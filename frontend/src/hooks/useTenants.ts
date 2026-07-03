@@ -77,7 +77,11 @@ export function useTenants() {
   //   - defaultBucket — resource name "storageBackends/{b}/buckets/{bk}";
   //     when non-empty, the server pins this tenant's default
   //     (backend, bucket) in tenant_default_bindings. Optional; legacy
-  //     bootstrap callers omit it.
+  //     bootstrap callers omit it. For a dedicated tenant, send a
+  //     backend-only ref "storageBackends/{b}/buckets/" (bucket derived).
+  //   - storageLayout — "shared" (default) or "dedicated" (ADR-0011): a
+  //     dedicated tenant gets its own provisioned bucket on the named backend;
+  //     the backend is required, the bucket is derived (paladin-<tenant_uuid>).
   const createTenant = useCallback(
     async (
       slug: string,
@@ -85,6 +89,7 @@ export function useTenants() {
       displayName: string = "",
       labels: Record<string, string> = {},
       defaultBucket: string = "",
+      storageLayout: string = "shared",
     ): Promise<Tenant> => {
       try {
         setError(null);
@@ -96,6 +101,7 @@ export function useTenants() {
           slug,
           displayName,
           labels,
+          storageLayout,
           inheritedCedarPolicy: "",
           resourceVersion: "",
         });

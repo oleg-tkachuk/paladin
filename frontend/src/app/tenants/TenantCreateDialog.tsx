@@ -42,7 +42,10 @@ type CreateTenantFn = (
   displayName: string,
   labels: Record<string, string>,
   defaultBucket: string,
+  storageLayout: string,
 ) => Promise<Tenant>;
+
+type StorageLayout = "shared" | "dedicated";
 
 interface TenantCreateDialogProps {
   open: boolean;
@@ -65,9 +68,14 @@ export function TenantCreateDialog({
   const [newSlug, setNewSlug] = useState("");
   const [newId, setNewId] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
+  const [layout, setLayout] = useState<StorageLayout>("shared");
   const [newBackend, setNewBackend] = useState("");
   const [newBucket, setNewBucket] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // A dedicated tenant gets its own provisioned bucket on the chosen backend
+  // (name derived server-side), so only the backend is picked — no bucket.
+  const dedicated = layout === "dedicated";
 
   // Backends + buckets feed the cascading Backend → Bucket dropdowns. Both
   // lists are tiny and refreshed on dialog open.
@@ -116,16 +124,21 @@ export function TenantCreateDialog({
       });
       return;
     }
-    if (!newBackend || !newBucket) {
+    if (!newBackend || (!dedicated && !newBucket)) {
       showNotification({
         type: "error",
-        title: "Default location required",
-        message:
-          "Pick a storage backend and a bucket. Tenant objects live there by default.",
+        title: dedicated ? "Backend required" : "Default location required",
+        message: dedicated
+          ? "Pick a storage backend. A dedicated bucket is provisioned there automatically."
+          : "Pick a storage backend and a bucket. Tenant objects live there by default.",
       });
       return;
     }
-    const defaultBucketRef = `storageBackends/${newBackend}/buckets/${newBucket}`;
+    // Dedicated: backend-only ref (trailing slash) — the server derives the
+    // bucket name. Shared: the full backend/bucket binding.
+    const defaultBucketRef = dedicated
+      ? `storageBackends/${newBackend}/buckets/`
+      : `storageBackends/${newBackend}/buckets/${newBucket}`;
     try {
       setSubmitting(true);
       const created = await createTenant(
@@ -134,6 +147,7 @@ export function TenantCreateDialog({
         newDisplayName,
         {},
         defaultBucketRef,
+        layout,
       );
       showNotification({
         type: "success",
@@ -144,6 +158,7 @@ export function TenantCreateDialog({
       setNewId("");
       setNewDisplayName("");
       setNewBucket("");
+      setLayout("shared");
       onOpenChange(false);
     } catch (err) {
       console.error(err);
@@ -237,7 +252,8 @@ export function TenantCreateDialog({
                 </Link>
               </div>
             )}
-            {backends.length > 0 &&
+            {!dedicated &&
+              backends.length > 0 &&
               bucketsForBackend.length === 0 &&
               newBackend && (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
@@ -257,7 +273,26 @@ export function TenantCreateDialog({
                   </Link>
                 </div>
               )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="tenant-layout">Storage layout</Label>
+              <SelectRoot
+                value={layout}
+                onValueChange={(v) => setLayout(v as StorageLayout)}
+              >
+                <SelectTrigger id="tenant-layout">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="shared">
+                    Shared — bind to an existing bucket
+                  </SelectItem>
+                  <SelectItem value="dedicated">
+                    Dedicated — provision a private bucket
+                  </SelectItem>
+                </SelectContent>
+              </SelectRoot>
+            </div>
+            <div className={dedicated ? "" : "grid grid-cols-2 gap-3"}>
               <div className="space-y-1.5">
                 <Label htmlFor="tenant-backend">
                   Storage backend <span className="text-destructive">*</span>
@@ -286,42 +321,56 @@ export function TenantCreateDialog({
                   </SelectContent>
                 </SelectRoot>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tenant-bucket">
-                  Bucket <span className="text-destructive">*</span>
-                </Label>
-                <SelectRoot
-                  value={newBucket}
-                  onValueChange={(v) => setNewBucket(v)}
-                  disabled={!newBackend || bucketsForBackend.length === 0}
-                >
-                  <SelectTrigger id="tenant-bucket">
-                    <SelectValue
-                      placeholder={
-                        !newBackend
-                          ? "Pick backend first"
-                          : bucketsForBackend.length === 0
-                            ? "No buckets on this backend"
-                            : "Pick bucket"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bucketsForBackend.map((b) => (
-                      <SelectItem key={b.bucketName} value={b.bucketName}>
-                        {b.bucketName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-              </div>
+              {!dedicated && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="tenant-bucket">
+                    Bucket <span className="text-destructive">*</span>
+                  </Label>
+                  <SelectRoot
+                    value={newBucket}
+                    onValueChange={(v) => setNewBucket(v)}
+                    disabled={!newBackend || bucketsForBackend.length === 0}
+                  >
+                    <SelectTrigger id="tenant-bucket">
+                      <SelectValue
+                        placeholder={
+                          !newBackend
+                            ? "Pick backend first"
+                            : bucketsForBackend.length === 0
+                              ? "No buckets on this backend"
+                              : "Pick bucket"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bucketsForBackend.map((b) => (
+                        <SelectItem key={b.bucketName} value={b.bucketName}>
+                          {b.bucketName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectRoot>
+                </div>
+              )}
             </div>
             <p className="text-xs text-muted-foreground -mt-2">
-              Tenant objects will live under{" "}
-              <span className={cn(T.code, "text-[10px]")}>
-                {newBucket || "<bucket>"}/&lt;tenant_id&gt;/…
-              </span>
-              . Bind cannot be moved without rebinding via the admin RPC.
+              {dedicated ? (
+                <>
+                  A private bucket is provisioned on{" "}
+                  <span className={cn(T.code, "text-[10px]")}>
+                    {newBackend || "<backend>"}
+                  </span>{" "}
+                  and its name is derived from the tenant ID.
+                </>
+              ) : (
+                <>
+                  Tenant objects will live under{" "}
+                  <span className={cn(T.code, "text-[10px]")}>
+                    {newBucket || "<bucket>"}/&lt;tenant_id&gt;/…
+                  </span>
+                  . Bind cannot be moved without rebinding via the admin RPC.
+                </>
+              )}
             </p>
             <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
               <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
@@ -366,7 +415,12 @@ export function TenantCreateDialog({
             </Button>
             <Button
               type="submit"
-              disabled={submitting || !newSlug || !newBackend || !newBucket}
+              disabled={
+                submitting ||
+                !newSlug ||
+                !newBackend ||
+                (!dedicated && !newBucket)
+              }
             >
               {submitting ? "Creating…" : "Create tenant"}
             </Button>
