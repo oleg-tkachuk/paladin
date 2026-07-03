@@ -29,5 +29,8 @@ tasks:
       # `task gen:proto` byte-reproducible and matches the hook. Requires
       # goimports on PATH (same assumption as the lefthook backend-goimports
       # step); install with `go install golang.org/x/tools/cmd/goimports@latest`.
-      - buf generate
+      # buf.yaml/buf.gen.yaml now live in proto/ (the self-contained contract
+      # module, tagged api/vX for external consumers). Run from backend/ with
+      # explicit input + template so out (.) still lands in ./internal/api/pb.
+      - buf generate proto --template proto/buf.gen.yaml
       - goimports -w internal/api/pb

@@ -60,7 +60,7 @@ jobs:
       - name: buf lint
         uses: bufbuild/buf-action@v1
         with:
-          input: backend
+          input: backend/proto
           lint: true
           format: false
           breaking: false
@@ -81,7 +81,7 @@ jobs:
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go
           go install golang.org/x/tools/cmd/goimports@v0.46.0
           export PATH="$(go env GOPATH)/bin:$PATH"
-          buf generate
+          buf generate proto --template proto/buf.gen.yaml
           goimports -w internal/api/pb
           if ! git diff --exit-code -- internal/api/pb; then
             echo "ERROR: generated proto code is out of date. Run 'task gen:proto' and commit."

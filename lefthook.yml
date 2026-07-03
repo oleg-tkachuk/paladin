@@ -89,7 +89,7 @@ pre-commit:
       glob: "proto/**/*.proto"
       run: |
         if command -v buf >/dev/null 2>&1; then
-          buf lint
+          buf lint proto
         fi
 
     # ─── Frontend (Next.js / TS) ────────────────────────────────────
