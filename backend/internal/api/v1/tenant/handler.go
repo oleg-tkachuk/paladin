@@ -353,13 +353,16 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.DisplayName == "" {
 		args.DisplayName = args.Slug
 	}
-	// Default binding: (backend_id, bucket_name) must be both empty or
-	// both set. Prevents half-formed bindings where the operator picked
-	// a backend but forgot the bucket (or vice-versa) and ended up with
-	// a tenant whose objects had no destination.
+	// Default binding (SHARED layout): (backend_id, bucket_name) must be both
+	// empty or both set. Prevents half-formed bindings where the operator
+	// picked a backend but forgot the bucket (or vice-versa) and ended up with
+	// a tenant whose objects had no destination. The DEDICATED layout is exempt
+	// — it legitimately carries backend-only (bucket derived) and has its own
+	// validation in the switch arm below.
 	args.DefaultBackendID = strings.TrimSpace(args.DefaultBackendID)
 	args.DefaultBucketName = strings.TrimSpace(args.DefaultBucketName)
-	if (args.DefaultBackendID == "") != (args.DefaultBucketName == "") {
+	if args.StorageLayout != "dedicated" &&
+		(args.DefaultBackendID == "") != (args.DefaultBucketName == "") {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("default_binding requires both backend and bucket"))
 	}
