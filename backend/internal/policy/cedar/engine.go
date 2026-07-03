@@ -325,6 +325,21 @@ type Authorizer interface {
 // Returns DecisionAllow only when ≥1 `permit` matches AND no `forbid` matches.
 // Errors indicate engine faults (policy fetch/compile), not denials.
 func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
+	// Same-tenant slug inheritance: the Tenant entity UID prefers the slug
+	// (tenantUID), and the rendered default policy keys its member permits on
+	// `Tenant::"<slug>"` — but most data-plane call sites build the Resource
+	// with only the tenant UUID. Without this, the entity graph keys the
+	// tenant by UUID, the slug-keyed group permit never matches, and tenant
+	// MEMBERS are denied everywhere only platform.admin survives (confirmed
+	// live). Inherit the principal's slug when the resource targets the
+	// principal's own tenant; cross-tenant resources (platform-admin reach)
+	// keep their own identity and never borrow the caller's slug.
+	if r.TenantSlug == "" && p.TenantSlug != "" && r.TenantID == p.TenantID {
+		patched := *r
+		patched.TenantSlug = p.TenantSlug
+		r = &patched
+	}
+
 	set, err := e.compiledFor(ctx, r.TenantID, r.ObjectKey)
 	if err != nil {
 		e.m.compileErrs.Add(1)
