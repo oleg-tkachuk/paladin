@@ -19,13 +19,18 @@
 #
 # `PALADIN_VERSION_BASE` overrides the no-tag base (default 0.1.0 — matches
 # the pre-version.sh info.env seed).
+#
+# `api/*` tags are EXCLUDED: those version the proto contract (consumed by
+# external repos via `buf generate <repo>.git#tag=api/vX`), not the PALADIN
+# image/chart. They carry a `/` that is invalid in a Docker tag, and a
+# contract bump must not restamp the image. Never let them leak in here.
 set -eu
 
 BASE="${PALADIN_VERSION_BASE:-0.1.0}"
 TS=$(date +%s)
 COMMIT=$(git rev-parse --short HEAD)
 DIRTY=$(git status --porcelain | wc -l | tr -d ' ')
-TAG=$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)
+TAG=$(git describe --tags --exact-match --exclude 'api/*' 2>/dev/null | sed 's/^v//' || true)
 
 if [ -n "$TAG" ] && [ "$DIRTY" = "0" ]; then
   echo "$TAG"
