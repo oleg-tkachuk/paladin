@@ -299,13 +299,14 @@ func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region
 			return fmt.Errorf("s3 create bucket %q: %w", bucketName, err)
 		}
 	}
-	// Verify the bucket is actually reachable before reporting success. Some
-	// S3-compatible backends (observed: Garage) accept CreateBucket without
-	// provisioning a usable bucket — the object store then 500s every upload.
-	// Without this check the reconciler would flip provision_state to 'ready'
-	// on a bucket that can't be written, and the presign/upload gate (ADR-0011)
-	// would lift into a broken bucket. A failing HeadBucket keeps the row in
-	// 'failed'/'pending' with the error surfaced, so the gate stays closed.
+	// Verify the bucket is actually reachable before reporting success: a
+	// backend that accepts CreateBucket without exposing a usable bucket would
+	// otherwise let the reconciler flip provision_state to 'ready' on a bucket
+	// that can't be served, lifting the presign/upload gate (ADR-0011) into a
+	// broken bucket. A failing HeadBucket keeps the row in 'failed'/'pending'
+	// with the error surfaced, so the gate stays closed. NOTE: this catches a
+	// missing bucket, not a store that has the bucket but can't accept writes
+	// (e.g. SeaweedFS out of writable volumes) — that surfaces at PUT time.
 	if _, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucketName)}); err != nil {
 		return fmt.Errorf("s3 create bucket %q: created but not reachable (HeadBucket): %w", bucketName, err)
 	}

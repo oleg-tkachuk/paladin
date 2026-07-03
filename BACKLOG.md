@@ -941,17 +941,21 @@ open deliberately — each notes why._
   derived bucket name for cross-account global uniqueness; bucket tagging
   (`tenant_id`) at provision time for native cost attribution; frontend
   proto regen to surface `storage_layout` in the console.
-- **Deferred — Garage-backed dedicated buckets:** the reconciler provisions
-  via the S3 `CreateBucket` API, which real S3/MinIO honour but Garage does
-  not — Garage needs an out-of-band bucket create + access-key grant through
-  its admin API, so on the dev cluster (`storage/garage-0`) dedicated buckets
-  never become writable and now correctly stay `pending`/`failed` (the
-  `HeadBucket` readiness check above catches it). Dedicated layout therefore
-  only works on S3/MinIO today. **DoD:** a Garage-aware provisioner path
-  (admin-API `bucket create` + `bucket allow --read --write --key paladin-key`)
-  selected by backend kind, or a documented "dedicated layout requires an
-  S3/MinIO backend" constraint. **Blocker:** product/infra call on whether
-  the dev cluster should keep Garage or move to MinIO for the dedicated flow.
+- **Note — SeaweedFS collection-per-bucket volume pressure (dev cluster):**
+  the dev cluster's `primary` backend is SeaweedFS
+  (`seaweedfs-filer.storage:8333`, bucket `paladin-primary`; Garage in the same
+  namespace is unused). SeaweedFS maps each S3 bucket to a *collection* that
+  reserves its own volume(s), so the dedicated-per-tenant layout multiplies
+  volume consumption — N tenants ⇒ N+ collections. With the volume server at
+  `-max=0` (auto-capped by disk → 18 volumes) the cluster exhausted its
+  volumes (`No writable volumes and no free volumes left`), so **every** PUT
+  (shared bucket `paladin-1` included) 500s `InternalError` regardless of PALADIN.
+  This is an infra-capacity issue, not an PALADIN defect: raise the SeaweedFS
+  volume server disk / lower `volumeSizeLimit` / set an explicit higher
+  `-max`. Design follow-up: consider a shared-bucket-with-prefix option for
+  SeaweedFS-class backends where collection-per-tenant is costly (real
+  S3/MinIO have no such per-bucket reservation). **Blocker:** none — dev
+  infra tuning; the design follow-up needs a product call.
 - **Blockers:** none technical — Phase 3 is an explicit admin action per
   tenant; build it when the first shared→dedicated migration is needed.
 
