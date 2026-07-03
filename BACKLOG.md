@@ -941,21 +941,26 @@ open deliberately — each notes why._
   derived bucket name for cross-account global uniqueness; bucket tagging
   (`tenant_id`) at provision time for native cost attribution; frontend
   proto regen to surface `storage_layout` in the console.
-- **Note — SeaweedFS collection-per-bucket volume pressure (dev cluster):**
-  the dev cluster's `primary` backend is SeaweedFS
-  (`seaweedfs-filer.storage:8333`, bucket `paladin-primary`; Garage in the same
-  namespace is unused). SeaweedFS maps each S3 bucket to a *collection* that
-  reserves its own volume(s), so the dedicated-per-tenant layout multiplies
-  volume consumption — N tenants ⇒ N+ collections. With the volume server at
-  `-max=0` (auto-capped by disk → 18 volumes) the cluster exhausted its
-  volumes (`No writable volumes and no free volumes left`), so **every** PUT
-  (shared bucket `paladin-1` included) 500s `InternalError` regardless of PALADIN.
-  This is an infra-capacity issue, not an PALADIN defect: raise the SeaweedFS
-  volume server disk / lower `volumeSizeLimit` / set an explicit higher
-  `-max`. Design follow-up: consider a shared-bucket-with-prefix option for
-  SeaweedFS-class backends where collection-per-tenant is costly (real
-  S3/MinIO have no such per-bucket reservation). **Blocker:** none — dev
-  infra tuning; the design follow-up needs a product call.
+- **Note — dev cluster object store is Garage (switched off SeaweedFS):**
+  the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
+  bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik
+  route in `deploy/local/garage-s3-ingressroute.yaml`) — see
+  `values-local.yaml`. We swapped off the co-located **SeaweedFS**
+  (`seaweedfs-filer:8333`) because it maps each S3 bucket to a *collection*
+  reserving its own volume(s); with the volume server at `-max=0`
+  (auto-capped by disk → 18 volumes) ~10 buckets exhausted it
+  (`No writable volumes and no free volumes left`) and **every** PUT (shared
+  `paladin-1` included) 500-ed `InternalError` — an infra-capacity issue, not an
+  PALADIN defect. Garage has no per-bucket volume reservation; verified
+  end-to-end (shared security-probe 6/6 + dedicated provision→upload→read).
+  **Garage prerequisite:** the S3 access key needs the global create-bucket
+  grant (`garage key allow --create-bucket <key>`) or the ADR-0011
+  reconciler's `CreateBucket` is rejected. **Follow-ups:** (1) to move the
+  change into the registry-pulled chart, `task deploy:backend`, then re-enable
+  the PALADIN ArgoCD app's `automated` sync (paused during the live cutover);
+  (2) if a SeaweedFS-class backend is ever reused, consider a
+  shared-bucket-with-prefix option since collection-per-tenant is costly
+  there (real S3 / MinIO / Garage have no such reservation).
 - **Blockers:** none technical — Phase 3 is an explicit admin action per
   tenant; build it when the first shared→dedicated migration is needed.
 

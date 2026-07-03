@@ -77,9 +77,18 @@ ATID=$(printf '%s' "$ATTK" | sed -n 's/.*"tenantId":"\([^"]*\)".*/\1/p')
 [ -n "$VTID" ] && [ -n "$ATID" ] || { echo "setup failed (victim=$VTID attacker=$ATID)"; echo "$VICT"; exit 2; }
 echo "  victim=$VTID  attacker=$ATID"
 
-# Create the objectKey, then upload the victim's secret object.
+# Shared tenants get no auto default binding (only dedicated ones do, at
+# CreateTenant), so discover a shared + ready bucket and name it on the
+# objectKey directly. owner_tenant_id empty = shared; provision_state ready =
+# physically usable.
+BKS=$(call "$ADMIN" paladin.admin.v1.BucketService/ListBuckets "$PADMIN" '{}')
+SHARED=$(printf '%s' "$BKS" | jq -r '.buckets[]? | select((.ownerTenantId // "") == "" and (.provisionState // "ready") == "ready") | "storageBackends/\(.backendId)/buckets/\(.bucketName)"' | head -1)
+[ -n "$SHARED" ] || { echo "setup: no shared+ready bucket found: $(printf '%s' "$BKS" | head -c 200)"; exit 2; }
+echo "  shared bucket: $SHARED"
+
+# Create the objectKey (bound to the shared bucket), then upload the secret.
 OKR=$(call "$ADMIN" paladin.admin.v1.ObjectKeyService/CreateObjectKey "$PADMIN" \
-  "{\"parent\":\"tenants/$VTID\",\"objectKey\":\"docs\",\"objectKeyResource\":{}}")
+  "{\"parent\":\"tenants/$VTID\",\"objectKey\":\"docs\",\"objectKeyResource\":{\"bucket\":\"$SHARED\"}}")
 printf '%s' "$OKR" | grep -q '"objectKey":"docs"' || { echo "setup: CreateObjectKey failed: $(printf '%s' "$OKR" | head -c 200)"; exit 2; }
 # Setup upload runs as the VICTIM itself (its own data-plane token): the data
 # plane resolves the object_key under the caller's tenant, so a platform-admin

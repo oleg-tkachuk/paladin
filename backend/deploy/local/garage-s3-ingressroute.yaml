@@ -1,0 +1,36 @@
+# Traefik route exposing the local Garage S3 API as a host/browser-reachable
+# endpoint, so PALADIN presigned upload/download URLs (public_endpoint =
+# https://s3-garage.paladin.local) resolve from outside the cluster.
+#
+# Mirrors the storage-layer seaweedfs-filer IngressRoute (same entryPoint,
+# wildcard cert, and cors-s3 middleware) but targets garage-s3:3900. Garage
+# serves path-style S3, so the Host header is not significant.
+#
+# Apply once against the local cluster (it lives in the storage namespace next
+# to the Garage service; not part of an ArgoCD app, so it is not pruned):
+#
+#   kubectl apply -f backend/deploy/local/garage-s3-ingressroute.yaml
+#
+# LOCAL DEV ONLY — see backend/deploy/chart/values-local.yaml.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: garage-s3
+  namespace: storage
+  labels:
+    app.kubernetes.io/part-of: storage
+    app.kubernetes.io/managed-by: manual
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`s3-garage.paladin.local`)
+      middlewares:
+        - name: cors-s3
+      services:
+        - kind: Service
+          name: garage-s3
+          port: 3900
+  tls:
+    secretName: traefik-tls

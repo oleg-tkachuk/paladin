@@ -42,11 +42,19 @@ config:
   storage:
     backends:
       primary:
-        endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
-        public_endpoint: "https://s3.paladin.local"
+        # Local dev object store: Garage S3 (garage-s3.storage:3900). The
+        # co-located SeaweedFS was swapped out — its volume server hit its
+        # volume-count cap (-max=0 → 18 volumes, one collection per bucket)
+        # and 500-ed every upload. Garage has no per-bucket volume reservation.
+        # public_endpoint is a Traefik route (see deploy/local/garage-s3-
+        # ingressroute.yaml) so presigned URLs are reachable from host/browser.
+        # The access key is a LOCAL dev credential (Garage `paladin-key`, granted
+        # create-bucket); rotate/scope for any non-local overlay.
+        endpoint: "http://garage-s3.storage.svc.cluster.local:3900"
+        public_endpoint: "https://s3-garage.paladin.local"
         auth:
-          access_key: dummy_access_key
-          secret_key: dummy_secret_key
+          access_key: GK23158d98481625830fe52ac4
+          secret_key: d527ecccad4e2851fa5c2433ebbbedbd48e151d9d86599e2b1c0791f4e9cc538
 
 # Chart-managed Secret for the primary backend is unused on the local
 # overlay (config inlines plain keys above). Disable creation so the
