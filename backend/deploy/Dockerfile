@@ -94,12 +94,14 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 COPY --link cmd/ cmd/
 COPY --link internal/ internal/
 COPY --link migrations/ migrations/
+# proto/ is a self-contained buf module — buf.yaml/buf.gen.yaml/buf.lock now
+# live inside it (copied by the line above), so only sqlc.yaml is copied here.
 COPY --link proto/ proto/
-COPY --link buf.yaml buf.gen.yaml buf.lock sqlc.yaml ./
+COPY --link sqlc.yaml ./
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    buf generate && \
+    buf generate proto --template proto/buf.gen.yaml && \
     go generate ./...
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
