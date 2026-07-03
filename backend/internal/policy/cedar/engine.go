@@ -612,7 +612,17 @@ func (e *Engine) buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 		}
 	}
 
-	// User — anchors the principal under their tenant when known.
+	// User — anchored under the in-scope Tenant entity (built above from the
+	// resource; for a same-tenant call — the only case Cedar sees for
+	// non-admins, since assertJWTTenant forces URL-tenant == JWT-tenant — this
+	// is the caller's own tenant). Cross-tenant isolation is enforced BY
+	// COMPOSITION, not by Cedar alone (see the block comment on IsAuthorized):
+	// compiledFor loads the policy by the TRUSTED tenant UUID, and that policy
+	// is keyed on the tenant's real slug, so a spoofed tenant_slug claim never
+	// matches the loaded policy — it fails closed. Anchoring membership on the
+	// principal's JWT slug instead would be WORSE: the slug is attacker-
+	// controlled, so a caller could claim a victim's slug and match a member
+	// permit. Do not "fix" this here without making the slug DB-authoritative.
 	userParents := cedartypes.EntityUIDSet{}
 	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
 		userParents = cedartypes.NewEntityUIDSet(tUID)
