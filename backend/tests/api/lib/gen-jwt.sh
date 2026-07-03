@@ -7,19 +7,26 @@
 #   secret:  dev-secret-change-me-32-bytes-min
 #
 # Usage
-#   tests/api/lib/gen-jwt.sh <tenant_uuid> [subject] [role,role,...]
+#   tests/api/lib/gen-jwt.sh <tenant_uuid> [subject] [role,role,...] [tenant_slug]
 #
 # Defaults
 #   subject = e2e-runner
 #   roles   = platform-admin
+#   slug    = (empty; also settable via JWT_SLUG)
+#
+# tenant_slug matters for MEMBER-level testing: the default Cedar policy keys
+# its member permits on Tenant::"<slug>", and the engine anchors the principal
+# under that group from the JWT's tenant_slug claim. Omit it and only
+# platform.admin (builtin policy) passes.
 #
 # Output: a single JWT string on stdout, suitable for
 #   curl -H "Authorization: Bearer $(...)" ...
 set -euo pipefail
 
-TENANT_ID="${1:?usage: gen-jwt.sh <tenant_uuid> [sub] [roles_csv]}"
+TENANT_ID="${1:?usage: gen-jwt.sh <tenant_uuid> [sub] [roles_csv] [tenant_slug]}"
 SUBJECT="${2:-e2e-runner}"
 ROLES_CSV="${3:-platform-admin}"
+TENANT_SLUG="${4:-${JWT_SLUG:-}}"
 
 ISSUER="${JWT_ISS:-paladin-dev}"
 AUDIENCE="${JWT_AUD:-paladin-api}"
@@ -42,8 +49,13 @@ now=$(date +%s)
 exp=$((now + TTL_SECONDS))
 
 header='{"alg":"HS256","typ":"JWT"}'
-payload=$(printf '{"iss":"%s","aud":"%s","sub":"%s","tenant":"%s","roles":%s,"iat":%d,"exp":%d}' \
-    "$ISSUER" "$AUDIENCE" "$SUBJECT" "$TENANT_ID" "$roles_json" "$now" "$exp")
+if [ -n "$TENANT_SLUG" ]; then
+    payload=$(printf '{"iss":"%s","aud":"%s","sub":"%s","tenant":"%s","tenant_slug":"%s","roles":%s,"iat":%d,"exp":%d}' \
+        "$ISSUER" "$AUDIENCE" "$SUBJECT" "$TENANT_ID" "$TENANT_SLUG" "$roles_json" "$now" "$exp")
+else
+    payload=$(printf '{"iss":"%s","aud":"%s","sub":"%s","tenant":"%s","roles":%s,"iat":%d,"exp":%d}' \
+        "$ISSUER" "$AUDIENCE" "$SUBJECT" "$TENANT_ID" "$roles_json" "$now" "$exp")
+fi
 
 # base64url-encode (no padding) helper
 b64url() {
