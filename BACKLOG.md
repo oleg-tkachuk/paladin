@@ -922,7 +922,11 @@ open deliberately — each notes why._
   `dedicated` provisions a pending tenant-owned bucket + default binding
   in the same tx, physically created by the (backend-routed) reconciler
   (#129); mutations are gated on `provision_state='ready'` with a clean
-  retryable FailedPrecondition (#130).
+  retryable FailedPrecondition (#130). Provisioning now verifies the bucket
+  is actually reachable (post-`CreateBucket` `HeadBucket`) before it can flip
+  to `ready`, so a backend that accepts `CreateBucket` without yielding a
+  writable bucket keeps the gate closed and surfaces `provision_error`
+  instead of 500-ing every upload.
 - **Definition of Done (remaining — Phase 3):**
   - `streamThrough` cross-backend copy (GET(src)→PUT(dst), multipart for
     large objects) behind the `CopyObject` router branch that currently
@@ -937,6 +941,17 @@ open deliberately — each notes why._
   derived bucket name for cross-account global uniqueness; bucket tagging
   (`tenant_id`) at provision time for native cost attribution; frontend
   proto regen to surface `storage_layout` in the console.
+- **Deferred — Garage-backed dedicated buckets:** the reconciler provisions
+  via the S3 `CreateBucket` API, which real S3/MinIO honour but Garage does
+  not — Garage needs an out-of-band bucket create + access-key grant through
+  its admin API, so on the dev cluster (`storage/garage-0`) dedicated buckets
+  never become writable and now correctly stay `pending`/`failed` (the
+  `HeadBucket` readiness check above catches it). Dedicated layout therefore
+  only works on S3/MinIO today. **DoD:** a Garage-aware provisioner path
+  (admin-API `bucket create` + `bucket allow --read --write --key paladin-key`)
+  selected by backend kind, or a documented "dedicated layout requires an
+  S3/MinIO backend" constraint. **Blocker:** product/infra call on whether
+  the dev cluster should keep Garage or move to MinIO for the dedicated flow.
 - **Blockers:** none technical — Phase 3 is an explicit admin action per
   tenant; build it when the first shared→dedicated migration is needed.
 

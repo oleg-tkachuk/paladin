@@ -59,11 +59,17 @@ expect_ok() {
   fi
 }
 
-echo "== setup: platform admin creates victim (dedicated) + attacker tenants =="
+echo "== setup: platform admin creates victim + attacker tenants =="
+# Victim uses the SHARED layout so this probe runs on any object-store backend.
+# Dedicated-bucket provisioning + the upload gate (ADR-0011) are covered
+# separately by the integration test TestAdversarial_ProvisionGateOnUploadPath;
+# on a backend whose S3 CreateBucket doesn't yield a writable bucket (e.g.
+# Garage), a dedicated victim never becomes writable and the cross-tenant
+# controls below couldn't stage their object.
 PADMIN=$(jwt paladin-admin 019f0fa2-5a22-74ab-8f29-04b2fcac3179 probe-admin platform.admin)
 HX=$(date +%s)
 VICT=$(call "$ADMIN" paladin.admin.v1.TenantService/CreateTenant "$PADMIN" \
-  "{\"tenant\":{\"slug\":\"vict-$HX\",\"displayName\":\"vict-$HX\",\"storageLayout\":\"dedicated\"}}")
+  "{\"tenant\":{\"slug\":\"vict-$HX\",\"displayName\":\"vict-$HX\"}}")
 VTID=$(printf '%s' "$VICT" | sed -n 's/.*"tenantId":"\([^"]*\)".*/\1/p')
 ATTK=$(call "$ADMIN" paladin.admin.v1.TenantService/CreateTenant "$PADMIN" \
   "{\"tenant\":{\"slug\":\"attk-$HX\",\"displayName\":\"attk-$HX\"}}")
@@ -71,9 +77,7 @@ ATID=$(printf '%s' "$ATTK" | sed -n 's/.*"tenantId":"\([^"]*\)".*/\1/p')
 [ -n "$VTID" ] && [ -n "$ATID" ] || { echo "setup failed (victim=$VTID attacker=$ATID)"; echo "$VICT"; exit 2; }
 echo "  victim=$VTID  attacker=$ATID"
 
-# Create the objectKey, then poll UploadObject until it succeeds — the
-# provision gate returns FailedPrecondition on the dedicated bucket until the
-# reconciler creates it, so the early attempts double as a live gate check.
+# Create the objectKey, then upload the victim's secret object.
 OKR=$(call "$ADMIN" paladin.admin.v1.ObjectKeyService/CreateObjectKey "$PADMIN" \
   "{\"parent\":\"tenants/$VTID\",\"objectKey\":\"docs\",\"objectKeyResource\":{}}")
 printf '%s' "$OKR" | grep -q '"objectKey":"docs"' || { echo "setup: CreateObjectKey failed: $(printf '%s' "$OKR" | head -c 200)"; exit 2; }
@@ -81,16 +85,9 @@ printf '%s' "$OKR" | grep -q '"objectKey":"docs"' || { echo "setup: CreateObject
 # plane resolves the object_key under the caller's tenant, so a platform-admin
 # acting on the victim's namespace would look under the wrong tenant.
 PADMIN_DATA=$(jwt paladin-data "$VTID" victim-setup tenant.admin "vict-$HX")
-VOID="" GATED=0
-for i in $(seq 1 20); do
-  UP=$(call "$API" paladin.data.v1.ObjectService/UploadObject "$PADMIN_DATA" \
-    "{\"parent\":\"tenants/$VTID/objectKeys/docs\",\"key\":\"secret.txt\",\"contentType\":\"text/plain\",\"sizeHintBytes\":\"6\"}")
-  VOID=$(printf '%s' "$UP" | sed -n 's/.*"objectId":"\([^"]*\)".*/\1/p')
-  [ -n "$VOID" ] && break
-  printf '%s' "$UP" | grep -q "provisioning" && GATED=1
-  sleep 3
-done
-[ "$GATED" -eq 1 ] && { echo "  PASS  E0 upload gated while bucket provisioning"; PASS=$((PASS+1)); }
+UP=$(call "$API" paladin.data.v1.ObjectService/UploadObject "$PADMIN_DATA" \
+  "{\"parent\":\"tenants/$VTID/objectKeys/docs\",\"key\":\"secret.txt\",\"contentType\":\"text/plain\",\"sizeHintBytes\":\"6\"}")
+VOID=$(printf '%s' "$UP" | sed -n 's/.*"objectId":"\([^"]*\)".*/\1/p')
 VNAME="tenants/$VTID/objectKeys/docs/objects/$VOID"
 [ -n "$VOID" ] || { echo "setup: upload never succeeded"; echo "$UP"; exit 2; }
 

@@ -291,16 +291,25 @@ func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region
 			LocationConstraint: s3types.BucketLocationConstraint(loc),
 		}
 	}
-	_, err := c.s3.CreateBucket(ctx, in)
-	if err == nil {
-		return nil
+	if _, err := c.s3.CreateBucket(ctx, in); err != nil {
+		// Idempotency: ignore "already exists / already owned by you" and fall
+		// through to the reachability check below.
+		msg := err.Error()
+		if !strings.Contains(msg, "BucketAlreadyOwnedByYou") && !strings.Contains(msg, "BucketAlreadyExists") {
+			return fmt.Errorf("s3 create bucket %q: %w", bucketName, err)
+		}
 	}
-	// Idempotency: ignore "already exists / already owned by you".
-	msg := err.Error()
-	if strings.Contains(msg, "BucketAlreadyOwnedByYou") || strings.Contains(msg, "BucketAlreadyExists") {
-		return nil
+	// Verify the bucket is actually reachable before reporting success. Some
+	// S3-compatible backends (observed: Garage) accept CreateBucket without
+	// provisioning a usable bucket — the object store then 500s every upload.
+	// Without this check the reconciler would flip provision_state to 'ready'
+	// on a bucket that can't be written, and the presign/upload gate (ADR-0011)
+	// would lift into a broken bucket. A failing HeadBucket keeps the row in
+	// 'failed'/'pending' with the error surfaced, so the gate stays closed.
+	if _, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucketName)}); err != nil {
+		return fmt.Errorf("s3 create bucket %q: created but not reachable (HeadBucket): %w", bucketName, err)
 	}
-	return fmt.Errorf("s3 create bucket %q: %w", bucketName, err)
+	return nil
 }
 
 // DeleteBucket removes a real S3 bucket. Caller is responsible for ensuring
