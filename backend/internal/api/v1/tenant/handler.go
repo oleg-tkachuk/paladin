@@ -205,10 +205,6 @@ const (
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer
-	// defaultBackend is the storage backend a dedicated tenant's bucket is
-	// provisioned on when the caller doesn't name one. Sourced from
-	// cfg.Storage.DefaultBackend at construction.
-	defaultBackend string
 
 	// events is optional — when nil, lifecycle Dispatch calls are
 	// silent no-ops. Set via SetEventProducer once the dispatcher is
@@ -220,12 +216,11 @@ type Handler struct {
 
 // NewHandler builds a tenant handler. policyEngine is required — production
 // wiring passes the live Cedar engine; tests inject a fake Authorizer.
-// defaultBackend is the fallback backend for dedicated-layout provisioning.
-func NewHandler(repo Repository, policyEngine cedar.Authorizer, defaultBackend string) *Handler {
+func NewHandler(repo Repository, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("tenant: policy authorizer is required")
 	}
-	return &Handler{repo: repo, policy: policyEngine, defaultBackend: defaultBackend, log: zap.NewNop()}
+	return &Handler{repo: repo, policy: policyEngine, log: zap.NewNop()}
 }
 
 // SetEventProducer attaches the optional outbox producer. nil clears
@@ -375,19 +370,22 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	case "", "shared":
 		args.StorageLayout = "shared"
 	case "dedicated":
-		// A dedicated tenant gets its own bucket on the default backend
-		// (per-tenant backend selection is a follow-up). Reject if no default
-		// backend is configured — there's nowhere to provision it.
-		args.DedicatedBackend = h.defaultBackend
-		if args.DedicatedBackend == "" {
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("storage_layout 'dedicated' requires a configured default storage backend"))
-		}
-		// The dedicated path owns the binding; reject a conflicting explicit one.
-		if args.DefaultBackendID != "" || args.DefaultBucketName != "" {
+		// A dedicated tenant gets its own bucket, and the caller MUST name the
+		// backend to provision it on — there is no default. The backend is
+		// carried in default_binding.backend_id; the bucket name is derived
+		// (paladin-<tenant_uuid>), so a bucket name must NOT be supplied.
+		if args.DefaultBackendID == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				errors.New("default_bucket cannot be combined with storage_layout 'dedicated'"))
+				errors.New("storage_layout 'dedicated' requires default_binding.backend_id naming the backend to provision on (there is no default backend)"))
 		}
+		if args.DefaultBucketName != "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				errors.New("default_binding.bucket_name cannot be combined with storage_layout 'dedicated' (the bucket name is derived)"))
+		}
+		// Consume the caller's backend as the dedicated backend and clear the
+		// shared-binding fields so the dedicated provisioning path owns it.
+		args.DedicatedBackend = args.DefaultBackendID
+		args.DefaultBackendID = ""
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("storage_layout: must be 'shared' or 'dedicated', got %q", args.StorageLayout))

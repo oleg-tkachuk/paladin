@@ -12,7 +12,7 @@ import (
 
 func TestSetBackendReadOnly_FlipsState(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	out, err := h.SetBackendReadOnly(ctxWithRoles("platform.admin"), "primary", true, 1)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestSetBackendReadOnly_FlipsState(t *testing.T) {
 
 func TestSetBackendReadOnly_IdempotentNoOp(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, readOnly: true, rv: 5}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	out, err := h.SetBackendReadOnly(ctxWithRoles("platform.admin"), "primary", true, 5)
 	if err != nil {
@@ -41,7 +41,7 @@ func TestSetBackendReadOnly_IdempotentNoOp(t *testing.T) {
 
 func TestSetBackendReadOnly_VersionMismatchAborts(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1, mismatch: true}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	_, err := h.SetBackendReadOnly(ctxWithRoles("platform.admin"), "primary", true, 99)
 	if connect.CodeOf(err) != connect.CodeAborted {
@@ -51,7 +51,7 @@ func TestSetBackendReadOnly_VersionMismatchAborts(t *testing.T) {
 
 func TestSetBackendReadOnly_NotFound(t *testing.T) {
 	repo := &stateBackendRepo{notFound: true}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	_, err := h.SetBackendReadOnly(ctxWithRoles("platform.admin"), "ghost", true, 1)
 	if connect.CodeOf(err) != connect.CodeNotFound {
@@ -62,7 +62,7 @@ func TestSetBackendReadOnly_NotFound(t *testing.T) {
 // Draining the configured default backend is allowed (unlike disabling it).
 func TestSetBackendReadOnly_DefaultBackendAllowed(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "primary") // primary is the default
+	h := NewHandler(repo, allowAuthorizer{}) // primary is the default
 
 	out, err := h.SetBackendReadOnly(ctxWithRoles("platform.admin"), "primary", true, 1)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestSetBackendReadOnly_DefaultBackendAllowed(t *testing.T) {
 
 func TestSetBackendReadOnly_RequiresPlatformAdmin(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	_, err := h.SetBackendReadOnly(ctxWithRoles("tenant.admin"), "primary", true, 1)
 	if connect.CodeOf(err) != connect.CodePermissionDenied {

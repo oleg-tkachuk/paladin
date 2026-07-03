@@ -13,7 +13,6 @@ import (
 // counting fake, so tests exercise caching / routing without AWS.
 func testRegistry() (*BackendRegistry, *int32) {
 	cfg := config.Storage{
-		DefaultBackend: "primary",
 		Backends: map[string]config.StorageBackend{
 			"primary":   {},
 			"secondary": {},
@@ -65,23 +64,13 @@ func TestBackendRegistry_UnknownIDErrors(t *testing.T) {
 	}
 }
 
-func TestBackendRegistry_EmptyIDResolvesDefault(t *testing.T) {
+func TestBackendRegistry_EmptyIDErrors(t *testing.T) {
 	reg, builds := testRegistry()
-	ctx := context.Background()
-
-	def, err := reg.For(ctx, "primary")
-	if err != nil {
-		t.Fatalf("For(primary): %v", err)
+	if _, err := reg.For(context.Background(), ""); err == nil {
+		t.Fatal("For(\"\") returned nil error — there is no default backend; an empty id must be rejected")
 	}
-	empty, err := reg.For(ctx, "")
-	if err != nil {
-		t.Fatalf("For(\"\"): %v", err)
-	}
-	if empty != def {
-		t.Fatal("For(\"\") did not resolve to the default backend's client")
-	}
-	if got := atomic.LoadInt32(builds); got != 1 {
-		t.Fatalf("build called %d times, want 1 (empty id shares the default's client)", got)
+	if got := atomic.LoadInt32(builds); got != 0 {
+		t.Fatalf("build called %d times for an empty id, want 0", got)
 	}
 }
 
@@ -115,28 +104,18 @@ func TestBackendRegistry_ConcurrentForBuildsOnce(t *testing.T) {
 
 func TestBackendRegistry_Warmup(t *testing.T) {
 	reg, builds := testRegistry()
-	ctx := context.Background()
-
-	if err := reg.Warmup(ctx, false); err != nil {
-		t.Fatalf("Warmup(false): %v", err)
+	if err := reg.Warmup(context.Background()); err != nil {
+		t.Fatalf("Warmup: %v", err)
 	}
-	if got := atomic.LoadInt32(builds); got != 1 {
-		t.Fatalf("Warmup(false) built %d backends, want 1 (default only)", got)
-	}
-
-	reg2, builds2 := testRegistry()
-	if err := reg2.Warmup(ctx, true); err != nil {
-		t.Fatalf("Warmup(true): %v", err)
-	}
-	if got := atomic.LoadInt32(builds2); got != 2 {
-		t.Fatalf("Warmup(true) built %d backends, want 2 (all configured)", got)
+	if got := atomic.LoadInt32(builds); got != 2 {
+		t.Fatalf("Warmup built %d backends, want 2 (all configured)", got)
 	}
 }
 
-func TestBackendRegistry_WarmupNoDefault(t *testing.T) {
-	reg := NewBackendRegistry(config.Storage{Backends: map[string]config.StorageBackend{"x": {}}})
-	if err := reg.Warmup(context.Background(), false); err == nil {
-		t.Fatal("Warmup with no default_backend returned nil error")
+func TestBackendRegistry_WarmupNoBackends(t *testing.T) {
+	reg := NewBackendRegistry(config.Storage{Backends: map[string]config.StorageBackend{}})
+	if err := reg.Warmup(context.Background()); err == nil {
+		t.Fatal("Warmup with zero configured backends returned nil error")
 	}
 }
 

@@ -63,10 +63,6 @@ type BackendProber interface {
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer
-	// defaultBackendID is the configured storage.default_backend. Disabling
-	// it is refused (FR-006) — new buckets without an explicit backend
-	// resolve to it, so turning it off would break platform-wide creation.
-	defaultBackendID string
 	// prober runs TestBackend's connectivity check. nil → TestBackend
 	// reports unreachable with an explanatory message instead of probing.
 	prober BackendProber
@@ -75,11 +71,11 @@ type Handler struct {
 	log    *zap.Logger
 }
 
-func NewHandler(r Repository, policyEngine cedar.Authorizer, defaultBackendID string) *Handler {
+func NewHandler(r Repository, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("backendh: policy authorizer is required")
 	}
-	return &Handler{repo: r, policy: policyEngine, defaultBackendID: defaultBackendID, log: zap.NewNop()}
+	return &Handler{repo: r, policy: policyEngine, log: zap.NewNop()}
 }
 
 // SetProber wires the TestBackend connectivity prober. Opt-in: an unset
@@ -259,11 +255,10 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
 		return nil, err
 	}
-	// Guard: never disable the configured default backend (FR-006).
-	if !enabled && backendID == h.defaultBackendID {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("cannot disable the configured default backend %q", backendID))
-	}
+	// No default-backend guard: there is no default backend to protect. An
+	// operator disabling a backend that still holds buckets is expected to
+	// drain (read-only) first; operations resolving to a disabled backend fail
+	// loudly, which is the honest, explicit behaviour.
 	if err := h.repo.SetEnabled(ctx, backendID, enabled, expectedVersion); err != nil {
 		return nil, apiutil.MapError(err)
 	}

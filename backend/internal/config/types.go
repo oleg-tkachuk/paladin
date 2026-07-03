@@ -219,11 +219,13 @@ type PostgresTimeouts struct {
 }
 
 // Storage is the registry of physical object-storage backends. Each logical
-// objectKey references one by name via `object_keys.backend_id`; if that column
-// is empty the service falls back to DefaultBackend.
+// objectKey references one by name via `object_keys.backend_id`, and every
+// write path (bucket / objectKey / dedicated-tenant creation) MUST name a
+// backend explicitly — there is no implicit default. Silently defaulting where
+// a tenant's bytes land is a footgun in a multi-backend world, so an omitted
+// backend is an error, not a fallback.
 type Storage struct {
-	DefaultBackend string                    `yaml:"default_backend" json:"default_backend"`
-	Backends       map[string]StorageBackend `yaml:"backends" json:"backends"`
+	Backends map[string]StorageBackend `yaml:"backends" json:"backends"`
 }
 
 // Limits collects all request-shape constraints the data plane enforces:

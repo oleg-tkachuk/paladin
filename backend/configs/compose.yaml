@@ -175,7 +175,6 @@ worker:
       interval: 1s
 
 storage:
-  default_backend: primary
   backends:
     primary:
       kind: s3-compatible

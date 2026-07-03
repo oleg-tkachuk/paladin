@@ -68,13 +68,12 @@ type Repository interface {
 }
 
 type Handler struct {
-	repo           Repository
-	provisioner    Provisioner
-	defaultBackend string
+	repo        Repository
+	provisioner Provisioner
 }
 
-func NewHandler(repo Repository, provisioner Provisioner, defaultBackend string) *Handler {
-	return &Handler{repo: repo, provisioner: provisioner, defaultBackend: defaultBackend}
+func NewHandler(repo Repository, provisioner Provisioner) *Handler {
+	return &Handler{repo: repo, provisioner: provisioner}
 }
 
 func (h *Handler) CreateBucket(ctx context.Context, args CreateArgs) (*Bucket, error) {
@@ -82,11 +81,8 @@ func (h *Handler) CreateBucket(ctx context.Context, args CreateArgs) (*Bucket, e
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	if args.BackendID == "" {
-		args.BackendID = h.defaultBackend
-	}
-	if args.BackendID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("backend_id required and no default configured"))
+			errors.New("backend_id is required (there is no default backend)"))
 	}
 	// Provision physical S3 bucket first; CreateBucket is idempotent so a
 	// retry after a partial failure is safe.

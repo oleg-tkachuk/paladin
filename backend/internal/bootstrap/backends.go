@@ -57,9 +57,7 @@ const (
 // dropped.
 //
 // Empty cfg.Backends is treated as a no-op (operator opted out / using
-// the BackendService RPC exclusively). cfg.DefaultBackend, when set, is
-// validated to actually exist among the upserted entries — same as the
-// startup check in buildListeners.
+// the BackendService RPC exclusively).
 func EnsureBackends(ctx context.Context, cfg config.Storage, deps BackendDeps) error {
 	if deps.Logger == nil {
 		deps.Logger = zap.NewNop()
@@ -110,15 +108,6 @@ func EnsureBackends(ctx context.Context, cfg config.Storage, deps BackendDeps) e
 			zap.String("kind", desired.Kind),
 			zap.String("endpoint", desired.Endpoint))
 		writeBackendAudit(ctx, deps, auditActionBackendUpsert, id)
-	}
-
-	if cfg.DefaultBackend != "" {
-		if _, ok := cfg.Backends[cfg.DefaultBackend]; !ok {
-			return fmt.Errorf(
-				"bootstrap.backends: storage.default_backend=%q not in storage.backends",
-				cfg.DefaultBackend,
-			)
-		}
 	}
 	return nil
 }

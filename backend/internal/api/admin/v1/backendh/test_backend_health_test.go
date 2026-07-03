@@ -11,7 +11,7 @@ import (
 
 func TestTestBackend_RecordsHealthOK(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 	h.SetProber(&fakeProber{err: nil})
 
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
@@ -28,7 +28,7 @@ func TestTestBackend_RecordsHealthOK(t *testing.T) {
 
 func TestTestBackend_RecordsHealthError(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 	h.SetProber(&fakeProber{err: errors.New("dial tcp: connection refused")})
 
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
@@ -49,7 +49,7 @@ func TestTestBackend_RecordsHealthError(t *testing.T) {
 // A health-write failure is best-effort: it must not fail the probe response.
 func TestTestBackend_HealthWriteFailureIsBestEffort(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1, setHealthErr: errors.New("db down")}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 	h.SetProber(&fakeProber{err: nil})
 
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
@@ -65,7 +65,7 @@ func TestTestBackend_HealthWriteFailureIsBestEffort(t *testing.T) {
 // health (there was no probe to record).
 func TestTestBackend_NoProberDoesNotRecordHealth(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
 	if err != nil {

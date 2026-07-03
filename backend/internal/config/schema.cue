@@ -348,12 +348,12 @@ dispatcher: {
 }
 
 // Storage is the registry of physical object-storage backends. Each
-// logical object_key picks one by name; when its `storage_backend`
-// column is empty the service falls back to `default_backend`.
+// logical object_key picks one by name; every write path must name a
+// backend explicitly — there is no implicit default.
 storage: {
-  default_backend: string | *"primary"
   backends: [string]: {
     kind:             "aws-s3" | "s3-compatible" | "gcs" | *"aws-s3"
+    provider:         string | *""
     bucket:           string | *""
     region:           string | *""
     endpoint:         string | *""

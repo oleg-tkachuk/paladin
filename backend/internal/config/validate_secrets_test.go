@@ -19,7 +19,6 @@ func minimalValidConfig() Config {
 			Postgres: Postgres{DSN: "postgres://x@y/z"},
 		},
 		Storage: Storage{
-			DefaultBackend: "primary",
 			Backends: map[string]StorageBackend{
 				"primary": {
 					Auth: StorageBackendAuth{Mode: AuthModeStaticKeys, AccessKey: "k", SecretKey: "s"},

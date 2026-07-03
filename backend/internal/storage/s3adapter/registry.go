@@ -44,15 +44,14 @@ func NewBackendRegistry(cfg config.Storage) *BackendRegistry {
 }
 
 // For returns the cached client for backendID, building it lazily from
-// cfg.Backends[backendID]. An empty id resolves to the default backend, the
-// back-compat path for callers that pass no backend (single-backend
-// deployments). An unknown id is a hard error — never silently default a
-// wrong id, which would place a tenant's bytes on another tenant's store.
+// cfg.Backends[backendID]. The id is REQUIRED — there is no implicit default:
+// an empty id is a hard error, never a silent fallback that could place a
+// tenant's bytes on an arbitrary store. An unknown id is likewise a hard error.
 func (r *BackendRegistry) For(ctx context.Context, backendID string) (*Client, error) {
-	id := backendID
-	if id == "" {
-		id = r.cfg.DefaultBackend
+	if backendID == "" {
+		return nil, fmt.Errorf("s3 registry: backend id required (no default backend)")
 	}
+	id := backendID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.clients[id]; ok {
@@ -70,22 +69,16 @@ func (r *BackendRegistry) For(ctx context.Context, backendID string) (*Client, e
 	return c, nil
 }
 
-// Warmup eagerly builds the default backend so a boot misconfiguration fails
-// loudly (matching the single-New-at-boot behaviour it replaces); with
-// all=true it also builds every configured backend so the request path never
-// pays first-build latency. Returns the first build error.
-func (r *BackendRegistry) Warmup(ctx context.Context, all bool) error {
-	if r.cfg.DefaultBackend == "" {
-		return fmt.Errorf("s3 registry: storage.default_backend not set")
+// Warmup eagerly builds every configured backend so a boot misconfiguration
+// fails loudly and the request path never pays first-build latency. At least
+// one backend must be configured. Returns the first build error.
+func (r *BackendRegistry) Warmup(ctx context.Context) error {
+	if len(r.cfg.Backends) == 0 {
+		return fmt.Errorf("s3 registry: no storage backends configured")
 	}
-	if _, err := r.For(ctx, r.cfg.DefaultBackend); err != nil {
-		return err
-	}
-	if all {
-		for id := range r.cfg.Backends {
-			if _, err := r.For(ctx, id); err != nil {
-				return err
-			}
+	for id := range r.cfg.Backends {
+		if _, err := r.For(ctx, id); err != nil {
+			return err
 		}
 	}
 	return nil

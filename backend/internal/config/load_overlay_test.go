@@ -34,7 +34,6 @@ datastores:
   postgres:
     dsn: "postgres://x@y/z"
 storage:
-  default_backend: primary
   backends:
     primary:
       kind: aws-s3
@@ -96,7 +95,6 @@ runtime: { mode: debug }
 datastores:
   postgres: { dsn: "postgres://x@y/z" }
 storage:
-  default_backend: primary
   backends:
     primary:
       kind: aws-s3

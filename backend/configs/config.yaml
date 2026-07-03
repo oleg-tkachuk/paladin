@@ -269,13 +269,14 @@ dispatcher:
 
 # ─── Storage backends ───────────────────────────────────────────────────────
 # Registry of physical object-storage backends. Each logical ObjectKey picks
-# one by name (or falls back to `default_backend`). `events.enabled=true`
-# flips CompletionMode to IMPLICIT (object promoted via S3 event stream).
+# one by name; every write path names a backend explicitly (there is no
+# default). `events.enabled=true` flips CompletionMode to IMPLICIT (object
+# promoted via S3 event stream).
 storage:
-  default_backend: primary
   backends:
     primary:
       kind: s3-compatible               # aws-s3 | s3-compatible | gcs
+      provider: ""                      # garage | seaweedfs | minio | aws | gcp | ...
       bucket: paladin-primary               # full S3 key = "<tenant_id>/<object_key>/<key>"
       region: us-east-1
       endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"

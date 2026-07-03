@@ -186,11 +186,6 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.Storage.DefaultBackend != "" {
-		if _, ok := c.Storage.Backends[c.Storage.DefaultBackend]; !ok {
-			return fmt.Errorf("storage: default_backend %q not present in storage.backends", c.Storage.DefaultBackend)
-		}
-	}
 	for name, b := range c.Storage.Backends {
 		if b.Auth.AccessKey != "" && b.Auth.AccessKeySecret != nil {
 			return fmt.Errorf("storage.backends.%s.auth: cannot specify both access_key and access_key_secret", name)

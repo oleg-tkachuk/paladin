@@ -82,7 +82,6 @@ func TestBackendRegistryRouting(t *testing.T) {
 	}
 	const bucketA, bucketB = "paladin-a", "paladin-b"
 	reg := s3adapter.NewBackendRegistry(config.Storage{
-		DefaultBackend: "a",
 		Backends: map[string]config.StorageBackend{
 			"a": mkBackend(epA, bucketA),
 			"b": mkBackend(epB, bucketB),

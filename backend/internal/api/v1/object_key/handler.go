@@ -105,16 +105,15 @@ type Repository interface {
 }
 
 type Handler struct {
-	repo           Repository
-	policy         cedar.Authorizer
-	defaultBackend string
+	repo   Repository
+	policy cedar.Authorizer
 
 	events EventProducer
 	log    *zap.Logger
 }
 
-func NewHandler(repo Repository, policy cedar.Authorizer, defaultBackend string) *Handler {
-	return &Handler{repo: repo, policy: policy, defaultBackend: defaultBackend, log: zap.NewNop()}
+func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
+	return &Handler{repo: repo, policy: policy, log: zap.NewNop()}
 }
 
 // SetEventProducer / SetLogger — same opt-in contract as tenanth /
@@ -177,11 +176,12 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 				errors.New("cross-tenant CreateObjectKey requires platform.admin"))
 		}
 	}
-	// Fall back to the configured default backend when the caller omits it.
-	// The backend name is a FK to storage_backends.id, so an empty string
-	// would fail the constraint.
+	// A backend must be named explicitly — there is no default. The connectshim
+	// resolves it from the named bucket or the tenant's default binding before
+	// we get here; an empty id at this point means neither was supplied.
 	if args.BackendID == "" {
-		args.BackendID = h.defaultBackend
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("backend_id is required (name a bucket or set a tenant default binding; there is no default backend)"))
 	}
 	if err := h.authorizeFull(ctx, principal, args.TenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
 		return nil, err

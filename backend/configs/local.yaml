@@ -127,7 +127,6 @@ worker:
       delete_orphaned_parts: false
 
 storage:
-  default_backend: primary
   backends:
     primary:
       kind: s3-compatible

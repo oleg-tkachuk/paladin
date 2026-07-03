@@ -180,16 +180,16 @@ func ProvideObjectHandler(
 	})
 }
 
-func ProvideObjectKeyHandler(repos Repos, pe *policy.Engine, cfg config.Config) *objectkey.Handler {
-	return objectkey.NewHandler(repos.ObjectKey, pe, cfg.Storage.DefaultBackend)
+func ProvideObjectKeyHandler(repos Repos, pe *policy.Engine, _ config.Config) *objectkey.Handler {
+	return objectkey.NewHandler(repos.ObjectKey, pe)
 }
 
-func ProvideBucketHandler(repos Repos, storage Storage, cfg config.Config) *bucket.Handler {
-	return bucket.NewHandler(repos.Bucket, storage.Provisioner, cfg.Storage.DefaultBackend)
+func ProvideBucketHandler(repos Repos, storage Storage, _ config.Config) *bucket.Handler {
+	return bucket.NewHandler(repos.Bucket, storage.Provisioner)
 }
 
-func ProvideTenantHandler(repos Repos, pe *policy.Engine, cfg config.Config) *tenant.Handler {
-	return tenant.NewHandler(repos.Tenant, pe, cfg.Storage.DefaultBackend)
+func ProvideTenantHandler(repos Repos, pe *policy.Engine, _ config.Config) *tenant.Handler {
+	return tenant.NewHandler(repos.Tenant, pe)
 }
 
 func ProvideObjectTagHandler(repos Repos) *objecttag.Handler {
@@ -279,11 +279,11 @@ func tenantSlugLookup(tr tenant.Repository) func(ctx context.Context, tenantID u
 	}
 }
 
-func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, cfg config.Config) *backendh.Handler {
+func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, _ config.Config) *backendh.Handler {
 	// The concrete *BackendRepoV2 satisfies backendh.Repository (domain
 	// interface + ADR-0003 tx seam); Repos.BackendV2 is the pgx-free domain
 	// type, so assert to the wider local interface here (same as bucketh).
-	return backendh.NewHandler(repos.BackendV2.(backendh.Repository), pe, cfg.Storage.DefaultBackend)
+	return backendh.NewHandler(repos.BackendV2.(backendh.Repository), pe)
 }
 
 func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {

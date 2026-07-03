@@ -814,7 +814,6 @@ config:
     default_max_attempts: 5
 
   storage:
-    default_backend: primary
     backends:
       primary:
         kind: s3-compatible

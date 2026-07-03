@@ -12,7 +12,7 @@ import (
 
 func TestSetBackendMaintenance_FlipsState(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	out, err := h.SetBackendMaintenance(ctxWithRoles("platform.admin"), "primary", true, 1)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestSetBackendMaintenance_FlipsState(t *testing.T) {
 
 func TestSetBackendMaintenance_VersionMismatchAborts(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1, mismatch: true}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	_, err := h.SetBackendMaintenance(ctxWithRoles("platform.admin"), "primary", true, 99)
 	if connect.CodeOf(err) != connect.CodeAborted {
@@ -38,7 +38,7 @@ func TestSetBackendMaintenance_VersionMismatchAborts(t *testing.T) {
 
 func TestSetBackendMaintenance_NotFound(t *testing.T) {
 	repo := &stateBackendRepo{notFound: true}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	_, err := h.SetBackendMaintenance(ctxWithRoles("platform.admin"), "ghost", true, 1)
 	if connect.CodeOf(err) != connect.CodeNotFound {
@@ -50,7 +50,7 @@ func TestSetBackendMaintenance_NotFound(t *testing.T) {
 // advisory label, not a gate).
 func TestSetBackendMaintenance_DefaultBackendAllowed(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "primary") // primary is the default
+	h := NewHandler(repo, allowAuthorizer{}) // primary is the default
 
 	if _, err := h.SetBackendMaintenance(ctxWithRoles("platform.admin"), "primary", true, 1); err != nil {
 		t.Fatalf("maintenance on the default backend should be allowed: %v", err)
@@ -62,7 +62,7 @@ func TestSetBackendMaintenance_DefaultBackendAllowed(t *testing.T) {
 
 func TestSetBackendMaintenance_RequiresPlatformAdmin(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{}, "")
+	h := NewHandler(repo, allowAuthorizer{})
 
 	_, err := h.SetBackendMaintenance(ctxWithRoles("tenant.admin"), "primary", true, 1)
 	if connect.CodeOf(err) != connect.CodePermissionDenied {

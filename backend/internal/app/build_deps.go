@@ -49,13 +49,6 @@ type SharedDeps struct {
 	// one via s3adapter.New*Router(deps.Registry).
 	Registry *s3adapter.BackendRegistry
 
-	// S3 is the default-backend client, sourced from Registry. The
-	// maintenance workers (reconciler probe, multipart reaper, hard-deleter,
-	// bucket reconciler) use their own narrow interfaces that don't carry a
-	// backend id yet, so they operate on the default backend — correct on a
-	// single-backend deployment; per-backend worker routing is a follow-up.
-	S3 *s3adapter.Client
-
 	// Capability is the agent-runtime authorisation primitive. Nil when
 	// cfg.Capability.Enabled is false; callers must guard.
 	Capability *CapabilityBundle
@@ -85,26 +78,14 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		return nil, errors.New("app: auth.signing_key (or signing_key_secret) is required")
 	}
 
-	defaultName := cfg.Storage.DefaultBackend
-	if defaultName == "" {
-		return nil, errors.New("app: storage.default_backend not set")
-	}
 	// One client per backend, keyed by backend id (docs/backend-registry.md).
-	// Warmup(false) eagerly builds only the default — identical to the single
-	// New-at-boot it replaces; other backends build lazily on first use. Each
-	// storage interface below is a router that resolves the target client from
-	// the registry per call, keyed on the object's backend id. On a
-	// single-backend config every call resolves to the same client, so
-	// behaviour is identical to the pre-registry wiring.
+	// Warmup eagerly builds every configured backend so a boot misconfiguration
+	// fails loudly. Each storage interface below is a router that resolves the
+	// target client from the registry per call, keyed on the object's backend
+	// id — there is no default backend, so every write path names one explicitly.
 	registry := s3adapter.NewBackendRegistry(cfg.Storage)
-	if err := registry.Warmup(ctx, false); err != nil {
+	if err := registry.Warmup(ctx); err != nil {
 		return nil, fmt.Errorf("app: s3 backend registry: %w", err)
-	}
-	// Default-backend client for the maintenance workers that still use
-	// backend-id-free interfaces (see SharedDeps.S3).
-	s3c, err := registry.For(ctx, defaultName)
-	if err != nil {
-		return nil, fmt.Errorf("app: s3 adapter: %w", err)
 	}
 
 	repos := wire.Repos{
@@ -154,7 +135,6 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		SM:        statemachine.New(pool),
 		CELEval:   cel.NewEvaluator(),
 		Registry:  registry,
-		S3:        s3c,
 	}
 
 	// Capability subsystem — additive; absence is fine. Built after the

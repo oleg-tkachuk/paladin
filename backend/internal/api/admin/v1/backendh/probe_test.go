@@ -21,7 +21,7 @@ func (p *fakeProber) Probe(_ context.Context, _ admindomain.StorageBackend) erro
 }
 
 func TestTestBackend_NoProber(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}, "")
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -35,7 +35,7 @@ func TestTestBackend_NoProber(t *testing.T) {
 }
 
 func TestTestBackend_Reachable(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}, "")
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
 	pr := &fakeProber{}
 	h.SetProber(pr)
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
@@ -51,7 +51,7 @@ func TestTestBackend_Reachable(t *testing.T) {
 }
 
 func TestTestBackend_Unreachable(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}, "")
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
 	h.SetProber(&fakeProber{err: errors.New("dial tcp: connection refused")})
 	out, err := h.TestBackend(ctxWithRoles("platform.admin"), "primary")
 	if err != nil {
@@ -66,7 +66,7 @@ func TestTestBackend_Unreachable(t *testing.T) {
 }
 
 func TestTestBackend_RequiresPlatformAdmin(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}, "")
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
 	h.SetProber(&fakeProber{})
 	_, err := h.TestBackend(ctxWithRoles("tenant.admin"), "primary")
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
