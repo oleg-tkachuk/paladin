@@ -25,7 +25,7 @@ INSERT INTO buckets (
 -- rows are picked up before failed-and-waiting-for-retry rows. Caller is
 -- expected to apply its own backoff before recalling on failed rows.
 SELECT backend_id, bucket_name, region, provision_state,
-       provision_attempts, last_provision_at
+       provision_attempts, last_provision_at, owner_tenant_id
 FROM buckets
 WHERE provision_state = 'pending'
    OR (provision_state = 'failed' AND provision_attempts < sqlc.arg('max_attempts')::int)

@@ -945,9 +945,15 @@ open deliberately — each notes why._
   (size, not ETag — ETags differ between a server-side copy and a stream-through
   multipart upload); a miss / mismatch fails the migration instead of completing
   on a broken copy. Unit-tested (pass + size-mismatch fail).
+- **Shipped — cost-attribution tagging:** the bucket reconciler now tags a
+  dedicated (owned) bucket with `tenant_id=<uuid>` via `PutBucketTagging` right
+  after `CreateBucket` (owner threaded through `ListPendingBucketProvisions` →
+  `BucketProvisionRow.OwnerTenantID` → `BucketProvisioner.TagBucketOwner`).
+  Best-effort — a backend without `PutBucketTagging` logs a warning and keeps
+  the bucket usable.
 - **Definition of Done (remaining — Phase 3 slice 4):**
-  - **Slice 4 — surface:** frontend migration status + provision-time bucket
-    tagging (`tenant_id`) for cost attribution.
+  - **Frontend migration status:** surface the storage-migration state/progress
+    in the admin console (BFF → `GetTenantStorageMigration`).
   - Live cross-backend run (needs a second working backend) + two-backend
     integration test of the full migration.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at

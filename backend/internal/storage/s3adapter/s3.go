@@ -325,6 +325,22 @@ func (c *Client) DeleteBucket(ctx context.Context, backendID, bucketName string)
 	return nil
 }
 
+// TagBucketOwner tags a bucket with tenant_id=<uuid> for cost attribution
+// (ADR-0011). Callers treat failure as non-fatal — not every S3-compatible
+// backend implements PutBucketTagging.
+func (c *Client) TagBucketOwner(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error {
+	_, err := c.s3.PutBucketTagging(ctx, &s3.PutBucketTaggingInput{
+		Bucket: aws.String(bucketName),
+		Tagging: &s3types.Tagging{
+			TagSet: []s3types.Tag{{Key: aws.String("tenant_id"), Value: aws.String(tenantID.String())}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("s3 tag bucket %q: %w", bucketName, err)
+	}
+	return nil
+}
+
 // ─── object.Storage (methods; the ObjectRouter satisfies the interface) ─────
 //
 // The narrow storage interfaces now carry a backend id so the router can

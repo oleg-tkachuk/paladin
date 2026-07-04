@@ -227,3 +227,11 @@ func (r *ProvisionerRouter) DeleteBucket(ctx context.Context, backendID, bucketN
 	}
 	return c.DeleteBucket(ctx, backendID, bucketName)
 }
+
+func (r *ProvisionerRouter) TagBucketOwner(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return err
+	}
+	return c.TagBucketOwner(ctx, backendID, bucketName, tenantID)
+}

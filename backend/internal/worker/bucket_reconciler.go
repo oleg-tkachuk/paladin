@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -42,6 +43,9 @@ import (
 type BucketProvisioner interface {
 	CreateBucket(ctx context.Context, backendID, bucketName, region string) error
 	DeleteBucket(ctx context.Context, backendID, bucketName string) error
+	// TagBucketOwner tags a dedicated bucket with its owner tenant_id for cost
+	// attribution (ADR-0011). Best-effort at the call site.
+	TagBucketOwner(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error
 }
 
 // BucketProvisionRepo is the subset of admindomain.BucketRepository the
@@ -182,6 +186,15 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 
 	err := r.prov.CreateBucket(ctx, row.BackendID, row.BucketName, row.Region)
 	if err == nil {
+		// Cost attribution (ADR-0011): tag a dedicated (owned) bucket with its
+		// tenant_id so cloud cost reports group bucket→tenant. Best-effort —
+		// a backend that doesn't support PutBucketTagging must not block
+		// provisioning; the bucket is already usable.
+		if row.OwnerTenantID != uuid.Nil {
+			if tErr := r.prov.TagBucketOwner(ctx, row.BackendID, row.BucketName, row.OwnerTenantID); tErr != nil {
+				log.Warn("bucket cost-attribution tagging failed (non-fatal)", zap.Error(tErr))
+			}
+		}
 		if mErr := r.repo.MarkProvisionReady(ctx, row.BackendID, row.BucketName); mErr != nil {
 			// Backend created the bucket but the DB-side mark failed.
 			// Next tick will see the row still pending; the backend

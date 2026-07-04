@@ -359,7 +359,7 @@ func (q *Queries) ListPendingBucketDeletions(ctx context.Context, maxAttempts in
 
 const listPendingBucketProvisions = `-- name: ListPendingBucketProvisions :many
 SELECT backend_id, bucket_name, region, provision_state,
-       provision_attempts, last_provision_at
+       provision_attempts, last_provision_at, owner_tenant_id
 FROM buckets
 WHERE provision_state = 'pending'
    OR (provision_state = 'failed' AND provision_attempts < $1::int)
@@ -374,6 +374,7 @@ type ListPendingBucketProvisionsRow struct {
 	ProvisionState    string             `json:"provision_state"`
 	ProvisionAttempts int32              `json:"provision_attempts"`
 	LastProvisionAt   pgtype.Timestamptz `json:"last_provision_at"`
+	OwnerTenantID     pgtype.UUID        `json:"owner_tenant_id"`
 }
 
 // Worker query: drag the next batch of buckets that need a backend
@@ -396,6 +397,7 @@ func (q *Queries) ListPendingBucketProvisions(ctx context.Context, maxAttempts i
 			&i.ProvisionState,
 			&i.ProvisionAttempts,
 			&i.LastProvisionAt,
+			&i.OwnerTenantID,
 		); err != nil {
 			return nil, err
 		}

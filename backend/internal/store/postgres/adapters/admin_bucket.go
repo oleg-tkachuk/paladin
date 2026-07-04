@@ -133,6 +133,7 @@ func (r *BucketRepoV2) ListPendingProvisions(ctx context.Context, maxAttempts, l
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
 			LastProvisionAt:   timeFrom(row.LastProvisionAt),
+			OwnerTenantID:     uuidFrom(row.OwnerTenantID),
 		})
 	}
 	return out, nil
