@@ -218,6 +218,52 @@ func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
 	}
 }
 
+// fakeHeader answers HEADs against a target-bucket size map.
+type fakeHeader struct{ sizes map[string]int64 }
+
+func (h *fakeHeader) HeadObject(_ context.Context, loc CopyLocation) (int64, error) {
+	if s, ok := h.sizes[loc.ObjectKey+"/"+loc.Key]; ok {
+		return s, nil
+	}
+	return -1, errors.New("not found")
+}
+
+func TestStorageMigration_PhysicalVerifyPass(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateProvisioning,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+		},
+		bucketState: "ready",
+		objects:     []ObjectRef{{ObjectKey: "docs", Key: "a.txt", SizeBytes: 11}, {ObjectKey: "docs", Key: "b.txt", SizeBytes: 22}},
+	}
+	hdr := &fakeHeader{sizes: map[string]int64{"docs/a.txt": 11, "docs/b.txt": 22}} // sizes match
+	w := &StorageMigrationWorker{Repo: repo, Copier: &fakeCopier{}, Header: hdr, CopyBatch: 2, Now: time.Now}
+	runToTerminal(t, w, repo)
+	if repo.mig.State != MigStateCompleted {
+		t.Fatalf("state = %q, want completed (physical verify should pass)", repo.mig.State)
+	}
+}
+
+func TestStorageMigration_PhysicalVerifyFailsOnMismatch(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateVerifying, ObjectsTotal: 1, ObjectsCopied: 1,
+			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+		},
+		objects: []ObjectRef{{ObjectKey: "docs", Key: "a.txt", SizeBytes: 100}},
+	}
+	hdr := &fakeHeader{sizes: map[string]int64{"docs/a.txt": 50}} // wrong size in target
+	w := &StorageMigrationWorker{Repo: repo, Copier: &fakeCopier{}, Header: hdr, CopyBatch: 2, Now: time.Now}
+	w.tick(context.Background())
+	if repo.mig.State != MigStateFailed {
+		t.Fatalf("state = %q, want failed (target size mismatch)", repo.mig.State)
+	}
+}
+
 func TestStorageMigration_CleanupAfterRetention(t *testing.T) {
 	tid := uuid.New()
 	repo := &fakeMigRepo{

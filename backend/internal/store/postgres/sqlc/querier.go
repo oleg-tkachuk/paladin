@@ -354,6 +354,7 @@ type Querier interface {
 	MigrationListTenantObjectKeys(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
 	// Objects to copy, keyset-paginated by (object_key, key) after the cursor so a
 	// worker restart resumes mid-prefix instead of rescanning from the top.
+	// size_bytes feeds the physical (HEAD size) verify after copy.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterObjectKey string, afterKey string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.

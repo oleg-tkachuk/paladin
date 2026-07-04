@@ -263,6 +263,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		Repo:    adapters.NewStorageMigrationRepo(db.Queries, deps.Pool),
 		Copier:  migCopier,
 		Deleter: migCopier, // retention-gated source cleanup (slice 2)
+		Header:  migCopier, // physical (HEAD size) verify
 		Logger:  l.Named("storage-migration"),
 	})
 

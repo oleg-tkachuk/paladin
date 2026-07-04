@@ -239,7 +239,7 @@ func (q *Queries) MigrationListTenantObjectKeys(ctx context.Context, tenantID pg
 }
 
 const migrationListTenantObjects = `-- name: MigrationListTenantObjects :many
-SELECT object_key, key
+SELECT object_key, key, COALESCE(size_bytes, 0)::bigint AS size_bytes
 FROM objects
 WHERE tenant_id = $1
   AND state = 'AVAILABLE'
@@ -251,10 +251,12 @@ LIMIT $4::int
 type MigrationListTenantObjectsRow struct {
 	ObjectKey string `json:"object_key"`
 	Key       string `json:"key"`
+	SizeBytes int64  `json:"size_bytes"`
 }
 
 // Objects to copy, keyset-paginated by (object_key, key) after the cursor so a
 // worker restart resumes mid-prefix instead of rescanning from the top.
+// size_bytes feeds the physical (HEAD size) verify after copy.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterObjectKey string, afterKey string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -269,7 +271,7 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 	var items []MigrationListTenantObjectsRow
 	for rows.Next() {
 		var i MigrationListTenantObjectsRow
-		if err := rows.Scan(&i.ObjectKey, &i.Key); err != nil {
+		if err := rows.Scan(&i.ObjectKey, &i.Key, &i.SizeBytes); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

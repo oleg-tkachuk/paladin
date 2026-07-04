@@ -940,9 +940,12 @@ open deliberately — each notes why._
   buffering. The migration worker's same-backend-only guard is removed; the
   router picks server-side copy vs stream-through transparently. Unit-tested
   (worker cross-backend proceeds).
-- **Definition of Done (remaining — Phase 3 slice 4 + hardening):**
-  - **Physical verify:** after copy, HEAD/checksum each object in the target
-    bucket before completing (today's verify is count-based).
+- **Shipped — physical verify:** the verify phase now HEADs every object in the
+  TARGET bucket and checks its size against the source's recorded `size_bytes`
+  (size, not ETag — ETags differ between a server-side copy and a stream-through
+  multipart upload); a miss / mismatch fails the migration instead of completing
+  on a broken copy. Unit-tested (pass + size-mismatch fail).
+- **Definition of Done (remaining — Phase 3 slice 4):**
   - **Slice 4 — surface:** frontend migration status + provision-time bucket
     tagging (`tenant_id`) for cost attribution.
   - Live cross-backend run (needs a second working backend) + two-backend

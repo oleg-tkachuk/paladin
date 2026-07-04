@@ -61,7 +61,8 @@ WHERE tenant_id = $1;
 -- name: MigrationListTenantObjects :many
 -- Objects to copy, keyset-paginated by (object_key, key) after the cursor so a
 -- worker restart resumes mid-prefix instead of rescanning from the top.
-SELECT object_key, key
+-- size_bytes feeds the physical (HEAD size) verify after copy.
+SELECT object_key, key, COALESCE(size_bytes, 0)::bigint AS size_bytes
 FROM objects
 WHERE tenant_id = $1
   AND state = 'AVAILABLE'

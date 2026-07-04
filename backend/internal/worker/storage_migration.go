@@ -56,6 +56,12 @@ type ObjectDeleter interface {
 	DeleteObject(ctx context.Context, loc CopyLocation) error
 }
 
+// ObjectHeader reports a physical object's size (-1 / error when missing). Used
+// by the verify phase to confirm each copy landed in the destination.
+type ObjectHeader interface {
+	HeadObject(ctx context.Context, loc CopyLocation) (sizeBytes int64, err error)
+}
+
 // StorageMigration is one tenant's in-flight shared->dedicated copy job.
 type StorageMigration struct {
 	TenantID         uuid.UUID
@@ -73,10 +79,12 @@ type StorageMigration struct {
 	CleanupAfter time.Time
 }
 
-// ObjectRef is a logical (object_key, key) pair to copy.
+// ObjectRef is a logical (object_key, key) pair to copy, with its recorded
+// size for the physical verify.
 type ObjectRef struct {
 	ObjectKey string
 	Key       string
+	SizeBytes int64
 }
 
 // MigrationRepo is the persistence seam for the migration state machine.
@@ -106,6 +114,7 @@ type StorageMigrationWorker struct {
 	Repo      MigrationRepo
 	Copier    ObjectCopier
 	Deleter   ObjectDeleter
+	Header    ObjectHeader
 	Interval  time.Duration
 	CopyBatch int
 	Logger    *zap.Logger
@@ -248,16 +257,60 @@ func (w *StorageMigrationWorker) stepRebinding(ctx context.Context, m StorageMig
 	return w.Repo.SetState(ctx, m.TenantID, MigStateVerifying)
 }
 
-// stepVerifying is a count-based check for slice 1 (every listed object was
-// copied). Physical HEAD/checksum verification against the target bucket, and
-// old-prefix cleanup, are later slices — the source copies remain as a fallback.
+// stepVerifying confirms the migration is sound before serving from the
+// dedicated bucket: the count matches, and — when a Header is wired — every
+// object physically exists in the TARGET bucket with the recorded size. A miss
+// or size mismatch fails the migration (the object_keys are already rebound, so
+// completing on a bad copy would serve a broken object; the source copies are
+// still present for a repair). Size, not checksum: S3 ETags differ between a
+// server-side copy and a stream-through (multipart) upload, so they can't be
+// compared across copy methods.
 func (w *StorageMigrationWorker) stepVerifying(ctx context.Context, m StorageMigration) error {
 	if m.ObjectsCopied < m.ObjectsTotal {
 		return fmt.Errorf("verify: copied %d < total %d", m.ObjectsCopied, m.ObjectsTotal)
 	}
+	if w.Header != nil {
+		if err := w.verifyPhysical(ctx, m); err != nil {
+			w.log().Error("physical verify failed; not completing",
+				zap.String("tenant_id", m.TenantID.String()), zap.Error(err))
+			return w.Repo.Fail(ctx, m.TenantID, "physical verify: "+err.Error())
+		}
+	}
 	w.log().Info("migration completed",
 		zap.String("tenant_id", m.TenantID.String()), zap.Int64("objects", m.ObjectsCopied))
 	return w.Repo.Complete(ctx, m.TenantID)
+}
+
+// verifyPhysical HEADs every object in the TARGET bucket and checks its size
+// against the source's recorded size_bytes.
+func (w *StorageMigrationWorker) verifyPhysical(ctx context.Context, m StorageMigration) error {
+	curOK, curKey := "", ""
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		objs, err := w.Repo.ListObjects(ctx, m.TenantID, curOK, curKey, w.CopyBatch)
+		if err != nil {
+			return fmt.Errorf("list objects: %w", err)
+		}
+		if len(objs) == 0 {
+			return nil
+		}
+		for _, o := range objs {
+			dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, ObjectKey: o.ObjectKey, Key: o.Key}
+			got, err := w.Header.HeadObject(ctx, dst)
+			if err != nil {
+				return fmt.Errorf("%s/%s missing in target: %w", o.ObjectKey, o.Key, err)
+			}
+			if got != o.SizeBytes {
+				return fmt.Errorf("%s/%s size mismatch: target %d != source %d", o.ObjectKey, o.Key, got, o.SizeBytes)
+			}
+			curOK, curKey = o.ObjectKey, o.Key
+		}
+		if len(objs) < w.CopyBatch {
+			return nil
+		}
+	}
 }
 
 // stepCompleted runs the retention-gated cleanup (slice 2): once the window has
