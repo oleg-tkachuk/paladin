@@ -831,9 +831,17 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	// Object — child of ObjectKey.
 	if r.Key != "" || r.ObjectID != uuid.Nil {
 		oUID := e.resourceUID(r, authSlug)
+		// tags: Set<String> of KEYS (membership tests, back-compat).
+		// tag_values: Record<String,String> of key→value, so policies can test
+		// a value, e.g. `resource.tag_values has "classified" &&
+		// resource.tag_values["classified"] == "true"`. Both are populated from
+		// the same map; keeping `tags` avoids breaking existing key-membership
+		// policies.
 		tagsSet := make([]cedartypes.Value, 0, len(r.Tags))
-		for k := range r.Tags {
+		tagValues := make(cedartypes.RecordMap, len(r.Tags))
+		for k, v := range r.Tags {
 			tagsSet = append(tagsSet, cedartypes.String(k))
+			tagValues[cedartypes.String(k)] = cedartypes.String(v)
 		}
 		var parents cedartypes.EntityUIDSet
 		if okUID != (cedartypes.EntityUID{}) {
@@ -852,6 +860,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"bucket_name":  cedartypes.String(r.BucketName),
 				"backend_id":   cedartypes.String(r.BackendID),
 				"tags":         cedartypes.NewSet(tagsSet...),
+				"tag_values":   cedartypes.NewRecord(tagValues),
 			}),
 		}
 	}

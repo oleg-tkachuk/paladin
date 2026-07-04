@@ -43,6 +43,12 @@ func TestPolicyReadsPerObjectResourceAttr(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "tag_values (value predicate) triggers per-row",
+			text: `forbid (principal, action, resource)
+			       when { resource.tag_values has "classified" && resource.tag_values["classified"] == "true" };`,
+			want: true,
+		},
+		{
 			name: "state predicate triggers per-row",
 			text: `permit (principal, action, resource)
 			       when { resource.state == "AVAILABLE" };`,

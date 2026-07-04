@@ -65,6 +65,14 @@ entity Object in [ObjectKey] = {
   bucket_name: String,
   backend_id: String,
   tags: Set<String>,
+  // Runtime-only: the engine also populates `tag_values`, a dynamic
+  // Record of tag_name -> tag_value (String -> String), so a policy can test a
+  // tag's VALUE, not just its presence:
+  //   resource.tag_values has "classified" && resource.tag_values["classified"] == "true"
+  // It is intentionally NOT declared as a typed attribute above because Cedar's
+  // schema language has no open-map type; it is available at authorization time
+  // but invisible to `cedar validate`. Use `has` before indexing — a missing
+  // key is an evaluation error otherwise.
 };
 
 // User serves both as the principal (keyed by Subject) and as a resource
