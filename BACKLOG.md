@@ -546,38 +546,55 @@ open deliberately — each notes why._
 - **Trigger to do:** customer ask — banking / fintech enterprise already
   running a RabbitMQ cluster as their event bus.
 
-### NATS auth: NKey / JWT support
+### NATS auth: NKey / JWT support — broker-side (gitops)
 
-- **Status:** Partially done — the PALADIN dispatcher half shipped
-  2026-06-29; the broker + SeaweedFS-publisher + ops half remains.
-- **Reason:** The outbound `Dispatcher` → NATS edge now supports NKey /
-  JWT: `NatsSink.credentials_ref` honours `token:`, `nkey:<seed>` (in-memory
-  `nats.Nkey` via `nkeys.FromSeed`), and `jwt:<jwt>+<seed>` (in-memory
-  `nats.UserJWTAndSeed`) — no temp-file materialisation needed. Covered by
-  embedded-server auth round-trip tests per scheme (nkey + decentralized
-  JWT). What's still unauthenticated:
-    - **SeaweedFS publisher** — `gocdk_pub_sub` reads `NATS_SERVER_URL`
-      from process env (set on `spec.filer.env` in
-      `gitops/.../seaweedfs/seaweed.yaml`). No auth fields; gocloud.dev's
-      natspubsub driver doesn't surface them.
-    - **The broker itself** — the `nats` chart runs auth-free, so the
-      dispatcher's new NKey/JWT support has nothing to authenticate against
-      yet in the lab.
-  Fine for the lab cluster (NATS has no exposed ingress, cluster-network
-  only). Production needs broker-side auth so a stolen Pod identity can't
-  fan-out arbitrary events.
-- **Definition of Done (remaining):**
-  - `NATS_SERVER_URL` for SeaweedFS published via a Kubernetes `Secret`
-    (the URL itself becomes `nats://<token>@host:port` for the simplest
-    auth flavour).
-  - `gitops` overlay enables NKey/JWT on the NATS broker deployment.
-  - Document the credential-rotation flow in `docs/`.
-- **Trigger to do:** before any non-lab deployment of the SF NATS
-  publisher (the PALADIN sink half is ready now).
+- **Status:** Partially done — the PALADIN-side (client) half shipped 2026-06-29.
+  The remaining work is **broker-side and lives in gitops** (separate repo),
+  not here — there is nothing left to implement in this repo. The
+  SeaweedFS-publisher leg of the original DoD is now **moot** (Garage — see
+  below).
+- **Shipped (this repo):** the outbound `Dispatcher` → NATS sink supports NKey /
+  JWT. `NatsSink.credentials_ref` honours `token:`, `nkey:<seed>` (in-memory
+  `nats.Nkey` via `nkeys.FromSeed`) and `jwt:<jwt>+<seed>` (in-memory
+  `nats.UserJWTAndSeed`) — no temp-file materialisation. Covered by
+  embedded-server auth round-trip tests per scheme (nkey + decentralized JWT).
+  This is client-side only: it has nothing to authenticate against until the
+  broker itself requires auth (the lab `nats` chart runs auth-free, and there is
+  no NATS broker chart in this repo).
+- **Remaining — all gitops / out of this repo:**
+  - Enable NKey/JWT on the NATS broker deployment (gitops's `nats` chart).
+  - Document the credential-rotation flow. Deferred **with** the broker change,
+    not before it: writing a rotation runbook for a scheme the broker doesn't
+    yet enforce would drift. It belongs beside the gitops overlay that
+    introduces the broker identities it rotates.
+- **~~SeaweedFS-publisher auth~~ — MOOT under Garage.** The original DoD also
+  required auth on the SeaweedFS filer's `gocdk_pub_sub` publisher
+  (`gitops/.../seaweedfs/seaweed.yaml`, `NATS_SERVER_URL` from process env,
+  no auth fields exposed by gocloud.dev's natspubsub driver). The dev cluster
+  switched the `primary` backend off SeaweedFS onto **Garage** (see the
+  ADR-0011 storage-migration note *"dev cluster object store is Garage"* in the
+  Storage section) — Garage runs no SF filer→NATS publisher, so there is no SF
+  publisher to authenticate. The in-repo SF *source* adapter
+  (`internal/eventingest/source_seaweedfs_nats.go`) stays as a dormant,
+  pluggable ingest format; if a SeaweedFS-class backend is ever reused this leg
+  returns with it.
+- **Trigger to do (revised):** a **non-lab deployment of the PALADIN dispatcher
+  NATS sink** — the event fan-out bus (`paladin.bucket.updated` etc.), which runs
+  independent of the object store and is live under Garage. That is what now
+  needs broker-side auth so a stolen Pod identity can't fan out arbitrary
+  events. The former trigger (a non-lab SF NATS publisher) is void while Garage
+  is the store.
 
 ### Storage event ingest pipeline — JetStream upgrade + integration coverage
 
 - **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
+- **Dormant under Garage (2026-07-05):** this pipeline is SeaweedFS-specific
+  (SF filer→NATS publisher). The dev cluster switched the `primary` backend off
+  SeaweedFS onto **Garage** (see the *"dev cluster object store is Garage"* note
+  in the Storage section), which emits no filer events, so the SF source is idle
+  in the current cluster. The in-repo SF source adapter stays as a pluggable
+  format for a possible SF-class backend return; the ~~SeaweedFS-publisher auth~~
+  leg of the NATS-auth item above went moot for the same reason.
 - **State as of 2026-05-10:** Full SF → NATS → PALADIN ingest pipeline
   works end-to-end on the local cluster, **including PROMOTE on
   a real PALADIN data-plane upload**. Verified live:
