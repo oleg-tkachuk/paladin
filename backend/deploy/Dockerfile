@@ -2,7 +2,7 @@
 #
 # PALADIN container image — three stages:
 #
-#   1. tools   — installs codegen binaries (buf, sqlc, protoc-gen-*, wire)
+#   1. tools   — installs codegen binaries (buf, sqlc, protoc-gen-*)
 #                on BUILDPLATFORM. Pinned versions + cache mounts.
 #   2. builder — runs codegen + go build for TARGETPLATFORM.
 #   3. runtime — distroless static; ENTRYPOINTs the binary.
@@ -52,7 +52,6 @@ FROM gobase AS tools
 
 ARG PROTOC_GEN_GO_VERSION=v1.36.11
 ARG PROTOC_GEN_CONNECT_GO_VERSION=v1.19.1
-ARG WIRE_VERSION=v0.7.0
 ARG SQLC_VERSION=v1.30.0
 ARG BUF_VERSION=v1.50.0
 
@@ -60,7 +59,6 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
     go install connectrpc.com/connect/cmd/protoc-gen-connect-go@${PROTOC_GEN_CONNECT_GO_VERSION} && \
-    go install github.com/google/wire/cmd/wire@${WIRE_VERSION} && \
     go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION} && \
     go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 

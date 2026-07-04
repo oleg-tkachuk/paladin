@@ -6,7 +6,6 @@ package tools
 
 import (
 	_ "connectrpc.com/connect/cmd/protoc-gen-connect-go"
-	_ "github.com/google/wire/cmd/wire"
 	_ "github.com/sqlc-dev/sqlc/cmd/sqlc"
 	_ "github.com/vektra/mockery/v3"
 )

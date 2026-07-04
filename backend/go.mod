@@ -17,7 +17,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/exaring/otelpgx v0.11.1
 	github.com/google/uuid v1.6.0
-	github.com/google/wire v0.7.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/nats-io/jwt/v2 v2.8.1
@@ -44,6 +43,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/automaxprocs v1.6.0
+	go.uber.org/fx v1.24.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sync v0.21.0
@@ -103,6 +103,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
+	go.uber.org/dig v1.19.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 )
 
@@ -139,7 +140,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/cel-go v0.29.0
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
-	github.com/google/subcommands v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

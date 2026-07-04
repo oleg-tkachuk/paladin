@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -69,29 +68,14 @@ type ConfigPath string
 // that exists before the config-driven logger is built.
 type BootstrapLogger *zap.Logger
 
-// ProviderSet assembles every handler, engine, and long-lived resource in
-// the PALADIN runtime. Storage/Repos are *not* provided here — the caller must
-// pass concrete implementations into InitializeApp.
-var ProviderSet = wire.NewSet(
-	ProvidePgxPool,
-	ProvideCELEvaluator,
-	ProvidePolicyStore,
-	ProvidePolicyEngine,
-	ProvideStateMachine,
-
-	ProvideObjectKeyHandler,
-	ProvideBucketHandler,
-	ProvideTenantHandler,
-	ProvideObjectTagHandler,
-	ProvideOperationHandler,
-	ProvideBatchHandler,
-	ProvideObjectHandler,
-	ProvidePresignHandler,
-	ProvideMultipartHandler,
-
-	wire.Bind(new(batch.Submitter), new(*operation.Handler)),
-	wire.Bind(new(policy.Store), new(*policy.PostgresStore)),
-)
+// NOTE: this package holds the plain constructor functions (Provide*) + the
+// shared Repos/Storage seam types that internal/app wires by hand. The former
+// Google Wire ProviderSet (wire.NewSet + wire.Bind) was removed: Wire (archived
+// upstream) was never actually code-generating here — no injector, no
+// wire_gen.go — so it was dead. Dependency injection + lifecycle now run
+// through Uber fx (internal/app/appfx.go). The batch.Submitter/policy.Store
+// bindings the old wire.Bind expressed are satisfied structurally where the
+// handlers are passed.
 
 // ProvidePgxPool extracts the concrete *pgxpool.Pool from *postgres.DB.
 // statemachine + policy store need the concrete pool for LISTEN/NOTIFY
