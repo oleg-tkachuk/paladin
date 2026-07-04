@@ -164,7 +164,44 @@ type Repository interface {
 	SoftDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error
 	HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error
 	RestoreTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (Tenant, error)
+
+	// StartStorageMigration provisions the tenant's dedicated bucket
+	// (provision_state='pending', owned by the tenant) and inserts the
+	// tenant_storage_migrations row (state='provisioning') in one transaction
+	// (ADR-0011 Phase 3). ErrStorageMigrationExists when a migration row is
+	// already present for the tenant. Returns the created migration.
+	StartStorageMigration(ctx context.Context, args StartStorageMigrationArgs) (StorageMigration, error)
+	// GetStorageMigration returns the tenant's migration status. ErrNotFound
+	// when none was ever started.
+	GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
 }
+
+// StartStorageMigrationArgs is the input for Repository.StartStorageMigration.
+type StartStorageMigrationArgs struct {
+	TenantID         uuid.UUID
+	SourceBackendID  string
+	SourceBucketName string
+	TargetBackendID  string
+	TargetBucketName string
+}
+
+// StorageMigration is a tenant's shared->dedicated copy-job status
+// (tenant_storage_migrations row).
+type StorageMigration struct {
+	TenantID         uuid.UUID
+	SourceBackendID  string
+	SourceBucketName string
+	TargetBackendID  string
+	TargetBucketName string
+	State            string
+	ObjectsTotal     int64
+	ObjectsCopied    int64
+	Error            string
+}
+
+// ErrStorageMigrationExists is returned by StartStorageMigration when a
+// migration row already exists for the tenant.
+var ErrStorageMigrationExists = errors.New("storage migration already exists for tenant")
 
 // RenameTenantSlugArgs is the input shape for Repository.Rename and
 // Handler.RenameTenantSlug.
@@ -503,6 +540,72 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 		return nil, connect.NewError(connect.CodeNotFound, lookupErr)
 	}
 	return &t, nil
+}
+
+// MigrateTenantStorageLayout starts a shared->dedicated migration (ADR-0011
+// Phase 3): it validates the tenant is currently shared, provisions the
+// tenant's dedicated bucket, and records the copy job. The async
+// StorageMigrationWorker does the actual object copy + rebind. Returns the
+// initial migration status.
+func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string) (*StorageMigration, error) {
+	if err := requirePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
+		return nil, err
+	}
+
+	t, err := h.repo.Get(ctx, tenantID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if t.StorageLayout != "shared" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout))
+	}
+
+	// Source is the tenant's current default (shared) bucket. Without one there
+	// is nothing to migrate from.
+	src, err := h.repo.GetDefaultBinding(ctx, tenantID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("tenant has no default binding to migrate from: %w", err))
+	}
+
+	targetBackend := targetBackendID
+	if targetBackend == "" {
+		targetBackend = src.BackendID
+	}
+	args := StartStorageMigrationArgs{
+		TenantID:         tenantID,
+		SourceBackendID:  src.BackendID,
+		SourceBucketName: src.BucketName,
+		TargetBackendID:  targetBackend,
+		TargetBucketName: "paladin-" + tenantID.String(),
+	}
+	m, err := h.repo.StartStorageMigration(ctx, args)
+	if err != nil {
+		if errors.Is(err, ErrStorageMigrationExists) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &m, nil
+}
+
+// GetTenantStorageMigration returns a tenant's migration status.
+func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.UUID) (*StorageMigration, error) {
+	if err := requirePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionReadTenant, tenantID); err != nil {
+		return nil, err
+	}
+	m, err := h.repo.GetStorageMigration(ctx, tenantID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return &m, nil
 }
 
 // defaultRenameGraceWindow bounds how long after a rename the old slug still

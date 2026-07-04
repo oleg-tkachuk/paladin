@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	// Records copy progress + the resume cursor after a batch.
+	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorObjectKey string, cursorKey string) (int64, error)
 	// Atomically rebinds an object_key to a different (backend_id, bucket_name).
 	// The DB trigger enforce_object_key_bucket_tenancy validates the tenancy
 	// constraint (single-tenant buckets reject mismatched tenants).
@@ -45,6 +47,7 @@ type Querier interface {
 	// first sighting (claimed = true → process) or a duplicate (false → skip).
 	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
 	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
@@ -73,6 +76,8 @@ type Querier interface {
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
+	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
+	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string) (TenantStorageMigration, error)
 	// Tenant queries.
 	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout string) error
 	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
@@ -91,6 +96,7 @@ type Querier interface {
 	DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
+	FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error string) (int64, error)
 	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
 	// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
@@ -132,6 +138,7 @@ type Querier interface {
 	GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error)
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
+	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error)
 	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
@@ -179,6 +186,8 @@ type Querier interface {
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, objectKey string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
+	// Worker scan: non-terminal migrations, oldest-touched first.
+	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error)
 	// $3 is the keyset-pagination cursor; pgUUID(uuid.Nil) maps to NULL,
 	// which the Go adapter passes for the first page. Without the IS NULL
 	// guard, `api_key_id > NULL` evaluates to NULL → all rows filtered out
@@ -335,6 +344,12 @@ type Querier interface {
 	MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
 	MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error)
 	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
+	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// All object_keys of a tenant, for the transactional rebind.
+	MigrationListTenantObjectKeys(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
+	// Objects to copy, keyset-paginated by (object_key, key) after the cursor so a
+	// worker restart resumes mid-prefix instead of rescanning from the top.
+	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterObjectKey string, afterKey string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.
 	// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
@@ -439,6 +454,9 @@ type Querier interface {
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
 	// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD string, expectedVersion int64) (int64, error)
+	SetStorageMigrationState(ctx context.Context, tenantID pgtype.UUID, state string) (int64, error)
+	// Records the object count and moves provisioning -> copying.
+	SetStorageMigrationTotal(ctx context.Context, tenantID pgtype.UUID, objectsTotal int64) (int64, error)
 	// Tenant aggregate budget queries.
 	//
 	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical
@@ -461,6 +479,7 @@ type Querier interface {
 	// deleted; deletion of the underlying bucket is RESTRICTed so an
 	// operator must rebind before tearing down the bucket.
 	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, backendID string, bucketName string, setBy string) error
+	SetTenantStorageLayout(ctx context.Context, tenantID pgtype.UUID, storageLayout string) (int64, error)
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Sets deleted_at on an active row. expected_version=0 means

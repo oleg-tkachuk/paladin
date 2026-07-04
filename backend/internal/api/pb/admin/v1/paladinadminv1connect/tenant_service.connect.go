@@ -60,6 +60,12 @@ const (
 	// TenantServiceRenameTenantSlugProcedure is the fully-qualified name of the TenantService's
 	// RenameTenantSlug RPC.
 	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
+	// TenantServiceMigrateTenantStorageLayoutProcedure is the fully-qualified name of the
+	// TenantService's MigrateTenantStorageLayout RPC.
+	TenantServiceMigrateTenantStorageLayoutProcedure = "/paladin.admin.v1.TenantService/MigrateTenantStorageLayout"
+	// TenantServiceGetTenantStorageMigrationProcedure is the fully-qualified name of the
+	// TenantService's GetTenantStorageMigration RPC.
+	TenantServiceGetTenantStorageMigrationProcedure = "/paladin.admin.v1.TenantService/GetTenantStorageMigration"
 	// TenantServiceResolveRenamedSlugProcedure is the fully-qualified name of the TenantService's
 	// ResolveRenamedSlug RPC.
 	TenantServiceResolveRenamedSlugProcedure = "/paladin.admin.v1.TenantService/ResolveRenamedSlug"
@@ -104,6 +110,16 @@ type TenantServiceClient interface {
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
+	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
+	// (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
+	// async copy job that server-side-copies every object into it, then rebinds
+	// the object_keys and flips the layout. Returns the initial migration status;
+	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
+	// tenant is not currently `shared` or a migration is already in flight.
+	MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
+	// GetTenantStorageMigration returns the current migration status for a
+	// tenant, or NOT_FOUND if none was ever started.
+	GetTenantStorageMigration(context.Context, *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
 	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
 	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
 	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
@@ -190,6 +206,18 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
 			connect.WithClientOptions(opts...),
 		),
+		migrateTenantStorageLayout: connect.NewClient[v1.MigrateTenantStorageLayoutRequest, v1.StorageMigrationStatus](
+			httpClient,
+			baseURL+TenantServiceMigrateTenantStorageLayoutProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("MigrateTenantStorageLayout")),
+			connect.WithClientOptions(opts...),
+		),
+		getTenantStorageMigration: connect.NewClient[v1.GetTenantStorageMigrationRequest, v1.StorageMigrationStatus](
+			httpClient,
+			baseURL+TenantServiceGetTenantStorageMigrationProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("GetTenantStorageMigration")),
+			connect.WithClientOptions(opts...),
+		),
 		resolveRenamedSlug: connect.NewClient[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse](
 			httpClient,
 			baseURL+TenantServiceResolveRenamedSlugProcedure,
@@ -219,19 +247,21 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // tenantServiceClient implements TenantServiceClient.
 type tenantServiceClient struct {
-	createTenant              *connect.Client[v1.CreateTenantRequest, v1.Tenant]
-	getTenant                 *connect.Client[v1.GetTenantRequest, v1.Tenant]
-	updateTenant              *connect.Client[v1.UpdateTenantRequest, v1.Tenant]
-	deleteTenant              *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
-	listTenants               *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
-	setInheritedPolicy        *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
-	restoreTenant             *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
-	purgeTenant               *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
-	renameTenantSlug          *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
-	resolveRenamedSlug        *connect.Client[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse]
-	getTenantDefaultBinding   *connect.Client[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
-	setTenantDefaultBinding   *connect.Client[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
-	clearTenantDefaultBinding *connect.Client[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse]
+	createTenant               *connect.Client[v1.CreateTenantRequest, v1.Tenant]
+	getTenant                  *connect.Client[v1.GetTenantRequest, v1.Tenant]
+	updateTenant               *connect.Client[v1.UpdateTenantRequest, v1.Tenant]
+	deleteTenant               *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
+	listTenants                *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
+	setInheritedPolicy         *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
+	restoreTenant              *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
+	purgeTenant                *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
+	renameTenantSlug           *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
+	migrateTenantStorageLayout *connect.Client[v1.MigrateTenantStorageLayoutRequest, v1.StorageMigrationStatus]
+	getTenantStorageMigration  *connect.Client[v1.GetTenantStorageMigrationRequest, v1.StorageMigrationStatus]
+	resolveRenamedSlug         *connect.Client[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse]
+	getTenantDefaultBinding    *connect.Client[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
+	setTenantDefaultBinding    *connect.Client[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
+	clearTenantDefaultBinding  *connect.Client[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse]
 }
 
 // CreateTenant calls paladin.admin.v1.TenantService.CreateTenant.
@@ -277,6 +307,16 @@ func (c *tenantServiceClient) PurgeTenant(ctx context.Context, req *connect.Requ
 // RenameTenantSlug calls paladin.admin.v1.TenantService.RenameTenantSlug.
 func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
 	return c.renameTenantSlug.CallUnary(ctx, req)
+}
+
+// MigrateTenantStorageLayout calls paladin.admin.v1.TenantService.MigrateTenantStorageLayout.
+func (c *tenantServiceClient) MigrateTenantStorageLayout(ctx context.Context, req *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
+	return c.migrateTenantStorageLayout.CallUnary(ctx, req)
+}
+
+// GetTenantStorageMigration calls paladin.admin.v1.TenantService.GetTenantStorageMigration.
+func (c *tenantServiceClient) GetTenantStorageMigration(ctx context.Context, req *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
+	return c.getTenantStorageMigration.CallUnary(ctx, req)
 }
 
 // ResolveRenamedSlug calls paladin.admin.v1.TenantService.ResolveRenamedSlug.
@@ -329,6 +369,16 @@ type TenantServiceHandler interface {
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
+	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
+	// (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
+	// async copy job that server-side-copies every object into it, then rebinds
+	// the object_keys and flips the layout. Returns the initial migration status;
+	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
+	// tenant is not currently `shared` or a migration is already in flight.
+	MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
+	// GetTenantStorageMigration returns the current migration status for a
+	// tenant, or NOT_FOUND if none was ever started.
+	GetTenantStorageMigration(context.Context, *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
 	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
 	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
 	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
@@ -411,6 +461,18 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tenantServiceMigrateTenantStorageLayoutHandler := connect.NewUnaryHandler(
+		TenantServiceMigrateTenantStorageLayoutProcedure,
+		svc.MigrateTenantStorageLayout,
+		connect.WithSchema(tenantServiceMethods.ByName("MigrateTenantStorageLayout")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tenantServiceGetTenantStorageMigrationHandler := connect.NewUnaryHandler(
+		TenantServiceGetTenantStorageMigrationProcedure,
+		svc.GetTenantStorageMigration,
+		connect.WithSchema(tenantServiceMethods.ByName("GetTenantStorageMigration")),
+		connect.WithHandlerOptions(opts...),
+	)
 	tenantServiceResolveRenamedSlugHandler := connect.NewUnaryHandler(
 		TenantServiceResolveRenamedSlugProcedure,
 		svc.ResolveRenamedSlug,
@@ -455,6 +517,10 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 			tenantServicePurgeTenantHandler.ServeHTTP(w, r)
 		case TenantServiceRenameTenantSlugProcedure:
 			tenantServiceRenameTenantSlugHandler.ServeHTTP(w, r)
+		case TenantServiceMigrateTenantStorageLayoutProcedure:
+			tenantServiceMigrateTenantStorageLayoutHandler.ServeHTTP(w, r)
+		case TenantServiceGetTenantStorageMigrationProcedure:
+			tenantServiceGetTenantStorageMigrationHandler.ServeHTTP(w, r)
 		case TenantServiceResolveRenamedSlugProcedure:
 			tenantServiceResolveRenamedSlugHandler.ServeHTTP(w, r)
 		case TenantServiceGetTenantDefaultBindingProcedure:
@@ -506,6 +572,14 @@ func (UnimplementedTenantServiceHandler) PurgeTenant(context.Context, *connect.R
 
 func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.RenameTenantSlug is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.MigrateTenantStorageLayout is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) GetTenantStorageMigration(context.Context, *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.GetTenantStorageMigration is not implemented"))
 }
 
 func (UnimplementedTenantServiceHandler) ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error) {

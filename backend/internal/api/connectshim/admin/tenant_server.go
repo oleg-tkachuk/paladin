@@ -92,6 +92,44 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.Ge
 	return connect.NewResponse(tenantDomainToProto(t)), nil
 }
 
+func storageMigrationToProto(m *tenant.StorageMigration) *pb.StorageMigrationStatus {
+	return &pb.StorageMigrationStatus{
+		Tenant:           "tenants/" + m.TenantID.String(),
+		State:            m.State,
+		ObjectsTotal:     m.ObjectsTotal,
+		ObjectsCopied:    m.ObjectsCopied,
+		SourceBackendId:  m.SourceBackendID,
+		SourceBucketName: m.SourceBucketName,
+		TargetBackendId:  m.TargetBackendID,
+		TargetBucketName: m.TargetBucketName,
+		Error:            m.Error,
+	}
+}
+
+func (s *TenantServer) MigrateTenantStorageLayout(ctx context.Context, req *connect.Request[pb.MigrateTenantStorageLayoutRequest]) (*connect.Response[pb.StorageMigrationStatus], error) {
+	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.H.MigrateTenantStorageLayout(ctx, id, req.Msg.GetTargetBackendId())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(storageMigrationToProto(m)), nil
+}
+
+func (s *TenantServer) GetTenantStorageMigration(ctx context.Context, req *connect.Request[pb.GetTenantStorageMigrationRequest]) (*connect.Response[pb.StorageMigrationStatus], error) {
+	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.H.GetTenantStorageMigration(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(storageMigrationToProto(m)), nil
+}
+
 func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb.UpdateTenantRequest]) (*connect.Response[pb.Tenant], error) {
 	m := req.Msg
 	idStr, err := tenantIDFromName(m.GetName())

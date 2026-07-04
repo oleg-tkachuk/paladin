@@ -546,6 +546,24 @@ type TenantSlugHistory struct {
 	RenamedAt pgtype.Timestamptz `json:"renamed_at"`
 }
 
+type TenantStorageMigration struct {
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	SourceBackendID  string             `json:"source_backend_id"`
+	SourceBucketName string             `json:"source_bucket_name"`
+	TargetBackendID  string             `json:"target_backend_id"`
+	TargetBucketName string             `json:"target_bucket_name"`
+	State            string             `json:"state"`
+	ObjectsTotal     int64              `json:"objects_total"`
+	ObjectsCopied    int64              `json:"objects_copied"`
+	CursorObjectKey  string             `json:"cursor_object_key"`
+	CursorKey        string             `json:"cursor_key"`
+	Error            string             `json:"error"`
+	Attempts         int32              `json:"attempts"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+}
+
 type User struct {
 	UserID          pgtype.UUID        `json:"user_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`

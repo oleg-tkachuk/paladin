@@ -254,6 +254,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
+	// ADR-0011 Phase 3: shared->dedicated storage migration copy job. Always
+	// registered — it is idle unless a tenant_storage_migrations row is active
+	// (the admin MigrateTenantStorageLayout RPC creates one), so it needs no
+	// config toggle. Slice 1 is same-backend server-side copy.
+	out = append(out, &worker.StorageMigrationWorker{
+		Repo:   adapters.NewStorageMigrationRepo(db.Queries, deps.Pool),
+		Copier: storageCopier{s: deps.Storage.Object},
+		Logger: l.Named("storage-migration"),
+	})
+
 	return out
 }
 

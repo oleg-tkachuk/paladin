@@ -45,6 +45,18 @@ service TenantService {
   // the supplied resource_version. Returns the renamed Tenant.
   rpc RenameTenantSlug(RenameTenantSlugRequest) returns (Tenant);
 
+  // MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
+  // (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
+  // async copy job that server-side-copies every object into it, then rebinds
+  // the object_keys and flips the layout. Returns the initial migration status;
+  // poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
+  // tenant is not currently `shared` or a migration is already in flight.
+  rpc MigrateTenantStorageLayout(MigrateTenantStorageLayoutRequest) returns (StorageMigrationStatus);
+
+  // GetTenantStorageMigration returns the current migration status for a
+  // tenant, or NOT_FOUND if none was ever started.
+  rpc GetTenantStorageMigration(GetTenantStorageMigrationRequest) returns (StorageMigrationStatus);
+
   // ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
   // renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
   // "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
@@ -169,6 +181,38 @@ message ResolveRenamedSlugResponse {
   string new_slug = 1;
   // renamed_at — when the rotation happened (for a "renamed N days ago" hint).
   google.protobuf.Timestamp renamed_at = 2;
+}
+
+message MigrateTenantStorageLayoutRequest {
+  // name — "tenants/{tenant_id_or_slug}". The tenant MUST currently be shared.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // target_backend_id — backend the dedicated bucket is provisioned on.
+  // Optional; empty reuses the tenant's current (shared) backend. Slice 1
+  // supports same-backend only, so a different backend is rejected by the copy
+  // job until the cross-backend stream-through path lands.
+  string target_backend_id = 2;
+}
+
+message GetTenantStorageMigrationRequest {
+  // name — "tenants/{tenant_id_or_slug}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0011
+// Phase 3): the copy job's state machine + progress.
+message StorageMigrationStatus {
+  // tenant — "tenants/{tenant_id}".
+  string tenant = 1;
+  // state — provisioning | copying | rebinding | verifying | completed | failed.
+  string state = 2;
+  int64 objects_total = 3;
+  int64 objects_copied = 4;
+  string source_backend_id = 5;
+  string source_bucket_name = 6;
+  string target_backend_id = 7;
+  string target_bucket_name = 8;
+  // error — non-empty only in the `failed` state.
+  string error = 9;
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the

@@ -894,8 +894,9 @@ open deliberately — each notes why._
 ### Per-tenant S3 bucket layout — Phase 3 (shared→dedicated copy job)
 
 - **Status:** Phases 1 + 2 SHIPPED 2026-07-02/03 per
-  [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md); only
-  **Phase 3** (the migration copy job) remains.
+  [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md); **Phase 3
+  slice 1 SHIPPED** (same-backend copy job) — cross-backend + cleanup +
+  frontend remain.
 - **Shipped — Phase 2 (multi-backend routing):** `BackendRegistry`
   (client-per-backend, #121) → `backend_id` threading resolver→storage
   boundary (#122) → per-backend routers on `wire.Storage` (#123), proven
@@ -913,14 +914,23 @@ open deliberately — each notes why._
   to `ready`, so a backend that accepts `CreateBucket` without yielding a
   writable bucket keeps the gate closed and surfaces `provision_error`
   instead of 500-ing every upload.
-- **Definition of Done (remaining — Phase 3):**
-  - `streamThrough` cross-backend copy (GET(src)→PUT(dst), multipart for
-    large objects) behind the `CopyObject` router branch that currently
-    refuses cross-backend pairs loudly.
-  - An admin-triggered per-tenant migration job: provision dedicated
-    bucket → same-key `CopyObject` sweep of the `<tenant_id>/` prefix
-    with watermark/retry → transactional `object_keys` rebind (FK is
-    DEFERRABLE) → verify → delete old prefix (or tombstone).
+- **Shipped — Phase 3 slice 1 (same-backend copy job):** migration 056
+  `tenant_storage_migrations` (resumable state machine + cursor); admin RPC
+  `MigrateTenantStorageLayout` + `GetTenantStorageMigration` (provision the
+  dedicated bucket + record the migration); `StorageMigrationWorker` (leased
+  BackgroundJob) drives provisioning→copying (same-key server-side
+  `CopyObject`, cursor-resumable)→transactional `object_keys` rebind + layout
+  flip→verify→completed. Cross-backend pairs fail loudly (deferred to the
+  stream-through slice). Source copies are RETAINED (cleanup is a later slice).
+  Unit-tested state machine (happy path, bucket-wait, cross-backend fail).
+- **Definition of Done (remaining — Phase 3 slices 2–4):**
+  - **Slice 2 — cleanup:** delete the old `<tenant_id>/` prefix from the
+    shared bucket (or tombstone with a retention window) after verify.
+  - **Slice 3 — cross-backend:** `streamThrough` copy (GET(src)→PUT(dst),
+    multipart for large objects) behind the `CopyObject` router branch that
+    currently refuses cross-backend pairs; physical HEAD/checksum verify.
+  - **Slice 4 — surface:** frontend migration status + provision-time bucket
+    tagging (`tenant_id`) for cost attribution.
   - Two-MinIO integration test of the full migration.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
