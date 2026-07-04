@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -64,21 +65,44 @@ type SharedDeps struct {
 	// so future listener-scoped jobs share the same instance.
 	BackgroundJobs []BackgroundJob
 
-	// stopWatchers cancels the long-lived background watchers BuildSharedDeps
-	// starts (today: the Cedar policy engine's LISTEN loop, which holds a
-	// pooled connection for the process lifetime). It MUST be called before
-	// db.Close() — pgxpool.Close() blocks until every acquired connection is
-	// released, and the watcher's held LISTEN connection would otherwise
-	// deadlock shutdown until the pod is SIGKILLed. See StopWatchers.
-	stopWatchers context.CancelFunc
+	// watcherMu guards watcherStops.
+	watcherMu sync.Mutex
+	// watcherStops holds the cancel for every long-lived background watcher
+	// that holds a pooled connection for the process lifetime — the Cedar
+	// policy engine's LISTEN loop (registered here) and the admin plane's
+	// audit-stream LISTEN hub (registered by AssembleAdminMux). They MUST all
+	// be stopped before db.Close(): pgxpool.Close() blocks until every acquired
+	// connection is released, so any still-running watcher would deadlock
+	// shutdown until the pod is SIGKILLed. See RegisterWatcherStop/StopWatchers.
+	watcherStops []func()
 }
 
-// StopWatchers cancels the background watchers (Cedar LISTEN loop) so their
-// pooled connections are released. Idempotent and nil-safe. Every shutdown path
-// MUST call this before closing the DB pool — see the stopWatchers field.
+// RegisterWatcherStop records a cancel for a background watcher that holds a
+// pooled connection, to be run by StopWatchers before the pool is closed.
+// Nil-safe; call at construction time.
+func (d *SharedDeps) RegisterWatcherStop(cancel func()) {
+	if d == nil || cancel == nil {
+		return
+	}
+	d.watcherMu.Lock()
+	d.watcherStops = append(d.watcherStops, cancel)
+	d.watcherMu.Unlock()
+}
+
+// StopWatchers cancels every registered background watcher (Cedar LISTEN loop,
+// admin audit-stream hub, …) so their pooled connections are released.
+// Idempotent and nil-safe. Every shutdown path MUST call this before closing
+// the DB pool — see the watcherStops field.
 func (d *SharedDeps) StopWatchers() {
-	if d != nil && d.stopWatchers != nil {
-		d.stopWatchers()
+	if d == nil {
+		return
+	}
+	d.watcherMu.Lock()
+	stops := d.watcherStops
+	d.watcherStops = nil
+	d.watcherMu.Unlock()
+	for _, cancel := range stops {
+		cancel()
 	}
 }
 
@@ -149,19 +173,19 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	}
 
 	deps := &SharedDeps{
-		Cfg:          cfg,
-		Logger:       l,
-		DB:           db,
-		Pool:         pool,
-		Repos:        repos,
-		Storage:      storage,
-		PolEngine:    polEngine,
-		PolStore:     polStore,
-		SM:           statemachine.New(pool),
-		CELEval:      cel.NewEvaluator(),
-		Registry:     registry,
-		stopWatchers: cancelWatchers,
+		Cfg:       cfg,
+		Logger:    l,
+		DB:        db,
+		Pool:      pool,
+		Repos:     repos,
+		Storage:   storage,
+		PolEngine: polEngine,
+		PolStore:  polStore,
+		SM:        statemachine.New(pool),
+		CELEval:   cel.NewEvaluator(),
+		Registry:  registry,
 	}
+	deps.RegisterWatcherStop(cancelWatchers)
 
 	// Capability subsystem — additive; absence is fine. Built after the
 	// rest so the bundle can take a *SharedDeps for logging convenience.

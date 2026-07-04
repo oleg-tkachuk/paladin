@@ -250,10 +250,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// Connect). Auth: the same admin-audience bearer the console's RPCs
 	// use, verified inline by the handler; the stream is scoped to the
 	// JWT's tenant claim like ListAuditLog. One LISTEN connection per pod
-	// (migration 050's trigger NOTIFYs on every audit_log insert); the
-	// hub goroutine lives for the mux ctx.
+	// (migration 050's trigger NOTIFYs on every audit_log insert). The hub
+	// runs on a dedicated context registered with deps.StopWatchers — NOT the
+	// passed `ctx` (context.Background() under fx) — so the held LISTEN
+	// connection is released at shutdown before db.Close(); otherwise
+	// pgxpool.Close() deadlocks the admin/embedded teardown until SIGKILL.
+	hubCtx, hubCancel := context.WithCancel(context.Background())
+	deps.RegisterWatcherStop(hubCancel)
 	auditHub := auditstream.NewHub(l.Named("audit-stream"))
-	go auditHub.Run(ctx, deps.Pool)
+	go auditHub.Run(hubCtx, deps.Pool)
 	mux.Handle("/audit/stream", auditHub.SSEHandler(verifierAdmin))
 
 	// JWKS endpoint — public, unauthenticated. Verifiers in other pods
