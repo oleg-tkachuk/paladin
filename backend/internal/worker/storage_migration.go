@@ -186,6 +186,17 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 		return fmt.Errorf("list objects: %w", err)
 	}
 	if len(objs) == 0 {
+		// Safety net: never rebind on an incomplete copy. If the list is empty
+		// but fewer objects were copied than counted, something hid rows (an RLS
+		// GUC gap, a race) — rebinding here would orphan the uncopied objects on
+		// the old bucket. Fail loudly instead; the operator retries.
+		if m.ObjectsCopied < m.ObjectsTotal {
+			w.log().Error("copy ended short of the count; refusing to rebind",
+				zap.String("tenant_id", m.TenantID.String()),
+				zap.Int64("copied", m.ObjectsCopied), zap.Int64("total", m.ObjectsTotal))
+			return w.Repo.Fail(ctx, m.TenantID,
+				fmt.Sprintf("copy incomplete: %d of %d objects copied; not rebinding", m.ObjectsCopied, m.ObjectsTotal))
+		}
 		return w.Repo.SetState(ctx, m.TenantID, MigStateRebinding)
 	}
 	copied := m.ObjectsCopied

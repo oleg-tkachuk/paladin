@@ -62,8 +62,35 @@ func (r *StorageMigrationRepo) BucketProvisionState(ctx context.Context, backend
 	return b.ProvisionState, nil
 }
 
+// withTenantTx runs fn inside a transaction whose `paladin.tenant_id` GUC is set to
+// tenantID, so RLS-gated reads (objects, object_keys) see that tenant's rows.
+// The worker pool wipes the GUC on every acquisition (no auth context), so the
+// migration worker MUST set it explicitly — otherwise RLS returns nothing and
+// the copy silently no-ops while the rebind orphans the data.
+func (r *StorageMigrationRepo) withTenantTx(ctx context.Context, tenantID uuid.UUID, fn func(q *sqlc.Queries) error) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// set_config(..., true) = transaction-local; overrides the pool's per-acquire wipe.
+	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantID.String()); err != nil {
+		return err
+	}
+	if err := fn(r.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *StorageMigrationRepo) CountObjects(ctx context.Context, tenantID uuid.UUID) (int64, error) {
-	return r.q.MigrationCountTenantObjects(ctx, pgUUID(tenantID))
+	var n int64
+	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
+		var e error
+		n, e = q.MigrationCountTenantObjects(ctx, pgUUID(tenantID))
+		return e
+	})
+	return n, err
 }
 
 func (r *StorageMigrationRepo) SetCopying(ctx context.Context, tenantID uuid.UUID, total int64) error {
@@ -72,15 +99,19 @@ func (r *StorageMigrationRepo) SetCopying(ctx context.Context, tenantID uuid.UUI
 }
 
 func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UUID, afterObjectKey, afterKey string, limit int) ([]worker.ObjectRef, error) {
-	rows, err := r.q.MigrationListTenantObjects(ctx, pgUUID(tenantID), afterObjectKey, afterKey, int32(limit))
-	if err != nil {
-		return nil, err
-	}
-	out := make([]worker.ObjectRef, 0, len(rows))
-	for _, o := range rows {
-		out = append(out, worker.ObjectRef{ObjectKey: o.ObjectKey, Key: o.Key})
-	}
-	return out, nil
+	var out []worker.ObjectRef
+	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
+		rows, e := q.MigrationListTenantObjects(ctx, pgUUID(tenantID), afterObjectKey, afterKey, int32(limit))
+		if e != nil {
+			return e
+		}
+		out = make([]worker.ObjectRef, 0, len(rows))
+		for _, o := range rows {
+			out = append(out, worker.ObjectRef{ObjectKey: o.ObjectKey, Key: o.Key})
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, tenantID uuid.UUID, copied int64, cursorObjectKey, cursorKey string) error {
@@ -103,6 +134,10 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// Scope RLS to this tenant so the object_keys list isn't silently empty.
+	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantID.String()); err != nil {
+		return err
+	}
 	qtx := r.q.WithTx(tx)
 
 	keys, err := qtx.MigrationListTenantObjectKeys(ctx, pgUUID(tenantID))

@@ -170,6 +170,29 @@ func TestStorageMigration_CrossBackendFails(t *testing.T) {
 	}
 }
 
+// TestStorageMigration_IncompleteCopyDoesNotRebind guards against the RLS-hidden
+// -rows bug: if the object list ends while copied < total, the worker must fail
+// rather than rebind (which would orphan the uncopied objects).
+func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateCopying,
+			ObjectsTotal: 5, ObjectsCopied: 2, // 3 objects unaccounted for
+			SourceBackendID: "primary", TargetBackendID: "primary",
+		},
+		objects: nil, // list returns empty even though total=5
+	}
+	w := newWorker(repo, &fakeCopier{})
+	w.tick(context.Background())
+	if repo.mig.State != MigStateFailed {
+		t.Fatalf("state = %q, want failed (must not rebind on incomplete copy)", repo.mig.State)
+	}
+	if repo.rebound {
+		t.Fatal("SECURITY: rebound object_keys despite an incomplete copy — data would be orphaned")
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
