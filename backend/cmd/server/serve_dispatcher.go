@@ -198,7 +198,7 @@ func runDispatcher(
 			go func() { runErr <- runner.Run(workCtx) }()
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(context.Context) error {
 			l.Info("dispatcher shutdown signal received")
 			cancel() // stop the outbox loop
 			shutdownCtx, c := context.WithTimeout(context.Background(), defaultShutdownGrace)
@@ -217,7 +217,11 @@ func runDispatcher(
 			if ownPool != nil {
 				ownPool.Close()
 			}
-			_ = otel(ctx)
+			// Bounded (5s) fresh-context OTel flush — the fx OnStop context
+			// carries the 90s StopTimeout, so a slow/unreachable OTLP endpoint
+			// would otherwise block teardown past the pod's termination grace
+			// and get SIGKILLed mid-shutdown.
+			flushOTel(otel)
 			db.Close()
 			_ = l.Sync()
 			return nil

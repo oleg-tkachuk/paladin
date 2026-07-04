@@ -194,8 +194,12 @@ func provideMCPEmbeddedRunner(
 			}
 			return makeInlineClients(token, r.Header.Get("X-PALADIN-Capability"))
 		},
-		onStop: func(ctx context.Context) {
-			_ = otel(ctx)
+		onStop: func(context.Context) {
+			// Bounded (5s) fresh-context OTel flush — see the same note in the
+			// other roles: the fx OnStop context carries the 90s StopTimeout, so
+			// a slow/unreachable OTLP endpoint would otherwise block teardown
+			// past the pod's termination grace and get SIGKILLed.
+			flushOTel(otel)
 			db.Close()
 		},
 	}, nil

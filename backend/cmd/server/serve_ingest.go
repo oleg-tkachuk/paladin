@@ -208,13 +208,17 @@ func runIngest(
 			}()
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(context.Context) error {
 			cancel() // stop the worker, reaper, and ops listener
 			<-workerDone
 			if ownPool != nil {
 				ownPool.Close()
 			}
-			_ = otel(ctx)
+			// Bounded (5s) fresh-context OTel flush — the fx OnStop context
+			// carries the 90s StopTimeout, so a slow/unreachable OTLP endpoint
+			// would otherwise block teardown past the pod's termination grace
+			// and get SIGKILLed mid-shutdown.
+			flushOTel(otel)
 			db.Close()
 			_ = l.Sync()
 			return nil

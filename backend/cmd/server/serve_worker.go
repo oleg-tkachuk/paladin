@@ -148,7 +148,7 @@ func runWorker(
 			}()
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(context.Context) error {
 			l.Info("worker shutdown signal received")
 			cancel() // release leases; lease.Run returns
 			shutdownCtx, c := context.WithTimeout(context.Background(), defaultShutdownGrace)
@@ -156,7 +156,11 @@ func runWorker(
 			_ = opsSrv.Shutdown(shutdownCtx)
 			wg.Wait()
 			db.Close()
-			_ = otel(ctx)
+			// flushOTel uses a fresh, bounded (5s) context — the fx OnStop
+			// context carries the 90s StopTimeout, and a slow/unreachable OTLP
+			// endpoint would otherwise block the whole teardown past the pod's
+			// termination grace and get SIGKILLed mid-shutdown.
+			flushOTel(otel)
 			_ = l.Sync()
 			return nil
 		},
