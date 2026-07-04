@@ -13,11 +13,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/health"
+	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
@@ -48,142 +52,171 @@ var serveDispatcherCmd = &cobra.Command{
 	Use:   "dispatcher",
 	Short: "Run the event-delivery outbox loop",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx, stop := signalCtx()
-		defer stop()
+		fx.New(
+			fx.Supply(configSource()),
+			fx.Supply(buildMeta()),
+			app.BaseModule,
+			fx.Invoke(runDispatcher),
+		).Run()
+	},
+}
 
-		cfg, l, db, otelShutdown := boot(ctx)
-		defer db.Close()
-		defer flushOTel(otelShutdown)
-
-		deps, err := app.BuildSharedDeps(ctx, cfg, db, l)
+// runDispatcher is the dispatcher role's fx lifecycle. It builds the outbox
+// runner, its sink connection pools, and the ops listener up front (any failure
+// aborts start, matching the pre-fx Fatal), then OnStart pre-warms the sink
+// dials and spawns the runner; OnStop stops the ops listener, drains the
+// in-flight batch, then closes the sink pools, the dispatcher's own DB pool,
+// and the shared DB, and flushes OTel — the same teardown order the pre-fx
+// serve dispatcher produced via LIFO defers.
+func runDispatcher(
+	lc fx.Lifecycle,
+	cfg config.Config,
+	l *zap.Logger,
+	db *postgres.DB,
+	otel observability.ShutdownFunc,
+	deps *app.SharedDeps,
+) error {
+	dispatcherPool := deps.Pool
+	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated MigrateDSN pool
+	if cfg.Datastores.Postgres.MigrateDSN != "" {
+		// Pass MigratePassword explicitly — the runtime path
+		// (postgres.New for the deps.Pool) injects cfg.Password
+		// into pgxpool.ConnConfig.Password after parse, since the
+		// resolver populates the field from migrate_password_secret
+		// at boot. The dispatcher's pool needs the same treatment
+		// or pgx falls back to no-password and SASL fails with
+		// 28P01. Symptom before this fix: outbox loop spammed
+		// "failed SASL auth: FATAL: password authentication
+		// failed for user paladin_migrate" every poll_interval, and
+		// /readyz flipped to 503 because the outbox health check
+		// also can't acquire a connection.
+		pool, err := newDispatcherPool(
+			context.Background(),
+			cfg.Datastores.Postgres.MigrateDSN,
+			cfg.Datastores.Postgres.MigratePassword,
+			l,
+		)
 		if err != nil {
-			l.Fatal("failed to build shared deps", zap.Error(err))
+			return fmt.Errorf("open dispatcher pool: %w", err)
 		}
+		dispatcherPool = pool
+		ownPool = pool
+	} else {
+		l.Warn("dispatcher: MigrateDSN not set; using runtime pool — " +
+			"RLS will gate the outbox loop. Set datastores.postgres.migrate_dsn " +
+			"to a BYPASSRLS role for production.")
+	}
 
-		dispatcherPool := deps.Pool
-		if cfg.Datastores.Postgres.MigrateDSN != "" {
-			// Pass MigratePassword explicitly — the runtime path
-			// (postgres.New for the deps.Pool) injects cfg.Password
-			// into pgxpool.ConnConfig.Password after parse, since the
-			// resolver populates the field from migrate_password_secret
-			// at boot. The dispatcher's pool needs the same treatment
-			// or pgx falls back to no-password and SASL fails with
-			// 28P01. Symptom before this fix: outbox loop spammed
-			// "failed SASL auth: FATAL: password authentication
-			// failed for user paladin_migrate" every poll_interval, and
-			// /readyz flipped to 503 because the outbox health check
-			// also can't acquire a connection.
-			pool, err := newDispatcherPool(
-				ctx,
-				cfg.Datastores.Postgres.MigrateDSN,
-				cfg.Datastores.Postgres.MigratePassword,
-				l,
-			)
-			if err != nil {
-				l.Fatal("failed to open dispatcher pool", zap.Error(err))
-			}
-			dispatcherPool = pool
-			defer pool.Close()
-		} else {
-			l.Warn("dispatcher: MigrateDSN not set; using runtime pool — " +
-				"RLS will gate the outbox loop. Set datastores.postgres.migrate_dsn " +
-				"to a BYPASSRLS role for production.")
-		}
+	// Subscription read-seam used by OutboxRunner per-row. The admin
+	// repo's Get matches what we need; reuse via deps.Repos.EventSub.
+	store := dispatcherSubStore{r: deps.Repos.EventSub}
 
-		// Subscription read-seam used by OutboxRunner per-row. The admin
-		// repo's Get matches what we need; reuse via deps.Repos.EventSub.
-		store := dispatcherSubStore{r: deps.Repos.EventSub}
+	// One NATS connection pool shared by every NATS sink. Created
+	// unconditionally — empty until the first nats-sink delivery
+	// dials a server. Closed on shutdown so in-flight publishes
+	// have a chance to flush.
+	natsPool := worker.NewNatsConnPool(l.Named("nats-pool"))
 
-		// One NATS connection pool shared by every NATS sink. Created
-		// unconditionally — empty until the first nats-sink delivery
-		// dials a server. Closed on shutdown so in-flight publishes
-		// have a chance to flush.
-		natsPool := worker.NewNatsConnPool(l.Named("nats-pool"))
-		defer natsPool.Close()
+	// SQS + RabbitMQ sink clients, same lazy contract as the NATS pool:
+	// empty until the first sqs/rabbitmq-sink delivery dials. The SQS
+	// pool holds stateless HTTP clients (no Close); the RabbitMQ pool
+	// holds live AMQP connections, drained on shutdown.
+	sqsPool := worker.NewSQSClientPool(l.Named("sqs-pool"))
+	rabbitPool := worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool"))
+	kafkaPool := worker.NewKafkaWriterPool(l.Named("kafka-pool"))
 
-		// SQS + RabbitMQ sink clients, same lazy contract as the NATS pool:
-		// empty until the first sqs/rabbitmq-sink delivery dials. The SQS
-		// pool holds stateless HTTP clients (no Close); the RabbitMQ pool
-		// holds live AMQP connections, drained on shutdown.
-		sqsPool := worker.NewSQSClientPool(l.Named("sqs-pool"))
-		rabbitPool := worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool"))
-		defer rabbitPool.Close()
-		kafkaPool := worker.NewKafkaWriterPool(l.Named("kafka-pool"))
-		defer kafkaPool.Close()
+	dispatcher := &worker.Dispatcher{
+		Store:    store,
+		NATS:     natsPool,
+		SQS:      sqsPool,
+		RabbitMQ: rabbitPool,
+		Kafka:    kafkaPool,
+		// Delivery-time resolver for "k8s:<name>/<key>" refs in sink
+		// credential fields (HTTP HMAC, Kafka SASL/mTLS, NATS creds,
+		// AMQP URL). Referenced Secret names must be in the pod's RBAC
+		// secret allowlist.
+		Secrets: app.NewSinkSecretResolver(l.Named("sink-secrets")),
+		Logger:  l.Named("event-dispatcher"),
+	}
 
-		dispatcher := &worker.Dispatcher{
-			Store:    store,
-			NATS:     natsPool,
-			SQS:      sqsPool,
-			RabbitMQ: rabbitPool,
-			Kafka:    kafkaPool,
-			// Delivery-time resolver for "k8s:<name>/<key>" refs in sink
-			// credential fields (HTTP HMAC, Kafka SASL/mTLS, NATS creds,
-			// AMQP URL). Referenced Secret names must be in the pod's RBAC
-			// secret allowlist.
-			Secrets: app.NewSinkSecretResolver(l.Named("sink-secrets")),
-			Logger:  l.Named("event-dispatcher"),
-		}
+	runner := &worker.OutboxRunner{
+		Pool:               dispatcherPool,
+		Dispatcher:         dispatcher,
+		Logger:             l.Named("outbox-runner"),
+		PollInterval:       cfg.Dispatcher.PollInterval,
+		BatchSize:          cfg.Dispatcher.BatchSize,
+		BaseBackoff:        cfg.Dispatcher.BaseBackoff,
+		MaxBackoff:         cfg.Dispatcher.MaxBackoff,
+		DefaultMaxAttempts: cfg.Dispatcher.DefaultMaxAttempts,
+	}
 
-		// Pre-warm: scan event_subscriptions WHERE sink_kind='nats'
-		// once at boot and dial each unique URL. Two reasons:
-		//   - first-delivery latency drops from "TLS+SASL handshake"
-		//     to "queue-and-flush" inside the hot tick loop.
-		//   - the health probe below has something to report on
-		//     before any row hits the dispatcher.
-		// Pre-warm errors are logged but never fatal — the dispatcher
-		// still boots and per-row deliver will retry the dial under
-		// the row's normal retry budget.
-		preWarmNATS(ctx, dispatcherPool, natsPool, l)
-		preWarmRabbitMQ(ctx, dispatcherPool, rabbitPool, l)
+	opsAddr := cfg.Dispatcher.Ops.Addr
+	if opsAddr == "" {
+		opsAddr = ":8099"
+	}
+	opsMux, _ := dispatcherOpsMux(deps, runner, natsPool, rabbitPool, l)
+	opsSrv := &http.Server{
+		Addr:              opsAddr,
+		ReadHeaderTimeout: 5 * time.Second,
+		Handler:           opsMux,
+	}
 
-		runner := &worker.OutboxRunner{
-			Pool:               dispatcherPool,
-			Dispatcher:         dispatcher,
-			Logger:             l.Named("outbox-runner"),
-			PollInterval:       cfg.Dispatcher.PollInterval,
-			BatchSize:          cfg.Dispatcher.BatchSize,
-			BaseBackoff:        cfg.Dispatcher.BaseBackoff,
-			MaxBackoff:         cfg.Dispatcher.MaxBackoff,
-			DefaultMaxAttempts: cfg.Dispatcher.DefaultMaxAttempts,
-		}
+	// workCtx bounds the outbox loop; cancelled OnStop so runner.Run returns.
+	workCtx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
 
-		opsAddr := cfg.Dispatcher.Ops.Addr
-		if opsAddr == "" {
-			opsAddr = ":8099"
-		}
-		opsMux, _ := dispatcherOpsMux(deps, runner, natsPool, rabbitPool, l)
-		opsSrv := &http.Server{
-			Addr:              opsAddr,
-			ReadHeaderTimeout: 5 * time.Second,
-			Handler:           opsMux,
-		}
-		go func() {
-			l.Info("dispatcher ops listener", zap.String("addr", opsAddr))
-			if err := opsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				l.Error("dispatcher ops listener exited", zap.Error(err))
-			}
-		}()
+	l.Info("starting dispatcher",
+		zap.String("version", version),
+		zap.String("commit", commit),
+		zap.String("build_time", buildTime),
+	)
 
-		runErr := make(chan error, 1)
-		go func() { runErr <- runner.Run(ctx) }()
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			// Pre-warm: scan event_subscriptions once at boot and dial each
+			// unique sink URL. Drops first-delivery latency from a cold
+			// TLS+SASL handshake to a queue-and-flush inside the hot tick
+			// loop, and gives the health probe something to report before
+			// any row hits the dispatcher. Errors are logged but never
+			// fatal — per-row deliver retries the dial under its own budget.
+			preWarmNATS(workCtx, dispatcherPool, natsPool, l)
+			preWarmRabbitMQ(workCtx, dispatcherPool, rabbitPool, l)
 
-		select {
-		case <-ctx.Done():
+			go func() {
+				l.Info("dispatcher ops listener", zap.String("addr", opsAddr))
+				if err := opsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					l.Error("dispatcher ops listener exited", zap.Error(err))
+				}
+			}()
+			go func() { runErr <- runner.Run(workCtx) }()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
 			l.Info("dispatcher shutdown signal received")
-		case err := <-runErr:
-			if err != nil && !errorsIsCancelled(err) {
+			cancel() // stop the outbox loop
+			shutdownCtx, c := context.WithTimeout(context.Background(), defaultShutdownGrace)
+			defer c()
+			_ = opsSrv.Shutdown(shutdownCtx)
+			// Wait for the runner to drain its in-flight batch (bounded by
+			// per-delivery HTTP timeouts).
+			if err := <-runErr; err != nil && !errorsIsCancelled(err) {
 				l.Error("outbox runner exited", zap.Error(err))
 			}
-		}
-
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaultShutdownGrace)
-		defer cancel()
-		_ = opsSrv.Shutdown(shutdownCtx)
-		// Wait for the runner to drain its in-flight batch (bounded by
-		// per-delivery HTTP timeouts).
-		<-runErr
-	},
+			// Drain the sink pools (reverse of construction), then flush OTel
+			// and close DB pools — matching the pre-fx LIFO defer order.
+			kafkaPool.Close()
+			rabbitPool.Close()
+			natsPool.Close()
+			if ownPool != nil {
+				ownPool.Close()
+			}
+			_ = otel(ctx)
+			db.Close()
+			_ = l.Sync()
+			return nil
+		},
+	})
+	return nil
 }
 
 // newDispatcherPool opens a minimal pgxpool aimed at the dispatcher's

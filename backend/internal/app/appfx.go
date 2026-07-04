@@ -147,14 +147,33 @@ func fxLogger(l *zap.Logger) fxevent.Logger {
 	return zl
 }
 
-// SharedModule bundles the process-wide providers + fx settings every serve
-// role needs. StopTimeout must exceed *App.Shutdown's own budget
-// (readyDrainPause + Runtime.ShutdownTimeout) so fx doesn't abort the graceful
-// drain; 90s is comfortably above the 12s drain + typical 20s shutdown.
-var SharedModule = fx.Options(
-	fx.Provide(ProvideConfig, ProvideLogger, ProvideOTel, ProvideDB, ProvideSharedDeps, ProvideApp),
+// LiteModule is the smallest process-wide bundle: config + logger, fx's own log
+// routed through zap, and the shared StopTimeout — but NO database, OTel, or
+// SharedDeps. It exists for roles that legitimately run without a DB, such as
+// the MCP bridge (a stdio/HTTP proxy that speaks Connect to upstream URLs and
+// never opens a pool). The StopTimeout exceeds any role's graceful-shutdown
+// budget (readyDrainPause + Runtime.ShutdownTimeout for planes; the worker's
+// lease-drain + ops-shutdown) — 90s is comfortably above the 12s drain + a
+// typical 20s shutdown.
+var LiteModule = fx.Options(
+	fx.Provide(ProvideConfig, ProvideLogger),
 	fx.WithLogger(fxLogger),
 	fx.StopTimeout(90*time.Second),
+)
+
+// BaseModule is LiteModule plus the heavy shared infrastructure EVERY DB-backed
+// serve role needs (listener planes and workers alike): OTel → DB → SharedDeps.
+var BaseModule = fx.Options(
+	LiteModule,
+	fx.Provide(ProvideOTel, ProvideDB, ProvideSharedDeps),
+)
+
+// SharedModule is BaseModule plus the *App container — the runtime shape the
+// listener planes (api/admin) use. Worker-style roles compose BaseModule with
+// their own lifecycle instead of *App.
+var SharedModule = fx.Options(
+	BaseModule,
+	fx.Provide(ProvideApp),
 )
 
 // ─── Role modules ────────────────────────────────────────────────────────────

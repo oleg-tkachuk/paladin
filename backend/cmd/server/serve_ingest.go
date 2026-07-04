@@ -6,14 +6,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -35,148 +39,181 @@ var serveIngestCmd = &cobra.Command{
 	Use:   "ingest",
 	Short: "Run the storage-event consumer (webhook / NATS / RabbitMQ)",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx, stop := signalCtx()
-		defer stop()
-
-		cfg, l, db, otelShutdown := boot(ctx)
-		defer db.Close()
-		defer flushOTel(otelShutdown)
-
-		if !cfg.Ingest.Enabled {
-			l.Fatal("cfg.Ingest.Enabled=false; refuse to start serve ingest with the subsystem disabled")
-		}
-
-		deps, err := app.BuildSharedDeps(ctx, cfg, db, l)
-		if err != nil {
-			l.Fatal("failed to build shared deps", zap.Error(err))
-		}
-
-		// Lookup + state-machine transitions for the ingest worker
-		// MUST run cross-tenant — the storage event arrives via NATS
-		// from SF without any auth context, so the runtime pool's
-		// RLS GUC is empty and `paladin_app` filters every row out.
-		// Same pattern as serve_dispatcher.go: open a dedicated pool
-		// from cfg.Datastores.Postgres.MigrateDSN (BYPASSRLS).
-		// Without this the smoke logs "no matching object for event;
-		// skipping" on every PUT — looks like a race / ordering bug,
-		// is actually RLS denying the SELECT.
-		ingestQueries := db.Queries
-		ingestSM := deps.SM
-		ingestPool := deps.Pool
-		if cfg.Datastores.Postgres.MigrateDSN != "" {
-			pool, err := newDispatcherPool(
-				ctx,
-				cfg.Datastores.Postgres.MigrateDSN,
-				cfg.Datastores.Postgres.MigratePassword,
-				l,
-			)
-			if err != nil {
-				l.Fatal("failed to open ingest pool", zap.Error(err))
-			}
-			defer pool.Close()
-			ingestQueries = sqlc.New(pool)
-			ingestSM = statemachine.New(pool)
-			ingestPool = pool
-		} else {
-			l.Warn("ingest: MigrateDSN not set; using runtime pool — " +
-				"RLS will gate the lookup and PROMOTE will silently no-op " +
-				"for every event. Set datastores.postgres.migrate_dsn to a " +
-				"BYPASSRLS role.")
-		}
-
-		// Wire the handler. Lookup uses the data-plane object repo
-		// so we can resolve (tenant, object_key, key) → object_id;
-		// statemachine.Transitioner already lives on SharedDeps but
-		// we replace it with one bound to ingestQueries so PROMOTE
-		// flows through the same BYPASSRLS pool.
-		// Producer-only dispatcher: enqueues paladin.object.uploaded outbox
-		// rows on the promote tx (ADR-0003) so an explicit-mode storage
-		// event notifies webhook subscribers just like a CompleteObject
-		// RPC does. Bound to the ingest (BYPASSRLS) queries so the sub
-		// fan-out isn't RLS-gated. The separate `serve dispatcher` pod
-		// drains event_deliveries and does the actual delivery, so NATS
-		// stays nil here — enqueue never opens a socket.
-		ingestDispatcher := &worker.Dispatcher{
-			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(ingestQueries)),
-			Outbox:      worker.PgxOutboxWriter{Pool: ingestPool},
-			Logger:      l.Named("ingest-event-dispatcher"),
-			MaxAttempts: 3,
-		}
-
-		handler := &eventingest.PromoteHandler{
-			// Wrap the queries in the per-tenant longest-prefix cache so
-			// ResolveObjectKeyPrefix isn't a SQL round-trip on every storage
-			// event (bounded-staleness — see eventingest.CachingLookup).
-			Lookup:       eventingest.NewCachingLookup(ingestQueries, eventingest.DefaultPrefixCacheTTL, l.Named("ingest.prefix-cache")),
-			Transitioner: ingestSM,
-			Events:       ingestDispatcher,
-			Logger:       l.Named("ingest.handler"),
-		}
-
-		// Build the configured driver.
-		driver, err := buildIngestDriver(cfg.Ingest, l)
-		if err != nil {
-			l.Fatal("failed to build ingest driver", zap.Error(err))
-		}
-
-		worker := &eventingest.Worker{
-			Driver:  driver,
-			Handler: handler,
-			// Dedup shares the ingest (BYPASSRLS) queries, not the runtime
-			// RLS pool: ingest events carry no tenant GUC, so on the RLS
-			// pool a future RLS policy on ingest_events would silently make
-			// every dedup check miss and re-process every event.
-			Dedup:  &eventingest.PgxDedupStore{Q: ingestQueries},
-			Logger: l.Named("ingest.worker"),
-		}
-
-		// Reaper runs alongside the worker — keeps the dedup table
-		// bounded. Cheap enough that we don't need a separate pod
-		// for it.
-		reaper := &eventingest.Reaper{
-			Q:        db.Queries,
-			Interval: cfg.Ingest.ReaperInterval,
-			TTL:      cfg.Ingest.DedupTTL,
-			Logger:   l.Named("ingest.reaper"),
-		}
-		go func() {
-			if err := reaper.Run(ctx); err != nil && !errorsIsCancelled(err) {
-				l.Warn("ingest reaper exited", zap.Error(err))
-			}
-		}()
-
-		// Health server. The webhook driver binds its own listener on
-		// cfg.Ingest.Webhook.Addr (which serves /healthz alongside the
-		// receiver routes), but nats / rabbitmq drivers have nothing
-		// HTTP-shaped — without an ops endpoint kubelet's liveness
-		// probe sees ECONNREFUSED on :8100 and crash-loops the pod
-		// every 60s, AND the BFF /api/health/all aggregator gets no
-		// /system/health.json snapshot to render on the operator
-		// /health page.
-		//
-		// Wire the same `app.NewHealthHandler` mux the worker /
-		// dispatcher / api / admin pods serve, with one
-		// driver-specific subsystem check (subscriber connectivity).
-		// Same pattern as serve_dispatcher.go::dispatcherOpsMux.
-		if cfg.Ingest.Driver != "webhook" && cfg.Ingest.Webhook.Addr != "" {
-			go runIngestOpsServer(ctx, cfg.Ingest.Webhook.Addr, deps, driver, l)
-		}
-
-		l.Info("ingest plane starting", zap.String("driver", cfg.Ingest.Driver))
-		if err := worker.Run(ctx); err != nil && !errorsIsCancelled(err) {
-			// Exit non-zero so kubelet reports `Reason: Error` (not
-			// `Reason: Completed`) and CrashLoopBackOff is actually
-			// applied — a clean exit on a fatal worker error
-			// silently masks the failure and makes the pod
-			// appear to restart "for no reason" every few seconds.
-			// The NATS driver now retries the initial dial in the
-			// background (driver_nats.go: RetryOnFailedConnect),
-			// so reaching this branch means a non-recoverable
-			// failure (config error, subscribe error, stream
-			// missing, etc.) — Fatal is the right level.
-			l.Fatal("ingest worker exited", zap.Error(err))
-		}
+		fx.New(
+			fx.Supply(configSource()),
+			fx.Supply(buildMeta()),
+			app.BaseModule,
+			fx.Invoke(runIngest),
+		).Run()
 	},
+}
+
+// runIngest is the ingest role's fx lifecycle. It validates the subsystem is
+// enabled, builds the driver/handler/worker/reaper and the optional BYPASSRLS
+// pool up front (any failure aborts start, matching the pre-fx Fatal), then
+// OnStart spawns the reaper, the driver-aware ops listener, and the ingest
+// worker; a non-recoverable worker error escalates to an exit-1 shutdown. OnStop
+// stops the loop, then closes the own pool + shared DB and flushes OTel — the
+// same teardown the pre-fx defers produced.
+func runIngest(
+	lc fx.Lifecycle,
+	sd fx.Shutdowner,
+	cfg config.Config,
+	l *zap.Logger,
+	db *postgres.DB,
+	otel observability.ShutdownFunc,
+	deps *app.SharedDeps,
+) error {
+	if !cfg.Ingest.Enabled {
+		return fmt.Errorf("cfg.Ingest.Enabled=false; refuse to start serve ingest with the subsystem disabled")
+	}
+
+	// Lookup + state-machine transitions for the ingest worker
+	// MUST run cross-tenant — the storage event arrives via NATS
+	// from SF without any auth context, so the runtime pool's
+	// RLS GUC is empty and `paladin_app` filters every row out.
+	// Same pattern as serve_dispatcher.go: open a dedicated pool
+	// from cfg.Datastores.Postgres.MigrateDSN (BYPASSRLS).
+	// Without this the smoke logs "no matching object for event;
+	// skipping" on every PUT — looks like a race / ordering bug,
+	// is actually RLS denying the SELECT.
+	ingestQueries := db.Queries
+	ingestSM := deps.SM
+	ingestPool := deps.Pool
+	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated MigrateDSN pool
+	if cfg.Datastores.Postgres.MigrateDSN != "" {
+		pool, err := newDispatcherPool(
+			context.Background(),
+			cfg.Datastores.Postgres.MigrateDSN,
+			cfg.Datastores.Postgres.MigratePassword,
+			l,
+		)
+		if err != nil {
+			return fmt.Errorf("open ingest pool: %w", err)
+		}
+		ownPool = pool
+		ingestQueries = sqlc.New(pool)
+		ingestSM = statemachine.New(pool)
+		ingestPool = pool
+	} else {
+		l.Warn("ingest: MigrateDSN not set; using runtime pool — " +
+			"RLS will gate the lookup and PROMOTE will silently no-op " +
+			"for every event. Set datastores.postgres.migrate_dsn to a " +
+			"BYPASSRLS role.")
+	}
+
+	// Wire the handler. Lookup uses the data-plane object repo
+	// so we can resolve (tenant, object_key, key) → object_id;
+	// statemachine.Transitioner already lives on SharedDeps but
+	// we replace it with one bound to ingestQueries so PROMOTE
+	// flows through the same BYPASSRLS pool.
+	// Producer-only dispatcher: enqueues paladin.object.uploaded outbox
+	// rows on the promote tx (ADR-0003) so an explicit-mode storage
+	// event notifies webhook subscribers just like a CompleteObject
+	// RPC does. Bound to the ingest (BYPASSRLS) queries so the sub
+	// fan-out isn't RLS-gated. The separate `serve dispatcher` pod
+	// drains event_deliveries and does the actual delivery, so NATS
+	// stays nil here — enqueue never opens a socket.
+	ingestDispatcher := &worker.Dispatcher{
+		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(ingestQueries)),
+		Outbox:      worker.PgxOutboxWriter{Pool: ingestPool},
+		Logger:      l.Named("ingest-event-dispatcher"),
+		MaxAttempts: 3,
+	}
+
+	handler := &eventingest.PromoteHandler{
+		// Wrap the queries in the per-tenant longest-prefix cache so
+		// ResolveObjectKeyPrefix isn't a SQL round-trip on every storage
+		// event (bounded-staleness — see eventingest.CachingLookup).
+		Lookup:       eventingest.NewCachingLookup(ingestQueries, eventingest.DefaultPrefixCacheTTL, l.Named("ingest.prefix-cache")),
+		Transitioner: ingestSM,
+		Events:       ingestDispatcher,
+		Logger:       l.Named("ingest.handler"),
+	}
+
+	// Build the configured driver.
+	driver, err := buildIngestDriver(cfg.Ingest, l)
+	if err != nil {
+		return fmt.Errorf("build ingest driver: %w", err)
+	}
+
+	ingestWorker := &eventingest.Worker{
+		Driver:  driver,
+		Handler: handler,
+		// Dedup shares the ingest (BYPASSRLS) queries, not the runtime
+		// RLS pool: ingest events carry no tenant GUC, so on the RLS
+		// pool a future RLS policy on ingest_events would silently make
+		// every dedup check miss and re-process every event.
+		Dedup:  &eventingest.PgxDedupStore{Q: ingestQueries},
+		Logger: l.Named("ingest.worker"),
+	}
+
+	// Reaper runs alongside the worker — keeps the dedup table
+	// bounded. Cheap enough that we don't need a separate pod for it.
+	reaper := &eventingest.Reaper{
+		Q:        db.Queries,
+		Interval: cfg.Ingest.ReaperInterval,
+		TTL:      cfg.Ingest.DedupTTL,
+		Logger:   l.Named("ingest.reaper"),
+	}
+
+	// workCtx bounds the worker, reaper, and ops listener; cancelled OnStop.
+	// workerDone closes when ingestWorker.Run returns, so OnStop can wait for
+	// the in-flight event to drain before closing the pools.
+	workCtx, cancel := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			go func() {
+				if err := reaper.Run(workCtx); err != nil && !errorsIsCancelled(err) {
+					l.Warn("ingest reaper exited", zap.Error(err))
+				}
+			}()
+
+			// Health server. The webhook driver binds its own listener on
+			// cfg.Ingest.Webhook.Addr (which serves /healthz alongside the
+			// receiver routes), but nats / rabbitmq drivers have nothing
+			// HTTP-shaped — without an ops endpoint kubelet's liveness probe
+			// sees ECONNREFUSED on :8100 and crash-loops the pod every 60s,
+			// AND the BFF /api/health/all aggregator gets no
+			// /system/health.json snapshot to render on the operator /health
+			// page. Same app.NewHealthHandler mux the other pods serve, with
+			// one driver-specific subscriber check. runIngestOpsServer watches
+			// workCtx.Done() and shuts its listener down on cancel.
+			if cfg.Ingest.Driver != "webhook" && cfg.Ingest.Webhook.Addr != "" {
+				go runIngestOpsServer(workCtx, cfg.Ingest.Webhook.Addr, deps, driver, l)
+			}
+
+			l.Info("ingest plane starting", zap.String("driver", cfg.Ingest.Driver))
+			go func() {
+				err := ingestWorker.Run(workCtx)
+				close(workerDone)
+				if err != nil && !errorsIsCancelled(err) {
+					// Non-recoverable (config / subscribe / stream-missing) —
+					// the NATS driver already retries the initial dial in the
+					// background, so reaching here is fatal. Escalate to an
+					// exit-1 fx shutdown so kubelet reports Reason: Error and
+					// applies CrashLoopBackOff rather than masking the failure.
+					l.Error("ingest worker exited", zap.Error(err))
+					_ = sd.Shutdown(fx.ExitCode(1))
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			cancel() // stop the worker, reaper, and ops listener
+			<-workerDone
+			if ownPool != nil {
+				ownPool.Close()
+			}
+			_ = otel(ctx)
+			db.Close()
+			_ = l.Sync()
+			return nil
+		},
+	})
+	return nil
 }
 
 // runIngestOpsServer mounts the same kind of ops mux the other worker

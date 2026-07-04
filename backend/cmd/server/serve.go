@@ -1,10 +1,6 @@
 package main
 
 import (
-	"context"
-	"os/signal"
-	"syscall"
-
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +8,11 @@ import (
 // `api`, `admin`, `worker`, `mcp`, `ingest`, `dispatcher`. The collapsed
 // "all-in-one" mode that used to live in rootCmd is intentionally absent —
 // Helm deploys one Deployment per child.
+//
+// Every child now runs on Uber fx: fx.App.Run() owns SIGINT/SIGTERM handling
+// and drives the start/stop lifecycle, so there is no shared signalCtx or
+// runListeners loop here anymore. The DB-backed bootstrap/migrate one-shot
+// commands still use the boot() helper in common.go.
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Run an PALADIN plane or worker",
@@ -19,12 +20,4 @@ var serveCmd = &cobra.Command{
 
 func init() {
 	serveCmd.AddCommand(serveAPICmd, serveAdminCmd, serveWorkerCmd, serveMCPCmd, serveIngestCmd, serveDispatcherCmd)
-}
-
-// signalCtx wires SIGINT/SIGTERM into a parent context. Used by the roles that
-// still run on the pre-fx boot() path (worker/mcp/ingest/dispatcher); the fx
-// roles (api/admin) get signal handling from fx.App.Run() instead. Returned
-// cancel must be deferred.
-func signalCtx() (context.Context, context.CancelFunc) {
-	return signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 }
