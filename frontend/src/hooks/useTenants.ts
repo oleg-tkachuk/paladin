@@ -3,11 +3,12 @@
 import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { tenantClient } from "@/lib/connect/client";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { TenantSchema } from "@/gen/paladin/admin/v1/types_pb";
+import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
@@ -227,6 +228,24 @@ export function useTenants() {
     }
   }, []);
 
+  // getTenantStorageMigration returns the tenant's shared->dedicated migration
+  // status, or null when none was ever started (NOT_FOUND). See ADR-0011 Phase 3.
+  const getTenantStorageMigration = useCallback(
+    async (tenantId: string): Promise<StorageMigrationStatus | null> => {
+      try {
+        return await tenantClient.getTenantStorageMigration({
+          name: `tenants/${tenantId}`,
+        });
+      } catch (err) {
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
+          return null;
+        }
+        throw err;
+      }
+    },
+    [],
+  );
+
   return {
     tenants,
     loading,
@@ -237,5 +256,6 @@ export function useTenants() {
     deleteTenant,
     restoreTenant,
     purgeTenant,
+    getTenantStorageMigration,
   };
 }

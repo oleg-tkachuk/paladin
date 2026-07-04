@@ -951,9 +951,11 @@ open deliberately — each notes why._
   `BucketProvisionRow.OwnerTenantID` → `BucketProvisioner.TagBucketOwner`).
   Best-effort — a backend without `PutBucketTagging` logs a warning and keeps
   the bucket usable.
-- **Definition of Done (remaining — Phase 3 slice 4):**
-  - **Frontend migration status:** surface the storage-migration state/progress
-    in the admin console (BFF → `GetTenantStorageMigration`).
+- **Shipped — frontend migration status:** the tenant overview in the admin
+  console shows a `StorageMigrationCard` (state badge + copied/total progress +
+  source→target + error) that polls `GetTenantStorageMigration` while a
+  migration is in flight and renders nothing when the tenant never migrated.
+- **Definition of Done (remaining — Phase 3 hardening):**
   - Live cross-backend run (needs a second working backend) + two-backend
     integration test of the full migration.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at

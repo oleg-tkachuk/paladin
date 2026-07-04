@@ -35,6 +35,7 @@ import { IdentityField } from "@/components/IdentityField";
 import { RelativeTime } from "@/components/RelativeTime";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { StorageMigrationCard } from "./StorageMigrationCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, timestampToDate } from "@/lib/utils";
@@ -330,6 +331,9 @@ export default function TenantOverviewPage() {
           </Link>
         ))}
       </div>
+
+      {/* ─── Storage migration (ADR-0011 Phase 3) ──────────────── */}
+      <StorageMigrationCard tenantId={tenant.tenantId} />
 
       {/* ─── Recent activity ───────────────────────────────────── */}
       <Card>
