@@ -58,6 +58,13 @@ type App struct {
 	health *health.Handler
 
 	jobsCancel context.CancelFunc
+
+	// stopWatchers cancels SharedDeps' long-lived background watchers (the
+	// Cedar LISTEN loop) so their pooled connections are released. Shutdown
+	// calls it BEFORE db.Close() — otherwise the held LISTEN connection
+	// deadlocks pgxpool.Close() until the pod is SIGKILLed. Nil is fine
+	// (contexts that don't bring up SharedDeps).
+	stopWatchers func()
 }
 
 // readyDrainPause is the wait between MarkShuttingDown and listener
@@ -180,6 +187,13 @@ func (a *App) WithHealth(h *health.Handler) *App {
 	return a
 }
 
+// WithStopWatchers installs the SharedDeps watcher-cancel that Shutdown runs
+// before closing the DB pool. See the stopWatchers field.
+func (a *App) WithStopWatchers(fn func()) *App {
+	a.stopWatchers = fn
+	return a
+}
+
 // Shutdown stops every HTTP listener and the reconciler. Idempotent.
 //
 // Order matters:
@@ -224,6 +238,13 @@ func (a *App) Shutdown() {
 		if l.Server != nil {
 			_ = l.Server.Shutdown(ctx)
 		}
+	}
+
+	// Stop the Cedar LISTEN watcher (releases its pooled connection) BEFORE
+	// closing the pool — pgxpool.Close blocks until every acquired connection
+	// is released, so a still-running watcher would deadlock shutdown.
+	if a.stopWatchers != nil {
+		a.stopWatchers()
 	}
 
 	if a.db != nil {

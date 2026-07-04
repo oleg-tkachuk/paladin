@@ -97,20 +97,24 @@ func ProvideSharedDeps(cfg config.Config, db *postgres.DB, l *zap.Logger) (*Shar
 	return BuildSharedDeps(context.Background(), cfg, db, l)
 }
 
-// ProvideApp assembles the runtime container from the resolved graph.
+// ProvideApp assembles the runtime container from the resolved graph. It takes
+// *SharedDeps so App.Shutdown can stop the Cedar LISTEN watcher (holds a pooled
+// connection) before closing the DB pool — without that, pgxpool.Close
+// deadlocks shutdown until SIGKILL.
 func ProvideApp(
 	meta BuildMeta,
 	cfg config.Config,
 	l *zap.Logger,
 	db *postgres.DB,
 	otel observability.ShutdownFunc,
+	deps *SharedDeps,
 	set ListenerSet,
 ) *App {
 	started := &atomic.Bool{}
 	return NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
 		cfg, l, set.Listeners, db, otel, set.Jobs, started,
-	).WithHealth(set.Health)
+	).WithHealth(set.Health).WithStopWatchers(deps.StopWatchers)
 }
 
 // RunApp registers the App lifecycle with fx. OnStart launches the listeners in

@@ -155,6 +155,7 @@ func runWorker(
 			defer c()
 			_ = opsSrv.Shutdown(shutdownCtx)
 			wg.Wait()
+			deps.StopWatchers() // release the Cedar LISTEN conn before pool close
 			db.Close()
 			// flushOTel uses a fresh, bounded (5s) context — the fx OnStop
 			// context carries the 90s StopTimeout, and a slow/unreachable OTLP

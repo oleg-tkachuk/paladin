@@ -63,6 +63,23 @@ type SharedDeps struct {
 	// flusher to register. Kept on SharedDeps (not returned separately)
 	// so future listener-scoped jobs share the same instance.
 	BackgroundJobs []BackgroundJob
+
+	// stopWatchers cancels the long-lived background watchers BuildSharedDeps
+	// starts (today: the Cedar policy engine's LISTEN loop, which holds a
+	// pooled connection for the process lifetime). It MUST be called before
+	// db.Close() — pgxpool.Close() blocks until every acquired connection is
+	// released, and the watcher's held LISTEN connection would otherwise
+	// deadlock shutdown until the pod is SIGKILLed. See StopWatchers.
+	stopWatchers context.CancelFunc
+}
+
+// StopWatchers cancels the background watchers (Cedar LISTEN loop) so their
+// pooled connections are released. Idempotent and nil-safe. Every shutdown path
+// MUST call this before closing the DB pool — see the stopWatchers field.
+func (d *SharedDeps) StopWatchers() {
+	if d != nil && d.stopWatchers != nil {
+		d.stopWatchers()
+	}
 }
 
 // BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
@@ -119,28 +136,38 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	polStore := policy.NewPostgresStore(pool)
 	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL,
 		policy.WithCanonicalObjectKeyEUID(cfg.Cedar.CanonicalObjectKeyEUID))
-	if err := polEngine.Start(ctx); err != nil {
+	// The engine's LISTEN watcher is a process-lifetime goroutine that holds a
+	// pooled connection until its context is cancelled — so it runs on a
+	// dedicated background context, NOT the construction `ctx` (which may carry
+	// a timeout and, under fx, is context.Background() anyway). StopWatchers
+	// cancels it at shutdown, before the pool is closed. Without this the
+	// watcher's held connection deadlocks pgxpool.Close() until SIGKILL.
+	watchCtx, cancelWatchers := context.WithCancel(context.Background())
+	if err := polEngine.Start(watchCtx); err != nil {
+		cancelWatchers()
 		return nil, fmt.Errorf("app: policy engine start: %w", err)
 	}
 
 	deps := &SharedDeps{
-		Cfg:       cfg,
-		Logger:    l,
-		DB:        db,
-		Pool:      pool,
-		Repos:     repos,
-		Storage:   storage,
-		PolEngine: polEngine,
-		PolStore:  polStore,
-		SM:        statemachine.New(pool),
-		CELEval:   cel.NewEvaluator(),
-		Registry:  registry,
+		Cfg:          cfg,
+		Logger:       l,
+		DB:           db,
+		Pool:         pool,
+		Repos:        repos,
+		Storage:      storage,
+		PolEngine:    polEngine,
+		PolStore:     polStore,
+		SM:           statemachine.New(pool),
+		CELEval:      cel.NewEvaluator(),
+		Registry:     registry,
+		stopWatchers: cancelWatchers,
 	}
 
 	// Capability subsystem — additive; absence is fine. Built after the
 	// rest so the bundle can take a *SharedDeps for logging convenience.
 	cap, err := BuildCapabilityBundle(cfg.Capability, deps)
 	if err != nil {
+		deps.StopWatchers() // don't leak the LISTEN goroutine on a failed boot
 		return nil, fmt.Errorf("app: capability bundle: %w", err)
 	}
 	deps.Capability = cap

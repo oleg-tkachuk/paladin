@@ -200,6 +200,7 @@ func provideMCPEmbeddedRunner(
 			// a slow/unreachable OTLP endpoint would otherwise block teardown
 			// past the pod's termination grace and get SIGKILLed.
 			flushOTel(otel)
+			deps.StopWatchers() // release the Cedar LISTEN conn before pool close
 			db.Close()
 		},
 	}, nil

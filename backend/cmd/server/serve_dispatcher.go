@@ -222,6 +222,7 @@ func runDispatcher(
 			// would otherwise block teardown past the pod's termination grace
 			// and get SIGKILLed mid-shutdown.
 			flushOTel(otel)
+			deps.StopWatchers() // release the Cedar LISTEN conn before pool close
 			db.Close()
 			_ = l.Sync()
 			return nil
