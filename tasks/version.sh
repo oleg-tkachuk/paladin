@@ -24,11 +24,19 @@
 # external repos via `buf generate <repo>.git#tag=api/vX`), not the PALADIN
 # image/chart. They carry a `/` that is invalid in a Docker tag, and a
 # contract bump must not restamp the image. Never let them leak in here.
+#
+# The short SHA is prefixed with `g` (the git-describe convention:
+# `v1.2.3-4-gabc1234`). Without it, an all-numeric short SHA with a leading
+# zero (e.g. `0825472`) is an invalid SemVer-2 pre-release identifier —
+# "numeric identifiers MUST NOT include leading zeroes" — and Helm/OCI reject
+# the chart version with `version segment starts with 0`. The `g` makes the
+# segment alphanumeric, so the leading-zero rule never applies. (Observed on
+# real all-digit SHAs; do not drop the prefix.)
 set -eu
 
 BASE="${PALADIN_VERSION_BASE:-0.1.0}"
 TS=$(date +%s)
-COMMIT=$(git rev-parse --short HEAD)
+COMMIT=g$(git rev-parse --short HEAD)
 DIRTY=$(git status --porcelain | wc -l | tr -d ' ')
 TAG=$(git describe --tags --exact-match --exclude 'api/*' 2>/dev/null | sed 's/^v//' || true)
 
