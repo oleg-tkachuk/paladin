@@ -324,19 +324,27 @@ open deliberately — each notes why._
 
 ## Performance / Scale
 
-### Per-row Cedar filtering in ListObjects
+### Expose object tag VALUES to Cedar policies
 
-- **Status:** Deferred
-- **Reason:** `object.Handler.ListObjects` runs **one** Cedar check
-  before the page fetch (objectKey-scoped). Per-row filtering would
-  let policies decline individual objects (e.g. `tags['classified']
-  == 'true'`), which v1 doesn't.
+- **Status:** Deferred (follow-up to per-row Cedar, which shipped)
+- **Reason:** The Cedar `Object` entity exposes `tags` as `Set<String>`
+  of KEYS only ([policies/schema.cedarschema](backend/policies/schema.cedarschema);
+  `buildEntities` in [engine.go](backend/internal/policy/cedar/engine.go)),
+  so a policy can test `resource.tags.contains("classified")` but not
+  `resource.tags["classified"] == "true"`. Per-row Cedar filtering in
+  ListObjects now enforces key/state/size/content_type predicates
+  (and tag-KEY membership), but the tag-VALUE predicate from the
+  original motivating example still isn't expressible.
 - **Definition of Done:**
-  - Optional per-row mode triggered when the policy text references
-    object-attribute predicates (parsed at compile time).
-  - Skipped when the policy is a constant for the objectKey.
-  - Pagination cursor stable across filtered/unfiltered modes.
-- **Blockers:** policy-attribute analyzer in cedar-go.
+  - Add a value-bearing tag attribute to the Cedar Object entity (e.g.
+    `tag_values: Record` or promote `tags` to a record) + schema update.
+  - Existing key-membership policies keep working, or a documented
+    migration path.
+  - Analyzer + per-row eval already cover the decision side — no
+    ListObjects change needed (a value predicate reads `resource.tags…`,
+    which the analyzer already flags as per-object).
+- **Blockers:** Cedar schema-contract change; audit existing tenant
+  policies before flipping the `tags` shape.
 
 ### Per-table autovacuum tuning
 

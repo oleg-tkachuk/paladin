@@ -812,6 +812,47 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
+
+	// Per-row Cedar. The up-front check above is objectKey-scoped, so it can't
+	// enforce policies that decide on per-object attributes (tags, state,
+	// size, …). When the tenant's applicable policies read such an attribute
+	// (analysed once at compile time), re-evaluate each returned object and drop
+	// the ones the policy declines. Policies that are constant across the
+	// objectKey take the cheap path and skip this loop entirely.
+	//
+	// Pagination is unaffected: `next` keys on the last FETCHED row (repo), not
+	// the surviving rows — exactly like the CEL filter above — so dropping rows
+	// post-fetch keeps the cursor stable and never skips or repeats an object.
+	if pe, ok := h.policy.(cedar.PerObjectEvaluator); ok {
+		perRow, err := pe.NeedsPerObjectEval(ctx, tenantID, in.ObjectKey)
+		if err != nil {
+			return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		}
+		if perRow {
+			kept := objs[:0]
+			for _, o := range objs {
+				authErr := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+					TenantID:    tenantID,
+					ObjectKey:   in.ObjectKey,
+					Key:         o.Key,
+					ObjectID:    o.ObjectID,
+					State:       string(o.State),
+					SizeBytes:   o.SizeBytes,
+					ContentType: o.ContentType,
+					Tags:        o.Tags,
+				}, cedar.ActionGetObject, o.SizeBytes, o.ContentType)
+				if authErr != nil {
+					if connect.CodeOf(authErr) == connect.CodePermissionDenied {
+						continue // policy declines this specific object
+					}
+					return nil, "", authErr // engine fault, not a denial
+				}
+				kept = append(kept, o)
+			}
+			objs = kept
+		}
+	}
+
 	return objs, next, nil
 }
 

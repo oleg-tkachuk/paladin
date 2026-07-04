@@ -7,6 +7,7 @@ package cedar
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -257,7 +258,12 @@ type compiledPolicy struct {
 	// (ADR-0012). Cached with the policy so keying tenant membership on the
 	// trusted slug costs no extra query on the authz hot path.
 	tenantSlug string
-	expiresAt  time.Time
+	// perObjectEval is true when at least one policy in the set reads a
+	// per-object resource attribute (analysed once at compile time). List
+	// handlers use it to decide between a single objectKey-scoped Cedar check
+	// and a per-row check. See NeedsPerObjectEval.
+	perObjectEval bool
+	expiresAt     time.Time
 }
 
 // NewEngine constructs an Engine. Call Start to kick off the invalidation loop.
@@ -357,32 +363,148 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 }
 
 func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey string) (*cedar.PolicySet, string, error) {
+	cp, err := e.loadCompiled(ctx, tenantID, objectKey)
+	if err != nil {
+		return nil, "", err
+	}
+	return cp.policySet, cp.tenantSlug, nil
+}
+
+// loadCompiled returns the cached (or freshly fetched + compiled) policy entry
+// for the scope, refreshing on TTL expiry. The per-object-eval flag is analysed
+// once here, on the compile path, so the authz hot path never re-inspects the
+// policy AST.
+func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, objectKey string) (*compiledPolicy, error) {
 	key := cacheKey{tenant: tenantID, objectKey: objectKey}
 	if v, ok := e.compiled.Load(key); ok {
 		cp := v.(*compiledPolicy)
 		if time.Now().Before(cp.expiresAt) {
 			e.m.cacheHits.Add(1)
-			return cp.policySet, cp.tenantSlug, nil
+			return cp, nil
 		}
 	}
 	e.m.cacheMisses.Add(1)
 
 	text, hash, slug, err := e.store.Fetch(ctx, tenantID, objectKey)
 	if err != nil {
-		return nil, "", fmt.Errorf("cedar: fetch policy: %w", err)
+		return nil, fmt.Errorf("cedar: fetch policy: %w", err)
 	}
 	set, err := compile(text)
 	if err != nil {
-		return nil, "", fmt.Errorf("cedar: compile policy: %w", err)
+		return nil, fmt.Errorf("cedar: compile policy: %w", err)
 	}
 	cp := &compiledPolicy{
-		hash:       hash,
-		policySet:  set,
-		tenantSlug: slug,
-		expiresAt:  time.Now().Add(e.ttl),
+		hash:          hash,
+		policySet:     set,
+		tenantSlug:    slug,
+		perObjectEval: policyReadsPerObjectResourceAttr(set),
+		expiresAt:     time.Now().Add(e.ttl),
 	}
 	e.compiled.Store(key, cp)
-	return set, slug, nil
+	return cp, nil
+}
+
+// PerObjectEvaluator is the optional capability an Authorizer may expose so a
+// list handler can choose between one objectKey-scoped Cedar check and per-row
+// checks. *Engine implements it; permissive test fakes need not — the handler
+// then takes the cheap single-check path.
+type PerObjectEvaluator interface {
+	NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, objectKey string) (bool, error)
+}
+
+// NeedsPerObjectEval reports whether the policies applicable to (tenantID,
+// objectKey) decide on per-object resource attributes (tags, state, size, …),
+// so a list handler must Cedar-check each returned object individually. It is
+// false when every applicable policy is constant across the objectKey scope
+// (reads only tenant_id/object_key, or no resource attributes at all), in which
+// case the single up-front objectKey-scoped check already covers the whole page.
+//
+// Conservative by design: it does not scope the analysis by action, so a policy
+// that reads a per-object attribute for ANY action turns on per-row evaluation
+// for listing. That only ever costs extra Cedar calls — never a wrong decision,
+// since an action-mismatched policy simply doesn't match the per-row request.
+func (e *Engine) NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, objectKey string) (bool, error) {
+	cp, err := e.loadCompiled(ctx, tenantID, objectKey)
+	if err != nil {
+		e.m.compileErrs.Add(1)
+		return false, err
+	}
+	return cp.perObjectEval, nil
+}
+
+// constantResourceAttrs are the Object resource attributes that do NOT vary
+// across a ListObjects page — they ARE the objectKey scope. A policy reading
+// only these decides identically for every object under the objectKey, so the
+// single up-front check suffices. Every other resource attribute (key, state,
+// size_bytes, content_type, tags, bucket_name, backend_id, and any future one)
+// varies per object and forces per-row evaluation.
+var constantResourceAttrs = map[string]bool{
+	"tenant_id":  true,
+	"object_key": true,
+}
+
+// policyReadsPerObjectResourceAttr walks every policy in the set (via its Cedar
+// JSON form) and reports whether any reads a per-object resource attribute. On a
+// marshal/parse fault it returns true — the safe default is to evaluate per row
+// rather than risk skipping a policy that declines individual objects.
+func policyReadsPerObjectResourceAttr(set *cedar.PolicySet) bool {
+	for _, p := range set.All() {
+		js, err := p.MarshalJSON()
+		if err != nil {
+			return true // conservative: don't skip a policy we can't inspect
+		}
+		var tree any
+		if err := json.Unmarshal(js, &tree); err != nil {
+			return true
+		}
+		if walkReadsPerObjectResourceAttr(tree) {
+			return true
+		}
+	}
+	return false
+}
+
+// walkReadsPerObjectResourceAttr recursively scans a decoded Cedar JSON
+// expression tree for an attribute access (`.`) or presence test (`has`) rooted
+// directly at the `resource` variable whose attribute is not an objectKey-scope
+// constant. Cedar JSON encodes `resource.tags` as
+// {".": {"left": {"Var": "resource"}, "attr": "tags"}}.
+func walkReadsPerObjectResourceAttr(n any) bool {
+	switch v := n.(type) {
+	case map[string]any:
+		for _, op := range [...]string{".", "has"} {
+			acc, ok := v[op].(map[string]any)
+			if !ok {
+				continue
+			}
+			if isResourceVar(acc["left"]) {
+				if attr, ok := acc["attr"].(string); ok && !constantResourceAttrs[attr] {
+					return true
+				}
+			}
+		}
+		for _, sub := range v {
+			if walkReadsPerObjectResourceAttr(sub) {
+				return true
+			}
+		}
+	case []any:
+		for _, sub := range v {
+			if walkReadsPerObjectResourceAttr(sub) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isResourceVar(n any) bool {
+	m, ok := n.(map[string]any)
+	if !ok {
+		return false
+	}
+	name, ok := m["Var"].(string)
+	return ok && name == "resource"
 }
 
 // builtinPolicy is concatenated with every fetched tenant/objectKey
