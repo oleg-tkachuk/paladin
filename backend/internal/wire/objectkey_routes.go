@@ -15,12 +15,12 @@ import (
 
 const (
 	// whoAmIRoutePageSize is the objectKey page pulled per List round-trip
-	// while assembling the WhoAmI route table.
+	// while assembling a WhoAmI route-table page.
 	whoAmIRoutePageSize = 200
-	// whoAmIMaxRoutes caps the total routes WhoAmI returns. The route table
-	// (ADR-0010 Phase 4) is a client-side normalization aid, not an inventory
-	// API — a tenant with more ObjectKeys than this should page
-	// ListObjectKeys directly. See BACKLOG for the pagination follow-up.
+	// whoAmIMaxRoutes caps the routes returned in ONE WhoAmI call. Beyond it the
+	// caller pages via the returned next_page_token (ADR-0010 Phase 4). A
+	// multiple of whoAmIRoutePageSize so the cap always lands on a ListObjectKeys
+	// page boundary — the boundary cursor is what we hand back for resumption.
 	whoAmIMaxRoutes = 1000
 )
 
@@ -55,7 +55,7 @@ func ProvideObjectKeyRouteLister(repos Repos, pe *policy.Engine, cfg config.Conf
 	}
 }
 
-func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) ([]authh.ObjectKeyRoute, bool, error) {
+func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID, pageToken string) ([]authh.ObjectKeyRoute, string, error) {
 	// The default binding decides which ObjectKeys expose a bare (B) alias: a
 	// bare name resolves through the binding, so it round-trips to canonical
 	// only for ObjectKeys in the default (backend, bucket). No binding → no
@@ -64,32 +64,24 @@ func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID 
 	if db, err := l.tenants.GetDefaultBinding(ctx, tenantID); err == nil {
 		dbBackend, dbBucket = db.BackendID, db.BucketName
 	} else if !errors.Is(err, tenant.ErrNotFound) {
-		return nil, false, err
+		return nil, "", err
 	}
 
-	var (
-		routes    []authh.ObjectKeyRoute
-		pageToken string
-		truncated bool
-	)
-	// truncated is set only when we encounter a key while already at the cap,
-	// i.e. there is at least one ObjectKey we did NOT include — never when the
-	// last page fills exactly to the cap with nothing left.
-loop:
+	// Accumulate WHOLE ListObjectKeys pages until the cap or exhaustion. Whole
+	// pages keep the resume cursor on a page boundary (whoAmIMaxRoutes is a
+	// multiple of whoAmIRoutePageSize), so next_page_token never skips a key.
+	routes := make([]authh.ObjectKeyRoute, 0, whoAmIRoutePageSize)
+	cursor := pageToken
 	for {
 		keys, next, err := l.okH.ListObjectKeys(ctx, objectkey.ListObjectKeysArgs{
 			TenantID:  tenantID,
 			PageSize:  whoAmIRoutePageSize,
-			PageToken: pageToken,
+			PageToken: cursor,
 		})
 		if err != nil {
-			return nil, false, err
+			return nil, "", err
 		}
 		for i := range keys {
-			if len(routes) >= whoAmIMaxRoutes {
-				truncated = true // more readable ObjectKeys exist than the cap allows
-				break loop
-			}
 			k := keys[i]
 			bare := ""
 			if dbBackend != "" && k.BackendID == dbBackend && k.BucketName == dbBucket {
@@ -103,10 +95,15 @@ loop:
 				Bucket:     k.BucketName,
 			})
 		}
+		cursor = next
 		if next == "" {
-			break
+			// Exhausted — this is the last page.
+			return routes, "", nil
 		}
-		pageToken = next
+		if len(routes) >= whoAmIMaxRoutes {
+			// Cap reached with more keys remaining; hand back the boundary
+			// cursor so the caller resumes exactly after the last route.
+			return routes, cursor, nil
+		}
 	}
-	return routes, truncated, nil
 }

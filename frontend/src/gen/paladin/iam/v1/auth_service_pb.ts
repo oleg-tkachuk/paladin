@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_auth_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QinQEKDldob0FtSVJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC5vY3AuaWFtLnYxLlVzZXISEAoIYXVkaWVuY2UYAiABKAkSEwoLdGVuYW50X3NsdWcYAyABKAkSKgoGcm91dGVzGAQgAygLMhoub2NwLmlhbS52MS5PYmplY3RLZXlSb3V0ZRIYChByb3V0ZXNfdHJ1bmNhdGVkGAUgASgIIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAkiGgoYTGlzdE15TWVtYmVyc2hpcHNSZXF1ZXN0ImYKCk1lbWJlcnNoaXASEQoJdGVuYW50X2lkGAEgASgJEhMKC3RlbmFudF9zbHVnGAIgASgJEg0KBXJvbGVzGAMgAygJEhAKCGRpc2FibGVkGAQgASgIEg8KB2N1cnJlbnQYBSABKAgiSAoZTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRIrCgttZW1iZXJzaGlwcxgBIAMoCzIWLm9jcC5pYW0udjEuTWVtYmVyc2hpcCJUChNTd2l0Y2hUZW5hbnRSZXF1ZXN0EiEKEHRhcmdldF90ZW5hbnRfaWQYASABKAlCB7pIBHICEAESGgoScmVxdWVzdGVkX2F1ZGllbmNlGAIgASgJIl0KFFN3aXRjaFRlbmFudFJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIyjQUKC0F1dGhTZXJ2aWNlEjwKBUxvZ2luEhgub2NwLmlhbS52MS5Mb2dpblJlcXVlc3QaGS5vY3AuaWFtLnYxLkxvZ2luUmVzcG9uc2USUQoMUmVmcmVzaFRva2VuEh8ub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiAub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRI/CgZSZXZva2USGS5vY3AuaWFtLnYxLlJldm9rZVJlcXVlc3QaGi5vY3AuaWFtLnYxLlJldm9rZVJlc3BvbnNlEj8KBldob0FtSRIZLm9jcC5pYW0udjEuV2hvQW1JUmVxdWVzdBoaLm9jcC5pYW0udjEuV2hvQW1JUmVzcG9uc2USVwoOQ2hhbmdlUGFzc3dvcmQSIS5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBoiLm9jcC5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJdChBFeGNoYW5nZUF1ZGllbmNlEiMub2NwLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBokLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEmAKEUxpc3RNeU1lbWJlcnNoaXBzEiQub2NwLmlhbS52MS5MaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QaJS5vY3AuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVzcG9uc2USUQoMU3dpdGNoVGVuYW50Eh8ub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXF1ZXN0GiAub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
+    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIikKDVdob0FtSVJlcXVlc3QSGAoQcm91dGVfcGFnZV90b2tlbhgBIAEoCSK2AQoOV2hvQW1JUmVzcG9uc2USHgoEdXNlchgBIAEoCzIQLm9jcC5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCRIqCgZyb3V0ZXMYBCADKAsyGi5vY3AuaWFtLnYxLk9iamVjdEtleVJvdXRlEhgKEHJvdXRlc190cnVuY2F0ZWQYBSABKAgSFwoPbmV4dF9wYWdlX3Rva2VuGAYgASgJIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAkiGgoYTGlzdE15TWVtYmVyc2hpcHNSZXF1ZXN0ImYKCk1lbWJlcnNoaXASEQoJdGVuYW50X2lkGAEgASgJEhMKC3RlbmFudF9zbHVnGAIgASgJEg0KBXJvbGVzGAMgAygJEhAKCGRpc2FibGVkGAQgASgIEg8KB2N1cnJlbnQYBSABKAgiSAoZTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRIrCgttZW1iZXJzaGlwcxgBIAMoCzIWLm9jcC5pYW0udjEuTWVtYmVyc2hpcCJUChNTd2l0Y2hUZW5hbnRSZXF1ZXN0EiEKEHRhcmdldF90ZW5hbnRfaWQYASABKAlCB7pIBHICEAESGgoScmVxdWVzdGVkX2F1ZGllbmNlGAIgASgJIl0KFFN3aXRjaFRlbmFudFJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIyjQUKC0F1dGhTZXJ2aWNlEjwKBUxvZ2luEhgub2NwLmlhbS52MS5Mb2dpblJlcXVlc3QaGS5vY3AuaWFtLnYxLkxvZ2luUmVzcG9uc2USUQoMUmVmcmVzaFRva2VuEh8ub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiAub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRI/CgZSZXZva2USGS5vY3AuaWFtLnYxLlJldm9rZVJlcXVlc3QaGi5vY3AuaWFtLnYxLlJldm9rZVJlc3BvbnNlEj8KBldob0FtSRIZLm9jcC5pYW0udjEuV2hvQW1JUmVxdWVzdBoaLm9jcC5pYW0udjEuV2hvQW1JUmVzcG9uc2USVwoOQ2hhbmdlUGFzc3dvcmQSIS5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBoiLm9jcC5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJdChBFeGNoYW5nZUF1ZGllbmNlEiMub2NwLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBokLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEmAKEUxpc3RNeU1lbWJlcnNoaXBzEiQub2NwLmlhbS52MS5MaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QaJS5vY3AuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVzcG9uc2USUQoMU3dpdGNoVGVuYW50Eh8ub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXF1ZXN0GiAub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
     [file_buf_validate_validate, file_paladin_iam_v1_types],
   );
 
@@ -175,7 +175,17 @@ export const RevokeResponseSchema: GenMessage<RevokeResponse> =
 /**
  * @generated from message paladin.iam.v1.WhoAmIRequest
  */
-export type WhoAmIRequest = Message<"paladin.iam.v1.WhoAmIRequest"> & {};
+export type WhoAmIRequest = Message<"paladin.iam.v1.WhoAmIRequest"> & {
+  /**
+   * route_page_token pages the ObjectKey route table (ADR-0010 Phase 4). Empty
+   * = first page; pass back the previous response's `next_page_token` to fetch
+   * the next page. Only the route table is paged — identity fields are always
+   * returned in full.
+   *
+   * @generated from field: string route_page_token = 1;
+   */
+  routePageToken: string;
+};
 
 /**
  * Describes the message paladin.iam.v1.WhoAmIRequest.
@@ -213,27 +223,35 @@ export type WhoAmIResponse = Message<"paladin.iam.v1.WhoAmIResponse"> & {
   tenantSlug: string;
 
   /**
-   * routes is the caller's ObjectKey route table (ADR-0010 Phase 4): every
-   * ObjectKey the caller can read, in all three name shapes, so clients and
-   * SDKs normalize to canonical (A) before sending rather than constructing
-   * it themselves. Empty when the server has no route source wired or the
-   * caller has no readable ObjectKeys. The list is capped server-side and is
-   * not paginated — see BACKLOG for the large-tenant follow-up.
+   * routes is ONE PAGE of the caller's ObjectKey route table (ADR-0010 Phase
+   * 4): the ObjectKeys the caller can read, in all three name shapes, so
+   * clients and SDKs normalize to canonical (A) before sending rather than
+   * constructing it themselves. Empty when the server has no route source wired
+   * or the caller has no readable ObjectKeys. Page through with
+   * `next_page_token`.
    *
    * @generated from field: repeated paladin.iam.v1.ObjectKeyRoute routes = 4;
    */
   routes: ObjectKeyRoute[];
 
   /**
-   * routes_truncated is true when the caller has MORE readable ObjectKeys than
-   * the server-side cap, so `routes` is an incomplete prefix. A client that
-   * sees this must not treat the table as exhaustive — fall back to resolving
-   * any name it can't find via ListObjectKeys. False when the table is
-   * complete (the common case) or empty.
+   * routes_truncated is true when more readable ObjectKeys remain beyond this
+   * page (equivalent to next_page_token != ""). Kept for clients that don't
+   * page: such a client must not treat the table as exhaustive — fall back to
+   * resolving any name it can't find via ListObjectKeys.
    *
    * @generated from field: bool routes_truncated = 5;
    */
   routesTruncated: boolean;
+
+  /**
+   * next_page_token pages the route table: pass it back as
+   * WhoAmIRequest.route_page_token to fetch the next page. Empty on the last
+   * page (or when routes is empty).
+   *
+   * @generated from field: string next_page_token = 6;
+   */
+  nextPageToken: string;
 };
 
 /**

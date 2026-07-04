@@ -84,8 +84,8 @@ func (s *AuthServer) Revoke(ctx context.Context, req *connect.Request[pb.RevokeR
 	return connect.NewResponse(&pb.RevokeResponse{}), nil
 }
 
-func (s *AuthServer) WhoAmI(ctx context.Context, _ *connect.Request[pb.WhoAmIRequest]) (*connect.Response[pb.WhoAmIResponse], error) {
-	out, err := s.H.WhoAmI(ctx)
+func (s *AuthServer) WhoAmI(ctx context.Context, req *connect.Request[pb.WhoAmIRequest]) (*connect.Response[pb.WhoAmIResponse], error) {
+	out, err := s.H.WhoAmI(ctx, req.Msg.GetRoutePageToken())
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +105,7 @@ func (s *AuthServer) WhoAmI(ctx context.Context, _ *connect.Request[pb.WhoAmIReq
 		TenantSlug:      tenantSlug,
 		Routes:          objectKeyRoutesToProto(out.Routes),
 		RoutesTruncated: out.RoutesTruncated,
+		NextPageToken:   out.NextPageToken,
 	}), nil
 }
 

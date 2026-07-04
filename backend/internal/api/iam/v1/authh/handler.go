@@ -70,10 +70,10 @@ type ObjectKeyRoute struct {
 // free of admin-plane (objectKey / tenant-binding) imports; the concrete
 // implementation is wired in the composition root.
 type ObjectKeyRouteLister interface {
-	// Returns the route table plus `truncated` — true when the caller has more
-	// readable ObjectKeys than the server cap, so the table is an incomplete
-	// prefix (ADR-0010 Phase 4).
-	ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) (routes []ObjectKeyRoute, truncated bool, err error)
+	// Returns one page of the route table (starting after pageToken; empty =
+	// first page) plus nextPageToken — non-empty when more readable ObjectKeys
+	// remain, so the caller pages until it comes back empty (ADR-0010 Phase 4).
+	ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID, pageToken string) (routes []ObjectKeyRoute, nextPageToken string, err error)
 }
 
 type Handler struct {
@@ -382,15 +382,19 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 type WhoAmIOutput struct {
 	User     authstore.User
 	Audience string
-	// Routes is the caller's ObjectKey route table (ADR-0010 Phase 4). Empty
-	// when no route source is wired or the caller has no readable ObjectKeys.
+	// Routes is one page of the caller's ObjectKey route table (ADR-0010 Phase
+	// 4). Empty when no route source is wired or the caller has no readable
+	// ObjectKeys.
 	Routes []ObjectKeyRoute
-	// RoutesTruncated is true when Routes is an incomplete prefix (the caller
-	// has more readable ObjectKeys than the server cap).
+	// RoutesTruncated is true when more readable ObjectKeys remain beyond this
+	// page (equivalent to NextPageToken != ""). Kept for clients that don't page.
 	RoutesTruncated bool
+	// NextPageToken pages the route table: pass it back in the next WhoAmI to
+	// fetch the following page. Empty when this is the last page.
+	NextPageToken string
 }
 
-func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
+func (h *Handler) WhoAmI(ctx context.Context, routePageToken string) (*WhoAmIOutput, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
@@ -410,7 +414,7 @@ func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
 	// route-source failure (incl. a Cedar denial for a caller who can't list
 	// ObjectKeys) degrades to an empty table rather than failing the call.
 	if h.routes != nil && u.TenantID != uuid.Nil {
-		routes, truncated, rErr := h.routes.ListObjectKeyRoutes(ctx, u.TenantID)
+		routes, nextToken, rErr := h.routes.ListObjectKeyRoutes(ctx, u.TenantID, routePageToken)
 		if rErr != nil {
 			if h.log != nil {
 				h.log.Warn("whoami: object-key route lookup failed; returning identity without routes",
@@ -419,7 +423,8 @@ func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
 			}
 		} else {
 			out.Routes = routes
-			out.RoutesTruncated = truncated
+			out.NextPageToken = nextToken
+			out.RoutesTruncated = nextToken != ""
 		}
 	}
 	return out, nil

@@ -462,17 +462,19 @@ func TestRefreshToken_DecoderError(t *testing.T) {
 // ─── WhoAmI route table (ADR-0010 Phase 4) ──────────────────────────────────
 
 type stubRouteLister struct {
-	routes    []ObjectKeyRoute
-	truncated bool
-	err       error
-	calls     int
-	gotTID    uuid.UUID
+	routes   []ObjectKeyRoute
+	next     string // next_page_token to return (non-empty ⇒ RoutesTruncated)
+	err      error
+	calls    int
+	gotTID   uuid.UUID
+	gotToken string
 }
 
-func (s *stubRouteLister) ListObjectKeyRoutes(_ context.Context, tid uuid.UUID) ([]ObjectKeyRoute, bool, error) {
+func (s *stubRouteLister) ListObjectKeyRoutes(_ context.Context, tid uuid.UUID, pageToken string) ([]ObjectKeyRoute, string, error) {
 	s.calls++
 	s.gotTID = tid
-	return s.routes, s.truncated, s.err
+	s.gotToken = pageToken
+	return s.routes, s.next, s.err
 }
 
 // whoAmICtx builds a context carrying a principal whose subject is the given
@@ -488,7 +490,7 @@ func whoAmICtx(u authstore.User) context.Context {
 func TestWhoAmI_NoRouteListerReturnsIdentityOnly(t *testing.T) {
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
 	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{})
-	out, err := h.WhoAmI(whoAmICtx(u))
+	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
 		t.Fatalf("WhoAmI: %v", err)
 	}
@@ -509,7 +511,7 @@ func TestWhoAmI_ReturnsRoutesFromLister(t *testing.T) {
 	lister := &stubRouteLister{routes: want}
 	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
 
-	out, err := h.WhoAmI(whoAmICtx(u))
+	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
 		t.Fatalf("WhoAmI: %v", err)
 	}
@@ -527,17 +529,43 @@ func TestWhoAmI_ReturnsRoutesFromLister(t *testing.T) {
 func TestWhoAmI_PropagatesRoutesTruncated(t *testing.T) {
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
 	lister := &stubRouteLister{
-		routes:    []ObjectKeyRoute{{Canonical: "c", TenantPath: "t", Backend: "b", Bucket: "bk"}},
-		truncated: true,
+		routes: []ObjectKeyRoute{{Canonical: "c", TenantPath: "t", Backend: "b", Bucket: "bk"}},
+		next:   "cursor-page-2",
 	}
 	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
 
-	out, err := h.WhoAmI(whoAmICtx(u))
+	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
 		t.Fatalf("WhoAmI: %v", err)
 	}
 	if !out.RoutesTruncated {
 		t.Error("RoutesTruncated should propagate from the lister")
+	}
+	if out.NextPageToken != "cursor-page-2" {
+		t.Errorf("NextPageToken = %q, want %q", out.NextPageToken, "cursor-page-2")
+	}
+}
+
+// TestWhoAmI_ForwardsRoutePageToken proves the caller's page token reaches the
+// lister and a second page (empty next) marks the table exhausted — the full
+// page-through path (ADR-0010 Phase 4 DoD option a).
+func TestWhoAmI_ForwardsRoutePageToken(t *testing.T) {
+	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
+	lister := &stubRouteLister{
+		routes: []ObjectKeyRoute{{Canonical: "c2", TenantPath: "t2", Backend: "b", Bucket: "bk"}},
+		next:   "", // last page
+	}
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+
+	out, err := h.WhoAmI(whoAmICtx(u), "cursor-page-2")
+	if err != nil {
+		t.Fatalf("WhoAmI: %v", err)
+	}
+	if lister.gotToken != "cursor-page-2" {
+		t.Errorf("lister got token %q, want the forwarded %q", lister.gotToken, "cursor-page-2")
+	}
+	if out.RoutesTruncated || out.NextPageToken != "" {
+		t.Errorf("last page must not be truncated: truncated=%v next=%q", out.RoutesTruncated, out.NextPageToken)
 	}
 }
 
@@ -548,7 +576,7 @@ func TestWhoAmI_RouteListerErrorDegradesToEmpty(t *testing.T) {
 	lister := &stubRouteLister{err: connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))}
 	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
 
-	out, err := h.WhoAmI(whoAmICtx(u))
+	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
 		t.Fatalf("WhoAmI should not fail on route error: %v", err)
 	}

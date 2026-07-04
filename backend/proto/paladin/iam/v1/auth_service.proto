@@ -87,7 +87,13 @@ message RevokeRequest {
 
 message RevokeResponse {}
 
-message WhoAmIRequest {}
+message WhoAmIRequest {
+  // route_page_token pages the ObjectKey route table (ADR-0010 Phase 4). Empty
+  // = first page; pass back the previous response's `next_page_token` to fetch
+  // the next page. Only the route table is paged — identity fields are always
+  // returned in full.
+  string route_page_token = 1;
+}
 
 message WhoAmIResponse {
   User user = 1;
@@ -99,19 +105,22 @@ message WhoAmIResponse {
   // slug-form URLs (`/tenants/<slug>/...`) without a follow-up
   // GetTenant lookup.
   string tenant_slug = 3;
-  // routes is the caller's ObjectKey route table (ADR-0010 Phase 4): every
-  // ObjectKey the caller can read, in all three name shapes, so clients and
-  // SDKs normalize to canonical (A) before sending rather than constructing
-  // it themselves. Empty when the server has no route source wired or the
-  // caller has no readable ObjectKeys. The list is capped server-side and is
-  // not paginated — see BACKLOG for the large-tenant follow-up.
+  // routes is ONE PAGE of the caller's ObjectKey route table (ADR-0010 Phase
+  // 4): the ObjectKeys the caller can read, in all three name shapes, so
+  // clients and SDKs normalize to canonical (A) before sending rather than
+  // constructing it themselves. Empty when the server has no route source wired
+  // or the caller has no readable ObjectKeys. Page through with
+  // `next_page_token`.
   repeated ObjectKeyRoute routes = 4;
-  // routes_truncated is true when the caller has MORE readable ObjectKeys than
-  // the server-side cap, so `routes` is an incomplete prefix. A client that
-  // sees this must not treat the table as exhaustive — fall back to resolving
-  // any name it can't find via ListObjectKeys. False when the table is
-  // complete (the common case) or empty.
+  // routes_truncated is true when more readable ObjectKeys remain beyond this
+  // page (equivalent to next_page_token != ""). Kept for clients that don't
+  // page: such a client must not treat the table as exhaustive — fall back to
+  // resolving any name it can't find via ListObjectKeys.
   bool routes_truncated = 5;
+  // next_page_token pages the route table: pass it back as
+  // WhoAmIRequest.route_page_token to fetch the next page. Empty on the last
+  // page (or when routes is empty).
+  string next_page_token = 6;
 }
 
 // ObjectKeyRoute is one addressable ObjectKey expressed in all three

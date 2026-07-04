@@ -329,9 +329,14 @@ func (*RevokeResponse) Descriptor() ([]byte, []int) {
 }
 
 type WhoAmIRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// route_page_token pages the ObjectKey route table (ADR-0010 Phase 4). Empty
+	// = first page; pass back the previous response's `next_page_token` to fetch
+	// the next page. Only the route table is paged — identity fields are always
+	// returned in full.
+	RoutePageToken string `protobuf:"bytes,1,opt,name=route_page_token,json=routePageToken,proto3" json:"route_page_token,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WhoAmIRequest) Reset() {
@@ -364,6 +369,13 @@ func (*WhoAmIRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{6}
 }
 
+func (x *WhoAmIRequest) GetRoutePageToken() string {
+	if x != nil {
+		return x.RoutePageToken
+	}
+	return ""
+}
+
 type WhoAmIResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	User  *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
@@ -375,21 +387,24 @@ type WhoAmIResponse struct {
 	// slug-form URLs (`/tenants/<slug>/...`) without a follow-up
 	// GetTenant lookup.
 	TenantSlug string `protobuf:"bytes,3,opt,name=tenant_slug,json=tenantSlug,proto3" json:"tenant_slug,omitempty"`
-	// routes is the caller's ObjectKey route table (ADR-0010 Phase 4): every
-	// ObjectKey the caller can read, in all three name shapes, so clients and
-	// SDKs normalize to canonical (A) before sending rather than constructing
-	// it themselves. Empty when the server has no route source wired or the
-	// caller has no readable ObjectKeys. The list is capped server-side and is
-	// not paginated — see BACKLOG for the large-tenant follow-up.
+	// routes is ONE PAGE of the caller's ObjectKey route table (ADR-0010 Phase
+	// 4): the ObjectKeys the caller can read, in all three name shapes, so
+	// clients and SDKs normalize to canonical (A) before sending rather than
+	// constructing it themselves. Empty when the server has no route source wired
+	// or the caller has no readable ObjectKeys. Page through with
+	// `next_page_token`.
 	Routes []*ObjectKeyRoute `protobuf:"bytes,4,rep,name=routes,proto3" json:"routes,omitempty"`
-	// routes_truncated is true when the caller has MORE readable ObjectKeys than
-	// the server-side cap, so `routes` is an incomplete prefix. A client that
-	// sees this must not treat the table as exhaustive — fall back to resolving
-	// any name it can't find via ListObjectKeys. False when the table is
-	// complete (the common case) or empty.
+	// routes_truncated is true when more readable ObjectKeys remain beyond this
+	// page (equivalent to next_page_token != ""). Kept for clients that don't
+	// page: such a client must not treat the table as exhaustive — fall back to
+	// resolving any name it can't find via ListObjectKeys.
 	RoutesTruncated bool `protobuf:"varint,5,opt,name=routes_truncated,json=routesTruncated,proto3" json:"routes_truncated,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// next_page_token pages the route table: pass it back as
+	// WhoAmIRequest.route_page_token to fetch the next page. Empty on the last
+	// page (or when routes is empty).
+	NextPageToken string `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WhoAmIResponse) Reset() {
@@ -455,6 +470,13 @@ func (x *WhoAmIResponse) GetRoutesTruncated() bool {
 		return x.RoutesTruncated
 	}
 	return false
+}
+
+func (x *WhoAmIResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // ObjectKeyRoute is one addressable ObjectKey expressed in all three
@@ -1037,15 +1059,17 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x06tokens\x18\x01 \x01(\v2\x15.paladin.iam.v1.TokenPairR\x06tokens\".\n" +
 	"\rRevokeRequest\x12\x1d\n" +
 	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
-	"\x0eRevokeResponse\"\x0f\n" +
-	"\rWhoAmIRequest\"\xd2\x01\n" +
+	"\x0eRevokeResponse\"9\n" +
+	"\rWhoAmIRequest\x12(\n" +
+	"\x10route_page_token\x18\x01 \x01(\tR\x0eroutePageToken\"\xfa\x01\n" +
 	"\x0eWhoAmIResponse\x12$\n" +
 	"\x04user\x18\x01 \x01(\v2\x10.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1f\n" +
 	"\vtenant_slug\x18\x03 \x01(\tR\n" +
 	"tenantSlug\x122\n" +
 	"\x06routes\x18\x04 \x03(\v2\x1a.paladin.iam.v1.ObjectKeyRouteR\x06routes\x12)\n" +
-	"\x10routes_truncated\x18\x05 \x01(\bR\x0froutesTruncated\"\xa0\x01\n" +
+	"\x10routes_truncated\x18\x05 \x01(\bR\x0froutesTruncated\x12&\n" +
+	"\x0fnext_page_token\x18\x06 \x01(\tR\rnextPageToken\"\xa0\x01\n" +
 	"\x0eObjectKeyRoute\x12\x1c\n" +
 	"\tcanonical\x18\x01 \x01(\tR\tcanonical\x12\x1f\n" +
 	"\vtenant_path\x18\x02 \x01(\tR\n" +
