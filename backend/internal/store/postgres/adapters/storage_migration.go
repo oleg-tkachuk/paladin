@@ -119,6 +119,11 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 	if _, err := qtx.SetTenantStorageLayout(ctx, pgUUID(tenantID), "dedicated"); err != nil {
 		return fmt.Errorf("set storage_layout: %w", err)
 	}
+	// Point the default binding at the dedicated bucket too, so bare-name
+	// object_keys created after the migration land there rather than failing.
+	if err := qtx.SetTenantDefaultBinding(ctx, pgUUID(tenantID), targetBackendID, targetBucketName, "storage-migration"); err != nil {
+		return fmt.Errorf("set default binding: %w", err)
+	}
 	return tx.Commit(ctx)
 }
 

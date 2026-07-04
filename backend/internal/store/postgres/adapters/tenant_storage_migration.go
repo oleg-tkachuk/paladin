@@ -63,6 +63,25 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 	return storageMigrationToDomain(m), nil
 }
 
+// TenantSourceBucket returns the single (backend, bucket) the tenant's
+// object_keys currently bind to. Shared tenants normally have exactly one;
+// zero means no object_keys (nothing to migrate from), more than one means the
+// tenant spans buckets (unsupported in slice 1).
+func (r *TenantRepo) TenantSourceBucket(ctx context.Context, tenantID uuid.UUID) (string, string, error) {
+	rows, err := r.q.TenantObjectKeyBuckets(ctx, pgUUID(tenantID))
+	if err != nil {
+		return "", "", err
+	}
+	switch len(rows) {
+	case 0:
+		return "", "", tenant.ErrNotFound
+	case 1:
+		return rows[0].BackendID, rows[0].BucketName, nil
+	default:
+		return "", "", tenant.ErrSourceBucketAmbiguous
+	}
+}
+
 func (r *TenantRepo) GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (tenant.StorageMigration, error) {
 	m, err := r.q.GetStorageMigration(ctx, pgUUID(tenantID))
 	if err != nil {

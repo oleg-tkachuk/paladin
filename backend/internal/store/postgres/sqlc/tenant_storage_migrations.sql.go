@@ -293,3 +293,35 @@ func (q *Queries) SetTenantStorageLayout(ctx context.Context, tenantID pgtype.UU
 	}
 	return result.RowsAffected(), nil
 }
+
+const tenantObjectKeyBuckets = `-- name: TenantObjectKeyBuckets :many
+SELECT DISTINCT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1
+`
+
+type TenantObjectKeyBucketsRow struct {
+	BackendID  string `json:"backend_id"`
+	BucketName string `json:"bucket_name"`
+}
+
+// Distinct (backend, bucket) the tenant's object_keys currently bind to. The
+// migration copies FROM this — a shared tenant's keys normally share one bucket;
+// more than one row means the tenant spans buckets (not supported in slice 1).
+func (q *Queries) TenantObjectKeyBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantObjectKeyBucketsRow, error) {
+	rows, err := q.db.Query(ctx, tenantObjectKeyBuckets, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TenantObjectKeyBucketsRow
+	for rows.Next() {
+		var i TenantObjectKeyBucketsRow
+		if err := rows.Scan(&i.BackendID, &i.BucketName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

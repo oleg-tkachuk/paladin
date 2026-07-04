@@ -70,3 +70,9 @@ WHERE tenant_id = $1;
 -- name: MigrationListTenantObjectKeys :many
 -- All object_keys of a tenant, for the transactional rebind.
 SELECT object_key FROM object_keys WHERE tenant_id = $1 ORDER BY object_key;
+
+-- name: TenantObjectKeyBuckets :many
+-- Distinct (backend, bucket) the tenant's object_keys currently bind to. The
+-- migration copies FROM this — a shared tenant's keys normally share one bucket;
+-- more than one row means the tenant spans buckets (not supported in slice 1).
+SELECT DISTINCT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1;

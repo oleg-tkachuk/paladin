@@ -487,6 +487,10 @@ type Querier interface {
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
 	SoftDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
+	// Distinct (backend, bucket) the tenant's object_keys currently bind to. The
+	// migration copies FROM this — a shared tenant's keys normally share one bucket;
+	// more than one row means the tenant spans buckets (not supported in slice 1).
+	TenantObjectKeyBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantObjectKeyBucketsRow, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error
 	TouchUserLogin(ctx context.Context, userID pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).

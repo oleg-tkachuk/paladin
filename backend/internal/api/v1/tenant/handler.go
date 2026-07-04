@@ -174,6 +174,12 @@ type Repository interface {
 	// GetStorageMigration returns the tenant's migration status. ErrNotFound
 	// when none was ever started.
 	GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
+	// TenantSourceBucket returns the (backend, bucket) the tenant's objects
+	// physically live in today — the DISTINCT binding across its object_keys.
+	// A shared tenant's keys normally share one bucket; ErrSourceBucketAmbiguous
+	// when they span more than one (unsupported in slice 1), ErrNotFound when
+	// the tenant has no object_keys.
+	TenantSourceBucket(ctx context.Context, tenantID uuid.UUID) (backendID, bucketName string, err error)
 }
 
 // StartStorageMigrationArgs is the input for Repository.StartStorageMigration.
@@ -202,6 +208,11 @@ type StorageMigration struct {
 // ErrStorageMigrationExists is returned by StartStorageMigration when a
 // migration row already exists for the tenant.
 var ErrStorageMigrationExists = errors.New("storage migration already exists for tenant")
+
+// ErrSourceBucketAmbiguous is returned by TenantSourceBucket when the tenant's
+// object_keys span more than one (backend, bucket) — slice 1 migrates from a
+// single source bucket.
+var ErrSourceBucketAmbiguous = errors.New("tenant object_keys span multiple buckets; single-source migration only")
 
 // RenameTenantSlugArgs is the input shape for Repository.Rename and
 // Handler.RenameTenantSlug.
@@ -564,22 +575,24 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 			fmt.Errorf("tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout))
 	}
 
-	// Source is the tenant's current default (shared) bucket. Without one there
-	// is nothing to migrate from.
-	src, err := h.repo.GetDefaultBinding(ctx, tenantID)
+	// Source is where the tenant's objects physically live today — the
+	// (backend, bucket) its object_keys bind to. (Not the default binding,
+	// which is only for the bare-name shape and is often unset on shared
+	// tenants whose keys carry explicit bindings.)
+	srcBackend, srcBucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("tenant has no default binding to migrate from: %w", err))
+			fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
 	}
 
 	targetBackend := targetBackendID
 	if targetBackend == "" {
-		targetBackend = src.BackendID
+		targetBackend = srcBackend
 	}
 	args := StartStorageMigrationArgs{
 		TenantID:         tenantID,
-		SourceBackendID:  src.BackendID,
-		SourceBucketName: src.BucketName,
+		SourceBackendID:  srcBackend,
+		SourceBucketName: srcBucket,
 		TargetBackendID:  targetBackend,
 		TargetBucketName: "paladin-" + tenantID.String(),
 	}
