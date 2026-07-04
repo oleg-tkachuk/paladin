@@ -426,6 +426,21 @@ func (c *Client) CopyObject(ctx context.Context, src, dst object.Location) error
 	return nil
 }
 
+// GetStream opens a server-side read of one object, returning its body reader +
+// content type. Used by the cross-backend migration stream-through (the caller
+// pipes it into another backend's Open writer). The caller MUST Close the
+// reader.
+func (c *Client) GetStream(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) (io.ReadCloser, string, error) {
+	out, err := c.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.resolveBucket(bucket)),
+		Key:    aws.String(composeKey(tenantID, objectKey, key)),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("get stream: %w", err)
+	}
+	return out.Body, aws.ToString(out.ContentType), nil
+}
+
 func (c *Client) DeleteObject(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) error {
 	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(c.resolveBucket(bucket)),

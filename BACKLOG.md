@@ -895,8 +895,10 @@ open deliberately — each notes why._
 
 - **Status:** Phases 1 + 2 SHIPPED 2026-07-02/03 per
   [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md); **Phase 3
-  slices 1 + 2 SHIPPED** (same-backend copy job + retention-gated cleanup,
-  live-verified end-to-end against Garage) — cross-backend + frontend remain.
+  slices 1 + 2 + 3 SHIPPED** (same-backend copy job + retention-gated cleanup
+  live-verified end-to-end against Garage; cross-backend stream-through
+  unit-tested — a live cross-backend run needs a second working backend, the
+  dev `secondary`/SeaweedFS being off). Physical verify + frontend remain.
 - **Shipped — Phase 2 (multi-backend routing):** `BackendRegistry`
   (client-per-backend, #121) → `backend_id` threading resolver→storage
   boundary (#122) → per-backend routers on `wire.Storage` (#123), proven
@@ -931,13 +933,20 @@ open deliberately — each notes why._
   (keyset-scanned, `DeleteObject` per blob) and marks `cleaned`. Guard: cleanup
   never runs before `cleanup_after`. Unit-tested (delete-after-retention +
   waits-during-retention).
-- **Definition of Done (remaining — Phase 3 slices 3–4):**
-  - **Slice 3 — cross-backend:** `streamThrough` copy (GET(src)→PUT(dst),
-    multipart for large objects) behind the `CopyObject` router branch that
-    currently refuses cross-backend pairs; physical HEAD/checksum verify.
+- **Shipped — Phase 3 slice 3 (cross-backend stream-through):** the s3
+  `ObjectRouter.CopyObject` now handles cross-backend pairs — `Client.GetStream`
+  (server-side GET → body reader) piped via `io.Copy` into the destination
+  backend's multipart `Open` writer, so arbitrarily large objects copy without
+  buffering. The migration worker's same-backend-only guard is removed; the
+  router picks server-side copy vs stream-through transparently. Unit-tested
+  (worker cross-backend proceeds).
+- **Definition of Done (remaining — Phase 3 slice 4 + hardening):**
+  - **Physical verify:** after copy, HEAD/checksum each object in the target
+    bucket before completing (today's verify is count-based).
   - **Slice 4 — surface:** frontend migration status + provision-time bucket
     tagging (`tenant_id`) for cost attribution.
-  - Two-MinIO integration test of the full migration.
+  - Live cross-backend run (needs a second working backend) + two-backend
+    integration test of the full migration.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
   derived bucket name for cross-account global uniqueness; bucket tagging

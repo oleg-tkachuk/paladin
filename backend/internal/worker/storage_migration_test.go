@@ -172,16 +172,26 @@ func TestStorageMigration_WaitsForBucketReady(t *testing.T) {
 	}
 }
 
-func TestStorageMigration_CrossBackendFails(t *testing.T) {
+func TestStorageMigration_CrossBackendProceeds(t *testing.T) {
+	// Slice 3: cross-backend is supported (the s3 router stream-throughs), so the
+	// worker must migrate it end to end, not fail it.
 	tid := uuid.New()
 	repo := &fakeMigRepo{
-		mig:         StorageMigration{TenantID: tid, State: MigStateProvisioning, SourceBackendID: "primary", TargetBackendID: "secondary"},
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateProvisioning,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			TargetBackendID: "secondary", TargetBucketName: "paladin-" + tid.String(),
+		},
 		bucketState: "ready",
+		objects:     []ObjectRef{{ObjectKey: "docs", Key: "a.txt"}},
 	}
-	w := newWorker(repo, &fakeCopier{})
-	w.tick(context.Background())
-	if repo.mig.State != MigStateFailed {
-		t.Fatalf("state = %q, want failed (cross-backend unsupported in slice 1)", repo.mig.State)
+	cop := &fakeCopier{}
+	runToTerminal(t, newWorker(repo, cop), repo)
+	if repo.mig.State != MigStateCompleted {
+		t.Fatalf("state = %q, want completed (cross-backend now supported)", repo.mig.State)
+	}
+	if len(cop.copies) != 1 {
+		t.Fatalf("copied %d, want 1 (cross-backend copy)", len(cop.copies))
 	}
 }
 

@@ -3,6 +3,7 @@ package s3adapter
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,18 +70,49 @@ func (r *ObjectRouter) Head(ctx context.Context, backendID, bucket string, tenan
 }
 
 func (r *ObjectRouter) CopyObject(ctx context.Context, src, dst object.Location) error {
-	// A server-side S3 copy runs on a single client, so src and dst must be
-	// on the same backend. Cross-backend copy (a stream-through GET→PUT) is
-	// Phase 3 (the shared→dedicated migration job); refuse it loudly here
-	// rather than silently copying within the dst backend.
-	if src.BackendID != dst.BackendID {
-		return fmt.Errorf("s3 router: cross-backend copy not supported yet (src backend %q, dst backend %q)", src.BackendID, dst.BackendID)
+	// Same backend: a server-side S3 CopyObject runs on one client (no bytes
+	// flow through this process).
+	if src.BackendID == dst.BackendID {
+		c, err := r.reg.For(ctx, dst.BackendID)
+		if err != nil {
+			return err
+		}
+		return c.CopyObject(ctx, src, dst)
 	}
-	c, err := r.reg.For(ctx, dst.BackendID)
+	// Cross-backend (ADR-0011 Phase 3 slice 3): the two objects live on
+	// different S3 endpoints, so stream through — GET from the source client
+	// into the destination's multipart writer, which parts the body so
+	// arbitrarily large objects copy without buffering the whole thing.
+	return r.streamThrough(ctx, src, dst)
+}
+
+func (r *ObjectRouter) streamThrough(ctx context.Context, src, dst object.Location) error {
+	srcC, err := r.reg.For(ctx, src.BackendID)
 	if err != nil {
-		return err
+		return fmt.Errorf("stream copy: source backend: %w", err)
 	}
-	return c.CopyObject(ctx, src, dst)
+	dstC, err := r.reg.For(ctx, dst.BackendID)
+	if err != nil {
+		return fmt.Errorf("stream copy: dest backend: %w", err)
+	}
+	reader, contentType, err := srcC.GetStream(ctx, src.Bucket, src.TenantID, src.ObjectKey, src.Key)
+	if err != nil {
+		return fmt.Errorf("stream copy: open source: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	w, err := dstC.Open(ctx, dst.Bucket, dst.TenantID, dst.ObjectKey, dst.Key, contentType, 0)
+	if err != nil {
+		return fmt.Errorf("stream copy: open dest: %w", err)
+	}
+	if _, err := io.Copy(w, reader); err != nil {
+		_ = w.Abort()
+		return fmt.Errorf("stream copy: transfer: %w", err)
+	}
+	if _, _, _, err := w.Close(); err != nil {
+		return fmt.Errorf("stream copy: finalize dest: %w", err)
+	}
+	return nil
 }
 
 func (r *ObjectRouter) DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) error {

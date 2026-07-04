@@ -176,14 +176,8 @@ func (w *StorageMigrationWorker) advance(ctx context.Context, m StorageMigration
 // stepProvisioning waits for the reconciler to make the target bucket ready,
 // then records the object count and moves to copying.
 func (w *StorageMigrationWorker) stepProvisioning(ctx context.Context, m StorageMigration) error {
-	if m.SourceBackendID != m.TargetBackendID {
-		// Cross-backend needs a stream-through GET+PUT (later slice) — terminal here.
-		w.log().Error("cross-backend migration not supported; failing",
-			zap.String("tenant_id", m.TenantID.String()),
-			zap.String("src_backend", m.SourceBackendID), zap.String("dst_backend", m.TargetBackendID))
-		return w.Repo.Fail(ctx, m.TenantID,
-			fmt.Sprintf("cross-backend migration not supported yet (src %q, dst %q)", m.SourceBackendID, m.TargetBackendID))
-	}
+	// Both same-backend (server-side CopyObject) and cross-backend
+	// (stream-through GET→PUT) are supported now — the s3 router picks the path.
 	state, err := w.Repo.BucketProvisionState(ctx, m.TargetBackendID, m.TargetBucketName)
 	if err != nil {
 		return fmt.Errorf("read target bucket state: %w", err)

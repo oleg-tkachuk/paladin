@@ -2,7 +2,6 @@ package s3adapter
 
 import (
 	"context"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -34,26 +33,10 @@ func TestObjectRouter_UnknownBackendPropagates(t *testing.T) {
 	}
 }
 
-// TestObjectRouter_CrossBackendCopyRejected proves a copy whose source and
-// destination are on different backends is refused up front (Phase 3 will add
-// the stream-through), before any client is built.
-func TestObjectRouter_CrossBackendCopyRejected(t *testing.T) {
-	reg, builds := testRegistry()
-	rt := NewObjectRouter(reg)
-
-	err := rt.CopyObject(context.Background(),
-		object.Location{BackendID: "primary", Bucket: "a"},
-		object.Location{BackendID: "secondary", Bucket: "b"})
-	if err == nil {
-		t.Fatal("cross-backend copy: want error")
-	}
-	if !strings.Contains(err.Error(), "cross-backend") {
-		t.Fatalf("error should mention cross-backend, got %v", err)
-	}
-	if n := atomic.LoadInt32(builds); n != 0 {
-		t.Fatalf("cross-backend copy must fail before building any client, got %d builds", n)
-	}
-}
+// Cross-backend CopyObject used to be rejected up front; ADR-0011 Phase 3
+// slice 3 turned it into a GET→PUT stream-through (see ObjectRouter.streamThrough).
+// The byte transfer needs a real/mock S3 on both ends, so it is covered by the
+// migration integration test rather than a unit test here.
 
 // TestProvisionerRouter_UnknownBackendPropagates mirrors the object router for
 // the provisioner path (its backend id is an explicit parameter).
