@@ -47,6 +47,9 @@ type Querier interface {
 	// first sighting (claimed = true → process) or a duplicate (false → skip).
 	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
 	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// Rebind verified: serve from the dedicated bucket. The old copies are kept
+	// until cleanup_after (now + the row's retention) so a bad migration is still
+	// rollback-able within the window.
 	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
@@ -77,7 +80,7 @@ type Querier interface {
 	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
 	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
-	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string) (TenantStorageMigration, error)
+	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
 	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout string) error
 	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
@@ -186,7 +189,8 @@ type Querier interface {
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, objectKey string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
-	// Worker scan: non-terminal migrations, oldest-touched first.
+	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
+	// still active — the worker must run retention-gated cleanup on it.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error)
 	// $3 is the keyset-pagination cursor; pgUUID(uuid.Nil) maps to NULL,
 	// which the Go adapter passes for the first page. Without the IS NULL
@@ -344,6 +348,7 @@ type Querier interface {
 	MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
 	MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error)
 	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
+	MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// All object_keys of a tenant, for the transactional rebind.
 	MigrationListTenantObjectKeys(ctx context.Context, tenantID pgtype.UUID) ([]string, error)

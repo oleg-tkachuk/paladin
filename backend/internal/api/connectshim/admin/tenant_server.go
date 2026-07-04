@@ -111,7 +111,7 @@ func (s *TenantServer) MigrateTenantStorageLayout(ctx context.Context, req *conn
 	if err != nil {
 		return nil, err
 	}
-	m, err := s.H.MigrateTenantStorageLayout(ctx, id, req.Msg.GetTargetBackendId())
+	m, err := s.H.MigrateTenantStorageLayout(ctx, id, req.Msg.GetTargetBackendId(), req.Msg.GetCleanupRetentionSeconds())
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,7 @@ func migFromSQLC(m sqlc.TenantStorageMigration) worker.StorageMigration {
 		ObjectsCopied:    m.ObjectsCopied,
 		CursorObjectKey:  m.CursorObjectKey,
 		CursorKey:        m.CursorKey,
+		CleanupAfter:     m.CleanupAfter.Time, // zero when NULL (CleanupAfter.Valid == false)
 	}
 }
 
@@ -164,6 +165,11 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 
 func (r *StorageMigrationRepo) Complete(ctx context.Context, tenantID uuid.UUID) error {
 	_, err := r.q.CompleteStorageMigration(ctx, pgUUID(tenantID))
+	return err
+}
+
+func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := r.q.MarkStorageMigrationCleaned(ctx, pgUUID(tenantID))
 	return err
 }
 

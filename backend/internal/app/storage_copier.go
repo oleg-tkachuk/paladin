@@ -17,6 +17,12 @@ func (c storageCopier) CopyObject(ctx context.Context, src, dst worker.CopyLocat
 	return c.s.CopyObject(ctx, objLoc(src), objLoc(dst))
 }
 
+// DeleteObject removes one physical object — used by the migration cleanup
+// phase to delete the old (shared) copies after the retention window.
+func (c storageCopier) DeleteObject(ctx context.Context, loc worker.CopyLocation) error {
+	return c.s.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.ObjectKey, loc.Key)
+}
+
 func objLoc(l worker.CopyLocation) object.Location {
 	return object.Location{
 		BackendID: l.BackendID,

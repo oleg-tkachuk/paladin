@@ -191,6 +191,10 @@ message MigrateTenantStorageLayoutRequest {
   // supports same-backend only, so a different backend is rejected by the copy
   // job until the cross-backend stream-through path lands.
   string target_backend_id = 2;
+  // cleanup_retention_seconds — how long the old (shared) copies are kept after
+  // the migration completes before they are deleted. Optional; 0 uses the
+  // server default (24h). A rollback is only possible within this window.
+  int64 cleanup_retention_seconds = 3;
 }
 
 message GetTenantStorageMigrationRequest {

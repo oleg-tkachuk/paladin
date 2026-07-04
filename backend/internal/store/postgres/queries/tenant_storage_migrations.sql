@@ -2,17 +2,19 @@
 
 -- name: CreateStorageMigration :one
 INSERT INTO tenant_storage_migrations
-    (tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state)
-VALUES ($1, $2, $3, $4, $5, 'provisioning')
+    (tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name,
+     cleanup_retention_seconds, state)
+VALUES ($1, $2, $3, $4, $5, $6, 'provisioning')
 RETURNING *;
 
 -- name: GetStorageMigration :one
 SELECT * FROM tenant_storage_migrations WHERE tenant_id = $1;
 
 -- name: ListActiveStorageMigrations :many
--- Worker scan: non-terminal migrations, oldest-touched first.
+-- Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
+-- still active — the worker must run retention-gated cleanup on it.
 SELECT * FROM tenant_storage_migrations
-WHERE state NOT IN ('completed', 'failed')
+WHERE state NOT IN ('cleaned', 'failed')
 ORDER BY updated_at
 LIMIT sqlc.arg('limit_count')::int;
 
@@ -37,8 +39,18 @@ SET objects_copied    = $2,
 WHERE tenant_id = $1;
 
 -- name: CompleteStorageMigration :execrows
+-- Rebind verified: serve from the dedicated bucket. The old copies are kept
+-- until cleanup_after (now + the row's retention) so a bad migration is still
+-- rollback-able within the window.
 UPDATE tenant_storage_migrations
-SET state = 'completed', error = '', completed_at = now(), updated_at = now()
+SET state = 'completed', error = '', completed_at = now(),
+    cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
+    updated_at = now()
+WHERE tenant_id = $1;
+
+-- name: MarkStorageMigrationCleaned :execrows
+UPDATE tenant_storage_migrations
+SET state = 'cleaned', cleaned_at = now(), updated_at = now()
 WHERE tenant_id = $1;
 
 -- name: FailStorageMigration :execrows

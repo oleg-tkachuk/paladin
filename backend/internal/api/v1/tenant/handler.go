@@ -189,6 +189,9 @@ type StartStorageMigrationArgs struct {
 	SourceBucketName string
 	TargetBackendID  string
 	TargetBucketName string
+	// CleanupRetentionSeconds is how long the old (shared) copies are kept
+	// after the migration completes before the cleanup phase deletes them.
+	CleanupRetentionSeconds int64
 }
 
 // StorageMigration is a tenant's shared->dedicated copy-job status
@@ -558,7 +561,7 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 // tenant's dedicated bucket, and records the copy job. The async
 // StorageMigrationWorker does the actual object copy + rebind. Returns the
 // initial migration status.
-func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string) (*StorageMigration, error) {
+func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*StorageMigration, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -589,12 +592,18 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	if targetBackend == "" {
 		targetBackend = srcBackend
 	}
+	// Retention before the old copies are deleted; default 24h when unset.
+	retention := cleanupRetentionSeconds
+	if retention <= 0 {
+		retention = 86400
+	}
 	args := StartStorageMigrationArgs{
-		TenantID:         tenantID,
-		SourceBackendID:  srcBackend,
-		SourceBucketName: srcBucket,
-		TargetBackendID:  targetBackend,
-		TargetBucketName: "paladin-" + tenantID.String(),
+		TenantID:                tenantID,
+		SourceBackendID:         srcBackend,
+		SourceBucketName:        srcBucket,
+		TargetBackendID:         targetBackend,
+		TargetBucketName:        "paladin-" + tenantID.String(),
+		CleanupRetentionSeconds: retention,
 	}
 	m, err := h.repo.StartStorageMigration(ctx, args)
 	if err != nil {

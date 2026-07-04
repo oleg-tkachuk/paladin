@@ -797,8 +797,12 @@ type MigrateTenantStorageLayoutRequest struct {
 	// supports same-backend only, so a different backend is rejected by the copy
 	// job until the cross-backend stream-through path lands.
 	TargetBackendId string `protobuf:"bytes,2,opt,name=target_backend_id,json=targetBackendId,proto3" json:"target_backend_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// cleanup_retention_seconds — how long the old (shared) copies are kept after
+	// the migration completes before they are deleted. Optional; 0 uses the
+	// server default (24h). A rollback is only possible within this window.
+	CleanupRetentionSeconds int64 `protobuf:"varint,3,opt,name=cleanup_retention_seconds,json=cleanupRetentionSeconds,proto3" json:"cleanup_retention_seconds,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *MigrateTenantStorageLayoutRequest) Reset() {
@@ -843,6 +847,13 @@ func (x *MigrateTenantStorageLayoutRequest) GetTargetBackendId() string {
 		return x.TargetBackendId
 	}
 	return ""
+}
+
+func (x *MigrateTenantStorageLayoutRequest) GetCleanupRetentionSeconds() int64 {
+	if x != nil {
+		return x.CleanupRetentionSeconds
+	}
+	return 0
 }
 
 type GetTenantStorageMigrationRequest struct {
@@ -1318,10 +1329,11 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x1aResolveRenamedSlugResponse\x12\x19\n" +
 	"\bnew_slug\x18\x01 \x01(\tR\anewSlug\x129\n" +
 	"\n" +
-	"renamed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\trenamedAt\"l\n" +
+	"renamed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\trenamedAt\"\xa8\x01\n" +
 	"!MigrateTenantStorageLayoutRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12*\n" +
-	"\x11target_backend_id\x18\x02 \x01(\tR\x0ftargetBackendId\"?\n" +
+	"\x11target_backend_id\x18\x02 \x01(\tR\x0ftargetBackendId\x12:\n" +
+	"\x19cleanup_retention_seconds\x18\x03 \x01(\x03R\x17cleanupRetentionSeconds\"?\n" +
 	" GetTenantStorageMigrationRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdc\x02\n" +
 	"\x16StorageMigrationStatus\x12\x16\n" +

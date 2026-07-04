@@ -895,8 +895,8 @@ open deliberately — each notes why._
 
 - **Status:** Phases 1 + 2 SHIPPED 2026-07-02/03 per
   [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md); **Phase 3
-  slice 1 SHIPPED** (same-backend copy job) — cross-backend + cleanup +
-  frontend remain.
+  slices 1 + 2 SHIPPED** (same-backend copy job + retention-gated cleanup,
+  live-verified end-to-end against Garage) — cross-backend + frontend remain.
 - **Shipped — Phase 2 (multi-backend routing):** `BackendRegistry`
   (client-per-backend, #121) → `backend_id` threading resolver→storage
   boundary (#122) → per-backend routers on `wire.Storage` (#123), proven
@@ -923,9 +923,15 @@ open deliberately — each notes why._
   flip→verify→completed. Cross-backend pairs fail loudly (deferred to the
   stream-through slice). Source copies are RETAINED (cleanup is a later slice).
   Unit-tested state machine (happy path, bucket-wait, cross-backend fail).
-- **Definition of Done (remaining — Phase 3 slices 2–4):**
-  - **Slice 2 — cleanup:** delete the old `<tenant_id>/` prefix from the
-    shared bucket (or tombstone with a retention window) after verify.
+- **Shipped — Phase 3 slice 2 (retention-gated cleanup):** migration 057 adds
+  `cleanup_retention_seconds` / `cleanup_after` / `cleaned_at` + a `cleaned`
+  state. On completion the worker sets `cleanup_after = now() + retention`
+  (default 24h, overridable via the RPC's `cleanup_retention_seconds`), and once
+  the window elapses it deletes the old copies from the SOURCE bucket
+  (keyset-scanned, `DeleteObject` per blob) and marks `cleaned`. Guard: cleanup
+  never runs before `cleanup_after`. Unit-tested (delete-after-retention +
+  waits-during-retention).
+- **Definition of Done (remaining — Phase 3 slices 3–4):**
   - **Slice 3 — cross-backend:** `streamThrough` copy (GET(src)→PUT(dst),
     multipart for large objects) behind the `CopyObject` router branch that
     currently refuses cross-backend pairs; physical HEAD/checksum verify.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -17,10 +18,16 @@ type fakeMigRepo struct {
 }
 
 func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, error) {
-	if f.mig.State == MigStateCompleted || f.mig.State == MigStateFailed {
+	// 'completed' is still active (cleanup pending); only cleaned/failed are terminal.
+	if f.mig.State == MigStateCleaned || f.mig.State == MigStateFailed {
 		return nil, nil
 	}
 	return []StorageMigration{f.mig}, nil
+}
+
+func (f *fakeMigRepo) MarkCleaned(_ context.Context, _ uuid.UUID) error {
+	f.mig.State = MigStateCleaned
+	return nil
 }
 
 func (f *fakeMigRepo) BucketProvisionState(context.Context, string, string) (string, error) {
@@ -88,6 +95,14 @@ func (c *fakeCopier) CopyObject(_ context.Context, src, dst CopyLocation) error 
 		return errors.New("copy boom")
 	}
 	c.copies = append(c.copies, src.ObjectKey+"/"+src.Key+" : "+src.Bucket+"->"+dst.Bucket)
+	return nil
+}
+
+// fakeDeleter records every source delete.
+type fakeDeleter struct{ deleted []string }
+
+func (d *fakeDeleter) DeleteObject(_ context.Context, loc CopyLocation) error {
+	d.deleted = append(d.deleted, loc.ObjectKey+"/"+loc.Key+" @ "+loc.Bucket)
 	return nil
 }
 
@@ -190,6 +205,53 @@ func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
 	}
 	if repo.rebound {
 		t.Fatal("SECURITY: rebound object_keys despite an incomplete copy — data would be orphaned")
+	}
+}
+
+func TestStorageMigration_CleanupAfterRetention(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateCompleted,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+			ObjectsTotal: 2, ObjectsCopied: 2,
+			CleanupAfter: time.Now().Add(-time.Minute), // retention elapsed
+		},
+		objects: []ObjectRef{{ObjectKey: "docs", Key: "a.txt"}, {ObjectKey: "docs", Key: "b.txt"}},
+	}
+	del := &fakeDeleter{}
+	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}
+	w.tick(context.Background())
+
+	if repo.mig.State != MigStateCleaned {
+		t.Fatalf("state = %q, want cleaned", repo.mig.State)
+	}
+	if len(del.deleted) != 2 {
+		t.Fatalf("deleted %d source objects, want 2: %v", len(del.deleted), del.deleted)
+	}
+	for _, d := range del.deleted {
+		if !contains(d, "@ paladin-shared") {
+			t.Fatalf("delete did not target the SOURCE bucket: %q", d)
+		}
+	}
+}
+
+func TestStorageMigration_CleanupWaitsForRetention(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig:     StorageMigration{TenantID: tid, State: MigStateCompleted, CleanupAfter: time.Now().Add(time.Hour)},
+		objects: []ObjectRef{{ObjectKey: "docs", Key: "a.txt"}},
+	}
+	del := &fakeDeleter{}
+	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}
+	w.tick(context.Background())
+
+	if repo.mig.State != MigStateCompleted {
+		t.Fatalf("state = %q, want completed (retention not elapsed)", repo.mig.State)
+	}
+	if len(del.deleted) != 0 {
+		t.Fatal("deleted source objects before the retention window elapsed")
 	}
 }
 

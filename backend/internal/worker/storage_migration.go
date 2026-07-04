@@ -22,13 +22,14 @@ import (
 // `failed`; transient errors (a DB blip, one failed CopyObject) are retried on
 // the next tick without abandoning the migration.
 
-// Migration states (mirror the CHECK constraint in migration 056).
+// Migration states (mirror the CHECK constraint in migrations 056 + 057).
 const (
 	MigStateProvisioning = "provisioning"
 	MigStateCopying      = "copying"
 	MigStateRebinding    = "rebinding"
 	MigStateVerifying    = "verifying"
 	MigStateCompleted    = "completed"
+	MigStateCleaned      = "cleaned"
 	MigStateFailed       = "failed"
 )
 
@@ -49,6 +50,12 @@ type ObjectCopier interface {
 	CopyObject(ctx context.Context, src, dst CopyLocation) error
 }
 
+// ObjectDeleter permanently removes one physical object. Used by the
+// retention-gated cleanup phase to drop the old (shared) copies.
+type ObjectDeleter interface {
+	DeleteObject(ctx context.Context, loc CopyLocation) error
+}
+
 // StorageMigration is one tenant's in-flight shared->dedicated copy job.
 type StorageMigration struct {
 	TenantID         uuid.UUID
@@ -61,6 +68,9 @@ type StorageMigration struct {
 	ObjectsCopied    int64
 	CursorObjectKey  string
 	CursorKey        string
+	// CleanupAfter is when the old (shared) copies may be deleted; zero until
+	// the migration is 'completed'. Cleanup runs once time.Now >= CleanupAfter.
+	CleanupAfter time.Time
 }
 
 // ObjectRef is a logical (object_key, key) pair to copy.
@@ -86,6 +96,8 @@ type MigrationRepo interface {
 	// 'dedicated'. The FK is DEFERRABLE INITIALLY DEFERRED.
 	RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error
 	Complete(ctx context.Context, tenantID uuid.UUID) error
+	// MarkCleaned is the terminal transition after the old copies are deleted.
+	MarkCleaned(ctx context.Context, tenantID uuid.UUID) error
 	Fail(ctx context.Context, tenantID uuid.UUID, reason string) error
 }
 
@@ -93,9 +105,12 @@ type MigrationRepo interface {
 type StorageMigrationWorker struct {
 	Repo      MigrationRepo
 	Copier    ObjectCopier
+	Deleter   ObjectDeleter
 	Interval  time.Duration
 	CopyBatch int
 	Logger    *zap.Logger
+	// Now is injectable for tests; defaults to time.Now.
+	Now func() time.Time
 }
 
 func (w *StorageMigrationWorker) Run(ctx context.Context) error {
@@ -105,10 +120,20 @@ func (w *StorageMigrationWorker) Run(ctx context.Context) error {
 	if w.CopyBatch <= 0 {
 		w.CopyBatch = 100
 	}
+	if w.Now == nil {
+		w.Now = time.Now
+	}
 	return RunTicker(ctx, "storage-migration", w.Interval, func(ctx context.Context) error {
 		w.tick(ctx)
 		return nil
 	})
+}
+
+func (w *StorageMigrationWorker) now() time.Time {
+	if w.Now != nil {
+		return w.Now()
+	}
+	return time.Now()
 }
 
 func (w *StorageMigrationWorker) tick(ctx context.Context) {
@@ -141,6 +166,8 @@ func (w *StorageMigrationWorker) advance(ctx context.Context, m StorageMigration
 		return w.stepRebinding(ctx, m)
 	case MigStateVerifying:
 		return w.stepVerifying(ctx, m)
+	case MigStateCompleted:
+		return w.stepCompleted(ctx, m)
 	default:
 		return nil
 	}
@@ -237,6 +264,47 @@ func (w *StorageMigrationWorker) stepVerifying(ctx context.Context, m StorageMig
 	w.log().Info("migration completed",
 		zap.String("tenant_id", m.TenantID.String()), zap.Int64("objects", m.ObjectsCopied))
 	return w.Repo.Complete(ctx, m.TenantID)
+}
+
+// stepCompleted runs the retention-gated cleanup (slice 2): once the window has
+// elapsed, delete the old copies from the SOURCE bucket, then mark cleaned. The
+// object rows are unchanged by the migration, so we keyset-scan them and delete
+// each physical blob at its source location; the loop terminates because the
+// cursor advances past the stable object list.
+func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMigration) error {
+	if m.CleanupAfter.IsZero() || w.now().Before(m.CleanupAfter) {
+		return nil // still inside the retention window
+	}
+	if w.Deleter == nil {
+		return nil // cleanup disabled
+	}
+	curOK, curKey := "", ""
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+		objs, err := w.Repo.ListObjects(ctx, m.TenantID, curOK, curKey, w.CopyBatch)
+		if err != nil {
+			return fmt.Errorf("cleanup list objects: %w", err)
+		}
+		if len(objs) == 0 {
+			break
+		}
+		for _, o := range objs {
+			loc := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, ObjectKey: o.ObjectKey, Key: o.Key}
+			if err := w.Deleter.DeleteObject(ctx, loc); err != nil {
+				return fmt.Errorf("cleanup delete %s/%s: %w", o.ObjectKey, o.Key, err)
+			}
+			curOK, curKey = o.ObjectKey, o.Key
+		}
+		if len(objs) < w.CopyBatch {
+			break
+		}
+	}
+	w.log().Info("migration source cleaned",
+		zap.String("tenant_id", m.TenantID.String()),
+		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
+	return w.Repo.MarkCleaned(ctx, m.TenantID)
 }
 
 func (w *StorageMigrationWorker) log() *zap.Logger {

@@ -50,7 +50,8 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 	}
 
 	m, err := qtx.CreateStorageMigration(ctx, pgUUID(args.TenantID),
-		args.SourceBackendID, args.SourceBucketName, args.TargetBackendID, args.TargetBucketName)
+		args.SourceBackendID, args.SourceBucketName, args.TargetBackendID, args.TargetBucketName,
+		args.CleanupRetentionSeconds)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return tenant.StorageMigration{}, tenant.ErrStorageMigrationExists

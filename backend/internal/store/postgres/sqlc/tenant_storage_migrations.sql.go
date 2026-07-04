@@ -36,10 +36,15 @@ func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgty
 
 const completeStorageMigration = `-- name: CompleteStorageMigration :execrows
 UPDATE tenant_storage_migrations
-SET state = 'completed', error = '', completed_at = now(), updated_at = now()
+SET state = 'completed', error = '', completed_at = now(),
+    cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
+    updated_at = now()
 WHERE tenant_id = $1
 `
 
+// Rebind verified: serve from the dedicated bucket. The old copies are kept
+// until cleanup_after (now + the row's retention) so a bad migration is still
+// rollback-able within the window.
 func (q *Queries) CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, completeStorageMigration, tenantID)
 	if err != nil {
@@ -51,19 +56,21 @@ func (q *Queries) CompleteStorageMigration(ctx context.Context, tenantID pgtype.
 const createStorageMigration = `-- name: CreateStorageMigration :one
 
 INSERT INTO tenant_storage_migrations
-    (tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state)
-VALUES ($1, $2, $3, $4, $5, 'provisioning')
-RETURNING tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_object_key, cursor_key, error, attempts, created_at, updated_at, completed_at
+    (tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name,
+     cleanup_retention_seconds, state)
+VALUES ($1, $2, $3, $4, $5, $6, 'provisioning')
+RETURNING tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_object_key, cursor_key, error, attempts, created_at, updated_at, completed_at, cleanup_retention_seconds, cleanup_after, cleaned_at
 `
 
 // ADR-0011 Phase 3: shared->dedicated storage migration copy job.
-func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string) (TenantStorageMigration, error) {
+func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string, cleanupRetentionSeconds int64) (TenantStorageMigration, error) {
 	row := q.db.QueryRow(ctx, createStorageMigration,
 		tenantID,
 		sourceBackendID,
 		sourceBucketName,
 		targetBackendID,
 		targetBucketName,
+		cleanupRetentionSeconds,
 	)
 	var i TenantStorageMigration
 	err := row.Scan(
@@ -82,6 +89,9 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.CleanupRetentionSeconds,
+		&i.CleanupAfter,
+		&i.CleanedAt,
 	)
 	return i, err
 }
@@ -101,7 +111,7 @@ func (q *Queries) FailStorageMigration(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_object_key, cursor_key, error, attempts, created_at, updated_at, completed_at FROM tenant_storage_migrations WHERE tenant_id = $1
+SELECT tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_object_key, cursor_key, error, attempts, created_at, updated_at, completed_at, cleanup_retention_seconds, cleanup_after, cleaned_at FROM tenant_storage_migrations WHERE tenant_id = $1
 `
 
 func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error) {
@@ -123,18 +133,22 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.CleanupRetentionSeconds,
+		&i.CleanupAfter,
+		&i.CleanedAt,
 	)
 	return i, err
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_object_key, cursor_key, error, attempts, created_at, updated_at, completed_at FROM tenant_storage_migrations
-WHERE state NOT IN ('completed', 'failed')
+SELECT tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_object_key, cursor_key, error, attempts, created_at, updated_at, completed_at, cleanup_retention_seconds, cleanup_after, cleaned_at FROM tenant_storage_migrations
+WHERE state NOT IN ('cleaned', 'failed')
 ORDER BY updated_at
 LIMIT $1::int
 `
 
-// Worker scan: non-terminal migrations, oldest-touched first.
+// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
+// still active — the worker must run retention-gated cleanup on it.
 func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error) {
 	rows, err := q.db.Query(ctx, listActiveStorageMigrations, limitCount)
 	if err != nil {
@@ -160,6 +174,9 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CompletedAt,
+			&i.CleanupRetentionSeconds,
+			&i.CleanupAfter,
+			&i.CleanedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -169,6 +186,20 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 		return nil, err
 	}
 	return items, nil
+}
+
+const markStorageMigrationCleaned = `-- name: MarkStorageMigrationCleaned :execrows
+UPDATE tenant_storage_migrations
+SET state = 'cleaned', cleaned_at = now(), updated_at = now()
+WHERE tenant_id = $1
+`
+
+func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markStorageMigrationCleaned, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const migrationCountTenantObjects = `-- name: MigrationCountTenantObjects :one

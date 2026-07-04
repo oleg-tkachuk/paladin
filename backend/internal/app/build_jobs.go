@@ -258,10 +258,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// registered — it is idle unless a tenant_storage_migrations row is active
 	// (the admin MigrateTenantStorageLayout RPC creates one), so it needs no
 	// config toggle. Slice 1 is same-backend server-side copy.
+	migCopier := storageCopier{s: deps.Storage.Object}
 	out = append(out, &worker.StorageMigrationWorker{
-		Repo:   adapters.NewStorageMigrationRepo(db.Queries, deps.Pool),
-		Copier: storageCopier{s: deps.Storage.Object},
-		Logger: l.Named("storage-migration"),
+		Repo:    adapters.NewStorageMigrationRepo(db.Queries, deps.Pool),
+		Copier:  migCopier,
+		Deleter: migCopier, // retention-gated source cleanup (slice 2)
+		Logger:  l.Named("storage-migration"),
 	})
 
 	return out
