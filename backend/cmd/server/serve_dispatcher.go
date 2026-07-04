@@ -55,11 +55,18 @@ var serveDispatcherCmd = &cobra.Command{
 		fx.New(
 			fx.Supply(configSource()),
 			fx.Supply(buildMeta()),
-			app.BaseModule,
-			fx.Invoke(runDispatcher),
+			dispatcherModule,
 		).Run()
 	},
 }
+
+// dispatcherModule is the dispatcher role's fx graph: the DB-backed BaseModule
+// plus the outbox lifecycle. Extracted so both the command and the
+// graph-validation test (fx_validate_test.go) reference the same wiring.
+var dispatcherModule = fx.Options(
+	app.BaseModule,
+	fx.Invoke(runDispatcher),
+)
 
 // runDispatcher is the dispatcher role's fx lifecycle. It builds the outbox
 // runner, its sink connection pools, and the ops listener up front (any failure

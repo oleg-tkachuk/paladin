@@ -39,11 +39,18 @@ var serveWorkerCmd = &cobra.Command{
 		fx.New(
 			fx.Supply(configSource()),
 			fx.Supply(buildMeta()),
-			app.BaseModule,
-			fx.Invoke(runWorker),
+			workerModule,
 		).Run()
 	},
 }
+
+// workerModule is the worker role's fx graph: the DB-backed BaseModule plus the
+// worker lifecycle. Extracted so both the command and the graph-validation test
+// (fx_validate_test.go) reference the exact same wiring.
+var workerModule = fx.Options(
+	app.BaseModule,
+	fx.Invoke(runWorker),
+)
 
 // runWorker is the worker role's fx lifecycle. It builds one lease per
 // background job up front (a build failure aborts start, matching the pre-fx

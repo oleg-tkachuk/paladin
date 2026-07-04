@@ -63,19 +63,9 @@ var serveMCPCmd = &cobra.Command{
 		// handlers, so it needs the full DB-backed BaseModule; bridge is a
 		// pure Connect-over-HTTP proxy with no DB, so it rides the lighter
 		// LiteModule (config + logger only — no pool is ever opened).
-		var roleModule fx.Option
+		roleModule := mcpBridgeModule
 		if mcpEmbedded {
-			roleModule = fx.Options(
-				app.BaseModule,
-				fx.Provide(provideMCPEmbeddedRunner),
-				fx.Invoke(runMCPServer),
-			)
-		} else {
-			roleModule = fx.Options(
-				app.LiteModule,
-				fx.Provide(provideMCPBridgeRunner),
-				fx.Invoke(runMCPServer),
-			)
+			roleModule = mcpEmbeddedModule
 		}
 		fx.New(
 			fx.Supply(configSource()),
@@ -84,6 +74,24 @@ var serveMCPCmd = &cobra.Command{
 		).Run()
 	},
 }
+
+// mcpBridgeModule / mcpEmbeddedModule are the two mcp role graphs. Bridge rides
+// the DB-less LiteModule (pure Connect-over-HTTP proxy); embedded rides the
+// full BaseModule (co-hosts the api/admin/iam handlers). Extracted so both the
+// command and the graph-validation test (fx_validate_test.go) reference the
+// same wiring.
+var (
+	mcpBridgeModule = fx.Options(
+		app.LiteModule,
+		fx.Provide(provideMCPBridgeRunner),
+		fx.Invoke(runMCPServer),
+	)
+	mcpEmbeddedModule = fx.Options(
+		app.BaseModule,
+		fx.Provide(provideMCPEmbeddedRunner),
+		fx.Invoke(runMCPServer),
+	)
+)
 
 func init() {
 	serveMCPCmd.Flags().StringVar(&mcpTransport, "transport", "http", `MCP client transport: "stdio" or "http"`)

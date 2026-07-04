@@ -42,11 +42,18 @@ var serveIngestCmd = &cobra.Command{
 		fx.New(
 			fx.Supply(configSource()),
 			fx.Supply(buildMeta()),
-			app.BaseModule,
-			fx.Invoke(runIngest),
+			ingestModule,
 		).Run()
 	},
 }
+
+// ingestModule is the ingest role's fx graph: the DB-backed BaseModule plus the
+// storage-event consumer lifecycle. Extracted so both the command and the
+// graph-validation test (fx_validate_test.go) reference the same wiring.
+var ingestModule = fx.Options(
+	app.BaseModule,
+	fx.Invoke(runIngest),
+)
 
 // runIngest is the ingest role's fx lifecycle. It validates the subsystem is
 // enabled, builds the driver/handler/worker/reaper and the optional BYPASSRLS
