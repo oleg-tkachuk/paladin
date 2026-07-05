@@ -49,22 +49,6 @@ merges. Genuinely-deferred hardening/tuning stays below with full DoD.
   measurement; the "Adoption check" in the producer-wiring entry feeds this.
 - **Blockers:** needs real cardinality data — same gap as the adoption check.
 
-### RLS-aware integration harness (DEFERRED — supersedes the dispatcher-only entry)
-
-- **Status:** Deferred (test-infra; the meta-fragility behind the recurring RLS bugs).
-- **Reason:** the integration harness only exposes `PoolMigrate` (BYPASSRLS) and a
-  GUC-setting `PoolApp`; it can't reproduce the production condition (`paladin_app`,
-  cross-tenant, NO GUC) that both the dispatcher and reaper bugs hit — so tests
-  give false confidence about exactly that failure mode.
-- **Definition of Done:** a GUC-less `paladin_app` harness pool + a shared assertion
-  that any cross-tenant background component finds rows only on a BYPASSRLS pool;
-  retro-fit the dispatcher + reaper suites onto it.
-- **Note:** the `tests/integration` compile-drift that previously blocked this
-  (stale `config.Storage.DefaultBackend`, 2-value `repo.LookupBucket`, the
-  `DeleteObject`/`NewHandler` signature churn from ADR-0011) was un-bit-rotted in
-  the transactional-outbox pass — the suite compiles and runs under
-  `-tags integration` again. This item is now purely the harness design work above.
-
 ---
 
 ## MCP bridge

@@ -22,6 +22,13 @@
 //   - PoolApp (RLS-enforced via paladin_app + WithRLS hooks): the
 //     production-shaped pool. Tests that exercise tenant
 //     isolation use this one and stamp tenant via auth context.
+//
+//   - PoolAppNoGUC (paladin_app, NO RLS hook, tenant GUC never set): the
+//     production FAILURE mode a cross-tenant background component hits
+//     when it runs on the RLS runtime pool with no request principal —
+//     `paladin_session_tenant_id()` is NULL, so every RLS policy matches
+//     zero rows. This is the exact condition the reaper + dispatcher
+//     bugs hit; AssertRLSHidesCrossTenant asserts it.
 package pgharness
 
 import (
@@ -54,6 +61,13 @@ type Harness struct {
 	// installed. Tests use this to exercise tenant-isolation
 	// behaviour the production runtime sees.
 	PoolApp *pgxpool.Pool
+
+	// PoolAppNoGUC runs as `paladin_app` with NO RLS hook — the tenant GUC is
+	// never set, so paladin_session_tenant_id() is NULL and every RLS policy
+	// matches zero rows. This reproduces the cross-tenant-background-job
+	// failure mode (reaper / dispatcher on the runtime pool with no request
+	// principal). Use AssertRLSHidesCrossTenant.
+	PoolAppNoGUC *pgxpool.Pool
 
 	// DSN strings for either role, in case a test needs to open its
 	// own connection (e.g. to verify connection-time GUC behaviour).
@@ -131,12 +145,47 @@ func Setup(t *testing.T) *Harness {
 	}
 	t.Cleanup(poolApp.Close)
 
+	// paladin_app pool WITHOUT the RLS hook — the tenant GUC is never set, so RLS
+	// policies match nothing cross-tenant. Reproduces the background-job bug.
+	poolAppNoGUC, err := pgxpool.New(ctx, appDSN)
+	if err != nil {
+		t.Fatalf("app pool (no GUC): %v", err)
+	}
+	t.Cleanup(poolAppNoGUC.Close)
+
 	return &Harness{
-		Container:   pgC,
-		PoolMigrate: poolMigrate,
-		PoolApp:     poolApp,
-		MigrateDSN:  migrateDSN,
-		AppDSN:      appDSN,
+		Container:    pgC,
+		PoolMigrate:  poolMigrate,
+		PoolApp:      poolApp,
+		PoolAppNoGUC: poolAppNoGUC,
+		MigrateDSN:   migrateDSN,
+		AppDSN:       appDSN,
+	}
+}
+
+// AssertRLSHidesCrossTenant proves the production failure mode the reaper +
+// dispatcher bugs hit: a cross-tenant read on a GUC-less paladin_app pool returns
+// ZERO rows (RLS matches nothing without a tenant GUC), while the same read on
+// the BYPASSRLS migrate pool sees them. countSQL must be a
+// `SELECT count(*) FROM <rls_table> ...` with NO tenant predicate; call it
+// after seeding the rows via PoolMigrate. A cross-tenant background component
+// MUST run on a BYPASSRLS pool — this is the shared assertion that pins it.
+func (h *Harness) AssertRLSHidesCrossTenant(t *testing.T, countSQL string, args ...any) {
+	t.Helper()
+	ctx := context.Background()
+
+	var appN, migN int64
+	if err := h.PoolAppNoGUC.QueryRow(ctx, countSQL, args...).Scan(&appN); err != nil {
+		t.Fatalf("AssertRLSHidesCrossTenant: GUC-less app pool query: %v", err)
+	}
+	if err := h.PoolMigrate.QueryRow(ctx, countSQL, args...).Scan(&migN); err != nil {
+		t.Fatalf("AssertRLSHidesCrossTenant: migrate pool query: %v", err)
+	}
+	if migN == 0 {
+		t.Fatalf("AssertRLSHidesCrossTenant: BYPASSRLS pool saw 0 rows — seed rows via PoolMigrate first (nothing to assert)")
+	}
+	if appN != 0 {
+		t.Errorf("AssertRLSHidesCrossTenant: GUC-less paladin_app saw %d rows, want 0 — a cross-tenant background component on the RLS pool would silently no-op; it MUST use a BYPASSRLS pool", appN)
 	}
 }
 
@@ -174,7 +223,7 @@ func applyMigrations(dsn string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}

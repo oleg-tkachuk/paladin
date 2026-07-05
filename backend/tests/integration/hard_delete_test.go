@@ -75,6 +75,10 @@ func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "leaky")
 	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
 
+	// Shared harness assertion: the seeded object is cross-tenant-invisible on a
+	// GUC-less paladin_app pool — the root reason the reaper must run on BYPASSRLS.
+	h.AssertRLSHidesCrossTenant(t, `SELECT count(*) FROM objects WHERE object_id = $1`, objectID)
+
 	sweptCount := func(pool *pgxpool.Pool) int {
 		st := &recordingStorage{}
 		w := &worker.LifecycleHardDeleter{Q: sqlc.New(pool), Storage: st, TTL: time.Hour, BatchSize: 100}
