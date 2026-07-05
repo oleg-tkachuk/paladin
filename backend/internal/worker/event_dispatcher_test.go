@@ -97,7 +97,7 @@ func TestDispatchWritesOutbox(t *testing.T) {
 		Outbox: out,
 	}
 	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{
-		Type:     "object.created",
+		Type:     "paladin.object.uploaded",
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
 	})
@@ -114,7 +114,7 @@ func TestDispatchWritesOutbox(t *testing.T) {
 	if rows[0].SubscriptionID != subID {
 		t.Errorf("sub id: got %s want %s", rows[0].SubscriptionID, subID)
 	}
-	if rows[0].EventType != "object.created" {
+	if rows[0].EventType != "paladin.object.uploaded" {
 		t.Errorf("event type: got %q", rows[0].EventType)
 	}
 	if len(rows[0].EventPayload) == 0 {
@@ -149,7 +149,7 @@ func TestDispatchScopesListToTenant(t *testing.T) {
 	}
 	out := &fakeOutbox{}
 	d := &Dispatcher{Store: store, Outbox: out}
-	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
+	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "paladin.object.uploaded"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -162,6 +162,33 @@ func TestDispatchScopesListToTenant(t *testing.T) {
 	}
 	if got := len(out.snapshot()); got != 1 {
 		t.Errorf("outbox writes: got %d want 1", got)
+	}
+}
+
+func TestKindFromType(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"paladin.object.uploaded", "object"},
+		{"paladin.object.deleted", "object"},
+		{"paladin.object_key.created", "object_key"},
+		{"paladin.bucket.created", "bucket"},
+		{"paladin.tenant.trashed", "tenant"},
+		{"paladin.capability.charged", "capability"},
+		{"paladin.quota.set", "quota"},
+		{"paladin.backend.credentials_rotated", "backend"},
+		{"paladin.audit.login", "audit"},
+		{"object.created", ""},   // legacy 2-segment, non-canonical
+		{"paladin.object", ""},       // no verb segment
+		{"paladin.", ""},             // empty kind
+		{"not.paladin.prefixed", ""}, // wrong prefix
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := kindFromType(tc.in); got != tc.want {
+			t.Errorf("kindFromType(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }
 
@@ -188,7 +215,7 @@ func TestBucketFromResourceName(t *testing.T) {
 // nothing.
 func TestDispatchRejectsInvalidTenantID(t *testing.T) {
 	d := &Dispatcher{Store: &fakeStore{}, Outbox: &fakeOutbox{}}
-	if _, err := d.Dispatch(context.Background(), "not-a-uuid", Event{Type: "object.created"}); err == nil {
+	if _, err := d.Dispatch(context.Background(), "not-a-uuid", Event{Type: "paladin.object.uploaded"}); err == nil {
 		t.Fatal("expected error for invalid tenant id")
 	}
 }
@@ -209,7 +236,7 @@ func TestDispatchSkipsDisabled(t *testing.T) {
 		},
 		Outbox: out,
 	}
-	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
+	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "paladin.object.uploaded"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,13 +278,16 @@ func TestDispatchFilterMatch(t *testing.T) {
 		evt    Event
 		want   int
 	}{
-		{"non-matching type drops", `type == "object.deleted"`, Event{Type: "object.created"}, 0},
-		{"matching type queues", `type == "object.created"`, Event{Type: "object.created"}, 1},
-		{"empty filter matches all", "", Event{Type: "anything"}, 1},
+		{"non-matching type drops", `type == "paladin.object.deleted"`, Event{Type: "paladin.object.uploaded"}, 0},
+		{"matching type queues", `type == "paladin.object.uploaded"`, Event{Type: "paladin.object.uploaded"}, 1},
+		{"empty filter matches all", "", Event{Type: "paladin.tenant.created"}, 1},
+		{"kind derived from type matches", `kind == "object"`, Event{Type: "paladin.object.uploaded"}, 1},
+		{"kind derived (object_key) matches", `kind == "object_key"`, Event{Type: "paladin.object_key.created"}, 1},
+		{"kind mismatch drops", `kind == "bucket"`, Event{Type: "paladin.object.uploaded"}, 0},
 		{
 			"predicate over envelope field",
-			`type == "object.created" && actor_subject == "svc"`,
-			Event{Type: "object.created", ActorSubject: "svc"},
+			`type == "paladin.object.uploaded" && actor_subject == "svc"`,
+			Event{Type: "paladin.object.uploaded", ActorSubject: "svc"},
 			1,
 		},
 		{
@@ -295,7 +325,7 @@ func TestDispatchFilterMatch(t *testing.T) {
 		},
 		// A pre-validation legacy value (bare event type, not a bool CEL
 		// expression) can't compile → fail-closed, not fan-out.
-		{"uncompilable filter fails closed", "object.created", Event{Type: "object.created"}, 0},
+		{"uncompilable filter fails closed", "paladin.object.uploaded", Event{Type: "paladin.object.uploaded"}, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

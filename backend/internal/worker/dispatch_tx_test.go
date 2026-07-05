@@ -39,7 +39,7 @@ func TestDispatchTxWritesRowsOnTx(t *testing.T) {
 	d := &Dispatcher{Store: store} // NOTE: no Outbox — DispatchTx must not need it
 	tx := &fakeTx{}
 
-	n, err := d.DispatchTx(context.Background(), tx, tenantID.String(), Event{Type: "object.created"})
+	n, err := d.DispatchTx(context.Background(), tx, tenantID.String(), Event{Type: "paladin.object.uploaded"})
 	if err != nil {
 		t.Fatalf("DispatchTx: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestDispatchTxPropagatesInsertError(t *testing.T) {
 	// guarantee under test: DispatchTx routes through the tx, never the
 	// (nil) pool, so a nil-Outbox dispatcher can't accidentally write
 	// outside the transaction.
-	n, err := d.DispatchTx(context.Background(), tx, tenantID.String(), Event{Type: "object.created"})
+	n, err := d.DispatchTx(context.Background(), tx, tenantID.String(), Event{Type: "paladin.object.uploaded"})
 	if err != nil {
 		t.Fatalf("DispatchTx returned hard error: %v", err)
 	}

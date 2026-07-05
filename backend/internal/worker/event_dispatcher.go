@@ -63,7 +63,7 @@ import (
 // Event is the wire payload delivered to subscribers. The shape is JSON-
 // stable across releases; new fields go to the end.
 type Event struct {
-	Type         string         `json:"type"` // "object.created", "bucket.created", ...
+	Type         string         `json:"type"` // canonical "paladin.<kind>.<verb>", e.g. "paladin.object.uploaded"
 	At           time.Time      `json:"at"`
 	TenantID     string         `json:"tenant_id"`
 	ResourceName string         `json:"resource_name"`
@@ -323,7 +323,7 @@ func eventCELVars(evt Event) map[string]any {
 		"time":            "",
 		"datacontenttype": "",
 		"subject":         "",
-		"kind":            payloadString(evt.Payload, "kind"),
+		"kind":            kindFromType(evt.Type),
 		"severity":        payloadString(evt.Payload, "severity"),
 		"object_key":      payloadString(evt.Payload, "object_key"),
 		"bucket_name":     eventBucketName(evt),
@@ -342,6 +342,24 @@ func eventBucketName(evt Event) string {
 		return b
 	}
 	return bucketFromResourceName(evt.ResourceName)
+}
+
+// kindFromType extracts the resource kind from a canonical event type of the
+// form "paladin.<kind>.<verb>" — "paladin.object.uploaded" → "object",
+// "paladin.object_key.created" → "object_key", "paladin.audit.login" → "audit". All
+// producers emit this shape (see the EventType constants and the paladin.* string
+// literals across the dispatch call sites). Returns "" for anything that
+// doesn't fit, so a `kind ==` filter never matches something wrong.
+func kindFromType(t string) string {
+	const prefix = "paladin."
+	if !strings.HasPrefix(t, prefix) {
+		return ""
+	}
+	rest := t[len(prefix):] // "<kind>.<verb>..."
+	if i := strings.IndexByte(rest, '.'); i > 0 {
+		return rest[:i]
+	}
+	return ""
 }
 
 // bucketFromResourceName extracts the bucket segment from an A-shape resource
