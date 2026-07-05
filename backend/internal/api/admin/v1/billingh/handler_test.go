@@ -131,6 +131,28 @@ func TestGetTenantTimeSeries_DenyFirst(t *testing.T) {
 	}
 }
 
+// TestGetTenantTimeSeries_RejectsTooManyBuckets: a period ÷ granularity that
+// would materialise more than maxTimeSeriesBuckets rows is rejected as
+// InvalidArgument, bounding the buffered result set. A sane window passes the
+// cap (and then hits the nil-pool Unavailable, proving no false-trip).
+func TestGetTenantTimeSeries_RejectsTooManyBuckets(t *testing.T) {
+	h := NewHandler(nil, nil, allowAuthorizer{})
+	start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// hour granularity over 5 years → ~43800 buckets >> the 1000 cap.
+	_, err := h.GetTenantTimeSeries(ctxWithAdmin(t), uuid.New(), start, start.AddDate(5, 0, 0), "hour")
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("wide hour window: code = %v, want InvalidArgument", connect.CodeOf(err))
+	}
+
+	// 7 days at hour granularity = 168 buckets < cap → passes to the nil-pool
+	// short-circuit.
+	_, err = h.GetTenantTimeSeries(ctxWithAdmin(t), uuid.New(), start, start.AddDate(0, 0, 7), "hour")
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Errorf("narrow hour window: code = %v, want Unavailable (cap must not false-trip)", connect.CodeOf(err))
+	}
+}
+
 // TestGetTenantSummary_DenyFirst parallel to the time-series case.
 func TestGetTenantSummary_DenyFirst(t *testing.T) {
 	h := NewHandler(nil, nil, denyAuthorizer{})

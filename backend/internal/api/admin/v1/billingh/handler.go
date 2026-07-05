@@ -235,6 +235,29 @@ var allowedGranularities = map[string]bool{
 	"hour": true, "day": true, "week": true,
 }
 
+// maxTimeSeriesBuckets caps the number of (period ÷ granularity) buckets a
+// single GetTenantTimeSeries call may materialise, bounding the buffered result
+// set. 1000 is generous for any legitimate chart — hour granularity spans ~41
+// days (> the 30d default period), day spans ~2.7 years, week ~19 years — while
+// rejecting the pathological "hour granularity over years" request.
+const maxTimeSeriesBuckets = 1000
+
+// granularityStep maps a validated granularity to its bucket width, used to
+// pre-flight the bucket count. Returns 0 for an unknown value (the caller has
+// already validated against allowedGranularities, so 0 only skips the check).
+func granularityStep(granularity string) time.Duration {
+	switch granularity {
+	case "hour":
+		return time.Hour
+	case "day":
+		return 24 * time.Hour
+	case "week":
+		return 7 * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
 // GetTenantTimeSeries buckets charges.amount + count by time.
 // granularity is validated against the closed allowlist before
 // reaching the SQL — date_trunc would silently accept "minute" /
@@ -244,10 +267,9 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	if err := h.authorize(ctx, tenantID); err != nil {
 		return nil, err
 	}
-	if h.pool == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("billing: capability subsystem disabled"))
-	}
+	// Input validation (granularity + period + bucket bound) runs before the
+	// subsystem-availability check so a malformed request is rejected the same
+	// way whether or not the capability subsystem is wired.
 	if granularity == "" {
 		granularity = "day"
 	}
@@ -258,6 +280,22 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	start, end, err := resolvePeriod(periodStart, periodEnd)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	// Bound the result set: (period ÷ granularity) is the bucket count the
+	// GROUP BY produces, all buffered in memory. An hour-granularity request
+	// over years would materialise tens of thousands of rows. Reject rather
+	// than silently LIMIT — a truncated series is a misleading answer, so the
+	// caller must narrow the period or coarsen the granularity instead.
+	if step := granularityStep(granularity); step > 0 {
+		if buckets := int64(end.Sub(start) / step); buckets > maxTimeSeriesBuckets {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
+					granularity, buckets, maxTimeSeriesBuckets))
+		}
+	}
+	if h.pool == nil {
+		return nil, connect.NewError(connect.CodeUnavailable,
+			errors.New("billing: capability subsystem disabled"))
 	}
 
 	q := fmt.Sprintf(

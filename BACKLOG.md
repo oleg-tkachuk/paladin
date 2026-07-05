@@ -49,16 +49,6 @@ merges. Genuinely-deferred hardening/tuning stays below with full DoD.
   measurement; the "Adoption check" in the producer-wiring entry feeds this.
 - **Blockers:** needs real cardinality data — same gap as the adoption check.
 
-### Unbounded reads / caches (DEFERRED)
-
-- **Status:** Deferred (operational; bounded by tenant/period cardinality today).
-- **Reason:** (a) `eventingest/prefix_cache.go` caches one entry per tenant with
-  NO eviction (contrast the CEL evaluator's bounded cache); (b) billing timeseries
-  (`billingh/handler.go:277`) has no `LIMIT` and accepts an arbitrary period —
-  hour-granularity over years buffers a huge result set in memory.
-- **Definition of Done:** bound the prefix cache (size cap + evict, like the CEL
-  cache); cap/validate the billing period (or `LIMIT` the query).
-
 ### At-least-once sink dedup guidance (DEFERRED)
 
 - **Status:** Deferred (documentation + optional enforcement).

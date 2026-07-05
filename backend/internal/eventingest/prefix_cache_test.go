@@ -49,6 +49,27 @@ func testTenant() pgtype.UUID {
 	return pgtype.UUID{Bytes: uuid.New(), Valid: true}
 }
 
+// TestCachingLookup_EvictsPastCap: the per-tenant map is size-bounded — loading
+// more distinct tenants than maxPrefixCacheTenants must not grow it without
+// limit (memory backstop, mirrors the CEL cache).
+func TestCachingLookup_EvictsPastCap(t *testing.T) {
+	be := &fakePrefixBackend{keys: []string{"invoices"}}
+	c := NewCachingLookup(be, time.Minute, nil)
+
+	for i := 0; i < maxPrefixCacheTenants+100; i++ {
+		if _, _, err := c.keysFor(context.Background(), testTenant(), false); err != nil {
+			t.Fatalf("keysFor #%d: %v", i, err)
+		}
+	}
+
+	c.mu.Lock()
+	n := len(c.cache)
+	c.mu.Unlock()
+	if n > maxPrefixCacheTenants {
+		t.Errorf("cache holds %d entries, want <= %d (eviction didn't fire)", n, maxPrefixCacheTenants)
+	}
+}
+
 func TestCachingLookup_LongestPrefixWins(t *testing.T) {
 	be := &fakePrefixBackend{keys: []string{"invoices", "invoices/2026/q1", "photos"}}
 	c := NewCachingLookup(be, time.Minute, nil)

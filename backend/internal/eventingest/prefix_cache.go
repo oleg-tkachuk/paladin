@@ -17,6 +17,14 @@ import (
 // ResolveObjectKeyPrefix may be. See CachingLookup for the staleness contract.
 const DefaultPrefixCacheTTL = 30 * time.Second
 
+// maxPrefixCacheTenants bounds the number of per-tenant entries the cache
+// holds. Tenant cardinality on a control plane is bounded, so eviction
+// effectively never fires in normal operation — this is a memory backstop
+// against a runaway tenant count (or a test/synthetic burst), mirroring the CEL
+// evaluator's bounded compile cache. At capacity a new tenant evicts one
+// arbitrary entry (its next resolve just reloads from the backend — cheap).
+const maxPrefixCacheTenants = 2048
+
 // prefixBackend is the store surface CachingLookup needs: the two object
 // lookups it passes straight through, plus the full per-tenant object_key name
 // list it caches for longest-prefix resolution. *sqlc.Queries satisfies it.
@@ -48,9 +56,11 @@ type prefixBackend interface {
 //     consistent, not lost. This is the same eventual-consistency posture the
 //     handler already relies on for the presign/upload race.
 //
-// The cache map holds one small string slice per tenant and is never evicted
-// (entries are refreshed in place). Tenant cardinality on a control plane is
-// bounded, so unbounded growth is a non-issue in practice.
+// The cache map holds one small string slice per tenant. Entries are refreshed
+// in place; the map is size-bounded at maxPrefixCacheTenants (arbitrary-eviction
+// backstop, like the CEL cache) so a runaway tenant count can't grow it without
+// limit. Tenant cardinality on a control plane is bounded, so eviction
+// effectively never fires in normal operation.
 type CachingLookup struct {
 	src prefixBackend
 	ttl time.Duration
@@ -148,6 +158,16 @@ func (c *CachingLookup) keysFor(ctx context.Context, tenantID pgtype.UUID, force
 	}
 
 	c.mu.Lock()
+	if _, present := c.cache[tenantID]; !present && len(c.cache) >= maxPrefixCacheTenants {
+		// At capacity and this is a new tenant — evict one arbitrary entry to
+		// bound memory (mirror the CEL cache). Range yields a pseudo-random key;
+		// delete-during-range is safe in Go. The evicted tenant just reloads on
+		// its next resolve.
+		for k := range c.cache {
+			delete(c.cache, k)
+			break
+		}
+	}
 	c.cache[tenantID] = cachedKeys{keys: loaded, at: now}
 	c.mu.Unlock()
 	return loaded, true, nil
