@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -34,9 +35,12 @@ type PartitionMaintainer struct {
 
 // PartitionDB is the narrow pgx seam the maintainer needs. *pgxpool.Pool
 // satisfies it. Kept small so the tick logic unit-tests against a fake.
+// Begin backs the DEFAULT-overlap recovery, which relocates rows and ATTACHes
+// a partition atomically.
 type PartitionDB interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // PartitionPeriod is the bucket width of a partitioned table.
@@ -64,6 +68,12 @@ type PartitionSpec struct {
 	// Ahead is how many future buckets to keep pre-created (including the
 	// current one). Staying ahead keeps writes off the DEFAULT partition.
 	Ahead int
+	// PartitionKey is the RANGE column the table is partitioned on
+	// (audit_log → "at", idempotency_keys → "expires_at"). Only the
+	// DEFAULT-overlap recovery needs it — to move the blocking rows out of
+	// the DEFAULT partition by range. Empty disables recovery (the failure
+	// is logged as before).
+	PartitionKey string
 }
 
 // truncate returns the start of the bucket containing t (UTC).
@@ -170,9 +180,18 @@ func (m *PartitionMaintainer) tick(ctx context.Context) {
 }
 
 // ensureAhead creates the current + upcoming partitions. CREATE ... IF NOT
-// EXISTS makes it idempotent; a failure (e.g. the DEFAULT partition holds a
-// row in the new range) is logged, not fatal — the row stays in DEFAULT and
-// the DELETE backstop sweeps it.
+// EXISTS makes it idempotent.
+//
+// The one failure worth handling is the self-perpetuating one: if the DEFAULT
+// partition already holds rows whose key falls in the new range (because a
+// write for that bucket landed before its partition existed — a fresh deploy,
+// or the maintainer having been down past the create-ahead window), then
+// `CREATE TABLE ... PARTITION OF` fails with a check_violation (SQLSTATE 23514)
+// and keeps failing every tick until those rows expire. Meanwhile every write
+// for that bucket piles into DEFAULT (DELETE-reclaimed, not DROP-reclaimed).
+// recoverDefaultOverlap resolves it directly by relocating the blocking rows
+// into the partition. Any other error is logged, not fatal — DEFAULT catches
+// the write and the DELETE backstop sweeps it.
 func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpec, now time.Time) {
 	for _, d := range spec.desiredAhead(now) {
 		// Identifiers are derived from trusted Spec.Table + a digit suffix;
@@ -182,13 +201,77 @@ func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpe
 			pgQuoteIdent(d.name), pgQuoteIdent(spec.Table),
 			d.from.Format("2006-01-02"), d.to.Format("2006-01-02"),
 		)
-		if _, err := m.DB.Exec(ctx, sql); err != nil {
-			m.log().Warn("ensure partition failed",
-				zap.String("table", spec.Table),
-				zap.String("partition", d.name),
-				zap.Error(err))
+		_, err := m.DB.Exec(ctx, sql)
+		if err == nil {
+			continue
 		}
+		if isDefaultOverlap(err) && spec.PartitionKey != "" {
+			if rErr := m.recoverDefaultOverlap(ctx, spec, d); rErr != nil {
+				m.log().Warn("ensure partition: DEFAULT-overlap recovery failed",
+					zap.String("table", spec.Table),
+					zap.String("partition", d.name),
+					zap.Error(rErr))
+			} else {
+				m.log().Info("ensure partition: recovered by relocating DEFAULT rows",
+					zap.String("table", spec.Table),
+					zap.String("partition", d.name))
+			}
+			continue
+		}
+		m.log().Warn("ensure partition failed",
+			zap.String("table", spec.Table),
+			zap.String("partition", d.name),
+			zap.Error(err))
 	}
+}
+
+// isDefaultOverlap reports whether err is the check_violation Postgres raises
+// when CREATE TABLE ... PARTITION OF would strand rows already sitting in the
+// parent's DEFAULT partition ("...would be violated by some row").
+func isDefaultOverlap(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514"
+}
+
+// recoverDefaultOverlap creates the partition ensureAhead couldn't, by moving
+// the DEFAULT rows that block it into place first. Steps, in one transaction so
+// a failure leaves DEFAULT untouched:
+//
+//  1. Build the partition as a STANDALONE table (LIKE parent) — plain, so it
+//     can hold rows before it becomes a partition.
+//  2. Relocate the overlapping rows out of DEFAULT into it (DELETE … RETURNING
+//     → INSERT).
+//  3. ATTACH it — the DEFAULT-overlap scan now passes because the rows are
+//     gone, and Postgres builds the parent's indexes on the child.
+func (m *PartitionMaintainer) recoverDefaultOverlap(ctx context.Context, spec PartitionSpec, d partitionDef) (err error) {
+	tx, err := m.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
+
+	newPart := pgQuoteIdent(d.name)
+	parent := pgQuoteIdent(spec.Table)
+	def := pgQuoteIdent(spec.Table + "_default")
+	key := pgQuoteIdent(spec.PartitionKey)
+	lo := d.from.Format("2006-01-02")
+	hi := d.to.Format("2006-01-02")
+
+	if _, err := tx.Exec(ctx, fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s (LIKE %s INCLUDING DEFAULTS)`, newPart, parent)); err != nil {
+		return fmt.Errorf("create standalone %s: %w", d.name, err)
+	}
+	if _, err := tx.Exec(ctx, fmt.Sprintf(
+		`WITH moved AS (DELETE FROM %s WHERE %s >= $1 AND %s < $2 RETURNING *)
+		 INSERT INTO %s SELECT * FROM moved`, def, key, key, newPart), lo, hi); err != nil {
+		return fmt.Errorf("relocate DEFAULT rows into %s: %w", d.name, err)
+	}
+	if _, err := tx.Exec(ctx, fmt.Sprintf(
+		`ALTER TABLE %s ATTACH PARTITION %s FOR VALUES FROM ('%s') TO ('%s')`,
+		parent, newPart, lo, hi)); err != nil {
+		return fmt.Errorf("attach %s: %w", d.name, err)
+	}
+	return tx.Commit(ctx)
 }
 
 // dropOld lists the parent's child partitions and DROPs those fully past

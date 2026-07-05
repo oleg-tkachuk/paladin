@@ -34,7 +34,7 @@ import (
 func BenchmarkAuditInsertDurable(b *testing.B) {
 	ctx := context.Background()
 	pool := startPostgres(b)
-	repo := adapters.NewAuditRepoV2(sqlc.New(pool))
+	repo := adapters.NewAuditRepoV2(sqlc.New(pool), pool)
 
 	tenantID := uuid.New()
 	base := admindomain.AuditEntry{

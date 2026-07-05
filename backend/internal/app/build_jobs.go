@@ -165,8 +165,8 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	out = append(out, &worker.PartitionMaintainer{
 		DB: reaperPool,
 		Specs: []worker.PartitionSpec{
-			{Table: "audit_log", Period: worker.PeriodMonthly, Retention: auditRetention, Ahead: 3},
-			{Table: "idempotency_keys", Period: worker.PeriodDaily, Retention: 0, Ahead: 8},
+			{Table: "audit_log", Period: worker.PeriodMonthly, Retention: auditRetention, Ahead: 3, PartitionKey: "at"},
+			{Table: "idempotency_keys", Period: worker.PeriodDaily, Retention: 0, Ahead: 8, PartitionKey: "expires_at"},
 		},
 		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 		Logger:   l.Named("partition-maintainer"),

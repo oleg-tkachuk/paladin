@@ -105,7 +105,7 @@ func BenchmarkAuditListPushdown(b *testing.B) {
 	seedAuditRows(b, ctx, pool, benchAuditRows)
 	mustExec(b, ctx, pool, `ANALYZE audit_log`)
 
-	repo := adapters.NewAuditRepoV2(sqlc.New(pool))
+	repo := adapters.NewAuditRepoV2(sqlc.New(pool), pool)
 	cutoff := benchAnchor.Add(-30 * 24 * time.Hour) // last 30 days
 
 	b.Run("pushdown", func(b *testing.B) {

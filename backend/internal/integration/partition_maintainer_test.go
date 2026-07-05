@@ -113,6 +113,90 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 	assertPartitionPresent(ctx, t, pool, tomorrow)
 }
 
+// TestPartitionMaintainer_RecoversDefaultOverlap pins the self-heal: when the
+// DEFAULT partition already holds rows in a bucket's range (a write landed
+// before its partition existed — fresh deploy / maintainer downtime), the
+// naive CREATE ... PARTITION OF fails with a check_violation and would keep
+// failing every tick. The maintainer must instead relocate the blocking rows
+// into the partition and ATTACH it. Uses a synthetic RANGE-partitioned table
+// so the DDL is exercised without the idempotency_keys tenant FK.
+func TestPartitionMaintainer_RecoversDefaultOverlap(t *testing.T) {
+	ctx := context.Background()
+
+	pgC, err := tcpostgres.Run(ctx,
+		"postgres:16-alpine",
+		tcpostgres.WithDatabase("paladin"),
+		tcpostgres.WithUsername("paladin"),
+		tcpostgres.WithPassword("paladin"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(60*time.Second),
+		),
+	)
+	if err != nil {
+		t.Fatalf("postgres start: %v", err)
+	}
+	t.Cleanup(func() { _ = pgC.Terminate(context.Background()) })
+
+	dsn, err := pgC.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatalf("dsn: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	// Synthetic RANGE-partitioned table with ONLY a DEFAULT partition — the
+	// state a table is in before any daily partition is provisioned.
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE pm_test (id int NOT NULL, k date NOT NULL, PRIMARY KEY (id, k)) PARTITION BY RANGE (k);
+		CREATE TABLE pm_test_default PARTITION OF pm_test DEFAULT;`); err != nil {
+		t.Fatalf("create synthetic partitioned table: %v", err)
+	}
+
+	// A row for TODAY has nowhere to go but DEFAULT (its daily partition
+	// doesn't exist yet). This is exactly what blocks CREATE ... PARTITION OF.
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	if _, err := pool.Exec(ctx, `INSERT INTO pm_test (id, k) VALUES (1, $1)`, today); err != nil {
+		t.Fatalf("seed DEFAULT row: %v", err)
+	}
+
+	m := &worker.PartitionMaintainer{
+		DB: pool,
+		Specs: []worker.PartitionSpec{
+			// Retention -1 so dropOld never interferes; PartitionKey enables the
+			// DEFAULT-overlap recovery.
+			{Table: "pm_test", Period: worker.PeriodDaily, Retention: -1, Ahead: 2, PartitionKey: "k"},
+		},
+	}
+	m.RunOnce(ctx)
+
+	// Today's partition now exists (recovery created + attached it)...
+	todayPart := "pm_test_" + today.Format("20060102")
+	assertPartitionPresent(ctx, t, pool, todayPart)
+
+	// ...and the blocking row was relocated out of DEFAULT into it.
+	var inPart, inDefault int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+pgIdent(todayPart)).Scan(&inPart); err != nil {
+		t.Fatalf("count in %s: %v", todayPart, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pm_test_default`).Scan(&inDefault); err != nil {
+		t.Fatalf("count in default: %v", err)
+	}
+	if inPart != 1 {
+		t.Errorf("rows in %s = %d, want 1 (row relocated from DEFAULT)", todayPart, inPart)
+	}
+	if inDefault != 0 {
+		t.Errorf("rows in DEFAULT = %d, want 0 (row moved out)", inDefault)
+	}
+
+	// Idempotent: a second sweep with DEFAULT now clean is a plain no-op.
+	m.RunOnce(ctx)
+	assertPartitionPresent(ctx, t, pool, todayPart)
+}
+
 func pgIdent(s string) string { return `"` + s + `"` }
 
 func partitionExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) bool {
