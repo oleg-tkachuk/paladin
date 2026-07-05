@@ -106,10 +106,13 @@ datastores: {
     migrate_dsn:               string | *""
     migrate_password:          string | *""
     migrate_password_secret?:  #SecretRef
-    // Optional separate DSN for reaper / housekeeping connections so they
-    // run with a lower-privilege role and don't compete with hot-path
-    // queries on the main pool. Empty → reuse `dsn`.
-    reaper_dsn: string | *""
+    // Optional separate DSN for the worker's cross-tenant background DML
+    // jobs (purgers, lifecycle reapers, dispatcher outbox). Its user should
+    // resolve to a dedicated least-privilege BYPASSRLS role (`paladin_reaper`,
+    // migration 058) — DML-only, no DDL. Empty → fall back to `migrate_dsn`.
+    reaper_dsn:               string | *""
+    reaper_password:          string | *""
+    reaper_password_secret?:  #SecretRef
     pool: {
       max_conns:          int & >= 1 | *20
       min_conns:          int & >= 0 | *2

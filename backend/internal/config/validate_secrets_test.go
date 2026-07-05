@@ -53,6 +53,13 @@ func TestValidate_SecretMutex_PostgresMigratePassword(t *testing.T) {
 	mustReject(t, c, "migrate_password and migrate_password_secret")
 }
 
+func TestValidate_SecretMutex_PostgresReaperPassword(t *testing.T) {
+	c := minimalValidConfig()
+	c.Datastores.Postgres.ReaperPassword = "inline"
+	c.Datastores.Postgres.ReaperPasswordSecret = &SecretRef{Name: "x", Key: "k"}
+	mustReject(t, c, "reaper_password and reaper_password_secret")
+}
+
 func TestValidate_SecretMutex_AuthSigningKey(t *testing.T) {
 	c := minimalValidConfig()
 	c.Auth.SigningKey = "32-bytes-of-secret-data-here-please"

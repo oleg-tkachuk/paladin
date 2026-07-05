@@ -65,25 +65,46 @@ func runWorker(
 	otel observability.ShutdownFunc,
 	deps *app.SharedDeps,
 ) error {
-	// Background reapers are cross-tenant with no request principal, so they
-	// must bypass RLS — a query on the RLS runtime pool without an paladin.tenant_id
-	// GUC returns ZERO rows and every reaper silently no-ops. Open a BYPASSRLS
-	// pool from reaper_dsn (falling back to migrate_dsn, the same BYPASSRLS role
-	// the dispatcher uses) and hand it to the jobs via deps.ReaperPool.
-	reaperDSN := cfg.Datastores.Postgres.ReaperDSN
-	if reaperDSN == "" {
-		reaperDSN = cfg.Datastores.Postgres.MigrateDSN
+	// Background jobs are cross-tenant with no request principal, so they must
+	// bypass RLS — a query on the RLS runtime pool without an paladin.tenant_id GUC
+	// returns ZERO rows and every job silently no-ops. Two BYPASSRLS pools,
+	// split by privilege (migration 058):
+	//
+	//   - PartitionPool (paladin_migrate): the ONE background job that needs DDL —
+	//     PartitionMaintainer (CREATE/ATTACH/DROP PARTITION) — runs here; the
+	//     migrate role owns the partitioned tables.
+	//   - ReaperPool (paladin_reaper): every other, DML-only job runs here, on a
+	//     least-privilege role that cannot touch the schema.
+	//
+	// When reaper_dsn is unset the reaper jobs reuse the migrate pool object
+	// (dev parity — one BYPASSRLS role for everything, no redundant pool).
+	migrateDSN := cfg.Datastores.Postgres.MigrateDSN
+	if migrateDSN != "" {
+		pp, err := newDispatcherPool(context.Background(), migrateDSN,
+			cfg.Datastores.Postgres.MigratePassword, "paladin-worker-ddl", l)
+		if err != nil {
+			return fmt.Errorf("open partition (migrate) pool: %w", err)
+		}
+		deps.PartitionPool = pp
 	}
-	if reaperDSN != "" {
+
+	reaperDSN := cfg.Datastores.Postgres.ReaperDSN
+	switch {
+	case reaperDSN != "" && reaperDSN != migrateDSN:
+		// Dedicated least-privilege reaper role.
 		rp, err := newDispatcherPool(context.Background(), reaperDSN,
-			cfg.Datastores.Postgres.MigratePassword, "paladin-worker", l)
+			cfg.Datastores.Postgres.ReaperPassword, "paladin-reaper", l)
 		if err != nil {
 			return fmt.Errorf("open reaper pool: %w", err)
 		}
 		deps.ReaperPool = rp
-	} else {
+	case deps.PartitionPool != nil:
+		// No distinct reaper role → share the migrate BYPASSRLS pool. Aliased,
+		// not re-opened; OnStop closes it once (guarded below).
+		deps.ReaperPool = deps.PartitionPool
+	default:
 		l.Warn("worker: neither reaper_dsn nor migrate_dsn is set; background " +
-			"reapers fall back to the RLS runtime pool and will find ZERO rows " +
+			"jobs fall back to the RLS runtime pool and will find ZERO rows " +
 			"(no tenant GUC). Set datastores.postgres.migrate_dsn to a BYPASSRLS role.")
 	}
 
@@ -178,8 +199,13 @@ func runWorker(
 			_ = opsSrv.Shutdown(shutdownCtx)
 			wg.Wait()
 			deps.StopWatchers() // release the Cedar LISTEN conn before pool close
-			if deps.ReaperPool != nil {
-				deps.ReaperPool.Close() // BYPASSRLS reaper pool opened above
+			// Close ReaperPool only when it's a distinct pool — in the dev
+			// fallback it's aliased to PartitionPool, closed just below.
+			if deps.ReaperPool != nil && deps.ReaperPool != deps.PartitionPool {
+				deps.ReaperPool.Close() // BYPASSRLS paladin_reaper DML pool
+			}
+			if deps.PartitionPool != nil {
+				deps.PartitionPool.Close() // BYPASSRLS paladin_migrate DDL pool
 			}
 			db.Close()
 			// flushOTel uses a fresh, bounded (5s) context — the fx OnStop

@@ -177,6 +177,9 @@ func (c *Config) Validate() error {
 	if c.Datastores.Postgres.MigratePassword != "" && c.Datastores.Postgres.MigratePasswordSecret != nil {
 		return fmt.Errorf("postgres: cannot specify both migrate_password and migrate_password_secret")
 	}
+	if c.Datastores.Postgres.ReaperPassword != "" && c.Datastores.Postgres.ReaperPasswordSecret != nil {
+		return fmt.Errorf("postgres: cannot specify both reaper_password and reaper_password_secret")
+	}
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
 	}

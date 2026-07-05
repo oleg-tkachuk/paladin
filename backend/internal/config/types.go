@@ -200,7 +200,18 @@ type Postgres struct {
 	MigratePassword       string     `yaml:"migrate_password" json:"migrate_password"`
 	MigratePasswordSecret *SecretRef `yaml:"migrate_password_secret" json:"migrate_password_secret"`
 
-	ReaperDSN         string           `yaml:"reaper_dsn" json:"reaper_dsn"`
+	// ReaperDSN is the connection the worker's cross-tenant background DML
+	// jobs (purgers, lifecycle reapers, dispatcher outbox) use. Its user
+	// should resolve to a dedicated least-privilege role (`paladin_reaper` by
+	// convention, migration 058): BYPASSRLS — so the jobs see every tenant's
+	// rows with no per-request GUC — but DML-only, no DDL/ownership. When
+	// empty the worker falls back to MigrateDSN (dev parity). The one DDL
+	// background job (PartitionMaintainer) always runs on the migrate role,
+	// never this one. See docs/db-roles.md.
+	ReaperDSN            string     `yaml:"reaper_dsn" json:"reaper_dsn"`
+	ReaperPassword       string     `yaml:"reaper_password" json:"reaper_password"`
+	ReaperPasswordSecret *SecretRef `yaml:"reaper_password_secret" json:"reaper_password_secret"`
+
 	Pool              PostgresPool     `yaml:"pool" json:"pool"`
 	Timeouts          PostgresTimeouts `yaml:"timeouts" json:"timeouts"`
 	HealthcheckPeriod time.Duration    `yaml:"healthcheck_period" json:"healthcheck_period"`

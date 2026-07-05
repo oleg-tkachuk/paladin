@@ -39,6 +39,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	}
 	reaperQ := sqlc.New(reaperPool)
 
+	// partitionPool is the DDL-capable pool for PartitionMaintainer (the only
+	// background job that runs CREATE/ATTACH/DROP PARTITION). It needs the
+	// migrate role's table ownership, which the least-privilege reaper role
+	// lacks — so prefer deps.PartitionPool, degrading to the reaper pool (dev
+	// parity, where both are the same paladin_migrate BYPASSRLS pool).
+	partitionPool := reaperPool
+	if deps.PartitionPool != nil {
+		partitionPool = deps.PartitionPool
+	}
+
 	out := []BackgroundJob{
 		&worker.RefreshTokenPurger{
 			Repo:     adapters.NewRefreshTokenRepo(reaperQ),
@@ -152,7 +162,10 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// partitions past retention for the RANGE-partitioned tables (migrations
 	// 041 audit_log monthly, 042 idempotency_keys daily). This is the
 	// DROP-PARTITION payoff; the *Purger DELETEs above stay as the backstop
-	// for the DEFAULT partition. reaperPool (BYPASSRLS) satisfies worker.PartitionDB.
+	// for the DEFAULT partition. Runs on partitionPool (the DDL-capable migrate
+	// role) — its CREATE/ATTACH/DROP PARTITION need table ownership the reaper
+	// role lacks. Its DEFAULT-overlap recovery also relocates rows, so BYPASSRLS
+	// is required to see every tenant's rows.
 	//
 	// audit_log retention follows AuditLogTTL: a negative Retention disables
 	// dropping (TTL=0 means keep forever) while still keeping partitions
@@ -163,7 +176,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		auditRetention = -1 // keep-forever: create-ahead, never drop
 	}
 	out = append(out, &worker.PartitionMaintainer{
-		DB: reaperPool,
+		DB: partitionPool,
 		Specs: []worker.PartitionSpec{
 			{Table: "audit_log", Period: worker.PeriodMonthly, Retention: auditRetention, Ahead: 3, PartitionKey: "at"},
 			{Table: "idempotency_keys", Period: worker.PeriodDaily, Retention: 0, Ahead: 8, PartitionKey: "expires_at"},

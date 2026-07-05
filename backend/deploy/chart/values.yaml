@@ -655,6 +655,14 @@ config:
         name: paladin-postgresql-migrate-user
         key: password
         namespace: database
+      # reaper_dsn / reaper_password_secret: the worker's cross-tenant
+      # background DML jobs connect here, as a dedicated least-privilege
+      # BYPASSRLS role (paladin_reaper, migration 058 — DML-only, no DDL). Empty
+      # (dev default) → the worker reuses migrate_dsn. Prod overlays set both
+      # and add reaper_password_secret.name to rbac.secretReader.secretNames.
+      # Example (prod overlay):
+      #   reaper_dsn: "postgres://paladin_reaper@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca/ca.crt"
+      #   reaper_password_secret: { name: paladin-postgresql-reaper-user, key: password, namespace: database }
       reaper_dsn: ""
       pool:
         max_conns: 20

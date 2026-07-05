@@ -123,6 +123,17 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.Postgres.MigratePassword = pwd
 		cfg.Datastores.Postgres.MigratePasswordSecret = nil
 	}
+	// Reaper role secret — the least-privilege BYPASSRLS DML credential the
+	// worker's background jobs use. Independent of both the runtime and the
+	// migrate secret.
+	if cfg.Datastores.Postgres.ReaperPasswordSecret != nil {
+		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.ReaperPasswordSecret)
+		if err != nil {
+			return fmt.Errorf("postgres.reaper_password_secret: %w", err)
+		}
+		cfg.Datastores.Postgres.ReaperPassword = pwd
+		cfg.Datastores.Postgres.ReaperPasswordSecret = nil
+	}
 
 	// Bootstrap admin password — only resolved when bootstrap.admin.enabled
 	// is true. Skip otherwise so a misconfigured Secret doesn't crash boot

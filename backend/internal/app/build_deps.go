@@ -35,14 +35,21 @@ type SharedDeps struct {
 	Logger *zap.Logger
 	DB     *postgres.DB
 	Pool   *pgxpool.Pool
-	// ReaperPool is an optional BYPASSRLS pool (paladin_migrate) for the worker's
-	// cross-tenant background jobs. Nil on every pod except the worker, which
-	// opens it in serve_worker; nil → BuildBackgroundJobs degrades to Pool. The
-	// reapers MUST NOT use the RLS-scoped Pool: with no per-request tenant GUC,
-	// RLS returns zero rows and every reaper silently no-ops.
+	// ReaperPool is an optional BYPASSRLS pool for the worker's cross-tenant
+	// background DML jobs (least-privilege paladin_reaper in prod; paladin_migrate in
+	// dev). Nil on every pod except the worker, which opens it in serve_worker;
+	// nil → BuildBackgroundJobs degrades to Pool. The reapers MUST NOT use the
+	// RLS-scoped Pool: with no per-request tenant GUC, RLS returns zero rows and
+	// every reaper silently no-ops.
 	ReaperPool *pgxpool.Pool
-	Repos      wire.Repos
-	Storage    wire.Storage
+	// PartitionPool is the BYPASSRLS pool for the one background job that needs
+	// DDL — PartitionMaintainer (CREATE/ATTACH/DROP PARTITION), which requires
+	// the migrate role's table ownership that ReaperPool deliberately lacks.
+	// Nil outside the worker; nil → BuildBackgroundJobs falls back to ReaperPool
+	// then Pool. See migration 058 / serve_worker for the privilege split.
+	PartitionPool *pgxpool.Pool
+	Repos         wire.Repos
+	Storage       wire.Storage
 
 	// Engines built once, shared across handlers.
 	PolEngine *policy.Engine
