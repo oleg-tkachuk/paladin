@@ -22,6 +22,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
@@ -114,9 +116,15 @@ func runDispatcher(
 			"to a BYPASSRLS role for production.")
 	}
 
-	// Subscription read-seam used by OutboxRunner per-row. The admin
-	// repo's Get matches what we need; reuse via deps.Repos.EventSub.
-	store := dispatcherSubStore{r: deps.Repos.EventSub}
+	// Subscription read-seam used by OutboxRunner per-row. It MUST bind to the
+	// same dispatcherPool the drain loop scans on: that loop is cross-tenant
+	// and sets no paladin.tenant_id GUC, so under a BYPASSRLS MigrateDSN the pool
+	// sees every tenant's rows — but deps.Repos.EventSub is bound to the
+	// runtime RLS pool (paladin_app), where a GUC-less Get returns zero rows and
+	// the runner mis-reports every delivery as "subscription deleted". (The
+	// runtime repo stays correct for the per-tenant admin handlers, which run
+	// with the GUC set by middleware.)
+	store := dispatcherSubStore{r: adapters.NewEventSubscriptionRepoV2(sqlc.New(dispatcherPool))}
 
 	// One NATS connection pool shared by every NATS sink. Created
 	// unconditionally — empty until the first nats-sink delivery
