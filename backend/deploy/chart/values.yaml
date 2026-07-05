@@ -1111,6 +1111,11 @@ rbac:
     secretNames:
       - paladin-postgresql-app-user
       - paladin-postgresql-migrate-user
+      # Least-privilege reaper credential (config.datastores.postgres.
+      # reaper_password_secret) — pre-allowlisted so a prod overlay that wires
+      # reaper_dsn "just works". Granting GET on an absent name is harmless in
+      # dev, where reaper_dsn is empty and the secret isn't read.
+      - paladin-postgresql-reaper-user
       - paladin-admin-key
       - paladin-bootstrap-admin
       # Default names for the optional signing-key / ingest-HMAC SecretRefs
