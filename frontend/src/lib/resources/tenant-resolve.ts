@@ -29,6 +29,8 @@ export type ResolvedTenant = {
   tenantId: string;
   slug: string;
   displayName: string;
+  // "shared" (default) | "dedicated" — ADR-0011 physical bucket layout.
+  storageLayout: string;
 };
 
 const UUID_RE =
@@ -104,6 +106,7 @@ export function useTenantResolve(id: string): {
           tenantId,
           slug,
           displayName: res.displayName || slug,
+          storageLayout: res.storageLayout || "shared",
         };
         setState({
           tenant,

@@ -246,6 +246,24 @@ export function useTenants() {
     [],
   );
 
+  // migrateTenantStorageLayout starts a shared->dedicated migration (ADR-0011
+  // Phase 3). The tenant MUST currently be shared. targetBackendId empty reuses
+  // the current backend; cleanupRetentionSeconds 0 uses the server default (24h).
+  // Returns the freshly-created migration status.
+  const migrateTenantStorageLayout = useCallback(
+    async (
+      tenantId: string,
+      opts?: { targetBackendId?: string; cleanupRetentionSeconds?: number },
+    ): Promise<StorageMigrationStatus> => {
+      return await tenantClient.migrateTenantStorageLayout({
+        name: `tenants/${tenantId}`,
+        targetBackendId: opts?.targetBackendId ?? "",
+        cleanupRetentionSeconds: BigInt(opts?.cleanupRetentionSeconds ?? 0),
+      });
+    },
+    [],
+  );
+
   return {
     tenants,
     loading,
@@ -257,5 +275,6 @@ export function useTenants() {
     restoreTenant,
     purgeTenant,
     getTenantStorageMigration,
+    migrateTenantStorageLayout,
   };
 }

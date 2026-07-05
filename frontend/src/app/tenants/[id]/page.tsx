@@ -123,7 +123,12 @@ function StorageBreadcrumb() {
 function IdentityCard({
   tenant,
 }: {
-  tenant: { tenantId: string; slug: string; displayName: string };
+  tenant: {
+    tenantId: string;
+    slug: string;
+    displayName: string;
+    storageLayout: string;
+  };
 }) {
   return (
     <Card>
@@ -142,6 +147,11 @@ function IdentityCard({
       <CardContent className="space-y-2 pt-0">
         <IdentityField label="slug" value={tenant.slug} immutable />
         <IdentityField label="id" value={tenant.tenantId} immutable truncate />
+        <IdentityField
+          label="storage"
+          value={tenant.storageLayout || "shared"}
+          immutable
+        />
       </CardContent>
     </Card>
   );
@@ -333,7 +343,10 @@ export default function TenantOverviewPage() {
       </div>
 
       {/* ─── Storage migration (ADR-0011 Phase 3) ──────────────── */}
-      <StorageMigrationCard tenantId={tenant.tenantId} />
+      <StorageMigrationCard
+        tenantId={tenant.tenantId}
+        storageLayout={tenant.storageLayout || "shared"}
+      />
 
       {/* ─── Recent activity ───────────────────────────────────── */}
       <Card>
