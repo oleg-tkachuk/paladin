@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
   ArrowLeftIcon,
@@ -27,9 +27,8 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useBackends } from "@/hooks/useBackends";
-import { useBuckets } from "@/hooks/useBuckets";
 import { useTenants } from "@/hooks/useTenants";
-import { objectKeyClient } from "@/lib/connect/client";
+import { bucketClient, objectKeyClient } from "@/lib/connect/client";
 import type { ObjectKey } from "@/gen/paladin/admin/v1/types_pb";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
@@ -55,7 +54,6 @@ export default function BucketDetailPage() {
   const bucketName = decodeURIComponent(params.bucketName);
 
   const { backends } = useBackends();
-  const { buckets, loading: loadingBucket } = useBuckets();
   const { tenants, fetchTenants } = useTenants();
 
   const [search, setSearch] = useState("");
@@ -93,6 +91,30 @@ export default function BucketDetailPage() {
     : null;
   const reloadObjectKeys = () => objectKeysQuery.refetch();
 
+  // Bucket identity via a direct GetBucket — the page already knows the
+  // (backend, bucket) pair, so fetch exactly this row rather than listing
+  // every bucket and filtering. (The prior list-and-find read
+  // `useBuckets().buckets` but never called fetchBuckets, so the array was
+  // always empty and the identity card always read "Bucket not found".) A
+  // genuine NotFound is distinguished from a transient load error below.
+  const bucketQuery = useQuery({
+    queryKey: ["bucket", backendId, bucketName],
+    retry: false, // NotFound won't resolve on retry.
+    queryFn: ({ signal }) =>
+      bucketClient.getBucket({ name: bucketRef }, { signal }),
+  });
+  const bucket = bucketQuery.data ?? undefined;
+  const loadingBucket = bucketQuery.isFetching;
+  const bucketNotFound =
+    bucketQuery.error instanceof ConnectError &&
+    bucketQuery.error.code === Code.NotFound;
+  const bucketError =
+    bucketQuery.error && !bucketNotFound
+      ? bucketQuery.error instanceof ConnectError
+        ? bucketQuery.error.rawMessage
+        : "Failed to load bucket."
+      : null;
+
   // useTenants has no auto-fetch; kick it on mount (unflagged cross-module).
   useEffect(() => {
     void fetchTenants();
@@ -101,13 +123,6 @@ export default function BucketDetailPage() {
   const backend = useMemo(
     () => backends.find((b) => b.backendId === backendId),
     [backends, backendId],
-  );
-  const bucket = useMemo(
-    () =>
-      buckets.find(
-        (b) => b.backendId === backendId && b.bucketName === bucketName,
-      ),
-    [buckets, backendId, bucketName],
   );
 
   // Server already narrowed by (backend, bucket) — `objectKeys` IS
@@ -238,6 +253,12 @@ export default function BucketDetailPage() {
                 key{totalOKs === 1 ? "" : "s"}
               </span>
             </div>
+          </CardContent>
+        </Card>
+      ) : bucketError ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-destructive">
+            {bucketError}
           </CardContent>
         </Card>
       ) : (
