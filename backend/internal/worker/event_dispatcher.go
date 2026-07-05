@@ -584,6 +584,15 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 	} else {
 		body, err = json.Marshal(d.newCloudEventEnvelope(sub, evt))
 	}
+	// dedupID is the retry-stable delivery-row id (CloudEvents `id`). The
+	// cloudevents body carries it, but the raw body doesn't — so surface it in a
+	// header on BOTH formats. The outbox is at-least-once (a 2xx received but a
+	// failed commit → redelivery), so subscribers MUST dedup on this id; the raw
+	// path had no dedup key before. See docs/event-delivery-dedup.md.
+	dedupID := evt.ID
+	if dedupID == "" {
+		dedupID = sub.SubscriptionID.String()
+	}
 	if err != nil {
 		return 0, fmt.Errorf("marshal event: %w", err)
 	}
@@ -616,6 +625,10 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 		req.Header.Set("Content-Type", contentType)
 		req.Header.Set("X-PALADIN-Event-Type", evt.Type)
 		req.Header.Set("X-PALADIN-Subscription-Id", sub.SubscriptionID.String())
+		// Dedup key (= CloudEvents `id`), stable across retries. Emitted on both
+		// formats so a raw-format subscriber — whose body carries no CE id — can
+		// still dedup an at-least-once redelivery.
+		req.Header.Set("X-PALADIN-Event-Id", dedupID)
 		// signing_secret_ref: either the HMAC key inline (lab-grade) or a
 		// "k8s:<name>/<key>" Secret ref resolved at delivery time — see
 		// sink_secrets.go. Resolution errors fail the attempt (retryable):

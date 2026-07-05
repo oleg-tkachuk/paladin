@@ -49,16 +49,6 @@ merges. Genuinely-deferred hardening/tuning stays below with full DoD.
   measurement; the "Adoption check" in the producer-wiring entry feeds this.
 - **Blockers:** needs real cardinality data — same gap as the adoption check.
 
-### At-least-once sink dedup guidance (DEFERRED)
-
-- **Status:** Deferred (documentation + optional enforcement).
-- **Reason:** the outbox is at-least-once; a sink 2xx received but a failed tx
-  commit → redelivery → duplicate at the sink. CloudEvents `id` (= delivery-row
-  id, retry-stable) lets sinks dedup, but the `format:"raw"` path gives no dedup
-  key/guidance, and it isn't documented as a subscriber contract.
-- **Definition of Done:** document the dedup contract (dedup on CloudEvents `id`);
-  consider always emitting the id header even in raw mode.
-
 ### RLS-aware integration harness (DEFERRED — supersedes the dispatcher-only entry)
 
 - **Status:** Deferred (test-infra; the meta-fragility behind the recurring RLS bugs).

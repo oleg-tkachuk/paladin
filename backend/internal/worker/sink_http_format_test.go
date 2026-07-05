@@ -38,6 +38,39 @@ func captureHTTPSink(t *testing.T, format string) (*Dispatcher, admindomain.Even
 	return d, sub, &gotCT, &gotBody
 }
 
+// TestDeliverHTTP_EmitsEventIdHeaderBothFormats: the dedup key (CloudEvents
+// `id`) MUST ride the X-PALADIN-Event-Id header on BOTH formats — the raw body has
+// no CloudEvents envelope, so the header is a raw subscriber's only dedup key.
+func TestDeliverHTTP_EmitsEventIdHeaderBothFormats(t *testing.T) {
+	for _, format := range []string{"cloudevents", "raw"} {
+		t.Run(format, func(t *testing.T) {
+			var gotID string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotID = r.Header.Get("X-PALADIN-Event-Id")
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(srv.Close)
+			cfg, _ := json.Marshal(map[string]any{"url": srv.URL, "format": format})
+			d := &Dispatcher{HTTPClient: srv.Client(), MaxAttempts: 1}
+			sub := admindomain.EventSubscription{
+				SubscriptionID: uuid.Must(uuid.NewV7()),
+				TenantID:       uuid.Must(uuid.NewV7()),
+				SinkKind:       "http",
+				SinkConfig:     cfg,
+			}
+			if err := d.DeliverOne(context.Background(), sub, "paladin.bucket.updated"); err != nil {
+				t.Fatalf("DeliverOne: %v", err)
+			}
+			// The DeliverOne path has no delivery row, so the id falls back to
+			// the subscription id — still stable + present, which is the point.
+			if gotID != sub.SubscriptionID.String() {
+				t.Errorf("format %s: X-PALADIN-Event-Id = %q, want %q (dedup key must be set)",
+					format, gotID, sub.SubscriptionID.String())
+			}
+		})
+	}
+}
+
 // TestDeliverHTTP_CloudEventsFormat: format="cloudevents" POSTs the CloudEvents
 // 1.0 envelope with Content-Type application/cloudevents+json — symmetric with
 // the broker sinks.
