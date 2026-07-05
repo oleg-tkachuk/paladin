@@ -28,6 +28,7 @@ import {
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import { ConnectError, Code } from "@connectrpc/connect";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -108,6 +109,9 @@ export default function TenantBudgetPage() {
   // this with budget.unitCode whenever a snapshot loads.
   const [unitCode, setUnitCode] = useState<string>("UNIT");
   const [resetSpend, setResetSpend] = useState<boolean>(false);
+  // Period close date (YYYY-MM-DD, local). Blank leaves the server's window
+  // untouched; a value pins when the billing period ends.
+  const [periodEnd, setPeriodEnd] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
   // Hydrate the form whenever a new snapshot arrives — render-phase
@@ -120,9 +124,17 @@ export default function TenantBudgetPage() {
     if (budget) {
       setMaxBudget(String(budget.maxBudgetAmount));
       if (budget.unitCode) setUnitCode(budget.unitCode);
+      setPeriodEnd(
+        budget.periodEnd
+          ? new Date(Number(budget.periodEnd.seconds) * 1000)
+              .toISOString()
+              .slice(0, 10)
+          : "",
+      );
     } else {
       setMaxBudget("");
       setUnitCode("UNIT");
+      setPeriodEnd("");
     }
     setResetSpend(false);
   }
@@ -145,6 +157,10 @@ export default function TenantBudgetPage() {
         maxBudgetAmount: cap,
         unitCode,
         resetSpend,
+        // Pin the period close date when set; blank leaves the server window.
+        periodEnd: periodEnd
+          ? timestampFromDate(new Date(`${periodEnd}T00:00:00Z`))
+          : undefined,
       });
       await fetchBudget();
       showNotification({
@@ -343,6 +359,21 @@ export default function TenantBudgetPage() {
               <p className={T.hint}>
                 Off: change the cap mid-cycle without affecting accumulated
                 spend.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="period-end">Period close</Label>
+              <Input
+                id="period-end"
+                type="date"
+                value={periodEnd}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+                className="w-full"
+              />
+              <p className={T.hint}>
+                Optional. Pins when the billing window closes; blank leaves the
+                server default.
               </p>
             </div>
           </div>
