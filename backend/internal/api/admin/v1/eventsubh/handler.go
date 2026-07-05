@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
@@ -13,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -65,6 +67,12 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	if err := h.authorize(ctx, cedar.ActionManageSubscription, s.TenantID); err != nil {
 		return nil, err
 	}
+	// Reject a malformed CEL filter synchronously — otherwise the dispatcher
+	// fails it closed at fan-out time and the operator sees silent
+	// non-delivery hours later (see worker.Dispatcher.subscriptionMatches).
+	if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
 	if err := h.repo.Create(ctx, &s); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -105,6 +113,15 @@ func (h *Handler) Update(ctx context.Context, s admindomain.EventSubscription, e
 	}
 	if err := h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
 		return nil, err
+	}
+	// Validate the CEL filter only when this update actually writes it —
+	// an empty mask means full replace (AIP), otherwise the "filter" path
+	// must be present. Skips false-rejecting a stale filter the caller isn't
+	// applying (e.g. a sink-only update).
+	if len(mask) == 0 || slices.Contains(mask, "filter") {
+		if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		}
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
 		return nil, apiutil.MapError(err)

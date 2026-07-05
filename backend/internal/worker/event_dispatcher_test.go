@@ -203,28 +203,60 @@ func TestDispatchSkipsDisabled(t *testing.T) {
 	}
 }
 
+// TestDispatchFilterMatch exercises the subscription CEL filter
+// (EventEnvelopeSchema) at fan-out: matching filters queue, non-matching
+// ones drop, richer predicates over envelope fields work, and an
+// uncompilable filter fails closed rather than fanning out.
 func TestDispatchFilterMatch(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
-	out := &fakeOutbox{}
-	d := &Dispatcher{
-		Store: &fakeStore{
-			subs: []admindomain.EventSubscription{{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
-				TenantID:       tenantID,
-				SinkKind:       "http",
-				SinkConfig:     cfg,
-				CELFilter:      "object.deleted", // exact-match in v2
-			}},
+
+	newDispatcher := func(filter string) (*Dispatcher, *fakeOutbox) {
+		out := &fakeOutbox{}
+		return &Dispatcher{
+			Store: &fakeStore{
+				subs: []admindomain.EventSubscription{{
+					SubscriptionID: uuid.Must(uuid.NewV7()),
+					TenantID:       tenantID,
+					SinkKind:       "http",
+					SinkConfig:     cfg,
+					CELFilter:      filter,
+				}},
+			},
+			Outbox: out,
+		}, out
+	}
+
+	cases := []struct {
+		name   string
+		filter string
+		evt    Event
+		want   int
+	}{
+		{"non-matching type drops", `type == "object.deleted"`, Event{Type: "object.created"}, 0},
+		{"matching type queues", `type == "object.created"`, Event{Type: "object.created"}, 1},
+		{"empty filter matches all", "", Event{Type: "anything"}, 1},
+		{
+			"predicate over envelope field",
+			`type == "object.created" && actor_subject == "svc"`,
+			Event{Type: "object.created", ActorSubject: "svc"},
+			1,
 		},
-		Outbox: out,
+		// A pre-validation legacy value (bare event type, not a bool CEL
+		// expression) can't compile → fail-closed, not fan-out.
+		{"uncompilable filter fails closed", "object.created", Event{Type: "object.created"}, 0},
 	}
-	n, _ := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
-	if n != 0 {
-		t.Errorf("queued: got %d want 0 (filter mismatch)", n)
-	}
-	if got := len(out.snapshot()); got != 0 {
-		t.Errorf("outbox writes: got %d want 0", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d, out := newDispatcher(tc.filter)
+			n, err := d.Dispatch(context.Background(), tenantID.String(), tc.evt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n != tc.want || len(out.snapshot()) != tc.want {
+				t.Errorf("queued=%d writes=%d, want %d/%d", n, len(out.snapshot()), tc.want, tc.want)
+			}
+		})
 	}
 }
 

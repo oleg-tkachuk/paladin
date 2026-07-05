@@ -135,6 +135,32 @@ func TestCreate_CedarDenied(t *testing.T) {
 	}
 }
 
+func TestCreate_InvalidFilterRejected(t *testing.T) {
+	caller := uuid.New()
+	repo := &fakeRepo{stampedID: uuid.New()}
+	h := NewHandler(repo, allowAuthorizer{})
+	// `bogus_field` isn't declared on EventEnvelopeSchema → compile error.
+	_, err := h.Create(ctxAs(caller, apiutil.RoleTenantAdmin),
+		admindomain.EventSubscription{TenantID: caller, SinkKind: "http", CELFilter: "bogus_field == 1"})
+	if code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument for a malformed filter", code(err))
+	}
+	if repo.sub.SinkKind != "" {
+		t.Error("repo.Create must not run when the filter is rejected")
+	}
+}
+
+func TestCreate_ValidFilterAccepted(t *testing.T) {
+	caller := uuid.New()
+	repo := &fakeRepo{stampedID: uuid.New()}
+	h := NewHandler(repo, allowAuthorizer{})
+	_, err := h.Create(ctxAs(caller, apiutil.RoleTenantAdmin),
+		admindomain.EventSubscription{TenantID: caller, SinkKind: "http", CELFilter: `type == "paladin.object.uploaded"`})
+	if err != nil {
+		t.Fatalf("valid CEL filter must be accepted, got: %v", err)
+	}
+}
+
 // ─── Get ─────────────────────────────────────────────────────────────────────
 
 func TestGet_NotFound(t *testing.T) {
@@ -187,6 +213,34 @@ func TestUpdate_VersionMismatchAborts(t *testing.T) {
 		admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}, 1, nil)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
+	}
+}
+
+func TestUpdate_InvalidFilterRejectedWhenMasked(t *testing.T) {
+	caller := uuid.New()
+	id := uuid.New()
+	repo := &fakeRepo{sub: admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}}
+	h := NewHandler(repo, allowAuthorizer{})
+	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin),
+		admindomain.EventSubscription{SubscriptionID: id, TenantID: caller, CELFilter: "bogus_field == 1"},
+		0, []string{"filter"})
+	if code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument (filter in mask)", code(err))
+	}
+}
+
+func TestUpdate_InvalidFilterIgnoredWhenNotMasked(t *testing.T) {
+	// A sink-only update carrying a stale/unused filter must not be
+	// rejected — validation gates only the field actually being written.
+	caller := uuid.New()
+	id := uuid.New()
+	repo := &fakeRepo{sub: admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}}
+	h := NewHandler(repo, allowAuthorizer{})
+	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin),
+		admindomain.EventSubscription{SubscriptionID: id, TenantID: caller, CELFilter: "bogus_field == 1"},
+		0, []string{"sink"})
+	if err != nil {
+		t.Fatalf("filter not in mask must not be validated, got: %v", err)
 	}
 }
 

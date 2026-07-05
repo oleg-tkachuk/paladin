@@ -56,6 +56,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 )
 
 // Event is the wire payload delivered to subscribers. The shape is JSON-
@@ -166,6 +167,11 @@ type Dispatcher struct {
 	Secrets         SinkSecretResolver
 	secretCache     *sinkSecretCache
 	secretCacheOnce sync.Once
+
+	// Filter evaluates a subscription's CEL filter against the event
+	// envelope (cel.EventEnvelopeSchema). Optional — nil falls back to a
+	// process-shared evaluator, so struct-literal construction keeps working.
+	Filter *cel.Evaluator
 }
 
 // Dispatch enumerates every enabled subscription for tenantID whose
@@ -230,7 +236,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, tenantID string, evt Event, i
 		if sub.Disabled {
 			continue
 		}
-		if sub.CELFilter != "" && sub.CELFilter != evt.Type {
+		if !d.subscriptionMatches(sub, evt) {
 			continue
 		}
 		row := OutboxRow{
@@ -252,6 +258,70 @@ func (d *Dispatcher) dispatch(ctx context.Context, tenantID string, evt Event, i
 		queued++
 	}
 	return queued, nil
+}
+
+// defaultEventEvaluator backs Dispatchers constructed without an explicit
+// Filter (struct literals, tests). The compile cache is process-shared and
+// concurrency-safe, so one instance serves every such Dispatcher.
+var defaultEventEvaluator = cel.NewEvaluator()
+
+// subscriptionMatches reports whether evt satisfies sub's CEL filter,
+// evaluated against cel.EventEnvelopeSchema. An empty filter matches every
+// event (the EventSubscription contract: "empty → all events"). A filter that
+// fails to compile or evaluate is treated as NON-matching (fail-closed) and
+// logged loudly: the write path validates filters (see eventsubh.Create/
+// Update), so this only fires on a filter stored before that validation
+// existed or a genuine runtime error — dropping-and-warning is safer than
+// fanning out events the operator meant to exclude.
+func (d *Dispatcher) subscriptionMatches(sub admindomain.EventSubscription, evt Event) bool {
+	if sub.CELFilter == "" {
+		return true
+	}
+	eval := d.Filter
+	if eval == nil {
+		eval = defaultEventEvaluator
+	}
+	prog, err := eval.Compile(cel.EventEnvelopeSchema, sub.CELFilter)
+	if err != nil {
+		d.log().Warn("subscription filter did not compile; skipping delivery (fail-closed)",
+			zap.String("subscription_id", sub.SubscriptionID.String()),
+			zap.String("filter", sub.CELFilter),
+			zap.Error(err),
+		)
+		return false
+	}
+	ok, err := cel.Match(prog, eventCELVars(evt))
+	if err != nil {
+		d.log().Warn("subscription filter eval error; skipping delivery (fail-closed)",
+			zap.String("subscription_id", sub.SubscriptionID.String()),
+			zap.String("filter", sub.CELFilter),
+			zap.Error(err),
+		)
+		return false
+	}
+	return ok
+}
+
+// eventCELVars projects an Event onto the cel.EventEnvelopeSchema variable
+// set. EVERY declared schema var must be present or cel-go errors on an
+// unknown attribute at eval time. The CloudEvents 1.0 envelope fields
+// (source/specversion/time/datacontenttype/subject) aren't populated on the
+// producer-side Event, so they're supplied empty — a filter referencing them
+// evaluates to false rather than erroring.
+func eventCELVars(evt Event) map[string]any {
+	return map[string]any{
+		"type":            evt.Type,
+		"at":              evt.At,
+		"tenant_id":       evt.TenantID,
+		"resource_name":   evt.ResourceName,
+		"actor_subject":   evt.ActorSubject,
+		"id":              evt.ID,
+		"source":          "",
+		"specversion":     "",
+		"time":            "",
+		"datacontenttype": "",
+		"subject":         "",
+	}
 }
 
 // DeliverOne delivers a synthetic test event to a single subscription.
