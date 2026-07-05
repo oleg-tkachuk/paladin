@@ -87,12 +87,15 @@ func runIngest(
 	ingestQueries := db.Queries
 	ingestSM := deps.SM
 	ingestPool := deps.Pool
-	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated MigrateDSN pool
-	if cfg.Datastores.Postgres.MigrateDSN != "" {
+	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated BYPASSRLS pool
+	// The ingest Lookup + state-machine transitions run cross-tenant (pure DML),
+	// so the BYPASSRLS pool uses the least-privilege paladin_reaper role (reaper_dsn),
+	// falling back to paladin_migrate when unset (dev parity). See migration 058.
+	if bypassDSN, bypassPwd := bypassRLSConn(cfg); bypassDSN != "" {
 		pool, err := newDispatcherPool(
 			context.Background(),
-			cfg.Datastores.Postgres.MigrateDSN,
-			cfg.Datastores.Postgres.MigratePassword,
+			bypassDSN,
+			bypassPwd,
 			"paladin-ingest",
 			l,
 		)

@@ -86,23 +86,22 @@ func runDispatcher(
 	deps *app.SharedDeps,
 ) error {
 	dispatcherPool := deps.Pool
-	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated MigrateDSN pool
-	if cfg.Datastores.Postgres.MigrateDSN != "" {
-		// Pass MigratePassword explicitly — the runtime path
-		// (postgres.New for the deps.Pool) injects cfg.Password
-		// into pgxpool.ConnConfig.Password after parse, since the
-		// resolver populates the field from migrate_password_secret
-		// at boot. The dispatcher's pool needs the same treatment
-		// or pgx falls back to no-password and SASL fails with
-		// 28P01. Symptom before this fix: outbox loop spammed
-		// "failed SASL auth: FATAL: password authentication
-		// failed for user paladin_migrate" every poll_interval, and
-		// /readyz flipped to 503 because the outbox health check
-		// also can't acquire a connection.
+	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated BYPASSRLS pool
+	// The dispatcher drains event_deliveries cross-tenant (no request principal
+	// → no paladin.tenant_id GUC), so it needs BYPASSRLS. That's pure DML, so it
+	// runs on the least-privilege paladin_reaper role (reaper_dsn); falls back to
+	// paladin_migrate when reaper_dsn is unset (dev parity). See migration 058.
+	if bypassDSN, bypassPwd := bypassRLSConn(cfg); bypassDSN != "" {
+		// Pass the password explicitly — the runtime path (postgres.New for the
+		// deps.Pool) injects cfg.Password into pgxpool.ConnConfig.Password after
+		// parse (the resolver populates it from *_password_secret at boot). This
+		// pool needs the same treatment or pgx falls back to no-password and
+		// SASL fails with 28P01 — the outbox loop would spam "password
+		// authentication failed" every poll_interval and /readyz would flip 503.
 		pool, err := newDispatcherPool(
 			context.Background(),
-			cfg.Datastores.Postgres.MigrateDSN,
-			cfg.Datastores.Postgres.MigratePassword,
+			bypassDSN,
+			bypassPwd,
 			"paladin-dispatcher",
 			l,
 		)
@@ -240,9 +239,22 @@ func runDispatcher(
 	return nil
 }
 
+// bypassRLSConn resolves the DSN + password for a cross-tenant BYPASSRLS
+// plumbing pool (dispatcher outbox, ingest dedup). Prefers the dedicated
+// least-privilege paladin_reaper role (reaper_dsn) — those loops are pure DML, so
+// they don't need the DDL owner — and falls back to paladin_migrate when reaper_dsn
+// is unset (dev parity). Returns ("","") when neither is configured, so the
+// caller degrades to the RLS runtime pool. See migration 058 / serve_worker.
+func bypassRLSConn(cfg config.Config) (dsn, password string) {
+	if cfg.Datastores.Postgres.ReaperDSN != "" {
+		return cfg.Datastores.Postgres.ReaperDSN, cfg.Datastores.Postgres.ReaperPassword
+	}
+	return cfg.Datastores.Postgres.MigrateDSN, cfg.Datastores.Postgres.MigratePassword
+}
+
 // newDispatcherPool opens a minimal pgxpool aimed at the dispatcher's
 // outbox loop. Skips the RLS PrepareConn / AfterRelease hooks — the
-// loop legitimately spans tenants and the MigrateDSN role is BYPASSRLS.
+// loop legitimately spans tenants and the pool's role is BYPASSRLS.
 //
 // `password` is the secret-resolved migrate password (populated at
 // config-load time from migrate_password_secret). When non-empty it
