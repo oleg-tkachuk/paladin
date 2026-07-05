@@ -813,18 +813,28 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 	// commit at the end — the loop's wallclock budget is bounded by
 	// per-delivery HTTP timeouts.
 	//
-	// SQS rows targeting the SAME (queue, region, role) are collected and
-	// flushed through SendMessageBatch after the loop — one API call per ≤10
-	// rows instead of one per row. Batching changes the transport only:
-	// every row keeps its own attempts / backoff / permanent bookkeeping via
-	// the per-row outcome map.
+	// Rows targeting the SAME batchable sink are collected and flushed together
+	// after the loop — SQS via SendMessageBatch (≤10/call), NATS via N publishes
+	// + one Flush per connection, Kafka via one WriteMessages(msgs...). Batching
+	// changes the transport only: every row keeps its own attempts / backoff /
+	// permanent bookkeeping via the per-row outcome map.
 	type sqsQueued struct {
 		row  pending
 		sub  admindomain.EventSubscription
 		item sqsBatchItem
 	}
+	type natsQueued struct {
+		row  pending
+		item natsBatchItem
+	}
+	type kafkaQueued struct {
+		row  pending
+		item kafkaBatchItem
+	}
 	sqsGroups := map[string][]sqsQueued{}
 	sqsCfgs := map[string]sqsSinkConfig{}
+	natsGroups := map[string][]natsQueued{}
+	kafkaGroups := map[string][]kafkaQueued{}
 	for _, p := range batchRows {
 		evt := Event{}
 		if err := json.Unmarshal(p.payload, &evt); err != nil {
@@ -858,6 +868,20 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 			})
 			continue
 		}
+		if key, ok := natsGroupTarget(sub); ok && r.Dispatcher.NATS != nil {
+			natsGroups[key] = append(natsGroups[key], natsQueued{
+				row:  p,
+				item: natsBatchItem{RowID: p.id, Sub: sub, Evt: evt},
+			})
+			continue
+		}
+		if key, ok := kafkaGroupTarget(sub); ok && r.Dispatcher.Kafka != nil {
+			kafkaGroups[key] = append(kafkaGroups[key], kafkaQueued{
+				row:  p,
+				item: kafkaBatchItem{RowID: p.id, Sub: sub, Evt: evt},
+			})
+			continue
+		}
 
 		status, deliverErr := r.Dispatcher.deliver(ctx, sub, evt)
 		if deliverErr == nil {
@@ -887,6 +911,44 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 				}
 			} else {
 				max := r.maxAttemptsFor(q.sub)
+				permanent := q.row.attempts+1 >= max
+				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
+			}
+		}
+	}
+
+	for _, queued := range natsGroups {
+		items := make([]natsBatchItem, len(queued))
+		for i, q := range queued {
+			items[i] = q.item
+		}
+		outcome := r.Dispatcher.deliverNATSBatch(ctx, items)
+		for _, q := range queued {
+			if derr := outcome[q.row.id]; derr == nil {
+				if err := r.markDelivered(ctx, tx, q.row.id, 0); err != nil {
+					return 0, err
+				}
+			} else {
+				max := r.maxAttemptsFor(q.item.Sub)
+				permanent := q.row.attempts+1 >= max
+				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
+			}
+		}
+	}
+
+	for _, queued := range kafkaGroups {
+		items := make([]kafkaBatchItem, len(queued))
+		for i, q := range queued {
+			items[i] = q.item
+		}
+		outcome := r.Dispatcher.deliverKafkaBatch(ctx, items)
+		for _, q := range queued {
+			if derr := outcome[q.row.id]; derr == nil {
+				if err := r.markDelivered(ctx, tx, q.row.id, 0); err != nil {
+					return 0, err
+				}
+			} else {
+				max := r.maxAttemptsFor(q.item.Sub)
 				permanent := q.row.attempts+1 >= max
 				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
 			}

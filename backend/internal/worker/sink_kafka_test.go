@@ -16,9 +16,11 @@ type fakeKafka struct {
 	msgs   []kafka.Message
 	err    error
 	closed int
+	calls  int // WriteMessages invocations — batching asserts one call per group
 }
 
 func (f *fakeKafka) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
+	f.calls++
 	f.msgs = append(f.msgs, msgs...)
 	return f.err
 }

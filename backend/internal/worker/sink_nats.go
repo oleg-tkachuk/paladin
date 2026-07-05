@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 	"go.uber.org/zap"
@@ -347,4 +348,101 @@ func (d *Dispatcher) deliverNATS(ctx context.Context, sub admindomain.EventSubsc
 		return 0, fmt.Errorf("nats flush: %w", err)
 	}
 	return 0, nil
+}
+
+// ─── Batched delivery (outbox fan-in) ────────────────────────────────────────
+
+// natsBatchItem is one outbox row headed for a shared NATS connection.
+type natsBatchItem struct {
+	RowID uuid.UUID
+	Sub   admindomain.EventSubscription
+	Evt   Event
+}
+
+// natsGroupTarget derives the batch-group key for a subscription IFF it is a
+// well-formed NATS sink. The key is the CONNECTION — url + raw credentials_ref
+// — NOT the subject: every row on one connection shares a single Flush
+// regardless of subject, so distinct-subject rows to the same server still
+// batch. Malformed rows return ok=false and take the per-row deliver path,
+// failing with the same error text as before batching.
+func natsGroupTarget(sub admindomain.EventSubscription) (key string, ok bool) {
+	if sub.SinkKind != "nats" {
+		return "", false
+	}
+	var cfg natsSinkConfig
+	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {
+		return "", false
+	}
+	if cfg.URL == "" || cfg.Subject == "" {
+		return "", false
+	}
+	return poolKey(cfg.URL, cfg.CredentialsRef), true
+}
+
+// deliverNATSBatch publishes every row in one group to its own subject over a
+// single pooled connection, then Flushes ONCE. The flush is the round-trip that
+// surfaces transport errors; batching turns N (publish+flush) into N publishes
+// + 1 flush. A per-message publish error fails just that row; a flush error
+// fails every row that published (the buffered messages are doomed). All items
+// share url + credentials_ref by construction, so the connection is resolved
+// from the first item.
+func (d *Dispatcher) deliverNATSBatch(ctx context.Context, items []natsBatchItem) map[uuid.UUID]error {
+	out := make(map[uuid.UUID]error, len(items))
+	failAll := func(err error) map[uuid.UUID]error {
+		for _, it := range items {
+			out[it.RowID] = err
+		}
+		return out
+	}
+	if d.NATS == nil {
+		return failAll(errors.New("nats sink: dispatcher has no NATS pool"))
+	}
+	if err := ctx.Err(); err != nil {
+		return failAll(err)
+	}
+	var cfg0 natsSinkConfig
+	if err := json.Unmarshal(items[0].Sub.SinkConfig, &cfg0); err != nil {
+		return failAll(fmt.Errorf("nats sink: decode config: %w", err))
+	}
+	credentialsRef, err := d.resolveSinkValue(ctx, cfg0.CredentialsRef)
+	if err != nil {
+		return failAll(fmt.Errorf("nats sink: %w", err))
+	}
+	conn, err := d.NATS.get(cfg0.URL, credentialsRef)
+	if err != nil {
+		return failAll(err)
+	}
+
+	published := make([]uuid.UUID, 0, len(items))
+	for _, it := range items {
+		var cfg natsSinkConfig
+		if uerr := json.Unmarshal(it.Sub.SinkConfig, &cfg); uerr != nil {
+			out[it.RowID] = fmt.Errorf("nats sink: decode config: %w", uerr)
+			continue
+		}
+		body, merr := json.Marshal(d.newCloudEventEnvelope(it.Sub, it.Evt))
+		if merr != nil {
+			out[it.RowID] = fmt.Errorf("nats sink: marshal envelope: %w", merr)
+			continue
+		}
+		if perr := conn.Publish(cfg.Subject, body); perr != nil {
+			out[it.RowID] = fmt.Errorf("nats publish: %w", perr)
+			continue
+		}
+		published = append(published, it.RowID)
+	}
+	if len(published) == 0 {
+		return out
+	}
+	if ferr := conn.FlushTimeout(2 * time.Second); ferr != nil {
+		wrapped := fmt.Errorf("nats flush: %w", ferr)
+		for _, id := range published {
+			out[id] = wrapped
+		}
+		return out
+	}
+	for _, id := range published {
+		out[id] = nil
+	}
+	return out
 }

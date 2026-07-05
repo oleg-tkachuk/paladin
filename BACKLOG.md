@@ -511,6 +511,22 @@ open deliberately — each notes why._
   a truststore: the sink delivers with `tls_client_cert/key`, and the same
   transport WITHOUT the keypair is refused at the handshake (negative
   pinned). PASSED locally against Docker.
+- **Shipped (2026-07-05) — batch fan-in (NATS + Kafka):** the OutboxRunner now
+  groups a tick's rows by sink target and flushes each group once, matching the
+  SQS `SendMessageBatch` path. Kafka: `kafkaGroupTarget` keys by
+  brokers+topic+auth-hash and `deliverKafkaBatch` sends one `WriteMessages(msgs
+  ...)` per group (kafka-go batches to the broker internally; a `WriteErrors`
+  slice maps partial failures per-row, any other error fails the whole group
+  retryably). NATS: `natsGroupTarget` keys by the CONNECTION (url + raw
+  credentials_ref, NOT subject — one Flush per conn covers every subject), and
+  `deliverNATSBatch` does N publishes + ONE `FlushTimeout` (a publish error
+  fails just that row; a flush error fails every row that published). Grouping is
+  over RAW config so it never merges distinct-credential sinks; malformed rows
+  fall back to the per-row `deliver()` path unchanged. Every row keeps its own
+  attempts/backoff/permanent bookkeeping via the per-row outcome map. Unit tests
+  (`sink_batch_test.go`): kafka one-call-per-group / partial-failure / whole-call
+  -fail + group-key identity; nats embedded-server multi-subject delivery +
+  no-pool + group-key (subject-independent).
 - **Definition of Done (remaining):**
   - Optional: per-tenant topic prefix vs operator-defined topic — operator
     -defined shipped; revisit if a customer needs auto-fan-out by tenant.

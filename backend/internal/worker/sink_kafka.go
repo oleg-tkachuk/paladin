@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
@@ -233,6 +234,111 @@ func (d *Dispatcher) deliverKafka(ctx context.Context, sub admindomain.EventSubs
 		return 0, fmt.Errorf("kafka write: %w", err)
 	}
 	return 0, nil
+}
+
+// ─── Batched delivery (outbox fan-in) ────────────────────────────────────────
+
+// kafkaBatchItem is one outbox row headed for a shared Kafka writer.
+type kafkaBatchItem struct {
+	RowID uuid.UUID
+	Sub   admindomain.EventSubscription
+	Evt   Event
+}
+
+// kafkaGroupTarget derives the batch-group key for a subscription IFF it is a
+// well-formed Kafka sink. Rows sharing brokers+topic+auth flush through one
+// WriteMessages call. The key is computed over the RAW (pre-resolution) config,
+// so it never merges sinks that differ in credentials (it may under-batch two
+// refs that resolve equal — safe). Malformed rows return ok=false and take the
+// per-row deliver path, failing with the same error text as before batching.
+func kafkaGroupTarget(sub admindomain.EventSubscription) (key string, ok bool) {
+	if sub.SinkKind != "kafka" {
+		return "", false
+	}
+	var cfg kafkaSinkConfig
+	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {
+		return "", false
+	}
+	brokers := splitTrim(cfg.Brokers)
+	if len(brokers) == 0 || cfg.Topic == "" {
+		return "", false
+	}
+	return kafkaWriterKey(brokers, cfg), true
+}
+
+// deliverKafkaBatch writes one group's rows to a single writer via one
+// WriteMessages(msgs...) call (kafka-go batches to the broker internally),
+// returning a per-row outcome (nil = delivered). kafka-go reports partial
+// failures as a WriteErrors (one entry per message); any other error fails the
+// whole group (retryable). All items share brokers/topic/auth by construction,
+// so config + credentials are read from the first item.
+func (d *Dispatcher) deliverKafkaBatch(ctx context.Context, items []kafkaBatchItem) map[uuid.UUID]error {
+	out := make(map[uuid.UUID]error, len(items))
+	failAll := func(err error) map[uuid.UUID]error {
+		for _, it := range items {
+			out[it.RowID] = err
+		}
+		return out
+	}
+	if d.Kafka == nil {
+		return failAll(errors.New("kafka sink: dispatcher has no Kafka writer pool"))
+	}
+	var cfg kafkaSinkConfig
+	if err := json.Unmarshal(items[0].Sub.SinkConfig, &cfg); err != nil {
+		return failAll(fmt.Errorf("kafka sink: decode config: %w", err))
+	}
+	brokers := splitTrim(cfg.Brokers)
+	for _, f := range []*string{&cfg.SASLUsername, &cfg.SASLPassword, &cfg.TLSClientCert, &cfg.TLSClientKey, &cfg.TLSCACert} {
+		v, rerr := d.resolveSinkValue(ctx, *f)
+		if rerr != nil {
+			return failAll(fmt.Errorf("kafka sink: %w", rerr))
+		}
+		*f = v
+	}
+	transport, err := buildKafkaTransport(cfg)
+	if err != nil {
+		return failAll(err)
+	}
+	w := d.Kafka.get(kafkaWriterKey(brokers, cfg), brokers, cfg.Topic, transport)
+
+	msgs := make([]kafka.Message, 0, len(items))
+	rowByIdx := make([]uuid.UUID, 0, len(items))
+	for _, it := range items {
+		body, berr := json.Marshal(d.newCloudEventEnvelope(it.Sub, it.Evt))
+		if berr != nil {
+			out[it.RowID] = fmt.Errorf("kafka sink: marshal envelope: %w", berr)
+			continue
+		}
+		msgs = append(msgs, kafka.Message{Key: []byte(it.Evt.TenantID), Value: body})
+		rowByIdx = append(rowByIdx, it.RowID)
+	}
+	if len(msgs) == 0 {
+		return out
+	}
+	werr := w.WriteMessages(ctx, msgs...)
+	if werr == nil {
+		for _, id := range rowByIdx {
+			out[id] = nil
+		}
+		return out
+	}
+	// Partial failure: kafka-go returns one error per message in order.
+	var we kafka.WriteErrors
+	if errors.As(werr, &we) && len(we) == len(rowByIdx) {
+		for i, id := range rowByIdx {
+			if we[i] != nil {
+				out[id] = fmt.Errorf("kafka write: %w", we[i])
+			} else {
+				out[id] = nil
+			}
+		}
+		return out
+	}
+	// Whole-call failure → every message fails (retryable).
+	for _, id := range rowByIdx {
+		out[id] = fmt.Errorf("kafka write: %w", werr)
+	}
+	return out
 }
 
 // splitTrim splits a comma-separated list and drops empty / whitespace-only
