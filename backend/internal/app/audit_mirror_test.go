@@ -64,10 +64,35 @@ func TestAuditMirror_EmitsAuditEvent(t *testing.T) {
 		"source_ip":      "10.0.0.1",
 		"capability_id":  capID.String(),
 		"error_message":  "",
+		"severity":       "info", // successful audit (no error_message)
 	} {
 		if got := c.evt.Payload[k]; got != want {
 			t.Errorf("payload[%q] = %v, want %v", k, got, want)
 		}
+	}
+}
+
+// TestAuditMirror_ErrorStampsWarningSeverity: an audited call that failed
+// (non-empty error_message) is stamped severity=warning, which the dispatcher's
+// classifyEvent payload-override then elevates from the default info — so a
+// subscriber can filter `severity_level >= 30` for failed operations.
+func TestAuditMirror_ErrorStampsWarningSeverity(t *testing.T) {
+	fake := &fakeEventDispatcher{}
+	m := &auditMirror{dispatcher: fake, log: zap.NewNop()}
+	tenant := uuid.New()
+	m.EmitAudited(context.Background(), admindomain.AuditEntry{
+		EntryID:       uuid.New(),
+		At:            time.Now().UTC(),
+		ActorTenantID: tenant,
+		Action:        "/paladin.admin.v1.TenantService/DeleteTenant",
+		ResourceName:  "tenants/" + tenant.String(),
+		ErrorMessage:  "denied by policy",
+	})
+	if len(fake.calls) != 1 {
+		t.Fatalf("Dispatch calls = %d, want 1", len(fake.calls))
+	}
+	if got := fake.calls[0].evt.Payload["severity"]; got != "warning" {
+		t.Errorf("payload[severity] = %v, want warning (failed audit)", got)
 	}
 }
 

@@ -63,6 +63,15 @@ func (m *auditMirror) EmitAudited(ctx context.Context, entry admindomain.AuditEn
 		// IdP callback). Subscribers haven't asked for these in v1.
 		return
 	}
+	// severity is the one signal a per-type map can't derive for audit events:
+	// significance depends on whether the audited call failed, not on the
+	// action. Stamp it so the dispatcher's classifyEvent (payload override)
+	// elevates failed operations. A denial/failure is notable but not data
+	// loss → warning; a success → info.
+	severity := "info"
+	if entry.ErrorMessage != "" {
+		severity = "warning"
+	}
 	queued, err := m.dispatcher.Dispatch(ctx, entry.ActorTenantID.String(), worker.Event{
 		Type:         auditEventType(entry.Action),
 		At:           entry.At,
@@ -78,6 +87,7 @@ func (m *auditMirror) EmitAudited(ctx context.Context, entry admindomain.AuditEn
 			"source_ip":      entry.SourceIP,
 			"capability_id":  entry.CapabilityID.String(),
 			"error_message":  entry.ErrorMessage,
+			"severity":       severity,
 		},
 	})
 	if err != nil {
