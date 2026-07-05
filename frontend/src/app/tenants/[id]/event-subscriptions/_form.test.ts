@@ -293,6 +293,66 @@ describe("Kafka sink auth", () => {
   });
 });
 
+// ─── NATS JetStream mode ─────────────────────────────────────────────────────
+
+describe("NATS sink JetStream mode", () => {
+  const natsTarget = (sink: ReturnType<typeof buildSink>) =>
+    sink.target.case === "nats" ? sink.target.value : undefined;
+
+  it("defaults to core publish (jetstream false)", () => {
+    const v = natsTarget(
+      buildSink({
+        ...EMPTY_FORM,
+        sinkType: "nats",
+        natsUrl: "nats://n:4222",
+        natsSubject: "paladin.events.x",
+      }),
+    );
+    expect(v?.jetstream).toBe(false);
+  });
+
+  it("sets jetstream=true when the toggle is on", () => {
+    const v = natsTarget(
+      buildSink({
+        ...EMPTY_FORM,
+        sinkType: "nats",
+        natsUrl: "nats://n:4222",
+        natsSubject: "paladin.events.x",
+        natsJetStream: true,
+      }),
+    );
+    expect(v?.jetstream).toBe(true);
+  });
+
+  it("hydrates jetstream from an existing subscription (edit round-trip)", () => {
+    const f = formFromSubscription({
+      $typeName: "paladin.admin.v1.EventSubscription",
+      name: "tenants/t-1/eventSubscriptions/s1",
+      tenantId: "t-1",
+      filter: "",
+      disabled: false,
+      resourceVersion: "v1",
+      sink: {
+        $typeName: "paladin.admin.v1.EventSink",
+        target: {
+          case: "nats",
+          value: {
+            $typeName: "paladin.admin.v1.NatsSink",
+            url: "nats://n:4222",
+            subject: "paladin.events.x",
+            credentialsRef: "",
+            jetstream: true,
+          },
+        },
+      },
+    } as EventSubscription);
+    expect(f.sinkType).toBe("nats");
+    expect(f.natsJetStream).toBe(true);
+    // …and a full build round-trips it, so an edit doesn't silently drop it.
+    expect(natsTarget(buildSink(f))?.jetstream).toBe(true);
+  });
+});
+
 // ─── Connector templates ─────────────────────────────────────────────────────
 
 describe("connector templates", () => {

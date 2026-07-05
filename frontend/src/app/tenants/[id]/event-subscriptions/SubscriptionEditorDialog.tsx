@@ -386,6 +386,24 @@ export function SubscriptionEditorDialog({
                     }
                   />
                 </Field>
+                <Field
+                  label="JetStream"
+                  hint="Publish durably onto a JetStream stream with server-side dedup (Nats-Msg-Id = the CloudEvents id), instead of core fire-and-forget publish. The subject must fall under a provisioned stream (e.g. paladin.events.>)."
+                >
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={form.natsJetStream}
+                      onCheckedChange={(v) =>
+                        setForm((p) => ({ ...p, natsJetStream: v }))
+                      }
+                    />
+                    <span className={T.hint}>
+                      {form.natsJetStream
+                        ? "Durable (JetStream)"
+                        : "Core publish"}
+                    </span>
+                  </div>
+                </Field>
               </>
             )}
 

@@ -165,8 +165,12 @@ export function sinkSummary(sub: EventSubscription): {
     const n = t.value;
     // Show subject prominently — it's the discriminator a subscriber
     // configures their listener with. URL is auxiliary; truncated
-    // visually by the table cell anyway.
-    return { badge: "NATS", detail: `${n.subject} @ ${n.url}` };
+    // visually by the table cell anyway. JetStream mode is called out since
+    // it changes the delivery guarantee (durable + dedup vs fire-and-forget).
+    return {
+      badge: n.jetstream ? "NATS · JetStream" : "NATS",
+      detail: `${n.subject} @ ${n.url}`,
+    };
   }
   if (t?.case === "kafka") {
     const k = t.value;
@@ -204,6 +208,9 @@ export type FormState = {
   natsUrl: string;
   natsSubject: string;
   natsCredentialsRef: string;
+  // JetStream mode: durable publish onto a stream with server-side dedup
+  // (Nats-Msg-Id = the CloudEvents id). Off = core publish (fire-and-forget).
+  natsJetStream: boolean;
   // Kafka
   kafkaBrokers: string;
   kafkaTopic: string;
@@ -234,6 +241,7 @@ export const EMPTY_FORM: FormState = {
   natsUrl: "nats://nats.nats.svc.cluster.local:4222",
   natsSubject: "paladin.events",
   natsCredentialsRef: "",
+  natsJetStream: false,
   kafkaBrokers: "",
   kafkaTopic: "",
   kafkaSaslMechanism: "",
@@ -270,6 +278,7 @@ export function formFromSubscription(sub: EventSubscription): FormState {
     next.natsUrl = t.value.url;
     next.natsSubject = t.value.subject;
     next.natsCredentialsRef = t.value.credentialsRef;
+    next.natsJetStream = t.value.jetstream;
   } else if (t?.case === "kafka") {
     next.sinkType = "kafka";
     next.kafkaBrokers = t.value.brokers;
@@ -315,6 +324,7 @@ export function buildSink(form: FormState): EventSink {
       url: form.natsUrl.trim(),
       subject: form.natsSubject.trim(),
       credentialsRef: form.natsCredentialsRef.trim(),
+      jetstream: form.natsJetStream,
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",
