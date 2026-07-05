@@ -38,15 +38,6 @@ idempotency/dual-write) plus a live-verified deep-dive. Confirmed defects are
 being fixed in batches this session; their entries are deleted as each fix
 merges. Genuinely-deferred hardening/tuning stays below with full DoD.
 
-### Subscription fan-out single-page cap (CONFIRMED)
-
-- **Status:** In-Progress (batch fix this session).
-- **Reason:** `dispatch()` (`event_dispatcher.go:210`) lists subscriptions
-  `PageSize:1000` and only WARNs at the cap — a tenant with >1000 subscriptions
-  silently loses events for subs 1001+. Now live surface since audit_mirror is on.
-- **Definition of Done:** page the subscription list to fan out to every matching
-  subscription; test with >1 page.
-
 ### Cedar Authorize error swallowed (CONFIRMED)
 
 - **Status:** In-Progress (batch fix this session).

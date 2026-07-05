@@ -203,6 +203,11 @@ func (d *Dispatcher) DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string,
 	})
 }
 
+// subscriptionFanoutPageSize pages the per-event subscription fan-out. Modest
+// so each round-trip is cheap; the loop covers every subscription, so there is
+// no silent cap regardless of how many a tenant has.
+const subscriptionFanoutPageSize = 500
+
 // dispatch is the shared fan-out: resolve subscriptions, filter-match,
 // and call `insert` once per match. `insert` is either the pool-backed
 // OutboxWriter.Insert (Dispatch) or a tx-bound insert (DispatchTx).
@@ -214,19 +219,33 @@ func (d *Dispatcher) dispatch(ctx context.Context, tenantID string, evt Event, i
 	if err != nil {
 		return 0, fmt.Errorf("dispatch: invalid tenant id %q: %w", tenantID, err)
 	}
-	subs, _, err := d.Store.List(ctx, admindomain.ListEventSubscriptionsArgs{
-		TenantID: tenantUUID,
-		PageSize: 1000,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("list subscriptions: %w", err)
-	}
-	if len(subs) == 1000 {
-		// Single-page fan-out: a tenant at the cap means later
-		// subscriptions silently miss events. Surface it loudly.
-		d.log().Warn("subscription fan-out hit the single-page cap; events may be dropped for this tenant",
-			zap.String("tenant_id", tenantID),
-		)
+	// Page through EVERY matching subscription. A single-page cap would
+	// silently drop events for tenants with more subscriptions than the page
+	// size — a real hazard now that audit_mirror fans every mutation out.
+	var subs []admindomain.EventSubscription
+	var afterID uuid.UUID
+	for {
+		page, next, lErr := d.Store.List(ctx, admindomain.ListEventSubscriptionsArgs{
+			TenantID: tenantUUID,
+			PageSize: subscriptionFanoutPageSize,
+			AfterID:  afterID,
+		})
+		if lErr != nil {
+			return 0, fmt.Errorf("list subscriptions: %w", lErr)
+		}
+		subs = append(subs, page...)
+		if next == "" {
+			break // exhausted (a short/empty page never carries a cursor)
+		}
+		parsed, pErr := uuid.Parse(next)
+		if pErr != nil {
+			// A non-UUID cursor should be impossible (it's a subscription id);
+			// stop rather than risk an infinite loop, and surface the anomaly.
+			d.log().Warn("subscription fan-out: unparseable page cursor; stopping early",
+				zap.String("tenant_id", tenantID), zap.String("cursor", next), zap.Error(pErr))
+			break
+		}
+		afterID = parsed
 	}
 	payload, err := json.Marshal(evt)
 	if err != nil {

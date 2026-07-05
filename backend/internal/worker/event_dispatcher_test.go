@@ -256,6 +256,83 @@ func TestBucketFromResourceName(t *testing.T) {
 	}
 }
 
+// pagingStore returns subscriptions in fixed-size pages with a subscription-id
+// cursor, like the real repo — so the fan-out's paging loop is exercised. subs
+// must be pre-sorted by SubscriptionID (uuid v7 = creation order).
+type pagingStore struct {
+	subs     []admindomain.EventSubscription
+	pageSize int
+	calls    int
+}
+
+func (s *pagingStore) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	s.calls++
+	var eligible []admindomain.EventSubscription
+	for _, sub := range s.subs {
+		if sub.TenantID != args.TenantID {
+			continue
+		}
+		if args.AfterID != uuid.Nil && sub.SubscriptionID.String() <= args.AfterID.String() {
+			continue // keyset cursor (v7 ids sort lexicographically by creation time)
+		}
+		eligible = append(eligible, sub)
+	}
+	ps := s.pageSize
+	if ps <= 0 || ps > len(eligible) {
+		ps = len(eligible)
+	}
+	page := eligible[:ps]
+	var next string
+	if ps < len(eligible) && ps > 0 {
+		next = page[ps-1].SubscriptionID.String()
+	}
+	return page, next, nil
+}
+
+func (s *pagingStore) Get(_ context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
+	for _, sub := range s.subs {
+		if sub.SubscriptionID == id {
+			return sub, nil
+		}
+	}
+	return admindomain.EventSubscription{}, errors.New("not found")
+}
+
+// TestDispatch_PagesAllSubscriptions: the fan-out must reach EVERY matching
+// subscription across pages — the old single-page cap silently dropped subs
+// beyond the page size.
+func TestDispatch_PagesAllSubscriptions(t *testing.T) {
+	tenantID := uuid.Must(uuid.NewV7())
+	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
+	const n = 5
+	subs := make([]admindomain.EventSubscription, n)
+	for i := range subs {
+		subs[i] = admindomain.EventSubscription{
+			SubscriptionID: uuid.Must(uuid.NewV7()),
+			TenantID:       tenantID,
+			SinkKind:       "http",
+			SinkConfig:     cfg, // empty filter → matches every event
+		}
+	}
+	store := &pagingStore{subs: subs, pageSize: 2}
+	out := &fakeOutbox{}
+	d := &Dispatcher{Store: store, Outbox: out}
+
+	queued, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "paladin.object.uploaded"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued != n {
+		t.Fatalf("queued = %d, want %d (every subscription across pages)", queued, n)
+	}
+	if len(out.snapshot()) != n {
+		t.Fatalf("outbox rows = %d, want %d", len(out.snapshot()), n)
+	}
+	if store.calls < 3 { // 2+2+1 → 3 pages
+		t.Errorf("List calls = %d, want >=3 — pagination did not actually page", store.calls)
+	}
+}
+
 // TestDispatchRejectsInvalidTenantID — Dispatch parses the tenant id
 // for the SQL filter; garbage must fail loudly, not fan out to
 // nothing.
