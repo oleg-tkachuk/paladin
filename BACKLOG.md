@@ -31,6 +31,107 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Fragility audit (2026-07-05)
+
+A parallel code+architecture sweep (RLS seams, fail-open, cardinality,
+idempotency/dual-write) plus a live-verified deep-dive. Confirmed defects are
+being fixed in batches this session; their entries are deleted as each fix
+merges. Genuinely-deferred hardening/tuning stays below with full DoD.
+
+### RLS-GUC pool coupling — cross-tenant reapers on the RLS pool (CONFIRMED)
+
+- **Status:** In-Progress (batch fix this session).
+- **Reason:** Same class as the dispatcher `Store.Get` bug. The worker's
+  cross-tenant reapers — `LifecycleWorker` (`lifecycle.go:132`),
+  `LifecycleHardDeleter` (`lifecycle_hard_delete.go:96`), `MultipartReaper`
+  (`multipart_reaper.go:56`), `ReplicationWorker` (`replication.go:142`) — run on
+  `deps.Pool` (`paladin_app`, NOBYPASSRLS) with no `paladin.tenant_id` GUC, so `objects`
+  (FORCE RLS, `USING tenant_id = paladin_session_tenant_id()`, migration 023) returns
+  ZERO rows → they silently do nothing in prod. `ReaperDSN` (`config/types.go:203`)
+  was declared as the BYPASSRLS escape but is **never consumed** (dead config).
+  Integration tests mask it (`hard_delete_test.go:13` wires `sqlc.New(PoolMigrate)`
+  — BYPASSRLS). Latent because the lab has no lifecycle rules + `hard_delete_after=0`.
+- **Definition of Done:** wire a BYPASSRLS reaper pool (ReaperDSN → MigrateDSN
+  fallback) for the worker's cross-tenant jobs; RLS-aware regression that runs a
+  reaper against `paladin_app` with no GUC and asserts it still finds rows only via
+  the BYPASSRLS pool. Same fix already applied to the dispatcher.
+
+### Subscription fan-out single-page cap (CONFIRMED)
+
+- **Status:** In-Progress (batch fix this session).
+- **Reason:** `dispatch()` (`event_dispatcher.go:210`) lists subscriptions
+  `PageSize:1000` and only WARNs at the cap — a tenant with >1000 subscriptions
+  silently loses events for subs 1001+. Now live surface since audit_mirror is on.
+- **Definition of Done:** page the subscription list to fan out to every matching
+  subscription; test with >1 page.
+
+### Cedar Authorize error swallowed (CONFIRMED)
+
+- **Status:** In-Progress (batch fix this session).
+- **Reason:** `cedar/engine.go:356` `decision, _ := cedar.Authorize(...)` drops
+  the engine error. It fails CLOSED (zero-value = deny) so it's not a bypass, but
+  a policy-engine fault is invisible — looks like "everything denied" with no
+  signal.
+- **Definition of Done:** return `(DecisionDeny, err)` + a metric/log so faults
+  are observable; test the error path.
+
+### Charge / audit-mirror dual-write window (CONFIRMED)
+
+- **Status:** In-Progress (batch fix this session — no-compromise transactional
+  outbox).
+- **Reason:** `charge_emitter.go` and `audit_mirror.go` call `Dispatch()`
+  (pool-backed) AFTER the ledger / audit_log row commits — a crash in between
+  loses the event. The charge ledger insert (`usage.go:185`) is itself a separate
+  `pool.Exec`, decoupled from the running-total tx.
+- **Definition of Done:** emit via `DispatchTx` in the SAME tx as the ledger /
+  audit_log write (ADR-0003 transactional outbox, already used by object-promote),
+  so the outbox row is atomic with the source write. Thread the tx through the
+  charge store + audit interceptor. Tests for the atomic path.
+
+### Event fan-out backpressure / admission control (DEFERRED)
+
+- **Status:** Deferred (tuning, not a correctness bug).
+- **Reason:** audit_mirror ON = full cluster mutation-rate into `event_deliveries`;
+  the outbox drains ~`BatchSize`(50)/tick with no producer-side admission control.
+  A noisy tenant + broad filter can bloat the outbox and add drain latency.
+- **Definition of Done:** decide a bound (per-tenant outbox depth cap with a
+  reject/shed signal, or a bounded queue) informed by a real fan-out-volume
+  measurement; the "Adoption check" in the producer-wiring entry feeds this.
+- **Blockers:** needs real cardinality data — same gap as the adoption check.
+
+### Unbounded reads / caches (DEFERRED)
+
+- **Status:** Deferred (operational; bounded by tenant/period cardinality today).
+- **Reason:** (a) `eventingest/prefix_cache.go` caches one entry per tenant with
+  NO eviction (contrast the CEL evaluator's bounded cache); (b) billing timeseries
+  (`billingh/handler.go:277`) has no `LIMIT` and accepts an arbitrary period —
+  hour-granularity over years buffers a huge result set in memory.
+- **Definition of Done:** bound the prefix cache (size cap + evict, like the CEL
+  cache); cap/validate the billing period (or `LIMIT` the query).
+
+### At-least-once sink dedup guidance (DEFERRED)
+
+- **Status:** Deferred (documentation + optional enforcement).
+- **Reason:** the outbox is at-least-once; a sink 2xx received but a failed tx
+  commit → redelivery → duplicate at the sink. CloudEvents `id` (= delivery-row
+  id, retry-stable) lets sinks dedup, but the `format:"raw"` path gives no dedup
+  key/guidance, and it isn't documented as a subscriber contract.
+- **Definition of Done:** document the dedup contract (dedup on CloudEvents `id`);
+  consider always emitting the id header even in raw mode.
+
+### RLS-aware integration harness (DEFERRED — supersedes the dispatcher-only entry)
+
+- **Status:** Deferred (test-infra; the meta-fragility behind the recurring RLS bugs).
+- **Reason:** the integration harness only exposes `PoolMigrate` (BYPASSRLS) and a
+  GUC-setting `PoolApp`; it can't reproduce the production condition (`paladin_app`,
+  cross-tenant, NO GUC) that both the dispatcher and reaper bugs hit — so tests
+  give false confidence about exactly that failure mode.
+- **Definition of Done:** a GUC-less `paladin_app` harness pool + a shared assertion
+  that any cross-tenant background component finds rows only on a BYPASSRLS pool;
+  retro-fit the dispatcher + reaper suites onto it.
+
+---
+
 ## MCP bridge
 
 ### Tool-coverage gaps vs the PALADIN RPC surface
