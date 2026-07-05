@@ -30,6 +30,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nkeys"
 	"go.uber.org/zap"
 
@@ -242,6 +243,11 @@ type natsSinkConfig struct {
 	URL            string `json:"url"`
 	Subject        string `json:"subject"`
 	CredentialsRef string `json:"credentials_ref"`
+	// JetStream switches from core publish (fire-and-forget) to a synchronous
+	// JetStream publish with Nats-Msg-Id = the CloudEvents id (server-side
+	// dedup within the stream's duplicate window). Requires a provisioned
+	// stream whose subject filter covers Subject.
+	JetStream bool `json:"jetstream"`
 }
 
 // cloudEventEnvelope is the on-the-wire shape published to the
@@ -271,6 +277,18 @@ const natsDefaultSource = "paladin"
 // id (stamped by the drain loop, stable across retries) and fall back to the
 // subscription id only on the synchronous DeliverOne test path, which has no
 // delivery row.
+// natsDedupID is the JetStream Nats-Msg-Id (= the CloudEvents id): the
+// retry-stable delivery-row id, falling back to the subscription id on the
+// synchronous DeliverOne test path that has no delivery row. Matches the id the
+// CloudEvents envelope carries so a consumer's dedup and the server's dedup
+// agree.
+func natsDedupID(sub admindomain.EventSubscription, evt Event) string {
+	if evt.ID != "" {
+		return evt.ID
+	}
+	return sub.SubscriptionID.String()
+}
+
 func (d *Dispatcher) newCloudEventEnvelope(sub admindomain.EventSubscription, evt Event) cloudEventEnvelope {
 	eventID := evt.ID
 	if eventID == "" {
@@ -335,6 +353,20 @@ func (d *Dispatcher) deliverNATS(ctx context.Context, sub admindomain.EventSubsc
 	conn, err := d.NATS.get(cfg.URL, credentialsRef)
 	if err != nil {
 		return 0, err
+	}
+	if cfg.JetStream {
+		// JetStream mode: synchronous publish with Nats-Msg-Id = the
+		// CloudEvents id, so the server persists durably and dedups a
+		// redelivery within the stream's duplicate window. The PubAck is the
+		// durability confirmation — no separate flush needed.
+		js, jerr := jetstream.New(conn)
+		if jerr != nil {
+			return 0, fmt.Errorf("nats jetstream: %w", jerr)
+		}
+		if _, perr := js.Publish(ctx, cfg.Subject, body, jetstream.WithMsgID(natsDedupID(sub, evt))); perr != nil {
+			return 0, fmt.Errorf("nats jetstream publish: %w", perr)
+		}
+		return 0, nil
 	}
 	if err := conn.Publish(cfg.Subject, body); err != nil {
 		return 0, fmt.Errorf("nats publish: %w", err)

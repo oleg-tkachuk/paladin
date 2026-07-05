@@ -2546,8 +2546,18 @@ type NatsSink struct {
 	// Format is `<scheme>:<value>` to keep one string field, parsed
 	// server-side. Validation rejects unknown schemes.
 	CredentialsRef string `protobuf:"bytes,3,opt,name=credentials_ref,json=credentialsRef,proto3" json:"credentials_ref,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// jetstream publishes to a JetStream stream instead of core NATS
+	// (at-most-once fire-and-forget). In JetStream mode the dispatcher
+	// publishes synchronously with `Nats-Msg-Id` = the CloudEvents `id`, so the
+	// server persists the message durably and DEDUPS a redelivery within the
+	// stream's duplicate window — turning the at-least-once outbox into an
+	// effectively-once publish onto the bus. `subject` must fall under a
+	// provisioned stream's subject filter (e.g. `paladin.events.>`); downstream
+	// consumers (analytics, search index) then read the stream with their own
+	// durable consumers and replay from any sequence.
+	Jetstream     bool `protobuf:"varint,4,opt,name=jetstream,proto3" json:"jetstream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NatsSink) Reset() {
@@ -2599,6 +2609,13 @@ func (x *NatsSink) GetCredentialsRef() string {
 		return x.CredentialsRef
 	}
 	return ""
+}
+
+func (x *NatsSink) GetJetstream() bool {
+	if x != nil {
+		return x.Jetstream
+	}
+	return false
 }
 
 var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
@@ -2826,11 +2843,12 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"routingKey\x12&\n" +
 	"\x0ftls_client_cert\x18\x04 \x01(\tR\rtlsClientCert\x12$\n" +
 	"\x0etls_client_key\x18\x05 \x01(\tR\ftlsClientKey\x12\x1e\n" +
-	"\vtls_ca_cert\x18\x06 \x01(\tR\ttlsCaCert\"_\n" +
+	"\vtls_ca_cert\x18\x06 \x01(\tR\ttlsCaCert\"}\n" +
 	"\bNatsSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12'\n" +
-	"\x0fcredentials_ref\x18\x03 \x01(\tR\x0ecredentialsRef*z\n" +
+	"\x0fcredentials_ref\x18\x03 \x01(\tR\x0ecredentialsRef\x12\x1c\n" +
+	"\tjetstream\x18\x04 \x01(\bR\tjetstream*z\n" +
 	"\vStorageKind\x12\x1c\n" +
 	"\x18STORAGE_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13STORAGE_KIND_AWS_S3\x10\x01\x12\x1e\n" +

@@ -471,4 +471,15 @@ message NatsSink {
   // Format is `<scheme>:<value>` to keep one string field, parsed
   // server-side. Validation rejects unknown schemes.
   string credentials_ref = 3;
+
+  // jetstream publishes to a JetStream stream instead of core NATS
+  // (at-most-once fire-and-forget). In JetStream mode the dispatcher
+  // publishes synchronously with `Nats-Msg-Id` = the CloudEvents `id`, so the
+  // server persists the message durably and DEDUPS a redelivery within the
+  // stream's duplicate window — turning the at-least-once outbox into an
+  // effectively-once publish onto the bus. `subject` must fall under a
+  // provisioned stream's subject filter (e.g. `paladin.events.>`); downstream
+  // consumers (analytics, search index) then read the stream with their own
+  // durable consumers and replay from any sequence.
+  bool jetstream = 4;
 }
