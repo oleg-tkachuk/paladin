@@ -66,13 +66,14 @@ var BucketSchema = &Schema{
 // datacontenttype / subject when the publisher emits a CE 1.0 envelope
 // (see internal/eventingest/source_cloudevents.go).
 //
-// The payload-derived attributes (kind, severity, object_key, bucket_name,
-// etag, size_bytes) are projected from each event's Payload map by
-// worker.eventCELVars. Absent keys default to the zero value, so a filter
-// referencing a field an event doesn't carry evaluates to false/0 rather
-// than erroring — object events populate object_key / etag / size_bytes
-// today; kind / severity / bucket_name are declared for producers that emit
-// them (a filter on an unpopulated field simply never matches).
+// The derived attributes (kind, severity, severity_level, object_key,
+// bucket_name, etag, size_bytes) are projected from the event's type / resource
+// name / Payload by worker.eventCELVars. Absent values default to zero, so a
+// filter referencing a field an event doesn't carry evaluates to false/0 rather
+// than erroring. severity is the human label ("info"|"warning"|"critical") and
+// severity_level its ordered companion (10/30/50) — filter thresholds on the
+// number (`severity_level >= 30`), since lexicographic string order is
+// meaningless for severity.
 var EventEnvelopeSchema = &Schema{
 	Name: "EventEnvelope",
 	vars: map[string]*cel.Type{
@@ -92,12 +93,13 @@ var EventEnvelopeSchema = &Schema{
 		"subject":         cel.StringType,
 		// Payload-derived attributes (projected by worker.eventCELVars);
 		// absent → zero value.
-		"kind":        cel.StringType,
-		"severity":    cel.StringType,
-		"object_key":  cel.StringType,
-		"bucket_name": cel.StringType,
-		"etag":        cel.StringType,
-		"size_bytes":  cel.IntType,
+		"kind":           cel.StringType,
+		"severity":       cel.StringType,
+		"severity_level": cel.IntType,
+		"object_key":     cel.StringType,
+		"bucket_name":    cel.StringType,
+		"etag":           cel.StringType,
+		"size_bytes":     cel.IntType,
 	},
 }
 

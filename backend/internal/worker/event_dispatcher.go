@@ -311,6 +311,7 @@ func (d *Dispatcher) subscriptionMatches(sub admindomain.EventSubscription, evt 
 // producer-side Event; the payload-derived fields are pulled from evt.Payload
 // by key (object events carry object_key / etag / size_bytes today).
 func eventCELVars(evt Event) map[string]any {
+	sev := classifyEvent(evt)
 	return map[string]any{
 		"type":            evt.Type,
 		"at":              evt.At,
@@ -324,7 +325,8 @@ func eventCELVars(evt Event) map[string]any {
 		"datacontenttype": "",
 		"subject":         "",
 		"kind":            kindFromType(evt.Type),
-		"severity":        payloadString(evt.Payload, "severity"),
+		"severity":        sev.label,
+		"severity_level":  sev.level,
 		"object_key":      payloadString(evt.Payload, "object_key"),
 		"bucket_name":     eventBucketName(evt),
 		"etag":            payloadString(evt.Payload, "etag"),
@@ -358,6 +360,83 @@ func kindFromType(t string) string {
 	rest := t[len(prefix):] // "<kind>.<verb>..."
 	if i := strings.IndexByte(rest, '.'); i > 0 {
 		return rest[:i]
+	}
+	return ""
+}
+
+// severityInfo pairs the human-readable severity label with its ordered level.
+// Both surface as CEL vars (severity string, severity_level int); the number
+// carries the ordering the lexicographic string can't ("critical" < "info" <
+// "warning" alphabetically), so subscribers threshold on it: severity_level >=
+// 30. Levels are gapped (10/30/50) so a rank can be inserted later (e.g. an
+// "error" at 40) without renumbering existing filters.
+type severityInfo struct {
+	label string
+	level int64
+}
+
+var (
+	sevInfo     = severityInfo{"info", 10}
+	sevWarning  = severityInfo{"warning", 30}
+	sevCritical = severityInfo{"critical", 50}
+)
+
+// eventSeverityByType is the static classification. It holds only the types the
+// destructive-verb heuristic below can't infer — today just the security event
+// whose verb ("credentials_rotated") isn't destructive. Destructive verbs
+// (purged/deleted/deleting/trashed) are handled by the heuristic so a new
+// *.deleted type isn't silently "info".
+var eventSeverityByType = map[string]severityInfo{
+	"paladin.backend.credentials_rotated": sevWarning, // security-relevant, non-destructive verb
+}
+
+// classifyEvent resolves an event's severity. Precedence:
+//  1. an explicit payload "severity" (audit-mirror can stamp it from is_error);
+//  2. a permanent object delete (payload.mode == "permanent") → critical, since
+//     soft and hard object deletes share the paladin.object.deleted type;
+//  3. the static per-type override;
+//  4. the destructive-verb safety net;
+//  5. else info.
+func classifyEvent(evt Event) severityInfo {
+	if s := payloadString(evt.Payload, "severity"); s != "" {
+		return severityForLabel(s)
+	}
+	if payloadString(evt.Payload, "mode") == "permanent" {
+		return sevCritical // hard delete (vs "soft") — irreversible
+	}
+	if si, ok := eventSeverityByType[evt.Type]; ok {
+		return si
+	}
+	switch verbOf(evt.Type) {
+	case "purged":
+		return sevCritical
+	case "deleted", "deleting", "trashed":
+		return sevWarning
+	}
+	return sevInfo
+}
+
+// severityForLabel maps a producer-supplied label back to its level so an
+// explicit payload severity still gets an ordered severity_level. An unknown
+// label keeps level 0 (sorts below info) — it's an unranked custom value.
+func severityForLabel(label string) severityInfo {
+	switch label {
+	case sevInfo.label:
+		return sevInfo
+	case sevWarning.label:
+		return sevWarning
+	case sevCritical.label:
+		return sevCritical
+	default:
+		return severityInfo{label: label, level: 0}
+	}
+}
+
+// verbOf returns the final ".<verb>" segment of an event type
+// ("paladin.object.deleted" → "deleted"). "" when there's no dot.
+func verbOf(t string) string {
+	if i := strings.LastIndexByte(t, '.'); i >= 0 && i+1 < len(t) {
+		return t[i+1:]
 	}
 	return ""
 }

@@ -192,6 +192,52 @@ func TestKindFromType(t *testing.T) {
 	}
 }
 
+// TestClassifyEvent pins the severity of every real event type — it doubles as
+// the guard that a destructive verb never silently classifies as "info".
+func TestClassifyEvent(t *testing.T) {
+	cases := []struct {
+		name  string
+		evt   Event
+		label string
+		level int64
+	}{
+		// Routine → info.
+		{"object.uploaded", Event{Type: "paladin.object.uploaded"}, "info", 10},
+		{"object.updated", Event{Type: "paladin.object.updated"}, "info", 10},
+		{"object.restored", Event{Type: "paladin.object.restored"}, "info", 10},
+		{"object_key.created", Event{Type: "paladin.object_key.created"}, "info", 10},
+		{"bucket.created", Event{Type: "paladin.bucket.created"}, "info", 10},
+		{"tenant.created", Event{Type: "paladin.tenant.created"}, "info", 10},
+		{"tenant.restored", Event{Type: "paladin.tenant.restored"}, "info", 10},
+		{"capability.charged", Event{Type: "paladin.capability.charged"}, "info", 10},
+		{"quota.set", Event{Type: "paladin.quota.set"}, "info", 10},
+		{"audit default", Event{Type: "paladin.audit.login"}, "info", 10},
+		{"unknown type", Event{Type: "paladin.future.invented"}, "info", 10},
+		// Recoverable-destructive / security → warning (verb heuristic + map).
+		{"object.deleted (no mode)", Event{Type: "paladin.object.deleted"}, "warning", 30},
+		{"object.deleted soft", Event{Type: "paladin.object.deleted", Payload: map[string]any{"mode": "soft"}}, "warning", 30},
+		{"object_key.deleted", Event{Type: "paladin.object_key.deleted"}, "warning", 30},
+		{"bucket.deleting", Event{Type: "paladin.bucket.deleting"}, "warning", 30},
+		{"bucket.deleted", Event{Type: "paladin.bucket.deleted"}, "warning", 30},
+		{"tenant.trashed (soft)", Event{Type: "paladin.tenant.trashed"}, "warning", 30},
+		{"credentials_rotated (map)", Event{Type: "paladin.backend.credentials_rotated"}, "warning", 30},
+		// Irreversible → critical.
+		{"tenant.purged (hard)", Event{Type: "paladin.tenant.purged"}, "critical", 50},
+		{"object.deleted permanent (mode)", Event{Type: "paladin.object.deleted", Payload: map[string]any{"mode": "permanent"}}, "critical", 50},
+		// Explicit payload override wins, and carries its ordered level.
+		{"payload override critical", Event{Type: "paladin.object.uploaded", Payload: map[string]any{"severity": "critical"}}, "critical", 50},
+		{"payload override unknown label → level 0", Event{Type: "paladin.object.uploaded", Payload: map[string]any{"severity": "spicy"}}, "spicy", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := classifyEvent(tc.evt)
+			if got.label != tc.label || got.level != tc.level {
+				t.Errorf("classifyEvent = {%q, %d}, want {%q, %d}", got.label, got.level, tc.label, tc.level)
+			}
+		})
+	}
+}
+
 func TestBucketFromResourceName(t *testing.T) {
 	cases := []struct {
 		name string
@@ -321,6 +367,21 @@ func TestDispatchFilterMatch(t *testing.T) {
 			"C-shape resource_name → bucket_name empty → no match",
 			`bucket_name == "paladin-primary"`,
 			Event{Type: "paladin.object.uploaded", ResourceName: "tenants/t/objectKeys/inv/objects-by-key/k"},
+			0,
+		},
+		{"severity == critical matches a hard tenant delete", `severity == "critical"`, Event{Type: "paladin.tenant.purged"}, 1},
+		{"severity_level threshold admits warning", `severity_level >= 30`, Event{Type: "paladin.object.deleted"}, 1},
+		{"severity_level threshold drops info", `severity_level >= 30`, Event{Type: "paladin.object.uploaded"}, 0},
+		{
+			"object hard delete (mode) escalates to critical",
+			`severity == "critical"`,
+			Event{Type: "paladin.object.deleted", Payload: map[string]any{"mode": "permanent"}},
+			1,
+		},
+		{
+			"object soft delete stays below critical",
+			`severity == "critical"`,
+			Event{Type: "paladin.object.deleted", Payload: map[string]any{"mode": "soft"}},
 			0,
 		},
 		// A pre-validation legacy value (bare event type, not a bool CEL

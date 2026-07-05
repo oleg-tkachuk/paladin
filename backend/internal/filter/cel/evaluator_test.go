@@ -50,7 +50,9 @@ func TestValidateEventEnvelope_PayloadDerivedFields(t *testing.T) {
 		`size_bytes > 1048576`,
 		`etag != ""`,
 		`bucket_name == "paladin-primary"`,
-		`kind == "storage" && severity == "high"`,
+		`kind == "object" && severity == "critical"`,
+		`severity_level >= 30`,
+		`severity_level >= 30 && kind == "tenant"`,
 	}
 	for _, expr := range exprs {
 		if err := Validate(EventEnvelopeSchema, expr); err != nil {
