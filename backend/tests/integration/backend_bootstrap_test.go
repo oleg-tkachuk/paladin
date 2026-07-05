@@ -25,7 +25,6 @@ func TestBootstrapPreservesDisabledState(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := config.Storage{
-		DefaultBackend: "primary",
 		Backends: map[string]config.StorageBackend{
 			"primary": {Kind: "s3-compatible", Endpoint: "http://localhost", Region: "us-east-1"},
 		},

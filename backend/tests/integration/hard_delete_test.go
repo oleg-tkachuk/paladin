@@ -62,6 +62,41 @@ func TestHardDelete_FullSweep(t *testing.T) {
 	}
 }
 
+// TestHardDelete_RLSPoolFindsNothing pins the reaper-RLS invariant behind the
+// whole class of "cross-tenant reaper silently no-ops" bugs: a LifecycleHardDeleter
+// wired to the RLS paladin_app pool with NO tenant GUC (exactly a background reaper's
+// context) sweeps ZERO objects — RLS hides every row — while the same sweep on the
+// BYPASSRLS pool reclaims it. Guards serve_worker's reaper-pool wiring: reapers
+// MUST run on the BYPASSRLS pool, never deps.Pool.
+func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
+	h := pgharness.Setup(t)
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "rls-reaper")
+	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "leaky")
+	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
+
+	sweptCount := func(pool *pgxpool.Pool) int {
+		st := &recordingStorage{}
+		w := &worker.LifecycleHardDeleter{Q: sqlc.New(pool), Storage: st, TTL: time.Hour, BatchSize: 100}
+		w.Sweep(context.Background()) // bare ctx → no paladin.tenant_id GUC
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return len(st.calls)
+	}
+
+	// BUG condition: RLS pool + no GUC → RLS returns zero hard-deletable rows.
+	if n := sweptCount(h.PoolApp); n != 0 {
+		t.Fatalf("RLS pool (no tenant GUC) swept %d objects; want 0 — a reaper on the RLS pool must find nothing", n)
+	}
+	if !mustObjectExists(t, h.PoolMigrate, objectID) {
+		t.Fatal("object hard-deleted via the RLS pool; RLS should have hidden it entirely")
+	}
+	// FIX: BYPASSRLS pool reclaims the same object cross-tenant.
+	if n := sweptCount(h.PoolMigrate); n != 1 {
+		t.Fatalf("BYPASSRLS pool swept %d objects; want 1", n)
+	}
+}
+
 // TestHardDelete_RestoreWinsRace: a row gets Restored mid-sweep
 // (after ListHardDeletable runs but before HardDeleteObjectIfStillDeleted
 // fires). The OCC guard makes the DB DELETE no-op; the row stays

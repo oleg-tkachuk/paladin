@@ -93,6 +93,7 @@ func runIngest(
 			context.Background(),
 			cfg.Datastores.Postgres.MigrateDSN,
 			cfg.Datastores.Postgres.MigratePassword,
+			"paladin-ingest",
 			l,
 		)
 		if err != nil {

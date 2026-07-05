@@ -103,6 +103,7 @@ func runDispatcher(
 			context.Background(),
 			cfg.Datastores.Postgres.MigrateDSN,
 			cfg.Datastores.Postgres.MigratePassword,
+			"paladin-dispatcher",
 			l,
 		)
 		if err != nil {
@@ -248,7 +249,7 @@ func runDispatcher(
 // overrides whatever the DSN string carries — production deploys
 // keep the DDL credential out of the YAML in a Kubernetes Secret,
 // so the DSN never has the password embedded.
-func newDispatcherPool(ctx context.Context, dsn, password string, l *zap.Logger) (*pgxpool.Pool, error) {
+func newDispatcherPool(ctx context.Context, dsn, password, appName string, l *zap.Logger) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse migrate_dsn: %w", err)
@@ -259,13 +260,14 @@ func newDispatcherPool(ctx context.Context, dsn, password string, l *zap.Logger)
 	if cfg.ConnConfig.RuntimeParams == nil {
 		cfg.ConnConfig.RuntimeParams = map[string]string{}
 	}
-	cfg.ConnConfig.RuntimeParams["application_name"] = "paladin-dispatcher"
+	cfg.ConnConfig.RuntimeParams["application_name"] = appName
 	cfg.ConnConfig.RuntimeParams["lock_timeout"] = strconv.Itoa(int((10 * time.Second).Milliseconds()))
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool init: %w", err)
 	}
-	l.Info("dispatcher pool initialized",
+	l.Info("BYPASSRLS pool initialized",
+		zap.String("application_name", appName),
 		zap.String("user", cfg.ConnConfig.User),
 		zap.String("host", cfg.ConnConfig.Host),
 	)

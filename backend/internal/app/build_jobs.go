@@ -9,6 +9,7 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 	"github.com/oleg-tkachuk/paladin/internal/worker/operations"
 )
@@ -23,17 +24,29 @@ import (
 // Empty slice in dev when no housekeeping is configured.
 func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	cfg := deps.Cfg
-	db := deps.DB
 	l := deps.Logger
+
+	// Background jobs are cross-tenant and run with no request principal, so they
+	// must NOT read/write through the RLS-scoped runtime pool (paladin_app): with no
+	// paladin.tenant_id GUC set, RLS on objects / multipart_uploads / event_deliveries
+	// / api_tokens (migration 023) returns zero rows and every reaper silently
+	// no-ops. Bind them to the BYPASSRLS reaper pool (serve_worker opens it from
+	// ReaperDSN / MigrateDSN). deps.ReaperPool is nil only in the un-wired
+	// fallback → degrade to deps.Pool (RLS-gated, as before; serve_worker warns).
+	reaperPool := deps.Pool
+	if deps.ReaperPool != nil {
+		reaperPool = deps.ReaperPool
+	}
+	reaperQ := sqlc.New(reaperPool)
 
 	out := []BackgroundJob{
 		&worker.RefreshTokenPurger{
-			Repo:     adapters.NewRefreshTokenRepo(db.Queries),
+			Repo:     adapters.NewRefreshTokenRepo(reaperQ),
 			Interval: cfg.Worker.Jobs.RefreshTokenReap.Interval,
 			Logger:   l.Named("refresh-purger"),
 		},
 		&worker.ApiKeyExpirer{
-			Repo:     &apiKeyExpirerAdapter{r: adapters.NewApiKeyRepo(db.Queries)},
+			Repo:     &apiKeyExpirerAdapter{r: adapters.NewApiKeyRepo(reaperQ)},
 			Interval: cfg.Worker.Jobs.ApiKeyReap.Interval,
 			Logger:   l.Named("api-key-expirer"),
 		},
@@ -41,8 +54,8 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 
 	if cfg.Worker.Jobs.Lifecycle.Enabled {
 		out = append(out, &worker.LifecycleWorker{
-			Buckets:      adapters.NewLifecycleSource(db.Queries),
-			Objects:      adapters.NewLifecycleObjectIter(db.Queries),
+			Buckets:      adapters.NewLifecycleSource(reaperQ),
+			Objects:      adapters.NewLifecycleObjectIter(reaperQ),
 			SoftDeleter:  deps.SM,
 			CELEvaluator: deps.CELEval,
 			Interval:     cfg.Worker.Jobs.Lifecycle.Interval,
@@ -56,10 +69,10 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// replicator from internal/storage in the slice that lands replication.
 	if cfg.Worker.Jobs.Replication.Enabled {
 		out = append(out, &worker.ReplicationWorker{
-			Buckets:        adapters.NewLifecycleSource(db.Queries),
-			Objects:        adapters.NewLifecycleObjectIter(db.Queries),
+			Buckets:        adapters.NewLifecycleSource(reaperQ),
+			Objects:        adapters.NewLifecycleObjectIter(reaperQ),
 			Replicator:     nil, // dry-run
-			Watermarks:     adapters.NewReplicationWatermarkRepo(db.Queries),
+			Watermarks:     adapters.NewReplicationWatermarkRepo(reaperQ),
 			Interval:       cfg.Worker.Jobs.Replication.Interval,
 			LookbackWindow: cfg.Worker.Jobs.Replication.LookbackWindow,
 			Logger:         l.Named("replication"),
@@ -70,7 +83,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// Reuse the SharedDeps S3 client; same default backend as listeners.
 		out = append(out, worker.NewReconcilerV2(
 			deps.SM,
-			adapters.NewReconcilerProbe(db.Queries, s3adapter.NewObjectRouter(deps.Registry)),
+			adapters.NewReconcilerProbe(reaperQ, s3adapter.NewObjectRouter(deps.Registry)),
 			worker.ReconcilerV2Config{
 				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
 				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,
@@ -85,7 +98,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// own backend rather than the default client (prerequisite for the
 		// per-tenant dedicated-bucket layout, ADR-0011 Phase 1).
 		bucketRec := worker.NewBucketReconciler(
-			adapters.NewBucketRepoV2(db.Queries, deps.Pool),
+			adapters.NewBucketRepoV2(reaperQ, reaperPool),
 			s3adapter.NewProvisionerRouter(deps.Registry),
 			worker.BucketReconcilerConfig{
 				Interval:  cfg.Worker.Jobs.Reconciler.Interval,
@@ -98,8 +111,8 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// the worker pool; the dispatcher pod drains event_deliveries, so no
 		// NATS pool here (enqueue never opens a socket).
 		bucketRec.SetEventProducer(&worker.Dispatcher{
-			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(db.Queries)),
-			Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
+			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),
+			Outbox:      worker.PgxOutboxWriter{Pool: reaperPool},
 			Logger:      l.Named("bucket-reconciler-events"),
 			MaxAttempts: 3,
 		})
@@ -108,7 +121,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 
 	if cfg.Worker.Jobs.Housekeeping.AuditLogTTL > 0 {
 		out = append(out, &worker.AuditLogPurger{
-			Purger:   adapters.NewAuditRepoV2(db.Queries),
+			Purger:   adapters.NewAuditRepoV2(reaperQ),
 			TTL:      cfg.Worker.Jobs.Housekeeping.AuditLogTTL,
 			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 			Logger:   l.Named("audit-purger"),
@@ -116,7 +129,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	}
 	if cfg.Worker.Jobs.Housekeeping.OperationsTTL > 0 {
 		out = append(out, &worker.OperationsReaper{
-			Repo:     adapters.NewOperationRepo(db.Queries, deps.Pool),
+			Repo:     adapters.NewOperationRepo(reaperQ, reaperPool),
 			TTL:      cfg.Worker.Jobs.Housekeeping.OperationsTTL,
 			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 			Logger:   l.Named("operations-reaper"),
@@ -128,7 +141,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// self-expire via expires_at; this reclaims them so the unique index
 	// stays lean.
 	out = append(out, &worker.IdempotencyKeyPurger{
-		Purger:   db.Queries,
+		Purger:   reaperQ,
 		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 		Logger:   l.Named("idempotency-purger"),
 	})
@@ -137,7 +150,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// partitions past retention for the RANGE-partitioned tables (migrations
 	// 041 audit_log monthly, 042 idempotency_keys daily). This is the
 	// DROP-PARTITION payoff; the *Purger DELETEs above stay as the backstop
-	// for the DEFAULT partition. deps.Pool satisfies worker.PartitionDB.
+	// for the DEFAULT partition. reaperPool (BYPASSRLS) satisfies worker.PartitionDB.
 	//
 	// audit_log retention follows AuditLogTTL: a negative Retention disables
 	// dropping (TTL=0 means keep forever) while still keeping partitions
@@ -148,7 +161,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		auditRetention = -1 // keep-forever: create-ahead, never drop
 	}
 	out = append(out, &worker.PartitionMaintainer{
-		DB: deps.Pool,
+		DB: reaperPool,
 		Specs: []worker.PartitionSpec{
 			{Table: "audit_log", Period: worker.PeriodMonthly, Retention: auditRetention, Ahead: 3},
 			{Table: "idempotency_keys", Period: worker.PeriodDaily, Retention: 0, Ahead: 8},
@@ -162,7 +175,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// forever). 0 disables it.
 	if cfg.Worker.Jobs.Housekeeping.MultipartTTL > 0 {
 		out = append(out, &worker.MultipartReaper{
-			Q: db.Queries,
+			Q: reaperQ,
 			// Routed: ListStaleMultipartUploads returns each session's backend,
 			// so the abort targets the object's own backend.
 			Storage:   s3adapter.NewMultipartRouter(deps.Registry),
@@ -181,7 +194,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// backend rather than the default.
 	if cfg.Worker.Jobs.Housekeeping.HardDeleteAfter > 0 {
 		out = append(out, &worker.LifecycleHardDeleter{
-			Q:         db.Queries,
+			Q:         reaperQ,
 			Storage:   s3adapter.NewObjectRouter(deps.Registry),
 			TTL:       cfg.Worker.Jobs.Housekeeping.HardDeleteAfter,
 			Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
@@ -223,7 +236,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// BatchXxx RPC stages a row that never reaches a terminal state.
 	// Disabled by setting interval to 0.
 	if cfg.Worker.Jobs.Operations.Interval > 0 {
-		opRepo := adapters.NewOperationRepo(db.Queries, deps.Pool)
+		opRepo := adapters.NewOperationRepo(reaperQ, reaperPool)
 		executors := map[string]operations.Executor{
 			"BatchDelete": &operations.BatchDeleteExecutor{
 				Objects:     deps.Repos.Object,
@@ -260,7 +273,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// config toggle. Slice 1 is same-backend server-side copy.
 	migCopier := storageCopier{s: deps.Storage.Object}
 	out = append(out, &worker.StorageMigrationWorker{
-		Repo:    adapters.NewStorageMigrationRepo(db.Queries, deps.Pool),
+		Repo:    adapters.NewStorageMigrationRepo(reaperQ, reaperPool),
 		Copier:  migCopier,
 		Deleter: migCopier, // retention-gated source cleanup (slice 2)
 		Header:  migCopier, // physical (HEAD size) verify

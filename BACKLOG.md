@@ -38,24 +38,6 @@ idempotency/dual-write) plus a live-verified deep-dive. Confirmed defects are
 being fixed in batches this session; their entries are deleted as each fix
 merges. Genuinely-deferred hardening/tuning stays below with full DoD.
 
-### RLS-GUC pool coupling — cross-tenant reapers on the RLS pool (CONFIRMED)
-
-- **Status:** In-Progress (batch fix this session).
-- **Reason:** Same class as the dispatcher `Store.Get` bug. The worker's
-  cross-tenant reapers — `LifecycleWorker` (`lifecycle.go:132`),
-  `LifecycleHardDeleter` (`lifecycle_hard_delete.go:96`), `MultipartReaper`
-  (`multipart_reaper.go:56`), `ReplicationWorker` (`replication.go:142`) — run on
-  `deps.Pool` (`paladin_app`, NOBYPASSRLS) with no `paladin.tenant_id` GUC, so `objects`
-  (FORCE RLS, `USING tenant_id = paladin_session_tenant_id()`, migration 023) returns
-  ZERO rows → they silently do nothing in prod. `ReaperDSN` (`config/types.go:203`)
-  was declared as the BYPASSRLS escape but is **never consumed** (dead config).
-  Integration tests mask it (`hard_delete_test.go:13` wires `sqlc.New(PoolMigrate)`
-  — BYPASSRLS). Latent because the lab has no lifecycle rules + `hard_delete_after=0`.
-- **Definition of Done:** wire a BYPASSRLS reaper pool (ReaperDSN → MigrateDSN
-  fallback) for the worker's cross-tenant jobs; RLS-aware regression that runs a
-  reaper against `paladin_app` with no GUC and asserts it still finds rows only via
-  the BYPASSRLS pool. Same fix already applied to the dispatcher.
-
 ### Subscription fan-out single-page cap (CONFIRMED)
 
 - **Status:** In-Progress (batch fix this session).
@@ -129,6 +111,13 @@ merges. Genuinely-deferred hardening/tuning stays below with full DoD.
 - **Definition of Done:** a GUC-less `paladin_app` harness pool + a shared assertion
   that any cross-tenant background component finds rows only on a BYPASSRLS pool;
   retro-fit the dispatcher + reaper suites onto it.
+- **Blocker (found 2026-07-05):** the `tests/integration` suite has drifted and
+  no longer compiles under `-tags integration` — stale `config.Storage.DefaultBackend`
+  (fixed) and a stale 2-value `repo.LookupBucket` call (`backend_enabled_test.go:116`),
+  likely more. The reaper RLS regression (`hard_delete_test.go
+  TestHardDelete_RLSPoolFindsNothing`) lands with the fix but can't run until this
+  un-bit-rot pass; the reaper fix itself is mechanism-verified (empty-GUC `paladin_app`
+  → 0 rows, same policy proven live on `event_subscriptions` this session).
 
 ---
 

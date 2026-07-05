@@ -31,12 +31,18 @@ import (
 // cedar engine's Start() is called here but Stop() — if/when added —
 // must be invoked by the caller during graceful shutdown.
 type SharedDeps struct {
-	Cfg     config.Config
-	Logger  *zap.Logger
-	DB      *postgres.DB
-	Pool    *pgxpool.Pool
-	Repos   wire.Repos
-	Storage wire.Storage
+	Cfg    config.Config
+	Logger *zap.Logger
+	DB     *postgres.DB
+	Pool   *pgxpool.Pool
+	// ReaperPool is an optional BYPASSRLS pool (paladin_migrate) for the worker's
+	// cross-tenant background jobs. Nil on every pod except the worker, which
+	// opens it in serve_worker; nil → BuildBackgroundJobs degrades to Pool. The
+	// reapers MUST NOT use the RLS-scoped Pool: with no per-request tenant GUC,
+	// RLS returns zero rows and every reaper silently no-ops.
+	ReaperPool *pgxpool.Pool
+	Repos      wire.Repos
+	Storage    wire.Storage
 
 	// Engines built once, shared across handlers.
 	PolEngine *policy.Engine

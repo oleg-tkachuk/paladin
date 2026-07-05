@@ -65,6 +65,28 @@ func runWorker(
 	otel observability.ShutdownFunc,
 	deps *app.SharedDeps,
 ) error {
+	// Background reapers are cross-tenant with no request principal, so they
+	// must bypass RLS — a query on the RLS runtime pool without an paladin.tenant_id
+	// GUC returns ZERO rows and every reaper silently no-ops. Open a BYPASSRLS
+	// pool from reaper_dsn (falling back to migrate_dsn, the same BYPASSRLS role
+	// the dispatcher uses) and hand it to the jobs via deps.ReaperPool.
+	reaperDSN := cfg.Datastores.Postgres.ReaperDSN
+	if reaperDSN == "" {
+		reaperDSN = cfg.Datastores.Postgres.MigrateDSN
+	}
+	if reaperDSN != "" {
+		rp, err := newDispatcherPool(context.Background(), reaperDSN,
+			cfg.Datastores.Postgres.MigratePassword, "paladin-worker", l)
+		if err != nil {
+			return fmt.Errorf("open reaper pool: %w", err)
+		}
+		deps.ReaperPool = rp
+	} else {
+		l.Warn("worker: neither reaper_dsn nor migrate_dsn is set; background " +
+			"reapers fall back to the RLS runtime pool and will find ZERO rows " +
+			"(no tenant GUC). Set datastores.postgres.migrate_dsn to a BYPASSRLS role.")
+	}
+
 	jobs := app.BuildBackgroundJobs(deps)
 	if len(jobs) == 0 {
 		l.Warn("no background jobs configured; worker pod will idle")
@@ -156,6 +178,9 @@ func runWorker(
 			_ = opsSrv.Shutdown(shutdownCtx)
 			wg.Wait()
 			deps.StopWatchers() // release the Cedar LISTEN conn before pool close
+			if deps.ReaperPool != nil {
+				deps.ReaperPool.Close() // BYPASSRLS reaper pool opened above
+			}
 			db.Close()
 			// flushOTel uses a fresh, bounded (5s) context — the fx OnStop
 			// context carries the 90s StopTimeout, and a slow/unreachable OTLP
