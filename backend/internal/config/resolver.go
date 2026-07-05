@@ -301,9 +301,18 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 func (c *Config) Obfuscated() Config {
 	cc := *c
 
-	// Redact Postgres
+	// Redact Postgres credentials — every role's password, not just the
+	// runtime one. The resolver populates these from *_password_secret at
+	// boot, so by the time Obfuscated() runs for the "config loaded" log they
+	// hold the real cleartext secret.
 	if cc.Datastores.Postgres.Password != "" {
 		cc.Datastores.Postgres.Password = Redacted
+	}
+	if cc.Datastores.Postgres.MigratePassword != "" {
+		cc.Datastores.Postgres.MigratePassword = Redacted
+	}
+	if cc.Datastores.Postgres.ReaperPassword != "" {
+		cc.Datastores.Postgres.ReaperPassword = Redacted
 	}
 
 	// Redact per-backend creds. Copy the map so we don't mutate the source.
@@ -326,6 +335,11 @@ func (c *Config) Obfuscated() Config {
 
 	if cc.Auth.SigningKey != "" {
 		cc.Auth.SigningKey = Redacted
+	}
+
+	// Bootstrap admin password (resolved from bootstrap.admin.password_secret).
+	if cc.Bootstrap.Admin.Password != "" {
+		cc.Bootstrap.Admin.Password = Redacted
 	}
 
 	return cc
