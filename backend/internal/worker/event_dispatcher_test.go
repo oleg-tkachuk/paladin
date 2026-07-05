@@ -165,6 +165,24 @@ func TestDispatchScopesListToTenant(t *testing.T) {
 	}
 }
 
+func TestBucketFromResourceName(t *testing.T) {
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"storageBackends/primary/buckets/paladin-primary/tenants/t/objectKeys/inv/objects-by-key/k", "paladin-primary"},
+		{"storageBackends/primary/buckets/paladin-primary", "paladin-primary"}, // bucket-lifecycle event
+		{"tenants/t/objectKeys/inv/objects-by-key/k", ""},              // C-shape: no bucket
+		{"tenants/019f26db-31d0-71ec-9b25-4b3f8636791a", ""},           // tenant event
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := bucketFromResourceName(tc.name); got != tc.want {
+			t.Errorf("bucketFromResourceName(%q) = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestDispatchRejectsInvalidTenantID — Dispatch parses the tenant id
 // for the SQL filter; garbage must fail loudly, not fan out to
 // nothing.
@@ -258,6 +276,21 @@ func TestDispatchFilterMatch(t *testing.T) {
 			"payload-derived field absent → false, not eval error",
 			`severity == "high"`,
 			Event{Type: "paladin.object.uploaded"}, // no Payload
+			0,
+		},
+		{
+			"bucket_name derived from A-shape resource_name",
+			`bucket_name == "paladin-primary"`,
+			Event{
+				Type:         "paladin.object.uploaded",
+				ResourceName: "storageBackends/primary/buckets/paladin-primary/tenants/t/objectKeys/inv/objects-by-key/k",
+			},
+			1,
+		},
+		{
+			"C-shape resource_name → bucket_name empty → no match",
+			`bucket_name == "paladin-primary"`,
+			Event{Type: "paladin.object.uploaded", ResourceName: "tenants/t/objectKeys/inv/objects-by-key/k"},
 			0,
 		},
 		// A pre-validation legacy value (bare event type, not a bool CEL

@@ -46,6 +46,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -325,10 +326,39 @@ func eventCELVars(evt Event) map[string]any {
 		"kind":            payloadString(evt.Payload, "kind"),
 		"severity":        payloadString(evt.Payload, "severity"),
 		"object_key":      payloadString(evt.Payload, "object_key"),
-		"bucket_name":     payloadString(evt.Payload, "bucket_name"),
+		"bucket_name":     eventBucketName(evt),
 		"etag":            payloadString(evt.Payload, "etag"),
 		"size_bytes":      payloadInt(evt.Payload, "size_bytes"),
 	}
+}
+
+// eventBucketName resolves the bucket a filter can match on. A producer that
+// stamps "bucket_name" in the payload wins; otherwise it's derived from the
+// A-shape resource name (…/buckets/<name>/…), which object and bucket events
+// carry. Empty when neither is available (a C-shape object event whose
+// binding didn't resolve, or a non-bucket resource) — empty, never wrong.
+func eventBucketName(evt Event) string {
+	if b := payloadString(evt.Payload, "bucket_name"); b != "" {
+		return b
+	}
+	return bucketFromResourceName(evt.ResourceName)
+}
+
+// bucketFromResourceName extracts the bucket segment from an A-shape resource
+// name (storageBackends/{b}/buckets/{bk}/…). The "/buckets/" delimiter sits
+// between the backend id and any user-controlled key, so the first match is
+// always the real bucket. Returns "" when the name carries no bucket segment.
+func bucketFromResourceName(name string) string {
+	const sep = "/buckets/"
+	i := strings.Index(name, sep)
+	if i < 0 {
+		return ""
+	}
+	rest := name[i+len(sep):]
+	if j := strings.IndexByte(rest, '/'); j >= 0 {
+		return rest[:j]
+	}
+	return rest // trailing bucket segment (e.g. a bucket-lifecycle event)
 }
 
 // payloadString reads a string key from an event payload, returning "" when
