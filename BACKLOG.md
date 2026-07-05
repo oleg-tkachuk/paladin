@@ -31,26 +31,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-## Fragility audit (2026-07-05)
-
-A parallel code+architecture sweep (RLS seams, fail-open, cardinality,
-idempotency/dual-write) plus a live-verified deep-dive. Confirmed defects are
-being fixed in batches this session; their entries are deleted as each fix
-merges. Genuinely-deferred hardening/tuning stays below with full DoD.
-
-### Event fan-out backpressure / admission control (DEFERRED)
-
-- **Status:** Deferred (tuning, not a correctness bug).
-- **Reason:** audit_mirror ON = full cluster mutation-rate into `event_deliveries`;
-  the outbox drains ~`BatchSize`(50)/tick with no producer-side admission control.
-  A noisy tenant + broad filter can bloat the outbox and add drain latency.
-- **Definition of Done:** decide a bound (per-tenant outbox depth cap with a
-  reject/shed signal, or a bounded queue) informed by a real fan-out-volume
-  measurement; the "Adoption check" in the producer-wiring entry feeds this.
-- **Blockers:** needs real cardinality data — same gap as the adoption check.
-
----
-
 ## MCP bridge
 
 ### Tool-coverage gaps vs the PALADIN RPC surface

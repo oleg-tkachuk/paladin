@@ -755,6 +755,7 @@ func (r *OutboxRunner) Run(ctx context.Context) error {
 	if poll <= 0 {
 		poll = time.Second
 	}
+	var lastDepthSample time.Time
 	for {
 		processed, err := r.tick(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -762,6 +763,12 @@ func (r *OutboxRunner) Run(ctx context.Context) error {
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		// Periodic backlog measurement — one aggregate query, throttled well
+		// below the tick rate so a hot drain loop doesn't pay for it every pass.
+		if time.Since(lastDepthSample) >= outboxDepthSampleInterval {
+			r.sampleDepth(ctx)
+			lastDepthSample = time.Now()
 		}
 		if processed == 0 {
 			timer := time.NewTimer(poll)
@@ -782,6 +789,54 @@ func (r *OutboxRunner) Run(ctx context.Context) error {
 // the internal tick produces.
 func (r *OutboxRunner) Tick(ctx context.Context) (int, error) {
 	return r.tick(ctx)
+}
+
+// outboxDepthSampleInterval throttles the backlog measurement — the drain loop
+// can tick many times a second, but the depth signal only needs coarse
+// resolution.
+const outboxDepthSampleInterval = 30 * time.Second
+
+// outboxDepthWarnThreshold is the per-tenant pending backlog above which
+// sampleDepth logs a warning. A deep single-tenant backlog means the drain
+// isn't keeping up with that tenant's fan-out (a broad audit-mirror filter, a
+// mutation burst): the operator levers are dispatcher.batch_size /
+// poll_interval, or narrowing the subscription's filter.
+const outboxDepthWarnThreshold = 10_000
+
+// OutboxDepth reports the cluster-wide pending backlog and the deepest single
+// per-tenant backlog. This is the fan-out-volume measurement the admission-
+// control decision was blocked on: shedding at produce time is off the table
+// (it would break the transactional-outbox atomicity, ADR-0003), so the lever
+// is the drain — and this tells operators whether the drain keeps up.
+func (r *OutboxRunner) OutboxDepth(ctx context.Context) (total, maxPerTenant int64, err error) {
+	err = r.Pool.QueryRow(ctx, `
+		WITH per_tenant AS (
+			SELECT count(*) AS c
+			FROM event_deliveries
+			WHERE status = 'pending'
+			GROUP BY tenant_id
+		)
+		SELECT COALESCE(sum(c), 0), COALESCE(max(c), 0) FROM per_tenant`).
+		Scan(&total, &maxPerTenant)
+	return total, maxPerTenant, err
+}
+
+// sampleDepth measures the backlog, publishes the gauges, and warns when a
+// single tenant's backlog is deep enough to signal the drain is falling behind.
+func (r *OutboxRunner) sampleDepth(ctx context.Context) {
+	total, maxPerTenant, err := r.OutboxDepth(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			r.log().Warn("outbox depth sample failed", zap.Error(err))
+		}
+		return
+	}
+	recordOutboxDepth(ctx, total, maxPerTenant)
+	if maxPerTenant >= outboxDepthWarnThreshold {
+		r.log().Warn("outbox backlog high — a tenant's pending fan-out is deep; raise dispatcher.batch_size / lower poll_interval, or narrow that tenant's subscription filters",
+			zap.Int64("pending_total", total),
+			zap.Int64("pending_max_per_tenant", maxPerTenant))
+	}
 }
 
 // tick claims and processes one batch. Returns the number of rows
