@@ -549,10 +549,16 @@ open deliberately — each notes why._
 ### NATS auth: NKey / JWT support — broker-side (gitops)
 
 - **Status:** Partially done — the PALADIN-side (client) half shipped 2026-06-29.
-  The remaining work is **broker-side and lives in gitops** (separate repo),
-  not here — there is nothing left to implement in this repo. The
-  SeaweedFS-publisher leg of the original DoD is now **moot** (Garage — see
-  below).
+  The remaining work is **broker-side** (enable auth on the NATS broker), which
+  lives in gitops (separate repo). Two client-side surfaces publish to that
+  broker unauthenticated today: the PALADIN dispatcher NATS sink **and** the
+  SeaweedFS filer→NATS publisher — both verified live 2026-07-05 (see below).
+- **Correction (2026-07-05):** an earlier revision of this entry claimed the
+  SeaweedFS-publisher leg was *moot because the cluster moved to Garage*. That
+  was wrong. Garage became the `primary` backend, but SeaweedFS is still
+  deployed as **`secondary`** (`seaweedfs-filer.storage:8333`) with its
+  `gocdk_pub_sub` publisher active, and the full SF→NATS→PALADIN ingest pipeline is
+  live. The "Garage" move was a `primary`-pointer change, not an SF teardown.
 - **Shipped (this repo):** the outbound `Dispatcher` → NATS sink supports NKey /
   JWT. `NatsSink.credentials_ref` honours `token:`, `nkey:<seed>` (in-memory
   `nats.Nkey` via `nkeys.FromSeed`) and `jwt:<jwt>+<seed>` (in-memory
@@ -561,40 +567,41 @@ open deliberately — each notes why._
   This is client-side only: it has nothing to authenticate against until the
   broker itself requires auth (the lab `nats` chart runs auth-free, and there is
   no NATS broker chart in this repo).
-- **Remaining — all gitops / out of this repo:**
+- **Still unauthenticated (both live in the lab cluster):**
+  - **SeaweedFS filer publisher** — `notification.toml`
+    `[notification.gocdk_pub_sub] topic_url = "nats://seaweedfs.filer"`, dialing
+    `NATS_SERVER_URL=nats://nats.nats.svc.cluster.local:4222` with no
+    credentials (gocloud.dev's natspubsub driver surfaces no auth fields). Fires
+    on every filer write; PALADIN ingest consumes on subject `seaweedfs.filer`.
+  - **The broker itself** — the gitops `nats` chart runs auth-free, so the
+    dispatcher's shipped NKey/JWT support has nothing to authenticate against.
+- **Definition of Done (remaining — all gitops / out of this repo):**
   - Enable NKey/JWT on the NATS broker deployment (gitops's `nats` chart).
+  - Give the SF filer credentials for the authed broker: `NATS_SERVER_URL`
+    carries them as `nats://<token>@host:port` (simplest flavour) via a
+    Kubernetes `Secret`, since gocloud.dev exposes no structured auth fields.
   - Document the credential-rotation flow. Deferred **with** the broker change,
-    not before it: writing a rotation runbook for a scheme the broker doesn't
-    yet enforce would drift. It belongs beside the gitops overlay that
-    introduces the broker identities it rotates.
-- **~~SeaweedFS-publisher auth~~ — MOOT under Garage.** The original DoD also
-  required auth on the SeaweedFS filer's `gocdk_pub_sub` publisher
-  (`gitops/.../seaweedfs/seaweed.yaml`, `NATS_SERVER_URL` from process env,
-  no auth fields exposed by gocloud.dev's natspubsub driver). The dev cluster
-  switched the `primary` backend off SeaweedFS onto **Garage** (see the
-  ADR-0011 storage-migration note *"dev cluster object store is Garage"* in the
-  Storage section) — Garage runs no SF filer→NATS publisher, so there is no SF
-  publisher to authenticate. The in-repo SF *source* adapter
-  (`internal/eventingest/source_seaweedfs_nats.go`) stays as a dormant,
-  pluggable ingest format; if a SeaweedFS-class backend is ever reused this leg
-  returns with it.
-- **Trigger to do (revised):** a **non-lab deployment of the PALADIN dispatcher
-  NATS sink** — the event fan-out bus (`paladin.bucket.updated` etc.), which runs
-  independent of the object store and is live under Garage. That is what now
-  needs broker-side auth so a stolen Pod identity can't fan out arbitrary
-  events. The former trigger (a non-lab SF NATS publisher) is void while Garage
-  is the store.
+    not before it — a rotation runbook for a scheme the broker doesn't yet
+    enforce would drift.
+- **Trigger to do:** before any non-lab deployment — both the dispatcher sink
+  and the SF publisher fan events into an unauthenticated broker, so a stolen
+  Pod identity could publish arbitrary events. Fine for the lab (NATS has no
+  exposed ingress, cluster-network only).
 
 ### Storage event ingest pipeline — JetStream upgrade + integration coverage
 
 - **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
-- **Dormant under Garage (2026-07-05):** this pipeline is SeaweedFS-specific
-  (SF filer→NATS publisher). The dev cluster switched the `primary` backend off
-  SeaweedFS onto **Garage** (see the *"dev cluster object store is Garage"* note
-  in the Storage section), which emits no filer events, so the SF source is idle
-  in the current cluster. The in-repo SF source adapter stays as a pluggable
-  format for a possible SF-class backend return; the ~~SeaweedFS-publisher auth~~
-  leg of the NATS-auth item above went moot for the same reason.
+- **Live in the lab cluster — re-verified 2026-07-05.** SeaweedFS is deployed as
+  the **`secondary`** backend (Garage is `primary`), and the SF filer→NATS→PALADIN
+  ingest pipeline is running: a live S3 PUT to the SF gateway made the filer
+  publish to NATS `seaweedfs.filer` (broker `in_msgs` incremented), the broker
+  delivered to the `paladin-ingest` subscriber (`out_msgs` incremented), and the
+  ingest handler decoded the gob+protobuf envelope, classified it
+  `paladin.object.uploaded`, parsed the `<bucket>/<tenant_uuid>/<object_key>/<key>`
+  path, and ran the DB lookup (logged `ingest.handler "no matching object for
+  event; skipping"` for a probe with no matching PALADIN row). Transport + decode +
+  parse + lookup all confirmed. (An earlier note calling this "dormant under
+  Garage" was wrong — corrected here and in the NATS-auth item above.)
 - **State as of 2026-05-10:** Full SF → NATS → PALADIN ingest pipeline
   works end-to-end on the local cluster, **including PROMOTE on
   a real PALADIN data-plane upload**. Verified live:
