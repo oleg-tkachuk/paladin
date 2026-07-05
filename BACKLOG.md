@@ -1048,21 +1048,6 @@ open deliberately — each notes why._
     unreachable.
 - **Blockers:** none.
 
-### NATS JetStream as the event bus
-
-- **Status:** Aspirational
-- **Reason:** Events today flow Postgres → outbox poller →
-  per-subscription HTTP sink. Adding NATS JetStream between the
-  outbox writer and the dispatcher gives durable fan-out, replay
-  windows, and downstream consumers (analytics, search index)
-  without further widening the SQL outbox table.
-- **Definition of Done:**
-  - JetStream stream provisioned via the chart.
-  - Outbox writer publishes to JetStream subjects; current HTTP
-    dispatcher becomes one consumer among others.
-  - Replay tooling (rebuild a sink from sequence N).
-- **Blockers:** operator preference (NATS vs Kafka vs Redpanda).
-
 ### SealedSecrets for prod-class clusters
 
 - **Status:** This-repo half SHIPPED (2026-07-01) — only the gitops
