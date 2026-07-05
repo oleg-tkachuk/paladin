@@ -104,7 +104,7 @@ func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max float64,
 // charge runs UsageStore.Charge (the production write path).
 func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount float64, unit, op, actor string, tenant uuid.UUID) {
 	t.Helper()
-	if _, err := f.store.Charge(context.Background(), capID, amount, 0, unit, tenant, op, actor); err != nil {
+	if _, err := f.store.Charge(context.Background(), capID, amount, 0, unit, tenant, op, actor, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 }

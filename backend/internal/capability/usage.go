@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // UsageStore tracks per-capability runtime counters used to enforce
@@ -25,11 +26,11 @@ type UsageStore interface {
 	BumpRequest(ctx context.Context, capID uuid.UUID, maxRequests int64) (newCount int64, err error)
 
 	// Charge adds amount to the per-capability spend counter AND
-	// to the tenant aggregate (when tenantID is non-zero). The two
-	// counters are atomic individually; cross-counter consistency is
-	// best-effort: if the tenant charge fails after the capability
-	// charge succeeded, the capability spend remains incremented and
-	// the caller is expected to refund. Order of checks:
+	// to the tenant aggregate (when tenantID is non-zero), writes the
+	// charges-ledger row, and (via onCharged) enqueues the fan-out
+	// outbox rows — ALL in a single transaction. Either the whole
+	// charge commits or nothing does; there is no cross-counter,
+	// ledger, or event dual-write window (ADR-0003). Order of checks:
 	//
 	//   1. Capability cap (cap.Caveats.MaxBudgetAmount)
 	//   2. Tenant aggregate cap (tenant_budgets.max_budget_usd; the
@@ -38,12 +39,10 @@ type UsageStore interface {
 	//
 	// If either rejects, returns the matching sentinel
 	// (ErrBudgetExceeded for the capability, ErrTenantBudgetExceeded
-	// for the tenant) and does NOT mutate the rejected counter.
-	// On capability-side rejection the tenant counter is not bumped
-	// (the call short-circuits). On tenant-side rejection the
-	// capability counter has already been bumped — a refund is
-	// queued via RefundCapability(amount) so the operator's
-	// audit reflects "attempted but rejected".
+	// for the tenant) and the transaction rolls back, so NEITHER
+	// counter is mutated — the tenant-side rollback compensates the
+	// capability bump implicitly (no explicit refund needed). A retry
+	// after any rejection is safe: nothing was committed.
 	//
 	// unitCode pins the currency for the new row when the row is
 	// missing (capability_usage / tenant_budgets DEFAULT 'USD').
@@ -52,7 +51,9 @@ type UsageStore interface {
 	// tenant budget is a configuration error and should fail at
 	// the handler layer before reaching the store.
 	//
-	// tenantID == uuid.Nil disables the tenant-aggregate path.
+	// tenantID == uuid.Nil disables the tenant-aggregate path (and,
+	// with it, the ledger row and the fan-out — the charges table
+	// requires a tenant_id).
 	//
 	// op + actor are stamped onto the charges-ledger row (migration
 	// 027). Both are best-effort — empty strings are accepted when
@@ -60,6 +61,12 @@ type UsageStore interface {
 	// interceptor layer doesn't know the per-handler op). They are
 	// NOT used for any enforcement decision; they only enrich the
 	// time-series surface that BillingService renders.
+	//
+	// onCharged, when non-nil, runs inside the charge transaction
+	// after the ledger row is written and before commit — the event
+	// producer enqueues its outbox rows on `tx` (dispatcher.DispatchTx)
+	// so the fan-out is atomic with the charge. An error from onCharged
+	// rolls the whole charge back. Pass nil to skip fan-out.
 	Charge(
 		ctx context.Context,
 		capID uuid.UUID,
@@ -68,6 +75,7 @@ type UsageStore interface {
 		tenantID uuid.UUID,
 		op string,
 		actor string,
+		onCharged func(ctx context.Context, tx pgx.Tx) error,
 	) (newSpent float64, err error)
 
 	// RefundCapability subtracts amount from the per-capability

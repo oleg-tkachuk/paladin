@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
@@ -24,6 +25,15 @@ type fakeAuditRepo struct {
 }
 
 func (f *fakeAuditRepo) Insert(context.Context, admindomain.AuditEntry) error { return nil }
+func (f *fakeAuditRepo) InsertWithOutbox(ctx context.Context, e admindomain.AuditEntry, onInserted func(context.Context, pgx.Tx) error) error {
+	if err := f.Insert(ctx, e); err != nil {
+		return err
+	}
+	if onInserted != nil {
+		return onInserted(ctx, nil)
+	}
+	return nil
+}
 func (f *fakeAuditRepo) Get(context.Context, uuid.UUID) (admindomain.AuditEntry, error) {
 	return admindomain.AuditEntry{}, admindomain.ErrNotFound
 }

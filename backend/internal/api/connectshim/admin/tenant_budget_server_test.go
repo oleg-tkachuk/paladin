@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/capability"
@@ -24,7 +25,7 @@ type fakeUsageStore struct {
 func (f *fakeUsageStore) BumpRequest(context.Context, uuid.UUID, int64) (int64, error) {
 	return 0, errors.New("not used")
 }
-func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, string, uuid.UUID, string, string) (float64, error) {
+func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, string, uuid.UUID, string, string, func(context.Context, pgx.Tx) error) (float64, error) {
 	return 0, errors.New("not used")
 }
 func (f *fakeUsageStore) RefundCapability(context.Context, uuid.UUID, float64) error {

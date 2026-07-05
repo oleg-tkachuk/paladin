@@ -6,14 +6,18 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
-// fakeEventDispatcher records every Dispatch call so the cross-cutting
-// emitter tests can assert the produced worker.Event (and the drop guards)
-// without a DB + NATS stack. Shared by charge + audit emitter tests.
+// fakeEventDispatcher records every Dispatch/DispatchTx call so the
+// cross-cutting emitter tests can assert the produced worker.Event (and the
+// drop guards) without a DB + NATS stack. Shared by charge + audit emitter
+// tests. The charge + audit emitters use the transactional DispatchTx path;
+// the fake ignores the tx (nil in these unit tests) and records into the same
+// slice so assertions read uniformly.
 type fakeEventDispatcher struct {
 	calls []dispatchCall
 	err   error
@@ -32,6 +36,14 @@ func (f *fakeEventDispatcher) Dispatch(_ context.Context, tenantID string, evt w
 	return len(f.calls), nil
 }
 
+func (f *fakeEventDispatcher) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) (int, error) {
+	f.calls = append(f.calls, dispatchCall{tenantID: tenantID, evt: evt})
+	if f.err != nil {
+		return 0, f.err
+	}
+	return len(f.calls), nil
+}
+
 // TestChargeEmitter_EmitsChargedEvent pins the producer-wiring contract: a
 // charge fans out exactly one paladin.capability.charged event carrying the
 // tenant, the capabilities/<id> resource name (for subscriber routing), the
@@ -42,7 +54,9 @@ func TestChargeEmitter_EmitsChargedEvent(t *testing.T) {
 
 	tenant := uuid.New().String()
 	cap := uuid.New().String()
-	e.EmitCharged(context.Background(), tenant, cap, "get", "agent-1", 1.5, "USD")
+	if err := e.EmitChargedTx(context.Background(), nil, tenant, cap, "get", "agent-1", 1.5, "USD"); err != nil {
+		t.Fatalf("EmitChargedTx: %v", err)
+	}
 
 	if len(fake.calls) != 1 {
 		t.Fatalf("Dispatch calls = %d, want 1", len(fake.calls))
@@ -86,21 +100,25 @@ func TestChargeEmitter_DropsTenantless(t *testing.T) {
 	for _, tenant := range []string{"", uuid.Nil.String()} {
 		fake := &fakeEventDispatcher{}
 		e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
-		e.EmitCharged(context.Background(), tenant, uuid.New().String(), "get", "a", 1, "USD")
+		if err := e.EmitChargedTx(context.Background(), nil, tenant, uuid.New().String(), "get", "a", 1, "USD"); err != nil {
+			t.Fatalf("tenant %q: EmitChargedTx: %v", tenant, err)
+		}
 		if len(fake.calls) != 0 {
 			t.Errorf("tenant %q: Dispatch calls = %d, want 0 (dropped)", tenant, len(fake.calls))
 		}
 	}
 }
 
-// TestChargeEmitter_SwallowsDispatchError: fan-out is best-effort — a
-// dispatch failure must not panic or propagate (the charge already
-// committed; the caller's request returns success regardless).
-func TestChargeEmitter_SwallowsDispatchError(t *testing.T) {
+// TestChargeEmitter_PropagatesDispatchError: the transactional fan-out is NOT
+// best-effort — a DispatchTx failure must propagate so UsageStore.Charge rolls
+// the whole charge back (no committed-charge-without-event window).
+func TestChargeEmitter_PropagatesDispatchError(t *testing.T) {
 	fake := &fakeEventDispatcher{err: errors.New("outbox down")}
 	e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
-	// Must not panic.
-	e.EmitCharged(context.Background(), uuid.New().String(), uuid.New().String(), "get", "a", 1, "USD")
+	err := e.EmitChargedTx(context.Background(), nil, uuid.New().String(), uuid.New().String(), "get", "a", 1, "USD")
+	if err == nil {
+		t.Fatal("EmitChargedTx returned nil, want the dispatch error to propagate")
+	}
 	if len(fake.calls) != 1 {
 		t.Fatalf("Dispatch should still be attempted once; got %d", len(fake.calls))
 	}

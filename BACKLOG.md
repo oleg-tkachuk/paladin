@@ -38,19 +38,6 @@ idempotency/dual-write) plus a live-verified deep-dive. Confirmed defects are
 being fixed in batches this session; their entries are deleted as each fix
 merges. Genuinely-deferred hardening/tuning stays below with full DoD.
 
-### Charge / audit-mirror dual-write window (CONFIRMED)
-
-- **Status:** In-Progress (batch fix this session — no-compromise transactional
-  outbox).
-- **Reason:** `charge_emitter.go` and `audit_mirror.go` call `Dispatch()`
-  (pool-backed) AFTER the ledger / audit_log row commits — a crash in between
-  loses the event. The charge ledger insert (`usage.go:185`) is itself a separate
-  `pool.Exec`, decoupled from the running-total tx.
-- **Definition of Done:** emit via `DispatchTx` in the SAME tx as the ledger /
-  audit_log write (ADR-0003 transactional outbox, already used by object-promote),
-  so the outbox row is atomic with the source write. Thread the tx through the
-  charge store + audit interceptor. Tests for the atomic path.
-
 ### Event fan-out backpressure / admission control (DEFERRED)
 
 - **Status:** Deferred (tuning, not a correctness bug).
@@ -92,13 +79,11 @@ merges. Genuinely-deferred hardening/tuning stays below with full DoD.
 - **Definition of Done:** a GUC-less `paladin_app` harness pool + a shared assertion
   that any cross-tenant background component finds rows only on a BYPASSRLS pool;
   retro-fit the dispatcher + reaper suites onto it.
-- **Blocker (found 2026-07-05):** the `tests/integration` suite has drifted and
-  no longer compiles under `-tags integration` — stale `config.Storage.DefaultBackend`
-  (fixed) and a stale 2-value `repo.LookupBucket` call (`backend_enabled_test.go:116`),
-  likely more. The reaper RLS regression (`hard_delete_test.go
-  TestHardDelete_RLSPoolFindsNothing`) lands with the fix but can't run until this
-  un-bit-rot pass; the reaper fix itself is mechanism-verified (empty-GUC `paladin_app`
-  → 0 rows, same policy proven live on `event_subscriptions` this session).
+- **Note:** the `tests/integration` compile-drift that previously blocked this
+  (stale `config.Storage.DefaultBackend`, 2-value `repo.LookupBucket`, the
+  `DeleteObject`/`NewHandler` signature churn from ADR-0011) was un-bit-rotted in
+  the transactional-outbox pass — the suite compiles and runs under
+  `-tags integration` again. This item is now purely the harness design work above.
 
 ---
 

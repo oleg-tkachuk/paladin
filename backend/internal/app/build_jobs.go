@@ -121,7 +121,9 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 
 	if cfg.Worker.Jobs.Housekeeping.AuditLogTTL > 0 {
 		out = append(out, &worker.AuditLogPurger{
-			Purger:   adapters.NewAuditRepoV2(reaperQ),
+			// Purger only calls PurgeOlderThan (autocommit) — no
+			// InsertWithOutbox — so no pool is needed here.
+			Purger:   adapters.NewAuditRepoV2(reaperQ, nil),
 			TTL:      cfg.Worker.Jobs.Housekeeping.AuditLogTTL,
 			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 			Logger:   l.Named("audit-purger"),

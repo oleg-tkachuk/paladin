@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
@@ -38,7 +39,7 @@ func (f *fakeUsage) BumpRequest(_ context.Context, id uuid.UUID, max int64) (int
 	return next, nil
 }
 
-func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64, _ string, _ uuid.UUID, _ string, _ string) (float64, error) {
+func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64, _ string, _ uuid.UUID, _ string, _ string, _ func(context.Context, pgx.Tx) error) (float64, error) {
 	next := f.spent[id] + amount
 	if max > 0 && next > max {
 		return 0, capability.ErrBudgetExceeded

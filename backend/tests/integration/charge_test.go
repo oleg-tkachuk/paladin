@@ -40,7 +40,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	capID := uuid.New()
 
 	// First charge: 4. Cap allows 10, tenant allows 5. Both fit.
-	spent, err := store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID, "", "")
+	spent, err := store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID, "", "", nil)
 	if err != nil {
 		t.Fatalf("first charge: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	// Second charge: 4. Cap accepts (8 ≤ 10). Tenant rejects (8 > 5).
 	// Inner store should compensate the per-cap counter.
-	_, err = store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID, "", "")
+	_, err = store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID, "", "", nil)
 	if !errors.Is(err, capability.ErrTenantBudgetExceeded) {
 		t.Fatalf("second charge: want ErrTenantBudgetExceeded, got %v", err)
 	}
@@ -99,7 +99,7 @@ func TestCharge_RefundFloorsAtZero(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
 
-	if _, err := store.Charge(ctx, capID, 1.0, 0, "USD", tenantID, "", ""); err != nil {
+	if _, err := store.Charge(ctx, capID, 1.0, 0, "USD", tenantID, "", "", nil); err != nil {
 		t.Fatalf("seed charge: %v", err)
 	}
 	// Refund 5 — flooring at 0 means the row reads 0 after.
@@ -147,7 +147,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 	capID := uuid.New()
-	if _, err := store.Charge(ctx, capID, 7.0, 0, "USD", tenantID, "", ""); err != nil {
+	if _, err := store.Charge(ctx, capID, 7.0, 0, "USD", tenantID, "", "", nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
@@ -196,7 +196,7 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 		t.Fatalf("seed capability_records: %v", err)
 	}
 
-	if _, err := store.Charge(ctx, capID, 2.5, 10.0, "USD", tenantID, "presign.put", "agent-1"); err != nil {
+	if _, err := store.Charge(ctx, capID, 2.5, 10.0, "USD", tenantID, "presign.put", "agent-1", nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 

@@ -29,7 +29,7 @@ func TestCreateObjectKey_UsesDefaultBinding(t *testing.T) {
 	q := sqlc.New(f.h.PoolMigrate)
 	okRepo := adapters.NewObjectKeyRepo(q, f.h.PoolMigrate)
 	tenantRepo := adapters.NewTenantRepo(q, f.h.PoolMigrate)
-	handler := objectkey.NewHandler(okRepo, allowAll{}, "primary")
+	handler := objectkey.NewHandler(okRepo, allowAll{})
 	server := admin.NewObjectKeyServer(handler, tenantRepo)
 
 	ctx := ctxAdmin(t, tid)

@@ -150,7 +150,7 @@ type recordingStorage struct {
 	calls []recordedDelete
 }
 
-func (s *recordingStorage) DeleteObject(_ context.Context, bucket string, _ uuid.UUID, objectKey, key string) error {
+func (s *recordingStorage) DeleteObject(_ context.Context, _ string, bucket string, _ uuid.UUID, objectKey, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, recordedDelete{bucket: bucket, objectKey: objectKey, key: key})

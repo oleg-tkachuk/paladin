@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
@@ -72,20 +73,26 @@ func marshalAuditPayload(v any) []byte {
 
 // AuditWriter inserts audit log entries. Implementations are typically the
 // Postgres adapter via admindomain.AuditRepository.
+//
+// InsertWithOutbox inserts the entry and, when onInserted is non-nil, runs
+// it inside the SAME transaction before commit — so the audit row and any
+// fan-out outbox rows the mirror enqueues commit atomically (ADR-0003, no
+// dual-write window). onInserted == nil behaves exactly like Insert.
 type AuditWriter interface {
 	Insert(ctx context.Context, e admindomain.AuditEntry) error
+	InsertWithOutbox(ctx context.Context, e admindomain.AuditEntry, onInserted func(ctx context.Context, tx pgx.Tx) error) error
 }
 
 // AuditMirrorEmitter is the optional fan-out seam every Audit row
-// runs through after Insert. nil-safe: when unwired the interceptor
-// behaves exactly like the pre-mirror Audit. Implementations live
-// in the wiring layer (app/audit_mirror.go).
+// runs through in the audit-insert transaction. nil-safe: when unwired
+// the interceptor behaves exactly like the pre-mirror Audit.
+// Implementations live in the wiring layer (app/audit_mirror.go).
 //
-// EmitAudited fires AFTER the row commits; failures here are
-// best-effort + logged on the implementation side. Same trade-off
-// as the audit Insert itself: the request returns success regardless.
+// EmitAuditedTx enqueues the mirror event's outbox rows on `tx` — the
+// audit row's own transaction — so the event is atomic with the row. An
+// error rolls the audit row back with the fan-out.
 type AuditMirrorEmitter interface {
-	EmitAudited(ctx context.Context, entry admindomain.AuditEntry)
+	EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admindomain.AuditEntry) error
 }
 
 // Audit returns a Connect interceptor that records every successful and
@@ -191,16 +198,21 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 	}
 	entry.BeforeJSON = beforeFromContext(ctx)
 	entry.AfterJSON = marshalAuditPayload(req.Any())
-	if err := a.w.Insert(ctx, entry); err != nil {
-		return err
+	// The audit row and its mirror event commit atomically: the mirror
+	// enqueues its outbox rows on the insert's own transaction (ADR-0003).
+	// nil mirror ⇒ nil hook ⇒ InsertWithOutbox degrades to a plain Insert.
+	return a.w.InsertWithOutbox(ctx, entry, a.mirrorHook(entry))
+}
+
+// mirrorHook returns the transactional fan-out closure for entry, or nil
+// when no mirror is wired (so InsertWithOutbox takes the plain-Insert path).
+func (a *auditInterceptor) mirrorHook(entry admindomain.AuditEntry) func(context.Context, pgx.Tx) error {
+	if a.mirror == nil {
+		return nil
 	}
-	// Mirror only when the row landed cleanly — fanning out a
-	// non-committed audit row would diverge from the audit_log
-	// table the dashboard reads.
-	if a.mirror != nil {
-		a.mirror.EmitAudited(ctx, entry)
+	return func(ctx context.Context, tx pgx.Tx) error {
+		return a.mirror.EmitAuditedTx(ctx, tx, entry)
 	}
-	return nil
 }
 
 func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID string, rpcErr error) error {
@@ -218,13 +230,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
 	}
-	if err := a.w.Insert(ctx, entry); err != nil {
-		return err
-	}
-	if a.mirror != nil {
-		a.mirror.EmitAudited(ctx, entry)
-	}
-	return nil
+	return a.w.InsertWithOutbox(ctx, entry, a.mirrorHook(entry))
 }
 
 func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {

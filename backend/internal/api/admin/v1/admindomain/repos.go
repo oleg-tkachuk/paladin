@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 )
@@ -118,6 +119,11 @@ type ListBucketsArgs struct {
 
 type AuditRepository interface {
 	Insert(ctx context.Context, e AuditEntry) error
+	// InsertWithOutbox inserts the entry and, when onInserted is non-nil,
+	// runs it inside the SAME transaction before commit — so the audit row
+	// and any fan-out outbox rows commit atomically (ADR-0003 transactional
+	// outbox). onInserted == nil behaves exactly like Insert.
+	InsertWithOutbox(ctx context.Context, e AuditEntry, onInserted func(ctx context.Context, tx pgx.Tx) error) error
 	Get(ctx context.Context, entryID uuid.UUID) (AuditEntry, error)
 	List(ctx context.Context, args ListAuditArgs) ([]AuditEntry, string, error)
 }

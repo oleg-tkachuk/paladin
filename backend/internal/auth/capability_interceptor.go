@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
@@ -357,10 +358,11 @@ func readLastOp(ctx context.Context) string {
 type chargeAmountKey struct{}
 
 // chargeEventsKey carries an optional ChargeEventEmitter that
-// ChargeCapability fans an `paladin.capability.charged` event through
-// AFTER the running totals commit. nil-safe: when unset (or
-// cfg.Dispatcher.ChargeEventsEnabled = false at boot) the dispatch
-// is a no-op and the charge path stays a single DB write.
+// ChargeCapability fans an `paladin.capability.charged` event through,
+// enqueued on the SAME transaction as the charge so the event is
+// atomic with the spend (ADR-0003 — no dual-write window). nil-safe:
+// when unset (or cfg.Dispatcher.ChargeEventsEnabled = false at boot)
+// the fan-out is skipped and the charge path stays counters + ledger.
 //
 // Pattern parallels chargeKey/chargeAmountKey: interceptor stamps
 // at request time; ChargeCapability reads. Decoupled because charge
@@ -373,8 +375,13 @@ type chargeEventsKey struct{}
 // out per-charge events. Implementations: a thin adapter over
 // *worker.Dispatcher (lives in the wiring layer; can't import worker
 // from auth without a cycle). Nil-safe.
+//
+// EmitChargedTx enqueues the event's outbox rows on `tx` — the same
+// transaction the UsageStore uses for the counters + ledger row — so
+// the fan-out commits atomically with the charge (or rolls back with
+// it). An error propagates up and rolls the charge back.
 type ChargeEventEmitter interface {
-	EmitCharged(ctx context.Context, tenantID, capabilityID, op, actor string, amount float64, unitCode string)
+	EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID, capabilityID, op, actor string, amount float64, unitCode string) error
 }
 
 // WithChargeEventEmitter stamps the optional emitter on ctx. Wiring
@@ -512,21 +519,26 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 	// honest answer.
 	op := readLastOp(ctx)
 	actor := cap.Subject.Subject
-	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor)
+	// Optional transactional fan-out — only wired when the operator
+	// enabled charge events (cfg.Dispatcher.ChargeEventsEnabled) AND
+	// there's a tenant to attribute the event to. onCharged runs
+	// INSIDE the charge transaction (dispatcher.DispatchTx on the same
+	// tx), so the event outbox rows are atomic with the spend — no
+	// dual-write window. nil ⇒ the store commits counters + ledger
+	// with no fan-out.
+	var onCharged func(ctx context.Context, tx pgx.Tx) error
+	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil && tenantID != uuid.Nil {
+		onCharged = func(ctx context.Context, tx pgx.Tx) error {
+			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
+		}
+	}
+	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor, onCharged)
 	if err != nil {
 		if errors.Is(err, capability.ErrBudgetExceeded) ||
 			errors.Is(err, capability.ErrTenantBudgetExceeded) {
 			return connect.NewError(connect.CodeResourceExhausted, err)
 		}
 		return connect.NewError(connect.CodeUnavailable, err)
-	}
-	// Optional fan-out — only fires when the wiring layer attached
-	// an emitter (gated on cfg.Dispatcher.ChargeEventsEnabled).
-	// Best-effort: the charge already committed; the emitter's
-	// implementation logs + swallows on its side, so we don't even
-	// need an error return.
-	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
-		emitter.EmitCharged(ctx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
 	}
 	return nil
 }

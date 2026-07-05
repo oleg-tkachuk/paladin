@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
@@ -22,6 +23,16 @@ func (w *latencyWriter) Insert(_ context.Context, _ admindomain.AuditEntry) erro
 	w.calls++
 	if w.d > 0 {
 		time.Sleep(w.d)
+	}
+	return nil
+}
+
+func (w *latencyWriter) InsertWithOutbox(ctx context.Context, e admindomain.AuditEntry, onInserted func(context.Context, pgx.Tx) error) error {
+	if err := w.Insert(ctx, e); err != nil {
+		return err
+	}
+	if onInserted != nil {
+		return onInserted(ctx, nil)
 	}
 	return nil
 }

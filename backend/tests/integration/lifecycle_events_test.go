@@ -135,7 +135,7 @@ func TestObjectKeyHandler_UpdateDispatches(t *testing.T) {
 
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewObjectKeyRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
-	handler := objectkeypkg.NewHandler(repo, allowAll{}, "primary")
+	handler := objectkeypkg.NewHandler(repo, allowAll{})
 	handler.SetEventProducer(probe.d)
 
 	newName := "Docs Renamed"

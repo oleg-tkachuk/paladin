@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -17,20 +18,37 @@ import (
 
 type AuditRepoV2 struct {
 	q *sqlc.Queries
+	// pool backs InsertWithOutbox's transaction. Optional: nil on the
+	// purger/bootstrap construction sites that only ever call Insert /
+	// PurgeOlderThan (autocommit paths). InsertWithOutbox requires it.
+	pool *pgxpool.Pool
 }
 
-func NewAuditRepoV2(q *sqlc.Queries) *AuditRepoV2 { return &AuditRepoV2{q: q} }
+// NewAuditRepoV2 wires the sqlc query set and (optionally) the pool that
+// InsertWithOutbox opens its transaction on. Pass the pool on the
+// request-serving construction site (the audit interceptor's writer);
+// pool may be nil where only Insert/Get/List/Purge are used.
+func NewAuditRepoV2(q *sqlc.Queries, pool *pgxpool.Pool) *AuditRepoV2 {
+	return &AuditRepoV2{q: q, pool: pool}
+}
 
 var _ admindomain.AuditRepository = (*AuditRepoV2)(nil)
 
 func (r *AuditRepoV2) Insert(ctx context.Context, e admindomain.AuditEntry) error {
+	return r.insertWith(ctx, r.q, e)
+}
+
+// insertWith runs the audit INSERT against an arbitrary query set — the
+// pool-backed r.q for autocommit (Insert) or a tx-bound q.WithTx(tx) for
+// InsertWithOutbox. Fills the EntryID / At defaults in one place.
+func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindomain.AuditEntry) error {
 	if e.EntryID == uuid.Nil {
 		e.EntryID = uuid.Must(uuid.NewV7())
 	}
 	if e.At.IsZero() {
 		e.At = time.Now().UTC()
 	}
-	return r.q.InsertAuditEntry(ctx,
+	return q.InsertAuditEntry(ctx,
 		pgUUID(e.EntryID),
 		pgTS(e.At),
 		e.ActorSubject,
@@ -48,6 +66,47 @@ func (r *AuditRepoV2) Insert(ctx context.Context, e admindomain.AuditEntry) erro
 		// index on the column stays small.
 		pgUUIDOptional(e.CapabilityID),
 	)
+}
+
+// InsertWithOutbox inserts the audit entry and, when onInserted is
+// non-nil, runs it inside the SAME transaction before commit — the
+// event producer enqueues its fan-out outbox rows on `tx`, so the audit
+// row and its mirror event commit atomically (ADR-0003 transactional
+// outbox — no dual-write window). An error from onInserted rolls the
+// audit row back too.
+//
+// onInserted == nil short-circuits to the plain autocommit Insert, so
+// the default (no-mirror) path keeps its single-statement cost and needs
+// no pool. When onInserted is non-nil, pool must be wired.
+func (r *AuditRepoV2) InsertWithOutbox(
+	ctx context.Context,
+	e admindomain.AuditEntry,
+	onInserted func(ctx context.Context, tx pgx.Tx) error,
+) error {
+	if onInserted == nil {
+		return r.Insert(ctx, e)
+	}
+	if r.pool == nil {
+		return errors.New("adapters: AuditRepoV2.InsertWithOutbox requires a pool")
+	}
+	if e.EntryID == uuid.Nil {
+		e.EntryID = uuid.Must(uuid.NewV7())
+	}
+	if e.At.IsZero() {
+		e.At = time.Now().UTC()
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("audit insert begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
+	if err := r.insertWith(ctx, r.q.WithTx(tx), e); err != nil {
+		return err
+	}
+	if err := onInserted(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *AuditRepoV2) Get(ctx context.Context, entryID uuid.UUID) (admindomain.AuditEntry, error) {

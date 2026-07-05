@@ -34,9 +34,11 @@ var bootstrapCmd = &cobra.Command{
 		if err := bootstrappkg.EnsureAdmin(ctx, cfg.Bootstrap.Admin, bootstrappkg.Deps{
 			Tenants: db.Queries,
 			Users:   adapters.NewUserRepo(db.Queries),
-			Audit:   adapters.NewAuditRepoV2(db.Queries),
-			Logger:  l.Named("bootstrap"),
-			Mode:    cfg.Runtime.Mode,
+			// nil pool: bootstrap only Insert-s audit rows (autocommit),
+			// never InsertWithOutbox.
+			Audit:  adapters.NewAuditRepoV2(db.Queries, nil),
+			Logger: l.Named("bootstrap"),
+			Mode:   cfg.Runtime.Mode,
 		}); err != nil {
 			l.Fatal("bootstrap admin failed", zap.Error(err))
 		}
@@ -45,7 +47,7 @@ var bootstrapCmd = &cobra.Command{
 			// nil pool: bootstrap only Upserts backends, never the RunInTx
 			// tx seam, so the pool is never dereferenced on this path.
 			Backends: adapters.NewBackendRepoV2(db.Queries, nil),
-			Audit:    adapters.NewAuditRepoV2(db.Queries),
+			Audit:    adapters.NewAuditRepoV2(db.Queries, nil),
 			Logger:   l.Named("bootstrap"),
 		}); err != nil {
 			l.Fatal("bootstrap backends failed", zap.Error(err))

@@ -7,6 +7,7 @@ package auth
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -37,38 +38,50 @@ func (_m *MockChargeEventEmitter) EXPECT() *MockChargeEventEmitter_Expecter {
 	return &MockChargeEventEmitter_Expecter{mock: &_m.Mock}
 }
 
-// EmitCharged provides a mock function for the type MockChargeEventEmitter
-func (_mock *MockChargeEventEmitter) EmitCharged(ctx context.Context, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string) {
-	_mock.Called(ctx, tenantID, capabilityID, op, actor, amount, unitCode)
-	return
+// EmitChargedTx provides a mock function for the type MockChargeEventEmitter
+func (_mock *MockChargeEventEmitter) EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string) error {
+	ret := _mock.Called(ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EmitChargedTx")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, pgx.Tx, string, string, string, string, float64, string) error); ok {
+		r0 = returnFunc(ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
 }
 
-// MockChargeEventEmitter_EmitCharged_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EmitCharged'
-type MockChargeEventEmitter_EmitCharged_Call struct {
+// MockChargeEventEmitter_EmitChargedTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EmitChargedTx'
+type MockChargeEventEmitter_EmitChargedTx_Call struct {
 	*mock.Call
 }
 
-// EmitCharged is a helper method to define mock.On call
+// EmitChargedTx is a helper method to define mock.On call
 //   - ctx context.Context
+//   - tx pgx.Tx
 //   - tenantID string
 //   - capabilityID string
 //   - op string
 //   - actor string
 //   - amount float64
 //   - unitCode string
-func (_e *MockChargeEventEmitter_Expecter) EmitCharged(ctx interface{}, tenantID interface{}, capabilityID interface{}, op interface{}, actor interface{}, amount interface{}, unitCode interface{}) *MockChargeEventEmitter_EmitCharged_Call {
-	return &MockChargeEventEmitter_EmitCharged_Call{Call: _e.mock.On("EmitCharged", ctx, tenantID, capabilityID, op, actor, amount, unitCode)}
+func (_e *MockChargeEventEmitter_Expecter) EmitChargedTx(ctx interface{}, tx interface{}, tenantID interface{}, capabilityID interface{}, op interface{}, actor interface{}, amount interface{}, unitCode interface{}) *MockChargeEventEmitter_EmitChargedTx_Call {
+	return &MockChargeEventEmitter_EmitChargedTx_Call{Call: _e.mock.On("EmitChargedTx", ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)}
 }
 
-func (_c *MockChargeEventEmitter_EmitCharged_Call) Run(run func(ctx context.Context, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string)) *MockChargeEventEmitter_EmitCharged_Call {
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string)) *MockChargeEventEmitter_EmitChargedTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 pgx.Tx
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(pgx.Tx)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -82,13 +95,17 @@ func (_c *MockChargeEventEmitter_EmitCharged_Call) Run(run func(ctx context.Cont
 		if args[4] != nil {
 			arg4 = args[4].(string)
 		}
-		var arg5 float64
+		var arg5 string
 		if args[5] != nil {
-			arg5 = args[5].(float64)
+			arg5 = args[5].(string)
 		}
-		var arg6 string
+		var arg6 float64
 		if args[6] != nil {
-			arg6 = args[6].(string)
+			arg6 = args[6].(float64)
+		}
+		var arg7 string
+		if args[7] != nil {
+			arg7 = args[7].(string)
 		}
 		run(
 			arg0,
@@ -98,17 +115,18 @@ func (_c *MockChargeEventEmitter_EmitCharged_Call) Run(run func(ctx context.Cont
 			arg4,
 			arg5,
 			arg6,
+			arg7,
 		)
 	})
 	return _c
 }
 
-func (_c *MockChargeEventEmitter_EmitCharged_Call) Return() *MockChargeEventEmitter_EmitCharged_Call {
-	_c.Call.Return()
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Return(err error) *MockChargeEventEmitter_EmitChargedTx_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockChargeEventEmitter_EmitCharged_Call) RunAndReturn(run func(ctx context.Context, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string)) *MockChargeEventEmitter_EmitCharged_Call {
-	_c.Run(run)
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) RunAndReturn(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string) error) *MockChargeEventEmitter_EmitChargedTx_Call {
+	_c.Call.Return(run)
 	return _c
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // MeteringStore is a UsageStore decorator that emits OTel metrics on
@@ -62,8 +63,9 @@ func (s *MeteringStore) Charge(
 	tenantID uuid.UUID,
 	op string,
 	actor string,
+	onCharged func(ctx context.Context, tx pgx.Tx) error,
 ) (float64, error) {
-	spent, err := s.Inner.Charge(ctx, capID, amount, maxBudget, unitCode, tenantID, op, actor)
+	spent, err := s.Inner.Charge(ctx, capID, amount, maxBudget, unitCode, tenantID, op, actor, onCharged)
 	switch {
 	case err == nil:
 		recordChargeAttempt(ctx, tenantID, amount, spent, "allowed")

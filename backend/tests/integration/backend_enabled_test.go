@@ -113,7 +113,7 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "gate-be", "gate-bucket", "docs")
 
 	// Enabled by default → resolution succeeds.
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
 		t.Fatalf("enabled LookupBucket: %v", err)
 	}
 	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); err != nil {
@@ -129,7 +129,7 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 
 	// Both resolver paths now refuse with the sentinel — the gate every
 	// object op funnels through.
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
 		t.Errorf("disabled LookupBucket: err=%v, want ErrBackendDisabled", err)
 	}
 	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
@@ -141,7 +141,7 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 	if err := be.SetEnabled(ctx, "gate-be", true, cur.ResourceVersion); err != nil {
 		t.Fatalf("re-enable: %v", err)
 	}
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
 		t.Errorf("re-enabled LookupBucket: %v", err)
 	}
 }
@@ -219,10 +219,10 @@ func TestBackendMaintenance_AdvisoryNotAGate(t *testing.T) {
 		t.Error("maintenance flag did not persist")
 	}
 	// Advisory: neither reads nor writes are gated by maintenance.
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
 		t.Errorf("read under maintenance should resolve: %v", err)
 	}
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
 		t.Errorf("write under maintenance should resolve (advisory, not a gate): %v", err)
 	}
 }
@@ -241,7 +241,7 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "drain-be", "drain-bucket", "docs")
 
 	// Writable by default: a mutation resolves.
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
 		t.Fatalf("writable LookupBucket(write): %v", err)
 	}
 
@@ -253,14 +253,14 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	}
 
 	// Mutations are refused with the read-only sentinel …
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
 		t.Errorf("drained LookupBucket(write): err=%v, want ErrBackendReadOnly", err)
 	}
 	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
 		t.Errorf("drained LookupBucketMeta(write): err=%v, want ErrBackendReadOnly", err)
 	}
 	// … but reads still resolve — the whole point of a drain.
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
 		t.Errorf("drained LookupBucket(read): err=%v, want success", err)
 	}
 	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); err != nil {
@@ -272,7 +272,7 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	if err := be.SetReadOnly(ctx, "drain-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("undrain: %v", err)
 	}
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
 		t.Errorf("undrained LookupBucket(write): %v", err)
 	}
 }
@@ -344,7 +344,7 @@ func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
 	if err := be.SetEnabled(ctx, "rev-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
 		t.Fatalf("expected disabled refusal, got %v", err)
 	}
 
@@ -353,7 +353,7 @@ func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
 	if err := be.SetEnabled(ctx, "rev-be", true, cur.ResourceVersion); err != nil {
 		t.Fatalf("re-enable: %v", err)
 	}
-	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
 		t.Fatalf("re-enabled resolution: %v", err)
 	}
 

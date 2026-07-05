@@ -37,7 +37,9 @@ func TestAuditMirror_EmitsAuditEvent(t *testing.T) {
 		CapabilityID:  capID,
 		ErrorMessage:  "",
 	}
-	m.EmitAudited(context.Background(), entry)
+	if err := m.EmitAuditedTx(context.Background(), nil, entry); err != nil {
+		t.Fatalf("EmitAuditedTx: %v", err)
+	}
 
 	if len(fake.calls) != 1 {
 		t.Fatalf("Dispatch calls = %d, want 1", len(fake.calls))
@@ -80,14 +82,16 @@ func TestAuditMirror_ErrorStampsWarningSeverity(t *testing.T) {
 	fake := &fakeEventDispatcher{}
 	m := &auditMirror{dispatcher: fake, log: zap.NewNop()}
 	tenant := uuid.New()
-	m.EmitAudited(context.Background(), admindomain.AuditEntry{
+	if err := m.EmitAuditedTx(context.Background(), nil, admindomain.AuditEntry{
 		EntryID:       uuid.New(),
 		At:            time.Now().UTC(),
 		ActorTenantID: tenant,
 		Action:        "/paladin.admin.v1.TenantService/DeleteTenant",
 		ResourceName:  "tenants/" + tenant.String(),
 		ErrorMessage:  "denied by policy",
-	})
+	}); err != nil {
+		t.Fatalf("EmitAuditedTx: %v", err)
+	}
 	if len(fake.calls) != 1 {
 		t.Fatalf("Dispatch calls = %d, want 1", len(fake.calls))
 	}
@@ -101,26 +105,33 @@ func TestAuditMirror_ErrorStampsWarningSeverity(t *testing.T) {
 func TestAuditMirror_DropsTenantless(t *testing.T) {
 	fake := &fakeEventDispatcher{}
 	m := &auditMirror{dispatcher: fake, log: zap.NewNop()}
-	m.EmitAudited(context.Background(), admindomain.AuditEntry{
+	if err := m.EmitAuditedTx(context.Background(), nil, admindomain.AuditEntry{
 		EntryID:       uuid.New(),
 		ActorTenantID: uuid.Nil,
 		Action:        "/paladin.iam.v1.AuthService/Login",
-	})
+	}); err != nil {
+		t.Fatalf("EmitAuditedTx: %v", err)
+	}
 	if len(fake.calls) != 0 {
 		t.Fatalf("tenant-less entry: Dispatch calls = %d, want 0 (dropped)", len(fake.calls))
 	}
 }
 
-// TestAuditMirror_SwallowsDispatchError: best-effort fan-out — a dispatch
-// failure must not panic or flip the already-committed RPC's reply.
-func TestAuditMirror_SwallowsDispatchError(t *testing.T) {
+// TestAuditMirror_PropagatesDispatchError: the transactional fan-out is NOT
+// best-effort — a DispatchTx failure must propagate so the audit row rolls
+// back with it (no audit-row-without-event window). The interceptor keeps the
+// RPC best-effort by swallowing the returned error at its own boundary.
+func TestAuditMirror_PropagatesDispatchError(t *testing.T) {
 	fake := &fakeEventDispatcher{err: errors.New("outbox down")}
 	m := &auditMirror{dispatcher: fake, log: zap.NewNop()}
-	m.EmitAudited(context.Background(), admindomain.AuditEntry{
+	err := m.EmitAuditedTx(context.Background(), nil, admindomain.AuditEntry{
 		EntryID:       uuid.New(),
 		ActorTenantID: uuid.New(),
 		Action:        "/paladin.admin.v1.TenantService/CreateTenant",
 	})
+	if err == nil {
+		t.Fatal("EmitAuditedTx returned nil, want the dispatch error to propagate")
+	}
 	if len(fake.calls) != 1 {
 		t.Fatalf("Dispatch should still be attempted once; got %d", len(fake.calls))
 	}

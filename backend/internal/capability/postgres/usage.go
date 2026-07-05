@@ -87,15 +87,28 @@ func (s *UsageStore) BumpRequest(
 // INSERT) so callers cannot accidentally re-denominate an existing
 // counter.
 //
-// Two-phase charge when tenantID is non-zero:
+// Everything runs in ONE transaction so the charge is atomic
+// (ADR-0003 transactional outbox — no dual-write window):
 //
-//  1. Charge the capability counter (atomic, with cap-side cap).
-//  2. If (1) succeeded and tenantID is non-zero, charge the tenant
-//     aggregate (atomic, with tenant-side cap).
-//  3. If (2) rejects, refund (1) immediately so the capability
-//     counter doesn't drift past the tenant cap. The audit trail
-//     still shows the attempted bump if the operator inspects
-//     telemetry; the row state is consistent.
+//  1. Charge the capability counter (with cap-side cap).
+//  2. When tenantID is non-zero: charge the tenant aggregate (with
+//     tenant-side cap), write the charges-ledger row, and run
+//     onCharged so the event producer enqueues its outbox rows on
+//     the same tx.
+//  3. Commit. Any rejection or error rolls the whole thing back, so
+//     the two counters can never drift and the ledger row + fan-out
+//     rows are never orphaned from the spend they describe.
+//
+// The ledger insert used to be best-effort (committed, then a
+// separate pool.Exec that logged-and-swallowed on failure). That
+// hedge existed to avoid misleading a customer into a double-spend
+// retry after the running totals had already committed. Folding the
+// ledger into the same tx removes the hazard at the root: a failure
+// now rolls the counters back too, so a retry is always safe.
+//
+// Pool nil ⇒ test stub path: no transaction, no ledger, no fan-out —
+// the counters run on the plain query set so in-memory tests still
+// exercise the bookkeeping.
 func (s *UsageStore) Charge(
 	ctx context.Context,
 	capID uuid.UUID,
@@ -104,6 +117,7 @@ func (s *UsageStore) Charge(
 	tenantID uuid.UUID,
 	op string,
 	actor string,
+	onCharged func(ctx context.Context, tx pgx.Tx) error,
 ) (float64, error) {
 	if amount < 0 {
 		return 0, errors.New("capability/postgres: charge amount must be >= 0")
@@ -120,7 +134,22 @@ func (s *UsageStore) Charge(
 	if err != nil {
 		return 0, err
 	}
-	spent, err := s.q.ChargeCapability(
+
+	// Test stub path: no pool ⇒ no transaction. Only the counter
+	// bookkeeping runs (charges-ledger + fan-out both require a real
+	// tx). onCharged is ignored — fakes never wire an emitter.
+	if s.pool == nil {
+		return s.chargeNoTx(ctx, capID, amountNumeric, resolvedUnit, maxBudgetNumeric, tenantID)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("capability/postgres: charge begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
+	qtx := s.q.WithTx(tx)
+
+	spent, err := qtx.ChargeCapability(
 		ctx,
 		pgtype.UUID{Bytes: capID, Valid: true},
 		amountNumeric,
@@ -137,20 +166,96 @@ func (s *UsageStore) Charge(
 	if tenantID == uuid.Nil {
 		// No tenant aggregate path → no ledger row (the charges
 		// table requires a tenant_id; charges without one wouldn't
-		// surface in the per-tenant billing UI anyway).
+		// surface in the per-tenant billing UI anyway) and no
+		// fan-out. Commit the lone capability bump.
+		if err := tx.Commit(ctx); err != nil {
+			return 0, fmt.Errorf("capability/postgres: charge commit: %w", err)
+		}
 		return floatFromNumeric(spent), nil
 	}
 
+	if _, tErr := qtx.ChargeTenantBudget(
+		ctx,
+		pgtype.UUID{Bytes: tenantID, Valid: true},
+		amountNumeric,
+		resolvedUnit,
+	); tErr != nil {
+		// Rollback (deferred) compensates the capability bump — no
+		// explicit refund needed now that both live on one tx.
+		if errors.Is(tErr, pgx.ErrNoRows) {
+			return 0, capability.ErrTenantBudgetExceeded
+		}
+		return 0, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
+	}
+
+	// Ledger row on the same tx — atomic with the counters.
+	ledgerID := uuid.New()
+	if _, lErr := tx.Exec(ctx,
+		`INSERT INTO charges (id, tenant_id, capability_id, amount, unit_code, op, actor_subject)
+		 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7)`,
+		ledgerID, tenantID, capID, amountNumeric, resolvedUnit, op, actor,
+	); lErr != nil {
+		return 0, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
+	}
+
+	// Transactional-outbox fan-out on the same tx (ADR-0003): the
+	// event's outbox rows commit atomically with the charge, so a
+	// crash can never leave the spend recorded without its event.
+	if onCharged != nil {
+		if fErr := onCharged(ctx, tx); fErr != nil {
+			// A fan-out failure rolls the whole charge back (the defer).
+			// That's the correct atomic outcome, but it means a healthy
+			// spend was rejected because the event infra hiccuped — worth
+			// surfacing so operators can correlate a charge-rejection spike
+			// with dispatcher trouble.
+			s.log.Warn("capability/postgres: charge rolled back on fan-out failure",
+				zap.String("capability_id", capID.String()),
+				zap.String("tenant_id", tenantID.String()),
+				zap.Float64("amount", amount),
+				zap.Error(fErr),
+			)
+			return 0, fmt.Errorf("capability/postgres: charge fan-out: %w", fErr)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("capability/postgres: charge commit: %w", err)
+	}
+	return floatFromNumeric(spent), nil
+}
+
+// chargeNoTx is the pool-less test-stub path: counter bookkeeping only,
+// no ledger row and no fan-out (both need a real transaction).
+func (s *UsageStore) chargeNoTx(
+	ctx context.Context,
+	capID uuid.UUID,
+	amountNumeric pgtype.Numeric,
+	resolvedUnit string,
+	maxBudgetNumeric pgtype.Numeric,
+	tenantID uuid.UUID,
+) (float64, error) {
+	spent, err := s.q.ChargeCapability(
+		ctx,
+		pgtype.UUID{Bytes: capID, Valid: true},
+		amountNumeric,
+		resolvedUnit,
+		maxBudgetNumeric,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, capability.ErrBudgetExceeded
+		}
+		return 0, fmt.Errorf("capability/postgres: charge: %w", err)
+	}
+	if tenantID == uuid.Nil {
+		return floatFromNumeric(spent), nil
+	}
 	if _, tErr := s.q.ChargeTenantBudget(
 		ctx,
 		pgtype.UUID{Bytes: tenantID, Valid: true},
 		amountNumeric,
 		resolvedUnit,
 	); tErr != nil {
-		// Compensate the capability spend so the two counters stay
-		// in sync. RefundCapability is itself idempotent (UPDATE
-		// floored at 0); a refund failure is logged but doesn't
-		// override the original tenant-cap rejection.
 		_ = s.q.RefundCapabilityUsage(
 			ctx,
 			pgtype.UUID{Bytes: capID, Valid: true},
@@ -160,44 +265,6 @@ func (s *UsageStore) Charge(
 			return 0, capability.ErrTenantBudgetExceeded
 		}
 		return 0, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
-	}
-
-	// Ledger row — best-effort by design. Both running totals already
-	// committed (capability_usage and tenant_budgets); a ledger-write
-	// failure is LOGGED + swallowed so the customer's charge call
-	// returns success. The running totals are the enforcement surface
-	// — they gate further spending. The ledger is the time-series
-	// surface — it powers /billing dashboards and per-charge audit
-	// trails. A missing ledger row leaves a small gap in the dashboard
-	// but does NOT undo the spend; the alternative (returning the
-	// error to the caller after totals committed) actively misleads:
-	// the customer thinks the charge failed and may retry, double-
-	// spending against the now-bumped running totals.
-	//
-	// Drift recovery is operator-driven: scrape logs for these
-	// warnings, replay missing rows from the running-total deltas.
-	// A reaper that backfills automatically is BACKLOG.
-	//
-	// Pool nil ⇒ test stub path; ledger writer disabled silently
-	// (charge_test fakes don't need to assert ledger state).
-	if s.pool != nil {
-		ledgerID := uuid.New()
-		if _, lErr := s.pool.Exec(ctx,
-			`INSERT INTO charges (id, tenant_id, capability_id, amount, unit_code, op, actor_subject)
-			 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7)`,
-			ledgerID, tenantID, capID, amountNumeric, resolvedUnit, op, actor,
-		); lErr != nil {
-			s.log.Warn("capability/postgres: charge ledger insert failed; running totals already committed",
-				zap.String("capability_id", capID.String()),
-				zap.String("tenant_id", tenantID.String()),
-				zap.Float64("amount", amount),
-				zap.String("unit_code", resolvedUnit),
-				zap.String("op", op),
-				zap.String("actor", actor),
-				zap.Error(lErr),
-			)
-			// fall through — return success below.
-		}
 	}
 	return floatFromNumeric(spent), nil
 }

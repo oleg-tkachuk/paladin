@@ -3,9 +3,9 @@ package app
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -46,22 +46,24 @@ func optionalAuditMirror(enabled bool, d *worker.Dispatcher, l *zap.Logger) midd
 	return newAuditMirror(d, l)
 }
 
-// EmitAudited fans out one paladin.audit.<action> event per AuditEntry
-// row. Best-effort — same semantics as auditInterceptor.write
-// itself: the row already committed; a mirror failure must not
-// flip the RPC reply.
+// EmitAuditedTx fans out one paladin.audit.<action> event per AuditEntry
+// row, enqueued on the audit row's own transaction `tx` so the event is
+// atomic with the row (ADR-0003 — no dual-write window). An error rolls
+// the audit row back with the fan-out; the interceptor keeps the RPC
+// best-effort by swallowing that error at its boundary.
 //
 // The event type is derived from the entry's Action field by
 // trimming the leading service path and lower-casing the method
 // (`/paladin.admin.v1.TenantService/CreateTenant` →
 // `paladin.audit.create_tenant`). Subscribers route on this; handlers
 // that share an Action prefix become a subject family.
-func (m *auditMirror) EmitAudited(ctx context.Context, entry admindomain.AuditEntry) {
+func (m *auditMirror) EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admindomain.AuditEntry) error {
 	if entry.ActorTenantID == uuid.Nil {
 		// No tenant on the entry → no fan-out target. Most often a
 		// pre-auth or platform-level call (Login, refresh, federated
 		// IdP callback). Subscribers haven't asked for these in v1.
-		return
+		// Nothing to enqueue; the audit row commits on its own.
+		return nil
 	}
 	// severity is the one signal a per-type map can't derive for audit events:
 	// significance depends on whether the audited call failed, not on the
@@ -72,7 +74,7 @@ func (m *auditMirror) EmitAudited(ctx context.Context, entry admindomain.AuditEn
 	if entry.ErrorMessage != "" {
 		severity = "warning"
 	}
-	queued, err := m.dispatcher.Dispatch(ctx, entry.ActorTenantID.String(), worker.Event{
+	queued, err := m.dispatcher.DispatchTx(ctx, tx, entry.ActorTenantID.String(), worker.Event{
 		Type:         auditEventType(entry.Action),
 		At:           entry.At,
 		TenantID:     entry.ActorTenantID.String(),
@@ -99,7 +101,7 @@ func (m *auditMirror) EmitAudited(ctx context.Context, entry admindomain.AuditEn
 				zap.Error(err),
 			)
 		}
-		return
+		return err
 	}
 	if m.log != nil {
 		m.log.Debug("audit mirror queued",
@@ -107,7 +109,7 @@ func (m *auditMirror) EmitAudited(ctx context.Context, entry admindomain.AuditEn
 			zap.Int("subscriptions_matched", queued),
 		)
 	}
-	_ = time.Now // keep imports tidy if future expansion uses time directly
+	return nil
 }
 
 // auditEventType derives an event class string from the audit
