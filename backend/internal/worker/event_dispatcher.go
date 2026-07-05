@@ -304,10 +304,11 @@ func (d *Dispatcher) subscriptionMatches(sub admindomain.EventSubscription, evt 
 
 // eventCELVars projects an Event onto the cel.EventEnvelopeSchema variable
 // set. EVERY declared schema var must be present or cel-go errors on an
-// unknown attribute at eval time. The CloudEvents 1.0 envelope fields
-// (source/specversion/time/datacontenttype/subject) aren't populated on the
-// producer-side Event, so they're supplied empty — a filter referencing them
-// evaluates to false rather than erroring.
+// unknown attribute at eval time, so absent values are supplied as their
+// zero value (a filter referencing them evaluates to false/0 rather than
+// erroring). The CloudEvents 1.0 envelope fields aren't populated on the
+// producer-side Event; the payload-derived fields are pulled from evt.Payload
+// by key (object events carry object_key / etag / size_bytes today).
 func eventCELVars(evt Event) map[string]any {
 	return map[string]any{
 		"type":            evt.Type,
@@ -321,6 +322,40 @@ func eventCELVars(evt Event) map[string]any {
 		"time":            "",
 		"datacontenttype": "",
 		"subject":         "",
+		"kind":            payloadString(evt.Payload, "kind"),
+		"severity":        payloadString(evt.Payload, "severity"),
+		"object_key":      payloadString(evt.Payload, "object_key"),
+		"bucket_name":     payloadString(evt.Payload, "bucket_name"),
+		"etag":            payloadString(evt.Payload, "etag"),
+		"size_bytes":      payloadInt(evt.Payload, "size_bytes"),
+	}
+}
+
+// payloadString reads a string key from an event payload, returning "" when
+// absent or not a string — keeps eventCELVars total over the schema without
+// panicking on a producer that shaped the field differently.
+func payloadString(p map[string]any, key string) string {
+	if s, ok := p[key].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// payloadInt reads an integer key from an event payload as int64 (cel's
+// IntType). Producers stamp Go ints directly (in-process, pre-JSON), but a
+// float64 (post-JSON round-trip) is coerced too; anything else → 0.
+func payloadInt(p map[string]any, key string) int64 {
+	switch v := p[key].(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case float64:
+		return int64(v)
+	default:
+		return 0
 	}
 }
 

@@ -41,6 +41,24 @@ func TestValidateEventEnvelope_OK(t *testing.T) {
 	}
 }
 
+func TestValidateEventEnvelope_PayloadDerivedFields(t *testing.T) {
+	// The payload-derived attributes (projected by worker.eventCELVars) must
+	// type-check against the schema so the admin UI's richer-filter hints
+	// compile rather than being rejected as unknown identifiers.
+	exprs := []string{
+		`object_key == "invoices"`,
+		`size_bytes > 1048576`,
+		`etag != ""`,
+		`bucket_name == "paladin-primary"`,
+		`kind == "storage" && severity == "high"`,
+	}
+	for _, expr := range exprs {
+		if err := Validate(EventEnvelopeSchema, expr); err != nil {
+			t.Errorf("Validate(EventEnvelope, %q): %v", expr, err)
+		}
+	}
+}
+
 func TestValidateEventEnvelope_UnknownField(t *testing.T) {
 	err := Validate(EventEnvelopeSchema, `no_such_field == "x"`)
 	if err == nil {

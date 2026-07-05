@@ -242,6 +242,24 @@ func TestDispatchFilterMatch(t *testing.T) {
 			Event{Type: "object.created", ActorSubject: "svc"},
 			1,
 		},
+		{
+			"payload-derived object_key matches",
+			`object_key == "invoices"`,
+			Event{Type: "paladin.object.uploaded", Payload: map[string]any{"object_key": "invoices"}},
+			1,
+		},
+		{
+			"payload-derived size_bytes predicate",
+			`size_bytes > 1000`,
+			Event{Type: "paladin.object.uploaded", Payload: map[string]any{"size_bytes": int64(2048)}},
+			1,
+		},
+		{
+			"payload-derived field absent → false, not eval error",
+			`severity == "high"`,
+			Event{Type: "paladin.object.uploaded"}, // no Payload
+			0,
+		},
 		// A pre-validation legacy value (bare event type, not a bool CEL
 		// expression) can't compile → fail-closed, not fan-out.
 		{"uncompilable filter fails closed", "object.created", Event{Type: "object.created"}, 0},

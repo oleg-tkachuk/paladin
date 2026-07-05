@@ -66,13 +66,13 @@ var BucketSchema = &Schema{
 // datacontenttype / subject when the publisher emits a CE 1.0 envelope
 // (see internal/eventingest/source_cloudevents.go).
 //
-// Only fields actually present at evaluation time are declared. The
-// admin UI references richer attributes (`kind`, `severity`,
-// `size_bytes`, `etag`, `bucket_name`, `object_key`) in placeholder
-// hints — those are aspirational; declaring them here would let users
-// write filters that compile but always evaluate to undefined / false.
-// Add them to the schema only when the dispatcher actually populates
-// them (slice-N follow-up).
+// The payload-derived attributes (kind, severity, object_key, bucket_name,
+// etag, size_bytes) are projected from each event's Payload map by
+// worker.eventCELVars. Absent keys default to the zero value, so a filter
+// referencing a field an event doesn't carry evaluates to false/0 rather
+// than erroring — object events populate object_key / etag / size_bytes
+// today; kind / severity / bucket_name are declared for producers that emit
+// them (a filter on an unpopulated field simply never matches).
 var EventEnvelopeSchema = &Schema{
 	Name: "EventEnvelope",
 	vars: map[string]*cel.Type{
@@ -90,6 +90,14 @@ var EventEnvelopeSchema = &Schema{
 		"time":            cel.StringType, // RFC3339 string per CE spec
 		"datacontenttype": cel.StringType,
 		"subject":         cel.StringType,
+		// Payload-derived attributes (projected by worker.eventCELVars);
+		// absent → zero value.
+		"kind":        cel.StringType,
+		"severity":    cel.StringType,
+		"object_key":  cel.StringType,
+		"bucket_name": cel.StringType,
+		"etag":        cel.StringType,
+		"size_bytes":  cel.IntType,
 	},
 }
 
