@@ -38,16 +38,6 @@ idempotency/dual-write) plus a live-verified deep-dive. Confirmed defects are
 being fixed in batches this session; their entries are deleted as each fix
 merges. Genuinely-deferred hardening/tuning stays below with full DoD.
 
-### Cedar Authorize error swallowed (CONFIRMED)
-
-- **Status:** In-Progress (batch fix this session).
-- **Reason:** `cedar/engine.go:356` `decision, _ := cedar.Authorize(...)` drops
-  the engine error. It fails CLOSED (zero-value = deny) so it's not a bypass, but
-  a policy-engine fault is invisible — looks like "everything denied" with no
-  signal.
-- **Definition of Done:** return `(DecisionDeny, err)` + a metric/log so faults
-  are observable; test the error path.
-
 ### Charge / audit-mirror dual-write window (CONFIRMED)
 
 - **Status:** In-Progress (batch fix this session — no-compromise transactional

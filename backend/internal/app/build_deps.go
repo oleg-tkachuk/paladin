@@ -165,7 +165,8 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 
 	polStore := policy.NewPostgresStore(pool)
 	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL,
-		policy.WithCanonicalObjectKeyEUID(cfg.Cedar.CanonicalObjectKeyEUID))
+		policy.WithCanonicalObjectKeyEUID(cfg.Cedar.CanonicalObjectKeyEUID),
+		policy.WithLogger(l.Named("cedar")))
 	// The engine's LISTEN watcher is a process-lifetime goroutine that holds a
 	// pooled connection until its context is cancelled — so it runs on a
 	// dedicated background context, NOT the construction `ctx` (which may carry

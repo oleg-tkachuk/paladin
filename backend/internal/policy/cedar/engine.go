@@ -16,6 +16,7 @@ import (
 	cedar "github.com/cedar-policy/cedar-go"
 	cedartypes "github.com/cedar-policy/cedar-go/types"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // Decision is the outcome of an authorization check.
@@ -234,6 +235,11 @@ type Engine struct {
 	// hardcodes a `resource == ObjectKey::"…"` literal.
 	canonicalObjectKeyEUID bool
 
+	// log surfaces policy-EVALUATION errors (a policy that fails to evaluate is
+	// SKIPPED by cedar — a skipped forbid could otherwise flip a deny to an
+	// allow). Nil-safe: NewEngine defaults it to a no-op.
+	log *zap.Logger
+
 	m metrics
 }
 
@@ -244,6 +250,16 @@ type EngineOption func(*Engine)
 // UID (ADR-0010, Phase 1). Off by default.
 func WithCanonicalObjectKeyEUID(on bool) EngineOption {
 	return func(e *Engine) { e.canonicalObjectKeyEUID = on }
+}
+
+// WithLogger wires a logger so policy-evaluation errors are surfaced (not just
+// counted). Default: no-op.
+func WithLogger(l *zap.Logger) EngineOption {
+	return func(e *Engine) {
+		if l != nil {
+			e.log = l
+		}
+	}
 }
 
 type cacheKey struct {
@@ -271,7 +287,7 @@ func NewEngine(store Store, ttl time.Duration, opts ...EngineOption) *Engine {
 	if ttl == 0 {
 		ttl = 30 * time.Second
 	}
-	e := &Engine{store: store, ttl: ttl}
+	e := &Engine{store: store, ttl: ttl, log: zap.NewNop()}
 	for _, o := range opts {
 		o(e)
 	}
@@ -353,7 +369,22 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 		Context:   buildContext(rc),
 	}
 
-	decision, _ := cedar.Authorize(set, entities, req)
+	decision, diag := cedar.Authorize(set, entities, req)
+	if len(diag.Errors) > 0 {
+		// A policy that errors at evaluation is SKIPPED by cedar — including,
+		// possibly, a `forbid` that should have matched, which would flip a
+		// deny into an accidental ALLOW. Never let an eval error become an
+		// allow: fail closed, count it, and log which policies faulted so the
+		// broken policy gets fixed rather than silently mis-authorising.
+		e.m.evalErrs.Add(1)
+		e.log.Warn("cedar: policy evaluation errors; denying (fail-closed)",
+			zap.String("action", action),
+			zap.Int("error_count", len(diag.Errors)),
+			zap.String("errors", fmt.Sprint(diag.Errors)),
+		)
+		e.m.authzDenied.Add(1)
+		return DecisionDeny, nil
+	}
 	if bool(decision) {
 		e.m.authzAllowed.Add(1)
 		return DecisionAllow, nil
@@ -929,8 +960,12 @@ type metrics struct {
 	authzAllowed atomic.Uint64
 	authzDenied  atomic.Uint64
 	compileErrs  atomic.Uint64
-	cacheHits    atomic.Uint64
-	cacheMisses  atomic.Uint64
+	// evalErrs counts authorize calls where ≥1 policy failed to evaluate (and
+	// was skipped) — the request was denied fail-closed. Non-zero means a
+	// policy is broken and some requests are being denied for the wrong reason.
+	evalErrs    atomic.Uint64
+	cacheHits   atomic.Uint64
+	cacheMisses atomic.Uint64
 	// watchResyncs counts full-cache flushes triggered by a Store reconnect
 	// (ResyncAll). Non-zero means the LISTEN link dropped at least once and
 	// the cache was conservatively cleared.
@@ -946,3 +981,8 @@ func (e *Engine) Stats() (allowed, denied, compileErrs, hits, misses uint64) {
 // compiled cache in response to a Store reconnect. Exposed separately from
 // Stats so a health probe can alarm on a flapping LISTEN link.
 func (e *Engine) WatchResyncs() uint64 { return e.m.watchResyncs.Load() }
+
+// EvalErrs returns how many authorize calls hit a policy-evaluation error and
+// were denied fail-closed. Exposed separately from Stats so a health probe can
+// alarm on a broken policy. Non-zero = a policy is faulting at eval time.
+func (e *Engine) EvalErrs() uint64 { return e.m.evalErrs.Load() }
