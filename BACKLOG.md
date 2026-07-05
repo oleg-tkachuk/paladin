@@ -992,9 +992,17 @@ open deliberately — each notes why._
   console shows a `StorageMigrationCard` (state badge + copied/total progress +
   source→target + error) that polls `GetTenantStorageMigration` while a
   migration is in flight and renders nothing when the tenant never migrated.
+- **Shipped — Phase 3 cross-backend integration test:** a two-backend
+  integration test (`internal/integration/storage_migration_crossbackend_test.go`)
+  stands up two physically distinct MinIO backends and drives the router's
+  cross-backend copy (`ObjectRouter.CopyObject` → `GetStream` piped into the
+  destination's multipart writer) for a 12 MiB object, asserting size + a
+  byte-for-byte sha256 match on the destination and that the source is retained.
+  This closes the "cross-backend proven end-to-end" gap the unit tests couldn't.
 - **Definition of Done (remaining — Phase 3 hardening):**
-  - Live cross-backend run (needs a second working backend) + two-backend
-    integration test of the full migration.
+  - Live cross-backend run on the dev cluster (infra-dependent — needs the
+    `secondary`/SeaweedFS backend back online; the integration test above is the
+    code-side proof).
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
   derived bucket name for cross-account global uniqueness; bucket tagging
