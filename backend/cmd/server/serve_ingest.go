@@ -6,6 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
@@ -298,8 +303,10 @@ func buildIngestDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, er
 		return buildNATSDriver(cfg, l)
 	case "rabbitmq":
 		return buildRabbitMQDriver(cfg, l)
+	case "sqs":
+		return buildSQSDriver(cfg, l)
 	default:
-		return nil, fmt.Errorf("ingest: unknown driver %q (expected webhook | nats | rabbitmq)", cfg.Driver)
+		return nil, fmt.Errorf("ingest: unknown driver %q (expected webhook | nats | rabbitmq | sqs)", cfg.Driver)
 	}
 }
 
@@ -346,6 +353,63 @@ func buildRabbitMQDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, 
 		SourceAdapt:   src,
 		Logger:        l.Named("ingest.rabbitmq"),
 	}, nil
+}
+
+// buildSQSDriver wires the AWS SQS poller. The queue (with its S3 notification
+// + optional redrive policy) is declared out-of-band; this driver only
+// receives + deletes. source_format defaults to "s3" — the format S3 emits.
+func buildSQSDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, error) {
+	sc := cfg.SQS
+	if sc.QueueURL == "" {
+		return nil, fmt.Errorf("ingest: sqs.queue_url required when driver=sqs")
+	}
+	if sc.Region == "" {
+		return nil, fmt.Errorf("ingest: sqs.region required when driver=sqs")
+	}
+	format := sc.SourceFormat
+	if format == "" {
+		format = "s3"
+	}
+	src, err := pickSource(format)
+	if err != nil {
+		return nil, err
+	}
+	client, err := newSQSReceiveClient(context.Background(), sc)
+	if err != nil {
+		return nil, fmt.Errorf("ingest: build sqs client: %w", err)
+	}
+	return &eventingest.SQSDriver{
+		Client:            client,
+		QueueURL:          sc.QueueURL,
+		MaxMessages:       sc.MaxMessages,
+		WaitTimeSeconds:   sc.WaitTimeSeconds,
+		VisibilityTimeout: sc.VisibilityTimeout,
+		UnwrapSNS:         sc.UnwrapSNS,
+		SourceAdapt:       src,
+		Logger:            l.Named("ingest.sqs"),
+	}, nil
+}
+
+// newSQSReceiveClient resolves AWS config (credential chain + region),
+// optionally assuming a cross-account role and/or pointing at a custom
+// endpoint (LocalStack / tests), and returns a live SQS client.
+func newSQSReceiveClient(ctx context.Context, sc config.IngestSQS) (eventingest.SQSReceiver, error) {
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(sc.Region))
+	if err != nil {
+		return nil, fmt.Errorf("load aws config: %w", err)
+	}
+	if sc.RoleArn != "" {
+		stsClient := sts.NewFromConfig(awsCfg)
+		awsCfg.Credentials = aws.NewCredentialsCache(
+			stscreds.NewAssumeRoleProvider(stsClient, sc.RoleArn))
+	}
+	var sqsOpts []func(*sqs.Options)
+	if sc.Endpoint != "" {
+		sqsOpts = append(sqsOpts, func(o *sqs.Options) {
+			o.BaseEndpoint = aws.String(sc.Endpoint)
+		})
+	}
+	return sqs.NewFromConfig(awsCfg, sqsOpts...), nil
 }
 
 // pickSource resolves a source-format string to the matching adapter.

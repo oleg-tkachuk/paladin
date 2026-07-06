@@ -687,10 +687,12 @@ open deliberately — each notes why._
     rejected** — it emits no notifications (Get/PutBucketNotification
     Configuration are 501; no non-S3 event mechanism), so
     `pickSource` errors with a directive pointing at the Reconciler.
-    A native **SQS driver** (AWS S3 → SQS, polled) is the one
-    remaining transport gap — the `s3` source parses the same JSON
-    regardless of transport. All documented in
-    [`docs/storage-ingest.md`](docs/storage-ingest.md).
+    The native **SQS driver** (AWS S3 → SQS, long-polled) landed too
+    (`driver_sqs.go`, `driver=sqs`): delete-on-success/ignore,
+    leave-on-transient-error (→ redrive-policy DLQ), drop-poison on
+    unrecognised, optional SNS unwrap, IRSA/AssumeRole/endpoint config;
+    covered by `driver_sqs_test.go` + `build_sqs_driver_test.go`. All
+    documented in [`docs/storage-ingest.md`](docs/storage-ingest.md).
   - ~~`buckets/` prefix observation — document the wire-format contract.~~
     **DONE (2026-06-29):** [`docs/storage-ingest.md`](docs/storage-ingest.md)
     documents the SF→NATS path contract (`<tenant>/<object_key>/<key>`), why

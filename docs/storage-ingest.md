@@ -41,12 +41,15 @@ Driver (transport)          Source (format)
 
 ### Transport × source — what actually pairs
 
-| source_format | webhook | nats | rabbitmq | Emitted by |
-|---|:---:|:---:|:---:|---|
-| `seaweedfs` | ✅ `/webhook/seaweedfs` | — | — | SeaweedFS `[notification.webhook]` |
-| `seaweedfs_nats` | — | ✅ | — | SeaweedFS `[notification.gocdk_pub_sub]` → NATS |
-| `s3` / `minio` | ✅ `/webhook/s3`, `/webhook/minio` | ✅ | ✅ | AWS S3, MinIO, any S3-compatible |
-| `cloudevents` | ✅ `/webhook/cloudevents` | ✅ | ✅ | anything speaking CE 1.0 |
+| source_format | webhook | nats | rabbitmq | sqs | Emitted by |
+|---|:---:|:---:|:---:|:---:|---|
+| `seaweedfs` | ✅ `/webhook/seaweedfs` | — | — | — | SeaweedFS `[notification.webhook]` |
+| `seaweedfs_nats` | — | ✅ | — | — | SeaweedFS `[notification.gocdk_pub_sub]` → NATS |
+| `s3` / `minio` | ✅ `/webhook/s3`, `/webhook/minio` | ✅ | ✅ | ✅ | AWS S3, MinIO, any S3-compatible |
+| `cloudevents` | ✅ `/webhook/cloudevents` | ✅ | ✅ | — | anything speaking CE 1.0 |
+
+The **`sqs`** driver is the native AWS S3 path: S3 → SQS delivers the same S3
+event JSON, the driver long-polls and deletes on success (details below).
 
 The `s3` and `minio` formats are byte-identical (MinIO mirrors the AWS
 shape); they differ only in the `Source` label stamped on emitted events
@@ -202,13 +205,45 @@ mc event add myminio/paladin-primary arn:minio:sqs::paladin:webhook \
 Or route MinIO → NATS/AMQP and set `ingest.driver=nats`/`rabbitmq` with
 `source_format: minio`.
 
-### AWS S3 config recipe
+### AWS S3 config recipe — the `sqs` driver (native path)
 
-AWS can't POST a webhook directly; bridge via **SNS → HTTPS subscription**
-pointed at `/webhook/s3`, or S3 → **EventBridge** → API destination. A native
-**SQS driver** (S3 → SQS, polled by ingest) is the cleaner long-term path and
-is tracked in BACKLOG — the `s3` source parses the same JSON regardless of
-which transport delivers it.
+The cleanest AWS path is **S3 → SQS**, polled by the `sqs` ingest driver.
+Point the bucket's notification at an SQS queue, then:
+
+```yaml
+ingest:
+  driver: sqs
+  sqs:
+    queue_url: https://sqs.us-east-1.amazonaws.com/<acct>/paladin-ingest
+    region: us-east-1
+    # role_arn: arn:aws:iam::<acct>:role/paladin-ingest   # cross-account (optional)
+    # endpoint: http://localstack:4566                # LocalStack / tests
+    max_messages: 10          # 1..10 per ReceiveMessage
+    wait_time_seconds: 20     # long-poll — cuts empty receives + API cost
+    visibility_timeout: 60    # hide in-flight; redrive policy DLQs after maxReceiveCount
+    unwrap_sns: false         # true when the topology is S3 → SNS → SQS
+    source_format: s3         # default
+```
+
+Credentials come from the ambient AWS chain (**IRSA** on EKS, env, or instance
+profile); `role_arn` `sts:AssumeRole`s for a queue in another account.
+
+**Queue lifecycle = the ack channel** (`SQSDriver`, `driver_sqs.go`):
+
+| Outcome | Action |
+|---|---|
+| parse OK + deliver OK | `DeleteMessage` (ack) |
+| `ErrIgnoredEvent` (not our bucket / uninteresting op) | `DeleteMessage` (ack) |
+| `ErrUnrecognisedEvent` (`s3:TestEvent`, SNS control, garbage) | `DeleteMessage` (drop poison) |
+| deliver error (transient — DB down) | **leave it** → reappears after `visibility_timeout`; the queue's **redrive policy** dead-letters after `maxReceiveCount` |
+
+Set `unwrap_sns: true` for **S3 → SNS → SQS** fan-out (the driver unwraps the
+SNS `Notification` envelope to reach the S3 JSON in `.Message`). For a direct
+S3 → SQS subscription leave it false.
+
+Alternatives without the SQS driver: **SNS → HTTPS subscription** pointed at
+`/webhook/s3`, or S3 → **EventBridge** → API destination — the `s3` source
+parses the same JSON regardless of transport.
 
 ---
 

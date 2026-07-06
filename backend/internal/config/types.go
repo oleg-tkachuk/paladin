@@ -1048,7 +1048,7 @@ type Ingest struct {
 	Enabled bool `yaml:"enabled" json:"enabled"`
 
 	// Driver selects which transport adapter starts: "webhook" |
-	// "nats" | "rabbitmq". Required when Enabled.
+	// "nats" | "rabbitmq" | "sqs". Required when Enabled.
 	Driver string `yaml:"driver" json:"driver"`
 
 	// Webhook configures the HTTP receiver. Honoured only when
@@ -1062,6 +1062,12 @@ type Ingest struct {
 	// RabbitMQ configures the AMQP consumer. Honoured only when
 	// Driver=="rabbitmq".
 	RabbitMQ IngestRabbitMQ `yaml:"rabbitmq" json:"rabbitmq"`
+
+	// SQS configures the AWS SQS poller. Honoured only when Driver=="sqs".
+	// The canonical AWS S3 → SQS path: S3 bucket notifications land in the
+	// queue, this driver long-polls and deletes on success. Pair with
+	// source_format "s3".
+	SQS IngestSQS `yaml:"sqs" json:"sqs"`
 
 	// DedupTTL controls how long ingested_events rows are retained.
 	// Must exceed the longest broker re-delivery window we expect.
@@ -1179,5 +1185,48 @@ type IngestRabbitMQ struct {
 
 	// SourceFormat tells the worker which adapter to use:
 	// "seaweedfs" | "minio" | "cloudevents". Required.
+	SourceFormat string `yaml:"source_format" json:"source_format"`
+}
+
+// IngestSQS is the AWS SQS poller config (the native AWS S3 → SQS path).
+type IngestSQS struct {
+	// QueueURL is the full SQS queue URL
+	// (https://sqs.<region>.amazonaws.com/<acct>/<queue>). Required.
+	QueueURL string `yaml:"queue_url" json:"queue_url"`
+
+	// Region is the AWS region the queue lives in. Required.
+	Region string `yaml:"region" json:"region"`
+
+	// RoleArn, when set, is sts:AssumeRole'd off the ambient credential chain
+	// (IRSA / env / instance profile) before polling — for a queue in another
+	// account. Empty = ambient credentials.
+	RoleArn string `yaml:"role_arn" json:"role_arn"`
+
+	// Endpoint overrides the SQS endpoint (LocalStack / an S3-compatible
+	// SQS shim / tests). Empty = real AWS.
+	Endpoint string `yaml:"endpoint" json:"endpoint"`
+
+	// MaxMessages caps messages returned per ReceiveMessage (1..10).
+	// Default 10.
+	MaxMessages int32 `yaml:"max_messages" json:"max_messages"`
+
+	// WaitTimeSeconds is the long-poll wait (0..20). Default 20 — long
+	// polling cuts empty receives and API cost. 0 = short poll.
+	WaitTimeSeconds int32 `yaml:"wait_time_seconds" json:"wait_time_seconds"`
+
+	// VisibilityTimeout (seconds) hides an in-flight message from other
+	// receivers while we process it. 0 = use the queue's configured default.
+	// On a delivery error we leave the message; it reappears after this
+	// window and the queue's redrive policy dead-letters it after
+	// maxReceiveCount.
+	VisibilityTimeout int32 `yaml:"visibility_timeout" json:"visibility_timeout"`
+
+	// UnwrapSNS unwraps an SNS `Notification` envelope to reach the S3 event
+	// JSON inside `.Message`. Set when the topology is S3 → SNS → SQS (SNS
+	// fan-out); leave false for a direct S3 → SQS subscription.
+	UnwrapSNS bool `yaml:"unwrap_sns" json:"unwrap_sns"`
+
+	// SourceFormat tells the worker which adapter to use — almost always
+	// "s3". Empty defaults to "s3".
 	SourceFormat string `yaml:"source_format" json:"source_format"`
 }
