@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
+  ArrowDownTrayIcon,
   ArrowPathIcon,
   ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
@@ -13,6 +14,8 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 import { useAuditStream } from "@/hooks/useAuditStream";
+import { AuditEntryDetailDialog } from "./AuditEntryDetailDialog";
+import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +85,10 @@ export default function AuditPage() {
   // each push triggers a trailing-debounced refresh() so a burst of audit
   // rows costs one ListAuditLog, and the full entry (incl. before/after)
   // flows through the same RPC path as a manual refresh.
+  // Row-click detail (GetAuditLogEntry by id) + header-triggered export.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+
   const [live, setLive] = useState(true);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onStreamEvent = useCallback(() => {
@@ -153,6 +160,14 @@ export default function AuditPage() {
                 className={cn("size-4", loading && "animate-spin")}
               />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExportOpen(true)}
+            >
+              <ArrowDownTrayIcon className="size-4" />
+              Export
             </Button>
           </>
         }
@@ -226,7 +241,18 @@ export default function AuditPage() {
                 return (
                   <TableRow
                     key={e.entryId}
-                    className={cn(hasError && "bg-destructive/5")}
+                    className={cn(
+                      "cursor-pointer hover:bg-muted/40",
+                      hasError && "bg-destructive/5",
+                    )}
+                    onClick={() => setDetailId(e.entryId)}
+                    tabIndex={0}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") {
+                        ev.preventDefault();
+                        setDetailId(e.entryId);
+                      }
+                    }}
                   >
                     <TableCell
                       className={cn(T.codeSmall, "text-muted-foreground")}
@@ -313,6 +339,7 @@ export default function AuditPage() {
                               "text-primary hover:underline",
                             )}
                             title={e.capabilityId}
+                            onClick={(ev) => ev.stopPropagation()}
                           >
                             {e.capabilityId.slice(0, 8)}…
                           </Link>
@@ -351,6 +378,14 @@ export default function AuditPage() {
           </Button>
         </div>
       )}
+
+      <AuditEntryDetailDialog
+        entryId={detailId}
+        onOpenChange={(o) => {
+          if (!o) setDetailId(null);
+        }}
+      />
+      <ExportAuditLogDialog open={exportOpen} onOpenChange={setExportOpen} />
     </div>
   );
 }
