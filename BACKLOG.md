@@ -660,30 +660,19 @@ open deliberately — each notes why._
     6. Row state flips PENDING → AVAILABLE.
   Ingest log line proves it: `"promote outcome … changed=true"`.
 - **What's left (low priority, not blocking):**
-  - **JetStream upgrade** — current binding is core pubsub
-    (`jetstream: false`). Fine for the lab (missed events on
-    a restart are caught by the data-plane Reconciler); prod
-    deployments that need at-least-once should flip
-    `jetstream: true` and pre-provision the stream
-    out-of-band. Wiring already supports it (`runJetStream`
-    branch in `driver_nats.go`); just needs broker-side
-    setup + an overlay flag.
-    - ~~Integration coverage of the `runJetStream` branch~~
-      **DONE (2026-07-06):** `driver_nats_jetstream_test.go`
-      boots an in-process nats-server with JetStream, provisions
-      the `seaweedfs_filer` stream, and asserts the durable-
-      consumer semantics the prod path relies on: deliver+ack,
-      NAK→redelivery, ignored-event→ack, and the `Nats-Msg-Id`
-      header override. What remains is purely deploy-side (the
-      broker Job + overlay flag below).
-    - **Broker-side stream + overlay flag (gitops)** — a Job
-      that pre-creates the `seaweedfs_filer` JetStream stream on
-      subject `seaweedfs.filer` (mirror `base/nats/nats/
-      paladin-events-stream.yaml`), then flip the ingest source's
-      `jetstream: true` in the overlay. Must land stream-first:
-      `jetstream.New` + `CreateOrUpdateConsumer` error if the
-      stream is absent, so flipping the flag before the Job runs
-      crashloops `serve ingest`.
+  - ~~**JetStream upgrade** — flip ingest from core pubsub
+    (at-most-once) to a durable consumer (at-least-once).~~
+    **DONE (2026-07-06):** `runJetStream` in `driver_nats.go` now
+    has integration coverage (`driver_nats_jetstream_test.go`:
+    deliver+ack, NAK→redelivery, ignored→ack, `Nats-Msg-Id`
+    override), and the lab is live in JetStream mode. gitops:
+    `base/nats/nats/seaweedfs-filer-stream.yaml` provisions the
+    `seaweedfs_filer` stream (512MB; PALADIN_EVENTS capped 5GB→3GiB so
+    the two share the 5Gi file store — a single stream reserving
+    the whole budget fails 10047), and the ingest overlay sets
+    `jetstream: true` + `durable_name: paladin-ingest-sf`. Verified:
+    consumer bound, a live filer event delivered + acked (stream
+    seq 1, 0 redelivered). Landed stream-first to avoid crashloop.
   - **MinIO source** — if storage backend ever flips to MinIO,
     MinIO has cleaner native webhook + AMQP + Kafka bucket-
     notifications. An additional source adapter (mirror of
