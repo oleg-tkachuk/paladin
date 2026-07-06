@@ -11,7 +11,8 @@
 //   3. Policy        — bucket-level Cedar overlay.
 //   4. Replication   — cross-region / cross-backend mirror config.
 //   5. Versioning    — object-versioning toggle + retention.
-//   6. Object Keys   — ObjectKeys routed to this bucket.
+//   6. Object Lock   — WORM default-retention (governance/compliance).
+//   7. Object Keys   — ObjectKeys routed to this bucket.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -30,6 +31,7 @@ const TABS: TabSpec[] = [
   { slug: "policy", label: "Policy" },
   { slug: "replication", label: "Replication" },
   { slug: "versioning", label: "Versioning" },
+  { slug: "object-lock", label: "Object Lock" },
   { slug: "object-keys", label: "Object Keys" },
 ];
 
