@@ -7,7 +7,7 @@
 // and files. This is the "physical layout" half of the IA — the
 // tenant-first half is at /tenants/[id]/.../objects.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useBackends } from "@/hooks/useBackends";
 import { useBuckets } from "@/hooks/useBuckets";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
+import { BackendActions } from "./BackendActions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -125,6 +126,9 @@ export default function StorageBackendDetailPage() {
             {backend.credentialsSecretRef && (
               <Row k="secret" v={backend.credentialsSecretRef} mono truncate />
             )}
+            <div className="border-t border-border pt-3">
+              <BackendActions backend={backend} />
+            </div>
           </CardContent>
         </Card>
       ) : (
