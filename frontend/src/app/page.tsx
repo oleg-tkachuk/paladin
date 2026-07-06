@@ -21,6 +21,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
+import { DispatcherStatsCard } from "@/components/DispatcherStatsCard";
 import {
   Card,
   CardContent,
@@ -370,6 +371,9 @@ export default function DashboardPage() {
 
       {/* ─── Dashboard widgets (recent activity, failed ops, budgets) */}
       <DashboardWidgets />
+
+      {/* ─── Event dispatcher backlog (SystemService.GetDispatcherStats) */}
+      <DispatcherStatsCard />
 
       {/* ─── Status strip ─────────────────────────────────────────── */}
       <Card>
