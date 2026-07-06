@@ -20,6 +20,18 @@
    spec: **3 instances, `minSyncReplicas: 1`, `maxSyncReplicas: 1`**
    (sync quorum), a PDB with `minAvailable: 2`, and zone spread.
 
+   **Implemented (2026-07-06):** gitops
+   `overlays/do/paladin-postgresql-ha/` carries exactly this spec (3 instances,
+   1-replica sync quorum, `enablePDB` for the CNPG-managed ~`minAvailable: 2`,
+   zone-key anti-affinity, prod resources/storage). The DO overlay repoints
+   the `paladin-postgresql` Application at it; the local overlay stays on the
+   single-instance base — HA is **prod-only** so orbstack/minikube keep
+   `instances: 1`. The 1-replica sync quorum is the no-data-loss-on-failover
+   guarantee: a commit is not acked until the WAL is flushed on the primary
+   *and* a standby, so a primary/node kill loses nothing acknowledged
+   (durability prioritised over availability — writes block, never silently
+   drop, if no sync standby is reachable).
+
 2. **App-side TLS is verify-full in prod** (this *is* in the PALADIN chart).
    The chart defaults to `sslmode=require` (encrypt only); the prod
    overlay upgrades to `verify-full` to authenticate the server cert,
