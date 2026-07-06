@@ -39,14 +39,13 @@ func TestPickSource(t *testing.T) {
 		}
 	})
 
-	t.Run("garage is rejected with a directive error", func(t *testing.T) {
+	t.Run("garage is rejected as not supported", func(t *testing.T) {
 		_, err := pickSource("garage")
 		if err == nil {
 			t.Fatal("garage should be rejected — it emits no notifications")
 		}
-		// The message must point the operator at the real fix.
-		if !strings.Contains(err.Error(), "Reconciler") {
-			t.Errorf("garage error should mention the Reconciler, got: %v", err)
+		if !strings.Contains(err.Error(), "not supported") {
+			t.Errorf("garage error should say 'not supported', got: %v", err)
 		}
 	})
 

@@ -394,15 +394,11 @@ func pickSource(format string) (eventingest.Source, error) {
 	case "garage":
 		// Garage has NO event-notification capability: Get/PutBucket
 		// NotificationConfiguration are 501 Not Implemented and it exposes
-		// no non-S3 event/webhook mechanism either. Direct-to-Garage writes
-		// are caught by the data-plane Reconciler, not this plane. Fail
-		// loudly rather than silently subscribing to a source that will
-		// never publish. See docs/storage-ingest.md.
+		// no non-S3 event/webhook mechanism either. Fail loudly rather than
+		// silently subscribing to a source that will never publish. The
+		// Reconciler covers direct-to-Garage writes; see docs/storage-ingest.md.
 		return nil, fmt.Errorf(
-			"ingest: source_format %q is not supported — Garage emits no bucket "+
-				"notifications; rely on the data-plane Reconciler, or front Garage "+
-				"with an S3-notification-capable layer (e.g. SeaweedFS) and use its "+
-				"source_format", format)
+			"ingest: source_format %q is not supported (Garage emits no notifications)", format)
 	case "":
 		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | seaweedfs_nats | s3 | minio | cloudevents)")
 	default:
