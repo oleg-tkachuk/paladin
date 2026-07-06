@@ -37,7 +37,7 @@ import (
 //
 //   tenants/<tenant_uuid>/objectKeys/<ok>/objects-by-key/<key>
 //
-// (the PALADIN canonical form, what SeaweedFSSource / MinIOSource emit)
+// (the PALADIN canonical form, what SeaweedFSSource / S3EventSource emit)
 // or as a plain `<tenant_uuid>/<object_key>/<key>` triple. The
 // parser tries the structured form first, falls back to the bare
 // triple. Empty `subject` → ErrIgnoredEvent.

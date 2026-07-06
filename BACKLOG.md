@@ -673,11 +673,24 @@ open deliberately — each notes why._
     `jetstream: true` + `durable_name: paladin-ingest-sf`. Verified:
     consumer bound, a live filer event delivered + acked (stream
     seq 1, 0 redelivered). Landed stream-first to avoid crashloop.
-  - **MinIO source** — if storage backend ever flips to MinIO,
-    MinIO has cleaner native webhook + AMQP + Kafka bucket-
-    notifications. An additional source adapter (mirror of
-    SF's) plus a `[bucket][notify]` config block on the MinIO
-    side, and the same `ingest.driver=nats` wiring works.
+  - ~~**MinIO / S3 source** — decode S3-compatible bucket
+    notifications.~~ **DONE (2026-07-06):** generalised the MinIO
+    adapter into the canonical `S3EventSource` (`source_s3.go`) —
+    parses the AWS S3 event-notification JSON emitted by AWS S3,
+    MinIO, and any S3-compatible store; proper `url.QueryUnescape`
+    key decoding (AWS-literal-slash + MinIO-`%2F` + `+`→space).
+    `source_format` `s3` and `minio` both resolve to it (distinct
+    labels); `/webhook/s3` + `/webhook/minio` routes. Covered by
+    `source_s3_test.go` (13 cases: AWS+MinIO shapes, event
+    variants, url-decode, bucket filter, non-PALADIN key, id
+    stability) + `pick_source_test.go`. **Garage is explicitly
+    rejected** — it emits no notifications (Get/PutBucketNotification
+    Configuration are 501; no non-S3 event mechanism), so
+    `pickSource` errors with a directive pointing at the Reconciler.
+    A native **SQS driver** (AWS S3 → SQS, polled) is the one
+    remaining transport gap — the `s3` source parses the same JSON
+    regardless of transport. All documented in
+    [`docs/storage-ingest.md`](docs/storage-ingest.md).
   - ~~`buckets/` prefix observation — document the wire-format contract.~~
     **DONE (2026-06-29):** [`docs/storage-ingest.md`](docs/storage-ingest.md)
     documents the SF→NATS path contract (`<tenant>/<object_key>/<key>`), why

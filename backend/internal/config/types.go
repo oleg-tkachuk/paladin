@@ -1131,7 +1131,10 @@ type IngestNATS struct {
 	DurableName string `yaml:"durable_name" json:"durable_name"`
 
 	// SourceFormat tells the worker which adapter to use:
-	// "seaweedfs" | "seaweedfs_nats" | "minio" | "cloudevents". Required.
+	// "seaweedfs" | "seaweedfs_nats" | "s3" | "minio" | "cloudevents".
+	// Required. (Garage is deliberately NOT a valid value — it emits no
+	// notifications; the factory returns a descriptive error. See
+	// docs/storage-ingest.md.)
 	//
 	// `seaweedfs` is for SF's `[notification.webhook]` driver — JSON
 	// payload posted over HTTP. NOT compatible with this NATS driver,
@@ -1143,6 +1146,11 @@ type IngestNATS struct {
 	// envelope wrapping a proto-marshalled `filer_pb.EventNotification`.
 	// This is what the in-cluster setup uses; see
 	// gitops/.../seaweedfs/notification-config.yaml.
+	//
+	// `s3` / `minio` both parse the AWS S3 event-notification JSON
+	// envelope (MinIO mirrors the AWS shape); they differ only in the
+	// source label stamped on emitted events. Works with the nats,
+	// rabbitmq, or webhook driver depending on where the store delivers.
 	SourceFormat string `yaml:"source_format" json:"source_format"`
 
 	// Auth — token / nkey / TLS. NATS-go has many auth flavours;

@@ -381,12 +381,30 @@ func pickSource(format string) (eventingest.Source, error) {
 			BucketName: "paladin-primary",
 			URI:        "seaweedfs-nats://primary",
 		}, nil
+	case "s3":
+		// Generic AWS-S3 event-notification JSON — AWS S3, or any
+		// S3-compatible store that emits bucket notifications.
+		return &eventingest.S3EventSource{URI: "s3://primary", Label: "s3"}, nil
 	case "minio":
-		return &eventingest.MinIOSource{URI: "minio://primary"}, nil
+		// MinIO speaks the same S3 event format; distinct label so
+		// metrics/logs attribute it to MinIO.
+		return &eventingest.S3EventSource{URI: "minio://primary", Label: "minio"}, nil
 	case "cloudevents":
 		return &eventingest.CloudEventsSource{URI: "cloudevents://primary"}, nil
+	case "garage":
+		// Garage has NO event-notification capability: Get/PutBucket
+		// NotificationConfiguration are 501 Not Implemented and it exposes
+		// no non-S3 event/webhook mechanism either. Direct-to-Garage writes
+		// are caught by the data-plane Reconciler, not this plane. Fail
+		// loudly rather than silently subscribing to a source that will
+		// never publish. See docs/storage-ingest.md.
+		return nil, fmt.Errorf(
+			"ingest: source_format %q is not supported — Garage emits no bucket "+
+				"notifications; rely on the data-plane Reconciler, or front Garage "+
+				"with an S3-notification-capable layer (e.g. SeaweedFS) and use its "+
+				"source_format", format)
 	case "":
-		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | seaweedfs_nats | minio | cloudevents)")
+		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | seaweedfs_nats | s3 | minio | cloudevents)")
 	default:
 		return nil, fmt.Errorf("ingest: unknown source_format %q", format)
 	}
@@ -419,13 +437,21 @@ func buildWebhookDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, e
 		URI:        "seaweedfs://primary",
 	}
 
-	// MinIO bucket-notifications POST to /webhook/minio with the
-	// AWS S3 event-notification JSON envelope. BucketName is empty
-	// so the adapter accepts every bucket; a multi-bucket deploy
-	// can split into per-route adapters later.
-	sources["/webhook/minio"] = &eventingest.MinIOSource{
+	// S3 bucket-notifications POST the AWS S3 event-notification JSON
+	// envelope. `/webhook/s3` is the vendor-neutral route (AWS S3 via
+	// SNS→HTTPS, or any S3-compatible store); `/webhook/minio` is the same
+	// parser with a MinIO label, kept for operators who already point MinIO
+	// at it. BucketName empty → accept every bucket (a multi-bucket deploy
+	// can split into per-route adapters later).
+	sources["/webhook/s3"] = &eventingest.S3EventSource{
+		BucketName: "",
+		URI:        "s3://primary",
+		Label:      "s3",
+	}
+	sources["/webhook/minio"] = &eventingest.S3EventSource{
 		BucketName: "",
 		URI:        "minio://primary",
+		Label:      "minio",
 	}
 
 	// Vendor-neutral CloudEvents 1.0 endpoint. Any publisher that

@@ -1,70 +1,266 @@
-# Storage event ingest — wire-format contract
+# Storage event ingest — sources, wire formats & config
 
 The ingest plane (`internal/eventingest`) lets objects written **directly to
 the storage bucket** — bypassing PALADIN's data-plane RPCs — still get promoted to
 `AVAILABLE`. A storage backend fires a notification when a key lands; the
-ingest pod consumes it, parses the path into `(tenant_id, object_key, key)`,
-and runs the same PROMOTE the data plane would have.
+ingest pod (`serve ingest`) consumes it, normalises it to a CloudEvents 1.0
+envelope, parses the object path into `(tenant_id, object_key, key)`, and runs
+the same PROMOTE the data plane would have.
 
-This doc pins the **path wire-format** the parser depends on, because it is an
-*observed* contract with the storage backend, not one PALADIN controls. A backend
-upgrade that changes the path shape will silently stop promotions if it drifts
-from what's documented here.
+This is a safety net for the "someone wrote straight to S3" case (a legacy
+pipeline, `mc cp`, another service). Without it PALADIN's DB would never learn the
+object exists. The data-plane **Reconciler** is the second safety net — it
+re-promotes `PENDING` rows on a schedule regardless of events — so a missed or
+absent notification degrades *latency*, not correctness.
 
-## SeaweedFS → NATS
+---
 
-Source adapter: `source_seaweedfs_nats.go` (decodes the gob+protobuf filer
-envelope) → `parseSeaweedFSPath` (`source_seaweedfs.go`).
+## Architecture — ports & adapters
 
-### Expected path, after normalisation
+Two orthogonal seams. Pick one **driver** (transport) and one **source**
+(wire format); they compose.
+
+```
+Driver (transport)          Source (format)
+  ─ webhook   (HTTP)          ─ seaweedfs        (SF webhook JSON)
+  ─ nats      (JetStream)     ─ seaweedfs_nats   (SF gob+protobuf)
+  ─ rabbitmq  (AMQP)          ─ s3 / minio       (AWS S3 event JSON)
+        \                     ─ cloudevents      (CE 1.0 passthrough)
+         ─→ Worker.Dispatch ←─
+                 │
+                 ▼
+        dedup (ingested_events) → Handler → PromoteToAvailable
+```
+
+- **Driver** — where events arrive. Config: `ingest.driver` = `nats` |
+  `webhook` | `rabbitmq`. See `IngestNATS` / `IngestWebhook` /
+  `IngestRabbitMQ` in `internal/config/types.go`.
+- **Source** — how to decode the bytes. Config: `ingest.nats.source_format`
+  (or the webhook route). Selected by `pickSource` in
+  `cmd/server/serve_ingest.go`.
+
+### Transport × source — what actually pairs
+
+| source_format | webhook | nats | rabbitmq | Emitted by |
+|---|:---:|:---:|:---:|---|
+| `seaweedfs` | ✅ `/webhook/seaweedfs` | — | — | SeaweedFS `[notification.webhook]` |
+| `seaweedfs_nats` | — | ✅ | — | SeaweedFS `[notification.gocdk_pub_sub]` → NATS |
+| `s3` / `minio` | ✅ `/webhook/s3`, `/webhook/minio` | ✅ | ✅ | AWS S3, MinIO, any S3-compatible |
+| `cloudevents` | ✅ `/webhook/cloudevents` | ✅ | ✅ | anything speaking CE 1.0 |
+
+The `s3` and `minio` formats are byte-identical (MinIO mirrors the AWS
+shape); they differ only in the `Source` label stamped on emitted events
+(`s3://…` vs `minio://…`) for metrics/audit attribution.
+
+---
+
+## The canonical CloudEvent + the path contract
+
+Every source normalises to `eventingest.CloudEvent` (`cloudevent.go`):
+
+| field | meaning |
+|---|---|
+| `Type` | `paladin.object.uploaded` \| `paladin.object.deleted` |
+| `Source` | e.g. `s3://primary`, `seaweedfs-nats://primary` |
+| `ID` | **load-bearing for dedup** — stable across replays of the same physical event |
+| `Subject` | `tenants/<t>/objectKeys/<ok>/objects-by-key/<key>` |
+| `SubjectFields` | parsed `(TenantID, ObjectKey, Key, Etag, SizeBytes, Sequencer)` |
+
+The **object path** the parser depends on is an *observed* contract with the
+backend, not one PALADIN controls — a backend upgrade that changes the shape
+silently stops promotions. After per-source normalisation the key is always:
 
 ```
 <tenant_uuid>/<object_key>/<key...>
 ```
 
-- `tenant_uuid` — the owning tenant (UUID).
+- `tenant_uuid` — owning tenant (UUID). All three segments must be non-empty.
 - `object_key` — the PALADIN object-key namespace.
-- `key` — the object key; **may contain `/`** (parsed with `SplitN(..., 3)`
+- `key` — the object key; **may contain `/`** (parsed with `SplitN(…, 3)`
   so the remainder is kept whole).
+
+A path that doesn't match (a non-PALADIN object dropped in the same bucket) is
+**ignored** — logged, no dedup row, no error — so junk never fills the dedup
+table.
+
+---
+
+## Per-backend matrix
+
+| Backend | Emits notifications? | Wire format | Transport(s) | source_format | Live in lab? |
+|---|:---:|---|---|---|:---:|
+| **SeaweedFS** | ✅ | gob+protobuf `filer_pb.EventNotification` **or** webhook JSON | NATS (gocdk_pubsub) / HTTP webhook | `seaweedfs_nats` / `seaweedfs` | ✅ (`seaweedfs_nats`, JetStream) |
+| **MinIO** | ✅ (native bucket notifications) | AWS S3 event JSON (`Records[]`) | webhook / AMQP / Kafka | `s3` / `minio` | — (not deployed) |
+| **AWS S3** | ✅ (→ SQS/SNS/EventBridge/Lambda) | AWS S3 event JSON (`Records[]`) | SNS→HTTPS webhook / (SQS driver: BACKLOG) | `s3` | — (not deployed) |
+| **Garage** | ❌ **none** | — | — | *(rejected — see below)* | — |
+
+---
+
+## SeaweedFS
+
+Two publishers; **not interchangeable** — the wrong `source_format` yields
+`ErrUnrecognisedEvent` on every message.
+
+### `seaweedfs_nats` — gocdk_pubsub over NATS (what the lab runs)
+
+Source: `source_seaweedfs_nats.go` decodes the gob envelope wrapping a
+proto-marshalled `filer_pb.EventNotification`, then `parseSeaweedFSPath`
+(`source_seaweedfs.go`) parses the path.
+
+gitops config (`deploy/manifests/storage/seaweedfs/notification-config.yaml`):
+
+```toml
+[notification.gocdk_pub_sub]
+enabled  = true
+topic_url = "nats://seaweedfs.filer"   # publishes onto subject seaweedfs.filer
+```
+
+PALADIN overlay (`ingest.nats`): `subject: seaweedfs.filer`,
+`source_format: seaweedfs_nats`, `jetstream: true`,
+`durable_name: paladin-ingest-sf`.
+
+### `seaweedfs` — webhook JSON
+
+Source: `source_seaweedfs.go`. Fields: `key`, `event_type`
+(`create`/`update` → uploaded, `delete` → deleted), `timestamp_ns`, optional
+`etag`/`size`/`sequencer`. Point SF's `[notification.webhook]` at
+`https://…/webhook/seaweedfs`. No broker id → the adapter hashes
+`(key, event_type, timestamp_ns)` for dedup.
 
 ### The `buckets/` prefix — why it's stripped
 
-Two publishers exist, and they disagree on the leading path:
+Two publishers disagree on the leading path:
 
 | Publisher | Emitted path |
-|-----------|--------------|
-| SF S3-gateway **webhook** notifications | `<bucket>/<tenant>/<object_key>/<key>` |
-| **gocdk_pubsub-over-NATS** (the path PALADIN runs today) | `buckets/<bucket>/<tenant>/<object_key>/<key>` |
+|---|---|
+| SF S3-gateway **webhook** | `<bucket>/<tenant>/<object_key>/<key>` |
+| **gocdk_pubsub-over-NATS** (lab) | `buckets/<bucket>/<tenant>/<object_key>/<key>` |
 
 The NATS path observes the **full filer namespace**, where the S3 gateway
 materialises bucket-rooted objects under `/buckets/<bucket>/…`. So
 `parseSeaweedFSPath` strips a leading `buckets/` *before* the bucket-prefix
-check, making both shapes parse identically. The configured bucket
-(`ingest.nats` / source config) is then stripped too; a path missing the
-bucket prefix is treated as **ignored** (wrong source / misconfig), not an
-error.
+check, making both shapes parse identically. A path missing the configured
+bucket prefix is **ignored** (wrong source / misconfig), not an error.
 
 > ⚠️ **Drift risk.** The `buckets/` strip was inferred from observed live
-> paths on the current SeaweedFS version. If a future SF release drops the
-> prefix, or a different storage backend is wired to the same `ingest.driver`,
-> the prefix logic must be re-checked — a wrong strip yields a non-matching
-> bucket prefix and the event is silently ignored (no promote, no error). The
-> data-plane Reconciler is the safety net (it re-promotes PENDING rows on its
-> own schedule), so drift degrades latency, not correctness.
+> paths on the current SeaweedFS version. A future SF release that drops the
+> prefix silently ignores events (no promote, no error). The Reconciler is the
+> safety net — drift degrades latency, not correctness.
 
-## Delivery semantics
+---
 
-The NATS binding is **core pub/sub** (`jetstream: false`) today: at-most-once.
-A missed event on a broker restart is caught by the Reconciler. Production
-deployments needing at-least-once should set `jetstream: true` (the
-`runJetStream` branch in `driver_nats.go` already supports it) and
-pre-provision the stream out-of-band — see the "Storage event ingest pipeline"
-BACKLOG entry.
+## MinIO / AWS S3 / S3-compatible — the `s3` source
 
-## Other backends
+Source: `source_s3.go` (`S3EventSource`). Parses the AWS S3
+event-notification JSON — the canonical `Records[]` envelope S3 delivers to
+SQS/SNS/Lambda/EventBridge, emitted verbatim by AWS S3, MinIO, and any
+S3-compatible store that speaks bucket notifications.
 
-If the storage backend moves to MinIO, MinIO exposes native bucket
-notifications (webhook / AMQP / Kafka). An additional source adapter mirroring
-the SeaweedFS one — plus a `[bucket][notify]` config block on the MinIO side —
-reuses the same `ingest.driver=nats` wiring. The path contract above still
-applies; only the envelope decode changes.
+```json
+{
+  "Records": [{
+    "eventSource": "aws:s3",                       // or "minio:s3" — not checked
+    "eventName":   "s3:ObjectCreated:Put",
+    "eventTime":   "2026-01-02T03:04:05.678Z",
+    "s3": {
+      "bucket": { "name": "paladin-primary" },
+      "object": {
+        "key":       "<tenant_uuid>/<object_key>/<key>",  // URL-encoded
+        "size":      2048, "eTag": "…", "sequencer": "…"
+      }
+    },
+    "responseElements": { "x-amz-request-id": "…" }
+  }]
+}
+```
+
+- **Event mapping:** `s3:ObjectCreated:*` (Put/Post/Copy/CompleteMultipart) →
+  `uploaded`; `s3:ObjectRemoved:*` (Delete/DeleteMarkerCreated) → `deleted`;
+  `ObjectAccessed`/lifecycle/replication → **ignored**.
+- **Key decoding:** the key is **bucket-relative** (the bucket is in
+  `s3.bucket.name`, so there's no bucket segment to strip — unlike SeaweedFS).
+  S3 form-encodes the key: space → `+`, `/` → `%2F` (MinIO) or left literal
+  (AWS), other bytes → `%XX`. The parser uses `url.QueryUnescape`, which
+  handles all of it (`+`/`%20` → space, `%2F` → `/`, `%2B` → literal `+`), so
+  both AWS-literal-slash and MinIO-encoded-slash keys parse identically.
+- **Dedup id:** prefers `responseElements["x-amz-request-id"]` (AWS + MinIO
+  both set it, reused on retry); falls back to a hash of
+  `(key, eventName, sequencer)`.
+- **Batching:** one CloudEvent per envelope (first `Records` entry); the rest
+  stay in `Data`. Per-record fan-out is BACKLOG'd.
+
+### MinIO config recipe
+
+```sh
+mc admin config set myminio notify_webhook:paladin \
+    endpoint="https://…/webhook/minio" queue_dir=/tmp/minio-events
+mc admin service restart myminio
+mc event add myminio/paladin-primary arn:minio:sqs::paladin:webhook \
+    --event put,delete
+```
+
+Or route MinIO → NATS/AMQP and set `ingest.driver=nats`/`rabbitmq` with
+`source_format: minio`.
+
+### AWS S3 config recipe
+
+AWS can't POST a webhook directly; bridge via **SNS → HTTPS subscription**
+pointed at `/webhook/s3`, or S3 → **EventBridge** → API destination. A native
+**SQS driver** (S3 → SQS, polled by ingest) is the cleaner long-term path and
+is tracked in BACKLOG — the `s3` source parses the same JSON regardless of
+which transport delivers it.
+
+---
+
+## Garage — no native notifications
+
+**Garage emits no object-lifecycle events of any kind.** `source_format:
+garage` is deliberately **rejected** by `pickSource` with a directive error
+rather than silently subscribing to a source that will never publish.
+
+Authoritative (verified 2026-07-06):
+
+- `PutBucketNotificationConfiguration` / `GetBucketNotificationConfiguration`
+  are **❌ Missing** — [S3 compatibility status][garage-s3]. Missing endpoints
+  return `501 Not Implemented`.
+- No non-S3 event / webhook / change-feed / pub-sub mechanism exists either —
+  the [feature list][garage-feat] has none (K2V is a key-value API, not a
+  change feed).
+- `garage.toml` in gitops (`charts/garage/templates/configmap.yaml`) has no
+  `[notification.*]` block — there is nothing to configure.
+
+**Consequence:** even when Garage is the primary (or only) backend, PALADIN cannot
+ingest its writes via events. This is exactly why the lab runs the ingest
+source on **SeaweedFS** (the `secondary` backend), not Garage. Direct writes to
+Garage are caught by the **data-plane Reconciler** (it lists/compares on a
+schedule). To get event-driven ingest for Garage-stored objects you must front
+Garage with an S3-notification-capable layer (e.g. SeaweedFS) and use that
+layer's `source_format`.
+
+[garage-s3]: https://garagehq.deuxfleurs.fr/documentation/reference-manual/s3-compatibility/
+[garage-feat]: https://garagehq.deuxfleurs.fr/documentation/reference-manual/features/
+
+---
+
+## Dedup & delivery semantics
+
+**Dedup.** Every event passes through the `ingested_events` table keyed on
+`ID` before the handler runs (at-least-once safe). Sources must pick an `ID`
+stable across replays — a broker message-id where available, else a
+deterministic content hash. Ignored events (`ErrIgnoredEvent`) skip the dedup
+write to avoid no-op rows.
+
+**Delivery (NATS driver).** Two modes (`ingest.nats.jetstream`):
+
+- `false` — core pub/sub, at-most-once. A missed event on a broker restart is
+  caught by the Reconciler. Cheap.
+- `true` — JetStream durable consumer, at-least-once. ACK after the pipeline
+  returns nil; NAK → redelivery; unparseable → term (dead-letter). Requires
+  the stream to be pre-provisioned out-of-band (the driver errors if it's
+  absent). The lab runs this on the `seaweedfs_filer` stream with durable
+  `paladin-ingest-sf`. See `driver_nats.go` `runJetStream` and its integration
+  coverage in `driver_nats_jetstream_test.go`.
+
+**`Nats-Msg-Id` override.** When a NATS message carries `Nats-Msg-Id`, the
+driver uses it as the CloudEvent `ID`, preserving dedup across upstream
+re-publish.

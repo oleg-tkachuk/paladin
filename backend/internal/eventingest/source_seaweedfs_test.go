@@ -87,6 +87,35 @@ func TestSeaweedFSSource_Parse_BucketPrefixStripped(t *testing.T) {
 	}
 }
 
+func TestSeaweedFSSource_Parse_Update(t *testing.T) {
+	// `update` maps to uploaded just like `create` — both re-emit a usable
+	// etag/size for the same PromoteToAvailable transition.
+	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
+	body := []byte(`{"key":"/t/ok/k","event_type":"update","timestamp_ns":2}`)
+	ev, err := src.Parse(body, "application/json")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if ev.Type != EventTypeUploaded {
+		t.Errorf("type = %q, want uploaded", ev.Type)
+	}
+}
+
+func TestSeaweedFSSource_Parse_BucketsNamespacePrefix(t *testing.T) {
+	// The S3 gateway materialises bucket-rooted paths under
+	// `/buckets/<bucket>/...` in the filer namespace. The adapter strips the
+	// `buckets/` prefix before the bucket-name check so both publishers parse.
+	src := &SeaweedFSSource{BucketName: "paladin-primary", URI: "seaweedfs://primary"}
+	body := []byte(`{"key":"/buckets/paladin-primary/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/ok/deep/k","event_type":"create","timestamp_ns":1}`)
+	ev, err := src.Parse(body, "application/json")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if ev.SubjectFields.TenantID != "0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc" || ev.SubjectFields.ObjectKey != "ok" || ev.SubjectFields.Key != "deep/k" {
+		t.Errorf("segments after buckets/ + bucket strip = %+v", ev.SubjectFields)
+	}
+}
+
 func TestSeaweedFSSource_Parse_BadJSON(t *testing.T) {
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	_, err := src.Parse([]byte("not json"), "application/json")
