@@ -86,6 +86,16 @@ export function BackgroundOpsDrawer() {
     }
   }, []);
 
+  // Cancel an in-flight operation, then refetch so the row reflects the new
+  // state immediately (the poll would catch it within a tick anyway).
+  const cancelOp = useCallback(
+    async (name: string) => {
+      await adminOperationClient.cancelOperation({ name });
+      await fetchOps();
+    },
+    [fetchOps],
+  );
+
   // Polls only while the tab is visible: with the Sheet open this loop
   // runs every 2s — leaving it alive in a backgrounded tab piles up
   // pointless listOperations calls indefinitely.
@@ -163,7 +173,7 @@ export function BackgroundOpsDrawer() {
           ) : (
             <ul className="space-y-2">
               {summary.ops.map((op) => (
-                <OpRow key={op.name} op={op} />
+                <OpRow key={op.name} op={op} onCancel={cancelOp} />
               ))}
             </ul>
           )}
@@ -194,9 +204,32 @@ function Tile({
   );
 }
 
-function OpRow({ op }: { op: Operation }) {
+function OpRow({
+  op,
+  onCancel,
+}: {
+  op: Operation;
+  onCancel: (name: string) => Promise<void>;
+}) {
   const inProgress = !op.done && !opError(op);
   const failed = !!opError(op);
+  // Local per-row state so the button disables + reports its own failure
+  // without coupling to the drawer's shared error banner.
+  const [canceling, setCanceling] = useState(false);
+  const [cancelErr, setCancelErr] = useState<string | null>(null);
+  const handleCancel = useCallback(async () => {
+    setCanceling(true);
+    setCancelErr(null);
+    try {
+      await onCancel(op.name);
+    } catch (err) {
+      setCancelErr(
+        err instanceof ConnectError ? err.rawMessage : "Cancel failed",
+      );
+    } finally {
+      setCanceling(false);
+    }
+  }, [onCancel, op.name]);
   const succeeded = op.done && !opError(op);
   const Icon = failed
     ? XCircleIcon
@@ -240,7 +273,23 @@ function OpRow({ op }: { op: Operation }) {
               {opError(op)}
             </p>
           )}
+          {cancelErr && (
+            <p className="mt-1 font-mono text-[10px] text-destructive">
+              {cancelErr}
+            </p>
+          )}
         </div>
+        {inProgress && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 shrink-0 px-2 text-[10px]"
+            disabled={canceling}
+            onClick={handleCancel}
+          >
+            {canceling ? "Canceling…" : "Cancel"}
+          </Button>
+        )}
       </div>
     </li>
   );
