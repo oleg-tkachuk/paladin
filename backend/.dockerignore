@@ -31,6 +31,15 @@ dist/
 *.so
 *.dylib
 
+# Named binaries built at the repo root by local dev flows: `server`
+# (`go build -o server ./cmd/server`) and the seed-fixture CLI. Both are
+# gitignored and weigh tens of MB (~86 MB + ~40 MB); without these two
+# lines they land in the build context on every uncached build. Docker's
+# matcher anchors a single-segment pattern to the root (^name$), so these
+# never shadow the copied cmd/server/ source tree.
+server
+seed-fixture
+
 # ── Coverage / profile output ───────────────────────────────────────
 coverage/
 coverage.*
