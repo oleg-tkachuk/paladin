@@ -22,8 +22,8 @@
 # NODE_VERSION is the human-readable tag; the @sha256 digest on each FROM is
 # the authoritative pin (a tag is mutable, a digest is not). Renovate keeps
 # both in lockstep — see renovate.json. Bump the tag and digest together.
-ARG NODE_VERSION=24
-ARG PNPM_VERSION=11.3.0
+ARG NODE_VERSION=26
+ARG PNPM_VERSION=11.15.1
 
 # -----------------------------------------------------------------------------
 # Stage 1 — deps. Pinned to BUILDPLATFORM so a multi-arch run doesn't
