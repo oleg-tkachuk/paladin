@@ -14,7 +14,7 @@
 # GO_VERSION is the human-readable tag; the @sha256 digest on the FROM is the
 # authoritative pin (a tag is mutable, a digest is not). Renovate keeps both
 # in lockstep — see renovate.json. Bump the tag and digest together.
-ARG GO_VERSION=1.26.0
+ARG GO_VERSION=1.26
 
 # BuildKit auto-fills these for multi-arch builds.
 ARG TARGETOS
@@ -85,7 +85,7 @@ WORKDIR /app
 # Module files first — best cache hit on dependency-only changes.
 COPY --link go.mod go.sum ./
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    go mod download
+    go mod download -x
 
 # Source layout. configs/ is intentionally NOT copied — runtime configs come
 # from a Helm ConfigMap (k8s) or a host bind mount (compose), never baked in.
