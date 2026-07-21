@@ -40,6 +40,53 @@ type fakeRepo struct {
 	createTxErr    error
 	createTxBucket admindomain.Bucket
 	deleteTxErr    error
+
+	// List / ListAccessible: configurable return + captured args.
+	listResult []admindomain.Bucket
+	listToken  string
+	listErr    error
+	listArgs   admindomain.ListBucketsArgs
+
+	listAccResult   []admindomain.Bucket
+	listAccToken    string
+	listAccErr      error
+	listAccTenant   uuid.UUID
+	listAccPageSize int32
+	listAccAfterBk  string
+	listAccAfterNm  string
+
+	// Single-purpose setters: configurable err + captured forwarded args.
+	setPolicyErr      error
+	gotPolicyArgs     setterArgs
+	gotPolicyValue    string
+	setLifecycleErr   error
+	gotLifecycleArg   []admindomain.LifecycleRule
+	setLockErr        error
+	gotLockArg        admindomain.ObjectLockConfig
+	setVersioningErr  error
+	gotVersioningArg  admindomain.BucketVersioning
+	setReplicationErr error
+	gotReplicationArg admindomain.BucketReplication
+
+	// UpdateBasicTx: configurable err + captured args.
+	updateBasicTxErr error
+	gotUpdateBucket  admindomain.Bucket
+	gotUpdateVer     int64
+	gotUpdateMask    []string
+
+	// MarkDeletingTx: configurable err + call flags.
+	markDeletingTxErr  error
+	markDeletingCalled bool
+	deleteTxCalled     bool
+}
+
+// setterArgs captures the (backend, bucket, expectedVersion) triple the
+// single-purpose setters forward to the repo, so tests can assert the
+// handler passes them through unchanged.
+type setterArgs struct {
+	backend string
+	bucket  string
+	ver     int64
 }
 
 // BucketRepository — meaningful methods.
@@ -52,27 +99,40 @@ func (f *fakeRepo) BackendEnabled(context.Context, string) (bool, error) {
 
 // BucketRepository — no-op remainder.
 func (f *fakeRepo) Create(context.Context, admindomain.Bucket) error { return nil }
-func (f *fakeRepo) List(context.Context, admindomain.ListBucketsArgs) ([]admindomain.Bucket, string, error) {
-	return nil, "", nil
+func (f *fakeRepo) List(_ context.Context, args admindomain.ListBucketsArgs) ([]admindomain.Bucket, string, error) {
+	f.listArgs = args
+	return f.listResult, f.listToken, f.listErr
 }
-func (f *fakeRepo) ListAccessible(context.Context, uuid.UUID, int32, string, string) ([]admindomain.Bucket, string, error) {
-	return nil, "", nil
+func (f *fakeRepo) ListAccessible(_ context.Context, tenantID uuid.UUID, pageSize int32, afterBackend, afterName string) ([]admindomain.Bucket, string, error) {
+	f.listAccTenant = tenantID
+	f.listAccPageSize = pageSize
+	f.listAccAfterBk = afterBackend
+	f.listAccAfterNm = afterName
+	return f.listAccResult, f.listAccToken, f.listAccErr
 }
 func (f *fakeRepo) UpdateBasic(context.Context, admindomain.Bucket, int64, []string) error {
 	return nil
 }
-func (f *fakeRepo) SetPolicy(context.Context, string, string, string, int64) error { return nil }
-func (f *fakeRepo) SetLifecycle(context.Context, string, string, []admindomain.LifecycleRule, int64) error {
-	return nil
+func (f *fakeRepo) SetPolicy(_ context.Context, backendID, bucketName, policy string, expectedVersion int64) error {
+	f.gotPolicyArgs = setterArgs{backendID, bucketName, expectedVersion}
+	f.gotPolicyValue = policy
+	return f.setPolicyErr
 }
-func (f *fakeRepo) SetObjectLock(context.Context, string, string, admindomain.ObjectLockConfig, int64) error {
-	return nil
+func (f *fakeRepo) SetLifecycle(_ context.Context, _, _ string, rules []admindomain.LifecycleRule, _ int64) error {
+	f.gotLifecycleArg = rules
+	return f.setLifecycleErr
 }
-func (f *fakeRepo) SetVersioning(context.Context, string, string, admindomain.BucketVersioning, int64) error {
-	return nil
+func (f *fakeRepo) SetObjectLock(_ context.Context, _, _ string, lock admindomain.ObjectLockConfig, _ int64) error {
+	f.gotLockArg = lock
+	return f.setLockErr
 }
-func (f *fakeRepo) SetReplication(context.Context, string, string, admindomain.BucketReplication, int64) error {
-	return nil
+func (f *fakeRepo) SetVersioning(_ context.Context, _, _ string, v admindomain.BucketVersioning, _ int64) error {
+	f.gotVersioningArg = v
+	return f.setVersioningErr
+}
+func (f *fakeRepo) SetReplication(_ context.Context, _, _ string, r admindomain.BucketReplication, _ int64) error {
+	f.gotReplicationArg = r
+	return f.setReplicationErr
 }
 func (f *fakeRepo) SetConstraints(context.Context, string, string, admindomain.BucketConstraints, int64) error {
 	return nil
@@ -101,17 +161,22 @@ func (f *fakeRepo) CreateTx(_ context.Context, _ pgx.Tx, b admindomain.Bucket) e
 	f.createTxBucket = b
 	return f.createTxErr
 }
-func (f *fakeRepo) UpdateBasicTx(context.Context, pgx.Tx, admindomain.Bucket, int64, []string) error {
-	return nil
+func (f *fakeRepo) UpdateBasicTx(_ context.Context, _ pgx.Tx, b admindomain.Bucket, expectedVersion int64, mask []string) error {
+	f.gotUpdateBucket = b
+	f.gotUpdateVer = expectedVersion
+	f.gotUpdateMask = mask
+	return f.updateBasicTxErr
 }
 func (f *fakeRepo) GetTx(context.Context, pgx.Tx, string, string) (admindomain.Bucket, error) {
 	return f.getTxBucket, nil
 }
 func (f *fakeRepo) DeleteTx(context.Context, pgx.Tx, string, string, int64) error {
+	f.deleteTxCalled = true
 	return f.deleteTxErr
 }
 func (f *fakeRepo) MarkDeletingTx(context.Context, pgx.Tx, string, string, int64) error {
-	return nil
+	f.markDeletingCalled = true
+	return f.markDeletingTxErr
 }
 
 type okProvisioner struct{}
