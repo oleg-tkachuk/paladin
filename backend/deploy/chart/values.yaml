@@ -1148,7 +1148,7 @@ networkPolicies:
   # The UI (BFF) pods — same namespace, separate chart.
   ui:
     podLabels:
-      app.kubernetes.io/name: paladin-ui
+      app.kubernetes.io/name: paladin-console
   postgres:
     namespace: database
     port: 5432

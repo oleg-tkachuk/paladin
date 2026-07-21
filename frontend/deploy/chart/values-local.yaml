@@ -1,6 +1,6 @@
 # PALADIN UI overlay for the LOCAL development cluster.
 #
-#   helm upgrade --install paladin-ui ./deploy/chart \
+#   helm upgrade --install paladin-console ./deploy/chart \
 #     -n paladin \
 #     -f ./deploy/chart/values.yaml \
 #     -f ./deploy/chart/values-local.yaml

@@ -31,24 +31,24 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-## Deploy cutover: `paladin`→`paladin-core`, `paladin-ui`→`paladin-ui`
+## Deploy cutover: `paladin`→`paladin-core`, `paladin-ui`→`paladin-console`
 
 ### Push renamed charts/images before syncing the renamed ApplicationSet
 
 - **Status:** Blocked (operator action — cannot deploy from a coding session).
 - **Reason:** The chart names, image repos, Helm release/app names, and every
-  in-cluster resource name were renamed to `paladin-core` / `paladin-ui` (this repo +
+  in-cluster resource name were renamed to `paladin-core` / `paladin-console` (this repo +
   gitops). The ArgoCD `paladin-core` ApplicationSet now pulls
-  `oci://registry.local/charts/{paladin-core,paladin-ui}` and images
-  `registry.local/paladin/{paladin-core,paladin-ui}`. Until those new-named artifacts are
+  `oci://registry.local/charts/{paladin-core,paladin-console}` and images
+  `registry.local/paladin/{paladin-core,paladin-console}`. Until those new-named artifacts are
   published, a sync of the renamed ApplicationSet cannot resolve its sources.
 - **Definition of Done:**
   - Build+push the renamed charts and images first (`task -d backend deploy`,
-    `task -d frontend deploy`) so `charts/paladin-core`, `charts/paladin-ui`, and the
-    `paladin/{paladin-core,paladin-ui}` images exist in the registry.
+    `task -d frontend deploy`) so `charts/paladin-core`, `charts/paladin-console`, and the
+    `paladin/{paladin-core,paladin-console}` images exist in the registry.
   - Then let ArgoCD sync gitops. Because the release name changed, the old
     `paladin*` Deployments/Services/ServiceAccounts/Certificates/
-    Linkerd Servers are pruned and new `paladin-core-*` / `paladin-ui` ones created —
+    Linkerd Servers are pruned and new `paladin-core-*` / `paladin-console` ones created —
     mTLS certs (SANs `paladin-core-api`/`paladin-core-admin`, SPIFFE `…/sa/paladin-core-api`)
     regenerate. Expect a brief in-namespace disruption; confirm the `/login`
     redirect, BFF→backend health aggregation, and internal mTLS all recover.

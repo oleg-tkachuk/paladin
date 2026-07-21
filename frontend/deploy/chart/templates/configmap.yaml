@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: paladin-ui-config
+  name: paladin-console-config
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 data:

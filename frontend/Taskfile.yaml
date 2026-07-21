@@ -6,7 +6,7 @@ version: "3"
 silent: true
 
 vars:
-  PROJECT_NAME: paladin-ui
+  PROJECT_NAME: paladin-console
   DEPLOY_INFO_ENV_FILE: ./deploy/info.env
   DOCKERFILE: ./deploy/Dockerfile
   CHART_DIR: ./deploy/chart
@@ -47,7 +47,7 @@ includes:
     taskfile: ../tasks/_service.task.yaml
     dir: .
     vars:
-      PROJECT_NAME: paladin-ui
+      PROJECT_NAME: paladin-console
       IMAGE_NAMESPACE: paladin
       DOCKERFILE: ./deploy/Dockerfile
       BUILD_CONTEXT: .

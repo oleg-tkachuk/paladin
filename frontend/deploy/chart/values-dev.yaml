@@ -9,7 +9,7 @@ config:
   runtimeConfig:
     public:
       oidc:
-        authority: "https://authentik.dev.example/application/o/paladin-ui/"
+        authority: "https://authentik.dev.example/application/o/paladin-console/"
         clientId: "<dev-oidc-client-id>"
         redirectUri: "https://paladin.dev.example/auth/callback"
         postLogoutRedirectUri: "https://paladin.dev.example/"

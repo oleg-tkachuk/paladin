@@ -12,7 +12,7 @@ SDD audit trail live at
 #   - Docker daemon running
 #   - PALADIN backend + UI images present locally as
 #     registry.local/paladin/paladin-core:latest
-#     registry.local/paladin/paladin-ui:latest
+#     registry.local/paladin/paladin-console:latest
 #     (build via `task -d backend build:image` if missing)
 #   - pnpm 11.3.0+: `corepack enable && corepack prepare pnpm@11.3.0 --activate`
 #   - Chromium binary: `pnpm exec playwright install chromium`

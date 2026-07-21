@@ -6,7 +6,7 @@ version: "3"
 #
 # Compose orchestration: backend's compose file is the single source
 # of truth — it builds backend services AND mounts the frontend as
-# the paladin-ui container with a build context resolving to ../../frontend.
+# the paladin-console container with a build context resolving to ../../frontend.
 # We don't have a separate top-level compose file; the path above
 # stays canonical as long as the two trees live side-by-side.
 

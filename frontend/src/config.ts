@@ -77,13 +77,13 @@ const configSchema = z.object({
         .default({ devToken: "" }),
       uiMetadata: z
         .object({
-          service: z.string().default("paladin-ui"),
+          service: z.string().default("paladin-console"),
           version: z.string().default(appVersion),
           gitSha: z.string().default(gitSha),
           buildTime: z.string().default(buildTime),
         })
         .default({
-          service: "paladin-ui",
+          service: "paladin-console",
           version: appVersion,
           gitSha: gitSha,
           buildTime: buildTime,
@@ -97,7 +97,7 @@ export const loadConfig = () => {
   // Priority:
   // 1. /app/config/config.yaml (K8s ConfigMap volume)
   // 2. /app/configs/config.yaml (Standard container path)
-  // 3. configs/paladin-ui.yaml (Local dev)
+  // 3. configs/paladin-console.yaml (Local dev)
   const CONFIG_PATHS = ["/app/configs/config.yaml", "configs/config.yaml"];
 
   for (const path of CONFIG_PATHS) {

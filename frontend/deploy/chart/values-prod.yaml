@@ -37,13 +37,13 @@ topologySpreadConstraints:
     whenUnsatisfiable: ScheduleAnyway
     labelSelector:
       matchLabels:
-        app.kubernetes.io/name: paladin-ui
+        app.kubernetes.io/name: paladin-console
 
 config:
   runtimeConfig:
     public:
       oidc:
-        authority: "https://authentik.example.com/application/o/paladin-ui/"
+        authority: "https://authentik.example.com/application/o/paladin-console/"
         clientId: "<prod-oidc-client-id>"
         redirectUri: "https://paladin.example.com/auth/callback"
         postLogoutRedirectUri: "https://paladin.example.com/"

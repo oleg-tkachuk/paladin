@@ -54,7 +54,7 @@ jobs:
         working-directory: frontend
         run: |
           docker buildx build --load \
-            --tag registry.local/paladin/paladin-ui:latest \
+            --tag registry.local/paladin/paladin-console:latest \
             --file deploy/Dockerfile \
             --build-arg APP_VERSION=e2e-${{ github.sha }} \
             --build-arg GIT_COMMIT_HASH=${{ github.sha }} \

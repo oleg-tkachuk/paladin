@@ -6,13 +6,13 @@
 #   docker compose -f deploy/docker-compose.yaml up --build
 #
 # UI build context resolves to the sibling `frontend/` directory of
-# the integrated repo. To bring up backend only: `--scale paladin-ui=0`.
+# the integrated repo. To bring up backend only: `--scale paladin-console=0`.
 #
 # Boot order via `condition: service_completed_successfully`:
 #   postgres healthy → paladin-migrate (one-shot) → paladin-bootstrap (one-shot)
 #                                              → paladin-api / paladin-admin /
 #                                                paladin-worker / paladin-mcp
-#                                              → paladin-ui (waits for api+admin)
+#                                              → paladin-console (waits for api+admin)
 #
 # Verify the planes + UI:
 #   curl http://localhost:8080/readyz   # data
@@ -177,10 +177,10 @@ services:
   # DNS. No host.docker.internal: same network as the planes.
   #
   # Build context is the sibling repo. If you don't have it checked out,
-  # bring up the backend with `--scale paladin-ui=0` to skip this service.
-  paladin-ui:
-    image: paladin-ui
-    container_name: paladin-ui
+  # bring up the backend with `--scale paladin-console=0` to skip this service.
+  paladin-console:
+    image: paladin-console
+    container_name: paladin-console
     build:
       context: ../../frontend
       dockerfile: ./deploy/Dockerfile

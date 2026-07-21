@@ -64,7 +64,7 @@ go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
   Connect-ES stubs via `cd frontend && npm run generate` (reads
   `../backend/proto`).
 - **Compose**: `backend/deploy/docker-compose.yaml` builds backend
-  services AND mounts frontend as the `paladin-ui` container with a
+  services AND mounts frontend as the `paladin-console` container with a
   build context resolving to `../../frontend`. The integrated stack
   starts via `task e2e-up`.
 - **Helm**: backend chart at `backend/deploy/chart/`; frontend chart

@@ -166,7 +166,7 @@ services:
     # Reuse the locally-built UI image; the dev-loop pipeline
     # rebuilds `:latest` in place on every code change, so the
     # test stack always picks up the operator's WIP.
-    image: registry.local/paladin/paladin-ui:latest
+    image: registry.local/paladin/paladin-console:latest
     container_name: paladin-e2e-ui
     init: true
     restart: on-failure

@@ -72,7 +72,7 @@ export function middleware(req: NextRequest) {
       }
       // Compare against the PUBLIC host the browser used, not
       // req.nextUrl.host — behind Traefik the latter is the in-cluster
-      // address (paladin-ui:3000) while the browser's
+      // address (paladin-console:3000) while the browser's
       // Origin carries the ingress host (paladin.example.com), so a naive
       // compare 403s every legitimate browser POST. X-Forwarded-Host is
       // set by our trusted ingress; Host covers direct/dev access. Origin
