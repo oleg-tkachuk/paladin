@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 // timeout keep the page interactive even when one role is wedged.
 //
 // Why a server-side aggregator rather than four parallel client fetches:
-//   1. Cluster-internal Service DNS (paladin-worker etc.)
+//   1. Cluster-internal Service DNS (paladin-core-worker etc.)
 //      isn't resolvable from a browser.
 //   2. The browser would need separate auth/CORS handling per role.
 //   3. One round trip from the browser keeps the page snappy on a
@@ -27,24 +27,24 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
   {
     name: "api",
     envKey: "PALADIN_IAM_URL",
-    defaultUrl: "http://paladin-api:8085",
+    defaultUrl: "http://paladin-core-api:8085",
   },
   {
     name: "admin",
     envKey: "PALADIN_ADMIN_URL",
-    defaultUrl: "http://paladin-admin:8090",
+    defaultUrl: "http://paladin-core-admin:8090",
   },
   {
     name: "worker",
     envKey: "PALADIN_WORKER_URL",
     // 8099 is the Service port (containerPort is 8090). See chart's
     // backend values.yaml `deployments.worker.service.ports`.
-    defaultUrl: "http://paladin-worker:8099",
+    defaultUrl: "http://paladin-core-worker:8099",
   },
   {
     name: "mcp",
     envKey: "PALADIN_MCP_URL",
-    defaultUrl: "http://paladin-mcp:8095",
+    defaultUrl: "http://paladin-core-mcp:8095",
   },
   // Dispatcher pod — durable webhook fan-out (event_deliveries outbox,
   // migration 028). Same ops shape as worker; the BFF aggregator just
@@ -52,7 +52,7 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
   {
     name: "dispatcher",
     envKey: "PALADIN_DISPATCHER_URL",
-    defaultUrl: "http://paladin-dispatcher:8099",
+    defaultUrl: "http://paladin-core-dispatcher:8099",
   },
   // Ingest pod — storage-event consumer (SeaweedFS / MinIO bucket
   // notifications → outbox state-promote pipeline). Container port
@@ -64,7 +64,7 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
   {
     name: "ingest",
     envKey: "PALADIN_INGEST_URL",
-    defaultUrl: "http://paladin-ingest:8100",
+    defaultUrl: "http://paladin-core-ingest:8100",
   },
 ];
 

@@ -6,7 +6,7 @@ version: "3"
 silent: true
 
 vars:
-  PROJECT_NAME: paladin
+  PROJECT_NAME: paladin-core
   COMPOSE_FILE: ./deploy/docker-compose.yaml
   DEPLOY_INFO_ENV_FILE: ./deploy/info.env
   DOCKERFILE: ./deploy/Dockerfile
@@ -50,7 +50,7 @@ includes:
     taskfile: ../tasks/_service.task.yaml
     dir: .
     vars:
-      PROJECT_NAME: paladin
+      PROJECT_NAME: paladin-core
       IMAGE_NAMESPACE: paladin
       DOCKERFILE: ./deploy/Dockerfile
       BUILD_CONTEXT: .
@@ -165,9 +165,9 @@ tasks:
           # on normal exit AND when the run is interrupted, so the forwards
           # never outlive the CLI.
           trap cleanup EXIT
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-admin 18090:8090 >/dev/null 2>&1 & pids="$pids $!"
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-api 18085:8085 >/dev/null 2>&1 & pids="$pids $!"
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-api 18080:8080 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-admin 18090:8090 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api 18085:8085 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api 18080:8080 >/dev/null 2>&1 & pids="$pids $!"
           for p in 18090 18085 18080; do
             ok=0
             for _ in $(seq 1 40); do

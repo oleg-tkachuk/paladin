@@ -73,7 +73,7 @@ Multi-stage build:
 2. Final stage — minimal image, copies binary + config
 
 ```bash
-docker build -f deploy/Dockerfile -t paladin:dev .
+docker build -f deploy/Dockerfile -t paladin-core:dev .
 ```
 
 Default runtime config path inside the image: `/app/configs/config.yaml`

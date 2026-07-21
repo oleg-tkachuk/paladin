@@ -56,13 +56,13 @@ import { SystemService } from "@/gen/paladin/iam/v1/system_service_pb";
  * passed through.
  *
  * Per-plane backend URLs are env-configurable so the chart can map
- * `PALADIN_<PLANE>_URL` → `http://paladin:{8080,8085,8090}`.
+ * `PALADIN_<PLANE>_URL` → `http://paladin-core:{8080,8085,8090}`.
  */
 
 const planeBackendUrls: Record<Plane, string> = {
-  data: process.env.PALADIN_DATA_URL || "http://paladin:8080",
-  iam: process.env.PALADIN_IAM_URL || "http://paladin:8085",
-  admin: process.env.PALADIN_ADMIN_URL || "http://paladin:8090",
+  data: process.env.PALADIN_DATA_URL || "http://paladin-core:8080",
+  iam: process.env.PALADIN_IAM_URL || "http://paladin-core:8085",
+  admin: process.env.PALADIN_ADMIN_URL || "http://paladin-core:8090",
 };
 
 const planeServices: Record<Plane, DescService[]> = {

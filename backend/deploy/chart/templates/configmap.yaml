@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   # `-config` suffix matches the deployment's volume reference. Templated
   # via chart.fullname so multiple releases of this chart in one namespace
-  # don't collide on a hardcoded `paladin-config`.
+  # don't collide on a hardcoded `paladin-core-config`.
   name: {{ include "chart.fullname" . }}-config
   annotations:
     # Pre-install hook with weight=-20 — must exist before the

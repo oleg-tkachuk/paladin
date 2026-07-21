@@ -83,7 +83,7 @@ Secret** — never inline the key into values or the sink config.
    one that talks to customer sinks, gets the credentials.
 
 Because the whole material lives in a Secret, rotation is a Secret update plus
-a `kubectl rollout restart deploy/paladin-dispatcher` — the SDK
+a `kubectl rollout restart deploy/paladin-core-dispatcher` — the SDK
 re-reads the env on process start. (The sink's own TTL cache is for `k8s:`
 credential **refs inside sink config**, a different path; static AWS env vars
 are read once at client build.)

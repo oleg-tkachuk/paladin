@@ -10,22 +10,23 @@ metadata:
 #
 # Service-name assumption: the backend chart renders one Service per
 # role via roleFullname (`<release>-<chart>-<role>`). The defaults
-# below assume `helm install paladin paladin …` in namespace
-# `paladin`, which gives:
-#   paladin-paladin-api    (ports data:8080, iam:8085)
-#   paladin-paladin-admin  (port  admin:8090)
+# below assume `helm install paladin-core paladin-core …` in namespace
+# `paladin` (release name == chart name, so chart.fullname collapses and
+# drops the duplicate prefix), which gives:
+#   paladin-core-api    (ports data:8080, iam:8085)
+#   paladin-core-admin  (port  admin:8090)
 # Note that data + iam share the api role — same Service, different
 # port. Admin sits on its own role / Service.
 #
-# If your backend release name differs (e.g. installed as just
-# `paladin`), override these URLs in the ArgoCD overlay
+# If your backend release name differs (e.g. installed under a
+# different name), override these URLs in the ArgoCD overlay
 # at applications/overlays/local/patches/paladin-values.yaml so the BFF
 # resolves to the actual Service names in your cluster.
 backend:
   urls:
-    data:   "http://paladin-paladin-api.paladin.svc.cluster.local:8080"
-    iam:    "http://paladin-paladin-api.paladin.svc.cluster.local:8085"
-    admin:  "http://paladin-paladin-admin.paladin.svc.cluster.local:8090"
+    data:   "http://paladin-core-api.paladin.svc.cluster.local:8080"
+    iam:    "http://paladin-core-api.paladin.svc.cluster.local:8085"
+    admin:  "http://paladin-core-admin.paladin.svc.cluster.local:8090"
     # worker + mcp expose /system/health.json on these ports for the
     # BFF /api/health/all aggregator. They do NOT serve Connect; the
     # browser never hits them.
@@ -35,13 +36,13 @@ backend:
     # backend chart values, deployments.worker.service.ports). The BFF
     # must hit the Service port — `8090` would route to a non-existent
     # endpoint on whichever Service happens to listen there.
-    worker: "http://paladin-paladin-worker.paladin.svc.cluster.local:8099"
-    mcp:    "http://paladin-paladin-mcp.paladin.svc.cluster.local:8095"
+    worker: "http://paladin-core-worker.paladin.svc.cluster.local:8099"
+    mcp:    "http://paladin-core-mcp.paladin.svc.cluster.local:8095"
     # dispatcher exposes /system/health.json on the same ops port shape
     # as worker. Service port 8099 (matches the backend chart's
     # deployments.dispatcher.service.ports). Surfaces in the BFF
     # /api/health/all aggregator alongside api/admin/worker/mcp.
-    dispatcher: "http://paladin-paladin-dispatcher.paladin.svc.cluster.local:8099"
+    dispatcher: "http://paladin-core-dispatcher.paladin.svc.cluster.local:8099"
 
 # Extra environment variables appended to the UI container's env block.
 # Use for knobs the chart doesn't model first-class. Common cases:
@@ -231,7 +232,7 @@ config:
     public:
       objectControlPlane:
         baseUrl: "/api/paladin"
-        upstreamUrl: "http://paladin.paladin.svc.cluster.local:8080"
+        upstreamUrl: "http://paladin-core.paladin.svc.cluster.local:8080"
         timeoutMs: 5000
       oidc:
         # No issuer / clientId defaults — every env overlay MUST set.

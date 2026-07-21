@@ -20,8 +20,7 @@ import { iamAuthClient, readSessionCookie } from "@/lib/auth/bff";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ADMIN_URL =
-  process.env.PALADIN_ADMIN_URL || "http://paladin:8090";
+const ADMIN_URL = process.env.PALADIN_ADMIN_URL || "http://paladin-core:8090";
 
 export async function GET(req: Request): Promise<Response> {
   const refreshToken = await readSessionCookie();

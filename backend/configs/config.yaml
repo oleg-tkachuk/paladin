@@ -1,4 +1,4 @@
-# paladin — full configuration reference.
+# paladin-core — full configuration reference.
 #
 # Every field the service reads is enumerated below with its default value
 # inline, so an operator can scan this file once and know every knob that
@@ -12,7 +12,7 @@
 
 # ─── Application identity ───────────────────────────────────────────────────
 app:
-  name: paladin
+  name: paladin-core
   env: local                            # local | staging | prod
 
 # ─── Logger (zap) ───────────────────────────────────────────────────────────

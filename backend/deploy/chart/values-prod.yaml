@@ -191,7 +191,7 @@ defaults:
       whenUnsatisfiable: ScheduleAnyway
       labelSelector:
         matchLabels:
-          app.kubernetes.io/name: paladin
+          app.kubernetes.io/name: paladin-core
 
 deployments:
   api:

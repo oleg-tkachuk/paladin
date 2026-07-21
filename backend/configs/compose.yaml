@@ -14,7 +14,7 @@
 #   curl http://localhost:8095/healthz  # mcp
 
 app:
-  name: paladin
+  name: paladin-core
   env: local
 
 logger:

@@ -13,7 +13,7 @@
 #
 # Environment (optional, written only when set non-empty):
 #   OCI_REGISTRY   — image registry, e.g. registry.local
-#   PROJECT_NAME   — chart/image name, e.g. paladin[-ui]
+#   PROJECT_NAME   — chart/image name, e.g. paladin-core[-ui]
 #
 # APP_VERSION comes from tasks/version.sh (the version source of truth);
 # GIT_COMMIT_HASH / BUILD_TIME are stamped here.

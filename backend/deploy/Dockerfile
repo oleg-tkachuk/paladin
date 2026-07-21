@@ -113,7 +113,7 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
             -X 'main.version=${APP_VERSION}' \
             -X 'main.commit=${GIT_COMMIT_HASH}' \
             -X 'main.buildTime=${BUILD_TIME}'" \
-        -o /out/paladin ./cmd/server
+        -o /out/paladin-core ./cmd/server
 
 # -----------------------------------------------------------------------------
 # Runtime stage — distroless static. No shell, no curl, no package manager.
@@ -128,7 +128,7 @@ ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
 
-LABEL org.opencontainers.image.title="paladin" \
+LABEL org.opencontainers.image.title="paladin-core" \
       org.opencontainers.image.description="Paladin — Connect RPC service" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT_HASH}" \
@@ -137,7 +137,7 @@ LABEL org.opencontainers.image.title="paladin" \
 
 WORKDIR /app
 
-COPY --from=builder --chown=nonroot:nonroot /out/paladin /app/bin/paladin
+COPY --from=builder --chown=nonroot:nonroot /out/paladin-core /app/bin/paladin-core
 
 # Three-plane HTTP service. Documentation only — Kubernetes binds via the
 # Service object, compose binds via the `ports:` stanza.
@@ -147,4 +147,4 @@ COPY --from=builder --chown=nonroot:nonroot /out/paladin /app/bin/paladin
 EXPOSE 8080 8085 8090
 
 USER nonroot:nonroot
-ENTRYPOINT ["/app/bin/paladin"]
+ENTRYPOINT ["/app/bin/paladin-core"]

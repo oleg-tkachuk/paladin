@@ -2,7 +2,7 @@
 # Each component's Taskfile `includes:` this as `svc:` and sets:
 #
 #   vars:
-#     PROJECT_NAME:    paladin      # Helm Chart name + image name
+#     PROJECT_NAME:    paladin-core      # Helm Chart name + image name
 #     IMAGE_NAMESPACE: paladin                        # registry path namespace
 #     DOCKERFILE:      ./deploy/Dockerfile        # relative to BUILD_CONTEXT
 #     BUILD_CONTEXT:   .                           # component root (Go replace dirs / Next standalone)

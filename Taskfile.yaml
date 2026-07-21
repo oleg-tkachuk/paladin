@@ -202,7 +202,7 @@ tasks:
     silent: true
     desc: |-
       After deploy-all, force the ArgoCD apps deploy-all republishes
-      (the `paladin*` charts — backend + UI) to hard-refresh
+      (the `paladin-core` + `paladin-ui` charts — backend + UI) to hard-refresh
       so they pick up the new chart digests immediately instead of waiting
       for the next poll. No-op when kubectl can't reach the cluster.
     cmds:
@@ -214,14 +214,14 @@ tasks:
             exit 0
           fi
           # Match the app names deploy-all republishes: the ArgoCD app
-          # names equal the chart names (`paladin` backend,
-          # `paladin-ui` frontend). An earlier `^paladin(-|$)`
-          # filter matched only the unrelated `paladin-postgresql` infra app
-          # and silently skipped both product apps.
+          # names equal the chart names (`paladin-core` backend, `paladin-ui`
+          # frontend). The `(core|ui)` alternation is deliberately narrow
+          # so a bare `^paladin(-|$)` doesn't also match the unrelated
+          # `paladin-postgresql` infra app (which must not be hard-refreshed).
           apps=$(kubectl --context {{.K8S_CONTEXT}} -n argocd get app -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
-                 | grep -E '^paladin(-|$)' || true)
+                 | grep -E '^paladin-(core|ui)(-|$)' || true)
           if [ -z "$apps" ]; then
-            echo "[deploy-all:sync] no paladin* apps in argocd ns"
+            echo "[deploy-all:sync] no paladin-core / paladin-ui apps in argocd ns"
             exit 0
           fi
           for app in $apps; do

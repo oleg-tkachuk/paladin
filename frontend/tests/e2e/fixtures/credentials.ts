@@ -1,7 +1,7 @@
 // NEVER true in prod. e2e-only fixture credentials.
 //
 // Mirrors the local-overlay convention from gitops/.../overlays/
-// local/values/paladin/paladin.yaml (the `local-dev-admin-
+// local/values/paladin/paladin-core.yaml (the `local-dev-admin-
 // pw-*` pattern). Constitution Principle V requires the
 // NEVER-in-prod marker above this comment to remain in place — these
 // credentials are baked into the test stack's bootstrap step, so

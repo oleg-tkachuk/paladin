@@ -28,8 +28,8 @@ pf() { # local_port svc remote_port
   PF_PIDS+=("$!")
 }
 
-if [ -z "${API:-}" ]; then pf 18080 paladin-api 8080; API=https://localhost:18080; fi
-if [ -z "${ADMIN:-}" ]; then pf 18090 paladin-admin 8090; ADMIN=https://localhost:18090; fi
+if [ -z "${API:-}" ]; then pf 18080 paladin-core-api 8080; API=https://localhost:18080; fi
+if [ -z "${ADMIN:-}" ]; then pf 18090 paladin-core-admin 8090; ADMIN=https://localhost:18090; fi
 sleep 3
 
 # jwt <aud> <tenant_uuid> <sub> <roles_csv> [slug]

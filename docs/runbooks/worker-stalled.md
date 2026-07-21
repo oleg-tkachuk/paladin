@@ -33,7 +33,7 @@ they are no-ops, so these alerts only have data in a deployment with the OTLP pi
 
    ```
    kubectl --context=<ctx> -n paladin get pods -l app.kubernetes.io/component=worker
-   kubectl --context=<ctx> -n paladin logs deploy/paladin-worker --tail=200 | grep -i "<worker>"
+   kubectl --context=<ctx> -n paladin logs deploy/paladin-core-worker --tail=200 | grep -i "<worker>"
    ```
 
    Look for `running job under lease` (claimed leadership) and the worker's own
@@ -52,7 +52,7 @@ they are no-ops, so these alerts only have data in a deployment with the OTLP pi
    ```
 
    Mitigation: clear the blocker (cancel the offending statement, restore the
-   downstream). If the pod is wedged, `kubectl rollout restart deploy/paladin-worker`
+   downstream). If the pod is wedged, `kubectl rollout restart deploy/paladin-core-worker`
    — another replica re-claims the lease and resumes. Restart is safe: every
    worker tick is idempotent (purges/reaps are `DELETE … WHERE`, reconciliation
    recomputes from source state).

@@ -43,7 +43,7 @@ jobs:
         working-directory: backend
         run: |
           docker buildx build --load \
-            --tag registry.local/paladin/paladin:latest \
+            --tag registry.local/paladin/paladin-core:latest \
             --file deploy/Dockerfile \
             --build-arg APP_VERSION=e2e-${{ github.sha }} \
             --build-arg GIT_COMMIT_HASH=${{ github.sha }} \

@@ -52,7 +52,7 @@ tasks:
           # Render with a representative release-name + namespace —
           # whatever values cause conditional template paths to fire
           # are exercised here, not skipped.
-          rendered=$(helm template paladin {{.CHART_DIR}} \
+          rendered=$(helm template paladin-core {{.CHART_DIR}} \
                        --namespace paladin 2>&1)
 
           # ── Gate 1: no glued document separators ─────────────────

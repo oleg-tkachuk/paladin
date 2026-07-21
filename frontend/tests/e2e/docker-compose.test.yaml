@@ -48,7 +48,7 @@
 #     | base64 -d)
 
 x-paladin-base: &paladin-base
-  image: registry.local/paladin/paladin:latest
+  image: registry.local/paladin/paladin-core:latest
   volumes:
     - ../../../backend/configs:/app/configs:ro
   environment:

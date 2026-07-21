@@ -28,7 +28,7 @@ x-build-meta: &build-meta
   BUILD_TIME: ${BUILD_TIME:-now}
 
 x-paladin-base: &paladin-base
-  image: paladin
+  image: paladin-core
   build:
     context: ..
     dockerfile: ./deploy/Dockerfile
