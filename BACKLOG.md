@@ -750,9 +750,24 @@ open deliberately — each notes why._
     function into `middleware-manifest.json` AND the standalone server must
     execute it (confirm the /login redirect + CSRF Origin gate still fire).
   - Delete this entry once the warning is gone and the gate is verified.
-- **Blockers:** a Next.js release that fixes proxy→standalone-manifest wiring
-  (recheck the 16.2.6 behaviour at the next upgrade — see the rationale block
+- **Blockers:** a Next.js release that makes the `output: standalone` server
+  execute a `proxy` function (recheck at each upgrade — see the rationale block
   atop `frontend/src/middleware.ts`).
+- **Recheck log:**
+  - **2026-07-21 — 16.2.10 (latest stable): STILL BLOCKED.** Bumped
+    `next` + `eslint-config-next` 16.2.6 → 16.2.10, renamed to `proxy.ts` /
+    `export function proxy`, ran an `output: standalone` build. A control build
+    of the same tree under `middleware.ts` populated the manifest
+    (`middleware: ["/"]`, `sortedMiddleware: ["/"]`, real matcher regexp);
+    the `proxy.ts` build left it empty (`middleware: {}`, `sortedMiddleware:
+    []`, `functions: {}`) — same version, same build, only the convention
+    changed. New datum: `proxy` is now **Node-runtime-only by design** — adding
+    `export const runtime = "edge"` hard-errors the build (`Route segment
+    config is not allowed in Proxy file … Proxy always runs on Node.js
+    runtime`), so the edge path that middleware relies on is not reachable from
+    `proxy`. The fix must come from Next running the Node-runtime proxy in the
+    standalone server, not from a config workaround on our side. Reverted the
+    bump + rename; `middleware.ts` stays.
 
 ### Remaining bucket sub-tab: Replication
 
