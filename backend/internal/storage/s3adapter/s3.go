@@ -635,29 +635,49 @@ type streamWriter struct {
 	aborted   bool
 }
 
+// Write buffers input and emits whole parts of exactly partSize bytes.
+//
+// The loop matters: a single Write larger than partSize must be split across
+// as many parts as it takes. Folding it into one part would break on any
+// object above S3's 5 GiB per-part ceiling, and would also drift the actual
+// part size away from the configured one. Streaming callers (io.Copy, which
+// hands over ~32 KiB at a time) never reached that path, but a caller that
+// writes a whole buffer in one call does.
+//
+// The partSize > 0 guard keeps a misconfigured zero part size from spinning
+// forever here; Open already floors it at 8 MiB, so this is belt-and-braces.
 func (w *streamWriter) Write(p []byte) (int, error) {
 	n := len(p)
 	w.buf = append(w.buf, p...)
 	w.total += int64(n)
-	if int64(len(w.buf)) >= w.partSize {
-		if err := w.flushPart(false); err != nil {
+	for w.partSize > 0 && int64(len(w.buf)) >= w.partSize {
+		if err := w.flushPart(w.partSize); err != nil {
 			return 0, err
 		}
 	}
 	return n, nil
 }
 
-func (w *streamWriter) flushPart(final bool) error {
+// flushPart uploads the first n buffered bytes as one part and keeps whatever
+// is left over for the next one. n <= 0, or an n beyond what is buffered,
+// means "everything still buffered" — the form Close uses for the trailing
+// part, which is the only part allowed to be smaller than partSize.
+func (w *streamWriter) flushPart(n int64) error {
 	if len(w.buf) == 0 {
 		return nil
 	}
+	if n <= 0 || n > int64(len(w.buf)) {
+		n = int64(len(w.buf))
+	}
+	chunk := w.buf[:n]
+
 	w.partNum++
 	out, err := w.c.s3.UploadPart(w.ctx, &s3.UploadPartInput{
 		Bucket:     aws.String(w.bucket),
 		Key:        aws.String(w.fullKey),
 		UploadId:   aws.String(w.uploadID),
 		PartNumber: aws.Int32(w.partNum),
-		Body:       strings.NewReader(string(w.buf)), // copy once
+		Body:       strings.NewReader(string(chunk)), // copy once
 	})
 	if err != nil {
 		return fmt.Errorf("upload part %d: %w", w.partNum, err)
@@ -669,9 +689,10 @@ func (w *streamWriter) flushPart(final bool) error {
 	if w.hasher == nil {
 		w.hasher = newStreamingMD5()
 	}
-	w.hasher.Write(w.buf)
-	w.buf = w.buf[:0]
-	_ = final
+	// Both reads of chunk must happen before the compaction below, which
+	// overwrites the front of the backing array.
+	w.hasher.Write(chunk)
+	w.buf = append(w.buf[:0], w.buf[n:]...)
 	return nil
 }
 
@@ -679,7 +700,7 @@ func (w *streamWriter) Close() (string, int64, string, error) {
 	if w.completed {
 		return "", 0, "", fmt.Errorf("stream writer already closed")
 	}
-	if err := w.flushPart(true); err != nil {
+	if err := w.flushPart(int64(len(w.buf))); err != nil {
 		_ = w.Abort()
 		return "", 0, "", err
 	}

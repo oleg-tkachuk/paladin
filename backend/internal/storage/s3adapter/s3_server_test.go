@@ -811,9 +811,8 @@ func TestClientOpenAndStreamWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	// Each Write flushes the *whole* pending buffer as one part once it
-	// reaches partSize — it does not slice a large Write into partSize
-	// chunks. So parts track Write calls, and two chunks ⇒ two parts.
+	// 18 bytes at partSize=8 ⇒ two full 8-byte parts plus a 2-byte trailer,
+	// regardless of how the caller chunked its Writes.
 	chunks := [][]byte{[]byte("0123456789"), []byte("abcdefXY")}
 	var payload []byte
 	for _, chunk := range chunks {
@@ -844,20 +843,97 @@ func TestClientOpenAndStreamWrite(t *testing.T) {
 	}
 
 	// Bytes must reach the store intact and in order across parts.
-	var assembled []byte
-	uploads := 0
-	for _, r := range f.reqs {
-		if r.Method == http.MethodPut && r.Query.Get("uploadId") != "" {
-			uploads++
-			assembled = append(assembled, r.Body...)
-		}
-	}
-	if uploads != len(chunks) {
-		t.Errorf("uploaded %d parts, want one per over-partSize Write (%d)", uploads, len(chunks))
+	sizes, assembled := uploadedParts(f)
+	if want := []int{8, 8, 2}; !slicesEqual(sizes, want) {
+		t.Errorf("part sizes = %v, want %v (partSize=8, trailer last)", sizes, want)
 	}
 	if !bytes.Equal(assembled, payload) {
 		t.Errorf("reassembled parts = %q, want %q", assembled, payload)
 	}
+}
+
+// A caller that hands over one big buffer must still get partSize-sized parts:
+// folding it into a single part would break past S3's 5 GiB per-part ceiling.
+func TestStreamWriterSplitsOneLargeWrite(t *testing.T) {
+	f := newFakeS3(t)
+	c := newTestClient(t, f.srv.URL, func(b *config.StorageBackend) { b.PartSizeBytes = 4 })
+
+	w, err := c.Open(testCtx, "b", testTenant, "ok", "k", "", 0)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	payload := []byte("abcdefghijklmno") // 15 bytes at partSize=4 ⇒ 4+4+4+3
+	if _, err := w.Write(payload); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	_, total, checksum, err := w.Close()
+	if err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	sizes, assembled := uploadedParts(f)
+	if want := []int{4, 4, 4, 3}; !slicesEqual(sizes, want) {
+		t.Errorf("part sizes = %v, want %v", sizes, want)
+	}
+	if !bytes.Equal(assembled, payload) {
+		t.Errorf("reassembled = %q, want %q", assembled, payload)
+	}
+	if total != int64(len(payload)) {
+		t.Errorf("total = %d, want %d", total, len(payload))
+	}
+	// Splitting must not disturb the rolling digest.
+	sum := md5.Sum(payload) // #nosec G401
+	if want := hex.EncodeToString(sum[:]); checksum != want {
+		t.Errorf("checksum = %q, want %q", checksum, want)
+	}
+}
+
+// An exact multiple of partSize must not emit a trailing empty part.
+func TestStreamWriterExactMultipleOfPartSize(t *testing.T) {
+	f := newFakeS3(t)
+	c := newTestClient(t, f.srv.URL, func(b *config.StorageBackend) { b.PartSizeBytes = 4 })
+
+	w, err := c.Open(testCtx, "b", testTenant, "ok", "k", "", 0)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := w.Write([]byte("12345678")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if _, _, _, err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	sizes, _ := uploadedParts(f)
+	if want := []int{4, 4}; !slicesEqual(sizes, want) {
+		t.Errorf("part sizes = %v, want %v (no empty trailer)", sizes, want)
+	}
+}
+
+// uploadedParts returns the byte length of each UploadPart body, in request
+// order, alongside the concatenation of all of them.
+func uploadedParts(f *fakeS3) (sizes []int, assembled []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, r := range f.reqs {
+		if r.Method == http.MethodPut && r.Query.Get("uploadId") != "" {
+			sizes = append(sizes, len(r.Body))
+			assembled = append(assembled, r.Body...)
+		}
+	}
+	return sizes, assembled
+}
+
+func slicesEqual(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestStreamWriterCloseIsIdempotentlyGuarded(t *testing.T) {
