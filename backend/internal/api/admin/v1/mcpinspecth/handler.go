@@ -44,6 +44,16 @@ type Handler struct {
 	policy      cedar.Authorizer
 	sessionsURL string
 	httpClient  *http.Client
+	// resolver backs the headless-Service fan-out. Defaults to
+	// net.DefaultResolver; overridable so the fan-out is testable without
+	// depending on what the host's DNS happens to return.
+	resolver hostResolver
+}
+
+// hostResolver is the one lookup sessionTargets needs. *net.Resolver satisfies
+// it as-is.
+type hostResolver interface {
+	LookupHost(ctx context.Context, host string) ([]string, error)
 }
 
 func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
@@ -55,6 +65,7 @@ func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
 		policy:      policy,
 		sessionsURL: cfg.HTTP.SessionsURL,
 		httpClient:  &http.Client{Timeout: 5 * time.Second},
+		resolver:    net.DefaultResolver,
 	}
 }
 
@@ -171,7 +182,11 @@ func (h *Handler) sessionTargets(ctx context.Context) []string {
 	if net.ParseIP(host) != nil {
 		return single // already an IP — nothing to resolve
 	}
-	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	res := h.resolver
+	if res == nil {
+		res = net.DefaultResolver
+	}
+	addrs, err := res.LookupHost(ctx, host)
 	if err != nil || len(addrs) <= 1 {
 		return single
 	}
