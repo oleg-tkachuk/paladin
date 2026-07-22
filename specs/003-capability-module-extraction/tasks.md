@@ -24,7 +24,7 @@ commit. Each step carries exactly one conventional-commit scope (Principle II).
 > (HIGH)**: the golden-token test was one commit later than the move it
 > guards, violating Principle I; it is now T033, inside the move commit.
 > **G2**: generation fencing had no assertion; T044 adds it. **A1**: SC-009's
-> latency claim was untestable; T005 now captures a baseline and T061 asserts
+> latency claim was untestable; T005 now captures a baseline and T064 asserts
 > a numeric bound against it. **I1**: the consumer-file count was taken on a
 > different branch — T008 now says 28, not 33.
 >
@@ -32,7 +32,12 @@ commit. Each step carries exactly one conventional-commit scope (Principle II).
 > remediation introduced (stale task-ID range, an outdated commit enumeration,
 > and two Phase 0 statements the growing task list had falsified). Those edits
 > landed in `research.md` and `plan.md`; this list was unaffected apart from
-> the count above, and stays at 62 tasks.
+> the count above.
+>
+> A third pass found the same class of drift in `contracts/` and the plan's
+> structure tree. A fourth mapped the spec's **edge cases** to tasks for the
+> first time and found three with no coverage anywhere — T049/T050/T051 close
+> them, taking the list to **65 tasks**.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -53,7 +58,7 @@ repo-relative.
 | 1 | 2 | `refactor(capability)` | parameterise the charge transaction handle |
 | 2 | 2 | `build(capability)` | add the module skeleton and standalone CI job |
 | 3 | 3 | `refactor(capability)` | move the primitive into its own module |
-| 4 | 4 | `test(capability)` | add in-memory store, atomicity guard, and example |
+| 4 | 4 | `test(capability)` | add in-memory store, atomicity + edge-case guards, and example |
 | — | 5 | `test(capability)` | assert store conformance at compile time |
 | 5 | 6 | `docs(capability)` | document and version the module |
 | — | 7 | `docs(backlog)` | record deferred decisions |
@@ -70,7 +75,7 @@ this *after* the move would mean comparing against memory instead of evidence
 - [ ] T002 [P] Snapshot the current dependency graph of `backend/internal/capability` (`go list -deps`) into `specs/003-capability-module-extraction/baseline-deps.txt`, so the post-extraction module graph can be diffed against it
 - [ ] T003 Generate a token with the **current** code using a fixed test key and check it in as `capability/testdata/golden_token.jwt` (created here, consumed by T033) — it must be produced before any refactor touches the serialisation path
 - [ ] T004 [P] Record the current full-suite pass state from `backend/` (`go test ./...`) as the green baseline every later phase must restore
-- [ ] T005 [P] Record the p99 latency of `StandardVerifier.Verify` over ≥10 000 iterations into `specs/003-capability-module-extraction/baseline-latency.txt` — the numeric reference SC-009 is asserted against in T061, then commit as `chore(capability): capture pre-extraction baselines`
+- [ ] T005 [P] Record the p99 latency of `StandardVerifier.Verify` over ≥10 000 iterations into `specs/003-capability-module-extraction/baseline-latency.txt` — the numeric reference SC-009 is asserted against in T064, then commit as `chore(capability): capture pre-extraction baselines`
 
 **Checkpoint**: baselines exist and are checked in; no production file has changed.
 
@@ -173,7 +178,10 @@ its resolved dependency graph contains no storage or database packages.
 - [ ] T046 [US1] Extend the T015 standalone job to run with network egress denied and no container runtime available, proving SC-006's "no database, no network, no container" claim rather than merely implying it from a clean runner
 - [ ] T047 [US1] Verify a `UsageStore[struct{}]` instantiation with `onCharged == nil` works end to end — the supported no-transaction mode for consumers without transactional storage (spec edge case; contracts §1.2)
 - [ ] T048 [US1] Compare the module's post-extraction dependency graph against the T002 baseline and confirm removal of the database driver (SC-002)
-- [ ] T049 [US1] Commit as `test(capability): add in-memory store, atomicity guard, and example`
+- [ ] T049 [P] [US1] Add `capability/rotation_test.go`: a token signed under a **retired but still published** key must verify, and must stop verifying once that key is withdrawn via `StaticKeyResolver` (spec edge case 3). `quickstart.md` documents a three-step rotation procedure that nothing currently tests — the withdrawal deadline is max-outstanding-TTL, and getting it wrong invalidates live tokens
+- [ ] T050 [P] [US1] Add `capability/forgery_test.go`: a syntactically valid, correctly-signed token whose `Store.Get` returns `ErrNotFound` must be rejected as **forgery**, not surfaced as a missing entity (spec edge case 5; contracts §1.1). Collapsing the two would turn a forged token into a 404 instead of an auth failure
+- [ ] T051 [P] [US1] Add `capability/unitcode_test.go` covering `NormaliseUnitCode` and `IsAllowedUnitCode`: `""` → `DefaultUnitCode`, every entry of `AllowedUnitCodes` round-trips, an unknown code errors, and `IsAllowedUnitCode("")` is **false** — the deliberate asymmetry with `NormaliseUnitCode` (spec edge case 7). ⚠️ These are published API (contracts §5) with **zero test coverage anywhere in the repository today**; they gate the empty-means-default rule and the comparison behind `ErrUnitCodeMismatch`
+- [ ] T052 [US1] Commit as `test(capability): add in-memory store, atomicity guard, and example`
 
 **Checkpoint**: US1 delivered and **proven**, not merely asserted. Combined
 with Phase 3, this is the MVP.
@@ -188,9 +196,9 @@ can read it as a worked example without being forced to adopt it.
 **Independent Test**: the module's suite passes with no persistent storage
 available, while PALADIN's relational store satisfies the same published contracts.
 
-- [ ] T050 [P] [US3] Add compile-time conformance assertions in `backend/internal/capability/postgres/` (`var _ capability.Store = (*Store)(nil)`, `var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)`) so contract drift fails the build rather than a runtime call
-- [ ] T051 [US3] Confirm PALADIN supplies its store to the module through published contracts only, with no privileged access unavailable to third parties (FR-014) — review `backend/internal/app/build_capability.go` for any non-contract coupling
-- [ ] T052 [US3] Confirm the module suite passes in isolation with no persistent storage present (SC-006 re-verified after Phase 4 additions), then commit as `test(capability): assert store conformance at compile time`
+- [ ] T053 [P] [US3] Add compile-time conformance assertions in `backend/internal/capability/postgres/` (`var _ capability.Store = (*Store)(nil)`, `var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)`) so contract drift fails the build rather than a runtime call
+- [ ] T054 [US3] Confirm PALADIN supplies its store to the module through published contracts only, with no privileged access unavailable to third parties (FR-014) — review `backend/internal/app/build_capability.go` for any non-contract coupling
+- [ ] T055 [US3] Confirm the module suite passes in isolation with no persistent storage present (SC-006 re-verified after Phase 4 additions), then commit as `test(capability): assert store conformance at compile time`
 
 ---
 
@@ -204,21 +212,21 @@ documentation reaches a working issue → verify cycle (SC-007).
 
 ### Step 5 — documentation and versioning (`docs(capability)`)
 
-- [ ] T053 [US4] Write `capability/README.md` explaining the primitive **without any reference to object storage** (FR-018) — adapt [quickstart.md](./quickstart.md), which was authored to this constraint
-- [ ] T054 [P] [US4] Add package-level doc comments to `capability/doc.go` covering the three contracts a consumer implements and the no-transaction mode
-- [ ] T055 [US4] Tag the module's first version (`capability/vX.Y.Z` per Go's nested-module tagging convention) and pin it in `backend/go.mod`'s `require`, keeping `replace` for local development (FR-020, [R-004](./research.md))
-- [ ] T056 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with PALADIN's documentation closed
-- [ ] T057 [US4] Commit as `docs(capability): document and version the module`
+- [ ] T056 [US4] Write `capability/README.md` explaining the primitive **without any reference to object storage** (FR-018) — adapt [quickstart.md](./quickstart.md), which was authored to this constraint
+- [ ] T057 [P] [US4] Add package-level doc comments to `capability/doc.go` covering the three contracts a consumer implements and the no-transaction mode
+- [ ] T058 [US4] Tag the module's first version (`capability/vX.Y.Z` per Go's nested-module tagging convention) and pin it in `backend/go.mod`'s `require`, keeping `replace` for local development (FR-020, [R-004](./research.md))
+- [ ] T059 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with PALADIN's documentation closed
+- [ ] T060 [US4] Commit as `docs(capability): document and version the module`
 
 ---
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T058 [P] Add the BACKLOG entry *"Capability module: dedicated repository"* with Status/Reason/Definition of Done/Blockers, recording the import-path branding cost accepted in [R-003](./research.md) (Principle III)
-- [ ] T059 [P] Add the BACKLOG entry *"Capability module: publish + version policy"* with the same four fields (Principle III), then commit as `docs(backlog): record capability module deferrals`
-- [ ] T060 Compare post-extraction module coverage against the T001 baseline; any regression is either fixed or recorded as a BACKLOG entry — not silently accepted
-- [ ] T061 Re-measure `Verify` p99 over ≥10 000 iterations and assert it is within **5%** of the T005 baseline (SC-009). A miss is a stop condition, not a note
-- [ ] T062 Confirm every checklist item in [checklists/requirements.md](./checklists/requirements.md) still holds against the delivered result
+- [ ] T061 [P] Add the BACKLOG entry *"Capability module: dedicated repository"* with Status/Reason/Definition of Done/Blockers, recording the import-path branding cost accepted in [R-003](./research.md) (Principle III)
+- [ ] T062 [P] Add the BACKLOG entry *"Capability module: publish + version policy"* with the same four fields (Principle III), then commit as `docs(backlog): record capability module deferrals`
+- [ ] T063 Compare post-extraction module coverage against the T001 baseline; any regression is either fixed or recorded as a BACKLOG entry — not silently accepted
+- [ ] T064 Re-measure `Verify` p99 over ≥10 000 iterations and assert it is within **5%** of the T005 baseline (SC-009). A miss is a stop condition, not a note
+- [ ] T065 Confirm every checklist item in [checklists/requirements.md](./checklists/requirements.md) still holds against the delivered result
 
 ---
 
@@ -278,10 +286,11 @@ T018 ‖ T019 ‖ T020 ‖ T021 ‖ T022 ‖ T023 ‖ T024 ‖ T025 ‖ T026
 ```
 T038 → T039 → T040
 T038 → (T041 ‖ T042 ‖ T043 ‖ T044)
-   →  T045 → (T046 ‖ T047 ‖ T048) → T049
+(T049 ‖ T050 ‖ T051)          # edge-case guards — independent of memstore
+   →  T045 → (T046 ‖ T047 ‖ T048) → T052
 ```
 
-**Phase 7** — T058 and T059 are independent file appends.
+**Phase 7** — T061 and T062 are independent file appends.
 
 ---
 
@@ -289,7 +298,7 @@ T038 → (T041 ‖ T042 ‖ T043 ‖ T044)
 
 ### MVP scope
 
-**Phases 1–4 (T001–T049).** Unusually, the MVP spans **two** P1 stories rather
+**Phases 1–4 (T001–T052).** Unusually, the MVP spans **two** P1 stories rather
 than one. This is deliberate and is argued in [spec.md](./spec.md): an
 extraction that makes the module importable but regresses PALADIN has not
 succeeded, and one that keeps PALADIN green without producing a usable module has
@@ -323,7 +332,7 @@ Halt and reassess rather than pressing on if:
   refactor. Record it and escalate rather than weakening the test.
 - T048 still shows a database driver in the graph → FR-003 is unmet and the
   feature's central promise is broken.
-- T061 exceeds the 5% bound → investigate before tagging; a silent latency
+- T064 exceeds the 5% bound → investigate before tagging; a silent latency
   regression on the authorisation hot path is not acceptable polish debt.
 
 ---
@@ -335,17 +344,25 @@ Halt and reassess rather than pressing on if:
 | 1 — Setup | — | T001–T005 | 5 |
 | 2 — Foundational | — | T006–T017 | 12 |
 | 3 — Move | US2 (P1) | T018–T037 | 20 |
-| 4 — Prove | US1 (P1) | T038–T049 | 12 |
-| 5 — Conformance | US3 (P2) | T050–T052 | 3 |
-| 6 — Adoption | US4 (P3) | T053–T057 | 5 |
-| 7 — Polish | — | T058–T062 | 5 |
-| **Total** | | | **62** |
+| 4 — Prove | US1 (P1) | T038–T052 | 15 |
+| 5 — Conformance | US3 (P2) | T053–T055 | 3 |
+| 6 — Adoption | US4 (P3) | T056–T060 | 5 |
+| 7 — Polish | — | T061–T065 | 5 |
+| **Total** | | | **65** |
 
 **Requirement coverage**: 29/29 (20 FR + 9 SC). The two previously uncovered —
 FR-011 and SC-008 — are closed by T039/T040; the two partials — FR-009 and
 FR-010 — by T044 and the FR-010 note on T035.
 
-**Parallel opportunities**: 22 tasks marked `[P]`, concentrated in the file
+**Edge-case coverage**: 8/8. Five were already covered (cross-currency and
+widening delegation by T042, in-flight revocation by T044, budget exhaustion
+by T040/T041, no-transaction consumer by T047). The remaining three — key
+rotation, missing-record-as-forgery, and unset budget unit — are closed by
+T049/T050/T051. They were *identified* in the spec from the start but never
+mapped to work, which is exactly how a checklist item reading "edge cases are
+identified" lets a gap survive three review passes.
+
+**Parallel opportunities**: 25 tasks marked `[P]`, concentrated in the file
 moves (Phase 3) and the test additions (Phase 4).
 
 **Commits**: 8, one logical scope each, satisfying Principle II without

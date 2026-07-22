@@ -105,6 +105,9 @@ capability/                          # NEW — the extracted module
 ├── metrics.go                       # OTel instrumentation (no-op by default)
 ├── doc.go                           # NEW — package docs (FR-018)
 ├── golden_test.go                   # NEW — wire-format guard, ships with the move
+├── rotation_test.go                 # NEW — retired-but-published key still verifies
+├── forgery_test.go                  # NEW — absent record is forgery, not 404
+├── unitcode_test.go                 # NEW — Normalise/IsAllowed unit-code helpers
 ├── testdata/
 │   └── golden_token.jwt             # frozen wire-format fixture (R-007)
 ├── memstore/                        # NEW — in-memory reference impl (R-006)
