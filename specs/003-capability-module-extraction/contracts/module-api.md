@@ -188,9 +188,24 @@ var (
 )
 ```
 
-Plus the store-side sentinels: `ErrNotFound`, `ErrUsageNotFound`,
-`ErrTenantBudgetNotFound`, `ErrTenantBudgetExceeded`,
-`ErrRequestLimitExceeded`.
+Plus five **store-side** sentinels, which are equally exported and equally
+frozen — a consumer implementing `Store` / `UsageStore[TX]` must return these
+exact values, because the module's own control flow matches on them:
+
+```go
+var (
+    ErrNotFound             = errors.New("capability: not found")
+    ErrUsageNotFound        = errors.New("capability: usage not found")
+    ErrTenantBudgetNotFound = errors.New("capability: tenant budget not found")
+    ErrTenantBudgetExceeded = errors.New("capability: tenant budget exceeded")
+    ErrRequestLimitExceeded = errors.New("capability: request limit exceeded")
+)
+```
+
+**Fourteen sentinels total.** FR-007 names nine because those are the nine a
+*verification* can reject with; the other five are the contract between the
+module and a store implementation. Both sets are frozen; only the nine are
+required to be distinguishable by an end consumer mapping to transport codes.
 
 **Contract**: consumers match with `errors.Is`. Every rejection path must wrap
 (never replace) its sentinel, so a consumer can map each to its own transport

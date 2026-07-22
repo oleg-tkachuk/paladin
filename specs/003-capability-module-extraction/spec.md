@@ -268,8 +268,12 @@ documentation to reach a working issue/verify cycle.
   the module's own documentation, without opening PALADIN's.
 - **SC-008**: Charge atomicity is demonstrated: an induced failure in the
   consumer-side side effect leaves the spend counter and ledger unchanged.
-- **SC-009**: No measurable regression in request-path authorisation latency
-  attributable to the extraction.
+- **SC-009**: Token verification on the request path shows **no more than 5%
+  increase at p99** against the pre-extraction baseline, measured over at
+  least 10 000 iterations of the same verification call on the same hardware.
+  The threshold is stated numerically because "no measurable regression" is
+  not a testable claim — a percentile, a sample size, and a bound are what
+  make it one.
 
 ## Assumptions
 

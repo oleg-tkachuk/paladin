@@ -17,7 +17,8 @@ with exactly one piece of real design work: the usage contract names `pgx.Tx`
 in its `onCharged` callback, which would force a database driver onto every
 consumer. That is resolved by parameterising the transaction handle as a
 generic type argument ([R-002](./research.md)), absorbed on PALADIN's side by a
-one-line alias so all 33 consumer files compile unchanged.
+one-line alias so all 28 consumer files (16 production, 12 test) compile
+unchanged.
 
 Everything else is mechanical relocation, sequenced ([R-008](./research.md))
 so `develop` stays green at every commit.
@@ -39,14 +40,16 @@ fixture; standalone module CI job that builds with no PALADIN checkout
 
 **Project Type**: library (nested module) alongside the existing web service
 
-**Performance Goals**: no measurable regression on the request authorisation
-path (SC-009); verification remains local — no issuer round trip
+**Performance Goals**: token verification ≤5% slower at p99 than the
+pre-extraction baseline over ≥10 000 iterations (SC-009); verification remains
+local — no issuer round trip
 
 **Constraints**: token wire format frozen (FR-006); module test suite runs with
 no database, no network, no container (SC-006)
 
 **Scale/Scope**: ~2 700 LOC relocated, 2 signatures parameterised, 856 LOC of
-relational implementation deliberately left behind, 33 consumer files preserved
+relational implementation deliberately left behind, 28 consumer files preserved
+(16 production, 12 test — counted on this branch; see [I1 note](#counting-note))
 
 ## Constitution Check
 
@@ -54,8 +57,8 @@ relational implementation deliberately left behind, 33 consumer files preserved
 
 | # | Principle | Gate | Status |
 |---|---|---|---|
-| I | Tests-First Guard Rails | Plan lists new unit + integration tests shipping in the SAME commits as production code. | **Pass** — the extraction adds no behaviour, so the guard rail is that *existing* suites pass on both sides. New tests are scoped and tied to a step: `memstore` + golden-token fixture (step 4), standalone module build/test job (step 2). The `onCharged` parameterisation (step 1) ships with its call-site test updated in the same commit. |
-| II | Single-Scope Conventional Commits | One logical scope per commit; multi-scope sweeps split. | **Pass** — [R-008](./research.md) defines five steps, each a single scope: `refactor(capability)` → `build(capability)` → `refactor(capability)` → `test(capability)` → `docs(capability)`. The import rewrite across 33 files is one mechanical scope, not a sweep of unrelated edits. |
+| I | Tests-First Guard Rails | Plan lists new unit + integration tests shipping in the SAME commits as production code. | **Pass** — the extraction adds no behaviour, so the guard rail is that *existing* suites pass on both sides. New tests are tied to the step they guard: the **golden-token test ships in step 3, in the same commit as the move it protects** (an earlier draft deferred it to step 4, which would have left one commit where the wire format was unguarded — corrected after analysis finding C1); `memstore`, the atomicity-rollback test, and the fencing test in step 4; the standalone build/test job in step 2. The `onCharged` parameterisation (step 1) ships with its call-site test updated in the same commit. |
+| II | Single-Scope Conventional Commits | One logical scope per commit; multi-scope sweeps split. | **Pass** — [R-008](./research.md) defines five steps, each a single scope: `refactor(capability)` → `build(capability)` → `refactor(capability)` → `test(capability)` → `docs(capability)`. The import rewrite across 28 files is one mechanical scope, not a sweep of unrelated edits. |
 | III | BACKLOG Source of Truth | Deferred work documented with Status/Reason/DoD/Blockers; closed entries deleted in the closing commit. | **Pass** — two entries to add: *"Capability module: dedicated repository"* (the import-path branding cost accepted in [R-003](./research.md)) and *"Capability module: publish + version policy"*. Both carry the four required fields. No existing entry is closed by this work. |
 | IV | Pre-1.0 Breaking Allowed | Breaking proto/SQL/API changes update dependent BACKLOG entries; new SQL migrations have working `-- +goose Down`. | **Pass** — **no SQL migration, no proto change**. The source-level break (two signatures gain a type parameter) is permitted pre-1.0 and is absorbed by an alias. The token **wire format is explicitly frozen** (FR-006) and pinned by a golden fixture ([R-007](./research.md)) — the deliberate exception explained in spec Assumptions. |
 | V | Local-Dev Parity Through Overlays | New chart values delivered via `gitops` overlay files, not inline `helm.values`. | **N/A** — no chart value, no deployment surface, no runtime configuration change. Pure source reorganisation. |
@@ -158,7 +161,7 @@ Complete. See [research.md](./research.md). Eight decisions recorded; all
 Technical Context unknowns resolved. Load-bearing outcomes:
 
 - **R-002** — generic `TX` parameter removes the only driver dependency while
-  preserving compile-time safety on the charge path and keeping 33 consumers
+  preserving compile-time safety on the charge path and keeping 28 consumers
   source-compatible behind an alias.
 - **R-004** — `replace` for local development, **plus a standalone CI job**,
   because `replace` would otherwise mask a module that cannot build alone.
@@ -206,9 +209,30 @@ Re-evaluating the constitution against the completed design:
 |---|---|---|---|
 | Generic parameter ripples beyond the two declarations | Medium | Medium | Step 1 lands the parameterisation **alone**, before any file moves, so a bisect isolates it. The alias is the containment boundary; if ripple exceeds it, stop and reassess before step 3. |
 | `replace` hides a module that cannot build standalone | **High** if unmitigated | High — silently defeats the feature's purpose | Standalone CI job (R-004) is a **required** deliverable of step 2, not step 5. |
-| Wire format changes invisibly during the move | Low | **Critical** — invalidates live agent credentials | Golden-token fixture (R-007) fails CI on any format drift. |
-| Import-path churn across 33 files hides a stray edit | Medium | Low | The rewrite is mechanical; step 3 is import-only, so any non-import diff in that commit is a review flag. |
+| Wire format changes invisibly during the move | Low | **Critical** — invalidates live agent credentials | Golden-token fixture (R-007) fails CI on any format drift. The fixture is minted from pre-extraction code (step 1 of the sequence) and its **test ships inside the move commit itself**, so no commit exists where the format is unguarded. |
+| Charge atomicity is unverified — it has no test today, before or after | **High** if unmitigated | **Critical** — a silent partial write corrupts spend counters | `memstore` gains a staging-commit semantic and an induced-failure test asserts both counters stay unmutated (SC-008/FR-011). Added after analysis finding G1; the property was previously moved across the boundary with no coverage on either side. |
+| Import-path churn across 28 files hides a stray edit | Medium | Low | The rewrite is mechanical; step 3 is import-only, so any non-import diff in that commit is a review flag. |
 | Moved code's test coverage is weaker than believed | Medium | Medium | Record the module's `go test -cover` baseline **before** step 3, so post-move coverage is compared against a number rather than a memory. |
+
+## Counting note
+
+The "28 consumer files" figure (16 production, 12 test) is counted **on this
+branch**, which is based on `develop`. An earlier draft said 33; that number
+was taken while `fix/s3adapter-part-chunking` was checked out, where commit
+`6a78c15` adds two further test files under
+`backend/internal/api/admin/v1/capabilityh/`. Both numbers were correct for
+their branch, which is exactly why the branch is now stated alongside the
+figure.
+
+Reproduce with:
+
+```bash
+cd backend && grep -rln "internal/capability" --include="*.go" . \
+  | sed 's|^\./||' | grep -vE '^internal/capability/' | wc -l
+```
+
+If that count differs when the work starts, the task enumeration in
+`tasks.md` (T026–T031) is what must be reconciled — not this prose.
 
 ## Not Doing (and why)
 

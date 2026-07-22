@@ -62,4 +62,18 @@
    implementation is not a success, so neither story alone is a viable
    slice.
 
-**Status**: All items pass. Ready for `/speckit-plan`.
+**Iteration 2 (2026-07-23, post-`/speckit-analyze`)**:
+
+6. *Unmeasurable success criterion* — SC-009 read "No measurable regression in
+   request-path authorisation latency", which fails the "success criteria are
+   measurable" item above. It survived iteration 1 because the phrase *sounds*
+   quantitative. Resolved: SC-009 now states p99, a ≥10 000-iteration sample,
+   and a 5% bound, with the same numbers mirrored in `plan.md` Performance
+   Goals and asserted by tasks T005/T061.
+
+   *Process note*: this is the one checklist item that was marked passing in
+   iteration 1 and should not have been. Recorded rather than quietly flipped,
+   because a checklist that only ever gains ticks is not doing its job.
+
+**Status**: All items pass, with item "Success criteria are measurable"
+re-verified after the SC-009 correction. Ready for `/speckit-implement`.
