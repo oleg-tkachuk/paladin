@@ -103,10 +103,14 @@ capability/                          # NEW — the extracted module
 ├── usage.go                         # UsageStore[TX] contract  ← parameterised
 ├── metering_store.go                # MeteringStore[TX]        ← parameterised
 ├── metrics.go                       # OTel instrumentation (no-op by default)
+├── doc.go                           # NEW — package docs (FR-018)
+├── golden_test.go                   # NEW — wire-format guard, ships with the move
 ├── testdata/
 │   └── golden_token.jwt             # frozen wire-format fixture (R-007)
 ├── memstore/                        # NEW — in-memory reference impl (R-006)
-│   └── memstore.go
+│   ├── memstore.go                  #   incl. staging-commit semantic for Charge
+│   ├── memstore_test.go             # NEW — revocation, cascade, limit rejections
+│   └── atomicity_test.go            # NEW — induced-failure rollback (SC-008)
 └── example/                         # NEW — runnable walkthrough (FR-019)
     └── main.go
 
@@ -167,8 +171,13 @@ Technical Context unknowns resolved. Load-bearing outcomes:
   source-compatible behind an alias.
 - **R-004** — `replace` for local development, **plus a standalone CI job**,
   because `replace` would otherwise mask a module that cannot build alone.
-- **R-007** — golden-token fixture freezes the wire format, the one thing this
-  refactor could break invisibly.
+- **R-006** — the extraction adds **three** guards, not just relocated tests:
+  wire format, charge atomicity, and generation fencing. Each covers a
+  property nothing currently asserts; the atomicity one closes a gap that
+  predates this feature.
+- **R-007** — golden-token fixture freezes the wire format — one of three
+  properties this refactor could break invisibly, and the only one whose
+  failure invalidates credentials already held by running agents.
 - **R-008** — five-step sequence keeping `develop` green at every commit.
 
 ## Phase 1 — Design & Contracts

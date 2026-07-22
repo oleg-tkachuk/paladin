@@ -256,7 +256,15 @@ consumer that configures no provider gets OTel's no-op and pays nothing
 | Obligation | Enforced by |
 |---|---|
 | Token wire format unchanged (FR-006) | Golden-token fixture in `testdata/` ([R-007](../research.md)) |
+| **Charge atomicity — an `onCharged` failure leaves both counters unmutated (FR-011)** | **Induced-failure rollback test against `memstore`'s staging-commit semantic (SC-008)** |
+| Two-ceiling rule — a rejection by either ceiling mutates neither counter (FR-013) | `memstore` conformance tests |
+| Generation fencing — a write decided pre-revocation must not land after (FR-009) | Fencing test in the module's own suite |
 | All nine sentinels distinguishable (FR-007) | This document + PALADIN's unchanged suites (SC-005) |
 | No database driver in the dependency graph (FR-003) | Standalone CI job ([R-004](../research.md)) |
 | No object-storage dependency (FR-002) | Same standalone job (SC-002) |
 | Contracts satisfiable in memory (FR-005) | `memstore` package, used by the module's own tests |
+
+The atomicity row is listed second deliberately: it is the property the whole
+`TX` parameterisation exists to preserve, and the one with **no test anywhere
+in the repository before this feature**. §1.2 states the requirement; this row
+names what enforces it.
