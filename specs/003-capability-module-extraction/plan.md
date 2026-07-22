@@ -33,8 +33,10 @@ so `develop` stays green at every commit.
 **Storage**: none in the module (contracts only); the relational reference
 implementation stays in PALADIN at `backend/internal/capability/postgres/`
 
-**Testing**: `go test`; relocated unit suites + new in-memory store + golden-token
-fixture; standalone module CI job that builds with no PALADIN checkout
+**Testing**: `go test`; relocated unit suites + in-memory reference store with a
+staging-commit semantic; three guards for properties nothing currently asserts
+— golden-token (wire format), induced-failure rollback (charge atomicity),
+generation fencing; standalone module CI job that builds with no PALADIN checkout
 
 **Target Platform**: any Go-supported platform — library, no runtime assumptions
 
@@ -58,7 +60,7 @@ relational implementation deliberately left behind, 28 consumer files preserved
 | # | Principle | Gate | Status |
 |---|---|---|---|
 | I | Tests-First Guard Rails | Plan lists new unit + integration tests shipping in the SAME commits as production code. | **Pass** — the extraction adds no behaviour, so the guard rail is that *existing* suites pass on both sides. New tests are tied to the step they guard: the **golden-token test ships in step 3, in the same commit as the move it protects** (an earlier draft deferred it to step 4, which would have left one commit where the wire format was unguarded — corrected after analysis finding C1); `memstore`, the atomicity-rollback test, and the fencing test in step 4; the standalone build/test job in step 2. The `onCharged` parameterisation (step 1) ships with its call-site test updated in the same commit. |
-| II | Single-Scope Conventional Commits | One logical scope per commit; multi-scope sweeps split. | **Pass** — [R-008](./research.md) defines five steps, each a single scope: `refactor(capability)` → `build(capability)` → `refactor(capability)` → `test(capability)` → `docs(capability)`. The import rewrite across 28 files is one mechanical scope, not a sweep of unrelated edits. |
+| II | Single-Scope Conventional Commits | One logical scope per commit; multi-scope sweeps split. | **Pass** — [R-008](./research.md) defines five *steps*, which `tasks.md` realises as **eight commits**, each carrying one logical scope: `chore(capability)` (baselines) → `refactor(capability)` (parameterise) → `build(capability)` (skeleton) → `refactor(capability)` (move) → `test(capability)` (guards) → `test(capability)` (conformance) → `docs(capability)` (release) → `docs(backlog)` (deferrals). Verified mechanically: the Commit Scope Map has one commit task per row (8 = 8). The import rewrite across 28 files is one mechanical scope, not a sweep of unrelated edits. |
 | III | BACKLOG Source of Truth | Deferred work documented with Status/Reason/DoD/Blockers; closed entries deleted in the closing commit. | **Pass** — two entries to add: *"Capability module: dedicated repository"* (the import-path branding cost accepted in [R-003](./research.md)) and *"Capability module: publish + version policy"*. Both carry the four required fields. No existing entry is closed by this work. |
 | IV | Pre-1.0 Breaking Allowed | Breaking proto/SQL/API changes update dependent BACKLOG entries; new SQL migrations have working `-- +goose Down`. | **Pass** — **no SQL migration, no proto change**. The source-level break (two signatures gain a type parameter) is permitted pre-1.0 and is absorbed by an alias. The token **wire format is explicitly frozen** (FR-006) and pinned by a golden fixture ([R-007](./research.md)) — the deliberate exception explained in spec Assumptions. |
 | V | Local-Dev Parity Through Overlays | New chart values delivered via `gitops` overlay files, not inline `helm.values`. | **N/A** — no chart value, no deployment surface, no runtime configuration change. Pure source reorganisation. |
@@ -232,7 +234,8 @@ cd backend && grep -rln "internal/capability" --include="*.go" . \
 ```
 
 If that count differs when the work starts, the task enumeration in
-`tasks.md` (T026–T031) is what must be reconciled — not this prose.
+`tasks.md` (T027–T032, the import-rewrite range) is what must be reconciled
+— not this prose.
 
 ## Not Doing (and why)
 

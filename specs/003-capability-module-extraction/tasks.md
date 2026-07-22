@@ -19,13 +19,20 @@ added here ([R-006](./research.md), [R-007](./research.md)).
 commit. Each step carries exactly one conventional-commit scope (Principle II).
 
 > **Revision (2026-07-23, post-`/speckit-analyze`)** — this list was amended to
-> close four findings. **G1 (CRITICAL)**: charge atomicity had zero task
+> close **five** findings. **G1 (CRITICAL)**: charge atomicity had zero task
 > coverage *and* zero test coverage in the repo; T039/T040 add it. **C1
 > (HIGH)**: the golden-token test was one commit later than the move it
 > guards, violating Principle I; it is now T033, inside the move commit.
 > **G2**: generation fencing had no assertion; T044 adds it. **A1**: SC-009's
 > latency claim was untestable; T005 now captures a baseline and T061 asserts
-> a numeric bound against it.
+> a numeric bound against it. **I1**: the consumer-file count was taken on a
+> different branch — T008 now says 28, not 33.
+>
+> A second analysis pass then corrected documentation drift the first
+> remediation introduced (stale task-ID range, an outdated commit enumeration,
+> and two Phase 0 statements the growing task list had falsified). Those edits
+> landed in `research.md` and `plan.md`; this list was unaffected apart from
+> the count above, and stays at 62 tasks.
 
 ## Format: `[ID] [P?] [Story] Description`
 

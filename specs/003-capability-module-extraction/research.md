@@ -33,7 +33,7 @@ only genuine architectural work is R-002. Everything else is mechanical.
 |---|---:|---|
 | Core (`types/signer/verifier/issuer/delegate/cache/jwks/keyloader/store/usage/metering_store/metrics`) | 2 701 | **Module** |
 | `internal/capability/postgres` (`store.go`, `usage.go`) | 856 | **Stays in PALADIN** |
-| Consumer files across PALADIN | 33 files | **Stays in PALADIN** |
+| Consumer files across PALADIN | 28 files (16 prod, 12 test) | **Stays in PALADIN** |
 
 ---
 
@@ -70,7 +70,7 @@ type MeteringStore[TX any] struct { Inner UsageStore[TX] }
 ```
 
 ```go
-// PALADIN, one line, keeps all 33 consumers source-compatible
+// PALADIN, one line, keeps all 28 consumers source-compatible
 type UsageStore = capability.UsageStore[pgx.Tx]
 ```
 
@@ -182,21 +182,41 @@ forces an adapter on the one consumer that already speaks OTel); build tags
    `verifier_test.go`).
 2. The module gains an **in-memory reference implementation** of `Store` and
    `UsageStore[TX]` under `capability/memstore/`, used by its own tests and
-   doubling as the worked example for FR-019.
+   doubling as the worked example for FR-019. It carries a **staging-commit
+   semantic** for `Charge` — without one, no implementation in the module is
+   capable of demonstrating rollback, and SC-008 stays unverifiable.
 3. PALADIN's existing capability/auth/billing/outbox tests stay in PALADIN and must
    pass with **no assertion changed** (FR-017, SC-003).
 4. A new **standalone CI job** builds and tests the module from its own
    directory with no PALADIN checkout on the module path (R-004).
+5. **Three guards** are added for properties this refactor could break
+   silently, each tied to the thing it protects:
+   - *wire format* — the golden-token fixture (R-007), shipping in the same
+     commit as the move;
+   - *charge atomicity* — an induced `onCharged` failure must leave both
+     counters unmutated (FR-011/SC-008). This property has **no test anywhere
+     in the repository today**, so the guard closes a pre-existing gap rather
+     than merely preserving coverage;
+   - *generation fencing* — a write authorised against a pre-revocation view
+     must not land afterwards (FR-009).
 
-**Rationale**: the in-memory store is the only new test infrastructure needed,
-and it does double duty as documentation. The module's suite must run with no
-database, no network, no container (SC-006) — the in-memory store is what
-makes that true.
+**Rationale**: the in-memory store is the only new test *infrastructure*
+needed, and it does double duty as documentation. The module's suite must run
+with no database, no network, no container (SC-006) — the in-memory store is
+what makes that true. The three guards are tests, not infrastructure, and each
+exists because the move's blast radius reaches a property nothing else asserts.
 
 **Constitution note (Principle I)**: this satisfies tests-first because the
 extraction ships no new behaviour; the guard rail is that the *existing*
 suites keep passing on both sides of the boundary. New tests are limited to
-the in-memory store and the standalone-build job.
+the in-memory store, the standalone-build job, and the three guards above —
+each landing in the same commit as the code it protects.
+
+> **Amended 2026-07-23** (analysis findings G1/G2, then R1). The original
+> decision said "new tests are limited to the in-memory store and the
+> standalone-build job", which the task list later contradicted. Recorded as
+> an amendment rather than a silent rewrite: the scope genuinely grew when the
+> atomicity gap was discovered, and the record should show that.
 
 ---
 
@@ -211,9 +231,13 @@ IV) but tokens are credentials that outlive a deployment — a format break
 invalidates live capabilities held by running agents. A golden fixture makes
 an accidental format change fail CI rather than fail in production.
 
-**Scope note**: this is the one place the extraction adds a genuinely new
-test rather than relocating one, and it is justified precisely because the
-refactor's blast radius includes the serialisation path.
+**Scope note**: this is one of **three** guards the extraction adds rather
+than relocates — alongside charge atomicity and generation fencing (R-006
+item 5). Each is justified the same way: the refactor's blast radius reaches
+a property that nothing currently asserts. For the wire format specifically,
+the consequence of an undetected change is the worst of the three, because it
+invalidates credentials already held by running agents rather than failing a
+build.
 
 ---
 
@@ -251,4 +275,4 @@ commit rule (Principle II) with one scope per step.
 | Project type | Library (nested module) + existing web service as reference consumer |
 | Performance goals | No regression on the request authorisation path (SC-009); verification stays local (no issuer round trip) |
 | Constraints | Token wire format frozen; module suite runs with no external infrastructure |
-| Scale/Scope | ~2 700 LOC moved, 2 signatures changed, 33 consumer files preserved |
+| Scale/Scope | ~2 700 LOC moved, 2 signatures changed, 28 consumer files preserved |
