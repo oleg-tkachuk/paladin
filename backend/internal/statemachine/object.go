@@ -50,9 +50,13 @@ const (
 // handler, reconciler poll) — the SQL uses WHERE state/sequencer guards so
 // the first-to-commit wins and the rest are no-ops.
 type Transitioner struct {
-	pool *pgxpool.Pool
+	pool dbPool
 }
 
+// New takes the concrete pool — callers keep passing *pgxpool.Pool — while the
+// field is stored behind dbPool so the tx-orchestrating paths can be exercised
+// without a database, the same way dbExec already does for the statement
+// bodies.
 func New(pool *pgxpool.Pool) *Transitioner {
 	return &Transitioner{pool: pool}
 }
@@ -64,6 +68,15 @@ func New(pool *pgxpool.Pool) *Transitioner {
 type dbExec interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// dbPool is the subset of *pgxpool.Pool the Transitioner itself needs: the
+// statement surface of dbExec plus Begin (for the *InTx orchestrators) and
+// Query (for ScanPendingExpired). *pgxpool.Pool satisfies it as-is.
+type dbPool interface {
+	dbExec
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // PromoteToAvailable attempts the PENDING → AVAILABLE transition for
