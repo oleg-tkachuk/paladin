@@ -1245,77 +1245,55 @@ of the pipeline._
 
 ### Dedicated repository for the capability module
 
-- **Status:** Deferred
-- **Reason:** The module lives at repo-root `capability/` with import path
-  `github.com/oleg-tkachuk/paladin/capability`. That path still
-  says "paladin", which works against the positioning that the
-  primitive is independent of object storage. The cost is branding, not
-  technical, and it is reversible: a move changes `module` in `go.mod` and
-  consumers' import lines, nothing else. Paying repo-split overhead (two CI
-  pipelines, no atomic cross-repo changes) for a hypothetical audience is
-  premature. See specs/003-capability-module-extraction/research.md R-003.
-- **Definition of Done:**
-  - At least one external adopter exists, or a decision is taken to publish.
+- **Status:** Not planned — revisit only on a visibility/licence divergence.
+- **Reason:** An earlier draft filed this as deferred work on the grounds that
+  the import path `github.com/oleg-tkachuk/paladin/capability`
+  still says "paladin", which sits awkwardly with a module whose
+  pitch is that it has nothing to do with object storage. That reasoning does
+  not survive scrutiny, and the entry is rewritten rather than quietly kept:
+  - **Nested modules already give what a split is usually wanted for.** Go
+    tags them independently (`capability/v0.1.0`), and the standalone CI job
+    already builds the module with no PALADIN checkout.
+  - **The path is cosmetic.** Anyone evaluating the module reads the README
+    first, and it never mentions object storage. People import
+    `k8s.io/apimachinery/pkg/apis/meta/v1` daily without complaint.
+  - **The cost is paid every day, the benefit is hypothetical.** Today a
+    change to the module and its consumer is one commit, one review, one CI
+    run. After a split it is two PRs, a version bump between them, and a
+    window where the two disagree — for zero current adopters.
+
+  The one reason that would genuinely force a split is a **divergence in
+  visibility or licence** — PALADIN going closed or commercial while the module
+  stays open. That is a business-model decision, not a packaging one, and
+  there is no way to satisfy it without separate repositories.
+- **Definition of Done (only if the trigger fires):**
   - Module moved to its own repository; `module` line and consumer imports
     updated; PALADIN consumes it by version rather than `replace`.
-  - CI for the new repo mirrors the standalone job in
-    `.github/workflows/capability-module.yml`.
-- **Blockers:** No external adopter yet. Not worth doing before one exists.
+  - CI mirrors the standalone job in `.github/workflows/capability-module.yml`.
+  - Old import path left resolvable — the module proxy keeps serving it, so
+    the move is not a one-way door for existing consumers.
+- **Blockers:** none — this is a decision, not work. Nothing is waiting on it.
 
 ### Capability module: publish + version policy
 
-- **Status:** Deferred
-- **Reason:** T059 called for tagging `capability/vX.Y.Z`. Tagging publishes,
-  and publishing carries obligations (a version people pin, a compatibility
-  expectation) that a refactor should not incur as a side effect. The module
-  is importable today via the `replace` directive; a tag can follow when
-  someone actually consumes it.
+- **Status:** Deferred — **unblocked** (see note).
+- **Reason:** Tagging publishes, and publishing carries obligations (a version
+  people pin, a compatibility expectation) that a refactor should not incur as
+  a side effect. The module is importable today via the `replace` directive.
+- **Note:** This was previously blocked on the repository decision above, on
+  the reasoning that tagging under the current path then moving would strand
+  the tag. That blocker is gone: the repository split is now "not planned",
+  and even if it later fires, the Go module proxy keeps the old path
+  resolvable, so a tag under the current path is not wasted. Tagging
+  `capability/v0.1.0` can happen whenever there is a reason to.
 - **Definition of Done:**
-  - Version policy decided and written down: what pre-1.0 means for the Go
-    API vs the token wire format (the format is already treated as frozen —
-    FR-006 — while the Go API is not).
+  - Version policy written down: what pre-1.0 means for the Go API vs the
+    token wire format. They differ — the format is already treated as frozen
+    (FR-006, pinned by the golden fixture) while the Go API is not.
   - First tag pushed; `backend/go.mod` pins the version alongside `replace`.
-- **Blockers:** Depends on the repository decision above — tagging under the
-  current path then moving would strand the tag.
-
-### Capability module: restore gomoddirectives replace-local
-
-- **Status:** Deferred
-- **Reason:** `backend/go.mod` carries a relative `replace` to the nested
-  `capability/` module until that module is tagged. `gomoddirectives` rejects
-  relative replaces, and the only knob that governs them is `replace-local`
-  (the `replace-allow-list` option covers non-local replacements only). So the
-  check is now off for **all** local replaces in `backend/`, not just this one
-  — a genuine widening, accepted because the alternative was disabling the
-  linter outright.
-- **Definition of Done:**
-  - `capability` is tagged and `backend/go.mod` pins a version instead of the
-    relative replace.
-  - `replace-local: true` deleted from `backend/.golangci.yaml` in the same
-    commit as the directive, and `golangci-lint run ./...` still passes.
-- **Blockers:** Depends on "Capability module: publish + version policy",
-  which is itself blocked on the repository decision.
-
-### Backend image: build context widened to the repository root
-
-- **Status:** SHIPPED (2026-07-23) — recorded because it changes an
-  operational assumption, not because work remains.
-- **Shipped:** The backend image now builds from the repo root instead of
-  `backend/`, because the binary depends on the nested `capability/` module
-  and a component-scoped context cannot reach it (`go mod download` fails
-  resolving the relative replace — reproduced via `task deploy-all`). Every
-  `COPY` in `backend/deploy/Dockerfile` is repo-relative; `BUILD_CONTEXT` in
-  `backend/Taskfile.yaml` is `..`.
-- **Operational note:** `backend/.dockerignore` **no longer applies** — Docker
-  reads only the file at the context root. Its rules were folded into a new
-  root `.dockerignore`, which also excludes `frontend/`, `specs/`, `docs/` and
-  the rest of the tree the backend image never builds. Verified: context is
-  ~8 MB against a 2.3 GB repo, and the image builds and runs (84.9 MB).
-  Anyone editing `backend/.dockerignore` expecting it to affect the backend
-  image will be editing a dead file — delete it when the replace goes away and
-  the context can move back, or sooner.
-- **Blockers:** none. Entry deletable once the context question is revisited
-  alongside module tagging.
+  - `replace-local: true` removed from `backend/.golangci.yaml` in the same
+    commit that drops the directive (see the entry below).
+- **Blockers:** none.
 
 ### Capability module CI: deny network egress in the standalone job
 
