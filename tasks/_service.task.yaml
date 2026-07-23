@@ -40,6 +40,12 @@ tasks:
         sh: bash "$(git rev-parse --show-toplevel)/tasks/version.sh"
       _IMAGE: '{{.OCI_REGISTRY}}/{{.IMAGE_NAMESPACE}}/{{.PROJECT_NAME}}'
       _CTX: '{{.BUILD_CONTEXT | default "."}}'
+      # Docker gets its own context because it can differ from the helm one:
+      # a component whose image needs a sibling module (see paladin-core and the
+      # capability module) builds from the repo root, while its chart still
+      # packages from the component dir. Defaults to BUILD_CONTEXT, so callers
+      # that do not set it are unaffected.
+      _DCTX: '{{.DOCKER_CONTEXT | default .BUILD_CONTEXT | default "."}}'
     cmds:
       - echo "[deploy] {{.PROJECT_NAME}} version={{._VERSION}} image={{._IMAGE}}"
       # Build the numeric version as the primary (only) tag — the chart's
@@ -56,7 +62,7 @@ tasks:
       # cd BUILD_CONTEXT first so DOCKERFILE + context resolve from the
       # component root.
       - cmd: |-
-          cd {{._CTX}} && docker buildx build --load \
+          cd {{._DCTX}} && docker buildx build --load \
             --network=host \
             --tag {{._IMAGE}}:{{._VERSION}} \
             --file {{.DOCKERFILE}} \

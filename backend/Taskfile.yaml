@@ -9,7 +9,10 @@ vars:
   PROJECT_NAME: paladin-core
   COMPOSE_FILE: ./deploy/docker-compose.yaml
   DEPLOY_INFO_ENV_FILE: ./deploy/info.env
-  DOCKERFILE: ./deploy/Dockerfile
+  # Relative to DOCKER_CONTEXT (repo root), not to backend/ — the image
+  # build needs the sibling capability module in its context.
+  DOCKERFILE: ./backend/deploy/Dockerfile
+  DOCKER_CONTEXT: ..
   CHART_DIR: ./deploy/chart
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
@@ -52,10 +55,13 @@ includes:
     vars:
       PROJECT_NAME: paladin-core
       IMAGE_NAMESPACE: paladin
-      # Repo root, not backend/: the binary depends on the nested capability
-      # module at capability/, which a backend-only context cannot reach.
+      # DOCKER_CONTEXT is the repo root, not backend/: the binary depends on
+      # the nested capability module at capability/, which a backend-only
+      # context cannot reach. BUILD_CONTEXT stays '.' — the Helm chart still
+      # packages from backend/, and conflating the two breaks helm package.
       DOCKERFILE: ./backend/deploy/Dockerfile
-      BUILD_CONTEXT: ..
+      DOCKER_CONTEXT: ..
+      BUILD_CONTEXT: .
       CHART_DIR: ./deploy/chart
       K8S_NAMESPACE: paladin
       GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}"

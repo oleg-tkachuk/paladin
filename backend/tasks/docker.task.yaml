@@ -118,7 +118,7 @@ tasks:
           # Without it the build result stays in BuildKit's cache and the
           # downstream `docker push` fails with "tag does not exist".
           # No-op when the legacy docker driver is active.
-          docker buildx build --load \
+          cd {{.DOCKER_CONTEXT | default "."}} && docker buildx build --load \
             --network=host \
             --tag {{.IMAGE}}:{{.TAG}} \
             --file {{.DOCKERFILE}} \
