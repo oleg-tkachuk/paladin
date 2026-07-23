@@ -206,3 +206,11 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.54.0 // indirect
 )
+
+// The capability primitive lives in a sibling module so third parties can
+// consume it without PALADIN. `replace` keeps the working tree building against
+// local source; the standalone CI job is what proves the module stands alone
+// (research R-004 — without that job, `replace` would mask a broken module).
+require github.com/oleg-tkachuk/paladin/capability v0.0.0
+
+replace github.com/oleg-tkachuk/paladin/capability => ../capability

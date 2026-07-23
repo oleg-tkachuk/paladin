@@ -98,7 +98,7 @@ scope each.
 - [X] T010 Update the relational implementation in `backend/internal/capability/postgres/usage.go` to satisfy the instantiated contract (`UsageStore[pgx.Tx]`)
 - [X] T011 Verify the single production call site in `backend/internal/auth/capability_interceptor.go` (line ~535) compiles with its `onCharged` closure **unchanged** — if it needs edits, the parameterisation is wrong; stop and reassess
 - [X] T012 Run `go build ./...` and `go test ./...` from `backend/`; confirm the T004 baseline is restored with **zero** consumer files edited beyond T009/T010
-- [ ] T013 Commit as `refactor(capability): parameterise the charge transaction handle`
+- [X] T013 Commit as `refactor(capability): parameterise the charge transaction handle`
 
 **Gate**: if more than the two declaration sites plus the alias required
 edits, the ripple exceeded its containment boundary — halt before Step 2.
@@ -107,10 +107,10 @@ edits, the ripple exceeded its containment boundary — halt before Step 2.
 
 ⚠️ The standalone CI job is a **required deliverable of this step, not a later polish item** ([R-004](./research.md), plan Risks row 2). Without it, `replace` silently hides a module that cannot build alone — which would defeat the entire feature while appearing to work.
 
-- [ ] T014 Create `capability/go.mod` with module path `github.com/oleg-tkachuk/paladin/capability` and Go 1.26, requiring only `github.com/google/uuid` and `go.opentelemetry.io/otel` (FR-001)
-- [ ] T015 Add `require` + `replace github.com/oleg-tkachuk/paladin/capability => ../capability` to `backend/go.mod`
-- [ ] T016 Add a CI job that runs `go build ./...` and `go test ./...` **from `capability/`, with no `replace` in effect and no `backend/` checkout on the module path** — this is what actually enforces FR-002/FR-003
-- [ ] T017 Add a CI assertion that the module's resolved dependency graph contains no database driver and no object-storage package (compare against T002; satisfies SC-002)
+- [X] T014 Create `capability/go.mod` with module path `github.com/oleg-tkachuk/paladin/capability` and Go 1.26, requiring only `github.com/google/uuid` and `go.opentelemetry.io/otel` (FR-001)
+- [X] T015 Add `require` + `replace github.com/oleg-tkachuk/paladin/capability => ../capability` to `backend/go.mod`
+- [X] T016 Add a CI job that runs `go build ./...` and `go test ./...` **from `capability/`, with no `replace` in effect and no `backend/` checkout on the module path** — this is what actually enforces FR-002/FR-003
+- [X] T017 Add a CI assertion that the module's resolved dependency graph contains no database driver and no object-storage package (compare against T002; satisfies SC-002)
 - [ ] T018 Commit as `build(capability): add the module skeleton and standalone CI job`
 
 **Checkpoint**: module exists and is empty; PALADIN still builds; the guard that

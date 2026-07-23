@@ -1,0 +1,123 @@
+name: Capability module
+
+# Standalone verification for the extracted capability module.
+#
+# This job exists because PALADIN consumes the module through a `replace`
+# directive, and `replace` silently masks a module that cannot build on its
+# own. The backend build passing therefore proves nothing about whether a
+# third party could actually import this — which is the entire point of the
+# extraction (research R-004).
+#
+# Two properties are enforced here and nowhere else:
+#   FR-002 — no object-storage dependency
+#   FR-003 — no database driver
+#
+# Both are checked against the module's RESOLVED dependency graph, not against
+# its go.mod, because a transitive pull is just as disqualifying as a direct
+# one. The pre-extraction baseline (specs/.../baseline-deps.txt) counted 10
+# jackc/pgx packages; the module must resolve zero.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: capability
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: capability/go.mod
+          cache-dependency-path: capability/go.sum
+
+      # The module is created empty in step 2 of the extraction and receives
+      # its packages in step 3. `go test ./...` exits 1 on a package-less
+      # module, so every step below is gated on this — the job must be green
+      # at every commit, which is the sequencing rule the whole plan rests on
+      # (research R-008).
+      - name: Detect packages
+        id: pkgs
+        run: |
+          set -euo pipefail
+          if [ -n "$(go list ./... 2>/dev/null || true)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::module has no packages yet (pre-step-3); build/test/graph checks skipped"
+          fi
+
+      # No `replace` is in effect here and backend/ is never entered. If the
+      # module needs anything from PALADIN, this step is where it fails.
+      - name: Build standalone
+        if: steps.pkgs.outputs.present == 'true'
+        run: go build ./...
+
+      - name: gofmt check
+        if: steps.pkgs.outputs.present == 'true'
+        run: |
+          out="$(gofmt -l . || true)"
+          if [ -n "$out" ]; then
+            echo "ERROR: gofmt needed on:"; echo "$out"; exit 1
+          fi
+
+      - name: go vet
+        if: steps.pkgs.outputs.present == 'true'
+        run: go vet ./...
+
+      # SC-006: the suite must run with no database, no network, no container.
+      # GOFLAGS=-mod=mod with a warm module cache means no network fetch; the
+      # runner has no database and the tests must not start one.
+      - name: Test with no external infrastructure
+        if: steps.pkgs.outputs.present == 'true'
+        run: go test ./...
+
+      # FR-003 / FR-002. Kept as an explicit allow-deny check rather than a
+      # go.mod diff so a transitive dependency cannot slip through.
+      - name: Assert no database driver and no storage SDK
+        if: steps.pkgs.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          deps="$(go list -deps ./...)"
+
+          fail=0
+          check() {
+            local pattern="$1" label="$2"
+            local hits
+            hits="$(printf '%s\n' "$deps" | grep -E "$pattern" || true)"
+            if [ -n "$hits" ]; then
+              echo "ERROR: $label present in the module dependency graph:"
+              printf '%s\n' "$hits" | sed 's/^/  /'
+              fail=1
+            fi
+          }
+
+          # Database drivers (FR-003)
+          check 'jackc/pgx|lib/pq|go-sql-driver/mysql|mattn/go-sqlite3|modernc.org/sqlite|database/sql' 'a database driver'
+          # Object-storage SDKs (FR-002)
+          check 'aws-sdk-go|minio-go|cloud.google.com/go/storage|Azure/azure-sdk-for-go' 'an object-storage SDK'
+
+          if [ "$fail" -ne 0 ]; then
+            echo
+            echo "The capability module must be consumable by a third party that"
+            echo "uses neither object storage nor a specific database. See FR-002,"
+            echo "FR-003 and specs/003-capability-module-extraction/contracts/."
+            exit 1
+          fi
+          echo "OK: no database driver, no storage SDK"
