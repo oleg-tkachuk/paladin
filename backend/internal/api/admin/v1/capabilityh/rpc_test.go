@@ -5,12 +5,14 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
 
 // Drives Issue / Revoke / List / GetUsage through the handler with the
@@ -51,7 +53,7 @@ func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.List
 // method the handler might start calling panics loudly instead of silently
 // returning a zero value.
 type fakeUsage struct {
-	capability.UsageStore
+	capability.UsageStore[pgx.Tx]
 	out capability.Usage
 	err error
 	got uuid.UUID
