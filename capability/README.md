@@ -229,4 +229,4 @@ it as a separate product. PALADIN is its reference consumer: a deployment with
 relational storage, policy evaluation and an admin API on top of it. It stays
 in-tree, consumed via a `replace` directive; the tag exists as hygiene, not as
 a promise of external support. The Go API is pre-1.0 — read the diff before
-bumping. Licensed [MIT](../LICENSE) with the rest of the repository.
+bumping.
