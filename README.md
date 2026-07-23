@@ -2,6 +2,12 @@
 
 Monorepo: Go control-plane backend + Next.js admin UI.
 
+Open source under the [MIT License](LICENSE). PALADIN is a reference
+implementation; the reusable piece worth reading on its own is the
+[`capability`](capability/) module — a budgeted, delegable, revocable
+authorisation primitive for agentic workloads, extracted as an internal
+library with no database or storage dependency.
+
 ## Layout
 
 ```
@@ -69,3 +75,9 @@ go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
   starts via `task e2e-up`.
 - **Helm**: backend chart at `backend/deploy/chart/`; frontend chart
   at `frontend/deploy/chart/`. Each is independently installable.
+
+## License
+
+[MIT](LICENSE) © 2026 Oleg Tkachuk. The nested `capability/` module is covered
+by the same license (Go's license detection resolves it from the repository
+root).
