@@ -485,3 +485,8 @@ func floatFromNumeric(n pgtype.Numeric) float64 {
 	}
 	return f.Float64
 }
+
+// Compile-time conformance, instantiated over PALADIN's actual transaction type.
+// This is also the assertion that keeps FR-014 honest: PALADIN satisfies the same
+// published contract a third party would, with no privileged access.
+var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)

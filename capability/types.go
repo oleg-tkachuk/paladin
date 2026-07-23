@@ -1,36 +1,3 @@
-// Package capability is PALADIN's object-capability authorisation primitive,
-// designed for agentic workloads.
-//
-// A Capability is a short-lived, signed token that grants its bearer a
-// specific set of operations on a specific set of resources, with
-// explicit budget and lifetime caveats. It is delegable (a parent issues
-// a strictly-narrower child to a sub-agent) and individually revocable.
-// Compared to long-lived API keys or role-based RBAC, capabilities give:
-//
-//   - Per-tool-call attribution: every Connect / MCP call carries the
-//     capability ID; audit and cost dashboards roll up by it.
-//
-//   - Budget enforcement at the auth layer: the verifier rejects calls
-//     once the per-capability USD budget is exhausted, rather than the
-//     business logic discovering it three RPCs deep.
-//
-//   - Mid-flight revocation: a compromised agent's capability is revoked
-//     atomically; the cache propagates within the configured TTL (≤2s
-//     default), and pending writes are fenced by `Generation`.
-//
-//   - Sub-capability for sub-agents: an orchestrator agent can issue a
-//     narrower capability to each tool agent it spawns, without going
-//     back through an admin API.
-//
-// Wire format is a JWT compact serialization with Ed25519 signatures
-// (alg=EdDSA). Public keys are surfaced via a JWKS endpoint so consumers
-// (data-plane interceptor, MCP server) verify locally without an extra
-// RPC.
-//
-// This package is currently the foundation only — the issuer / verifier
-// / Postgres store wiring lands in follow-up commits. Today: types,
-// caveats, signer/verifier interfaces, and revocation cache. Migration
-// 016 ships the schema. RPC surface (CapabilityService) is BACKLOG.
 package capability
 
 import (
@@ -173,14 +140,14 @@ type Capability struct {
 	// so per-tenant indexes stay tight).
 	ID uuid.UUID
 
-	// Issuer is the PALADIN instance that minted the capability. Verifiers
+	// Issuer is the service instance that minted the capability. Verifiers
 	// accept tokens whose Issuer is in the trusted set.
 	Issuer string
 
 	// Subject is the principal the capability authorises.
 	Subject Principal
 
-	// Audience pins which PALADIN planes the capability is valid for.
+	// Audience pins which services the capability is valid for.
 	// Typical values: "data", "admin", "mcp". Verifiers reject tokens
 	// whose audience does not include the calling plane.
 	Audience []string

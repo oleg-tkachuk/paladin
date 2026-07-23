@@ -16,7 +16,7 @@ import (
 // Scaffolding for T005: records the pre-extraction p99 of Verify so SC-009
 // has a numeric reference. Run explicitly:
 //
-//	PALADIN_WRITE_LATENCY=1 go test ./internal/capability/ -run TestLatencyBaseline
+//	PALADIN_WRITE_LATENCY=1 go test . -run TestLatencyBaseline
 //
 // SC-009 bounds the post-extraction p99 at +5% of what this writes.
 

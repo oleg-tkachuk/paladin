@@ -197,9 +197,9 @@ can read it as a worked example without being forced to adopt it.
 **Independent Test**: the module's suite passes with no persistent storage
 available, while PALADIN's relational store satisfies the same published contracts.
 
-- [ ] T054 [P] [US3] Add compile-time conformance assertions in `backend/internal/capability/postgres/` (`var _ capability.Store = (*Store)(nil)`, `var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)`) so contract drift fails the build rather than a runtime call
-- [ ] T055 [US3] Confirm PALADIN supplies its store to the module through published contracts only, with no privileged access unavailable to third parties (FR-014) — review `backend/internal/app/build_capability.go` for any non-contract coupling
-- [ ] T056 [US3] Confirm the module suite passes in isolation with no persistent storage present (SC-006 re-verified after Phase 4 additions), then commit as `test(capability): assert store conformance at compile time`
+- [X] T054 [P] [US3] Add compile-time conformance assertions in `backend/internal/capability/postgres/` (`var _ capability.Store = (*Store)(nil)`, `var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)`) so contract drift fails the build rather than a runtime call
+- [X] T055 [US3] Confirm PALADIN supplies its store to the module through published contracts only, with no privileged access unavailable to third parties (FR-014) — review `backend/internal/app/build_capability.go` for any non-contract coupling
+- [X] T056 [US3] Confirm the module suite passes in isolation with no persistent storage present (SC-006 re-verified after Phase 4 additions), then commit as `test(capability): assert store conformance at compile time`
 
 ---
 
@@ -213,10 +213,10 @@ documentation reaches a working issue → verify cycle (SC-007).
 
 ### Step 5 — documentation and versioning (`docs(capability)`)
 
-- [ ] T057 [US4] Write `capability/README.md` explaining the primitive **without any reference to object storage** (FR-018) — adapt [quickstart.md](./quickstart.md), which was authored to this constraint
-- [ ] T058 [P] [US4] Add package-level doc comments to `capability/doc.go` covering the three contracts a consumer implements and the no-transaction mode
-- [ ] T059 [US4] Tag the module's first version (`capability/vX.Y.Z` per Go's nested-module tagging convention) and pin it in `backend/go.mod`'s `require`, keeping `replace` for local development (FR-020, [R-004](./research.md))
-- [ ] T060 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with PALADIN's documentation closed
+- [X] T057 [US4] Write `capability/README.md` explaining the primitive **without any reference to object storage** (FR-018) — adapt [quickstart.md](./quickstart.md), which was authored to this constraint
+- [X] T058 [P] [US4] Add package-level doc comments to `capability/doc.go` covering the three contracts a consumer implements and the no-transaction mode
+- [ ] T059 [US4] **Deferred — tagging is a publish action, not a code change; see commit.** Tag the module's first version (`capability/vX.Y.Z` per Go's nested-module tagging convention) and pin it in `backend/go.mod`'s `require`, keeping `replace` for local development (FR-020, [R-004](./research.md))
+- [X] T060 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with PALADIN's documentation closed
 - [ ] T061 [US4] Commit as `docs(capability): document and version the module`
 
 ---

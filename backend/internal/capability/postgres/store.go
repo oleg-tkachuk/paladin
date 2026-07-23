@@ -369,3 +369,9 @@ func scanRow(r scanner) (*capability.Capability, error) {
 	}
 	return out, nil
 }
+
+// Compile-time conformance. The relational implementation is the reference,
+// not part of the module's contract (FR-015) — so drift between it and the
+// published interface must fail the build here rather than surface as a
+// runtime error on an admin RPC.
+var _ capability.Store = (*Store)(nil)

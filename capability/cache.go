@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// RevocationLookup is the seam the cache wraps. The Postgres store
+// RevocationLookup is the seam the cache wraps. A persistent store
 // implements it; tests substitute a stub. Pulled out of Store so the
 // cache stays decoupled from the persistence package and can sit in
 // front of any storage backend in the future (Redis, pgbouncer-fronted

@@ -18,7 +18,7 @@ import (
 //
 // Run explicitly:
 //
-//	go test ./internal/capability/ -run TestGenerateGoldenToken -tags goldengen
+//	PALADIN_WRITE_GOLDEN=1 go test . -run TestGenerateGoldenToken
 //
 // The fixture is checked in; this file is scaffolding and is removed once
 // the fixture exists. Every input below is fixed so the module-side test can

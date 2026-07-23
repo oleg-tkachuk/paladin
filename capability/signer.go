@@ -38,7 +38,7 @@ type Signer interface {
 // Verifier validates tokens. Production verifiers cache the JWKS for
 // the configured issuer and check the revocation list with a small
 // in-memory TTL (≤2s) so revocation propagates quickly without
-// hammering Postgres.
+// hammering the store.
 type Verifier interface {
 	// Verify decodes the token, checks the signature against the
 	// known JWKS, applies time / audience / revocation gates, and
@@ -91,7 +91,7 @@ type jwtHeader struct {
 }
 
 // jwtClaims is the payload. We follow JWT conventions for standard
-// claims (iss/sub/aud/iat/nbf/exp/jti) and namespace PALADIN-specific
+// claims (iss/sub/aud/iat/nbf/exp/jti) and namespace capability-specific
 // claims under `paladin:`. The unmarshal path tolerates unknown fields.
 type jwtClaims struct {
 	// Standard JWT claims.

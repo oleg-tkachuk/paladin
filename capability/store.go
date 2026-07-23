@@ -8,10 +8,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// Store persists capability records and revocation entries. The Postgres
-// implementation lands when the issuer / verifier RPC surface goes in;
-// this interface is here so callers (issuer, verifier, admin tooling)
-// have a stable seam from the start.
+// Store persists capability records and revocation entries. Consumers supply
+// the implementation; memstore ships an in-memory one and the reference
+// deployment supplies a relational one.
 //
 // Records are append-mostly: capabilities aren't mutated after issuance
 // except via Revoke. Revocations are checked by the verifier on every

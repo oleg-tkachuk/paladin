@@ -79,7 +79,7 @@ type VerifierConfig struct {
 	// Tokens whose `iss` claim is not in the set are rejected with
 	// ErrInvalidSignature — refusing to verify under an unknown issuer
 	// is the correct behaviour for a multi-tenant control plane that
-	// deploys multiple PALADIN instances.
+	// deploys multiple issuer instances.
 	TrustedIssuers []string
 
 	// Now is the time function the verifier uses for nbf/exp. Tests
@@ -133,7 +133,7 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	}
 
 	// 2) Issuer must be trusted. Defends against tokens from rogue
-	// PALADIN instances that share a Postgres user pool.
+	// issuer instances that share a backing store.
 	if !slices.Contains(v.cfg.TrustedIssuers, cap.Issuer) {
 		return nil, fmt.Errorf("%w: untrusted issuer %q", ErrInvalidSignature, cap.Issuer)
 	}
