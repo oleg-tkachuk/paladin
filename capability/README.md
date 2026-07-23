@@ -198,9 +198,33 @@ frozen wire format**, so renaming them would invalidate every token already
 issued. They stay until a deliberate format migration, which is a separate
 decision with its own compatibility window rather than a cleanup.
 
+## Versioning
+
+Two surfaces, two different promises — they are not the same thing and it
+matters which one you depend on.
+
+**The token wire format is frozen.** Claims, signature algorithm and
+serialisation do not change without a major version and a migration window.
+Tokens are credentials that outlive the process that issued them: a format
+change invalidates capabilities agents are still holding, which no amount of
+"it's pre-1.0" makes acceptable. A golden fixture in `testdata/` fails CI on
+any drift.
+
+**The Go API is pre-1.0 and may change.** Signatures, type names and struct
+fields can move between minor versions. Pin an exact version; read the diff
+before bumping.
+
+Tagged as a nested module, independently of the parent repository:
+
+```
+capability/v0.1.0     ← this module
+v3.7.2                ← Paladin, unrelated cadence
+```
+
 ## Status
 
-Pre-1.0. The **token wire format** is treated as frozen; the Go API may still
-change. Extracted from [Paladin](../README.md), which remains the
-reference consumer — a production deployment with relational storage, policy
-evaluation and an admin API on top of this primitive.
+v0.1.0 — extracted from [Paladin](../README.md), which remains
+the reference consumer: a production deployment with relational storage,
+policy evaluation and an admin API on top of this primitive. The module has
+no external adopters yet, so the Go API has not been stress-tested by anyone
+else's use case; treat pre-1.0 as meaning exactly that.
