@@ -25,9 +25,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"

@@ -108,8 +108,14 @@ jobs:
             fi
           }
 
-          # Database drivers (FR-003)
-          check 'jackc/pgx|lib/pq|go-sql-driver/mysql|mattn/go-sqlite3|modernc.org/sqlite|database/sql' 'a database driver'
+          # Database drivers (FR-003). Third-party drivers only — the stdlib
+          # `database/sql/driver` package is an interface definition, not a
+          # driver, and google/uuid imports it to implement sql.Scanner. An
+          # earlier revision of this pattern included `database/sql` and
+          # therefore failed the module it was written to protect; the guard
+          # is now checked in BOTH directions (see the plan's verification
+          # notes) rather than only against a known-bad graph.
+          check 'jackc/pgx|lib/pq|go-sql-driver/mysql|mattn/go-sqlite3|modernc\.org/sqlite|jmoiron/sqlx' 'a database driver'
           # Object-storage SDKs (FR-002)
           check 'aws-sdk-go|minio-go|cloud.google.com/go/storage|Azure/azure-sdk-for-go' 'an object-storage SDK'
 

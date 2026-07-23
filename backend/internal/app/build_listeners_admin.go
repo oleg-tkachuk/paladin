@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
@@ -21,7 +22,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/wire"

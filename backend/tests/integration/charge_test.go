@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/capability"
+	"github.com/oleg-tkachuk/paladin/capability"
 	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"

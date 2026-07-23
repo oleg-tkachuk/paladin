@@ -20,9 +20,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"

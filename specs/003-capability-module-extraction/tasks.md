@@ -130,26 +130,26 @@ and outbox suites unchanged — every assertion must pass untouched (SC-003).
 
 ⚠️ **Near-import-only commit.** The sole permitted non-import addition is the golden-token test (T034), which must ship *with* the move it guards (Principle I, finding C1). Any other non-import diff is a review flag (plan Risks, row 4).
 
-- [ ] T019 [P] [US2] Move `types.go` (Capability, Principal, AgentPrincipal, Caveats, the nine verification sentinels, the five store-side sentinels, unit-code helpers) from `backend/internal/capability/` to `capability/`
-- [ ] T020 [P] [US2] Move `signer.go` and `verifier.go` (incl. `KeyResolver` and `StaticKeyResolver`) to `capability/` — one of the three published extension points (FR-004)
-- [ ] T021 [P] [US2] Move `issuer.go` and `delegate.go` to `capability/`
-- [ ] T022 [P] [US2] Move `cache.go` (revocation cache + generation fencing) to `capability/`
-- [ ] T023 [P] [US2] Move `jwks.go` and `keyloader.go` to `capability/`
-- [ ] T024 [P] [US2] Move `store.go` (the `Store` contract) to `capability/` — second published extension point (FR-004)
-- [ ] T025 [P] [US2] Move `usage.go` and `metering_store.go` (already parameterised in T007/T008) to `capability/` — third published extension point (FR-004)
-- [ ] T026 [P] [US2] Move `metrics.go` to `capability/`, confirming it relies on OTel's global no-op default so no collector is required ([R-005](./research.md))
-- [ ] T027 [P] [US2] Move the existing suites `jwks_test.go`, `signer_test.go`, `verifier_test.go` to `capability/` — they must pass there **unchanged** ([R-006](./research.md))
-- [ ] T028 [US2] Rewrite the import path in the 5 `backend/internal/api/v1/` consumers: `batch/handler.go`, `multipart/handler.go`, `object/handler.go`, `object_tag/handler.go`, `presign/handler.go`
-- [ ] T029 [US2] Rewrite the import path in the admin consumers: `backend/internal/api/admin/v1/capabilityh/handler.go`, `backend/internal/api/admin/v1/billingh/handler.go`, `backend/internal/api/connectshim/admin/tenant_budget_server.go`
-- [ ] T030 [US2] Rewrite the import path in the hot path `backend/internal/auth/capability_interceptor.go`
-- [ ] T031 [US2] Rewrite the import path in the wiring: `backend/internal/app/build_capability.go`, `build_capability_jwks.go`, `build_listeners_admin.go`, `build_listeners_api.go`
-- [ ] T032 [US2] Rewrite the import path in `backend/internal/worker/capability_purger.go`, `backend/internal/worker/metrics.go`, and `backend/internal/config/types.go`
-- [ ] T033 [US2] Rewrite the import path in the test consumers: `backend/internal/auth/capability_{assert,caveats}_test.go`, `backend/internal/middleware/audit_capability_test.go`, `backend/internal/api/admin/v1/capabilityh/*_test.go`, `backend/internal/api/connectshim/admin/tenant_budget_server_test.go`, `backend/tests/integration/{billing,charge,transactional_outbox}_test.go`
-- [ ] T034 [US2] Add the golden-token test in `capability/golden_test.go`, verifying the T003 fixture byte-for-byte so any wire-format drift fails CI (FR-006/SC-004, [R-007](./research.md)) — **must land in this commit**, not a later one, so no commit exists where the format is unguarded
-- [ ] T035 [US2] Confirm `backend/internal/capability/postgres/` was **not** moved and still compiles against the module's contracts (FR-015)
-- [ ] T036 [US2] Run `go test ./...` from `backend/` and from `capability/`; both green, no assertion changed anywhere (SC-003). The unchanged auth suites are also what evidence FR-010 — budget rejection happens at the authorisation boundary, before handler logic — so a failure here is a FR-010 regression, not just a move defect. This task is also the acceptance evidence for FR-016 (every existing consumer still functions) and FR-017 (no assertion changed)
-- [ ] T037 [US2] Diff-review the commit: every hunk must be either a moved file, an import line, or `capability/golden_test.go`
-- [ ] T038 [US2] Commit as `refactor(capability): move the primitive into its own module`
+- [X] T019 [P] [US2] Move `types.go` (Capability, Principal, AgentPrincipal, Caveats, the nine verification sentinels, the five store-side sentinels, unit-code helpers) from `backend/internal/capability/` to `capability/`
+- [X] T020 [P] [US2] Move `signer.go` and `verifier.go` (incl. `KeyResolver` and `StaticKeyResolver`) to `capability/` — one of the three published extension points (FR-004)
+- [X] T021 [P] [US2] Move `issuer.go` and `delegate.go` to `capability/`
+- [X] T022 [P] [US2] Move `cache.go` (revocation cache + generation fencing) to `capability/`
+- [X] T023 [P] [US2] Move `jwks.go` and `keyloader.go` to `capability/`
+- [X] T024 [P] [US2] Move `store.go` (the `Store` contract) to `capability/` — second published extension point (FR-004)
+- [X] T025 [P] [US2] Move `usage.go` and `metering_store.go` (already parameterised in T007/T008) to `capability/` — third published extension point (FR-004)
+- [X] T026 [P] [US2] Move `metrics.go` to `capability/`, confirming it relies on OTel's global no-op default so no collector is required ([R-005](./research.md))
+- [X] T027 [P] [US2] Move the existing suites `jwks_test.go`, `signer_test.go`, `verifier_test.go` to `capability/` — they must pass there **unchanged** ([R-006](./research.md))
+- [X] T028 [US2] Rewrite the import path in the 5 `backend/internal/api/v1/` consumers: `batch/handler.go`, `multipart/handler.go`, `object/handler.go`, `object_tag/handler.go`, `presign/handler.go`
+- [X] T029 [US2] Rewrite the import path in the admin consumers: `backend/internal/api/admin/v1/capabilityh/handler.go`, `backend/internal/api/admin/v1/billingh/handler.go`, `backend/internal/api/connectshim/admin/tenant_budget_server.go`
+- [X] T030 [US2] Rewrite the import path in the hot path `backend/internal/auth/capability_interceptor.go`
+- [X] T031 [US2] Rewrite the import path in the wiring: `backend/internal/app/build_capability.go`, `build_capability_jwks.go`, `build_listeners_admin.go`, `build_listeners_api.go`
+- [X] T032 [US2] Rewrite the import path in `backend/internal/worker/capability_purger.go`, `backend/internal/worker/metrics.go`, and `backend/internal/config/types.go`
+- [X] T033 [US2] Rewrite the import path in the test consumers: `backend/internal/auth/capability_{assert,caveats}_test.go`, `backend/internal/middleware/audit_capability_test.go`, `backend/internal/api/admin/v1/capabilityh/*_test.go`, `backend/internal/api/connectshim/admin/tenant_budget_server_test.go`, `backend/tests/integration/{billing,charge,transactional_outbox}_test.go`
+- [X] T034 [US2] Add the golden-token test in `capability/golden_test.go`, verifying the T003 fixture byte-for-byte so any wire-format drift fails CI (FR-006/SC-004, [R-007](./research.md)) — **must land in this commit**, not a later one, so no commit exists where the format is unguarded
+- [X] T035 [US2] Confirm `backend/internal/capability/postgres/` was **not** moved and still compiles against the module's contracts (FR-015)
+- [X] T036 [US2] Run `go test ./...` from `backend/` and from `capability/`; both green, no assertion changed anywhere (SC-003). The unchanged auth suites are also what evidence FR-010 — budget rejection happens at the authorisation boundary, before handler logic — so a failure here is a FR-010 regression, not just a move defect. This task is also the acceptance evidence for FR-016 (every existing consumer still functions) and FR-017 (no assertion changed)
+- [X] T037 [US2] Diff-review the commit: every hunk must be either a moved file, an import line, or `capability/golden_test.go`
+- [X] T038 [US2] Commit as `refactor(capability): move the primitive into its own module`
 
 **Checkpoint**: US2 delivered, and the wire format is guarded from this commit
 onward. US1 is now *functionally* met too — a third party could implement the

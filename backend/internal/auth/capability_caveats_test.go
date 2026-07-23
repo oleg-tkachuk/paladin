@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/internal/capability"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // fakeUsage is an in-memory UsageStore for the caveat tests. Keeps a

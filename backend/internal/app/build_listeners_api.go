@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
@@ -18,7 +19,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/oauth"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"

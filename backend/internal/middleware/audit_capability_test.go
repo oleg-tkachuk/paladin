@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
 
 // TestCapabilityID_Absent confirms ctx without a capability returns

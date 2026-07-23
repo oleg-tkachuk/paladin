@@ -83,7 +83,7 @@ func TestLatencyBaseline(t *testing.T) {
 	p50 := samples[len(samples)*50/100]
 	p99 := samples[len(samples)*99/100]
 
-	out := filepath.Join("..", "..", "..", "specs",
+	out := filepath.Join("..", "specs",
 		"003-capability-module-extraction", "baseline-latency.txt")
 	body := fmt.Sprintf(
 		"# Pre-extraction Verify latency baseline (T005, SC-009)\n"+

@@ -106,7 +106,7 @@ func TestGenerateGoldenToken(t *testing.T) {
 		t.Fatalf("issue: %v", err)
 	}
 
-	out := filepath.Join("..", "..", "..", "capability", "testdata", "golden_token.jwt")
+	out := filepath.Join("testdata", "golden_token.jwt")
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

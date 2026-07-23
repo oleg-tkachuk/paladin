@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	"github.com/oleg-tkachuk/paladin/internal/capability"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )

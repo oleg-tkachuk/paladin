@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/capability"
+	"github.com/oleg-tkachuk/paladin/capability"
 	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 )
