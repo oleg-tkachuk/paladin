@@ -211,6 +211,6 @@ require (
 // consume it without PALADIN. `replace` keeps the working tree building against
 // local source; the standalone CI job is what proves the module stands alone
 // (research R-004 — without that job, `replace` would mask a broken module).
-require github.com/oleg-tkachuk/paladin/capability v0.0.0
+require github.com/oleg-tkachuk/paladin/capability v0.1.0
 
 replace github.com/oleg-tkachuk/paladin/capability => ../capability

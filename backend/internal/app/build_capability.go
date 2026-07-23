@@ -40,6 +40,18 @@ type CapabilityBundle struct {
 	EphemeralKey bool
 }
 
+// ephemeralKeyEnvs are the environments where running the capability issuer
+// on a generated, non-persisted signing key is acceptable — throwaway ones
+// where losing every token on restart costs nothing.
+//
+// Everything not listed here refuses to start rather than degrade quietly.
+var ephemeralKeyEnvs = map[string]bool{
+	"local": true,
+	"dev":   true,
+	"test":  true,
+	"ci":    true,
+}
+
 // BuildCapabilityBundle wires the capability subsystem from cfg.Capability
 // + the SharedDeps Postgres pool. Returns nil with a nil error when the
 // subsystem is disabled — callers should treat absence as "no capability
@@ -57,9 +69,26 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability key: %w", err)
 	}
 	if generated {
+		// An ephemeral key means every pod restart silently invalidates every
+		// capability agents are still holding. That is fine for a laptop and
+		// catastrophic anywhere else, and a startup warning is the wrong
+		// mechanism: nobody reads pod logs on a green rollout.
+		//
+		// Allow-listed rather than deny-listed on purpose — a new environment
+		// name defaults to REFUSING to start, not to shipping ephemeral keys.
+		// The failure mode of guessing wrong here is asymmetric.
+		if !ephemeralKeyEnvs[deps.Cfg.App.Env] {
+			return nil, fmt.Errorf(
+				"app: capability.enabled=true with no signing_key_path in env %q — "+
+					"an ephemeral key invalidates every issued token on restart; "+
+					"mount a persistent key or add %q to ephemeralKeyEnvs if this "+
+					"environment is genuinely disposable",
+				deps.Cfg.App.Env, deps.Cfg.App.Env)
+		}
 		deps.Logger.Warn(
 			"capability: ephemeral signing key (no signing_key_path); restarts WILL invalidate every issued token",
 			zap.String("kid", kid),
+			zap.String("env", deps.Cfg.App.Env),
 		)
 	}
 
