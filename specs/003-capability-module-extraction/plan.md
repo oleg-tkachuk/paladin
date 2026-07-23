@@ -90,32 +90,41 @@ specs/003-capability-module-extraction/
 ### Source Code (repository root)
 
 ```text
-capability/                          # NEW — the extracted module
-├── go.mod                           # module .../paladin/capability
+capability/                          # the extracted module
+├── README.md                         # standalone docs (FR-018)
+├── cache.go                          # revocation cache + generation fencing
+├── delegate.go                       # narrowing rules
+├── doc.go                            # package docs — the three contracts
+├── edge_guards_test.go               # rotation + forgery + unit-code guards (T050-T052)
+├── example/main.go                   # runnable walkthrough (FR-019)
+├── go.mod                            # module .../paladin/capability
 ├── go.sum
-├── README.md                        # standalone docs (FR-018)
-├── types.go                         # Capability, Principal, Caveats, sentinels
-├── signer.go  verifier.go           # Ed25519 sign/verify
-├── issuer.go  delegate.go           # issue + narrowing delegation
-├── cache.go                         # revocation cache
-├── jwks.go    keyloader.go          # key publication + loading
-├── store.go                         # Store contract
-├── usage.go                         # UsageStore[TX] contract  ← parameterised
-├── metering_store.go                # MeteringStore[TX]        ← parameterised
-├── metrics.go                       # OTel instrumentation (no-op by default)
-├── doc.go                           # NEW — package docs (FR-018)
-├── golden_test.go                   # NEW — wire-format guard, ships with the move
-├── rotation_test.go                 # NEW — retired-but-published key still verifies
-├── forgery_test.go                  # NEW — absent record is forgery, not 404
-├── unitcode_test.go                 # NEW — Normalise/IsAllowed unit-code helpers
-├── testdata/
-│   └── golden_token.jwt             # frozen wire-format fixture (R-007)
-├── memstore/                        # NEW — in-memory reference impl (R-006)
-│   ├── memstore.go                  #   incl. staging-commit semantic for Charge
-│   ├── memstore_test.go             # NEW — revocation, cascade, limit rejections
-│   └── atomicity_test.go            # NEW — induced-failure rollback (SC-008)
-└── example/                         # NEW — runnable walkthrough (FR-019)
-    └── main.go
+├── golden_test.go                    # wire-format guard, ships with the move
+├── goldengen_test.go                 # env-gated fixture generator (T003)
+├── issuer.go                         # Issue + Delegate (narrowing enforced)
+├── jwks.go                           # key publication
+├── jwks_test.go                      # relocated, unchanged
+├── keyloader.go                      # key loading
+├── latencybase_test.go               # env-gated latency baseline (T005/T064)
+├── memstore/atomicity_test.go        # induced-failure rollback (SC-008)
+├── memstore/memstore.go              # in-memory reference impl; staging-commit Charge
+├── memstore/memstore_test.go         # store conformance behaviours
+├── metering_store.go                 # MeteringStore[TX]        ← parameterised
+├── metrics.go                        # OTel instrumentation (no-op by default)
+├── signer.go                         # Ed25519 sign; paladin_* claim names are wire format
+├── signer_test.go                    # relocated, unchanged
+├── store.go                          # Store contract + ErrNotFound (core-owned)
+├── testdata/golden_token.jwt         # frozen wire-format fixture (R-007)
+├── types.go                          # Capability, Principal, Caveats, 15 sentinels
+├── usage.go                          # UsageStore[TX] contract  ← parameterised
+├── verifier.go                       # local verify + KeyResolver/StaticKeyResolver
+├── verifier_test.go                  # relocated, unchanged
+
+# Generated from `git ls-files` on 2026-07-23 rather than maintained by hand.
+# An earlier hand-written tree drifted in BOTH directions — it declared three
+# test files that were never created (the edge-case guards were consolidated
+# into edge_guards_test.go) and omitted seven that were, README.md included.
+# Regenerate with the snippet in the Counting note if this list is touched.
 
 backend/
 ├── go.mod                           # gains require + replace → ../capability

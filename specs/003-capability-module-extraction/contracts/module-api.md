@@ -23,7 +23,7 @@ type Store interface {
     Get(ctx context.Context, id uuid.UUID) (*Capability, error)
     IsRevoked(ctx context.Context, id uuid.UUID) (bool, error)
     Revoke(ctx context.Context, args RevokeArgs) error
-    PurgeExpired(ctx context.Context, olderThan time.Duration) (int64, error)
+    PurgeExpired(ctx context.Context, expiredFor time.Duration) (int64, error)
     ListByPrincipal(ctx context.Context, args ListByPrincipalArgs) ([]Capability, string, error)
 }
 ```
@@ -61,13 +61,22 @@ type UsageStore[TX any] interface {
 
     RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error
     RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error
-    Delete(ctx context.Context, capID uuid.UUID) error
     Get(ctx context.Context, capID uuid.UUID) (Usage, error)
     GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (TenantBudget, error)
     SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error)
-    ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudget, string, error)
+    ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error)
+    Delete(ctx context.Context, capID uuid.UUID) error
+    PurgeOrphans(ctx context.Context) (int64, error)
 }
 ```
+
+`ListTenantBudgets` returns `TenantBudgetSummary`, not `TenantBudget` — the
+summary carries the tenant's slug and display name alongside the budget row and
+a pre-computed `UtilisationPct`, so an operator view needs no second lookup.
+
+`PurgeOrphans` deletes usage rows whose capability no longer exists. It is
+bounded per call, so the caller loops; an implementation that tries to purge
+everything in one statement will pin the table.
 
 **`TX` is the consumer's transaction handle type.** The module never
 constructs, inspects, or constrains it — it only threads it back to the
@@ -131,15 +140,26 @@ type IssuerConfig struct { /* ... */ }
 func NewIssuer(cfg IssuerConfig) (*Issuer, error)
 
 type IssueRequest struct {
-    Subject   Principal
+    Subject    Principal
+    Audience   []string
+    Caveats    Caveats
+    TTL        time.Duration // 0 → IssuerConfig.DefaultTTL
+    NotBefore  time.Time     // zero → now
+    Generation int64         // 0 → 1; bump + revoke the previous row to rotate
+}
+func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, string, error)
+
+type DelegateRequest struct {
+    // Parent is the ALREADY-VERIFIED parent capability, passed whole — not
+    // just its ID. The issuer trusts the in-memory shape, so callers must run
+    // it through Verifier.Verify first.
+    Parent    Capability
+    Subject   Principal // the sub-agent; TenantID is required
     Audience  []string
     Caveats   Caveats
     TTL       time.Duration
     NotBefore time.Time
 }
-func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, string, error)
-
-type DelegateRequest struct { /* parent + narrowing */ }
 func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability, string, error)
 
 func GenerateEd25519Keypair() (kid string, pub ed25519.PublicKey, priv ed25519.PrivateKey, err error)
