@@ -71,11 +71,11 @@ repo-relative.
 this *after* the move would mean comparing against memory instead of evidence
 (plan Risks, row 5).
 
-- [ ] T001 [P] Record current coverage of the package under extraction: run `go test ./internal/capability/... -coverprofile` from `backend/` and write per-function output to `specs/003-capability-module-extraction/baseline-coverage.txt`
-- [ ] T002 [P] Snapshot the current dependency graph of `backend/internal/capability` (`go list -deps`) into `specs/003-capability-module-extraction/baseline-deps.txt`, so the post-extraction module graph can be diffed against it
-- [ ] T003 Generate a token with the **current** code using a fixed test key and check it in as `capability/testdata/golden_token.jwt` (created here, consumed by T033) — it must be produced before any refactor touches the serialisation path
-- [ ] T004 [P] Record the current full-suite pass state from `backend/` (`go test ./...`) as the green baseline every later phase must restore
-- [ ] T005 [P] Record the p99 latency of `StandardVerifier.Verify` over ≥10 000 iterations into `specs/003-capability-module-extraction/baseline-latency.txt` — the numeric reference SC-009 is asserted against in T064, then commit as `chore(capability): capture pre-extraction baselines`
+- [X] T001 [P] Record current coverage of the package under extraction: run `go test ./internal/capability/... -coverprofile` from `backend/` and write per-function output to `specs/003-capability-module-extraction/baseline-coverage.txt`
+- [X] T002 [P] Snapshot the current dependency graph of `backend/internal/capability` (`go list -deps`) into `specs/003-capability-module-extraction/baseline-deps.txt`, so the post-extraction module graph can be diffed against it
+- [X] T003 Generate a token with the **current** code using a fixed test key and check it in as `capability/testdata/golden_token.jwt` (created here, consumed by T033) — it must be produced before any refactor touches the serialisation path
+- [X] T004 [P] Record the current full-suite pass state from `backend/` (`go test ./...`) as the green baseline every later phase must restore
+- [X] T005 [P] Record the p99 latency of `StandardVerifier.Verify` over ≥10 000 iterations into `specs/003-capability-module-extraction/baseline-latency.txt` — the numeric reference SC-009 is asserted against in T064, then commit as `chore(capability): capture pre-extraction baselines`
 
 **Checkpoint**: baselines exist and are checked in; no production file has changed.
 

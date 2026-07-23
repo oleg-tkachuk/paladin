@@ -1,0 +1,5 @@
+# Pre-extraction Verify latency baseline (T005, SC-009)
+# iterations: 10000 (plus 1000 warm-up)
+p50: 40.542µs
+p99: 51.458µs
+# SC-009 bound: post-extraction p99 must be <= 54.03µs (+5%)
