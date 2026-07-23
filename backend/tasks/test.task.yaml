@@ -18,12 +18,15 @@ tasks:
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
     cmds:
-      - go test -tags=integration -count=1 ./internal/integration/...
+      # BOTH suites. tests/integration/ (pgharness-backed) was previously
+      # unreferenced by any task — 62 tests that ran nowhere, local or CI.
+      # The CI job (.github/workflows/integration.yml) runs the same set.
+      - go test -tags=integration -count=1 ./internal/integration/... ./tests/integration/...
 
   bench:
     desc: "Run Postgres-backed benchmarks (needs Docker; seeds ~1M rows)"
     cmds:
-      - go test -tags=integration -run='^$' -bench=. -benchtime=20x -timeout=600s ./internal/integration/...
+      - go test -tags=integration -run='^$' -bench=. -benchtime=20x -timeout=600s ./internal/integration/... ./tests/integration/...
 
   coverage:
     desc: "Run unit tests with coverage; HTML report → coverage/cover.html"

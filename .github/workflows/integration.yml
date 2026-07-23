@@ -1,0 +1,73 @@
+name: Integration
+
+# Postgres-backed integration tests, gated on every PR and push to
+# main/develop.
+#
+# These existed and passed but ran NOWHERE: the default `go test ./...` in
+# test.yml excludes them (they carry a `//go:build integration` tag), and only
+# one of the two suites was even wired into a local Task. So a regression in
+# the store/adapter layer — 4700+ LOC of hand-written SQL mapping — could reach
+# develop with a green pipeline, which is exactly the class of bug the project
+# constitution calls out ("Middleware and store layer MUST be covered — those
+# are where three-valued-logic bugs hide", citing a NULL-cursor regression that
+# lived for weeks).
+#
+# Two suites, both testcontainers-backed (a real Postgres per package, migrated
+# from the embedded migrations):
+#   internal/integration/  — 35 tests: partitioning, outbox crash-recovery,
+#                            broker sinks, idempotency replay, RLS routing
+#   tests/integration/     — 62 tests: charge/billing, batch, backend
+#                            enable/disable, transactional outbox, via pgharness
+#
+# Separate from the unit gate in test.yml because it needs Docker and takes
+# minutes, not seconds — a failing unit gate should not wait on container
+# starts, and vice versa.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-backed:
+    runs-on: ubuntu-latest
+    # Container starts dominate the wall clock; the suites themselves are
+    # quick. Generous ceiling so a slow image pull is not read as a hang, tight
+    # enough that a genuinely stuck test does not burn a runner for an hour.
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      # ubuntu-latest ships Docker preinstalled and running, which is what
+      # testcontainers-go drives. Surface it explicitly so a runner-image
+      # change that removes it fails here with a clear message rather than
+      # deep inside a container-start timeout.
+      - name: Verify Docker is available
+        run: docker info >/dev/null
+
+      # -count=1 defeats the test cache: a cached pass from a prior run must
+      # not stand in for actually exercising the database this time. Both
+      # suites in one invocation so Go schedules their packages in parallel.
+      - name: Integration tests (Postgres via testcontainers)
+        run: |
+          go test -tags=integration -count=1 -timeout=20m \
+            ./internal/integration/... ./tests/integration/...
