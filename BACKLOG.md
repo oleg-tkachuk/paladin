@@ -1243,58 +1243,6 @@ of the pipeline._
 
 ## Capability module
 
-### Dedicated repository for the capability module
-
-- **Status:** Not planned — revisit only on a visibility/licence divergence.
-- **Reason:** An earlier draft filed this as deferred work on the grounds that
-  the import path `github.com/oleg-tkachuk/paladin/capability`
-  still says "paladin", which sits awkwardly with a module whose
-  pitch is that it has nothing to do with object storage. That reasoning does
-  not survive scrutiny, and the entry is rewritten rather than quietly kept:
-  - **Nested modules already give what a split is usually wanted for.** Go
-    tags them independently (`capability/v0.1.0`), and the standalone CI job
-    already builds the module with no PALADIN checkout.
-  - **The path is cosmetic.** Anyone evaluating the module reads the README
-    first, and it never mentions object storage. People import
-    `k8s.io/apimachinery/pkg/apis/meta/v1` daily without complaint.
-  - **The cost is paid every day, the benefit is hypothetical.** Today a
-    change to the module and its consumer is one commit, one review, one CI
-    run. After a split it is two PRs, a version bump between them, and a
-    window where the two disagree — for zero current adopters.
-
-  The one reason that would genuinely force a split is a **divergence in
-  visibility or licence** — PALADIN going closed or commercial while the module
-  stays open. That is a business-model decision, not a packaging one, and
-  there is no way to satisfy it without separate repositories.
-- **Definition of Done (only if the trigger fires):**
-  - Module moved to its own repository; `module` line and consumer imports
-    updated; PALADIN consumes it by version rather than `replace`.
-  - CI mirrors the standalone job in `.github/workflows/capability-module.yml`.
-  - Old import path left resolvable — the module proxy keeps serving it, so
-    the move is not a one-way door for existing consumers.
-- **Blockers:** none — this is a decision, not work. Nothing is waiting on it.
-
-### Capability module: publish + version policy
-
-- **Status:** Deferred — **unblocked** (see note).
-- **Reason:** Tagging publishes, and publishing carries obligations (a version
-  people pin, a compatibility expectation) that a refactor should not incur as
-  a side effect. The module is importable today via the `replace` directive.
-- **Note:** This was previously blocked on the repository decision above, on
-  the reasoning that tagging under the current path then moving would strand
-  the tag. That blocker is gone: the repository split is now "not planned",
-  and even if it later fires, the Go module proxy keeps the old path
-  resolvable, so a tag under the current path is not wasted. Tagging
-  `capability/v0.1.0` can happen whenever there is a reason to.
-- **Definition of Done:**
-  - Version policy written down: what pre-1.0 means for the Go API vs the
-    token wire format. They differ — the format is already treated as frozen
-    (FR-006, pinned by the golden fixture) while the Go API is not.
-  - First tag pushed; `backend/go.mod` pins the version alongside `replace`.
-  - `replace-local: true` removed from `backend/.golangci.yaml` in the same
-    commit that drops the directive (see the entry below).
-- **Blockers:** none.
-
 ### Smoke test has no CI home — runs only on demand
 
 - **Status:** Deferred
@@ -1320,18 +1268,20 @@ of the pipeline._
 
 ### Capability module CI: deny network egress in the standalone job
 
-- **Status:** Deferred
-- **Reason:** T047. SC-006 claims the module suite runs with no database, no
-  network and no container. The standalone job already satisfies the database
-  and container halves (a bare runner), and the suite makes no network calls,
-  but nothing *enforces* the network half — a future test could start
-  reaching out and CI would not notice. Enforcing it needs a runner-level
-  egress policy, which is worth doing deliberately rather than smuggling into
-  the extraction commit.
+- **Status:** Deferred — considered, not urgent.
+- **Reason:** SC-006 claims the module suite runs with no network. The
+  standalone job already satisfies the no-database and no-container halves (a
+  bare runner), and — more importantly — the dependency-graph assertion already
+  enforces the property that actually matters: no database driver, no storage
+  SDK in the resolved graph. A network-egress firewall would add a weaker
+  belt-and-braces guarantee (no test reaches out at runtime) at real flakiness
+  risk on shared CI runners, where a firewall step interacts badly with module
+  fetch and container networking. Not worth rushing for marginal assurance over
+  a guard that already holds.
 - **Definition of Done:**
-  - The standalone job runs with egress denied (firewall step or a network-
-    restricted runner), with the module cache pre-warmed so dependency
-    resolution still works.
-  - A deliberately network-touching test is shown to fail under it, so the
+  - A step denies egress (firewall or a network-restricted runner) AFTER
+    `go mod download`, so dependency resolution still works, and BEFORE
+    `go test`.
+  - A deliberately network-touching test is shown to FAIL under it, so the
     control is proven rather than assumed.
-- **Blockers:** None functional; needs a decision on runner configuration.
+- **Blockers:** none. A judgment call, currently made as "not yet".

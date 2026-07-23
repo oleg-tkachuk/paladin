@@ -223,8 +223,10 @@ v3.7.2                ← Paladin, unrelated cadence
 
 ## Status
 
-v0.1.0 — extracted from [Paladin](../README.md), which remains
-the reference consumer: a production deployment with relational storage,
-policy evaluation and an admin API on top of this primitive. The module has
-no external adopters yet, so the Go API has not been stress-tested by anyone
-else's use case; treat pre-1.0 as meaning exactly that.
+v0.1.0 — an **internal library** of [Paladin](../README.md),
+extracted so the primitive is clean, self-contained and reusable, not to ship
+it as a separate product. PALADIN is its reference consumer: a deployment with
+relational storage, policy evaluation and an admin API on top of it. It stays
+in-tree, consumed via a `replace` directive; the tag exists as hygiene, not as
+a promise of external support. The Go API is pre-1.0 — read the diff before
+bumping. Licensed [MIT](../LICENSE) with the rest of the repository.
