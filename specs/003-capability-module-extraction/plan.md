@@ -251,6 +251,12 @@ If that count differs when the work starts, the task enumeration in
 
 ## Not Doing (and why)
 
+This list **extends** [spec.md](./spec.md)'s Out of Scope with
+implementation-level exclusions; where the two overlap the spec is
+authoritative. Items the spec excludes and this list does not repeat —
+notably *"extracting any other PALADIN component"* — remain excluded.
+
+
 - **Repository split** — deferred until there is a real external adopter;
   paying repo-split overhead for a hypothetical audience is premature
   ([R-003](./research.md)).

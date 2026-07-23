@@ -181,7 +181,7 @@ its resolved dependency graph contains no storage or database packages.
 - [ ] T049 [P] [US1] Add `capability/rotation_test.go`: a token signed under a **retired but still published** key must verify, and must stop verifying once that key is withdrawn via `StaticKeyResolver` (spec edge case 3). `quickstart.md` documents a three-step rotation procedure that nothing currently tests — the withdrawal deadline is max-outstanding-TTL, and getting it wrong invalidates live tokens
 - [ ] T050 [P] [US1] Add `capability/forgery_test.go`: a syntactically valid, correctly-signed token whose `Store.Get` returns `ErrNotFound` must be rejected as **forgery**, not surfaced as a missing entity (spec edge case 5; contracts §1.1). Collapsing the two would turn a forged token into a 404 instead of an auth failure
 - [ ] T051 [P] [US1] Add `capability/unitcode_test.go` covering `NormaliseUnitCode` and `IsAllowedUnitCode`: `""` → `DefaultUnitCode`, every entry of `AllowedUnitCodes` round-trips, an unknown code errors, and `IsAllowedUnitCode("")` is **false** — the deliberate asymmetry with `NormaliseUnitCode` (spec edge case 7). ⚠️ These are published API (contracts §5) with **zero test coverage anywhere in the repository today**; they gate the empty-means-default rule and the comparison behind `ErrUnitCodeMismatch`
-- [ ] T052 [US1] Commit as `test(capability): add in-memory store, atomicity guard, and example`
+- [ ] T052 [US1] Commit as `test(capability): add in-memory store, atomicity + edge-case guards, and example` — must match the Commit Scope Map row verbatim
 
 **Checkpoint**: US1 delivered and **proven**, not merely asserted. Combined
 with Phase 3, this is the MVP.

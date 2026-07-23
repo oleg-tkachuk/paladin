@@ -189,8 +189,10 @@ forces an adapter on the one consumer that already speaks OTel); build tags
    pass with **no assertion changed** (FR-017, SC-003).
 4. A new **standalone CI job** builds and tests the module from its own
    directory with no PALADIN checkout on the module path (R-004).
-5. **Three guards** are added for properties this refactor could break
-   silently, each tied to the thing it protects:
+5. **Guards** are added for every property this refactor could break
+   silently. The authoritative list is `tasks.md` Phases 3–4; deliberately
+   *not* restated as a count here, because a hardcoded number has already gone
+   stale twice as the list grew. The load-bearing ones:
    - *wire format* — the golden-token fixture (R-007), shipping in the same
      commit as the move;
    - *charge atomicity* — an induced `onCharged` failure must leave both
@@ -198,18 +200,21 @@ forces an adapter on the one consumer that already speaks OTel); build tags
      in the repository today**, so the guard closes a pre-existing gap rather
      than merely preserving coverage;
    - *generation fencing* — a write authorised against a pre-revocation view
-     must not land afterwards (FR-009).
+     must not land afterwards (FR-009);
+   - *key rotation, missing-record-as-forgery, unit-code helpers* — three
+     spec edge cases that likewise had no coverage anywhere (added after
+     analysis findings E1/E2).
 
 **Rationale**: the in-memory store is the only new test *infrastructure*
 needed, and it does double duty as documentation. The module's suite must run
 with no database, no network, no container (SC-006) — the in-memory store is
-what makes that true. The three guards are tests, not infrastructure, and each
+what makes that true. The guards are tests, not infrastructure, and each
 exists because the move's blast radius reaches a property nothing else asserts.
 
 **Constitution note (Principle I)**: this satisfies tests-first because the
 extraction ships no new behaviour; the guard rail is that the *existing*
 suites keep passing on both sides of the boundary. New tests are limited to
-the in-memory store, the standalone-build job, and the three guards above —
+the in-memory store, the standalone-build job, and the guards above —
 each landing in the same commit as the code it protects.
 
 > **Amended 2026-07-23** (analysis findings G1/G2, then R1). The original
@@ -231,7 +236,7 @@ IV) but tokens are credentials that outlive a deployment — a format break
 invalidates live capabilities held by running agents. A golden fixture makes
 an accidental format change fail CI rather than fail in production.
 
-**Scope note**: this is one of **three** guards the extraction adds rather
+**Scope note**: this is one of several guards the extraction adds rather
 than relocates — alongside charge atomicity and generation fencing (R-006
 item 5). Each is justified the same way: the refactor's blast radius reaches
 a property that nothing currently asserts. For the wire format specifically,
@@ -251,8 +256,11 @@ passing tests:
 2. **Create the module skeleton** (`go.mod`, `replace`, standalone CI job)
    with no code moved.
 3. **Move core files** into the module; rewrite PALADIN imports to the module
-   path. Postgres implementations stay put.
-4. **Add `memstore` + golden-token test + example**; wire the standalone CI
+   path. Postgres implementations stay put. **The golden-token test ships in
+   this step**, not the next — it guards the move, so deferring it would leave
+   one commit where the wire format is unguarded (Principle I; amended after
+   analysis finding C1).
+4. **Add `memstore` + the remaining guards + example**; wire the standalone CI
    job to enforce them.
 5. **Documentation and versioning** (module README, first tag).
 
