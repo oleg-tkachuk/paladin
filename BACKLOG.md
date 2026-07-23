@@ -1240,3 +1240,58 @@ of the pipeline._
 ---
 
 ## Documentation
+
+## Capability module
+
+### Dedicated repository for the capability module
+
+- **Status:** Deferred
+- **Reason:** The module lives at repo-root `capability/` with import path
+  `github.com/oleg-tkachuk/paladin/capability`. That path still
+  says "paladin", which works against the positioning that the
+  primitive is independent of object storage. The cost is branding, not
+  technical, and it is reversible: a move changes `module` in `go.mod` and
+  consumers' import lines, nothing else. Paying repo-split overhead (two CI
+  pipelines, no atomic cross-repo changes) for a hypothetical audience is
+  premature. See specs/003-capability-module-extraction/research.md R-003.
+- **Definition of Done:**
+  - At least one external adopter exists, or a decision is taken to publish.
+  - Module moved to its own repository; `module` line and consumer imports
+    updated; PALADIN consumes it by version rather than `replace`.
+  - CI for the new repo mirrors the standalone job in
+    `.github/workflows/capability-module.yml`.
+- **Blockers:** No external adopter yet. Not worth doing before one exists.
+
+### Capability module: publish + version policy
+
+- **Status:** Deferred
+- **Reason:** T059 called for tagging `capability/vX.Y.Z`. Tagging publishes,
+  and publishing carries obligations (a version people pin, a compatibility
+  expectation) that a refactor should not incur as a side effect. The module
+  is importable today via the `replace` directive; a tag can follow when
+  someone actually consumes it.
+- **Definition of Done:**
+  - Version policy decided and written down: what pre-1.0 means for the Go
+    API vs the token wire format (the format is already treated as frozen —
+    FR-006 — while the Go API is not).
+  - First tag pushed; `backend/go.mod` pins the version alongside `replace`.
+- **Blockers:** Depends on the repository decision above — tagging under the
+  current path then moving would strand the tag.
+
+### Capability module CI: deny network egress in the standalone job
+
+- **Status:** Deferred
+- **Reason:** T047. SC-006 claims the module suite runs with no database, no
+  network and no container. The standalone job already satisfies the database
+  and container halves (a bare runner), and the suite makes no network calls,
+  but nothing *enforces* the network half — a future test could start
+  reaching out and CI would not notice. Enforcing it needs a runner-level
+  egress policy, which is worth doing deliberately rather than smuggling into
+  the extraction commit.
+- **Definition of Done:**
+  - The standalone job runs with egress denied (firewall step or a network-
+    restricted runner), with the module cache pre-warmed so dependency
+    resolution still works.
+  - A deliberately network-touching test is shown to fail under it, so the
+    control is proven rather than assumed.
+- **Blockers:** None functional; needs a decision on runner configuration.

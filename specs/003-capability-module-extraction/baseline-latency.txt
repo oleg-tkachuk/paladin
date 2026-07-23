@@ -3,3 +3,12 @@
 p50: 40.542µs
 p99: 51.458µs
 # SC-009 bound: post-extraction p99 must be <= 54.03µs (+5%)
+
+# ── Post-extraction result (T064, measured 2026-07-23) ──
+# p50: 39.958µs   p99: 51.250µs
+# Verdict: WITHIN the 54.03µs bound — 0.4% FASTER than baseline, not slower.
+# SC-009 satisfied.
+#
+# Note: this file is written by TestLatencyBaseline (env-gated). Re-running
+# that generator overwrites the baseline section above; the pre-extraction
+# numbers are recoverable from git history at commit ceaac0f.

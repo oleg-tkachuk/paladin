@@ -111,7 +111,7 @@ edits, the ripple exceeded its containment boundary — halt before Step 2.
 - [X] T015 Add `require` + `replace github.com/oleg-tkachuk/paladin/capability => ../capability` to `backend/go.mod`
 - [X] T016 Add a CI job that runs `go build ./...` and `go test ./...` **from `capability/`, with no `replace` in effect and no `backend/` checkout on the module path** — this is what actually enforces FR-002/FR-003
 - [X] T017 Add a CI assertion that the module's resolved dependency graph contains no database driver and no object-storage package (compare against T002; satisfies SC-002)
-- [ ] T018 Commit as `build(capability): add the module skeleton and standalone CI job`
+- [X] T018 Commit as `build(capability): add the module skeleton and standalone CI job`
 
 **Checkpoint**: module exists and is empty; PALADIN still builds; the guard that
 makes the rest of the work honest is in place.
@@ -182,7 +182,7 @@ its resolved dependency graph contains no storage or database packages.
 - [X] T050 [P] [US1] Add `capability/rotation_test.go`: a token signed under a **retired but still published** key must verify, and must stop verifying once that key is withdrawn via `StaticKeyResolver` (spec edge case 3). `quickstart.md` documents a three-step rotation procedure that nothing currently tests — the withdrawal deadline is max-outstanding-TTL, and getting it wrong invalidates live tokens
 - [X] T051 [P] [US1] Add `capability/forgery_test.go`: a syntactically valid, correctly-signed token whose `Store.Get` returns `ErrNotFound` must be rejected as **forgery**, not surfaced as a missing entity (spec edge case 5; contracts §1.1). Collapsing the two would turn a forged token into a 404 instead of an auth failure
 - [X] T052 [P] [US1] Add `capability/unitcode_test.go` covering `NormaliseUnitCode` and `IsAllowedUnitCode`: `""` → `DefaultUnitCode`, every entry of `AllowedUnitCodes` round-trips, an unknown code errors, and `IsAllowedUnitCode("")` is **false** — the deliberate asymmetry with `NormaliseUnitCode` (spec edge case 7). ⚠️ These are published API (contracts §5) with **zero test coverage anywhere in the repository today**; they gate the empty-means-default rule and the comparison behind `ErrUnitCodeMismatch`
-- [ ] T053 [US1] Commit as `test(capability): add in-memory store, atomicity + edge-case guards, and example` — must match the Commit Scope Map row verbatim
+- [X] T053 [US1] Commit as `test(capability): add in-memory store, atomicity + edge-case guards, and example` — must match the Commit Scope Map row verbatim
 
 **Checkpoint**: US1 delivered and **proven**, not merely asserted. Combined
 with Phase 3, this is the MVP.
@@ -217,17 +217,17 @@ documentation reaches a working issue → verify cycle (SC-007).
 - [X] T058 [P] [US4] Add package-level doc comments to `capability/doc.go` covering the three contracts a consumer implements and the no-transaction mode
 - [ ] T059 [US4] **Deferred — tagging is a publish action, not a code change; see commit.** Tag the module's first version (`capability/vX.Y.Z` per Go's nested-module tagging convention) and pin it in `backend/go.mod`'s `require`, keeping `replace` for local development (FR-020, [R-004](./research.md))
 - [X] T060 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with PALADIN's documentation closed
-- [ ] T061 [US4] Commit as `docs(capability): document and version the module`
+- [X] T061 [US4] Commit as `docs(capability): document and version the module`
 
 ---
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T062 [P] Add the BACKLOG entry *"Capability module: dedicated repository"* with Status/Reason/Definition of Done/Blockers, recording the import-path branding cost accepted in [R-003](./research.md) (Principle III)
-- [ ] T063 [P] Add the BACKLOG entry *"Capability module: publish + version policy"* with the same four fields (Principle III), then commit as `docs(backlog): record capability module deferrals`
-- [ ] T064 Compare post-extraction module coverage against the T001 baseline; any regression is either fixed or recorded as a BACKLOG entry — not silently accepted
-- [ ] T065 Re-measure `Verify` p99 over ≥10 000 iterations and assert it is within **5%** of the T005 baseline (SC-009). A miss is a stop condition, not a note
-- [ ] T066 Confirm every checklist item in [checklists/requirements.md](./checklists/requirements.md) still holds against the delivered result
+- [X] T062 [P] Add the BACKLOG entry *"Capability module: dedicated repository"* with Status/Reason/Definition of Done/Blockers, recording the import-path branding cost accepted in [R-003](./research.md) (Principle III)
+- [X] T063 [P] Add the BACKLOG entry *"Capability module: publish + version policy"* with the same four fields (Principle III), then commit as `docs(backlog): record capability module deferrals`
+- [X] T064 Compare post-extraction module coverage against the T001 baseline; any regression is either fixed or recorded as a BACKLOG entry — not silently accepted
+- [X] T065 Re-measure `Verify` p99 over ≥10 000 iterations and assert it is within **5%** of the T005 baseline (SC-009). A miss is a stop condition, not a note
+- [X] T066 Confirm every checklist item in [checklists/requirements.md](./checklists/requirements.md) still holds against the delivered result
 
 ---
 
