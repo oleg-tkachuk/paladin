@@ -1295,6 +1295,29 @@ of the pipeline._
     commit that drops the directive (see the entry below).
 - **Blockers:** none.
 
+### Smoke test has no CI home — runs only on demand
+
+- **Status:** Deferred
+- **Reason:** `TestSmokeStackReady` (tests/integration/smoke_test.go) probes a
+  live docker-compose stack on localhost — it is not a testcontainers test.
+  Wiring the integration suite into CI made it fail on every run, because no
+  job brings the compose stack up. It now skips unless `PALADIN_SMOKE=1`, which
+  keeps the gate green but means the smoke test gates nothing: the "the stack
+  composes and every plane binds" claim it exists to check is unverified in
+  CI. The frontend e2e workflow brings up a DIFFERENT compose file
+  (`frontend/tests/e2e/docker-compose.test.yaml`), so it is not covered there
+  either.
+- **Definition of Done:**
+  - A CI job (or a step in an existing one) brings up
+    `backend/deploy/docker-compose.yaml`, waits for health, then runs the
+    smoke test with `PALADIN_SMOKE=1`, and tears the stack down.
+  - The 60s in-test timeout is reconciled with the job-level timeout so a
+    stack that never comes up fails fast with a clear message rather than
+    hanging.
+- **Blockers:** none. Needs a decision on whether it lives in the integration
+  workflow (adds a compose bring-up to a testcontainers job — mixed concerns)
+  or its own smoke workflow.
+
 ### Capability module CI: deny network egress in the standalone job
 
 - **Status:** Deferred
