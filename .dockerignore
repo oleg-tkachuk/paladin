@@ -1,0 +1,109 @@
+# Build context for backend/deploy/Dockerfile.
+#
+# The backend image builds from the REPOSITORY ROOT, not from backend/,
+# because the binary depends on the nested capability module at capability/
+# and a backend-only context cannot reach it (`go mod download` fails
+# resolving the relative replace in backend/go.mod).
+#
+# Widening the context from one component to the whole repo means everything
+# not excluded here is streamed to the Docker daemon on every uncached build.
+# backend/.dockerignore no longer applies — Docker reads only the file at the
+# context root — so its rules are folded in below, re-rooted.
+#
+# The frontend image is unaffected: it still builds from frontend/ with its
+# own frontend/.dockerignore.
+
+# ── Components the backend image does not build ─────────────────────────
+frontend/
+deploy/
+docs/
+specs/
+tasks/
+.specify/
+.agents/
+.github/
+.pre-commit/
+.rtk/
+.hypothesis/
+
+# ── VCS / CI metadata ───────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.gitleaks.toml
+.pre-commit-config.yaml
+lefthook.yml
+release.config.cjs
+renovate.json
+
+# ── Repo-root docs ──────────────────────────────────────────────────────
+*.md
+!capability/README.md
+
+# ── Build artifacts (Go output anywhere in the tree) ────────────────────
+bin/
+out/
+dist/
+*.test
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Named binaries built at the backend root by local dev flows. Both are
+# gitignored and weigh tens of MB; without these they land in the context on
+# every uncached build.
+backend/server
+backend/seed-fixture
+
+# ── Coverage / profile output ───────────────────────────────────────────
+coverage/
+coverage.*
+*.coverprofile
+*.out
+profile.cov
+
+# ── Test trees the build never reaches ──────────────────────────────────
+backend/tests/grpcurl/reports/
+backend/tests/api/mutations/reports/
+backend/tests/api/security/reports/
+backend/tests/integration/testdata/
+
+# ── Secrets / local-only ────────────────────────────────────────────────
+# Runtime configs are mounted via Helm ConfigMap or a compose bind mount,
+# never baked in.
+.env
+.env.*
+!.env.example
+backend/configs/local/
+
+# ── Editor / OS / agent detritus ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+
+# ── Logs ────────────────────────────────────────────────────────────────
+*.log
+
+# ── Repo-tooling configs not needed at build time ───────────────────────
+backend/.golangci.yaml
+backend/.mockery.yaml
+backend/skills-lock.json
+backend/scripts/
+backend/docs/
+Taskfile.yaml
+backend/Taskfile.yaml
+backend/tasks/
+
+# ── Trees the Dockerfile does not COPY ──────────────────────────────────
+# Real source, but the binary build never reaches them: pkg/ exposes the
+# public Connect SDK to external consumers, policies/ ships Cedar fixtures
+# used by tests and docs. If a future Dockerfile starts to COPY one, drop
+# the matching line.
+backend/pkg/
+backend/policies/
+backend/tools.go

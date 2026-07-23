@@ -83,19 +83,26 @@ COPY --from=tools /go_workspace/bin/ /go_workspace/bin/
 WORKDIR /app
 
 # Module files first — best cache hit on dependency-only changes.
-COPY --link go.mod go.sum ./
+# Build context is the REPOSITORY ROOT, not backend/ — the binary depends on
+# the nested capability module at repo-root capability/, which a backend-only
+# context cannot reach (`go mod download` fails resolving the relative
+# replace). Every path below is therefore repo-relative.
+COPY --link backend/go.mod backend/go.sum ./
+# The nested module must land BEFORE `go mod download`, because the replace
+# directive in backend/go.mod resolves against it.
+COPY --link capability/ /capability/
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     go mod download -x
 
 # Source layout. configs/ is intentionally NOT copied — runtime configs come
 # from a Helm ConfigMap (k8s) or a host bind mount (compose), never baked in.
-COPY --link cmd/ cmd/
-COPY --link internal/ internal/
-COPY --link migrations/ migrations/
+COPY --link backend/cmd/ cmd/
+COPY --link backend/internal/ internal/
+COPY --link backend/migrations/ migrations/
 # proto/ is a self-contained buf module — buf.yaml/buf.gen.yaml/buf.lock now
 # live inside it (copied by the line above), so only sqlc.yaml is copied here.
-COPY --link proto/ proto/
-COPY --link sqlc.yaml ./
+COPY --link backend/proto/ proto/
+COPY --link backend/sqlc.yaml ./
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \

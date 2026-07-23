@@ -1278,6 +1278,45 @@ of the pipeline._
 - **Blockers:** Depends on the repository decision above — tagging under the
   current path then moving would strand the tag.
 
+### Capability module: restore gomoddirectives replace-local
+
+- **Status:** Deferred
+- **Reason:** `backend/go.mod` carries a relative `replace` to the nested
+  `capability/` module until that module is tagged. `gomoddirectives` rejects
+  relative replaces, and the only knob that governs them is `replace-local`
+  (the `replace-allow-list` option covers non-local replacements only). So the
+  check is now off for **all** local replaces in `backend/`, not just this one
+  — a genuine widening, accepted because the alternative was disabling the
+  linter outright.
+- **Definition of Done:**
+  - `capability` is tagged and `backend/go.mod` pins a version instead of the
+    relative replace.
+  - `replace-local: true` deleted from `backend/.golangci.yaml` in the same
+    commit as the directive, and `golangci-lint run ./...` still passes.
+- **Blockers:** Depends on "Capability module: publish + version policy",
+  which is itself blocked on the repository decision.
+
+### Backend image: build context widened to the repository root
+
+- **Status:** SHIPPED (2026-07-23) — recorded because it changes an
+  operational assumption, not because work remains.
+- **Shipped:** The backend image now builds from the repo root instead of
+  `backend/`, because the binary depends on the nested `capability/` module
+  and a component-scoped context cannot reach it (`go mod download` fails
+  resolving the relative replace — reproduced via `task deploy-all`). Every
+  `COPY` in `backend/deploy/Dockerfile` is repo-relative; `BUILD_CONTEXT` in
+  `backend/Taskfile.yaml` is `..`.
+- **Operational note:** `backend/.dockerignore` **no longer applies** — Docker
+  reads only the file at the context root. Its rules were folded into a new
+  root `.dockerignore`, which also excludes `frontend/`, `specs/`, `docs/` and
+  the rest of the tree the backend image never builds. Verified: context is
+  ~8 MB against a 2.3 GB repo, and the image builds and runs (84.9 MB).
+  Anyone editing `backend/.dockerignore` expecting it to affect the backend
+  image will be editing a dead file — delete it when the replace goes away and
+  the context can move back, or sooner.
+- **Blockers:** none. Entry deletable once the context question is revisited
+  alongside module tagging.
+
 ### Capability module CI: deny network egress in the standalone job
 
 - **Status:** Deferred

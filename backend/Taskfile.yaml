@@ -52,8 +52,10 @@ includes:
     vars:
       PROJECT_NAME: paladin-core
       IMAGE_NAMESPACE: paladin
-      DOCKERFILE: ./deploy/Dockerfile
-      BUILD_CONTEXT: .
+      # Repo root, not backend/: the binary depends on the nested capability
+      # module at capability/, which a backend-only context cannot reach.
+      DOCKERFILE: ./backend/deploy/Dockerfile
+      BUILD_CONTEXT: ..
       CHART_DIR: ./deploy/chart
       K8S_NAMESPACE: paladin
       GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}"
