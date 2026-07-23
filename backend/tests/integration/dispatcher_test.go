@@ -499,10 +499,18 @@ func TestDispatcher_MaxAttemptsTransitionsToFailed(t *testing.T) {
 	}
 }
 
-// TestDispatcher_FilterMatch_OnlyMatchingSubsGetRow: the producer
-// honours sub.CELFilter (currently treated as an exact event-type
-// match). Only the two subs whose filter matches should produce rows;
-// the third is silently skipped.
+// TestDispatcher_FilterMatch_OnlyMatchingSubsGetRow: the producer honours
+// sub.CELFilter, a CEL predicate over the event envelope (see
+// cel.EventEnvelopeSchema; the event type is the `type` variable). An empty
+// filter matches every event; a predicate that evaluates false, or fails to
+// compile, is fail-closed and produces no row. Only the two subs whose filter
+// matches should produce rows; the third is silently skipped.
+//
+// Was previously written for the pre-CEL "exact event-type match" semantics
+// and seeded bare type strings as filters — which, as CEL, are string
+// literals rather than boolean predicates and so fail-closed to zero matches.
+// The suite ran nowhere (no task, no CI), so the drift went unnoticed until
+// it was wired into CI. Rewritten to current CEL semantics.
 func TestDispatcher_FilterMatch_OnlyMatchingSubsGetRow(t *testing.T) {
 	t.Parallel()
 	f := setupDispatcher(t)
@@ -511,8 +519,8 @@ func TestDispatcher_FilterMatch_OnlyMatchingSubsGetRow(t *testing.T) {
 
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "disp-filter")
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL}) // empty filter → match anything
-	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL, Filter: "paladin.object.uploaded"})
-	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL, Filter: "paladin.tenant.created"})
+	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL, Filter: `type == "paladin.object.uploaded"`})
+	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL, Filter: `type == "paladin.tenant.created"`})
 
 	d := f.dispatcher()
 	queued, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("paladin.object.uploaded", tenant))

@@ -21,12 +21,22 @@ func TestTenantStorageLayout(t *testing.T) {
 	pool := startPostgres(t)
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 
+	// A dedicated-layout tenant provisions a bucket bound to a backend, and
+	// buckets.backend_id is an FK into storage_backends (feature 002 made
+	// backends first-class). Seed one first and pass it as DedicatedBackend —
+	// mirrors TestCreateDedicatedTenantProvisionsBucket. The bare Create used
+	// to work before the FK landed; the suite ran nowhere, so the drift went
+	// unnoticed until it was wired into CI.
+	const backendID = "be-layout"
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+
 	hex := uuid.NewString()[:8]
 	ded, err := repo.Create(ctx, tenant.CreateTenantArgs{
-		TenantID:      uuid.New(),
-		Slug:          "ded-" + hex,
-		DisplayName:   "dedicated-" + hex,
-		StorageLayout: "dedicated",
+		TenantID:         uuid.New(),
+		Slug:             "ded-" + hex,
+		DisplayName:      "dedicated-" + hex,
+		StorageLayout:    "dedicated",
+		DedicatedBackend: backendID,
 	})
 	if err != nil {
 		t.Fatalf("create dedicated tenant: %v", err)

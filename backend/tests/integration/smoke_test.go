@@ -19,6 +19,7 @@ package integration
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 )
@@ -45,6 +46,23 @@ func TestSmokeStackReady(t *testing.T) {
 	defer cancel()
 
 	client := &http.Client{Timeout: 2 * time.Second}
+
+	// Precondition: a live compose stack on localhost (see the file header).
+	// Unlike the rest of this directory, this test is NOT self-contained — it
+	// probes a running deployment, not a testcontainers Postgres. When the
+	// stack is not up (every CI run of the integration gate, and any local
+	// run without `docker compose up`), skip rather than fail: an unmet
+	// environment precondition is a skip, not a red. Set PALADIN_SMOKE=1 to force
+	// it to run and fail loudly, e.g. in a job that brought the stack up.
+	if os.Getenv("PALADIN_SMOKE") != "1" {
+		probe := &http.Client{Timeout: 1 * time.Second}
+		resp, err := probe.Get(probes[0].url)
+		if err != nil {
+			t.Skipf("compose stack not reachable at %s (%v); "+
+				"bring it up and set PALADIN_SMOKE=1 to run this smoke test", probes[0].url, err)
+		}
+		_ = resp.Body.Close()
+	}
 
 	for _, p := range probes {
 		t.Run(p.name, func(t *testing.T) {
