@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/jackc/pgx/v5"
+
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
@@ -213,7 +215,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(paladinadminv1connect.NewOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
 	{
-		var usageStore capability.UsageStore
+		var usageStore capability.UsageStore[pgx.Tx]
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
 		}

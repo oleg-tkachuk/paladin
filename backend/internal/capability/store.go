@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,10 @@ type Store interface {
 	// Get fetches a capability record by ID. Returns ErrNotFound when
 	// no row exists; callers normally treat that as ErrInvalidSignature
 	// (token forgery) rather than a missing entity.
+	//
+	// ErrNotFound is defined in THIS package (below), not in any store
+	// implementation — a third party writing its own Store must have a
+	// sentinel to return without importing someone else's persistence.
 	Get(ctx context.Context, id uuid.UUID) (*Capability, error)
 
 	// IsRevoked reports whether the supplied capability ID is in the
@@ -53,6 +58,16 @@ type Store interface {
 }
 
 // RevokeArgs is the input shape for Store.Revoke.
+// ErrNotFound is the typed not-found return from Store.Get. It lives in the
+// core package rather than in a store implementation so that any consumer —
+// in-memory, relational, or otherwise — can satisfy the Store contract using
+// only what this package publishes (FR-004).
+//
+// Verifiers map it to an invalid-token response: a syntactically valid token
+// whose record is absent was forged or purged, which is an authentication
+// failure, not a missing entity.
+var ErrNotFound = errors.New("capability: not found")
+
 type RevokeArgs struct {
 	ID uuid.UUID
 	// Reason is an operator-supplied label ("compromise", "rotation",

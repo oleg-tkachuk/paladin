@@ -13,7 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
 
-// fakeUsageStore is a minimal in-memory capability.UsageStore that
+// fakeUsageStore is a minimal in-memory capability.UsageStore[pgx.Tx] that
 // covers just the methods TenantBudgetServer touches. The full
 // interface lives across many call sites; we mock only what's
 // reached in this test file.

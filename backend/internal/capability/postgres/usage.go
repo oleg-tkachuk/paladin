@@ -16,7 +16,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// UsageStore implements capability.UsageStore against migration 022's
+// UsageStore implements capability.UsageStore[pgx.Tx] against migration 022's
 // capability_usage table. Single-row UPSERT per call → concurrency-safe
 // without explicit locking.
 //
@@ -42,7 +42,7 @@ type UsageStore struct {
 }
 
 // NewUsageStore wires the sqlc-generated queries to the
-// capability.UsageStore interface. pool is optional — when nil, the
+// capability.UsageStore[pgx.Tx] interface. pool is optional — when nil, the
 // charges-ledger row insert is skipped (useful for tests that want
 // to exercise the in-memory bookkeeping without a real DB). In
 // production it must be non-nil so the BillingService surface has
@@ -57,7 +57,7 @@ func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool, log *zap.Logger) *UsageS
 	return &UsageStore{q: q, pool: pool, log: log}
 }
 
-// BumpRequest implements capability.UsageStore.
+// BumpRequest implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) BumpRequest(
 	ctx context.Context,
 	capID uuid.UUID,
@@ -77,7 +77,7 @@ func (s *UsageStore) BumpRequest(
 	return count, nil
 }
 
-// Charge implements capability.UsageStore. amount must be ≥ 0;
+// Charge implements capability.UsageStore[pgx.Tx]. amount must be ≥ 0;
 // negative input rejected — refunds are explicit via RefundCapability
 // / RefundTenant.
 //
@@ -269,7 +269,7 @@ func (s *UsageStore) chargeNoTx(
 	return floatFromNumeric(spent), nil
 }
 
-// RefundCapability implements capability.UsageStore. Idempotent —
+// RefundCapability implements capability.UsageStore[pgx.Tx]. Idempotent —
 // row floored at 0; missing row is a no-op.
 func (s *UsageStore) RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error {
 	if amount <= 0 {
@@ -289,7 +289,7 @@ func (s *UsageStore) RefundCapability(ctx context.Context, capID uuid.UUID, amou
 	return nil
 }
 
-// RefundTenant implements capability.UsageStore. Same idempotency
+// RefundTenant implements capability.UsageStore[pgx.Tx]. Same idempotency
 // shape as RefundCapability.
 func (s *UsageStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error {
 	if amount <= 0 {
@@ -309,7 +309,7 @@ func (s *UsageStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amoun
 	return nil
 }
 
-// GetTenantBudget implements capability.UsageStore.
+// GetTenantBudget implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (capability.TenantBudget, error) {
 	row, err := s.q.GetTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true})
 	if err != nil {
@@ -321,7 +321,7 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
 }
 
-// SetTenantBudget implements capability.UsageStore.
+// SetTenantBudget implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
 	maxBudget, err := numericFromFloat(args.MaxBudgetAmount)
 	if err != nil {
@@ -426,7 +426,7 @@ func tenantBudgetFromRow(
 	return out
 }
 
-// Get implements capability.UsageStore.
+// Get implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) Get(ctx context.Context, capID uuid.UUID) (capability.Usage, error) {
 	row, err := s.q.GetCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true})
 	if err != nil {
@@ -443,7 +443,7 @@ func (s *UsageStore) Get(ctx context.Context, capID uuid.UUID) (capability.Usage
 	}, nil
 }
 
-// Delete implements capability.UsageStore.
+// Delete implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) Delete(ctx context.Context, capID uuid.UUID) error {
 	if _, err := s.q.DeleteCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true}); err != nil {
 		return fmt.Errorf("capability/postgres: delete usage: %w", err)
@@ -451,7 +451,7 @@ func (s *UsageStore) Delete(ctx context.Context, capID uuid.UUID) error {
 	return nil
 }
 
-// PurgeOrphans implements capability.UsageStore.
+// PurgeOrphans implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) PurgeOrphans(ctx context.Context) (int64, error) {
 	n, err := s.q.PurgeCapabilityUsageOrphans(ctx)
 	if err != nil {

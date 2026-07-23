@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
@@ -37,7 +38,7 @@ const topN = 10
 // reaching for tenant_budgets directly).
 type Handler struct {
 	pool   *pgxpool.Pool
-	usage  capability.UsageStore
+	usage  capability.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
 }
 
@@ -45,7 +46,7 @@ type Handler struct {
 // be nil only when the capability subsystem is disabled (the listener
 // builder still needs to register a stub so the BFF allowlist doesn't
 // 404).
-func NewHandler(pool *pgxpool.Pool, usage capability.UsageStore, policy cedar.Authorizer) *Handler {
+func NewHandler(pool *pgxpool.Pool, usage capability.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("billingh: policy authorizer is required")
 	}

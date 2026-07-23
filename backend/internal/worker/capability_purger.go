@@ -16,6 +16,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
@@ -26,7 +28,7 @@ import (
 // capability is gone. Disabled when Interval <= 0.
 type CapabilityPurger struct {
 	Store      capability.Store
-	Usage      capability.UsageStore
+	Usage      capability.UsageStore[pgx.Tx]
 	Interval   time.Duration
 	ExpiredFor time.Duration
 	Logger     *zap.Logger

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
@@ -18,7 +20,7 @@ import (
 // admin handler) pull the pieces they need.
 type CapabilityBundle struct {
 	Store    capability.Store
-	Usage    capability.UsageStore
+	Usage    capability.UsageStore[pgx.Tx]
 	Issuer   *capability.Issuer
 	Verifier *capability.StandardVerifier
 	Keys     *capability.StaticKeyResolver

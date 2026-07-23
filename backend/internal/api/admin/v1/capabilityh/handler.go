@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -34,7 +36,7 @@ import (
 type Handler struct {
 	issuer *capability.Issuer
 	store  capability.Store
-	usage  capability.UsageStore
+	usage  capability.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
 }
 
@@ -45,7 +47,7 @@ type Handler struct {
 func NewHandler(
 	issuer *capability.Issuer,
 	store capability.Store,
-	usage capability.UsageStore,
+	usage capability.UsageStore[pgx.Tx],
 	policy cedar.Authorizer,
 ) *Handler {
 	if issuer == nil || store == nil || policy == nil {

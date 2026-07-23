@@ -32,7 +32,7 @@ Semantics the implementation must honour:
 
 | Method | Required behaviour |
 |---|---|
-| `Get` | Returns `ErrNotFound` when absent. Callers treat absence as **forgery**, not as a missing entity. |
+| `Get` | Returns the module's `ErrNotFound` (see §4) when absent. Callers treat absence as **forgery**, not as a missing entity. |
 | `IsRevoked` | On the hot path — every verification calls it. Must be cheap. |
 | `Revoke` | **Idempotent.** `RevokeArgs.CascadeChildren=true` revokes the whole descendant subtree; `false` revokes only the named id. |
 | `PurgeExpired` | Housekeeping only; must not affect verification results. |
@@ -188,24 +188,44 @@ var (
 )
 ```
 
-Plus five **store-side** sentinels, which are equally exported and equally
-frozen — a consumer implementing `Store` / `UsageStore[TX]` must return these
-exact values, because the module's own control flow matches on them:
+Plus the **store-contract** sentinels, which a consumer implementing `Store` /
+`UsageStore[TX]` must return by these exact values, because the module's own
+control flow matches on them with `errors.Is`:
 
 ```go
 var (
-    ErrNotFound             = errors.New("capability: not found")
-    ErrUsageNotFound        = errors.New("capability: usage not found")
-    ErrTenantBudgetNotFound = errors.New("capability: tenant budget not found")
-    ErrTenantBudgetExceeded = errors.New("capability: tenant budget exceeded")
+    ErrNotFound             = errors.New("capability: not found")              // Store.Get
+    ErrUsageNotFound        = errors.New("capability: usage row not found")     // UsageStore.Get
+    ErrTenantBudgetNotFound = errors.New("capability: tenant budget row not found")
+    ErrTenantBudgetExceeded = errors.New("capability: tenant aggregate budget exceeded")
     ErrRequestLimitExceeded = errors.New("capability: request limit exceeded")
 )
 ```
 
-**Fourteen sentinels total.** FR-007 names nine because those are the nine a
-*verification* can reject with; the other five are the contract between the
-module and a store implementation. Both sets are frozen; only the nine are
-required to be distinguishable by an end consumer mapping to transport codes.
+…and one **key-resolution** sentinel, returned by `KeyResolver` when a token's
+`kid` is unknown:
+
+```go
+var ErrUnknownKID = errors.New("capability: unknown kid")   // verifier.go
+```
+
+**Fifteen sentinels total**: 9 verification-facing (FR-007), 5 store-contract,
+1 key-resolution. All are frozen; only the nine are required to be
+individually distinguishable by an end consumer mapping to transport codes.
+
+> **Corrected 2026-07-23, during implementation.** An earlier revision of this
+> document listed `ErrNotFound` as already module-published and omitted
+> `ErrUnknownKID` entirely. Verified against source: `ErrNotFound` exists only
+> in `capability/postgres` — the implementation that stays in PALADIN — so the
+> `Store` contract as written was **not implementable by a third party**, who
+> would have had to import PALADIN's postgres package to satisfy it. T006 moves
+> the sentinel into the core package. `ErrUnknownKID` is defined in
+> `verifier.go` and was simply missed.
+>
+> Five analysis passes did not catch this because every one of them checked
+> the artifacts against *each other* — spec ↔ plan ↔ tasks, counts,
+> cross-references — and none checked this document against the code it
+> describes. Internal consistency is not truth.
 
 **Contract**: consumers match with `errors.Is`. Every rejection path must wrap
 (never replace) its sentinel, so a consumer can map each to its own transport
@@ -263,6 +283,7 @@ consumer that configures no provider gets OTel's no-op and pays nothing
 | No database driver in the dependency graph (FR-003) | Standalone CI job ([R-004](../research.md)) |
 | No object-storage dependency (FR-002) | Same standalone job (SC-002) |
 | Contracts satisfiable in memory (FR-005) | `memstore` package, used by the module's own tests |
+| Every sentinel a `Store` implementer must return is module-owned (FR-004) | T006 moves `ErrNotFound` into the core package; `memstore` compiles without importing PALADIN |
 
 The atomicity row is listed second deliberately: it is the property the whole
 `TX` parameterisation exists to preserve, and the one with **no test anywhere

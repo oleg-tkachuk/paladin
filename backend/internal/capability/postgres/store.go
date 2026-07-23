@@ -24,10 +24,12 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
 
-// ErrNotFound is the typed not-found return — distinguishes "no such
-// capability ID" from a database error. Verifiers map this to an
-// invalid-token response (the JTI was forged or the row was purged).
-var ErrNotFound = errors.New("capability/postgres: not found")
+// ErrNotFound re-exports the core sentinel so existing call sites keep
+// compiling. The value is deliberately capability.ErrNotFound, not a distinct
+// error: the Store contract is owned by the core package (FR-004), and a
+// second sentinel here would mean a third-party Store implementation and this
+// one disagree about what "not found" is.
+var ErrNotFound = capability.ErrNotFound
 
 // Store implements capability.Store against the migration-016 tables.
 type Store struct {

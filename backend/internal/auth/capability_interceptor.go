@@ -88,7 +88,7 @@ func WithCapability(ctx context.Context, c *capability.Capability) context.Conte
 func CapabilityInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
-	usage capability.UsageStore,
+	usage capability.UsageStore[pgx.Tx],
 	realIPHeader string,
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
@@ -105,7 +105,7 @@ func CapabilityInterceptor(
 func CapabilityInterceptorWithEvents(
 	verifier *capability.StandardVerifier,
 	audience string,
-	usage capability.UsageStore,
+	usage capability.UsageStore[pgx.Tx],
 	realIPHeader string,
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
@@ -131,7 +131,7 @@ func CapabilityInterceptorWithEvents(
 type capabilityInterceptor struct {
 	verifier               *capability.StandardVerifier
 	audience               string
-	usage                  capability.UsageStore
+	usage                  capability.UsageStore[pgx.Tx]
 	realIPHeader           string
 	chargePerRequestAmount float64
 	chargePerRequestUnit   string
@@ -413,7 +413,7 @@ type chargeAmount struct {
 // WithChargeStore stamps the UsageStore onto a context. Wired by the
 // capability interceptor at request time; tests can preset for unit
 // coverage of charging handlers.
-func WithChargeStore(ctx context.Context, s capability.UsageStore) context.Context {
+func WithChargeStore(ctx context.Context, s capability.UsageStore[pgx.Tx]) context.Context {
 	if s == nil {
 		return ctx
 	}
@@ -447,7 +447,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 //   - No capability on context (JWT auth) → no-op, returns nil.
 //   - Capability without MaxBudgetUSD AND tenant without aggregate
 //     cap → records spend on both counters but never rejects
-//     (operator audits via capability.UsageStore.Get / GetTenantBudget).
+//     (operator audits via capability.UsageStore[pgx.Tx].Get / GetTenantBudget).
 //   - Capability cap set and the new charge would exceed it →
 //     CodeResourceExhausted; per-capability row NOT mutated so the
 //     handler can decide to refund / log / retry. Tenant counter
@@ -477,7 +477,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 //   - No capability on context (JWT auth) → no-op, returns nil.
 //   - Capability without MaxBudgetAmount AND tenant without aggregate
 //     cap → records spend on both counters but never rejects
-//     (operator audits via capability.UsageStore.Get / GetTenantBudget).
+//     (operator audits via capability.UsageStore[pgx.Tx].Get / GetTenantBudget).
 //   - Capability cap set and the new charge would exceed it →
 //     CodeResourceExhausted; per-capability row NOT mutated so the
 //     handler can decide to refund / log / retry. Tenant counter
@@ -495,7 +495,7 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 	if !ok {
 		return nil
 	}
-	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore)
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore[pgx.Tx])
 	if !ok || store == nil {
 		return nil
 	}
@@ -586,7 +586,7 @@ func RefundCapability(ctx context.Context, amount float64) error {
 	if !ok {
 		return nil
 	}
-	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore)
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore[pgx.Tx])
 	if !ok || store == nil {
 		return nil
 	}

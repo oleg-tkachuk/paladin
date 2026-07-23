@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 // UsageStore tracks per-capability runtime counters used to enforce
@@ -18,7 +17,7 @@ import (
 // per capability row in a single round-trip. Two callers may race
 // to bump the counter; whichever loses sees the post-increment value
 // the other wrote.
-type UsageStore interface {
+type UsageStore[TX any] interface {
 	// BumpRequest increments the request counter and returns the new
 	// value. When maxRequests > 0 and the post-increment would
 	// exceed it, returns ErrRequestLimitExceeded without mutating
@@ -75,7 +74,7 @@ type UsageStore interface {
 		tenantID uuid.UUID,
 		op string,
 		actor string,
-		onCharged func(ctx context.Context, tx pgx.Tx) error,
+		onCharged func(ctx context.Context, tx TX) error,
 	) (newSpent float64, err error)
 
 	// RefundCapability subtracts amount from the per-capability
