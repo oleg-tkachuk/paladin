@@ -77,20 +77,22 @@ linters:
         - (io.Closer).Close
     gomoddirectives:
       # The capability module is a NESTED module in THIS repository (repo-root
-      # capability/), consumed via a relative replace until it is tagged.
+      # capability/), consumed via a relative replace. It is a permanent
+      # internal library — not headed for a separate repo (settled: it stays
+      # in-tree) — so the replace is permanent too, not a stopgap until a tag.
       #
       # The rule exists to stop a developer's machine-local replace reaching
       # main — a path outside the repo that breaks every other checkout. This
       # one always resolves, for everyone, because it ships in the same commit
-      # as the directory it points at, and the image build was moved to a
-      # repo-root context so the container resolves it too.
+      # as the directory it points at, and the image build uses a repo-root
+      # context so the container resolves it too.
       #
       # replace-local (not replace-allow-list) is the knob that governs
       # relative paths; the allow-list only covers non-local replacements.
-      # This does widen the rule to any local replace, which is a real cost —
-      # accepted because the alternative is disabling gomoddirectives outright.
-      # It goes away with the directive itself once the module is tagged
-      # (BACKLOG: "Capability module: publish + version policy").
+      # This does widen the rule to ANY local replace in backend/, which is a
+      # real, accepted cost — the alternative is disabling gomoddirectives
+      # outright. A stray developer replace still slips through; the mitigation
+      # is review, not the linter.
       replace-local: true
     gosec:
       excludes:
