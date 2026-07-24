@@ -736,6 +736,42 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
+### UI/UX refactor (2026-07-24): flatten the deep tenant→bucket→surface URLs
+
+- **Status:** Deferred (the identity + navigation-legibility pass landed this
+  session; the literal URL-depth cut is parked).
+- **Landed this session (calm-product direction):** a single brand accent on a
+  cool-slate ground (`globals.css` `.dark` token identity); the shell
+  de-cluttered — `RealTimeStatus` collapsed from a four-chip strip (which cried
+  red "ERR" for a merely-unknown rollup, in raw non-token colours) to one calm
+  token-based status pill; Sidebar icons neutralised so only the active row
+  carries the accent; the dashboard turned from a hybrid status-board-plus-
+  launcher-grid into a pure "what needs attention" board (launcher grid + tile
+  machinery removed, copy reframed); scope chrome de-duplicated to one control
+  (top-bar `ScopePicker`) by dropping PageHeader's `ScopeBreadcrumb` pills and
+  flipping `showDefaultActions` to default `false`; and `Breadcrumbs` rebuilt as
+  the legible deep-route "you are here" anchor.
+- **NOT done — why:** literally shortening
+  `tenants/[id]/buckets/[backendId]/[bucketName]/{lifecycle,policy,versioning,
+  object-lock,replication,object-keys}` (five segments). A bucket's identity is
+  the composite `(tenant, backend, name)`, so a shallower URL (`/buckets/<id>/
+  <surface>`) needs the backend to mint a stable single-token bucket id — a
+  proto/schema change, not a frontend move. The existing UX already renders
+  these as task-oriented **tab** screens (`TenantTabs` → `BucketTabs`), so the
+  depth is in the address bar, not the click-path. It is also unverifiable in
+  the lab today: `GetTenant` / `ListBuckets` return `fetch failed` at the
+  BFF→backend hop, so `TenantLayout` shows its "Failed to load tenant" retry
+  card and the bucket flow can't be exercised end-to-end.
+- **Definition of Done:** either (a) accept the composite-keyed depth as
+  correct and close this — the tab bars + breadcrumb already make it navigable —
+  or (b) add a backend bucket id (UUID or opaque `<backend>:<name>` token) +
+  resolver, collapse the route tree to `/buckets/<id>/<surface>`, and rewrite
+  every `Link`/redirect plus `BucketTabs` and the `Breadcrumbs` `ENTITY_PARENTS`
+  map, verified against a cluster where `GetTenant`/`ListBuckets` serve.
+- **Blockers:** a backend bucket-identity decision; and a working backend for
+  the bucket/tenant RPCs to verify the flow (the lab's ListBuckets/GetTenant are
+  currently failing — an environment condition, not a UI regression).
+
 ### Backend edit dialog: advanced fields (SSE / events / cedar_policy)
 
 - **Status:** Deferred (metadata edit landed; advanced fields parked).

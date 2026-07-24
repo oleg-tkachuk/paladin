@@ -1,7 +1,7 @@
 "use client";
 
-// DashboardWidgets — drop-in row for the home page. Three compact
-// cards over the existing tile grid:
+// DashboardWidgets — the dashboard's "attention row". Three compact
+// cards answering "is anything wrong right now?":
 //
 //   1. Recent activity (last 5 audit entries platform-wide)
 //   2. Failed operations (background-ops drawer's "failed" subset
@@ -10,7 +10,7 @@
 //   3. Tenants approaching budget cap (>= 80% spend)
 //
 // Each widget fetches independently and degrades silently. The home
-// page composes this above its tile grid via:
+// page composes this as its lead row via:
 //   <DashboardWidgets />
 //
 // Server load is minimal: small page sizes, no polling — only

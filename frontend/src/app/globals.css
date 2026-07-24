@@ -91,54 +91,72 @@
 }
 
 .dark {
-  /* Default mode: zinc-900 surfaces with indigo accent */
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.62 0.19 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --success: oklch(0.74 0.18 152);
-  --warning: oklch(0.82 0.16 80);
-  --info: oklch(0.72 0.13 220);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.62 0.19 264 / 60%);
-  --chart-1: oklch(0.62 0.19 264);
-  --chart-2: oklch(0.74 0.18 152);
-  --chart-3: oklch(0.82 0.16 80);
-  --chart-4: oklch(0.7 0.21 30);
-  --chart-5: oklch(0.72 0.13 220);
-  --sidebar: oklch(0.18 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.62 0.19 264);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.62 0.19 264 / 60%);
+  /* ── "Calm product" identity ──────────────────────────────────────────
+   * A cool slate ground (a faint cyan cast in the neutrals, not the stock
+   * chromatic-zero gray) carries a single restrained brand accent — a calm
+   * teal that reads as "data / flow" rather than the default periwinkle.
+   * Warm amber is reserved strictly for `warning`, so the accent and the
+   * warning colour never fight. Charts are a harmonised sequence, not a
+   * rainbow. Every value here is derived from that direction, not from the
+   * shadcn defaults it replaced. */
 
-  /* Bridge tokens for legacy `rgb(var(--color-bg) / <a>)` callsites.
-   * Lets old pages render correctly until they're migrated to theme tokens. */
-  --color-bg: 24 24 27;
-  --color-bg-deep: 9 9 11;
-  --color-surface: 39 39 42;
-  --color-surface-light: 63 63 70;
-  --color-text: 250 250 250;
-  --color-text-secondary: 161 161 170;
-  --color-success-rgb: 16 185 129;
-  --color-danger: 239 68 68;
+  --background: oklch(0.17 0.014 232);
+  --foreground: oklch(0.955 0.006 230);
+  --card: oklch(0.213 0.015 232);
+  --card-foreground: oklch(0.955 0.006 230);
+  --popover: oklch(0.213 0.015 232);
+  --popover-foreground: oklch(0.955 0.006 230);
+
+  /* Brand: calm teal. Foreground is dark — teal is light enough to carry it. */
+  --primary: oklch(0.74 0.1 194);
+  --primary-foreground: oklch(0.19 0.02 232);
+
+  --secondary: oklch(0.268 0.014 232);
+  --secondary-foreground: oklch(0.955 0.006 230);
+  --muted: oklch(0.268 0.014 232);
+  --muted-foreground: oklch(0.72 0.02 231);
+  --accent: oklch(0.3 0.02 210);
+  --accent-foreground: oklch(0.955 0.006 230);
+
+  --destructive: oklch(0.66 0.185 23);
+  --success: oklch(0.74 0.14 160);
+  --warning: oklch(0.79 0.13 76);
+  --info: oklch(0.72 0.09 232);
+
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.74 0.1 194 / 55%);
+
+  /* Harmonised chart ramp: teal → green → amber → soft indigo → muted magenta. */
+  --chart-1: oklch(0.74 0.1 194);
+  --chart-2: oklch(0.74 0.14 160);
+  --chart-3: oklch(0.79 0.13 76);
+  --chart-4: oklch(0.7 0.09 252);
+  --chart-5: oklch(0.68 0.11 322);
+
+  /* Sidebar sits a touch deeper than the ground so the shell reads as a
+   * separate plane, with the brand accent marking the active item. */
+  --sidebar: oklch(0.155 0.014 233);
+  --sidebar-foreground: oklch(0.955 0.006 230);
+  --sidebar-primary: oklch(0.74 0.1 194);
+  --sidebar-primary-foreground: oklch(0.19 0.02 232);
+  --sidebar-accent: oklch(0.268 0.014 232);
+  --sidebar-accent-foreground: oklch(0.955 0.006 230);
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: oklch(0.74 0.1 194 / 55%);
+
+  /* Bridge tokens for legacy `rgb(var(--color-bg) / <a>)` callsites, retuned
+   * to the slate ground so unmigrated pages stay consistent with the theme. */
+  --color-bg: 26 30 34;
+  --color-bg-deep: 15 18 21;
+  --color-surface: 35 40 45;
+  --color-surface-light: 55 62 68;
+  --color-text: 244 247 248;
+  --color-text-secondary: 150 161 168;
+  --color-success-rgb: 52 197 156;
+  --color-danger: 233 108 108;
   --color-border-rgb: 255 255 255;
-  --border-opacity: 0.08;
+  --border-opacity: 0.09;
 }
 
 @layer base {

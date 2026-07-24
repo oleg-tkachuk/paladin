@@ -39,10 +39,11 @@ import {
 } from "@/components/ui/Tooltip";
 
 /**
- * Each group claims one of the chart-N tokens. The icon picks up that
- * tint so the operator can locate sections at a glance without making
- * the whole row noisy. The active item still uses primary blue + a
- * left-rail accent — see `SidebarBody` below.
+ * Icons stay neutral (muted-foreground) at rest and brighten to the
+ * foreground on hover; only the active row carries the brand accent —
+ * a primary-tinted icon plus a left-rail marker (see `SidebarBody`).
+ * One accent, used sparingly, keeps the shell calm instead of turning
+ * the nav into a colour-coded key.
  *
  * `path` is for absolute routes that don't depend on the signed-in
  * user; `tenantTab` is a per-user shortcut that resolves to
@@ -61,8 +62,6 @@ type NavItem = {
 
 const navigationGroups: Array<{
   title: string;
-  /** Tailwind class on the icon foreground (idle state). */
-  accent: string;
   items: Array<NavItem>;
 }> = [
   {
@@ -72,7 +71,6 @@ const navigationGroups: Array<{
     // Resources). Upload stays in Core because it doesn't need a
     // pre-selected OK and is the most-used Core entry-point.
     title: "Core",
-    accent: "text-primary/80",
     items: [
       { name: "Dashboard", path: "/", icon: HomeIcon },
       { name: "Upload", path: "/upload", icon: CloudArrowUpIcon },
@@ -91,7 +89,6 @@ const navigationGroups: Array<{
     // not a per-tenant view (the per-tenant graph lives under the
     // tenant's Policies tab).
     title: "Management",
-    accent: "text-chart-2/85",
     items: [
       {
         // Storage Backends — physical S3-compatible endpoints (AWS,
@@ -131,7 +128,6 @@ const navigationGroups: Array<{
     // stays an absolute path — it's a cross-tenant aggregate
     // dashboard scoped by the JWT, not a per-tenant view.
     title: "Agents",
-    accent: "text-chart-4/85",
     items: [
       {
         name: "Capabilities",
@@ -150,7 +146,6 @@ const navigationGroups: Array<{
   },
   {
     title: "System",
-    accent: "text-chart-3/85",
     items: [
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
       { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
@@ -159,7 +154,6 @@ const navigationGroups: Array<{
   },
   {
     title: "Settings",
-    accent: "text-chart-5/85",
     items: [
       { name: "Profile", path: "/profile", icon: UserCircleIcon },
       { name: "Personal Tokens", path: "/api-tokens", icon: KeyIcon },
@@ -362,7 +356,7 @@ function SidebarBody({
                         "size-4 shrink-0 transition-colors",
                         active
                           ? "text-primary"
-                          : cn(group.accent, "group-hover:text-foreground"),
+                          : "text-muted-foreground group-hover:text-foreground",
                       )}
                     />
                     {!collapsed && (

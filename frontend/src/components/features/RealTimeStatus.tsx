@@ -1,113 +1,131 @@
 "use client";
 
-import {
-  ArrowPathIcon,
-  ShieldCheckIcon,
-  ClockIcon,
-} from "@heroicons/react/24/outline";
-import { cn } from "@/lib/utils";
 import { useStats } from "@/context/StatsContext";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { cn } from "@/lib/utils";
 import {
   type ComponentHealth,
   componentStatusLabel,
 } from "@/lib/connect/system";
 
-function StatusChip({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <Tooltip content={label}>
-      <div className="flex items-center gap-1.5">
-        <Icon className={cn("w-3.5 h-3.5", color)} />
-        <span className="text-xs font-mono font-semibold text-slate-300">
-          {value}
-        </span>
-      </div>
-    </Tooltip>
-  );
+/**
+ * SystemStatus — one calm health affordance for the top bar.
+ *
+ * The old version was a strip of four raw-Tailwind chips (Live/Err dot,
+ * latency, component count, version) that shouted red "ERR" for *any*
+ * non-HEALTHY rollup — including a not-yet-loaded "unknown", which is a
+ * lie: nothing has failed, we just haven't heard back. Here the default
+ * posture is quiet. Colour escalates only when the backend actually
+ * reports trouble, and the numeric detail (components, latency) moves
+ * into the tooltip so the bar carries a single word, not a dashboard.
+ *
+ * Colours come from the theme tokens (success / warning / destructive /
+ * muted) so the pill stays on-brand instead of importing a second,
+ * clashing palette.
+ */
+
+type Tone = "live" | "checking" | "degraded" | "down";
+
+const TONE: Record<
+  Tone,
+  { label: string; dot: string; text: string; pulse: boolean }
+> = {
+  live: {
+    label: "Live",
+    dot: "bg-success",
+    text: "text-success",
+    pulse: true,
+  },
+  checking: {
+    label: "Checking",
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    pulse: false,
+  },
+  degraded: {
+    label: "Degraded",
+    dot: "bg-warning",
+    text: "text-warning",
+    pulse: true,
+  },
+  down: {
+    label: "Down",
+    dot: "bg-destructive",
+    text: "text-destructive",
+    pulse: true,
+  },
+};
+
+function toneFor(rollup: string, loading: boolean): Tone {
+  if (loading && !rollup) return "checking";
+  switch (rollup) {
+    case "HEALTHY":
+    case "OK":
+      return "live";
+    case "DEGRADED":
+      return "degraded";
+    case "":
+    case "UNKNOWN":
+    case "UNSPECIFIED":
+      return "checking";
+    default:
+      return "down"; // UNHEALTHY / ERROR / DOWN
+  }
 }
 
 export function RealTimeStatus() {
-  const { stats, loading: isLoading } = useStats();
+  const { stats, loading } = useStats();
 
   const health = stats?.health;
-  const version = stats?.version;
+  const rollup =
+    health?.status !== undefined
+      ? componentStatusLabel(health.status).toUpperCase()
+      : "";
+  const tone = toneFor(rollup, loading);
+  const meta = TONE[tone];
 
-  const rollupStatus =
-    health?.status !== undefined ? componentStatusLabel(health.status) : "";
-  const connected = rollupStatus === "HEALTHY";
+  const components = health?.components ?? [];
+  const maxLatency = components.reduce((max: number, dep: ComponentHealth) => {
+    const l = Number(dep.latencyMs);
+    return Number.isFinite(l) && l > max ? l : max;
+  }, 0);
 
-  const latency =
-    health?.components?.reduce((max: number, dep: ComponentHealth) => {
-      const l = Number(dep.latencyMs);
-      return l > max ? l : max;
-    }, 0) || 0;
-
-  const componentCount = health?.components?.length || 0;
+  const detail =
+    tone === "checking"
+      ? "Waiting for the first health report."
+      : `${meta.label} · ${components.length} component${
+          components.length === 1 ? "" : "s"
+        } reporting · ${maxLatency}ms worst latency`;
 
   return (
-    <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-xl bg-surface/30 border border-white/5 text-xs">
-      <Tooltip
-        content={
-          connected
-            ? "Backend connected"
-            : `Status: ${rollupStatus || "unknown"}`
-        }
+    <Tooltip content={detail}>
+      <div
+        className={cn(
+          "hidden items-center gap-2 rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 sm:inline-flex",
+        )}
       >
-        <div className="flex items-center gap-1.5">
-          <div className="relative">
-            <div
+        <span className="relative flex size-2">
+          {meta.pulse && (
+            <span
               className={cn(
-                "w-2 h-2 rounded-full",
-                connected ? "bg-emerald-500 animate-pulse" : "bg-rose-500",
+                "absolute inline-flex size-full animate-ping rounded-full opacity-60",
+                meta.dot,
               )}
             />
-          </div>
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            {connected ? "Live" : "Err"}
-          </span>
-        </div>
-      </Tooltip>
-
-      <div className="w-px h-3.5 bg-white/10" />
-
-      <StatusChip
-        icon={isLoading ? ArrowPathIcon : ArrowPathIcon}
-        label="Max Component Latency"
-        value={`${latency}ms`}
-        color={cn("text-emerald-400", isLoading && "animate-spin")}
-      />
-
-      <div className="w-px h-3.5 bg-white/10 hidden md:block" />
-
-      <div className="hidden md:block">
-        <StatusChip
-          icon={ShieldCheckIcon}
-          label="Components Reporting"
-          value={`${componentCount}`}
-          color="text-amber-400"
-        />
+          )}
+          <span
+            className={cn("relative inline-flex size-2 rounded-full", meta.dot)}
+          />
+        </span>
+        <span
+          className={cn(
+            "text-[11px] font-medium uppercase tracking-wide",
+            meta.text,
+          )}
+        >
+          {meta.label}
+        </span>
       </div>
-
-      <div className="w-px h-3.5 bg-white/10 hidden lg:block" />
-
-      <div className="hidden lg:block">
-        <StatusChip
-          icon={ClockIcon}
-          label="Version"
-          value={version?.version || "dev"}
-          color="text-sky-400"
-        />
-      </div>
-    </div>
+    </Tooltip>
   );
 }

@@ -4,15 +4,20 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronRightIcon, HomeIcon } from "@heroicons/react/20/solid";
 
+import { cn } from "@/lib/utils";
+
 /**
- * Known parent routes that have detail pages with dynamic segments.
- * The breadcrumb labels the segment that follows by decoding it as a
- * resource identifier (slug / key / UUID) instead of a route name.
+ * Breadcrumbs — the "you are here" trail, and the primary way to climb
+ * back out of the deep tenant → bucket → surface hierarchy (a bucket's
+ * identity is tenant + backend + name, so those URLs run five segments
+ * deep by necessity). The trail is the anchor that keeps that depth
+ * legible, so it reads as a sentence, not a code string: route names in
+ * plain words, resource identifiers in mono, the current page in solid
+ * foreground.
  *
- * Tenant subtree adds: tenants/<id>/buckets/<backend>/<name>/...
- * and tenants/<id>/object-keys/<key>/objects/<id>. Listing the
- * intermediate "buckets" / "object-keys" / "objects" parents keeps
- * the immediately-following segment treated as a resource id.
+ * ENTITY_PARENTS marks segments whose *child* is a resource id (slug /
+ * key / UUID) rather than a route name — those children are decoded and
+ * rendered in mono; everything else is title-cased.
  */
 const ENTITY_PARENTS = new Set([
   "tenants",
@@ -22,23 +27,20 @@ const ENTITY_PARENTS = new Set([
   "object-tags",
 ]);
 
-/**
- * Resolves a URL segment into a readable breadcrumb label.
- * For entity detail pages, decodes the key and shows a truncated version.
- */
+function isEntityChild(parentSegment?: string): boolean {
+  return !!parentSegment && ENTITY_PARENTS.has(parentSegment);
+}
+
+/** Resolve a URL segment into a readable label. */
 function resolveLabel(segment: string, parentSegment?: string): string {
-  // If this segment is a child of an entity parent, decode it as a key/name
-  if (parentSegment && ENTITY_PARENTS.has(parentSegment)) {
+  if (isEntityChild(parentSegment)) {
     const decoded = decodeURIComponent(segment);
-    // Show last path segment for keys like "folder/subfolder/file.txt"
-    const shortName = decoded.includes("/")
+    // Keys can be paths ("folder/sub/file.txt") — show the leaf.
+    const leaf = decoded.includes("/")
       ? decoded.split("/").pop() || decoded
       : decoded;
-    // Truncate if too long
-    return shortName.length > 30 ? shortName.slice(0, 27) + "…" : shortName;
+    return leaf.length > 32 ? leaf.slice(0, 29) + "…" : leaf;
   }
-
-  // Default: capitalize and replace dashes
   return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
 }
 
@@ -50,24 +52,22 @@ export function Breadcrumbs() {
   if (paths.length === 0) return null;
 
   return (
-    <nav className="flex mb-6" aria-label="Breadcrumb">
-      <ol className="flex items-center space-x-2">
-        <li>
-          <div>
-            <Link
-              href="/"
-              className="text-muted-foreground hover:text-primary transition-colors"
-            >
-              <HomeIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="sr-only">Home</span>
-            </Link>
-          </div>
+    <nav aria-label="Breadcrumb" className="min-w-0">
+      <ol className="paladin-scroll flex items-center gap-1.5 overflow-x-auto whitespace-nowrap text-sm">
+        <li className="shrink-0">
+          <Link
+            href="/"
+            className="flex items-center text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Home"
+          >
+            <HomeIcon className="size-4" aria-hidden="true" />
+          </Link>
         </li>
         {paths.map((path, index) => {
           const isLast = index === paths.length - 1;
           const parentSegment = index > 0 ? paths[index - 1] : undefined;
+          const mono = isEntityChild(parentSegment);
 
-          // Build href — preserve query params for the last segment (detail pages)
           let href = `/${paths.slice(0, index + 1).join("/")}`;
           if (isLast && searchParams.toString()) {
             href += `?${searchParams.toString()}`;
@@ -75,27 +75,40 @@ export function Breadcrumbs() {
 
           const label = resolveLabel(path, parentSegment);
           const fullDecoded = decodeURIComponent(path);
+          const title = fullDecoded !== label ? fullDecoded : undefined;
 
           return (
-            <li key={`${path}-${index}`}>
-              <div className="flex items-center">
-                <ChevronRightIcon
-                  className="h-4 w-4 flex-shrink-0 text-muted-foreground/50"
-                  aria-hidden="true"
-                />
+            <li
+              key={`${path}-${index}`}
+              className="flex min-w-0 items-center gap-1.5"
+            >
+              <ChevronRightIcon
+                className="size-4 shrink-0 text-muted-foreground/40"
+                aria-hidden="true"
+              />
+              {isLast ? (
+                <span
+                  title={title}
+                  aria-current="page"
+                  className={cn(
+                    "max-w-[220px] truncate font-medium text-foreground",
+                    mono && "font-mono text-[0.8125rem]",
+                  )}
+                >
+                  {label}
+                </span>
+              ) : (
                 <Link
                   href={href}
-                  title={fullDecoded !== label ? fullDecoded : undefined}
-                  className={`ml-2 text-xs font-medium tracking-wide transition-colors max-w-[180px] truncate ${
-                    isLast
-                      ? "text-primary cursor-default pointer-events-none font-mono"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  aria-current={isLast ? "page" : undefined}
+                  title={title}
+                  className={cn(
+                    "max-w-[180px] truncate text-muted-foreground transition-colors hover:text-foreground",
+                    mono && "font-mono text-[0.8125rem]",
+                  )}
                 >
                   {label}
                 </Link>
-              </div>
+              )}
             </li>
           );
         })}
