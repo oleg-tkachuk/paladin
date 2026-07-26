@@ -25,7 +25,7 @@ ARG BUILDPLATFORM
 # Shared Go base — same toolchain + workspace layout for tools and builder.
 # Everything below extends this stage so we don't duplicate ENV blocks.
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:d4c4845f5d60c6a974c6000ce58ae079328d03ab7f721a0734277e69905473e5 AS gobase
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS gobase
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
