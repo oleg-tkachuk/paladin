@@ -90,8 +90,15 @@ ENV NODE_ENV=production \
 # Dedicated non-root user. UID/GID 1001 matches the Helm chart's
 # `runAsUser` / `runAsGroup` so bind-mounted volumes share owner with
 # the in-cluster pod.
+#
+# Also drop the global npm/npx CLI the node base image bundles: the Next.js
+# standalone runtime runs `node server.js` and never invokes it, but npm ships
+# with its own transitive deps (brace-expansion/tar/undici) that Trivy flags as
+# HIGH/CRITICAL. Removing it keeps those CVEs out of the shipped image without
+# affecting the runtime (the build stages keep their own npm).
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser  --system --uid 1001 nextjs
+    adduser  --system --uid 1001 nextjs && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 COPY --from=builder /app/public ./public
 
