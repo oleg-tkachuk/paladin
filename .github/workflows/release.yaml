@@ -21,6 +21,14 @@ permissions:
   issues: write
   pull-requests: write
 
+# One release at a time. Two quick merges to main must not run semantic-release
+# concurrently (they would race to compute + publish the next version).
+# Do NOT cancel a release already in flight — a half-published tag/release is
+# worse than waiting — so the second run queues behind the first.
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -30,11 +38,23 @@ jobs:
         with:
           fetch-depth: 0 # Required for semantic-release to analyze commits
 
+      # Pin the Node semantic-release runs on. v25 requires Node >= 20.8.1;
+      # relying on the runner default couples the release to whatever the
+      # ubuntu-latest image happens to ship.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # This project has NO @semantic-release/git plugin (see release.config.cjs)
+      # — it only creates a GitHub Release + version tag through the GitHub API,
+      # never pushing a commit to the protected main. So the default GITHUB_TOKEN
+      # (contents: write) is sufficient; no PAT / bypass is needed.
       - name: Semantic Release
         uses: cycjimmy/semantic-release-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          semantic_version: 19
+          semantic_version: 25
           extra_plugins: |
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@10.2.1

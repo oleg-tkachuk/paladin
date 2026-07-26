@@ -44,6 +44,17 @@ jobs:
     # quick. Generous ceiling so a slow image pull is not read as a hang, tight
     # enough that a genuinely stuck test does not burn a runner for an hour.
     timeout-minutes: 25
+    # Both suites start Postgres containers (postgres:16/17-alpine) via
+    # testcontainers-go. Two flake sources are neutralised here:
+    #   - The Reaper (ryuk) sidecar is one more Docker Hub pull per package and
+    #     is pointless on an ephemeral runner that's discarded after the job —
+    #     disable it so it's neither pulled nor raced.
+    #   - Postgres pulls still go to Docker Hub. The Docker Hub login step below
+    #     lifts the anonymous rate limit when the secrets are set. For a
+    #     secret-free alternative, route Hub images through the ECR Public mirror
+    #     by adding: TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: public.ecr.aws/docker/library/
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     defaults:
       run:
         working-directory: backend
@@ -63,6 +74,12 @@ jobs:
       # deep inside a container-start timeout.
       - name: Verify Docker is available
         run: docker info >/dev/null
+
+      - name: Docker Hub login (optional)
+        uses: ./.github/actions/dockerhub-login
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # -count=1 defeats the test cache: a cached pass from a prior run must
       # not stand in for actually exercising the database this time. Both

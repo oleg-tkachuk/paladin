@@ -38,6 +38,13 @@ jobs:
 
   trivy-fs:
     runs-on: ubuntu-latest
+    # Trivy pulls its vulnerability DB from ghcr.io by default, which is
+    # aggressively rate-limited for anonymous clients on shared runner IPs —
+    # the classic "scan fails, passes on re-run" flake. Point both DBs at the
+    # Aqua-maintained ECR Public mirrors, which are not GHCR-rate-limited.
+    env:
+      TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+      TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,12 +60,24 @@ jobs:
 
   trivy-image:
     runs-on: ubuntu-latest
+    env:
+      TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+      TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # Both images FROM golang/node alpine bases on Docker Hub; authenticate
+      # when the secrets exist so the base-image pulls don't 429 (no-op
+      # otherwise). See .github/actions/dockerhub-login.
+      - name: Docker Hub login (optional)
+        uses: ./.github/actions/dockerhub-login
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # Mirrors `task docker:build` (buildx --load, service dir as context).
       - name: Build backend image

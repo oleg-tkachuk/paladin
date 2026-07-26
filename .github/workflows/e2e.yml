@@ -39,6 +39,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The image builds FROM golang/node alpine bases and the stack pulls
+      # minio/minio + minio/mc — all Docker Hub. Authenticate when the secrets
+      # exist to avoid anonymous-pull 429s (no-op otherwise).
+      - name: Docker Hub login (optional)
+        uses: ./.github/actions/dockerhub-login
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          token: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build backend image
         working-directory: backend
         run: |
@@ -63,13 +72,26 @@ jobs:
 
       - name: Start MinIO (S3 endpoint for the stack)
         run: |
+          set -euo pipefail
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=paladin-e2e-access \
             -e MINIO_ROOT_PASSWORD=paladin-e2e-secret-key \
             minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:9000/minio/health/live && break || sleep 1
+          # Wait until MinIO is actually live, and FAIL LOUDLY if it never is —
+          # the old loop fell through silently, so a slow start surfaced as a
+          # cryptic `mc mb` error instead of "MinIO didn't come up".
+          ready=""
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              ready=1; echo "MinIO live after ${i}s"; break
+            fi
+            sleep 1
           done
+          if [ -z "$ready" ]; then
+            echo "::error::MinIO did not become healthy within 60s"
+            docker logs minio --tail 50 || true
+            exit 1
+          fi
           docker run --rm --network host --entrypoint sh minio/mc:RELEASE.2025-04-16T18-13-26Z -c "
             mc alias set local http://localhost:9000 paladin-e2e-access paladin-e2e-secret-key &&
             mc mb local/paladin-e2e"

@@ -1231,8 +1231,23 @@ of the pipeline._
 
 ### Branch protection on `main` and `develop` — require status checks
 
-- **Status:** Partially done — safe rules applied 2026-06-28; required
-  status checks still deferred.
+- **Status:** Partially done — deletion/force-push/linear-history applied
+  2026-06-28 and now also reproducible-as-code (2026-07-26); required status
+  checks still deferred.
+- **2026-07-26 update:** the non-required settings are now version-controlled in
+  [`.github/scripts/apply-repo-settings.sh`](.github/scripts/apply-repo-settings.sh)
+  — it sets `delete_branch_on_merge=false` and creates a **ruleset** (not classic
+  branch protection) forbidding deletion of `main`/`develop`. Ruleset over
+  classic protection on purpose: classic branch protection needs a **paid** plan
+  for a private repo, so if the plan lapsed with the billing failure below the
+  2026-06-28 rules would have silently dropped — whereas rulesets work on free
+  private repos and layer additively (they never clobber any classic protection
+  still in place). Must be run by the repo owner (`gh auth login`), since a
+  sandboxed session has no GitHub auth. Separately, CI rate-limit flakiness (the
+  "fails, passes on retry" class) was hardened this commit: optional Docker Hub
+  auth (`.github/actions/dockerhub-login`) across the image-pulling jobs, the
+  Trivy DB pointed at the ECR Public mirror, ryuk disabled for testcontainers,
+  and `golangci-lint-action` for a cached/retried linter install.
 - **Reason:** The non-blocking half landed via the API on both branches:
   force-pushes disabled, branch deletion blocked, linear history required,
   `enforce_admins` on. The **required status checks** half
