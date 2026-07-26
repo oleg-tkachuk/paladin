@@ -130,8 +130,16 @@ func runDriver(t *testing.T, url string, src Source, deliver func(context.Contex
 	})
 }
 
-// consumerInfo fetches live consumer state for ack assertions.
-func consumerInfo(t *testing.T, url string) *jetstream.ConsumerInfo {
+// consumerInfo fetches live consumer state for ack assertions. It returns
+// ok=false while the driver's durable consumer does not exist yet, rather than
+// failing the test: it is called from inside waitFor poll loops, and the driver
+// creates its consumer asynchronously in a goroutine. The IgnoredEventAcked
+// case has no delivery to synchronise on (an ignored event is acked and
+// dropped before deliver), so it can poll before the consumer exists — a hard
+// t.Fatalf on that transient 404 turned a startup race into a flaky failure.
+// Genuine errors (connect/info) still fail; only "consumer not found" is
+// treated as not-ready-yet so the poll retries.
+func consumerInfo(t *testing.T, url string) (*jetstream.ConsumerInfo, bool) {
 	t.Helper()
 	nc, err := nats.Connect(url)
 	if err != nil {
@@ -145,6 +153,9 @@ func consumerInfo(t *testing.T, url string) *jetstream.ConsumerInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cons, err := js.Consumer(ctx, jsStream, jsDurable)
+	if errors.Is(err, jetstream.ErrConsumerNotFound) {
+		return nil, false // driver hasn't created the durable consumer yet
+	}
 	if err != nil {
 		t.Fatalf("consumer lookup: %v", err)
 	}
@@ -152,7 +163,7 @@ func consumerInfo(t *testing.T, url string) *jetstream.ConsumerInfo {
 	if err != nil {
 		t.Fatalf("consumer info: %v", err)
 	}
-	return info
+	return info, true
 }
 
 func okSource() fakeSource {
@@ -189,8 +200,8 @@ func TestNATSDriver_JetStream_DeliversAndAcks(t *testing.T) {
 	// After a successful deliver the message is acked — nothing pending or
 	// awaiting ack, and no redelivery happened.
 	waitFor(t, 5*time.Second, func() bool {
-		info := consumerInfo(t, url)
-		return info.NumPending == 0 && info.NumAckPending == 0 && info.NumRedelivered == 0
+		info, ok := consumerInfo(t, url)
+		return ok && info.NumPending == 0 && info.NumAckPending == 0 && info.NumRedelivered == 0
 	}, "message not acked (still pending/ack-pending/redelivered)")
 }
 
@@ -225,8 +236,8 @@ func TestNATSDriver_JetStream_NakRedelivers(t *testing.T) {
 
 	// Eventually the redelivery is acked and the backlog drains.
 	waitFor(t, 8*time.Second, func() bool {
-		info := consumerInfo(t, url)
-		return info.NumPending == 0 && info.NumAckPending == 0
+		info, ok := consumerInfo(t, url)
+		return ok && info.NumPending == 0 && info.NumAckPending == 0
 	}, "backlog did not drain after redelivery")
 }
 
@@ -247,8 +258,8 @@ func TestNATSDriver_JetStream_IgnoredEventAcked(t *testing.T) {
 
 	// An ignored event is acked (not retried) and never reaches deliver.
 	waitFor(t, 5*time.Second, func() bool {
-		info := consumerInfo(t, url)
-		return info.NumPending == 0 && info.NumAckPending == 0
+		info, ok := consumerInfo(t, url)
+		return ok && info.NumPending == 0 && info.NumAckPending == 0
 	}, "ignored event was not acked")
 
 	select {
