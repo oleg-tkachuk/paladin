@@ -58,9 +58,9 @@ export function Breadcrumbs() {
           <Link
             href="/"
             className="flex items-center text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="Home"
           >
             <HomeIcon className="size-4" aria-hidden="true" />
+            <span className="sr-only">Home</span>
           </Link>
         </li>
         {paths.map((path, index) => {
