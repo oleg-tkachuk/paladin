@@ -13,6 +13,29 @@ allowBuilds:
   msw: true
   sharp: true
   unrs-resolver: true
+# Security bumps for transitive deps flagged HIGH by Trivy (the CI security
+# gate). pnpm 11 reads overrides from HERE, not package.json's `pnpm` field.
+#   - postcss  < 8.5.18: CVE-2026-45623 + GHSA-r28c-9q8g-f849 (path traversal
+#                        via sourceMappingURL).
+#   - sharp    < 0.35.0: GHSA-f88m-g3jw-g9cj (inherited libvips CVEs).
+#   - brace-expansion 5.0.x < 5.0.8: CVE-2026-14257 (ReDoS). Scoped to the 5.x
+#     line with `@5` so the already-patched 1.x consumers stay on 1.x.
+overrides:
+  postcss: ^8.5.23
+  sharp: ^0.35.0
+  brace-expansion@5: ^5.0.8
 minimumReleaseAgeExclude:
   - lucide-react@1.17.0
   - shadcn@4.8.2
+  - '@next/env@16.2.12'
+  - '@next/eslint-plugin-next@16.2.12'
+  - '@next/swc-darwin-arm64@16.2.12'
+  - '@next/swc-darwin-x64@16.2.12'
+  - '@next/swc-linux-arm64-gnu@16.2.12'
+  - '@next/swc-linux-arm64-musl@16.2.12'
+  - '@next/swc-linux-x64-gnu@16.2.12'
+  - '@next/swc-linux-x64-musl@16.2.12'
+  - '@next/swc-win32-arm64-msvc@16.2.12'
+  - '@next/swc-win32-x64-msvc@16.2.12'
+  - eslint-config-next@16.2.12
+  - next@16.2.12
