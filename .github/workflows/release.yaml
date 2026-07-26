@@ -51,7 +51,9 @@ jobs:
       # never pushing a commit to the protected main. So the default GITHUB_TOKEN
       # (contents: write) is sufficient; no PAT / bypass is needed.
       - name: Semantic Release
-        uses: cycjimmy/semantic-release-action@v6
+        # This action publishes only full-version tags (no moving `v6`), so pin
+        # the exact release rather than a major that would fail to resolve.
+        uses: cycjimmy/semantic-release-action@v6.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
