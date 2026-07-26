@@ -49,11 +49,14 @@ jobs:
           token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build backend image
-        working-directory: backend
+        # Repo-root context (not backend/): the Dockerfile COPYs backend/ AND
+        # the nested capability/ module (consumed via a `replace` directive),
+        # which a backend/-scoped context cannot reach. Mirrors the Taskfile's
+        # DOCKER_CONTEXT=repo-root. The root .dockerignore keeps the context lean.
         run: |
           docker buildx build --load \
             --tag registry.local/paladin/paladin-core:latest \
-            --file deploy/Dockerfile \
+            --file backend/deploy/Dockerfile \
             --build-arg APP_VERSION=e2e-${{ github.sha }} \
             --build-arg GIT_COMMIT_HASH=${{ github.sha }} \
             --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

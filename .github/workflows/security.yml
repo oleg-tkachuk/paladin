@@ -79,7 +79,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           token: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Mirrors `task docker:build` (buildx --load, service dir as context).
+      # Mirrors `task docker:build`. Backend context is the REPO ROOT (not
+      # backend/): the Dockerfile COPYs backend/ plus the nested capability/
+      # module, so a backend/-scoped context fails on `COPY backend/... not
+      # found`. The frontend build below keeps its frontend/ context.
       - name: Build backend image
         run: |
           docker buildx build --load \
@@ -87,7 +90,7 @@ jobs:
             --build-arg APP_VERSION=ci-scan \
             --build-arg GIT_COMMIT_HASH="${{ github.sha }}" \
             --build-arg BUILD_TIME=ci \
-            -t paladin-backend:scan backend
+            -t paladin-backend:scan .
 
       - name: Scan backend image
         uses: aquasecurity/trivy-action@v0.36.0
