@@ -42,7 +42,7 @@ jobs:
       # relying on the runner default couples the release to whatever the
       # ubuntu-latest image happens to ship.
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
