@@ -26,7 +26,12 @@ import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 
-import { TTL_OPTIONS, AUDIENCE_CHOICES } from "./_constants";
+import {
+  TTL_OPTIONS,
+  AUDIENCE_CHOICES,
+  parseScopes,
+  isValidScope,
+} from "./_constants";
 
 /**
  * Create-M2M-token dialog, extracted from the page. Owns the whole create form
@@ -91,10 +96,15 @@ export function CreateTokenDialog({
       return;
     }
     const ttlSeconds = TTL_OPTIONS.find((o) => o.value === ttl)?.seconds;
-    const scopeList = scopes
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const scopeList = parseScopes(scopes);
+    if (scopeList.some((s) => !isValidScope(s))) {
+      showNotification({
+        type: "error",
+        title: "Validation",
+        message: "Fix the invalid scopes before creating the token.",
+      });
+      return;
+    }
     const rpm = Number.parseInt(rateLimit || "0", 10);
 
     setCreating(true);
@@ -152,6 +162,12 @@ export function CreateTokenDialog({
         : "Clipboard unavailable.",
     });
   }, [reveal, showNotification]);
+
+  // Live scope validation drives the inline error + submit gate. Mirrors
+  // the backend's mint-time rejection so an invalid scope never leaves
+  // the browser.
+  const invalidScopes = parseScopes(scopes).filter((s) => !isValidScope(s));
+  const hasInvalidScopes = invalidScopes.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -265,14 +281,34 @@ export function CreateTokenDialog({
                 <Label htmlFor="m2m-scopes">Scopes (optional)</Label>
                 <Input
                   id="m2m-scopes"
-                  placeholder="object:read, bucket:list, …"
+                  placeholder="bucket:photos, object_key:photos/avatar.png, *"
                   value={scopes}
                   onChange={(e) => setScopes(e.target.value)}
+                  aria-invalid={hasInvalidScopes || undefined}
                 />
                 <p className={T.hint}>
-                  Comma- or space-separated. Backend interprets per its Cedar
-                  policy mapping.
+                  Comma-, space-, or newline-separated. Valid forms:{" "}
+                  <code className="font-mono">tenant:&lt;id&gt;</code>,{" "}
+                  <code className="font-mono">backend:&lt;id&gt;</code>,{" "}
+                  <code className="font-mono">bucket:&lt;name&gt;</code>,{" "}
+                  <code className="font-mono">
+                    object_key:&lt;bucket&gt;/&lt;key&gt;
+                  </code>
+                  , or <code className="font-mono">*</code>.
                 </p>
+                <p className={T.hint}>
+                  Leave empty for full tenant access; add scopes to confine the
+                  token to specific resources.
+                </p>
+                {hasInvalidScopes && (
+                  <p className="text-xs text-destructive">
+                    Invalid scope{invalidScopes.length > 1 ? "s" : ""}:{" "}
+                    <span className="font-mono">
+                      {invalidScopes.join(", ")}
+                    </span>
+                    . Each scope must match one of the forms above.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -312,7 +348,11 @@ export function CreateTokenDialog({
               <Button
                 type="submit"
                 disabled={
-                  creating || !name.trim() || audience.size === 0 || !tenantId
+                  creating ||
+                  !name.trim() ||
+                  audience.size === 0 ||
+                  !tenantId ||
+                  hasInvalidScopes
                 }
               >
                 {creating ? "Creating…" : "Create token"}

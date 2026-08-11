@@ -45,8 +45,9 @@ const EMPTY_USAGE: UsageMap = new Map();
 
 // /m2m-tokens — service-to-service hashed-bearer tokens.
 //
-// Distinct from /api-tokens (legacy iam.ApiKey, user-scoped PATs).
-// These are admin/v1.APITokenService tokens following the GitHub PAT /
+// The surviving M2M token surface: admin/v1.APITokenService tokens (the
+// former user-scoped iam.ApiKey / ApiKeyService was removed and unified
+// onto this one). These follow the GitHub PAT /
 // Stripe / Hatchet pattern: argon2id PHC hash on the server, plaintext
 // returned exactly once. Scoped per-tenant + per-audience + per-role,
 // optionally rate-limited via a sliding-window counter.
@@ -259,7 +260,7 @@ export default function M2MTokensPage() {
                           (unnamed)
                         </span>
                       )}
-                      {t.scopes.length > 0 && (
+                      {t.scopes.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {t.scopes.map((s) => (
                             <Badge
@@ -271,6 +272,8 @@ export default function M2MTokensPage() {
                             </Badge>
                           ))}
                         </div>
+                      ) : (
+                        <div className={cn("mt-1", T.hint)}>tenant-wide</div>
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">

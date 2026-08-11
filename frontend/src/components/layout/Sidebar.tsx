@@ -9,7 +9,6 @@ import {
   UsersIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
-  KeyIcon,
   ShieldCheckIcon,
   CheckCircleIcon,
   UserCircleIcon,
@@ -156,7 +155,6 @@ const navigationGroups: Array<{
     title: "Settings",
     items: [
       { name: "Profile", path: "/profile", icon: UserCircleIcon },
-      { name: "Personal Tokens", path: "/api-tokens", icon: KeyIcon },
       { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
     ],
   },

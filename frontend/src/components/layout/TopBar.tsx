@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRightOnRectangleIcon,
   Bars3Icon,
-  KeyIcon,
   MagnifyingGlassIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
@@ -104,8 +103,8 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
         <BackgroundOpsDrawer />
         <Separator orientation="vertical" className="h-6" />
         {/* Avatar → user menu. The avatar used to be a static fallback;
-            now it's a dropdown trigger with shortcuts to /profile,
-            /api-tokens, and the logout flow. */}
+            now it's a dropdown trigger with a shortcut to /profile and
+            the logout flow. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -138,12 +137,6 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
               <Link href="/profile">
                 <UserCircleIcon className="size-4" />
                 Profile
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/api-tokens">
-                <KeyIcon className="size-4" />
-                API Tokens
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

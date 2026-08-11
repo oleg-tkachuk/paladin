@@ -34,7 +34,7 @@ export type RefreshTopic =
   | "backends" // Backend create/delete/update — affects /backends, scope picker.
   | "tenants" // Tenant create/delete/update — affects /tenants, sidebar.
   | "users" // User create/delete/role change — affects /users.
-  | "tokens" // API token create/revoke — affects /api-tokens.
+  | "tokens" // API token create/revoke — affects /tenants/<id>/m2m-tokens.
   | "auditLogs"; // Audit log entries — affects /audit-logs and any audit-aware widget.
 
 type Counters = Partial<Record<RefreshTopic, number>>;

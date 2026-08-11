@@ -31,7 +31,6 @@ import { OperationService as DataOperationService } from "@/gen/paladin/data/v1/
 // iam plane
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
-import { ApiKeyService } from "@/gen/paladin/iam/v1/api_key_service_pb";
 import { UserSettingsService } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 
 // admin
@@ -83,7 +82,6 @@ import { SystemService } from "@/gen/paladin/iam/v1/system_service_pb";
 
 export const authClient = createClient(AuthService, iamTransport);
 export const userClient = createClient(UserService, iamTransport);
-export const apiKeyClient = createClient(ApiKeyService, iamTransport);
 export const userSettingsClient = createClient(
   UserSettingsService,
   iamTransport,

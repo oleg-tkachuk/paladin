@@ -42,7 +42,6 @@ import { OperationService as DataOperationService } from "@/gen/paladin/data/v1/
 // iam plane services
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
-import { ApiKeyService } from "@/gen/paladin/iam/v1/api_key_service_pb";
 import { UserSettingsService } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 import { SystemService } from "@/gen/paladin/iam/v1/system_service_pb";
 
@@ -92,13 +91,7 @@ const planeServices: Record<Plane, DescService[]> = {
     PresignService,
     DataOperationService,
   ],
-  iam: [
-    AuthService,
-    UserService,
-    ApiKeyService,
-    UserSettingsService,
-    SystemService,
-  ],
+  iam: [AuthService, UserService, UserSettingsService, SystemService],
 };
 
 // ContextKey must be constructed via createContextKey — a bare Symbol has
