@@ -92,9 +92,11 @@ func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter rateli
 // the data plane (paired with auth.InterceptorSkipAPITokens, which lets a PAT bearer past
 // the JWT verifier) so a service (e.g. consumer) authenticates document uploads with a
 // long-lived service API key. The derived principal is tenant-scoped, Kind=ApiKey, carries
-// NO roles/scopes (least privilege — the default per-tenant Cedar policy permits a tenant
-// member to Presign/Put its own objects, while role-gated ops like DeleteObject stay
-// denied), and its Audience is the plane label so a downstream RequireAudience passes.
+// NO roles (role-gated ops like DeleteObject stay denied), and — opt-in — the token's own
+// resource scopes: an unscoped token gets the default per-tenant baseline (Presign/Put its
+// own objects), while a scoped token is further confined to matching resources by the
+// scope-enforcement built-in policy. Its Audience is the plane label so a downstream
+// RequireAudience passes.
 // Additive: it only sets the principal when the context does not already carry one (a JWT
 // that already authenticated wins).
 func APITokenAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
@@ -113,17 +115,29 @@ type apiTokenInterceptor struct {
 	establishPrincipal bool
 }
 
-// principalFromAPIToken derives the request Principal from a verified API token. Minimal by
-// design: tenant binding + Kind=ApiKey + the plane audience, with no roles/scopes so the
-// key gets exactly the tenant-member baseline the default Cedar policy grants (read/write
-// own objects) and nothing role-gated.
-func principalFromAPIToken(t *api_token.Token, audienceLabel string) *Principal {
+// principalFromAPIToken derives the request Principal from a verified API token. Tenant
+// binding + Kind=ApiKey + the plane audience, and — opt-in — the token's resource scopes.
+//
+// Scopes are the OPT-IN half of the model: a token minted WITHOUT scopes keeps the
+// tenant-member baseline the default Cedar policy grants (read/write own objects, nothing
+// role-gated), exactly as before. A token minted WITH scopes (tenant:/backend:/bucket:/
+// object_key:/*) is confined by the scope-enforcement built-in policy to matching resources.
+//
+// Fail-closed on a malformed scope: a scoped token whose scope won't parse must NOT silently
+// drop the scope and fall back to unrestricted tenant-wide access. ParseScopes returns an
+// error the caller maps to CodeUnauthenticated, so the request is rejected outright.
+func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal, error) {
+	scopes, err := ParseScopes(t.Scopes)
+	if err != nil {
+		return nil, fmt.Errorf("api_token: scope: %w", err)
+	}
 	return &Principal{
 		TenantID: t.TenantID,
 		Subject:  "apikey:" + t.ID.String(),
 		Audience: principalAudienceFor(audienceLabel),
 		Kind:     PrincipalKindApiKey,
-	}
+		Scopes:   scopes,
+	}, nil
 }
 
 // principalAudienceFor maps a short plane label carried by API tokens ("data"/"admin"/
@@ -144,14 +158,21 @@ func principalAudienceFor(label string) string {
 
 // withTokenIdentity stamps the verified token on the context, and — when this interceptor
 // establishes identity — also the derived Principal (unless one is already present).
-func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_token.Token) context.Context {
+// Returns an error only when deriving the principal fails (a malformed token scope); the
+// caller maps that to CodeUnauthenticated. The additive (non-establishing) path never
+// derives a principal, so it never errors here.
+func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_token.Token) (context.Context, error) {
 	ctx = WithAPIToken(ctx, t)
 	if i.establishPrincipal {
 		if _, err := PrincipalFromContext(ctx); err != nil {
-			ctx = WithPrincipal(ctx, principalFromAPIToken(t, i.audience))
+			p, perr := principalFromAPIToken(t, i.audience)
+			if perr != nil {
+				return ctx, perr
+			}
+			ctx = WithPrincipal(ctx, p)
 		}
 	}
-	return ctx
+	return ctx, nil
 }
 
 // rateLimitGate runs the limiter for a verified token. Returns nil to
@@ -207,7 +228,11 @@ func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFun
 		if err := i.rateLimitGate(ctx, t); err != nil {
 			return nil, err
 		}
-		return next(i.withTokenIdentity(ctx, t), req)
+		idCtx, err := i.withTokenIdentity(ctx, t)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		}
+		return next(idCtx, req)
 	}
 }
 
@@ -228,7 +253,11 @@ func (i *apiTokenInterceptor) WrapStreamingHandler(next connect.StreamingHandler
 		if err := i.rateLimitGate(ctx, t); err != nil {
 			return err
 		}
-		return next(i.withTokenIdentity(ctx, t), conn)
+		idCtx, err := i.withTokenIdentity(ctx, t)
+		if err != nil {
+			return connect.NewError(connect.CodeUnauthenticated, err)
+		}
+		return next(idCtx, conn)
 	}
 }
 

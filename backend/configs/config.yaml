@@ -240,8 +240,6 @@ worker:
       hard_delete_batch_size: 100
     refresh_token_reap:                 # drops expired refresh tokens
       interval: 1h
-    api_key_reap:                       # auto-revokes api-keys past expires_at
-      interval: 1h
     lifecycle:                          # CEL-based per-bucket expiration
       enabled: true
       interval: 30m

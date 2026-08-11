@@ -54,7 +54,6 @@ type Querier interface {
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
-	CreateApiKey(ctx context.Context, apiKeyID pgtype.UUID, tenantID pgtype.UUID, displayPrefix string, description string, secretHash []byte, roles []byte, scopes []byte, expiresAt pgtype.Timestamptz) error
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
 	// (backend_id, bucket_name) composite key.
@@ -103,8 +102,6 @@ type Querier interface {
 	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
 	// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
-	GetApiKeyByID(ctx context.Context, apiKeyID pgtype.UUID) (ApiKey, error)
-	GetApiKeyByPrefix(ctx context.Context, displayPrefix string) (ApiKey, error)
 	GetAuditEntry(ctx context.Context, entryID pgtype.UUID) (AuditLog, error)
 	GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error)
 	GetBucketQuota(ctx context.Context, backendID *string, bucketName *string) (Quota, error)
@@ -192,11 +189,6 @@ type Querier interface {
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 	// still active — the worker must run retention-gated cleanup on it.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error)
-	// $3 is the keyset-pagination cursor; pgUUID(uuid.Nil) maps to NULL,
-	// which the Go adapter passes for the first page. Without the IS NULL
-	// guard, `api_key_id > NULL` evaluates to NULL → all rows filtered out
-	// and the first call returns empty even when rows exist.
-	ListApiKeysByTenant(ctx context.Context, tenantID pgtype.UUID, column2 bool, column3 pgtype.UUID, limit int32) ([]ApiKey, error)
 	// Cursor: (at, entry_id) tuple. Optional predicates use the canonical
 	// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
 	// constant-folds the disabled branches at plan time.
@@ -237,9 +229,6 @@ type Querier interface {
 	// `subscription_id > NULL` yields zero rows. Keep this shape on every
 	// cursor query in the package.
 	ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error)
-	// Returns api_keys whose `expires_at` has passed and that are still active.
-	// Used by the housekeeping worker to flip them to revoked.
-	ListExpiredApiKeys(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ApiKey, error)
 	// Picks DELETED objects past the cooling-off window for the
 	// LifecycleHardDeleter worker. Joins object_keys to materialise
 	// (backend_id, bucket_name) so the worker issues the storage DELETE
@@ -429,13 +418,11 @@ type Querier interface {
 	// Clears deleted_at on a trashed row. Bumps resource_version +
 	// updated_at.
 	RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	RevokeApiKey(ctx context.Context, apiKeyID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error
 	// Reuse-detection (ADR-0009): revoke every still-live token in the family of
 	// the given jti — the compromised chain only, not all the user's sessions.
 	RevokeRefreshTokenFamily(ctx context.Context, jti pgtype.UUID) (int64, error)
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
-	RotateApiKeySecret(ctx context.Context, apiKeyID pgtype.UUID, secretHash []byte, secretHashOld []byte, secretHashOldUntil pgtype.Timestamptz) error
 	// Dual-write rotation: stash the current ref as the previous one with a
 	// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
 	// window in seconds; 0 clears the previous window (instant rotation).
@@ -497,7 +484,6 @@ type Querier interface {
 	// migration copies FROM this — a shared tenant's keys normally share one bucket;
 	// more than one row means the tenant spans buckets (not supported in slice 1).
 	TenantObjectKeyBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantObjectKeyBucketsRow, error)
-	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error
 	TouchUserLogin(ctx context.Context, userID pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).
 	UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error)

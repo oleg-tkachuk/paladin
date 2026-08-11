@@ -58,25 +58,6 @@ func userToProto(u *authstore.User) *pb.User {
 	}
 }
 
-func apiKeyToProto(k *authstore.ApiKey) *pb.ApiKey {
-	if k == nil {
-		return nil
-	}
-	return &pb.ApiKey{
-		Name:          fmt.Sprintf("tenants/%s/apiKeys/%s", k.TenantID, k.ApiKeyID),
-		ApiKeyId:      k.ApiKeyID.String(),
-		TenantId:      k.TenantID.String(),
-		DisplayPrefix: k.DisplayPrefix,
-		Description:   k.Description,
-		Roles:         k.Roles,
-		Scopes:        scopesToProto(k.Scopes),
-		Revoked:       k.Revoked,
-		CreatedAt:     tsProto(k.CreatedAt),
-		ExpiresAt:     tsPtrProto(k.ExpiresAt),
-		LastUsedAt:    tsPtrProto(k.LastUsedAt),
-	}
-}
-
 func scopesToProto(s []auth.Scope) []*commonpb.Scope {
 	out := make([]*commonpb.Scope, 0, len(s))
 	for _, sc := range s {

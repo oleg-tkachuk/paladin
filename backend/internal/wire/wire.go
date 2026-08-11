@@ -34,7 +34,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/eventsubh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/apikeyh"
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
@@ -127,7 +126,6 @@ type Repos struct {
 	Quota         admindomain.QuotaRepository
 	EventSub      admindomain.EventSubscriptionRepository
 	IAMUser       authstore.UserRepository
-	IAMApiKey     authstore.ApiKeyRepository
 	IAMRefresh    authstore.RefreshTokenRepository
 	ObjectVersion object.VersionRepository
 
@@ -240,13 +238,8 @@ func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
 	return userh.NewHandler(repos.IAMUser, pe)
 }
 
-func ProvideApiKeyHandler(repos Repos, iss *issuer.Issuer, pe *policy.Engine) *apikeyh.Handler {
-	return apikeyh.NewHandler(repos.IAMApiKey, iss, pe).
-		WithTenantSlugLookup(tenantSlugLookup(repos.Tenant))
-}
-
 // tenantSlugLookup adapts the tenant.Repository to the Slug-resolver shape
-// authh / apikeyh expect. Lightweight cache: per-tenant slugs are
+// authh expects. Lightweight cache: per-tenant slugs are
 // effectively immutable (rename is a deferred admin RPC — see BACKLOG),
 // so a single Get round-trip per token mint is the worst case for now.
 // If the mint volume warrants it, drop in a sync.Map cache here.

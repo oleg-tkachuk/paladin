@@ -161,135 +161,6 @@ func (x *User) GetLastLoginAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// ApiKey is a long-lived credential for service accounts / CI / MCP servers.
-// Separate from User because its scopes are typically narrower and rotation
-// cadence different. Secret value is returned ONCE on Create.
-type ApiKey struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/apiKeys/{api_key_id}".
-	Name     string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ApiKeyId string `protobuf:"bytes,2,opt,name=api_key_id,json=apiKeyId,proto3" json:"api_key_id,omitempty"`
-	TenantId string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Key prefix shown in UI ("paladin_pat_xxxxxxxx"); first 8 chars of secret.
-	DisplayPrefix string                 `protobuf:"bytes,4,opt,name=display_prefix,json=displayPrefix,proto3" json:"display_prefix,omitempty"`
-	Description   string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	Roles         []string               `protobuf:"bytes,6,rep,name=roles,proto3" json:"roles,omitempty"`
-	Scopes        []*v1.Scope            `protobuf:"bytes,7,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
-	Revoked       bool                   `protobuf:"varint,11,opt,name=revoked,proto3" json:"revoked,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ApiKey) Reset() {
-	*x = ApiKey{}
-	mi := &file_paladin_iam_v1_types_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ApiKey) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ApiKey) ProtoMessage() {}
-
-func (x *ApiKey) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_types_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ApiKey.ProtoReflect.Descriptor instead.
-func (*ApiKey) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_types_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ApiKey) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ApiKey) GetApiKeyId() string {
-	if x != nil {
-		return x.ApiKeyId
-	}
-	return ""
-}
-
-func (x *ApiKey) GetTenantId() string {
-	if x != nil {
-		return x.TenantId
-	}
-	return ""
-}
-
-func (x *ApiKey) GetDisplayPrefix() string {
-	if x != nil {
-		return x.DisplayPrefix
-	}
-	return ""
-}
-
-func (x *ApiKey) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *ApiKey) GetRoles() []string {
-	if x != nil {
-		return x.Roles
-	}
-	return nil
-}
-
-func (x *ApiKey) GetScopes() []*v1.Scope {
-	if x != nil {
-		return x.Scopes
-	}
-	return nil
-}
-
-func (x *ApiKey) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-func (x *ApiKey) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-func (x *ApiKey) GetLastUsedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastUsedAt
-	}
-	return nil
-}
-
-func (x *ApiKey) GetRevoked() bool {
-	if x != nil {
-		return x.Revoked
-	}
-	return false
-}
-
 // TokenPair is the OAuth-2-style result of Login / RefreshToken. Both tokens
 // are JWT with audience=`paladin-data` (access) / `paladin-iam` (refresh).
 type TokenPair struct {
@@ -305,7 +176,7 @@ type TokenPair struct {
 
 func (x *TokenPair) Reset() {
 	*x = TokenPair{}
-	mi := &file_paladin_iam_v1_types_proto_msgTypes[2]
+	mi := &file_paladin_iam_v1_types_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +188,7 @@ func (x *TokenPair) String() string {
 func (*TokenPair) ProtoMessage() {}
 
 func (x *TokenPair) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_types_proto_msgTypes[2]
+	mi := &file_paladin_iam_v1_types_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +201,7 @@ func (x *TokenPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenPair.ProtoReflect.Descriptor instead.
 func (*TokenPair) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_paladin_iam_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TokenPair) GetAccessToken() string {
@@ -389,24 +260,7 @@ const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12>\n" +
-	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\"\xb2\x03\n" +
-	"\x06ApiKey\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\n" +
-	"api_key_id\x18\x02 \x01(\tR\bapiKeyId\x12\x1b\n" +
-	"\ttenant_id\x18\x03 \x01(\tR\btenantId\x12%\n" +
-	"\x0edisplay_prefix\x18\x04 \x01(\tR\rdisplayPrefix\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x14\n" +
-	"\x05roles\x18\x06 \x03(\tR\x05roles\x12,\n" +
-	"\x06scopes\x18\a \x03(\v2\x14.paladin.common.v1.ScopeR\x06scopes\x129\n" +
-	"\n" +
-	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
-	"\n" +
-	"expires_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12<\n" +
-	"\flast_used_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastUsedAt\x12\x18\n" +
-	"\arevoked\x18\v \x01(\bR\arevoked\"\xea\x01\n" +
+	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\"\xea\x01\n" +
 	"\tTokenPair\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
 	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12#\n" +
@@ -427,28 +281,23 @@ func file_paladin_iam_v1_types_proto_rawDescGZIP() []byte {
 	return file_paladin_iam_v1_types_proto_rawDescData
 }
 
-var file_paladin_iam_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_paladin_iam_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_paladin_iam_v1_types_proto_goTypes = []any{
 	(*User)(nil),                  // 0: paladin.iam.v1.User
-	(*ApiKey)(nil),                // 1: paladin.iam.v1.ApiKey
-	(*TokenPair)(nil),             // 2: paladin.iam.v1.TokenPair
-	(*v1.Scope)(nil),              // 3: paladin.common.v1.Scope
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*TokenPair)(nil),             // 1: paladin.iam.v1.TokenPair
+	(*v1.Scope)(nil),              // 2: paladin.common.v1.Scope
+	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
 }
 var file_paladin_iam_v1_types_proto_depIdxs = []int32{
-	3, // 0: paladin.iam.v1.User.scopes:type_name -> paladin.common.v1.Scope
-	4, // 1: paladin.iam.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	4, // 2: paladin.iam.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	4, // 3: paladin.iam.v1.User.last_login_at:type_name -> google.protobuf.Timestamp
-	3, // 4: paladin.iam.v1.ApiKey.scopes:type_name -> paladin.common.v1.Scope
-	4, // 5: paladin.iam.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
-	4, // 6: paladin.iam.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
-	4, // 7: paladin.iam.v1.ApiKey.last_used_at:type_name -> google.protobuf.Timestamp
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	2, // 0: paladin.iam.v1.User.scopes:type_name -> paladin.common.v1.Scope
+	3, // 1: paladin.iam.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	3, // 2: paladin.iam.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	3, // 3: paladin.iam.v1.User.last_login_at:type_name -> google.protobuf.Timestamp
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_paladin_iam_v1_types_proto_init() }
@@ -462,7 +311,7 @@ func file_paladin_iam_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_types_proto_rawDesc), len(file_paladin_iam_v1_types_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

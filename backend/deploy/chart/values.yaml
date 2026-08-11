@@ -789,8 +789,6 @@ config:
         delete_orphaned_parts: false
       refresh_token_reap:
         interval: 1h
-      api_key_reap:
-        interval: 1h
       lifecycle:
         enabled: true
         interval: 30m

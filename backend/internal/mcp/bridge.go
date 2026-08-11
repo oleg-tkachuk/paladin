@@ -56,9 +56,8 @@ type Clients struct {
 	Batch         datav1connect.BatchServiceClient
 	DataOperation datav1connect.OperationServiceClient
 
-	Auth   iamv1connect.AuthServiceClient
-	Users  iamv1connect.UserServiceClient
-	ApiKey iamv1connect.ApiKeyServiceClient
+	Auth  iamv1connect.AuthServiceClient
+	Users iamv1connect.UserServiceClient
 }
 
 // NewClients constructs a Clients bundle. Bearer is the access token the MCP
@@ -120,9 +119,8 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		Batch:         datav1connect.NewBatchServiceClient(httpc, dataURL, authInjector),
 		DataOperation: datav1connect.NewOperationServiceClient(httpc, dataURL, authInjector),
 
-		Auth:   iamv1connect.NewAuthServiceClient(httpc, iamURL, authInjector),
-		Users:  iamv1connect.NewUserServiceClient(httpc, iamURL, authInjector),
-		ApiKey: iamv1connect.NewApiKeyServiceClient(httpc, iamURL, authInjector),
+		Auth:  iamv1connect.NewAuthServiceClient(httpc, iamURL, authInjector),
+		Users: iamv1connect.NewUserServiceClient(httpc, iamURL, authInjector),
 	}
 }
 
@@ -589,9 +587,6 @@ type deleteSubscriptionArgs struct {
 	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"OCC guard; from a prior list/get"`
 }
 
-type revokeApiKeyArgs struct {
-	Name string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/apiKeys/{id}"`
-}
 type setQuotaArgs struct {
 	Name             string `json:"name" jsonschema:"Quota resource name"`
 	MaxTotalBytes    int64  `json:"max_total_bytes,omitempty" jsonschema:"hard cap on bytes stored"`
@@ -742,16 +737,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Deliver a synthetic event to the configured sink. Returns {delivered, status_code, error_message}. Safe — does not mutate any state.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.EventSub.TestSubscription(ctx, connect.NewRequest(&adminv1.TestSubscriptionRequest{Name: in.Name})))
-	})
-
-	addTool(s, filter, &mcpsdk.Tool{
-		Name:        "paladin_revoke_api_key",
-		Description: "Revoke an API key. The key stays in the table for audit but stops authenticating.",
-		Annotations: &destructive,
-	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in revokeApiKeyArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.ApiKey.RevokeApiKey(ctx, connect.NewRequest(&iamv1.RevokeApiKeyRequest{
-			Name: in.Name,
-		})))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{

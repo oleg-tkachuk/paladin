@@ -99,7 +99,10 @@ func TestAPITokenEstablishesPrincipal(t *testing.T) {
 
 	t.Run("establishing variant sets an ApiKey principal (aud=paladin-data)", func(t *testing.T) {
 		i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
-		ctx := i.withTokenIdentity(context.Background(), tok)
+		ctx, iderr := i.withTokenIdentity(context.Background(), tok)
+		if iderr != nil {
+			t.Fatalf("withTokenIdentity: %v", iderr)
+		}
 		p, err := PrincipalFromContext(ctx)
 		if err != nil {
 			t.Fatalf("expected a principal, got %v", err)
@@ -123,7 +126,10 @@ func TestAPITokenEstablishesPrincipal(t *testing.T) {
 
 	t.Run("additive variant does not set a principal", func(t *testing.T) {
 		i := &apiTokenInterceptor{audience: "iam", establishPrincipal: false}
-		ctx := i.withTokenIdentity(context.Background(), tok)
+		ctx, iderr := i.withTokenIdentity(context.Background(), tok)
+		if iderr != nil {
+			t.Fatalf("withTokenIdentity: %v", iderr)
+		}
 		if _, err := PrincipalFromContext(ctx); err == nil {
 			t.Error("additive api-token interceptor must not establish a principal")
 		}
@@ -132,10 +138,83 @@ func TestAPITokenEstablishesPrincipal(t *testing.T) {
 	t.Run("does not overwrite an existing principal", func(t *testing.T) {
 		existing := &Principal{TenantID: uuid.New(), Subject: "user-1", Audience: AudienceData}
 		i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
-		ctx := i.withTokenIdentity(WithPrincipal(context.Background(), existing), tok)
+		ctx, iderr := i.withTokenIdentity(WithPrincipal(context.Background(), existing), tok)
+		if iderr != nil {
+			t.Fatalf("withTokenIdentity: %v", iderr)
+		}
 		p, _ := PrincipalFromContext(ctx)
 		if p.Subject != "user-1" {
 			t.Errorf("existing principal was overwritten: subject=%q", p.Subject)
+		}
+	})
+}
+
+// TestAPITokenPrincipalScopes proves the opt-in half of the scope model at the
+// interceptor boundary: a token minted WITH scopes surfaces them (parsed) on
+// the derived principal, an unscoped token stays scope-free (today's baseline),
+// and a token whose scope string can't parse fails the request fail-closed
+// rather than silently dropping the scope and going tenant-wide.
+func TestAPITokenPrincipalScopes(t *testing.T) {
+	tid := uuid.New()
+
+	t.Run("token scopes are parsed onto the principal", func(t *testing.T) {
+		tok := &api_token.Token{
+			ID:       uuid.New(),
+			TenantID: tid,
+			Scopes:   []string{"bucket:medical", "object_key:medical/patient-42"},
+		}
+		i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
+		ctx, err := i.withTokenIdentity(context.Background(), tok)
+		if err != nil {
+			t.Fatalf("withTokenIdentity: %v", err)
+		}
+		p, err := PrincipalFromContext(ctx)
+		if err != nil {
+			t.Fatalf("expected a principal, got %v", err)
+		}
+		if len(p.Scopes) != 2 {
+			t.Fatalf("scopes len = %d, want 2 (%v)", len(p.Scopes), p.Scopes)
+		}
+		if p.Scopes[0].Type != ScopeBucket || p.Scopes[0].Value != "medical" {
+			t.Errorf("scope[0] = %+v, want bucket:medical", p.Scopes[0])
+		}
+		if p.Scopes[1].Type != ScopeObjectKey || p.Scopes[1].Value != "medical/patient-42" {
+			t.Errorf("scope[1] = %+v, want object_key:medical/patient-42", p.Scopes[1])
+		}
+		// Wire round-trip: String() must reproduce the exact mint strings.
+		if got := p.Scopes[1].String(); got != "object_key:medical/patient-42" {
+			t.Errorf("String() = %q, want object_key:medical/patient-42", got)
+		}
+	})
+
+	t.Run("unscoped token stays scope-free (baseline unaffected)", func(t *testing.T) {
+		tok := &api_token.Token{ID: uuid.New(), TenantID: tid}
+		i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
+		ctx, err := i.withTokenIdentity(context.Background(), tok)
+		if err != nil {
+			t.Fatalf("withTokenIdentity: %v", err)
+		}
+		p, _ := PrincipalFromContext(ctx)
+		if len(p.Scopes) != 0 {
+			t.Errorf("unscoped token yielded scopes %v, want none", p.Scopes)
+		}
+	})
+
+	t.Run("malformed scope fails closed (no principal established)", func(t *testing.T) {
+		tok := &api_token.Token{
+			ID:       uuid.New(),
+			TenantID: tid,
+			Scopes:   []string{"not-a-valid-scope-type:x"},
+		}
+		i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
+		ctx, err := i.withTokenIdentity(context.Background(), tok)
+		if err == nil {
+			t.Fatal("expected an error for a malformed token scope, got nil")
+		}
+		// Fail-closed: the derived-principal path errored, so no unrestricted
+		// tenant-wide principal was stamped onto the context as a fallback.
+		if _, perr := PrincipalFromContext(ctx); perr == nil {
+			t.Error("a malformed scope must NOT fall back to an unrestricted principal")
 		}
 	})
 }

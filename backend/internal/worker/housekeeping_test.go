@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -56,61 +55,6 @@ func TestRefreshTokenPurgerTicks(t *testing.T) {
 	if len(repo.purged) < 2 {
 		t.Errorf("expected ≥2 purges, got %d", len(repo.purged))
 	}
-}
-
-// ─── ApiKeyExpirer ──────────────────────────────────────────────────────────
-
-type fakeApiKeyExpirerRepo struct {
-	mu      sync.Mutex
-	keys    []authstore.ApiKey
-	revoked []uuid.UUID
-	listErr error
-}
-
-func (f *fakeApiKeyExpirerRepo) ListExpired(_ context.Context, _ time.Time, _ int32) ([]authstore.ApiKey, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.keys, f.listErr
-}
-func (f *fakeApiKeyExpirerRepo) Revoke(_ context.Context, id uuid.UUID) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.revoked = append(f.revoked, id)
-	return nil
-}
-
-func TestApiKeyExpirerRevokesExpired(t *testing.T) {
-	id1 := uuid.Must(uuid.NewV7())
-	id2 := uuid.Must(uuid.NewV7())
-	repo := &fakeApiKeyExpirerRepo{
-		keys: []authstore.ApiKey{{ApiKeyID: id1}, {ApiKeyID: id2}},
-	}
-	e := &ApiKeyExpirer{Repo: repo, Interval: 5 * time.Millisecond}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { _ = e.Run(ctx); close(done) }()
-	time.Sleep(15 * time.Millisecond)
-	cancel()
-	<-done
-
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-	// Each tick revokes both keys; we expect ≥2 revocations.
-	if len(repo.revoked) < 2 {
-		t.Errorf("expected ≥2 revocations, got %d", len(repo.revoked))
-	}
-}
-
-func TestApiKeyExpirerListErrorContinues(t *testing.T) {
-	repo := &fakeApiKeyExpirerRepo{listErr: errors.New("transient")}
-	e := &ApiKeyExpirer{Repo: repo, Interval: 5 * time.Millisecond}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { _ = e.Run(ctx); close(done) }()
-	time.Sleep(15 * time.Millisecond)
-	cancel()
-	<-done
-	// No panic, no exit — survival of transient errors is the contract.
 }
 
 // ─── AuditLogPurger ─────────────────────────────────────────────────────────

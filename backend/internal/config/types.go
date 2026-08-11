@@ -466,7 +466,6 @@ type WorkerJobs struct {
 	Reconciler       Reconciler       `yaml:"reconciler" json:"reconciler"`
 	Housekeeping     Housekeeping     `yaml:"housekeeping" json:"housekeeping"`
 	RefreshTokenReap RefreshTokenReap `yaml:"refresh_token_reap" json:"refresh_token_reap"`
-	ApiKeyReap       ApiKeyReap       `yaml:"api_key_reap" json:"api_key_reap"`
 	Lifecycle        Lifecycle        `yaml:"lifecycle" json:"lifecycle"`
 	Replication      Replication      `yaml:"replication" json:"replication"`
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
@@ -565,12 +564,6 @@ type APITokenWorker struct {
 // RefreshTokenReap drops expired refresh-token rows. Always on; tune
 // `interval` based on token issuance volume.
 type RefreshTokenReap struct {
-	Interval time.Duration `yaml:"interval" json:"interval"`
-}
-
-// ApiKeyReap flips revoked=true on api-keys past their expires_at.
-// Always on; tune `interval` based on api-key volume.
-type ApiKeyReap struct {
 	Interval time.Duration `yaml:"interval" json:"interval"`
 }
 

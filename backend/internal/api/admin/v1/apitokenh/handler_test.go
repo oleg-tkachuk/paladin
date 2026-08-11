@@ -121,8 +121,11 @@ func TestCreate_SuccessReturnsPlaintextOnce(t *testing.T) {
 	tid := uuid.New()
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+	// Valid resource scopes (tenant:/backend:/bucket:/object_key:/*). These must
+	// pass the mint-time auth.ParseScope validation and reach the issuer verbatim.
+	scopes := []string{"bucket:ci-bucket", "object_key:ci-bucket/artifacts"}
 	resp, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
-		TenantId: tid.String(), Name: "ci-runner", Scopes: []string{"api:read"},
+		TenantId: tid.String(), Name: "ci-runner", Scopes: scopes,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -133,9 +136,61 @@ func TestCreate_SuccessReturnsPlaintextOnce(t *testing.T) {
 	if resp.Msg.GetApiToken().GetName() != "ci-runner" {
 		t.Errorf("response metadata name = %q, want ci-runner", resp.Msg.GetApiToken().GetName())
 	}
-	// The issuer received the request faithfully, with the caller stamped.
+	// The issuer received the request faithfully, with the caller stamped and
+	// the scopes passed through to issuer→store→row unchanged.
 	if iss.req.TenantID != tid || iss.req.Name != "ci-runner" || iss.req.CreatedBy != "admin" {
 		t.Errorf("issuer got %+v, want tenant=%s name=ci-runner createdBy=admin", iss.req, tid)
+	}
+	if len(iss.req.Scopes) != len(scopes) {
+		t.Fatalf("issuer scopes = %v, want %v", iss.req.Scopes, scopes)
+	}
+	for i := range scopes {
+		if iss.req.Scopes[i] != scopes[i] {
+			t.Errorf("issuer scope[%d] = %q, want %q", i, iss.req.Scopes[i], scopes[i])
+		}
+	}
+}
+
+// TestCreate_RejectsMalformedScope proves the mint-path validation: a scope
+// string that auth.ParseScope can't decode is rejected at the edge (InvalidArgument)
+// and never reaches the issuer — so an operator can't mint a token that would be
+// dead-on-arrival (fail-closed) on the data plane.
+func TestCreate_RejectsMalformedScope(t *testing.T) {
+	iss := &stubIssuer{}
+	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: uuid.NewString(), Name: "bad", Scopes: []string{"api:read"}, // legacy vocab — no longer valid
+	}))
+	if code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", code(err))
+	}
+	if iss.req.Name != "" {
+		t.Error("issuer must NOT be called when a scope is invalid")
+	}
+}
+
+// TestCreateThenList_ScopesRoundTrip proves scopes survive the row and come back
+// on the read path: a token stored WITH scopes surfaces them on List's proto
+// mapping (tokenToProto → APIToken.Scopes), the same mapping GetSelf/Get use.
+func TestCreateThenList_ScopesRoundTrip(t *testing.T) {
+	tid := uuid.New()
+	scopes := []string{"tenant:" + tid.String(), "bucket:reports"}
+	store := &fakeStore{list: []api_token.Token{
+		{ID: uuid.New(), TenantID: tid, Name: "scoped", Scopes: scopes},
+	}}
+	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
+	resp, err := h.List(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceListRequest{
+		TenantId: tid.String(),
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := resp.Msg.GetApiTokens()
+	if len(got) != 1 {
+		t.Fatalf("got %d tokens, want 1", len(got))
+	}
+	if gs := got[0].GetScopes(); len(gs) != len(scopes) || gs[0] != scopes[0] || gs[1] != scopes[1] {
+		t.Errorf("round-tripped scopes = %v, want %v", gs, scopes)
 	}
 }
 

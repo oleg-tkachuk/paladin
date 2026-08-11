@@ -1,7 +1,7 @@
 // Package store defines the persistence seams for IAM.
 //
-// The interfaces are deliberately small — a User row, an ApiKey row, a
-// RefreshToken row. Postgres adapters live in internal/store/postgres/iam.
+// The interfaces are deliberately small — a User row, a RefreshToken row.
+// Postgres adapters live in internal/store/postgres/iam.
 package store
 
 import (
@@ -53,39 +53,6 @@ type ListUsersArgs struct {
 	PageSize  int32
 	PageToken string
 	Filter    string // CEL
-}
-
-// ─── ApiKey ─────────────────────────────────────────────────────────────────
-
-type ApiKey struct {
-	ApiKeyID      uuid.UUID
-	TenantID      uuid.UUID
-	DisplayPrefix string
-	Description   string
-	SecretHash    []byte // hash of the secret value; comparison via constant-time
-	Roles         []string
-	Scopes        []auth.Scope
-	CreatedAt     time.Time
-	ExpiresAt     *time.Time
-	LastUsedAt    *time.Time
-	Revoked       bool
-}
-
-type ApiKeyRepository interface {
-	Create(ctx context.Context, k ApiKey) (ApiKey, error)
-	GetByID(ctx context.Context, id uuid.UUID) (ApiKey, error)
-	GetByPrefix(ctx context.Context, prefix string) (ApiKey, error)
-	List(ctx context.Context, args ListApiKeysArgs) ([]ApiKey, string, error)
-	Revoke(ctx context.Context, id uuid.UUID) error
-	UpdateSecretHash(ctx context.Context, id uuid.UUID, newHash []byte, oldGraceUntil time.Time) error
-	TouchUse(ctx context.Context, id uuid.UUID, at time.Time) error
-}
-
-type ListApiKeysArgs struct {
-	TenantID       uuid.UUID
-	PageSize       int32
-	PageToken      string
-	IncludeRevoked bool
 }
 
 // ─── Refresh tokens ─────────────────────────────────────────────────────────

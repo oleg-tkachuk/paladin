@@ -64,20 +64,16 @@ permit (
      principal.tenant_id == resource.tenant_id)
 };
 
-// IAM: platform admins manage everything. Tenant admins manage users and
-// api-keys WITHIN their own tenant — comparison via resource.tenant_id
-// (User and ApiKey resource entities both expose it as a string).
+// IAM: platform admins manage everything. Tenant admins manage users
+// WITHIN their own tenant — comparison via resource.tenant_id (the User
+// resource entity exposes it as a string).
 permit (
     principal,
     action in [
         Action::"ManageUser",
         Action::"ReadUser",
         Action::"ResetPassword",
-        Action::"GrantScopes",
-        Action::"ManageApiKey",
-        Action::"ReadApiKey",
-        Action::"RotateApiKey",
-        Action::"MintScopedToken"
+        Action::"GrantScopes"
     ],
     resource
 ) when {

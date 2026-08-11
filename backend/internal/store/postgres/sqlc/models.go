@@ -100,28 +100,12 @@ func (ns NullOperationState) Value() (driver.Value, error) {
 	return string(ns.OperationState), nil
 }
 
-type ApiKey struct {
-	ApiKeyID           pgtype.UUID        `json:"api_key_id"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	DisplayPrefix      string             `json:"display_prefix"`
-	Description        string             `json:"description"`
-	SecretHash         []byte             `json:"secret_hash"`
-	SecretHashOld      []byte             `json:"secret_hash_old"`
-	SecretHashOldUntil pgtype.Timestamptz `json:"secret_hash_old_until"`
-	Roles              []byte             `json:"roles"`
-	Scopes             []byte             `json:"scopes"`
-	Revoked            bool               `json:"revoked"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt         pgtype.Timestamptz `json:"last_used_at"`
-}
-
 type ApiToken struct {
 	ID           pgtype.UUID        `json:"id"`
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	Name         string             `json:"name"`
 	Prefix       string             `json:"prefix"`
-	TokenHash    string             `json:"token_hash"`
+	TokenHash    *string            `json:"token_hash"`
 	Scopes       []string           `json:"scopes"`
 	Audience     []string           `json:"audience"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
@@ -130,6 +114,7 @@ type ApiToken struct {
 	CreatedBy    string             `json:"created_by"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	RateLimitRpm int32              `json:"rate_limit_rpm"`
+	TokenHmac    []byte             `json:"token_hmac"`
 }
 
 type ApiTokenRateBucket struct {

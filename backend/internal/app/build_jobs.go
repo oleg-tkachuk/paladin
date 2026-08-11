@@ -1,12 +1,6 @@
 package app
 
 import (
-	"context"
-	"time"
-
-	"github.com/google/uuid"
-
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -54,11 +48,6 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Repo:     adapters.NewRefreshTokenRepo(reaperQ),
 			Interval: cfg.Worker.Jobs.RefreshTokenReap.Interval,
 			Logger:   l.Named("refresh-purger"),
-		},
-		&worker.ApiKeyExpirer{
-			Repo:     &apiKeyExpirerAdapter{r: adapters.NewApiKeyRepo(reaperQ)},
-			Interval: cfg.Worker.Jobs.ApiKeyReap.Interval,
-			Logger:   l.Named("api-key-expirer"),
 		},
 	}
 
@@ -297,22 +286,3 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 
 	return out
 }
-
-// apiKeyExpirerAdapter narrows *adapters.ApiKeyRepo down to the
-// worker.ApiKeyExpirerRepo two-method seam. Keeps the worker package free
-// of a heavyweight import.
-type apiKeyExpirerAdapter struct {
-	r *adapters.ApiKeyRepo
-}
-
-func (a *apiKeyExpirerAdapter) ListExpired(ctx context.Context, at time.Time, limit int32) ([]authstore.ApiKey, error) {
-	return a.r.ListExpired(ctx, at, limit)
-}
-
-func (a *apiKeyExpirerAdapter) Revoke(ctx context.Context, id uuid.UUID) error {
-	return a.r.Revoke(ctx, id)
-}
-
-// silence unused — kept for explicit re-export so worker subcommand can
-// instantiate adapters without re-importing the auth/store package.
-var _ authstore.ApiKey

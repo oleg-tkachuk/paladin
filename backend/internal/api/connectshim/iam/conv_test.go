@@ -22,7 +22,6 @@ import (
 var (
 	tenantID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	userID   = uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	keyID    = uuid.MustParse("33333333-3333-3333-3333-333333333333")
 )
 
 // ─── timestamp / page helpers ──────────────────────────────────────────────
@@ -175,75 +174,11 @@ func TestUserToProtoOmitsUnsetLastLogin(t *testing.T) {
 	}
 }
 
-// ─── apiKeyToProto ─────────────────────────────────────────────────────────
-
-func TestApiKeyToProtoNil(t *testing.T) {
-	if apiKeyToProto(nil) != nil {
-		t.Error("nil in, nil out")
-	}
-}
-
-func TestApiKeyToProto(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-	exp := now.Add(24 * time.Hour)
-	k := &authstore.ApiKey{
-		ApiKeyID: keyID, TenantID: tenantID, DisplayPrefix: "paladin_ab",
-		Description: "ci runner", Roles: []string{"writer"},
-		Scopes:    []auth.Scope{{Type: auth.ScopeBucket, Value: "logs"}},
-		Revoked:   true,
-		CreatedAt: now, ExpiresAt: &exp,
-		SecretHash: []byte("secret-hash-material"),
-	}
-
-	got := apiKeyToProto(k)
-
-	if want := "tenants/" + tenantID.String() + "/apiKeys/" + keyID.String(); got.Name != want {
-		t.Errorf("Name = %q, want %q", got.Name, want)
-	}
-	if got.DisplayPrefix != "paladin_ab" || got.Description != "ci runner" || !got.Revoked {
-		t.Errorf("scalars = %+v", got)
-	}
-	if got.ExpiresAt == nil || !got.ExpiresAt.AsTime().Equal(exp) {
-		t.Errorf("ExpiresAt = %v", got.ExpiresAt)
-	}
-	// A never-used key must report no LastUsedAt rather than epoch 0.
-	if got.LastUsedAt != nil {
-		t.Error("LastUsedAt must be omitted when unset")
-	}
-	// The secret hash must never reach the wire.
-	if contains(got.String(), "secret-hash-material") {
-		t.Error("secret hash leaked into the wire message")
-	}
-}
-
 func contains(haystack, needle string) bool {
 	return len(needle) > 0 && len(haystack) >= len(needle) && indexOf(haystack, needle) >= 0
 }
 
 // ─── resource-name parsers ─────────────────────────────────────────────────
-
-func TestApiKeyIDFromName(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
-		got, err := apiKeyIDFromName("tenants/" + tenantID.String() + "/apiKeys/" + keyID.String())
-		if err != nil || got != keyID {
-			t.Errorf("got %v, %v", got, err)
-		}
-	})
-	for label, n := range map[string]string{
-		"empty":            "",
-		"wrong collection": "tenants/" + tenantID.String() + "/users/" + keyID.String(),
-		"missing segments": "tenants/" + tenantID.String(),
-		"extra segments":   "tenants/" + tenantID.String() + "/apiKeys/" + keyID.String() + "/x",
-		"bad uuid":         "tenants/" + tenantID.String() + "/apiKeys/not-a-uuid",
-		"wrong prefix":     "orgs/" + tenantID.String() + "/apiKeys/" + keyID.String(),
-	} {
-		t.Run(label, func(t *testing.T) {
-			if _, err := apiKeyIDFromName(n); err == nil {
-				t.Errorf("want an error for %q", n)
-			}
-		})
-	}
-}
 
 func TestUserIDFromName(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {

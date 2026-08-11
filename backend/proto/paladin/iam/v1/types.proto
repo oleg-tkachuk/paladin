@@ -27,25 +27,6 @@ message User {
   google.protobuf.Timestamp last_login_at = 12;
 }
 
-// ApiKey is a long-lived credential for service accounts / CI / MCP servers.
-// Separate from User because its scopes are typically narrower and rotation
-// cadence different. Secret value is returned ONCE on Create.
-message ApiKey {
-  // Resource name: "tenants/{tenant_id_or_slug}/apiKeys/{api_key_id}".
-  string name = 1;
-  string api_key_id = 2;
-  string tenant_id = 3;
-  // Key prefix shown in UI ("paladin_pat_xxxxxxxx"); first 8 chars of secret.
-  string display_prefix = 4;
-  string description = 5;
-  repeated string roles = 6;
-  repeated paladin.common.v1.Scope scopes = 7;
-  google.protobuf.Timestamp created_at = 8;
-  google.protobuf.Timestamp expires_at = 9;
-  google.protobuf.Timestamp last_used_at = 10;
-  bool revoked = 11;
-}
-
 // TokenPair is the OAuth-2-style result of Login / RefreshToken. Both tokens
 // are JWT with audience=`paladin-data` (access) / `paladin-iam` (refresh).
 message TokenPair {

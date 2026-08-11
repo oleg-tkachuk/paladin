@@ -55,11 +55,7 @@ permit (
         Action::"ManageUser",
         Action::"ReadUser",
         Action::"ResetPassword",
-        Action::"GrantScopes",
-        Action::"ManageApiKey",
-        Action::"ReadApiKey",
-        Action::"RotateApiKey",
-        Action::"MintScopedToken"
+        Action::"GrantScopes"
     ],
     resource
 ) when {

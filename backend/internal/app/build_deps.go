@@ -159,7 +159,6 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		Quota:         adapters.NewQuotaRepoV2(db.Queries, pool),
 		EventSub:      adapters.NewEventSubscriptionRepoV2(db.Queries),
 		IAMUser:       adapters.NewUserRepo(db.Queries),
-		IAMApiKey:     adapters.NewApiKeyRepo(db.Queries),
 		IAMRefresh:    adapters.NewRefreshTokenRepo(db.Queries),
 		ObjectVersion: adapters.NewObjectVersionRepo(db.Queries),
 		Idempotency:   adapters.NewIdempotencyRepo(db.Queries),

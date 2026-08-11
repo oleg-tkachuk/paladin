@@ -5,13 +5,11 @@ package iamv1connect
 import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
 
 type (
-	AuthServiceHandler   = internal.AuthServiceHandler
-	UserServiceHandler   = internal.UserServiceHandler
-	ApiKeyServiceHandler = internal.ApiKeyServiceHandler
+	AuthServiceHandler = internal.AuthServiceHandler
+	UserServiceHandler = internal.UserServiceHandler
 )
 
 var (
-	NewAuthServiceClient   = internal.NewAuthServiceClient
-	NewUserServiceClient   = internal.NewUserServiceClient
-	NewApiKeyServiceClient = internal.NewApiKeyServiceClient
+	NewAuthServiceClient = internal.NewAuthServiceClient
+	NewUserServiceClient = internal.NewUserServiceClient
 )

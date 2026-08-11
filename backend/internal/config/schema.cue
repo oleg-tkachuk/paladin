@@ -283,10 +283,6 @@ worker: {
   refresh_token_reap: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
   }
-  // ApiKeyReap: flips revoked=true on api-keys past their expires_at.
-  api_key_reap: {
-    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
-  }
   // Lifecycle: CEL-based per-bucket expiration. Disable when no buckets
   // carry lifecycle rules to save the per-tick scan.
   lifecycle: {

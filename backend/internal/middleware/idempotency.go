@@ -313,9 +313,8 @@ func reconstructResponse(respType reflect.Type, body []byte) (connect.AnyRespons
 //   - "Create" — the canonical AIP-style verb. CreateTenant,
 //     CreateBucket, CreateObjectKey, CreateUser, …
 //   - "Issue"  — the token/credential variant. CapabilityService.
-//     Issue, an IAM ApiKeyService.IssueKey (if added), etc.
-//     Logically these are creates with a different domain noun,
-//     and double-submit hazards are identical.
+//     Issue, etc. Logically these are creates with a different
+//     domain noun, and double-submit hazards are identical.
 //
 // Adding a new prefix here is a deliberate policy expansion —
 // document the reasoning inline so the next reader doesn't add

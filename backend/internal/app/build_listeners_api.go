@@ -94,7 +94,6 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		WithReuseAudit(repos.Audit, l).
 		WithObjectKeyRoutes(wire.ProvideObjectKeyRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
-	apikH := wire.ProvideApiKeyHandler(repos, iss, polEngine)
 	userSettingsH := usersettingsh.NewHandler(
 		adapters.NewUserSettingsRepo(deps.DB.Queries),
 		repos.IAMUser,
@@ -173,8 +172,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	//   - data plane: UploadObject/CompleteObject/... (in the future
 	//     Create* MultipartUpload, etc.) — retries on a flaky network
 	//     must collapse on the same object.
-	//   - iam plane: CreateUser, CreateApiKey — operator double-click
-	//     on the admin UI must not duplicate users / leak api keys.
+	//   - iam plane: CreateUser — operator double-click on the admin UI
+	//     must not duplicate users.
 	idempotencyInterceptor := middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
 		RequireOnCreate: true,
 	})
@@ -215,8 +214,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 			cfg.Auth.LoginRateLimitPerIPPerMinute,
 		),
-		// Audit IAM mutations (Login, CreateUser, CreateApiKey,
-		// RefreshToken, …). Placed after the permissive interceptor so
+		// Audit IAM mutations (Login, CreateUser, RefreshToken, …).
+		// Placed after the permissive interceptor so
 		// anonymous/failed Login attempts are still recorded — a
 		// credential-misuse breach must leave a server-side trail
 		// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
@@ -278,7 +277,6 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	healthH.Register(iamMux)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
-	iamMux.Handle(paladiniamv1connect.NewApiKeyServiceHandler(connectiam.NewApiKeyServer(apikH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewSystemServiceHandler(
 		connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH),
 		iamOpts,

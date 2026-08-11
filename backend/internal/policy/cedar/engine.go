@@ -89,12 +89,6 @@ const (
 	ActionReadUserSettings   = "ReadUserSettings"
 	ActionManageUserSettings = "ManageUserSettings"
 
-	// IAM ApiKey-scoped actions.
-	ActionManageApiKey    = "ManageApiKey"
-	ActionReadApiKey      = "ReadApiKey"
-	ActionRotateApiKey    = "RotateApiKey"
-	ActionMintScopedToken = "MintScopedToken"
-
 	// Quota-scoped actions. Resource is the Tenant or Bucket entity (no
 	// dedicated Quota entity — quota config attaches 1:1 to the parent).
 	ActionManageQuota     = "ManageQuota"
@@ -138,7 +132,6 @@ const (
 	entityTypeStorageBackend = "StorageBackend" // physical backend
 	entityTypeObject         = "Object"
 	entityTypeUser           = "User"
-	entityTypeApiKey         = "ApiKey"
 	entityTypeAction         = "Action"
 )
 
@@ -190,11 +183,10 @@ type Resource struct {
 	BucketName    string
 	OwnerTenantID uuid.UUID // empty = shared bucket
 
-	// IAM target identity (the user/api-key BEING managed — distinct
-	// from the principal, who is always a User keyed by Subject).
-	TargetUserID   uuid.UUID
-	TargetApiKeyID uuid.UUID
-	TargetSubject  string // user's login subject — exposed to Cedar as resource.subject
+	// IAM target identity (the user BEING managed — distinct from the
+	// principal, who is always a User keyed by Subject).
+	TargetUserID  uuid.UUID
+	TargetSubject string // user's login subject — exposed to Cedar as resource.subject
 }
 
 // RequestContext carries per-request attributes matched against Cedar context.
@@ -472,6 +464,16 @@ func (e *Engine) NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, obj
 var constantResourceAttrs = map[string]bool{
 	"tenant_id":  true,
 	"object_key": true,
+	// scope_keys is the Go-precomputed set of scope-strings that admit the
+	// resource (see resourceScopeKeys / the scope-enforcement built-in). Within
+	// a single ObjectKey scope it is CONSTANT — an ObjectKey binds to one bucket
+	// under one backend in one tenant, so tenant:/backend:/bucket:/object_key:
+	// are all fixed across a ListObjects page. Marking it constant keeps the
+	// scope-enforcement forbid (present in every compiled set) from forcing
+	// per-row Cedar evaluation on every list handler. Real tenant policies that
+	// read a genuinely per-object attr (tags/state/size/…) still trigger per-row
+	// eval on that attr; this entry only neutralizes the built-in's own read.
+	"scope_keys": true,
 }
 
 // policyReadsPerObjectResourceAttr walks every policy in the set (via its Cedar
@@ -589,6 +591,41 @@ when {
   resource has tenant_id &&
   principal.tenant_id == resource.tenant_id
 };
+
+// Built-in: OPT-IN resource-scope enforcement. A principal that carries a
+// NON-EMPTY scopes set (and not the "*" wildcard) is confined to resources
+// whose admitting scope-strings intersect its scopes. Principals with an EMPTY
+// scopes set — JWT users, roles-only callers, and unscoped API tokens — are
+// COMPLETELY UNAFFECTED: the "when" guard is false for them, so this forbid
+// never applies. Wildcard-scoped principals ("*", reserved for platform
+// admins) are exempt for the same reason.
+//
+// resource.scope_keys is precomputed in Go (buildEntities → resourceScopeKeys)
+// as the Set<String> of every scope that admits the resource
+// (tenant:/backend:/bucket:/object_key:<bucket>/<object_key>). Matching is a
+// pure set-intersection here: the wire format is produced ONCE, in Go, and is
+// never re-derived in Cedar. That is deliberate — Cedar has no string
+// concatenation, so a policy that tried to rebuild "object_key:"+bucket+"/"+key
+// would be a type error (skipped policy → fail-open). Keeping the format in Go
+// makes the Go side and this policy structurally incapable of disagreeing.
+//
+// forbid beats permit in Cedar, so this is a hard ceiling: a scoped principal
+// is denied on any out-of-scope resource even when a tenant permit would allow
+// it. Empty/wildcard principals keep exactly today's behavior.
+forbid (
+  principal,
+  action,
+  resource
+)
+when {
+  principal has scopes &&
+  !principal.scopes.isEmpty() &&
+  !principal.scopes.contains("*")
+}
+unless {
+  resource has scope_keys &&
+  principal.scopes.containsAny(resource.scope_keys)
+};
 `
 
 // compile parses the policy text into a cedar.PolicySet, prepending the
@@ -669,7 +706,6 @@ func storageBackendUID(backendID string) cedartypes.EntityUID {
 //   - ObjectKey      when ObjectKey set (without Object)
 //   - Bucket         when BackendID+BucketName set (without ObjectKey)
 //   - StorageBackend when only BackendID set
-//   - ApiKey         when TargetApiKeyID set
 //   - User           when TargetUserID or TargetSubject set
 //   - Tenant         when only TenantID set (admin tenant ops)
 func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID {
@@ -688,9 +724,6 @@ func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID 
 	}
 	if r.BackendID != "" {
 		return storageBackendUID(r.BackendID)
-	}
-	if r.TargetApiKeyID != uuid.Nil {
-		return targetApiKeyUID(r.TenantID, r.TargetApiKeyID)
 	}
 	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
 		return targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
@@ -713,13 +746,53 @@ func targetUserUID(tenantID, userID uuid.UUID, subject string) cedartypes.Entity
 	return cedartypes.NewEntityUID(entityTypeUser, cedartypes.String(id))
 }
 
-func targetApiKeyUID(tenantID, apiKeyID uuid.UUID) cedartypes.EntityUID {
-	return cedartypes.NewEntityUID(entityTypeApiKey,
-		cedartypes.String(tenantID.String()+"/"+apiKeyID.String()))
-}
-
 func actionUID(name string) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeAction, cedartypes.String(name))
+}
+
+// resourceScopeKeys returns every scope wire-string that ADMITS resource r,
+// derived from whichever identifying fields are populated. This is the single
+// Go-side source of truth for the scope wire format, and it MUST stay
+// byte-for-byte identical to auth.Scope.String() / auth.MatchScope
+// (internal/auth/scope.go):
+//
+//	tenant:<tenant_uuid>
+//	backend:<backend_id>
+//	bucket:<bucket_name>
+//	object_key:<bucket_name>/<object_key>   (requires BOTH bucket and object_key)
+//
+// The scope-enforcement built-in policy matches principal.scopes against the
+// Set<String> this produces (exposed as resource.scope_keys) via containsAny,
+// so the wire format is asserted in exactly one place. object_key deliberately
+// requires the physical bucket to be known — mirroring MatchScope — so a
+// resource whose bucket is not resolved at authz time simply won't carry an
+// object_key/bucket key and a principal scoped by those is denied (fail-closed).
+func resourceScopeKeys(r *Resource) []string {
+	keys := make([]string, 0, 4)
+	if r.TenantID != uuid.Nil {
+		keys = append(keys, "tenant:"+r.TenantID.String())
+	}
+	if r.BackendID != "" {
+		keys = append(keys, "backend:"+r.BackendID)
+	}
+	if r.BucketName != "" {
+		keys = append(keys, "bucket:"+r.BucketName)
+	}
+	if r.ObjectKey != "" && r.BucketName != "" {
+		keys = append(keys, "object_key:"+r.BucketName+"/"+r.ObjectKey)
+	}
+	return keys
+}
+
+// scopeKeysValue builds the Cedar Set<String> value emitted as
+// resource.scope_keys on every resource-side entity.
+func scopeKeysValue(r *Resource) cedartypes.Value {
+	ks := resourceScopeKeys(r)
+	vals := make([]cedartypes.Value, 0, len(ks))
+	for _, k := range ks {
+		vals = append(vals, cedartypes.String(k))
+	}
+	return cedartypes.NewSet(vals...)
 }
 
 // buildEntities assembles the transient entity graph passed to Authorize.
@@ -744,6 +817,12 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 		scopesSet = append(scopesSet, cedartypes.String(sc))
 	}
 
+	// scopeKeys is the set of scope-strings that admit THIS resource, computed
+	// once in Go and stamped as `scope_keys` on every resource-side entity below
+	// (never on the principal-User). The scope-enforcement built-in matches
+	// principal.scopes against it.
+	scopeKeys := scopeKeysValue(r)
+
 	m := cedartypes.EntityMap{}
 
 	// Tenant (resource scope) — keyed on the DB-AUTHORITATIVE slug (authSlug),
@@ -759,6 +838,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"slug":         cedartypes.String(authSlug),
 				"display_name": cedartypes.String(""),
 				"labels":       cedartypes.NewSet(),
+				"scope_keys":   scopeKeys,
 			}),
 		}
 	}
@@ -817,6 +897,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 			UID: sbUID,
 			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
 				"backend_id": cedartypes.String(r.BackendID),
+				"scope_keys": scopeKeys,
 			}),
 		}
 	}
@@ -834,6 +915,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"backend_id":      cedartypes.String(r.BackendID),
 				"owner_tenant_id": cedartypes.String(r.OwnerTenantID.String()),
 				"labels":          cedartypes.NewSet(),
+				"scope_keys":      scopeKeys,
 			}),
 		}
 		m[bUID] = bucketEntity
@@ -855,6 +937,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"tenant_id":   cedartypes.String(r.TenantID.String()),
 				"bucket_name": cedartypes.String(r.BucketName),
 				"backend_id":  cedartypes.String(r.BackendID),
+				"scope_keys":  scopeKeys,
 			}),
 		}
 	}
@@ -892,6 +975,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"backend_id":   cedartypes.String(r.BackendID),
 				"tags":         cedartypes.NewSet(tagsSet...),
 				"tag_values":   cedartypes.NewRecord(tagValues),
+				"scope_keys":   scopeKeys,
 			}),
 		}
 	}
@@ -909,26 +993,10 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 			UID:     uResUID,
 			Parents: parents,
 			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-				"user_id":   cedartypes.String(r.TargetUserID.String()),
-				"subject":   cedartypes.String(r.TargetSubject),
-				"tenant_id": cedartypes.String(r.TenantID.String()),
-			}),
-		}
-	}
-
-	// ApiKey-as-resource — child of Tenant for tenant-scoped keys.
-	if r.TargetApiKeyID != uuid.Nil {
-		akUID := targetApiKeyUID(r.TenantID, r.TargetApiKeyID)
-		var parents cedartypes.EntityUIDSet
-		if r.TenantID != uuid.Nil {
-			parents = cedartypes.NewEntityUIDSet(tUID)
-		}
-		m[akUID] = cedartypes.Entity{
-			UID:     akUID,
-			Parents: parents,
-			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-				"api_key_id": cedartypes.String(r.TargetApiKeyID.String()),
+				"user_id":    cedartypes.String(r.TargetUserID.String()),
+				"subject":    cedartypes.String(r.TargetSubject),
 				"tenant_id":  cedartypes.String(r.TenantID.String()),
+				"scope_keys": scopeKeys,
 			}),
 		}
 	}

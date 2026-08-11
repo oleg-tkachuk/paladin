@@ -5,7 +5,6 @@ import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 
 type (
 	User      = internal.User
-	ApiKey    = internal.ApiKey
 	TokenPair = internal.TokenPair
 
 	LoginRequest           = internal.LoginRequest
@@ -30,16 +29,4 @@ type (
 	RevokeScopesRequest   = internal.RevokeScopesRequest
 	ResetPasswordRequest  = internal.ResetPasswordRequest
 	ResetPasswordResponse = internal.ResetPasswordResponse
-
-	CreateApiKeyRequest     = internal.CreateApiKeyRequest
-	CreateApiKeyResponse    = internal.CreateApiKeyResponse
-	GetApiKeyRequest        = internal.GetApiKeyRequest
-	ListApiKeysRequest      = internal.ListApiKeysRequest
-	ListApiKeysResponse     = internal.ListApiKeysResponse
-	RevokeApiKeyRequest     = internal.RevokeApiKeyRequest
-	RevokeApiKeyResponse    = internal.RevokeApiKeyResponse
-	RotateApiKeyRequest     = internal.RotateApiKeyRequest
-	RotateApiKeyResponse    = internal.RotateApiKeyResponse
-	MintScopedTokenRequest  = internal.MintScopedTokenRequest
-	MintScopedTokenResponse = internal.MintScopedTokenResponse
 )

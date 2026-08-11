@@ -57,7 +57,6 @@ func TestToolFilter_AlwaysDeny_BeatsAdmin(t *testing.T) {
 		"paladin_apitoken_create",
 		"paladin_create_user",
 		"paladin_grant_user_scopes",
-		"paladin_revoke_api_key",
 		"paladin_set_policy",
 		"paladin_delete_policy",
 		"paladin_login",

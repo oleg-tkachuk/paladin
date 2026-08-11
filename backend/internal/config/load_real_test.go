@@ -166,9 +166,6 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if cfg.Worker.Jobs.RefreshTokenReap.Interval == 0 {
 		t.Error("workers.refresh_token_reap.interval defaulted to zero")
 	}
-	if cfg.Worker.Jobs.ApiKeyReap.Interval == 0 {
-		t.Error("workers.api_key_reap.interval defaulted to zero")
-	}
 	if cfg.Worker.Jobs.Lifecycle.Interval == 0 {
 		t.Error("workers.lifecycle.interval defaulted to zero")
 	}
