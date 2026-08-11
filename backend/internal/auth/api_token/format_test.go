@@ -1,16 +1,38 @@
 package api_token
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
 
+// testKey is a fixed ≥32-byte HMAC key for deterministic tests.
+var testKey = []byte("test-hmac-key-0123456789-abcdefgh")
+
+func mustHasher(t *testing.T) *Hasher {
+	t.Helper()
+	h, err := NewHasher(testKey)
+	if err != nil {
+		t.Fatalf("NewHasher: %v", err)
+	}
+	return h
+}
+
+// TestNewHasher_RejectsShortKey enforces the 32-byte minimum.
+func TestNewHasher_RejectsShortKey(t *testing.T) {
+	t.Parallel()
+	if _, err := NewHasher([]byte("too-short")); err == nil {
+		t.Fatal("expected error for short key")
+	}
+}
+
 // TestGenerateToken_Shape covers the format guarantees: prefix literal,
-// length of generated body, prefix-display extraction, hash format.
+// body length, prefix-display extraction, and digest presence.
 func TestGenerateToken_Shape(t *testing.T) {
 	t.Parallel()
+	h := mustHasher(t)
 
-	plaintext, prefix, hash, err := GenerateToken()
+	plaintext, prefix, digest, err := h.GenerateToken()
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -28,18 +50,22 @@ func TestGenerateToken_Shape(t *testing.T) {
 	if !strings.HasPrefix(body, prefix) {
 		t.Errorf("prefix not at body start: prefix=%q body=%q", prefix, body)
 	}
-	if !strings.HasPrefix(hash, "$argon2id$v=19$") {
-		t.Errorf("hash not in PHC argon2id form: %q", hash)
+	// HMAC-SHA256 digest is 32 bytes and equals Digest(plaintext).
+	if len(digest) != 32 {
+		t.Errorf("digest length: got %d, want 32", len(digest))
+	}
+	if !bytes.Equal(digest, h.Digest(plaintext)) {
+		t.Error("GenerateToken digest != Digest(plaintext)")
 	}
 }
 
-// TestGenerateToken_Unique confirms each generation yields a fresh
-// token. Two collisions in 100 generations would imply a CSPRNG bug.
+// TestGenerateToken_Unique confirms each generation yields a fresh token.
 func TestGenerateToken_Unique(t *testing.T) {
 	t.Parallel()
+	h := mustHasher(t)
 	seen := map[string]struct{}{}
 	for i := 0; i < 100; i++ {
-		p, _, _, err := GenerateToken()
+		p, _, _, err := h.GenerateToken()
 		if err != nil {
 			t.Fatalf("generate[%d]: %v", i, err)
 		}
@@ -50,55 +76,61 @@ func TestGenerateToken_Unique(t *testing.T) {
 	}
 }
 
-// TestCompareToken_Match verifies a valid plaintext matches its hash.
-func TestCompareToken_Match(t *testing.T) {
+// TestDigest_Deterministic: the same key + plaintext always yields the same
+// digest (required for the indexed lookup), and a different key yields a
+// different digest (the pepper actually participates).
+func TestDigest_Deterministic(t *testing.T) {
 	t.Parallel()
-	plaintext, _, hash, err := GenerateToken()
+	h := mustHasher(t)
+	plaintext, _, _, err := h.GenerateToken()
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	if err := CompareToken(plaintext, hash); err != nil {
-		t.Fatalf("expected match, got %v", err)
+	if !bytes.Equal(h.Digest(plaintext), h.Digest(plaintext)) {
+		t.Fatal("Digest not deterministic")
+	}
+	other, err := NewHasher([]byte("different-key-0123456789-abcdefgh!"))
+	if err != nil {
+		t.Fatalf("NewHasher: %v", err)
+	}
+	if bytes.Equal(h.Digest(plaintext), other.Digest(plaintext)) {
+		t.Fatal("digest independent of key — pepper not applied")
 	}
 }
 
-// TestCompareToken_WrongPlaintext returns ErrTokenNotFound for any
-// plaintext that wasn't the original. We use a different valid-shaped
-// token to exercise the argon2id miss path (length / format identical).
-func TestCompareToken_WrongPlaintext(t *testing.T) {
+// TestDigest_WrongPlaintext: a different plaintext yields a different digest,
+// so a wrong token cannot match the stored row.
+func TestDigest_WrongPlaintext(t *testing.T) {
 	t.Parallel()
-	_, _, hashA, _ := GenerateToken()
-	plaintextB, _, _, _ := GenerateToken()
-	if err := CompareToken(plaintextB, hashA); err == nil {
-		t.Fatal("expected error on mismatch")
+	h := mustHasher(t)
+	a, _, digestA, _ := h.GenerateToken()
+	b, _, _, _ := h.GenerateToken()
+	if a == b {
+		t.Fatal("two generations collided")
+	}
+	if bytes.Equal(h.Digest(b), digestA) {
+		t.Fatal("distinct plaintexts produced equal digests")
 	}
 }
 
-// TestCompareToken_MalformedHash rejects PHC strings we can't parse.
-func TestCompareToken_MalformedHash(t *testing.T) {
+// TestDigestsEqual exercises the constant-time compare helper.
+func TestDigestsEqual(t *testing.T) {
 	t.Parallel()
-	plaintext, _, _, _ := GenerateToken()
-	cases := []string{
-		"",
-		"not-a-phc-string",
-		"$argon2id$v=99$m=1024,t=1,p=1$YWFh$YmJi", // wrong version
-		"$bcrypt$v=19$$YWFh$YmJi",                 // wrong scheme
+	h := mustHasher(t)
+	p, _, d, _ := h.GenerateToken()
+	if !DigestsEqual(d, h.Digest(p)) {
+		t.Fatal("equal digests reported unequal")
 	}
-	for _, h := range cases {
-		t.Run(h, func(t *testing.T) {
-			err := CompareToken(plaintext, h)
-			if err == nil {
-				t.Fatalf("expected error for hash %q", h)
-			}
-		})
+	if DigestsEqual(d, h.Digest(p+"x")) {
+		t.Fatal("unequal digests reported equal")
 	}
 }
 
-// TestSplitToken validates prefix extraction and the malformed-input
-// rejection paths.
+// TestSplitToken validates prefix extraction and malformed-input rejection.
 func TestSplitToken(t *testing.T) {
 	t.Parallel()
-	plaintext, prefix, _, _ := GenerateToken()
+	h := mustHasher(t)
+	plaintext, prefix, _, _ := h.GenerateToken()
 	got, err := SplitToken(plaintext)
 	if err != nil {
 		t.Fatalf("split valid token: %v", err)

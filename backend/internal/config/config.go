@@ -183,6 +183,9 @@ func (c *Config) Validate() error {
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
 	}
+	if c.APIToken.HMACKey != "" && c.APIToken.HMACKeySecret != nil {
+		return fmt.Errorf("api_token: cannot specify both hmac_key and hmac_key_secret")
+	}
 	if c.Bootstrap.Admin.Enabled {
 		if c.Bootstrap.Admin.Password != "" && c.Bootstrap.Admin.PasswordSecret != nil {
 			return fmt.Errorf("bootstrap.admin: cannot specify both password and password_secret")

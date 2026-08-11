@@ -15,8 +15,9 @@ import (
 // outside this package's control) the row exists and is discoverable
 // via ListByTenant — operator can revoke before any caller could use it.
 type Issuer struct {
-	store Store
-	clock func() time.Time
+	store  Store
+	hasher *Hasher
+	clock  func() time.Time
 
 	// MaxTTL caps Issue's TTL parameter. Default 1y. Service tokens
 	// shouldn't live forever — if a customer needs a longer-lived
@@ -28,6 +29,7 @@ type Issuer struct {
 // IssuerConfig is the wiring shape.
 type IssuerConfig struct {
 	Store  Store
+	Hasher *Hasher
 	Now    func() time.Time
 	MaxTTL time.Duration
 }
@@ -37,6 +39,9 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 	if cfg.Store == nil {
 		return nil, errors.New("api_token: IssuerConfig.Store required")
 	}
+	if cfg.Hasher == nil {
+		return nil, errors.New("api_token: IssuerConfig.Hasher required")
+	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -45,6 +50,7 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 	}
 	return &Issuer{
 		store:  cfg.Store,
+		hasher: cfg.Hasher,
 		clock:  cfg.Now,
 		MaxTTL: cfg.MaxTTL,
 	}, nil
@@ -82,7 +88,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 		return nil, fmt.Errorf("api_token: TTL %s exceeds max %s", ttl, i.MaxTTL)
 	}
 
-	plaintext, prefix, hash, err := GenerateToken()
+	plaintext, prefix, digest, err := i.hasher.GenerateToken()
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +131,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 		Plaintext:    plaintext,
 	}
 
-	if err := i.store.Insert(ctx, tok, hash); err != nil {
+	if err := i.store.Insert(ctx, tok, digest); err != nil {
 		// Caller never sees the plaintext on a persistence failure;
 		// scrub from the in-memory struct in case the caller logs it
 		// from the partial value.

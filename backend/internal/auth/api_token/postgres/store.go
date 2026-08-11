@@ -32,11 +32,17 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 }
 
 // Insert implements api_token.Store. The Token's Plaintext field is
-// intentionally NOT persisted — only prefix + hash.
-func (s *Store) Insert(ctx context.Context, t api_token.Token, hash string) error {
+// intentionally NOT persisted — only prefix (display) + token_hmac (the
+// HMAC-SHA256 lookup digest). token_hash (the legacy argon2 column) is left
+// NULL for HMAC-issued tokens.
+//
+// Runs under the request principal's tenant (the RLS PrepareConn hook stamps
+// paladin.tenant_id from the admin caller), so the tenant_isolation WITH CHECK on
+// api_tokens is satisfied automatically.
+func (s *Store) Insert(ctx context.Context, t api_token.Token, digest []byte) error {
 	const stmt = `
 INSERT INTO api_tokens (
-    id, tenant_id, name, prefix, token_hash,
+    id, tenant_id, name, prefix, token_hmac,
     scopes, audience, expires_at, rate_limit_rpm,
     created_by, created_at
 ) VALUES (
@@ -50,7 +56,7 @@ INSERT INTO api_tokens (
 		t.TenantID,
 		t.Name,
 		t.Prefix,
-		hash,
+		digest,
 		t.Scopes,
 		t.Audience,
 		t.ExpiresAt,
@@ -63,61 +69,51 @@ INSERT INTO api_tokens (
 	return nil
 }
 
-// FindByPrefix implements api_token.Store.
-func (s *Store) FindByPrefix(ctx context.Context, prefix string) ([]api_token.Token, []string, error) {
+// FindByDigest implements api_token.Store. O(1) exact-match lookup on the
+// UNIQUE token_hmac index. Reached pre-authentication (the token is what
+// establishes the tenant), so it relies on the api_tokens permissive
+// SELECT policy — the tenant_isolation policy alone would filter it out
+// because no paladin.tenant_id GUC is set yet.
+func (s *Store) FindByDigest(ctx context.Context, digest []byte) (api_token.Token, error) {
 	const stmt = `
-SELECT id, tenant_id, name, prefix, token_hash,
+SELECT id, tenant_id, name, prefix,
        scopes, audience, expires_at, rate_limit_rpm,
        revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
-WHERE  prefix = $1;
+WHERE  token_hmac = $1;
 `
-	rows, err := s.pool.Query(ctx, stmt, prefix)
+	var t api_token.Token
+	var revokedAt, lastUsedAt *time.Time
+	err := s.pool.QueryRow(ctx, stmt, digest).Scan(
+		&t.ID, &t.TenantID, &t.Name, &t.Prefix,
+		&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+		&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
+	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("api_token/postgres: query by prefix: %w", err)
-	}
-	defer rows.Close()
-
-	var tokens []api_token.Token
-	var hashes []string
-	for rows.Next() {
-		var t api_token.Token
-		var hash string
-		var revokedAt, lastUsedAt *time.Time
-		err := rows.Scan(
-			&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
-			&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
-			&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("api_token/postgres: scan: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return api_token.Token{}, api_token.ErrTokenNotFound
 		}
-		t.RevokedAt = revokedAt
-		t.LastUsedAt = lastUsedAt
-		tokens = append(tokens, t)
-		hashes = append(hashes, hash)
+		return api_token.Token{}, fmt.Errorf("api_token/postgres: query by digest: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("api_token/postgres: iterate: %w", err)
-	}
-	return tokens, hashes, nil
+	t.RevokedAt = revokedAt
+	t.LastUsedAt = lastUsedAt
+	return t, nil
 }
 
 // Get implements api_token.Store. Returns ErrTokenNotFound when no
 // row matches.
 func (s *Store) Get(ctx context.Context, id uuid.UUID) (api_token.Token, error) {
 	const stmt = `
-SELECT id, tenant_id, name, prefix, token_hash,
+SELECT id, tenant_id, name, prefix,
        scopes, audience, expires_at, rate_limit_rpm,
        revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
 WHERE  id = $1;
 `
 	var t api_token.Token
-	var hash string
 	var revokedAt, lastUsedAt *time.Time
 	err := s.pool.QueryRow(ctx, stmt, id).Scan(
-		&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
+		&t.ID, &t.TenantID, &t.Name, &t.Prefix,
 		&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
 		&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 	)
@@ -129,7 +125,6 @@ WHERE  id = $1;
 	}
 	t.RevokedAt = revokedAt
 	t.LastUsedAt = lastUsedAt
-	_ = hash // not surfaced to callers
 	return t, nil
 }
 
@@ -148,13 +143,30 @@ WHERE  id = $1
 	return nil
 }
 
-// TouchLastUsed implements api_token.Store. Best-effort write —
-// callers (verifier) ignore errors so a failed touch doesn't fail
-// the verify.
-func (s *Store) TouchLastUsed(ctx context.Context, id uuid.UUID, at time.Time) error {
-	const stmt = `UPDATE api_tokens SET last_used_at = $2 WHERE id = $1`
-	if _, err := s.pool.Exec(ctx, stmt, id, at); err != nil {
+// TouchLastUsed implements api_token.Store. Best-effort write — callers
+// (verifier) ignore errors so a failed touch doesn't fail the verify.
+//
+// Runs pre-authentication (the verify path has no principal, so the pool's
+// PrepareConn hook stamped an empty paladin.tenant_id). The api_tokens
+// tenant_isolation RLS policy would therefore filter this UPDATE to zero
+// rows, so we open a transaction and SET LOCAL the verified token's tenant
+// first — same pattern the capability store uses. The GUC is LOCAL to the
+// tx and reverts on commit/rollback.
+func (s *Store) TouchLastUsed(ctx context.Context, id, tenantID uuid.UUID, at time.Time) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("api_token/postgres: touch begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after commit
+
+	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantID.String()); err != nil {
+		return fmt.Errorf("api_token/postgres: touch set tenant: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE api_tokens SET last_used_at = $2 WHERE id = $1`, id, at); err != nil {
 		return fmt.Errorf("api_token/postgres: touch: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("api_token/postgres: touch commit: %w", err)
 	}
 	return nil
 }
@@ -187,7 +199,7 @@ func (s *Store) ListByTenant(ctx context.Context, args api_token.ListByTenantArg
 	}
 	bindArgs = append(bindArgs, limit+1) // +1 to detect next page
 	stmt := fmt.Sprintf(`
-SELECT id, tenant_id, name, prefix, token_hash,
+SELECT id, tenant_id, name, prefix,
        scopes, audience, expires_at, rate_limit_rpm,
        revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens

@@ -160,6 +160,19 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Auth.SigningKeySecret = nil
 	}
 
+	// API-token HMAC key — the server-side pepper for the token lookup
+	// digest. Resolving it from a SecretRef keeps the key out of inline
+	// Helm values; Validate() rejects setting both api_token.hmac_key and
+	// api_token.hmac_key_secret.
+	if cfg.APIToken.HMACKeySecret != nil {
+		key, err := r.resolveSecret(ctx, cfg.APIToken.HMACKeySecret)
+		if err != nil {
+			return fmt.Errorf("api_token.hmac_key_secret: %w", err)
+		}
+		cfg.APIToken.HMACKey = key
+		cfg.APIToken.HMACKeySecret = nil
+	}
+
 	// Ingest webhook HMAC shared secret — the key the storage-event publisher
 	// signs bodies with. SharedSecretRef is a value type, so an empty Name is
 	// "not set" (the inline shared_secret, or dev's empty-passes-check, is used

@@ -1019,6 +1019,24 @@ type APIToken struct {
 	// token cleanup tooling; high-QPS deploys that can't tolerate the
 	// per-request UPDATE turn it off and rely on creation timestamps.
 	TouchLastUsed bool `yaml:"touch_last_used" json:"touch_last_used"`
+
+	// HMACKey is the server-side key for the token lookup digest —
+	// HMAC-SHA256(HMACKey, token) is stored in api_tokens.token_hmac and
+	// matched on verify. Must be ≥32 bytes. It is a shared secret (a
+	// "pepper"): rotating it invalidates every issued token, so treat it
+	// like the auth signing key. Provide it out-of-band via HMACKeySecret
+	// (Kubernetes Secret) in real deployments; an inline value here is for
+	// dev only. When BOTH are empty the subsystem derives a key from
+	// Auth.SigningKey (domain-separated) so dev works out of the box —
+	// acceptable because that key is already a managed secret, but a
+	// dedicated HMACKeySecret is preferred in production for key
+	// separation (so rotating the JWT signing key doesn't drop tokens).
+	HMACKey string `yaml:"hmac_key" json:"hmac_key"`
+
+	// HMACKeySecret resolves HMACKey from a Kubernetes Secret at boot.
+	// Takes precedence over an inline HMACKey. Same pattern as
+	// Auth.SigningKeySecret.
+	HMACKeySecret *SecretRef `yaml:"hmac_key_secret" json:"hmac_key_secret"`
 }
 
 // ─── Ingest plane (storage events) ──────────────────────────────────────────

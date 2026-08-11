@@ -13,20 +13,19 @@ import (
 // can branch without string-matching.
 type Store interface {
 	// Insert persists a freshly issued token. Caller must NOT include
-	// the plaintext on the row — only the prefix + hash. The Token
-	// struct passed in carries Plaintext for caller convenience but
-	// the implementation must drop it before storage.
-	Insert(ctx context.Context, t Token, hash string) error
+	// the plaintext on the row — only the prefix (display) + the HMAC
+	// digest (lookup key). The Token struct passed in carries Plaintext
+	// for caller convenience but the implementation must drop it before
+	// storage.
+	Insert(ctx context.Context, t Token, digest []byte) error
 
-	// FindByPrefix loads token rows whose `prefix` matches the supplied
-	// 8-char display string. Typical case: one row. Collisions handled
-	// by the caller via hash compare.
-	//
-	// Returns the token rows AND their stored hashes — verification
-	// needs the hash to argon2id-compare. Hash is intentionally NOT
-	// part of Token (which is the public-facing struct) to keep
-	// callers from accidentally logging it.
-	FindByPrefix(ctx context.Context, prefix string) ([]Token, []string, error)
+	// FindByDigest loads the single token row whose `token_hmac` equals
+	// the supplied HMAC-SHA256 digest. The digest column is UNIQUE, so
+	// this is an O(1) indexed exact-match lookup (no prefix scan, no
+	// per-candidate compare). Returns ErrTokenNotFound when no row
+	// matches — the verifier maps that to CodeUnauthenticated without
+	// revealing whether a prefix happened to exist.
+	FindByDigest(ctx context.Context, digest []byte) (Token, error)
 
 	// Get loads one token row by id. Used by admin tooling
 	// (GetUsage RPC) to surface metadata + rate-limit cap without
@@ -40,7 +39,14 @@ type Store interface {
 	// TouchLastUsed bumps last_used_at for the given id. Verifier
 	// invokes this on a successful verify; production batches /
 	// debounces under high QPS to avoid per-request UPDATE pressure.
-	TouchLastUsed(ctx context.Context, id uuid.UUID, at time.Time) error
+	//
+	// tenantID is the verified token's tenant. The verify path runs
+	// pre-authentication (no principal, so the RLS PrepareConn hook
+	// stamps an empty paladin.tenant_id), so this UPDATE must set the
+	// tenant GUC itself to satisfy the tenant_isolation policy on
+	// api_tokens — otherwise RLS filters the row and the touch silently
+	// no-ops. Best-effort: the verifier ignores the error.
+	TouchLastUsed(ctx context.Context, id, tenantID uuid.UUID, at time.Time) error
 
 	// ListByTenant returns active + (optionally) revoked tokens for an
 	// admin UI. Cursor-paginated.

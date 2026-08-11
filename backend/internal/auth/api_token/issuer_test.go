@@ -9,33 +9,30 @@ import (
 	"github.com/google/uuid"
 )
 
-// memStore is a goroutine-safe in-memory Store stub for tests.
+// memStore is an in-memory Store stub for tests. Keyed by the HMAC digest,
+// mirroring the production unique-index lookup.
 type memStore struct {
-	rows   map[uuid.UUID]Token
-	hashes map[uuid.UUID]string
+	rows     map[uuid.UUID]Token
+	byDigest map[string]uuid.UUID
 }
 
 func newMemStore() *memStore {
-	return &memStore{rows: map[uuid.UUID]Token{}, hashes: map[uuid.UUID]string{}}
+	return &memStore{rows: map[uuid.UUID]Token{}, byDigest: map[string]uuid.UUID{}}
 }
 
-func (m *memStore) Insert(_ context.Context, t Token, hash string) error {
+func (m *memStore) Insert(_ context.Context, t Token, digest []byte) error {
 	t.Plaintext = "" // mimic prod: never persist plaintext
 	m.rows[t.ID] = t
-	m.hashes[t.ID] = hash
+	m.byDigest[string(digest)] = t.ID
 	return nil
 }
 
-func (m *memStore) FindByPrefix(_ context.Context, prefix string) ([]Token, []string, error) {
-	var ts []Token
-	var hs []string
-	for _, t := range m.rows {
-		if t.Prefix == prefix {
-			ts = append(ts, t)
-			hs = append(hs, m.hashes[t.ID])
-		}
+func (m *memStore) FindByDigest(_ context.Context, digest []byte) (Token, error) {
+	id, ok := m.byDigest[string(digest)]
+	if !ok {
+		return Token{}, ErrTokenNotFound
 	}
-	return ts, hs, nil
+	return m.rows[id], nil
 }
 
 func (m *memStore) Get(_ context.Context, id uuid.UUID) (Token, error) {
@@ -55,7 +52,7 @@ func (m *memStore) Revoke(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (m *memStore) TouchLastUsed(_ context.Context, id uuid.UUID, at time.Time) error {
+func (m *memStore) TouchLastUsed(_ context.Context, id, _ uuid.UUID, at time.Time) error {
 	if t, ok := m.rows[id]; ok {
 		t.LastUsedAt = &at
 		m.rows[id] = t
@@ -71,12 +68,15 @@ func (m *memStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, nil
 }
 
-// buildIssuerVerifier wires an in-memory Store, Issuer, and Verifier.
+// buildIssuerVerifier wires an in-memory Store, Issuer, and Verifier sharing
+// one Hasher (as production does).
 func buildIssuerVerifier(t *testing.T) (*Issuer, *Verifier, *memStore) {
 	t.Helper()
 	store := newMemStore()
+	hasher := mustHasher(t)
 	issuer, err := NewIssuer(IssuerConfig{
 		Store:  store,
+		Hasher: hasher,
 		MaxTTL: 24 * time.Hour,
 	})
 	if err != nil {
@@ -84,6 +84,7 @@ func buildIssuerVerifier(t *testing.T) (*Issuer, *Verifier, *memStore) {
 	}
 	verifier, err := NewVerifier(VerifierConfig{
 		Store:         store,
+		Hasher:        hasher,
 		TouchLastUsed: false,
 	})
 	if err != nil {
@@ -160,9 +161,10 @@ func TestVerify_AudienceMismatch(t *testing.T) {
 func TestVerify_Expired(t *testing.T) {
 	t.Parallel()
 	store := newMemStore()
+	hasher := mustHasher(t)
 	clock := &mutableClock{now: time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)}
-	issuer, _ := NewIssuer(IssuerConfig{Store: store, MaxTTL: time.Hour, Now: clock.Now})
-	verifier, _ := NewVerifier(VerifierConfig{Store: store, Now: clock.Now, Leeway: time.Second})
+	issuer, _ := NewIssuer(IssuerConfig{Store: store, Hasher: hasher, MaxTTL: time.Hour, Now: clock.Now})
+	verifier, _ := NewVerifier(VerifierConfig{Store: store, Hasher: hasher, Now: clock.Now, Leeway: time.Second})
 
 	tok, _ := issuer.Issue(context.Background(), IssueRequest{
 		TenantID: uuid.New(),
@@ -199,7 +201,7 @@ func TestVerify_Revoked(t *testing.T) {
 
 // TestVerify_TamperedPlaintext rejects forged tokens. We craft a
 // plaintext with the same prefix but a different body and confirm the
-// argon2id miss surfaces as ErrTokenNotFound (not "valid prefix, wrong
+// digest miss surfaces as ErrTokenNotFound (not "valid prefix, wrong
 // hash" — that distinction would leak prefix existence).
 func TestVerify_TamperedPlaintext(t *testing.T) {
 	t.Parallel()

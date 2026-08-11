@@ -57,15 +57,15 @@ type fakeStore struct {
 	revokeCalls int
 }
 
-func (f *fakeStore) Insert(context.Context, api_token.Token, string) error { return nil }
-func (f *fakeStore) FindByPrefix(context.Context, string) ([]api_token.Token, []string, error) {
-	return nil, nil, nil
+func (f *fakeStore) Insert(context.Context, api_token.Token, []byte) error { return nil }
+func (f *fakeStore) FindByDigest(context.Context, []byte) (api_token.Token, error) {
+	return api_token.Token{}, api_token.ErrTokenNotFound
 }
 func (f *fakeStore) Get(context.Context, uuid.UUID) (api_token.Token, error) {
 	return f.get, f.getErr
 }
 func (f *fakeStore) Revoke(context.Context, uuid.UUID) error { f.revokeCalls++; return nil }
-func (f *fakeStore) TouchLastUsed(context.Context, uuid.UUID, time.Time) error {
+func (f *fakeStore) TouchLastUsed(context.Context, uuid.UUID, uuid.UUID, time.Time) error {
 	return nil
 }
 func (f *fakeStore) ListByTenant(context.Context, api_token.ListByTenantArgs) ([]api_token.Token, string, error) {

@@ -10,8 +10,9 @@ import (
 
 // VerifierConfig wires the verifier.
 type VerifierConfig struct {
-	Store Store
-	Now   func() time.Time
+	Store  Store
+	Hasher *Hasher
+	Now    func() time.Time
 	// Leeway widens the expires_at gate to absorb clock skew between
 	// issuer and verifier. Default 30s.
 	Leeway time.Duration
@@ -22,13 +23,12 @@ type VerifierConfig struct {
 	TouchLastUsed bool
 }
 
-// Verifier is the production verifier. Verification path: parse prefix
-// → lookup by prefix → argon2id-compare each candidate → time gate →
-// audience gate → revocation gate. The argon2id step is the slow gate
-// (~50ms); putting it after the cheap prefix lookup means we only
-// hash on the row that actually needs it. Audience / time / revocation
-// run after the hash compare so an invalid plaintext never reveals
-// whether a valid prefix exists.
+// Verifier is the production verifier. Verification path: validate the
+// token shape → compute HMAC-SHA256(key, plaintext) → single indexed
+// lookup by that digest → revocation gate → time gate → audience gate.
+// The digest lookup is O(1) on a UNIQUE index (no prefix scan, no
+// per-candidate hashing); a wrong plaintext yields a digest that matches
+// no row, indistinguishable from "no such token".
 type Verifier struct {
 	cfg VerifierConfig
 }
@@ -37,6 +37,9 @@ type Verifier struct {
 func NewVerifier(cfg VerifierConfig) (*Verifier, error) {
 	if cfg.Store == nil {
 		return nil, errors.New("api_token: VerifierConfig.Store required")
+	}
+	if cfg.Hasher == nil {
+		return nil, errors.New("api_token: VerifierConfig.Hasher required")
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -60,34 +63,22 @@ func NewVerifier(cfg VerifierConfig) (*Verifier, error) {
 //   - ErrAudienceMismatch — token.Audience does not include the calling
 //     plane.
 func (v *Verifier) Verify(ctx context.Context, plaintext, audience string) (*Token, error) {
-	prefix, err := SplitToken(plaintext)
-	if err != nil {
+	// Validate the token shape first — rejects non-`paladin_pat_` / too-short
+	// input cheaply before we touch the store.
+	if _, err := SplitToken(plaintext); err != nil {
 		return nil, err
 	}
 
-	candidates, hashes, err := v.cfg.Store.FindByPrefix(ctx, prefix)
+	// Single indexed lookup by HMAC digest. A wrong plaintext hashes to a
+	// digest that matches no row → ErrTokenNotFound, indistinguishable from
+	// "no such token" (no "valid prefix, wrong tail" leak).
+	tok, err := v.cfg.Store.FindByDigest(ctx, v.cfg.Hasher.Digest(plaintext))
 	if err != nil {
+		if errors.Is(err, ErrTokenNotFound) {
+			return nil, ErrTokenNotFound
+		}
 		return nil, fmt.Errorf("api_token: lookup: %w", err)
 	}
-	if len(candidates) == 0 {
-		return nil, ErrTokenNotFound
-	}
-
-	// argon2id-compare each candidate. In the typical case there's one
-	// row; collisions are rare. We never short-circuit early on
-	// matching because constant-time semantics matter — for the same
-	// reason CompareToken uses constantTimeEqual internally.
-	matched := -1
-	for i := range candidates {
-		if err := CompareToken(plaintext, hashes[i]); err == nil {
-			matched = i
-			break
-		}
-	}
-	if matched < 0 {
-		return nil, ErrTokenNotFound
-	}
-	tok := candidates[matched]
 
 	now := v.cfg.Now()
 	if tok.RevokedAt != nil {
@@ -100,10 +91,11 @@ func (v *Verifier) Verify(ctx context.Context, plaintext, audience string) (*Tok
 		return nil, fmt.Errorf("%w: %v lacks %q", ErrAudienceMismatch, tok.Audience, audience)
 	}
 
-	// Best-effort last_used_at bump. Failure is logged at the caller
-	// level (interceptor) but never fails the verify.
+	// Best-effort last_used_at bump. Runs pre-authentication, so it passes
+	// the verified tenant to satisfy the api_tokens RLS policy; failure is
+	// ignored (never fails the verify).
 	if v.cfg.TouchLastUsed {
-		_ = v.cfg.Store.TouchLastUsed(ctx, tok.ID, now)
+		_ = v.cfg.Store.TouchLastUsed(ctx, tok.ID, tok.TenantID, now)
 	}
 
 	return &tok, nil

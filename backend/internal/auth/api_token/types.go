@@ -13,14 +13,19 @@
 //     leak detection) and lets `grep` find tokens leaked in logs without
 //     false positives.
 //
-//   - Storage: hash only. The token is shown to the caller exactly once
-//     at issuance; the database holds argon2id(token) in PHC string
-//     format. Compromise of the DB does not reveal usable tokens.
+//   - Storage: digest only. The token is shown to the caller exactly once
+//     at issuance; the database holds HMAC-SHA256(server_key, token) in the
+//     token_hmac column. Compromise of the DB does not reveal usable tokens,
+//     and without the server key an attacker cannot forge a digest for a
+//     guessed token. A fast keyed hash (not a slow KDF like argon2/bcrypt) is
+//     correct here: the token body is 32 bytes of CSPRNG output, so there is
+//     no brute-force surface, and a deterministic digest can be UNIQUE-indexed
+//     for O(1) lookup.
 //
-//   - Verification: hash incoming → look up by prefix → argon2id verify
-//     → time gate → revocation check. The prefix index keeps the lookup
-//     to one row in the typical case; collisions are statistically rare
-//     and resolved by the hash compare.
+//   - Verification: HMAC the incoming token → single indexed lookup by
+//     token_hmac → revocation gate → time gate → audience gate. A wrong
+//     token hashes to a digest that matches no row, so the failure is
+//     indistinguishable from "no such token".
 //
 //   - TTL: `expires_at` is NOT NULL at the schema level (migration 017).
 //     Application-level cap: ≤1 year for service tokens.

@@ -23,38 +23,34 @@ import (
 // and crossing the package boundary just to reuse a stub costs more
 // than redeclaring it here.
 type smokeStore struct {
-	mu     sync.RWMutex
-	rows   map[uuid.UUID]api_token.Token
-	hashes map[uuid.UUID]string
+	mu       sync.RWMutex
+	rows     map[uuid.UUID]api_token.Token
+	byDigest map[string]uuid.UUID
 }
 
 func newSmokeStore() *smokeStore {
 	return &smokeStore{
-		rows:   map[uuid.UUID]api_token.Token{},
-		hashes: map[uuid.UUID]string{},
+		rows:     map[uuid.UUID]api_token.Token{},
+		byDigest: map[string]uuid.UUID{},
 	}
 }
 
-func (s *smokeStore) Insert(_ context.Context, t api_token.Token, hash string) error {
+func (s *smokeStore) Insert(_ context.Context, t api_token.Token, digest []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t.Plaintext = ""
 	s.rows[t.ID] = t
-	s.hashes[t.ID] = hash
+	s.byDigest[string(digest)] = t.ID
 	return nil
 }
-func (s *smokeStore) FindByPrefix(_ context.Context, prefix string) ([]api_token.Token, []string, error) {
+func (s *smokeStore) FindByDigest(_ context.Context, digest []byte) (api_token.Token, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var ts []api_token.Token
-	var hs []string
-	for _, t := range s.rows {
-		if t.Prefix == prefix {
-			ts = append(ts, t)
-			hs = append(hs, s.hashes[t.ID])
-		}
+	id, ok := s.byDigest[string(digest)]
+	if !ok {
+		return api_token.Token{}, api_token.ErrTokenNotFound
 	}
-	return ts, hs, nil
+	return s.rows[id], nil
 }
 func (s *smokeStore) Get(_ context.Context, id uuid.UUID) (api_token.Token, error) {
 	s.mu.RLock()
@@ -65,8 +61,10 @@ func (s *smokeStore) Get(_ context.Context, id uuid.UUID) (api_token.Token, erro
 	}
 	return t, nil
 }
-func (s *smokeStore) Revoke(context.Context, uuid.UUID) error                   { return nil }
-func (s *smokeStore) TouchLastUsed(context.Context, uuid.UUID, time.Time) error { return nil }
+func (s *smokeStore) Revoke(context.Context, uuid.UUID) error { return nil }
+func (s *smokeStore) TouchLastUsed(context.Context, uuid.UUID, uuid.UUID, time.Time) error {
+	return nil
+}
 func (s *smokeStore) ListByTenant(context.Context, api_token.ListByTenantArgs) ([]api_token.Token, string, error) {
 	return nil, "", nil
 }
@@ -108,14 +106,19 @@ func TestRetryAfter_E2E_ConnectTransport(t *testing.T) {
 	t.Parallel()
 
 	store := newSmokeStore()
+	hasher, err := api_token.NewHasher([]byte("smoke-test-hmac-key-0123456789-abc"))
+	if err != nil {
+		t.Fatalf("hasher: %v", err)
+	}
 	issuer, err := api_token.NewIssuer(api_token.IssuerConfig{
 		Store:  store,
+		Hasher: hasher,
 		MaxTTL: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
-	verifier, err := api_token.NewVerifier(api_token.VerifierConfig{Store: store})
+	verifier, err := api_token.NewVerifier(api_token.VerifierConfig{Store: store, Hasher: hasher})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
