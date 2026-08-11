@@ -27,12 +27,33 @@ func Interceptor(v TokenVerifier) connect.Interceptor {
 	return &authInterceptor{verifier: v}
 }
 
+// InterceptorSkipAPITokens is Interceptor that PASSES THROUGH (setting no principal) when
+// the bearer is an PALADIN API token (`paladin_pat_…`), deferring authentication to a downstream
+// APITokenAuthInterceptor. Every other case is handled exactly like Interceptor — a JWT is
+// verified, and a missing/invalid non-PAT bearer is rejected — so auth stays mandatory.
+// Used on the data plane so a caller may authenticate with EITHER an OIDC JWT or a PAT.
+func InterceptorSkipAPITokens(v TokenVerifier) connect.Interceptor {
+	return &authInterceptor{verifier: v, skipAPITokens: true}
+}
+
 type authInterceptor struct {
 	verifier TokenVerifier
+	// skipAPITokens lets `paladin_pat_…` bearers past this JWT gate untouched (no principal),
+	// so a downstream APITokenAuthInterceptor authenticates them instead.
+	skipAPITokens bool
+}
+
+// isAPIToken reports whether the Authorization header carries an PALADIN API token, which this
+// interceptor should defer to the PAT interceptor rather than verify as a JWT.
+func (a *authInterceptor) isAPIToken(authz string) bool {
+	return a.skipAPITokens && extractAPIToken("", authz) != ""
 }
 
 func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		if a.isAPIToken(req.Header().Get("Authorization")) {
+			return next(ctx, req) // a PAT — leave it for the API-token interceptor
+		}
 		p, err := principalFromHeaders(ctx, a.verifier, req.Header().Get("Authorization"))
 		if err != nil {
 			return nil, err
@@ -70,6 +91,9 @@ func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 
 func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		if a.isAPIToken(conn.RequestHeader().Get("Authorization")) {
+			return next(ctx, conn) // a PAT — leave it for the API-token interceptor
+		}
 		p, err := principalFromHeaders(ctx, a.verifier, conn.RequestHeader().Get("Authorization"))
 		if err != nil {
 			return err

@@ -157,7 +157,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// planes (high-QPS surfaces); admin uses the same limiter.
 	var apiTokData, apiTokIAM connect.Interceptor
 	if deps.APIToken != nil {
-		apiTokData = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "data")
+		// Data plane: the API-token interceptor ESTABLISHES the principal, so a service
+		// (e.g. consumer) can authenticate uploads with a long-lived `paladin_pat_…` key alone
+		// (paired with auth.InterceptorSkipAPITokens below). IAM plane stays additive.
+		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, "data")
 		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "iam")
 	} else {
 		apiTokData = auth.APITokenInterceptor(nil, "")
@@ -188,10 +191,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 	dataOpts := connect.WithInterceptors(
 		otelInt,
-		auth.Interceptor(verifierData),
+		// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
+		// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
+		// establishes the principal. Both paths land a principal before RequireAudience.
+		auth.InterceptorSkipAPITokens(verifierData),
+		apiTokData,
 		auth.RequireAudience(auth.AudienceData),
 		capData,
-		apiTokData,
 		middleware.NewQuotaSoftCheck(repos.Quota),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,

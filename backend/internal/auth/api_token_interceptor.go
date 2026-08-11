@@ -86,10 +86,72 @@ func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter rateli
 	return &apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience}
 }
 
+// APITokenAuthInterceptor is APITokenInterceptorWithLimiter that ALSO establishes an
+// auth.Principal from a valid token — so an `paladin_pat_…` API key can stand ALONE as the
+// request's identity, not merely as an additive attribute on top of a JWT. It is used on
+// the data plane (paired with auth.InterceptorSkipAPITokens, which lets a PAT bearer past
+// the JWT verifier) so a service (e.g. consumer) authenticates document uploads with a
+// long-lived service API key. The derived principal is tenant-scoped, Kind=ApiKey, carries
+// NO roles/scopes (least privilege — the default per-tenant Cedar policy permits a tenant
+// member to Presign/Put its own objects, while role-gated ops like DeleteObject stay
+// denied), and its Audience is the plane label so a downstream RequireAudience passes.
+// Additive: it only sets the principal when the context does not already carry one (a JWT
+// that already authenticated wins).
+func APITokenAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
+	if verifier == nil {
+		return passthroughInterceptor{}
+	}
+	return &apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience, establishPrincipal: true}
+}
+
 type apiTokenInterceptor struct {
 	verifier *api_token.Verifier
 	limiter  ratelimit.Limiter
 	audience string
+	// establishPrincipal makes a verified token also set an auth.Principal on the
+	// context (see APITokenAuthInterceptor). Off for the plain additive interceptor.
+	establishPrincipal bool
+}
+
+// principalFromAPIToken derives the request Principal from a verified API token. Minimal by
+// design: tenant binding + Kind=ApiKey + the plane audience, with no roles/scopes so the
+// key gets exactly the tenant-member baseline the default Cedar policy grants (read/write
+// own objects) and nothing role-gated.
+func principalFromAPIToken(t *api_token.Token, audienceLabel string) *Principal {
+	return &Principal{
+		TenantID: t.TenantID,
+		Subject:  "apikey:" + t.ID.String(),
+		Audience: principalAudienceFor(audienceLabel),
+		Kind:     PrincipalKindApiKey,
+	}
+}
+
+// principalAudienceFor maps a short plane label carried by API tokens ("data"/"admin"/
+// "iam"/"mcp") to the canonical RequireAudience value ("paladin-data", …). Unknown labels pass
+// through unchanged (RequireAudience then rejects, which is the safe default).
+func principalAudienceFor(label string) string {
+	switch label {
+	case "data":
+		return AudienceData
+	case "admin":
+		return AudienceAdmin
+	case "iam":
+		return AudienceIAM
+	default:
+		return label
+	}
+}
+
+// withTokenIdentity stamps the verified token on the context, and — when this interceptor
+// establishes identity — also the derived Principal (unless one is already present).
+func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_token.Token) context.Context {
+	ctx = WithAPIToken(ctx, t)
+	if i.establishPrincipal {
+		if _, err := PrincipalFromContext(ctx); err != nil {
+			ctx = WithPrincipal(ctx, principalFromAPIToken(t, i.audience))
+		}
+	}
+	return ctx
 }
 
 // rateLimitGate runs the limiter for a verified token. Returns nil to
@@ -145,7 +207,7 @@ func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFun
 		if err := i.rateLimitGate(ctx, t); err != nil {
 			return nil, err
 		}
-		return next(WithAPIToken(ctx, t), req)
+		return next(i.withTokenIdentity(ctx, t), req)
 	}
 }
 
@@ -166,7 +228,7 @@ func (i *apiTokenInterceptor) WrapStreamingHandler(next connect.StreamingHandler
 		if err := i.rateLimitGate(ctx, t); err != nil {
 			return err
 		}
-		return next(WithAPIToken(ctx, t), conn)
+		return next(i.withTokenIdentity(ctx, t), conn)
 	}
 }
 
