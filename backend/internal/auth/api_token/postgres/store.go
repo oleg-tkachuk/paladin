@@ -33,8 +33,8 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 
 // Insert implements api_token.Store. The Token's Plaintext field is
 // intentionally NOT persisted — only prefix (display) + token_hmac (the
-// HMAC-SHA256 lookup digest). token_hash (the legacy argon2 column) is left
-// NULL for HMAC-issued tokens.
+// HMAC-SHA256 lookup digest). The legacy argon2 token_hash column was dropped
+// in migration 062.
 //
 // Runs under the request principal's tenant (the RLS PrepareConn hook stamps
 // paladin.tenant_id from the admin caller), so the tenant_isolation WITH CHECK on

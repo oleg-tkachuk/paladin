@@ -105,7 +105,6 @@ type ApiToken struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	Name         string             `json:"name"`
 	Prefix       string             `json:"prefix"`
-	TokenHash    *string            `json:"token_hash"`
 	Scopes       []string           `json:"scopes"`
 	Audience     []string           `json:"audience"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
