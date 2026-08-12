@@ -529,7 +529,27 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, err
 	}
 
-	// 1. Cedar authorization: may this principal PutObject here?
+	// 1. Resolve bucket binding + completion mode in ONE lookup, BEFORE the
+	//    Cedar check — the scope-enforcement built-in confines a bucket:/
+	//    object_key:-scoped PAT to resources whose physical bucket it carries,
+	//    so the authz Resource must know its (backend, bucket) or a scoped
+	//    principal is fail-closed on this write path. The SAME meta is reused
+	//    below for completion mode + presign routing (one query on the hot
+	//    upload path), and the lookup keeps the disabled/read-only-backend
+	//    chokepoint. LookupBucketMeta joins the same object_keys ×
+	//    storage_backends rows the old BucketCompletionMode + LookupBucket
+	//    pair each queried separately. Empty BucketName means "row exists but
+	//    bucket_name is NULL" — the storage adapter falls back to its
+	//    configured default; after migration 005 / startup backfill this case
+	//    is impossible. It runs before authz: the lookup is tenant-RLS-scoped,
+	//    so it only reveals the caller's own tenant's object-key existence
+	//    (which MapResolveErr already surfaced pre-scoping).
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.ObjectKey, true) // upload (mutation)
+	if err != nil {
+		return nil, MapResolveErr(err)
+	}
+
+	// 2. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, TenantSlug: principal.TenantSlug, Roles: principal.Roles, Scopes: apiutil.ScopeStrings(principal.Scopes)},
@@ -538,6 +558,8 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 			TenantID:    tenantID,
 			ObjectKey:   in.ObjectKey,
 			Key:         in.Key,
+			BackendID:   meta.BackendID,
+			BucketName:  meta.BucketName,
 			ContentType: in.ContentType,
 			SizeBytes:   in.SizeHint,
 			Tags:        in.Tags,
@@ -555,17 +577,6 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 
-	// 2. Resolve bucket binding + completion mode in ONE lookup —
-	//    LookupBucketMeta joins the same object_keys × storage_backends
-	//    rows the old BucketCompletionMode + LookupBucket pair each
-	//    queried separately, and keeps the disabled-backend chokepoint.
-	//    Empty BucketName means "row exists but bucket_name is NULL" —
-	//    the storage adapter falls back to its configured default; after
-	//    migration 005 / startup backfill this case is impossible.
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.ObjectKey, true) // upload (mutation)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
 	completion := CompletionModeExplicit
 	if meta.EventsEnabled {
 		completion = CompletionModeImplicit
@@ -685,8 +696,19 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, err
 	}
 	principal, _ := auth.PrincipalFromContext(ctx)
+	// Populate the physical (backend, bucket) on the authz Resource so a
+	// bucket:/object_key:-scoped PAT enforces on complete. Best-effort +
+	// read-only: this RPC is also the idempotent already-AVAILABLE no-op,
+	// which historically resolved no bucket, so a resolution failure must NOT
+	// newly fail an unscoped completion — leave the bucket empty (scoped
+	// principals stay fail-closed as before, unscoped principals are
+	// unaffected because the scope-enforcement forbid never fires for them).
+	// The PENDING promote path below still resolves with write=true, keeping
+	// the disabled/read-only-backend gate exactly where it was.
+	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		BackendID: authBackendID, BucketName: authBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes,
 	}, cedar.ActionPutObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
@@ -1038,15 +1060,20 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow download", obj.State))
 	}
-	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
-		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
-	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
-		return nil, err
-	}
+	// Resolve the (backend, bucket) BEFORE the Cedar check so a bucket:/
+	// object_key:-scoped read PAT enforces on download; the same read-only
+	// resolution routes the presigned GET below (one lookup, unchanged for
+	// the allowed path — it already ran here immediately after authz).
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // download (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
+		BackendID: backendID, BucketName: bucket,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
+	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
+		return nil, err
 	}
 	if ttl <= 0 {
 		ttl = h.presign.DefaultTTL
@@ -1168,8 +1195,18 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
 		return err
 	}
+	// Populate the physical (backend, bucket) on the authz Resource so a
+	// bucket:/object_key:-scoped PAT enforces on delete (soft AND permanent).
+	// Best-effort + read-only: the soft-delete path historically resolved no
+	// bucket, so a resolution failure must NOT newly fail an unscoped
+	// soft-delete — leave the bucket empty (scoped principals stay
+	// fail-closed as before, unscoped principals are unaffected). The
+	// permanent path below still resolves with write=true, keeping the
+	// disabled/read-only-backend gate exactly where it was.
+	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, objectKey, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
+		BackendID: authBackendID, BucketName: authBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionDeleteObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return err
@@ -1427,18 +1464,24 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, destURI); err != nil {
 		return nil, err
 	}
+	// Resolve the DESTINATION (backend, bucket) BEFORE the Cedar check so a
+	// bucket:/object_key:-scoped write PAT enforces on the copy target — the
+	// authz Resource below is the destination (ActionCopyObject is checked
+	// against the dest). The same resolution is reused as the copy-dest
+	// Location; the source is resolved after authz as before.
+	dstBackendID, dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey, true) // copy dest (mutation)
+	if err != nil {
+		return nil, MapResolveErr(err)
+	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: in.DestObjectKey, Key: destKey,
+		BackendID: dstBackendID, BucketName: dstBucket,
 		ContentType: src.ContentType, SizeBytes: src.SizeBytes, Tags: in.Tags,
 	}, cedar.ActionCopyObject, src.SizeBytes, src.ContentType); err != nil {
 		return nil, err
 	}
 
 	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey, false) // copy source (read)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	dstBackendID, dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey, true) // copy dest (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}

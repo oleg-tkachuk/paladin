@@ -106,14 +106,19 @@ func (f *fakeStorage) PresignPart(_ context.Context, backendID, bucket string, _
 // It records the action it was asked about so tests can assert the handler
 // routes the correct cedar action per RPC.
 type fakePolicy struct {
-	decision   cedar.Decision
-	err        error
-	gotAction  string
-	gotSubject string
+	decision    cedar.Decision
+	err         error
+	gotAction   string
+	gotSubject  string
+	gotResource *cedar.Resource
 }
 
-func (f *fakePolicy) IsAuthorized(_ context.Context, p *cedar.Principal, action string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakePolicy) IsAuthorized(_ context.Context, p *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.gotAction = action
+	if r != nil {
+		cp := *r
+		f.gotResource = &cp
+	}
 	if p != nil {
 		f.gotSubject = p.Subject
 	}
@@ -243,8 +248,9 @@ func TestPresignGet(t *testing.T) {
 	t.Run("ok forwards resolved TTL + disposition, reads from bucket", func(t *testing.T) {
 		repo := &fakeRepo{}
 		st := &fakeStorage{}
+		pol := allowPolicy()
 		// requested TTL over the max ceiling → clamped to MaxTTL.
-		h := NewHandler(repo, st, allowPolicy(), Config{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour})
+		h := NewHandler(repo, st, pol, Config{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour})
 		url, headers, exp, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 5*time.Hour, "inline")
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -263,6 +269,12 @@ func TestPresignGet(t *testing.T) {
 		}
 		if repo.lastBucketWrite {
 			t.Fatal("GET must resolve bucket with write=false")
+		}
+		// Read-scoped tokens need the bucket on the authz Resource too —
+		// resolved BEFORE the Cedar check — or a bucket:/object_key:-scoped
+		// read PAT is fail-closed on presign-GET.
+		if pol.gotResource == nil || pol.gotResource.BucketName != "bucket-1" || pol.gotResource.BackendID != "backend-1" {
+			t.Fatalf("authz Resource missing physical binding: %+v", pol.gotResource)
 		}
 	})
 }
@@ -355,6 +367,11 @@ func TestPresignPut(t *testing.T) {
 		}
 		if pol.gotAction != cedar.ActionPresignPut {
 			t.Fatalf("cedar action: got %q want %q", pol.gotAction, cedar.ActionPresignPut)
+		}
+		// The bucket must be on the authz Resource — resolved BEFORE the Cedar
+		// check — or a bucket:/object_key:-scoped PAT is fail-closed on PUT.
+		if pol.gotResource == nil || pol.gotResource.BucketName != "bucket-1" || pol.gotResource.BackendID != "backend-1" {
+			t.Fatalf("authz Resource missing physical binding: %+v", pol.gotResource)
 		}
 	})
 }

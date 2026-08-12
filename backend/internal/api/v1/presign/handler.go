@@ -102,12 +102,14 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignGet); err != nil {
-		return "", nil, time.Time{}, err
-	}
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// scoped read PAT enforces here; the same resolution routes PresignGet.
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // presign GET (read)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
+	}
+	if err := h.authorize(ctx, p, tenantID, objectKey, key, backendID, bucket, cedar.ActionPresignGet); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	// Capability budget burn — gates issuance for over-budget callers
 	// before we hand them a usable presigned URL. No-op when the
@@ -148,12 +150,14 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
-		return "", nil, time.Time{}, err
-	}
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// scoped write PAT enforces here; the same resolution routes PresignPut.
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign PUT (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
+	}
+	if err := h.authorize(ctx, p, tenantID, objectKey, key, backendID, bucket, cedar.ActionPresignPut); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
@@ -177,12 +181,14 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
-		return "", nil, time.Time{}, err
-	}
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// scoped write PAT enforces here; the same resolution routes PresignPart.
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign part upload (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
+	}
+	if err := h.authorize(ctx, p, tenantID, objectKey, key, backendID, bucket, cedar.ActionPresignPut); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
@@ -201,11 +207,18 @@ func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
 	return requested
 }
 
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, action string) error {
+// authorize runs the Cedar check for a presign action. backendID/bucket carry
+// the resolved physical binding so the scope-enforcement built-in can confine a
+// bucket:/object_key:-scoped PAT to its own bucket — callers resolve the bucket
+// (via LookupBucket) BEFORE calling this so a scoped principal is not
+// fail-closed on the write/read path. Empty backendID/bucket (binding not
+// resolvable) leaves the resource without those scope keys, which only ever
+// denies a scoped principal — unscoped/roles-only callers are unaffected.
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, backendID, bucket, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key},
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {

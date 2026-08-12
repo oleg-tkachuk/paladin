@@ -161,13 +161,15 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, args.Key, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
-		return nil, err
-	}
-
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// scoped write PAT enforces on multipart init; the same resolution routes
+	// InitiateMultipart and anchors the session below.
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey, true) // multipart init (mutation)
 	if err != nil {
 		return nil, object.MapResolveErr(err)
+	}
+	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, args.Key, backendID, bucket, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
+		return nil, err
 	}
 
 	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.ObjectKey, args.Key, args.ContentType)
@@ -201,7 +203,9 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPutObject, 0, ""); err != nil {
+	// The session anchored its (backend, bucket) at initiate time; pass it to
+	// authz so a bucket:/object_key:-scoped PAT enforces on complete.
+	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPutObject, 0, ""); err != nil {
 		return err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
@@ -258,7 +262,9 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionDeleteObject, 0, ""); err != nil {
+	// Session-anchored (backend, bucket) → authz enforces bucket:/object_key:
+	// scopes on abort.
+	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
@@ -311,7 +317,9 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPresignPut, 0, ""); err != nil {
+	// Session-anchored (backend, bucket) → authz enforces bucket:/object_key:
+	// scopes on the part presign.
+	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
@@ -344,7 +352,9 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err
 	}
-	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionGetObject, 0, ""); err != nil {
+	// Session-anchored (backend, bucket) → authz enforces bucket:/object_key:
+	// read scopes on listing parts.
+	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
 	}
 	if pageSize <= 0 || pageSize > 1000 {
@@ -357,11 +367,17 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	return parts, next, nil
 }
 
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, action string, sizeBytes int64, contentType string) error {
+// authorize runs the Cedar check for a multipart action. backendID/bucket
+// carry the resolved physical binding (from the session, or a pre-authz
+// LookupBucket on initiate) so the scope-enforcement built-in can confine a
+// bucket:/object_key:-scoped PAT to its own bucket. Empty backendID/bucket
+// leaves the resource without those scope keys, which only ever denies a
+// scoped principal — unscoped/roles-only callers are unaffected.
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, backendID, bucket, action string, sizeBytes int64, contentType string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, SizeBytes: sizeBytes, ContentType: contentType},
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, BackendID: backendID, BucketName: bucket, SizeBytes: sizeBytes, ContentType: contentType},
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
 	)
 	if err != nil {

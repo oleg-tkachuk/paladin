@@ -103,6 +103,18 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 			fmt.Errorf("init metadata: %w", err))
 	}
 
+	// Resolve the (backend, bucket) FIRST so the Cedar check can enforce
+	// bucket:/object_key: PAT scopes on this write path (the scope-enforcement
+	// built-in needs the physical bucket on the resource; without it a
+	// bucket-scoped principal is fail-closed here). The SAME resolution routes
+	// the stream sink below — one lookup — and keeps the disabled/read-only-
+	// backend chokepoint. Resolving before CreateObject also avoids leaving an
+	// orphan PENDING row when the backend is disabled/draining.
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation)
+	if err != nil {
+		return nil, MapResolveErr(err)
+	}
+
 	// Authorize with the declared size as a context attribute — Cedar policy
 	// can reject oversized uploads at the start rather than after N chunks.
 	decision, err := h.policy.IsAuthorized(ctx,
@@ -110,6 +122,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		cedar.ActionPutObject,
 		&cedar.Resource{
 			TenantID: tenantID, ObjectKey: init.ObjectKey, Key: init.Key,
+			BackendID: backendID, BucketName: bucket,
 			ContentType: init.ContentType, SizeBytes: init.SizeHint, Tags: init.Tags,
 		},
 		cedar.RequestContext{
@@ -142,10 +155,6 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		return nil, mapCreateErr(err)
 	}
 
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
 	writer, err := deps.Sink.Open(ctx, backendID, bucket, tenantID, init.ObjectKey, key, init.ContentType, init.SizeHint)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open sink: %w", err))

@@ -346,7 +346,8 @@ func TestInitiateMultipartUpload(t *testing.T) {
 		}}
 		args := base
 		args.TenantID = uuid.New() // must be overwritten by ctx tenant
-		sess, err := newHandler(repo, storage, allow()).
+		authz := allow()
+		sess, err := newHandler(repo, storage, authz).
 			InitiateMultipartUpload(authedCtx(tid), args)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -359,6 +360,11 @@ func TestInitiateMultipartUpload(t *testing.T) {
 		}
 		if !repo.lastLookup.write {
 			t.Fatal("bucket lookup should request write routing for a mutation")
+		}
+		// The bucket must be resolved BEFORE authz and stamped on the Resource,
+		// or a bucket:/object_key:-scoped PAT is fail-closed on multipart init.
+		if authz.lastResource == nil || authz.lastResource.BucketName != "bucket-a" || authz.lastResource.BackendID != "backend-a" {
+			t.Fatalf("authz Resource missing physical binding: %+v", authz.lastResource)
 		}
 		if repo.lastLookup.objectKey != base.ObjectKey {
 			t.Fatalf("lookup object key: got %q want %q", repo.lastLookup.objectKey, base.ObjectKey)
@@ -437,7 +443,8 @@ func TestCompleteMultipartUpload(t *testing.T) {
 		storage := &fakeStorage{completeFn: func([]PartETag) (string, int64, error) {
 			return "", 0, errors.New("multipart complete rejected")
 		}}
-		err := newHandler(okSession(), storage, allow()).
+		authz := allow()
+		err := newHandler(okSession(), storage, authz).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: parts})
 		wantCode(t, err, connect.CodeInternal)
 		if len(storage.lastComplete.parts) != 2 || storage.lastComplete.parts[1].ETag != "e2" {
@@ -448,6 +455,11 @@ func TestCompleteMultipartUpload(t *testing.T) {
 		}
 		if storage.lastComplete.bucket != "bucket-sess" {
 			t.Fatalf("storage not routed to session bucket: %q", storage.lastComplete.bucket)
+		}
+		// The session-anchored (backend, bucket) must reach the authz Resource
+		// so a bucket:/object_key:-scoped PAT enforces on complete.
+		if authz.lastResource == nil || authz.lastResource.BucketName != "bucket-sess" || authz.lastResource.BackendID != "backend-sess" {
+			t.Fatalf("authz Resource missing session binding: %+v", authz.lastResource)
 		}
 	})
 }
