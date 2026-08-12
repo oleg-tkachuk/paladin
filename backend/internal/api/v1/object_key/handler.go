@@ -211,6 +211,73 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	return &b, nil
 }
 
+// EnsureObjectKey idempotently binds an object-key to (backend, bucket) under
+// the CALLER's tenant for a caller that a higher layer has ALREADY authorized.
+// Unlike CreateObjectKey there is NO Cedar ManageObjectKey check — the
+// DATA-plane StorageBootstrapService gates on the EnsureTenantStorage Cedar
+// action, and that action IS the authorization for the whole self-provision
+// bundle. Do NOT mount this behind a surface that has not already authorized
+// the caller.
+//
+// It is ALWAYS self-scoped: the tenant is taken from the request principal and
+// any tenant on args is overwritten with the caller's own. Reuses
+// CreateObjectKey's create + outbox/event path. Returns created=false when the
+// key already existed (a no-op), created=true when a new row was written.
+func (h *Handler) EnsureObjectKey(ctx context.Context, args CreateObjectKeyArgs) (bool, error) {
+	callerTenantID, _, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	// Self-scope: the operation is ALWAYS the caller's own tenant. Never trust
+	// a tenant id from the request.
+	args.TenantID = callerTenantID
+	if args.ObjectKey == "" {
+		return false, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("object_key is required"))
+	}
+	if args.BackendID == "" || args.BucketName == "" {
+		return false, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("backend_id and bucket_name are required"))
+	}
+	// Fast idempotent path: an existing key is a success no-op.
+	switch _, gerr := h.repo.Get(ctx, args.TenantID, args.ObjectKey); {
+	case gerr == nil:
+		return false, nil
+	case errors.Is(gerr, pgx.ErrNoRows):
+		// fall through to create
+	default:
+		return false, connect.NewError(connect.CodeInternal, gerr)
+	}
+	// Create + paladin.object_key.created in one tx (ADR-0003), mirroring
+	// CreateObjectKey.
+	var b ObjectKey
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		b, e = h.repo.CreateTx(ctx, tx, args)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.object_key.created",
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey),
+			map[string]any{
+				"tenant_id":    b.TenantID.String(),
+				"object_key":   b.ObjectKey,
+				"display_name": b.DisplayName,
+				"backend_id":   b.BackendID,
+				"bucket_name":  b.BucketName,
+			})
+	}); err != nil {
+		// Lost a race to a concurrent create: the key now exists, so honour
+		// idempotency and report it existing rather than surfacing the
+		// unique-violation.
+		if _, gerr := h.repo.Get(ctx, args.TenantID, args.ObjectKey); gerr == nil {
+			return false, nil
+		}
+		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("ensure objectKey: %w", err))
+	}
+	return true, nil
+}
+
 // GetObjectKey reads one ObjectKey under tenantID. tenantID comes from the
 // resource name (resolve.ResolveObjectKeyName) so a platform-admin can open
 // any tenant's ObjectKey via /tenants/{t}/object-keys/{ok}; uuid.Nil (a bare

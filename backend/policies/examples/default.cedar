@@ -52,6 +52,18 @@ permit (
     principal.roles.contains("platform.admin")
 };
 
+// Storage self-provisioning (data plane). A tenant member — including an
+// api_token principal (Kind=ApiKey) — may idempotently ensure its own PALADIN
+// bucket + object-keys with its data-plane PAT. The handler pins the resource
+// tenant to the caller's own, so `principal in Tenant::"placeholder"` (true
+// only on trusted tenant-UUID equality) is the self-scoping guarantee — the
+// same membership gate PresignPut relies on to admit this PAT.
+permit (
+    principal in Tenant::"placeholder",
+    action == Action::"EnsureTenantStorage",
+    resource
+);
+
 // ─── IAM ────────────────────────────────────────────────────────────────────
 
 permit (

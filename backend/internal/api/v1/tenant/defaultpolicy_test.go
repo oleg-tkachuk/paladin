@@ -101,3 +101,61 @@ func TestDefaultPolicy_ReadTenant(t *testing.T) {
 		t.Errorf("platform.admin reading foreign tenant = %v, want Allow", got)
 	}
 }
+
+// ─── EnsureTenantStorage through the real Cedar engine ───────────────────────
+//
+// Proves the default-policy permit added for data-plane self-provisioning
+// admits a same-tenant api_token (ApiKey) principal — the acme PAT case —
+// and denies a cross-tenant one. Also pins the scope-enforcement interaction:
+// a PAT scoped to THIS bucket is admitted, one scoped to a DIFFERENT bucket is
+// denied (least privilege). The engine renders an ApiKey principal as a User
+// entity keyed by Subject with empty roles/slug — exactly what
+// principalFromAPIToken produces — so cedar.Principal here is a faithful stand-in.
+func TestDefaultPolicy_EnsureTenantStorage(t *testing.T) {
+	tid := uuid.MustParse("0a8c0000-0000-7000-8000-000000000f12")
+	foreign := uuid.MustParse("0a8c0000-0000-7000-8000-00000000beef")
+	const bkt = "acme-consumer"
+	engine := cedar.NewEngine(staticPolicyStore{text: renderDefaultPolicy(tid, "acme"), slug: "acme"}, time.Minute)
+
+	// pat mirrors principalFromAPIToken: Subject "apikey:<id>", tenant-bound,
+	// EMPTY TenantSlug + EMPTY roles. Scopes optional (wire form).
+	authz := func(principalTenant uuid.UUID, scopes []string, resourceTenant uuid.UUID) cedar.Decision {
+		t.Helper()
+		dec, err := engine.IsAuthorized(context.Background(),
+			&cedar.Principal{
+				Subject:  "apikey:d3300000-0000-0000-0000-000000000001",
+				TenantID: principalTenant,
+				// TenantSlug intentionally empty — a PAT carries none.
+				Scopes: scopes,
+			},
+			cedar.ActionEnsureTenantStorage,
+			&cedar.Resource{TenantID: resourceTenant, BackendID: "garage-local", BucketName: bkt},
+			cedar.RequestContext{Now: time.Now()},
+		)
+		if err != nil {
+			t.Fatalf("IsAuthorized: %v", err)
+		}
+		return dec
+	}
+
+	// Same-tenant, unscoped PAT → Allow (the acme startup call).
+	if got := authz(tid, nil, tid); got != cedar.DecisionAllow {
+		t.Errorf("same-tenant unscoped ApiKey = %v, want Allow", got)
+	}
+	// Cross-tenant PAT → Deny (self-scoping via `principal in Tenant`).
+	if got := authz(foreign, nil, tid); got != cedar.DecisionDeny {
+		t.Errorf("cross-tenant ApiKey = %v, want Deny", got)
+	}
+	// Same-tenant PAT scoped to THIS bucket → Allow (scope_keys intersect).
+	if got := authz(tid, []string{"bucket:" + bkt}, tid); got != cedar.DecisionAllow {
+		t.Errorf("same-tenant ApiKey scoped to this bucket = %v, want Allow", got)
+	}
+	// Same-tenant PAT scoped to the tenant → Allow.
+	if got := authz(tid, []string{"tenant:" + tid.String()}, tid); got != cedar.DecisionAllow {
+		t.Errorf("same-tenant ApiKey scoped to tenant = %v, want Allow", got)
+	}
+	// Same-tenant PAT scoped ONLY to a DIFFERENT bucket → Deny (scope forbid).
+	if got := authz(tid, []string{"bucket:some-other-bucket"}, tid); got != cedar.DecisionDeny {
+		t.Errorf("same-tenant ApiKey scoped to a foreign bucket = %v, want Deny", got)
+	}
+}

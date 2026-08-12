@@ -57,6 +57,23 @@ permit (
     principal.roles.contains("platform.admin")
 };
 
+// Storage self-provisioning (data plane). A tenant member — INCLUDING an
+// api_token principal (Kind=ApiKey) — may idempotently ensure its own PALADIN
+// bucket + object-keys. The handler FORCES the resource tenant to the caller's
+// own tenant, and the engine only makes the principal a member of
+// Tenant::"placeholder" when the caller's TRUSTED tenant UUID matches the
+// resource tenant (buildEntities anchors the principal under the resource
+// Tenant only on UUID equality). That membership gate — identical to the
+// PresignPut permit above, which already admits this PAT — is the self-scoping
+// guarantee; no role or resource.tenant_id guard is used (the resource is a
+// Bucket entity, which carries no tenant_id attribute, so reading it would
+// fail closed).
+permit (
+    principal in Tenant::"placeholder",
+    action == Action::"EnsureTenantStorage",
+    resource
+);
+
 // User settings — every authenticated user reads/writes their own settings
 // without further check. Cross-user access (admin viewing a teammate's
 // timezone) is platform-admin or tenant-admin only.

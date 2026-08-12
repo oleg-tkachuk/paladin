@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+
+// StorageBootstrapService lets a tenant self-provision its own PALADIN storage
+// (a shared bucket + object-keys) using its EXISTING data-plane API token
+// (aud=data) — no platform-admin credential is required. It exists so a
+// consumer (e.g. acme) can ensure its storage at startup with the same PAT
+// it already uses for uploads, instead of holding an admin JWT.
+//
+// The operation is ALWAYS scoped to the caller's own tenant: the tenant is
+// taken from the api_token principal, never from the request. Every RPC is
+// idempotent and safe to call on every startup — existing bucket/object-keys
+// become no-ops.
+service StorageBootstrapService {
+  // EnsureTenantStorage idempotently ensures the shared PALADIN bucket exists and
+  // that each requested object-key is bound to (backend_id, bucket) under the
+  // caller's tenant. Reuses the same physical bucket-provisioning path as the
+  // admin BucketService.CreateBucket(provision_on_backend=true).
+  rpc EnsureTenantStorage(EnsureTenantStorageRequest) returns (EnsureTenantStorageResponse);
+}
+
+message EnsureTenantStorageRequest {
+  // backend_id names an EXISTING storage backend. A tenant may not create
+  // backends — an unknown id is rejected with FAILED_PRECONDITION.
+  string backend_id = 1 [(buf.validate.field).string.min_len = 1];
+  // bucket is the physical bucket to ensure. Same 3–63 char rule as
+  // admin CreateBucket.
+  string bucket = 2 [(buf.validate.field).string = {min_len: 3, max_len: 63}];
+  // object_keys are the logical namespaces to ensure under this tenant/bucket.
+  // May be empty to ensure only the bucket.
+  repeated string object_keys = 3;
+}
+
+message EnsureTenantStorageResponse {
+  // bucket_created is true only when this call wrote a new bucket row; false
+  // when the bucket already existed (idempotent no-op).
+  bool bucket_created = 1;
+  // object_keys_created lists the object-keys this call created.
+  repeated string object_keys_created = 2;
+  // object_keys_existing lists the requested object-keys that already existed.
+  repeated string object_keys_existing = 3;
+}

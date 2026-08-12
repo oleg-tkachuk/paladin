@@ -65,6 +65,9 @@ type (
 	ListOperationsRequest  = internal.ListOperationsRequest
 	ListOperationsResponse = internal.ListOperationsResponse
 	CancelOperationRequest = internal.CancelOperationRequest
+
+	EnsureTenantStorageRequest  = internal.EnsureTenantStorageRequest
+	EnsureTenantStorageResponse = internal.EnsureTenantStorageResponse
 )
 
 const (

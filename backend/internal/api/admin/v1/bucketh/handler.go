@@ -224,6 +224,88 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	return &got, nil
 }
 
+// EnsureBucket idempotently ensures a bucket row exists for a caller that a
+// higher layer has ALREADY authorized. Unlike CreateBucket there is NO role
+// gate and NO Cedar check here — the DATA-plane StorageBootstrapService gates
+// on the EnsureTenantStorage Cedar action before calling this, and that action
+// IS the authorization. Do NOT mount this behind a surface that has not
+// already authorized the caller.
+//
+// It reuses CreateBucket's exact repo + provision-state + outbox/event path,
+// so a shared bucket self-provisioned this way is indistinguishable from one
+// an admin created. Returns created=false when the bucket already existed (a
+// no-op), created=true when a new row was written.
+func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admindomain.Bucket, bool, error) {
+	if _, err := auth.PrincipalFromContext(ctx); err != nil {
+		return nil, false, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
+		return nil, false, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("backend_id and bucket_name required"))
+	}
+	// Fast idempotent path: an existing row is a success no-op. This also keeps
+	// the common "already provisioned" startup call off the write path.
+	switch existing, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); {
+	case err == nil:
+		return &existing, false, nil
+	case errors.Is(err, admindomain.ErrNotFound):
+		// fall through to create
+	default:
+		return nil, false, connect.NewError(connect.CodeInternal, err)
+	}
+	// Refuse binding to an unknown/disabled backend — same guard CreateBucket
+	// uses (feature 002); a tenant must not create backends.
+	switch enabled, err := h.repo.BackendEnabled(ctx, in.Bucket.BackendID); {
+	case errors.Is(err, admindomain.ErrNotFound):
+		return nil, false, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("backend %q does not exist", in.Bucket.BackendID))
+	case err != nil:
+		return nil, false, connect.NewError(connect.CodeInternal, err)
+	case !enabled:
+		return nil, false, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("backend %q is disabled", in.Bucket.BackendID))
+	}
+	if in.ProvisionOnBackend {
+		if h.provisioner == nil {
+			return nil, false, connect.NewError(connect.CodeUnavailable,
+				errors.New("backend provisioning not wired"))
+		}
+		in.Bucket.ProvisionState = admindomain.BucketProvisionStatePending
+	} else {
+		in.Bucket.ProvisionState = admindomain.BucketProvisionStateReady
+	}
+	var got admindomain.Bucket
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.CreateTx(ctx, tx, in.Bucket); e != nil {
+			return e
+		}
+		var e error
+		got, e = h.repo.GetTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.bucket.created",
+			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
+			map[string]any{
+				"tenant_id":       got.OwnerTenantID.String(),
+				"backend_id":      got.BackendID,
+				"bucket_name":     got.BucketName,
+				"region":          got.Region,
+				"provision_state": string(got.ProvisionState),
+			})
+	}); err != nil {
+		// Lost a race to a concurrent create (unique violation → ErrConflict):
+		// the bucket now exists, so honour idempotency and report it existing.
+		if errors.Is(err, admindomain.ErrConflict) {
+			if existing, gerr := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); gerr == nil {
+				return &existing, false, nil
+			}
+		}
+		return nil, false, apiutil.MapError(err)
+	}
+	return &got, true, nil
+}
+
 // ─── Read ───────────────────────────────────────────────────────────────────
 
 func (h *Handler) GetBucket(ctx context.Context, backendID, bucketName string) (*admindomain.Bucket, error) {

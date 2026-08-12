@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/storagebootstrap"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/internal/health"
@@ -83,6 +84,21 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	objH.SetLogger(l.Named("object-events"))
 	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
 	mpH.SetQuotaUpdater(quotaUpdater)
+
+	// Storage self-provisioning (StorageBootstrapService) — a tenant ensures
+	// its own bucket + object-keys with its data-plane PAT (aud=data), no
+	// admin credential. Reuses the admin bucket-create path (bucketh) and the
+	// object-key create path (objectkey), each wired to the api dispatcher so
+	// a self-provision emits the same paladin.bucket.created / paladin.object_key.created
+	// lifecycle events an admin create would. repos.BucketV2 doubles as the
+	// backend-existence checker (a tenant may not create backends).
+	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine)
+	bucketBootstrapH.SetEventProducer(apiDispatcher)
+	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
+	objectKeyBootstrapH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
+	objectKeyBootstrapH.SetEventProducer(apiDispatcher)
+	objectKeyBootstrapH.SetLogger(l.Named("object-key-events"))
+	storageBootstrapH := storagebootstrap.NewHandler(bucketBootstrapH, objectKeyBootstrapH, repos.BucketV2, polEngine)
 
 	// ─── IAM-plane handlers ──────────────────────────────────────────────
 	iss, err := wire.ProvideIssuer(cfg)
@@ -272,6 +288,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	dataMux.Handle(paladindatav1connect.NewObjectTagServiceHandler(connectdata.NewObjectTagServer(objH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewBatchServiceHandler(connectdata.NewBatchServer(batchH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewOperationServiceHandler(connectdata.NewOperationServer(opH), dataOpts))
+	// StorageBootstrapService shares the data-plane interceptor stack
+	// (dataOpts) so the api_token principal + RequireAudience(data) apply — an
+	// aud=data PAT can reach EnsureTenantStorage.
+	dataMux.Handle(paladindatav1connect.NewStorageBootstrapServiceHandler(connectdata.NewStorageBootstrapServer(storageBootstrapH), dataOpts))
 
 	iamMux = http.NewServeMux()
 	healthH.Register(iamMux)

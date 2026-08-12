@@ -117,6 +117,17 @@ action "ManageBucket", "ReadBucket",
   context: { now: Long, ip: String, audience: String }
 };
 
+// EnsureTenantStorage (DATA plane, aud=data). Self-service storage
+// provisioning: a tenant member — including an ApiKey principal — ensures its
+// own shared bucket + object-keys. The resource is the Bucket entity; the
+// handler pins the tenant to the caller's own, and the default-policy permit
+// gates on `principal in Tenant` membership (see defaultpolicy.go).
+action "EnsureTenantStorage" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Bucket],
+  context: { now: Long, ip: String, audience: String }
+};
+
 // Tenant (admin plane). Also the resource-shape for tenant-scoped admin
 // resources (Quota / AuditLog / EventSubscription / Operation) — those use
 // dedicated actions but evaluate against the Tenant entity carrying the

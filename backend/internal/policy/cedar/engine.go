@@ -52,6 +52,14 @@ const (
 	ActionManageBucket = "ManageBucket"
 	ActionReadBucket   = "ReadBucket"
 
+	// EnsureTenantStorage — data-plane self-provisioning. A tenant member
+	// (including an api_token principal, aud=data) idempotently ensures its
+	// OWN shared bucket + object-keys without a platform-admin credential.
+	// The handler forces the resource tenant to the caller's own tenant, so
+	// the default-policy permit is self-scoped via `principal in Tenant`
+	// membership — the same gate that admits the PAT for PresignPut.
+	ActionEnsureTenantStorage = "EnsureTenantStorage"
+
 	// Granular bucket sub-actions. Splitting ManageBucket lets compliance
 	// roles get fine-grained authority — e.g. ConfigureLock without
 	// SetReplication (data-residency risk) — without granting full bucket
