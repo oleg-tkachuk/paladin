@@ -600,6 +600,25 @@ when {
   principal.tenant_id == resource.tenant_id
 };
 
+// Built-in: self-service storage provisioning. A member may ensure its OWN
+// tenant's storage (bucket + object-keys) via EnsureTenantStorage using a
+// data-plane PAT — self-service like ReadTenant / AuthorizeOAuth above, gated
+// on tenant_id equality (the handler pins the resource tenant to the caller's).
+// Placing it here (not the per-tenant default template) makes it apply to ALL
+// tenants — including existing ones whose stored policy was frozen at creation —
+// without a per-tenant re-seed. A tenant policy can still forbid it for specific
+// principals (first-forbid wins).
+permit (
+  principal,
+  action == Action::"EnsureTenantStorage",
+  resource
+)
+when {
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
 // Built-in: OPT-IN resource-scope enforcement. A principal that carries a
 // NON-EMPTY scopes set (and not the "*" wildcard) is confined to resources
 // whose admitting scope-strings intersect its scopes. Principals with an EMPTY

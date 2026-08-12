@@ -126,9 +126,12 @@ func TestEnsureTenantStorage_TenantFromContextNotRequest(t *testing.T) {
 	if authz.gotAction != cedar.ActionEnsureTenantStorage {
 		t.Errorf("action = %q, want EnsureTenantStorage", authz.gotAction)
 	}
-	if authz.gotResource.BackendID != backendID || authz.gotResource.BucketName != bucket {
-		t.Errorf("resource backend/bucket = %q/%q, want %q/%q",
-			authz.gotResource.BackendID, authz.gotResource.BucketName, backendID, bucket)
+	// The authz resource is the caller's TENANT only (not the bucket) — the
+	// built-in permit gates on resource.tenant_id equality. backend/bucket flow
+	// to the provisioning calls, not the authz resource.
+	if authz.gotResource.BackendID != "" || authz.gotResource.BucketName != "" {
+		t.Errorf("authz resource must carry no backend/bucket, got %q/%q",
+			authz.gotResource.BackendID, authz.gotResource.BucketName)
 	}
 	// Object-key create ran under the caller's tenant.
 	if len(keys.seenTenants) != 1 || keys.seenTenants[0] != caller {

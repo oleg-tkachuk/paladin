@@ -96,11 +96,9 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bucket is required"))
 	}
 
-	// Authorize the whole self-provision bundle against the caller's own
-	// tenant. The resource carries backend + bucket so a scoped PAT is
-	// confined by the scope-enforcement built-in, and `principal in Tenant`
-	// membership (trusted-UUID anchored) is what admits the PAT.
-	if err := h.authorize(ctx, p, tenantID, backendID, bucket); err != nil {
+	// Authorize the whole self-provision bundle against the caller's own tenant
+	// (the built-in tenant_id-equality permit; see authorize).
+	if err := h.authorize(ctx, p, tenantID); err != nil {
 		return nil, err
 	}
 
@@ -156,9 +154,14 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 }
 
 // authorize evaluates the EnsureTenantStorage Cedar action against the caller's
-// OWN tenant (self-scoped). The resource is the Bucket under (backend, bucket);
-// the default-policy permit gates on `principal in Tenant` membership.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, backendID, bucket string) error {
+// OWN tenant (self-scoped), via the built-in tenant_id-equality permit.
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID) error {
+	// The resource is the caller's own TENANT (not the bucket): EnsureTenantStorage
+	// is a tenant-level self-service provisioning op, authorized by the built-in
+	// tenant_id-equality permit (see cedar.builtinPolicy). Modeling it as the
+	// Tenant entity exposes resource.tenant_id for that check and keeps the grant
+	// universal (no per-tenant policy seed). A scoped PAT is still confined by the
+	// scope-enforcement built-in at tenant granularity (scope_keys = tenant:<id>).
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{
 			Subject:    p.Subject,
@@ -168,11 +171,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 			Scopes:     apiutil.ScopeStrings(p.Scopes),
 		},
 		cedar.ActionEnsureTenantStorage,
-		&cedar.Resource{
-			TenantID:   tenantID,
-			BackendID:  backendID,
-			BucketName: bucket,
-		},
+		&cedar.Resource{TenantID: tenantID},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
