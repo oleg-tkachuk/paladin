@@ -810,10 +810,19 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err
 	}
+	// Resolve the objectKey→bucket binding so a bucket:/object_key:-scoped PAT
+	// can list within its scope (and is denied off-scope). Best-effort +
+	// read-only: an unbound/unknown objectKey (bucket="" or a lookup error)
+	// emits no bucket scope key — unscoped principals are unaffected (the
+	// scope-enforcement forbid never fires for them) and scoped principals
+	// stay fail-closed. Resolved ONCE here and reused by the per-row loop
+	// below (the objectKey→bucket binding is constant across the page).
+	listBackendID, listBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey, false) // list (read)
 	// One tenant+objectKey-scoped Cedar check up front; per-row Cedar would
 	// dominate pagination cost.
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: in.ObjectKey,
+		BackendID: listBackendID, BucketName: listBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
 	}
@@ -858,6 +867,8 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 					ObjectKey:   in.ObjectKey,
 					Key:         o.Key,
 					ObjectID:    o.ObjectID,
+					BackendID:   listBackendID,
+					BucketName:  listBucket,
 					State:       string(o.State),
 					SizeBytes:   o.SizeBytes,
 					ContentType: o.ContentType,
@@ -902,8 +913,12 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, err
 	}
+	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// enforce on count; best-effort + read-only (see ListObjects).
+	countBackendID, countBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey, false) // count (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: in.ObjectKey,
+		BackendID: countBackendID, BucketName: countBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, err
 	}
@@ -939,8 +954,12 @@ func (h *Handler) ListDistinctTags(ctx context.Context, objectKey string) (map[s
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, err
 	}
+	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// enforce on the tag facet; best-effort + read-only (see ListObjects).
+	tagsBackendID, tagsBucket, _ := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // list distinct tags (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: objectKey,
+		BackendID: tagsBackendID, BucketName: tagsBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, err
 	}
@@ -985,8 +1004,13 @@ func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*O
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return nil, err
 	}
+	// Resolve the objectKey→bucket binding (obj carries no bucket — the find
+	// query does not JOIN object_keys) so bucket:/object_key: PAT scopes
+	// enforce on read; best-effort + read-only (see ListObjects).
+	getBackendID, getBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false) // get (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		BackendID: getBackendID, BucketName: getBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
@@ -1013,8 +1037,12 @@ func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Obj
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return nil, err
 	}
+	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// enforce on lookup; best-effort + read-only (see ListObjects).
+	lkBackendID, lkBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false) // lookup (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		BackendID: lkBackendID, BucketName: lkBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
@@ -1128,8 +1156,16 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
+	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// enforce on metadata/tag writes (this backs PutObjectTags /
+	// DeleteObjectTags). Best-effort + read-only: UpdateObject is a DB-only
+	// mutation that historically resolved no bucket, so a resolution failure
+	// must NOT newly fail an unscoped update — leave the bucket empty (scoped
+	// principals stay fail-closed, unscoped are unaffected).
+	updBackendID, updBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey, false) // update (read-only; authz scope only)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: in.ObjectKey,
+		BackendID: updBackendID, BucketName: updBucket,
 	}, cedar.ActionUpdateObject, 0, ""); err != nil {
 		return nil, err
 	}
@@ -1353,8 +1389,14 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
+	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// enforce on restore; best-effort + read-only: restore is a DB-only state
+	// flip that historically resolved no bucket, so a resolution failure must
+	// NOT newly fail an unscoped restore (scoped principals stay fail-closed).
+	rsBackendID, rsBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false) // restore (read-only; authz scope only)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		BackendID: rsBackendID, BucketName: rsBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionRestoreObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err

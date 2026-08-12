@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
@@ -99,4 +100,61 @@ func TestUploadObjectAuthzResourceCarriesBucket(t *testing.T) {
 	if authz.lastAction != cedar.ActionPresignPut {
 		t.Fatalf("authz action = %q, want %q", authz.lastAction, cedar.ActionPresignPut)
 	}
+}
+
+// getRepo embeds fakeObjectRepo and implements the two methods GetObject
+// touches: FindByName (returns an object under the requested object-key) and
+// LookupBucket (resolves the object-key→bucket binding for the authz scope).
+type getRepo struct {
+	fakeObjectRepo
+	bucket string
+}
+
+func (r *getRepo) FindByName(_ context.Context, _ uuid.UUID, objectKey, _ string) (Object, error) {
+	return Object{ObjectID: uuid.Must(uuid.NewV7()), ObjectKey: objectKey, Key: "k"}, nil
+}
+func (r *getRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
+	return "be", r.bucket, nil
+}
+
+// permitStore is a cedar.Store returning a blanket permit so only the
+// scope-enforcement built-in decides — exercises the REAL engine end-to-end.
+type permitStore struct{}
+
+func (permitStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
+	return "permit(principal, action, resource);", nil, "", nil
+}
+func (permitStore) Watch(context.Context) (<-chan cedar.ChangeEvent, error) { return nil, nil }
+
+// A read (GetObject) against the real engine: a bucket:/object_key:-scoped PAT
+// may read within its scoped object-key and is DENIED off-scope. This proves
+// the resolved bucket reaches the Resource AND flips the engine's decision.
+func TestGetObjectScopeEnforcedByEngine(t *testing.T) {
+	tenantID := uuid.New()
+	engine := cedar.NewEngine(permitStore{}, time.Minute)
+	h := &Handler{repo: &getRepo{bucket: "bkt"}, policy: engine}
+	okScope := auth.Scope{Type: auth.ScopeObjectKey, Value: "bkt/docs"}
+
+	scopedCtx := func(scopes ...auth.Scope) context.Context {
+		return auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "svc", TenantID: tenantID, Scopes: scopes})
+	}
+
+	t.Run("allow on scoped object-key", func(t *testing.T) {
+		if _, err := h.GetObject(scopedCtx(okScope), "docs", uuid.New().String()); err != nil {
+			t.Fatalf("scoped PAT on its own object-key must be allowed, got %v", err)
+		}
+	})
+
+	t.Run("deny off scoped object-key", func(t *testing.T) {
+		_, err := h.GetObject(scopedCtx(okScope), "secret", uuid.New().String())
+		if err == nil || connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatalf("off-scope object-key must be denied, got %v", err)
+		}
+	})
+
+	t.Run("unscoped principal unaffected", func(t *testing.T) {
+		if _, err := h.GetObject(scopedCtx(), "secret", uuid.New().String()); err != nil {
+			t.Fatalf("unscoped principal must be unaffected, got %v", err)
+		}
+	})
 }

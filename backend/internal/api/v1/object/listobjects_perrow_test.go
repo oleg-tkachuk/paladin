@@ -25,6 +25,12 @@ func (r *listRepo) ListObjects(context.Context, ListObjectsArgs) ([]Object, stri
 	return append([]Object(nil), r.page...), r.next, nil
 }
 
+// ListObjects now resolves the objectKey→bucket binding before authz so
+// bucket:/object_key: scopes enforce; supply a stable binding here.
+func (r *listRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+	return "backend-list", "bucket-list", nil
+}
+
 // perRowAuthorizer allows the up-front objectKey-scoped check (Resource.Key
 // empty) and, per object, denies any object carrying tags[denyTag]=="true". It
 // implements the optional cedar.PerObjectEvaluator so the handler's per-row path

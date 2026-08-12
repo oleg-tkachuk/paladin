@@ -55,7 +55,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// ─── Data-plane handlers ─────────────────────────────────────────────
 	objH := wire.ProvideObjectHandler(repos, storage, polEngine, deps.CELEval, deps.SM, cfg)
 	opH := wire.ProvideOperationHandler(repos, polEngine)
-	batchH := wire.ProvideBatchHandler(opH, polEngine)
+	batchH := wire.ProvideBatchHandler(repos, opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM)
 	versionH := wire.ProvideVersionHandler(repos)

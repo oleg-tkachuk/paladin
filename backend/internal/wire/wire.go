@@ -182,8 +182,11 @@ func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operation.Handler 
 	return operation.NewHandler(repos.Operation, pe)
 }
 
-func ProvideBatchHandler(opH *operation.Handler, pe *policy.Engine) *batch.Handler {
-	return batch.NewHandler(opH, pe)
+func ProvideBatchHandler(repos Repos, opH *operation.Handler, pe *policy.Engine) *batch.Handler {
+	// repos.Object satisfies batch.BucketResolver — the submit-time Cedar check
+	// resolves each target object-key's bucket so bucket:/object_key: PAT
+	// scopes enforce (the batch worker does not re-check Cedar per object).
+	return batch.NewHandler(opH, pe, repos.Object)
 }
 
 func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presign.Handler {

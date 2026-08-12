@@ -54,13 +54,27 @@ type Submitter interface {
 	Submit(ctx context.Context, opType string, metadata []byte) (uuid.UUID, error)
 }
 
+// BucketResolver resolves an object-key to its physical (backend, bucket) so
+// the SUBMIT-time Cedar check can enforce bucket:/object_key: PAT scopes.
+//
+// This matters because the batch WORKER does NOT re-check Cedar per object
+// (see internal/worker/operations/batch_copy.go — "Per-object Cedar would be
+// defence-in-depth; not free in latency"): the submit-time object-key check is
+// the sole Cedar gate for a batch, so its Resource must carry the bucket or a
+// bucket:/object_key:-scoped PAT is fail-closed on its own object-keys. The
+// object repository (object.Repository) satisfies this.
+type BucketResolver interface {
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
+}
+
 type Handler struct {
 	submitter Submitter
 	policy    cedar.Authorizer
+	buckets   BucketResolver
 }
 
-func NewHandler(submitter Submitter, policy cedar.Authorizer) *Handler {
-	return &Handler{submitter: submitter, policy: policy}
+func NewHandler(submitter Submitter, policy cedar.Authorizer, buckets BucketResolver) *Handler {
+	return &Handler{submitter: submitter, policy: policy, buckets: buckets}
 }
 
 // BatchDelete validates and enqueues an async delete across up to 10k objects.
@@ -179,11 +193,26 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	return h.chargeAndSubmit(ctx, "BatchRestoreObjects", md)
 }
 
+// authorize runs the submit-time Cedar check for ONE target object-key. It
+// resolves that object-key's bucket and injects it so bucket:/object_key: PAT
+// scopes enforce — a scoped principal is admitted on its own object-key(s) and
+// DENIED when a target is off-scope. Each Batch RPC calls this per object-key
+// (BatchCopy: src + dst); any denial short-circuits the whole submit.
+//
+// Best-effort + read-only + nil-safe: an unresolvable binding (or no resolver
+// wired) emits no bucket scope key — unscoped principals are unaffected (the
+// scope-enforcement forbid never fires for them), scoped principals stay
+// fail-closed. write=false: the scope key is independent of the drain gate,
+// and this is a submit-time authz probe, not the mutation itself.
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
+	var backendID, bucket string
+	if h.buckets != nil {
+		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, objectKey, false)
+	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
