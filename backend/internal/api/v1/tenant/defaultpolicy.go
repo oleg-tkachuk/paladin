@@ -30,10 +30,17 @@ permit (
     resource
 ) when {
     context.size_bytes <= 5368709120 &&
-    !(resource.key like "*.exe" ||
-      resource.key like "*.dll" ||
-      resource.key like "*.bat" ||
-      resource.key like "*.sh")
+    // Guard resource.key: a PresignPut whose object key is server-generated has
+    // no key at authz time, making the resource an ObjectKey entity with no key
+    // attribute. Reading resource.key then raises an evaluation error and Cedar
+    // fails closed (denies a legitimate upload). "resource has key" skips the
+    // filename blocklist for keyless resources; the block still applies when a
+    // client supplies a key.
+    (!(resource has key) ||
+     !(resource.key like "*.exe" ||
+       resource.key like "*.dll" ||
+       resource.key like "*.bat" ||
+       resource.key like "*.sh"))
 };
 
 permit (

@@ -26,10 +26,15 @@ permit (
     // Hard size cap: 5 GiB per object.
     context.size_bytes <= 5368709120 &&
     // No executables.
-    !(resource.key like "*.exe" ||
-      resource.key like "*.dll" ||
-      resource.key like "*.bat" ||
-      resource.key like "*.sh")
+    // "resource has key" guard: a PresignPut with a server-generated key has no
+    // key at authz time (ObjectKey entity, no `key` attr); reading resource.key
+    // would raise an eval error → fail-closed deny. Skip the blocklist for
+    // keyless resources; it still applies when a client supplies a key.
+    (!(resource has key) ||
+     !(resource.key like "*.exe" ||
+       resource.key like "*.dll" ||
+       resource.key like "*.bat" ||
+       resource.key like "*.sh"))
 };
 
 // Mutating data-plane ops require a bucket admin.

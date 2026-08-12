@@ -549,7 +549,19 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, MapResolveErr(err)
 	}
 
-	// 2. Cedar authorization: may this principal PutObject here?
+	// 2. Derive the object id + key BEFORE authz so the Cedar resource is an
+	//    Object entity carrying `key`. The default per-tenant policy reads
+	//    resource.key (the .exe/.dll extension blocklist); an ABSENT key makes
+	//    the resource an ObjectKey entity → "does not have the attribute key"
+	//    eval error → fail-closed deny. A client-omitted key authorizes the
+	//    generated object id, which CreateObject persists below (same value).
+	objectID := uuid.Must(uuid.NewV7())
+	key := in.Key
+	if key == "" {
+		key = objectID.String()
+	}
+
+	// 3. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, TenantSlug: principal.TenantSlug, Roles: principal.Roles, Scopes: apiutil.ScopeStrings(principal.Scopes)},
@@ -557,7 +569,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		&cedar.Resource{
 			TenantID:    tenantID,
 			ObjectKey:   in.ObjectKey,
-			Key:         in.Key,
+			Key:         key,
 			BackendID:   meta.BackendID,
 			BucketName:  meta.BucketName,
 			ContentType: in.ContentType,
@@ -583,14 +595,8 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	}
 	bucket := meta.BucketName
 
-	// 3. Generate UUIDv7 for object_id; default key = <object_id> under tenant prefix.
-	objectID := uuid.Must(uuid.NewV7())
-	key := in.Key
-	if key == "" {
-		key = objectID.String()
-	}
-
-	// 4. Insert PENDING row with presign expiry.
+	// 4. Insert PENDING row with presign expiry. key was derived before authz
+	//    (step 2) so the authorized resource IS the object created.
 	ttl := h.presign.DefaultTTL
 	presignExp := time.Now().Add(ttl)
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
