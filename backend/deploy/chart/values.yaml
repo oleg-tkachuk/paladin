@@ -554,7 +554,7 @@ jobs:
 # ─── App config (templated into the ConfigMap) ─────────────────────────────
 #
 # Defaults here are PROD-SAFE. The dev cluster opt-ins (debug logging,
-# dummy access keys, hard-coded signing key, `*.local` endpoints)
+# dummy access keys, hard-coded signing key, `*.paladin.local` endpoints)
 # live in values-local.yaml and are applied via `helm -f values-local.yaml`.
 # Never restore dev defaults here — a future operator who installs the
 # chart with just `helm install paladin .` must get a deployment that's not
