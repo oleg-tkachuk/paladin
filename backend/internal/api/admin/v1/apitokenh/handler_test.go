@@ -305,3 +305,65 @@ var (
 	_ ratelimit.Limiter = fakeLimiter{}
 	_ cedar.Authorizer  = allowAuthorizer{}
 )
+
+// ─── cross-tenant minting ────────────────────────────────────────────────────
+
+// ctxAsTenant pins the caller's tenant so the cross-tenant branch can be
+// exercised in both directions.
+func ctxAsTenant(tenant uuid.UUID, roles ...string) context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject: "admin", TenantID: tenant, Roles: roles,
+	})
+}
+
+// Provisioning a new tenant's first service credential is the reason this RPC
+// takes a tenant_id at all. RLS used to refuse the write; now the handler
+// authorises it and the store scopes it.
+func TestCreate_PlatformAdminMintsForAnotherTenant(t *testing.T) {
+	caller, target := uuid.New(), uuid.New()
+	iss := &stubIssuer{}
+	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+
+	_, err := h.Create(ctxAsTenant(caller, "platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: target.String(), Name: "consumer-service", Audience: []string{"data"},
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if iss.req.TenantID != target {
+		t.Errorf("issued for tenant %v, want the requested %v", iss.req.TenantID, target)
+	}
+}
+
+// ...and everyone else stays inside their own tenant, because the database is
+// no longer the thing stopping them.
+func TestCreate_NonPlatformAdminCannotMintForAnotherTenant(t *testing.T) {
+	caller, target := uuid.New(), uuid.New()
+	iss := &stubIssuer{}
+	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+
+	_, err := h.Create(ctxAsTenant(caller, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: target.String(), Name: "sneaky", Audience: []string{"data"},
+	}))
+
+	if code(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", code(err))
+	}
+	if iss.req.Name != "" {
+		t.Errorf("issuer was reached with %+v; the mint must not happen at all", iss.req)
+	}
+}
+
+// A tenant-level admin minting for their OWN tenant is ordinary and must keep
+// working — the new check must not turn every non-platform caller away.
+func TestCreate_NonPlatformAdminMintsForOwnTenant(t *testing.T) {
+	own := uuid.New()
+	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
+
+	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: own.String(), Name: "own", Audience: []string{"data"},
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

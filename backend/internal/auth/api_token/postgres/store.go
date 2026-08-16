@@ -36,9 +36,22 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // HMAC-SHA256 lookup digest). The legacy argon2 token_hash column was dropped
 // in migration 062.
 //
-// Runs under the request principal's tenant (the RLS PrepareConn hook stamps
-// paladin.tenant_id from the admin caller), so the tenant_isolation WITH CHECK on
-// api_tokens is satisfied automatically.
+// The INSERT runs in a transaction that SET LOCALs paladin.tenant_id to the
+// TOKEN's tenant, not the caller's.
+//
+// The pool's PrepareConn hook stamps the GUC from the request principal, and
+// api_tokens' tenant_isolation policy checks the new row against it. That
+// combination made a platform admin unable to mint a token for any tenant but
+// their own — which is the entire purpose of an admin RPC that takes
+// `tenant_id` as a parameter. The RPC accepted the argument, then RLS refused
+// the write with a bare 42501, so provisioning a new tenant's service
+// credential was impossible through the API.
+//
+// Authorization for a cross-tenant mint belongs to the handler (Cedar, plus an
+// explicit platform.admin check for a tenant other than the caller's) and is
+// enforced there before this is ever reached. RLS is not the gate here; it
+// cannot be, because the caller is legitimately acting on somebody else's
+// tenant.
 func (s *Store) Insert(ctx context.Context, t api_token.Token, digest []byte) error {
 	const stmt = `
 INSERT INTO api_tokens (
@@ -51,7 +64,17 @@ INSERT INTO api_tokens (
     $10, $11
 );
 `
-	if _, err := s.pool.Exec(ctx, stmt,
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("api_token/postgres: insert begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after commit
+
+	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, t.TenantID.String()); err != nil {
+		return fmt.Errorf("api_token/postgres: insert set tenant: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, stmt,
 		t.ID,
 		t.TenantID,
 		t.Name,
@@ -65,6 +88,9 @@ INSERT INTO api_tokens (
 		t.CreatedAt,
 	); err != nil {
 		return fmt.Errorf("api_token/postgres: insert: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("api_token/postgres: insert commit: %w", err)
 	}
 	return nil
 }

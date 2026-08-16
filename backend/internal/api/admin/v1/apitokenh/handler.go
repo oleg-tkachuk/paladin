@@ -105,6 +105,21 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
 
+	// Minting for somebody else's tenant is a platform operation.
+	//
+	// This check is the gate, and it has to live here: the store now sets the
+	// RLS tenant from the token being written (it must, or provisioning a new
+	// tenant's first credential would be impossible through this RPC), so the
+	// database no longer refuses a cross-tenant write on its own. Cedar
+	// authorises `api_token:create` against the CALLER's tenant, which says
+	// nothing about the tenant named in the request — so without this, a
+	// tenant-level admin allowed to mint their own tokens could mint one for
+	// any tenant whose id they can guess.
+	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("minting an api_token for another tenant requires platform.admin"))
+	}
+
 	// Validate every requested scope parses as an auth.Scope. Minting a token
 	// whose scope string can't parse is a mistake we reject at the edge: a
 	// malformed scope on the data plane fails the request fail-closed (see
