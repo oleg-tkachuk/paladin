@@ -355,5 +355,20 @@ func (c *Config) Obfuscated() Config {
 		cc.Bootstrap.Admin.Password = Redacted
 	}
 
+	// API-token pepper (resolved from api_token.hmac_key_secret). It was
+	// missed here, so a deployment that did the right thing — a dedicated key
+	// in a Secret instead of one derived from the signing key — printed that
+	// key in cleartext in the "config loaded" line at every boot. Knowing it
+	// turns a stolen api_tokens dump into forgeable credentials, which is the
+	// single property the pepper exists to deny.
+	if cc.APIToken.HMACKey != "" {
+		cc.APIToken.HMACKey = Redacted
+	}
+
+	// Ingest webhook HMAC (resolved from ingest.webhook.shared_secret_ref).
+	if cc.Ingest.Webhook.SharedSecret != "" {
+		cc.Ingest.Webhook.SharedSecret = Redacted
+	}
+
 	return cc
 }
