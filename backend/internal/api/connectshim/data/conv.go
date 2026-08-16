@@ -143,6 +143,28 @@ func objectKeyNameParts(ctx context.Context, name string) (objectKey string, err
 	return ok, nil
 }
 
+// badName turns a resource-name failure into a Connect status, keeping the
+// status a lower layer already chose.
+//
+// A name parser fails for two unrelated reasons. The string may be malformed —
+// the caller's mistake, and invalid_argument is the right answer. Or the name
+// may be well-formed but address a tenant the caller may not touch, which
+// assertJWTTenant reports as permission_denied. Re-wrapping both as
+// invalid_argument told the second caller to fix a request that was never
+// malformed, and buried an authorization decision inside a validation error:
+// clients (and their operators) read a 400 and went looking for a bad field
+// instead of a misscoped credential.
+//
+// A plain error still becomes invalid_argument, so malformed names are
+// unaffected.
+func badName(err error) error {
+	if connect.CodeOf(err) != connect.CodeUnknown {
+		return err
+	}
+
+	return connect.NewError(connect.CodeInvalidArgument, err)
+}
+
 // assertJWTTenant returns an error when the URL tenant does not match the
 // caller's JWT tenant. Platform admins bypass the check.
 func assertJWTTenant(ctx context.Context, urlTenantID string) error {

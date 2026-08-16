@@ -25,7 +25,7 @@ func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.UploadObject(ctx, object.UploadObjectInput{
 		ObjectKey:     objectKey,
@@ -55,7 +55,7 @@ func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.DownloadObject(ctx, objectKey, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition())
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[
 func (s *ObjectServer) GetObject(ctx context.Context, req *connect.Request[pb.GetObjectRequest]) (*connect.Response[pb.Object], error) {
 	objectKey, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.GetObject(ctx, objectKey, objectID)
 	if err != nil {
@@ -84,7 +84,7 @@ func (s *ObjectServer) GetObject(ctx context.Context, req *connect.Request[pb.Ge
 func (s *ObjectServer) LookupObject(ctx context.Context, req *connect.Request[pb.LookupObjectRequest]) (*connect.Response[pb.Object], error) {
 	objectKey, err := objectKeyNameParts(ctx, req.Msg.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.LookupObject(ctx, objectKey, req.Msg.GetKey())
 	if err != nil {
@@ -97,11 +97,11 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
 		ObjectKey:       objectKey,
@@ -123,7 +123,7 @@ func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.CompleteObject(ctx, object.CompleteObjectInput{
 		ObjectKey: objectKey,
@@ -141,7 +141,7 @@ func (s *ObjectServer) DeleteObject(ctx context.Context, req *connect.Request[pb
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	if err := s.H.DeleteObject(ctx, objectKey, objectID, m.GetResourceVersion(), m.GetPermanent(), m.GetBypassGovernanceRetention()); err != nil {
 		return nil, err
@@ -154,7 +154,7 @@ func (s *ObjectServer) DeleteObject(ctx context.Context, req *connect.Request[pb
 func (s *ObjectServer) RestoreObject(ctx context.Context, req *connect.Request[pb.RestoreObjectRequest]) (*connect.Response[pb.Object], error) {
 	objectKey, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.RestoreObject(ctx, objectKey, objectID, req.Msg.GetResourceVersion())
 	if err != nil {
@@ -167,11 +167,11 @@ func (s *ObjectServer) CopyObject(ctx context.Context, req *connect.Request[pb.C
 	m := req.Msg
 	srcObjectKey, srcObjectID, err := objectNameParts(ctx, m.GetSourceName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source: %w", err))
+		return nil, badName(fmt.Errorf("source: %w", err))
 	}
 	destObjectKey, err := objectKeyNameParts(ctx, m.GetDestinationObjectKey())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("destination: %w", err))
+		return nil, badName(fmt.Errorf("destination: %w", err))
 	}
 	in := object.CopyObjectInput{
 		SourceObjectKey: srcObjectKey,
@@ -196,7 +196,7 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	objs, next, err := s.H.ListObjects(ctx, object.ListObjectsInput{
 		ObjectKey: objectKey,
@@ -220,7 +220,7 @@ func (s *ObjectServer) CountObjects(ctx context.Context, req *connect.Request[pb
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.CountObjects(ctx, object.CountObjectsInput{
 		ObjectKey: objectKey,
@@ -249,7 +249,7 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, next, err := s.Versions.ListVersions(ctx, object.ListVersionsInput{
 		ObjectKey: objectKey,
@@ -273,7 +273,7 @@ func (s *ObjectServer) GetObjectVersion(ctx context.Context, req *connect.Reques
 	}
 	parent, err := stripVersionSuffix(req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.Versions.GetVersion(ctx, req.Msg.GetName())
 	if err != nil {

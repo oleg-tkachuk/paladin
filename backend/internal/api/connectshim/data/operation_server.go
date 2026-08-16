@@ -27,7 +27,7 @@ func NewOperationServer(h *operation.Handler) *OperationServer { return &Operati
 func (s *OperationServer) GetOperation(ctx context.Context, req *connect.Request[pb.GetOperationRequest]) (*connect.Response[pb.Operation], error) {
 	id, err := dataOperationID(req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	op, err := s.H.GetOperation(ctx, id)
 	if err != nil {
@@ -52,7 +52,7 @@ func (s *OperationServer) ListOperations(ctx context.Context, req *connect.Reque
 func (s *OperationServer) CancelOperation(ctx context.Context, req *connect.Request[pb.CancelOperationRequest]) (*connect.Response[pb.Operation], error) {
 	id, err := dataOperationID(req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	if err := s.H.CancelOperation(ctx, id); err != nil {
 		return nil, err

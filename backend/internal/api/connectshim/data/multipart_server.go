@@ -23,7 +23,7 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	sess, err := s.H.InitiateMultipartUpload(ctx, multipart.InitiateArgs{
 		ObjectKey:    objectKey,

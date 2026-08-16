@@ -23,7 +23,7 @@ func NewObjectTagServer(h *object.Handler) *ObjectTagServer { return &ObjectTagS
 func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Request[pb.GetObjectTagsRequest]) (*connect.Response[pb.GetObjectTagsResponse], error) {
 	objectKey, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.GetObject(ctx, objectKey, objectID)
 	if err != nil {
@@ -36,11 +36,11 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
 		ObjectKey:       objectKey,
@@ -59,11 +59,11 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	current, err := s.H.GetObject(ctx, objectKey, objectID)
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *connect.Request[pb.ListDistinctTagsRequest]) (*connect.Response[pb.ListDistinctTagsResponse], error) {
 	objectKey, err := objectKeyNameParts(ctx, req.Msg.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	tags, err := s.H.ListDistinctTags(ctx, objectKey)
 	if err != nil {

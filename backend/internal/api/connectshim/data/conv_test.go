@@ -2,6 +2,8 @@ package data
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -438,6 +440,48 @@ func TestPresignedUrlProto(t *testing.T) {
 		}
 		if got.PostPolicy.Action != "https://s3/bucket" || got.PostPolicy.Fields["key"] != "k" {
 			t.Errorf("post policy = %+v", got.PostPolicy)
+		}
+	})
+}
+
+// ─── badName ───────────────────────────────────────────────────────────────
+
+// The status assertJWTTenant chose has to survive the trip back through the
+// name parser and out to the client. It used to be overwritten with
+// invalid_argument at every call site, which is how a misscoped credential
+// reached a browser as a 400 on an ordinary upload.
+func TestBadName(t *testing.T) {
+	t.Run("malformed name stays invalid_argument", func(t *testing.T) {
+		if got := code(badName(errors.New("invalid object_key name"))); got != connect.CodeInvalidArgument {
+			t.Errorf("code = %v, want InvalidArgument", got)
+		}
+	})
+
+	t.Run("permission denial keeps its code", func(t *testing.T) {
+		denial := connect.NewError(connect.CodePermissionDenied, errors.New("URL tenant does not match token tenant"))
+		if got := code(badName(denial)); got != connect.CodePermissionDenied {
+			t.Errorf("code = %v, want PermissionDenied", got)
+		}
+	})
+
+	// Call sites that add context with %w must not lose the code either.
+	t.Run("wrapped denial keeps its code", func(t *testing.T) {
+		denial := connect.NewError(connect.CodePermissionDenied, errors.New("nope"))
+		if got := code(badName(fmt.Errorf("source: %w", denial))); got != connect.CodePermissionDenied {
+			t.Errorf("code = %v, want PermissionDenied", got)
+		}
+	})
+
+	// End to end through the parser a data-plane RPC actually calls: a
+	// well-formed name for somebody else's tenant is a denial, not a
+	// malformed argument.
+	t.Run("cross-tenant object key name is denied, not invalid", func(t *testing.T) {
+		name := "tenants/" + tenantB.String() + "/objectKeys/docs"
+
+		_, err := objectKeyNameParts(ctxTenant(tenantA), name)
+
+		if got := code(badName(err)); got != connect.CodePermissionDenied {
+			t.Errorf("code = %v, want PermissionDenied", got)
 		}
 	})
 }

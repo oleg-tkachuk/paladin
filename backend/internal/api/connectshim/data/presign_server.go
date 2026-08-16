@@ -21,7 +21,7 @@ func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Re
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	// Regenerate uses PUT path; ContentType / ChecksumAlgo / SizeHint are
 	// looked up server-side from the existing object row by the handler.
@@ -38,7 +38,7 @@ func (s *PresignServer) PresignDownload(ctx context.Context, req *connect.Reques
 	m := req.Msg
 	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	url, headers, expires, err := s.H.PresignGet(ctx, objectKey, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition())
 	if err != nil {

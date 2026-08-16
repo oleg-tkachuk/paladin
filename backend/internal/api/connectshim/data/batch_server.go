@@ -23,11 +23,11 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	ids, err := resolveObjectIDs(ctx, m.GetSelector())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	opID, err := s.H.BatchDelete(ctx, batch.BatchDeleteArgs{
 		ObjectKey: objectKey,
@@ -46,15 +46,15 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request
 	m := req.Msg
 	srcOK, err := objectKeyNameParts(ctx, m.GetSourceParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source: %w", err))
+		return nil, badName(fmt.Errorf("source: %w", err))
 	}
 	dstOK, err := objectKeyNameParts(ctx, m.GetDestinationObjectKey())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("destination: %w", err))
+		return nil, badName(fmt.Errorf("destination: %w", err))
 	}
 	ids, err := resolveObjectIDs(ctx, m.GetSelector())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	opID, err := s.H.BatchCopy(ctx, batch.BatchCopyArgs{
 		SrcObjectKey: srcOK,
@@ -75,11 +75,11 @@ func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	ids, err := resolveObjectIDs(ctx, m.GetSelector())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	opID, err := s.H.BatchRestoreObjects(ctx, batch.BatchRestoreObjectsArgs{
 		ObjectKey: objectKey,
@@ -98,11 +98,11 @@ func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[
 	m := req.Msg
 	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	ids, err := resolveObjectIDs(ctx, m.GetSelector())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, badName(err)
 	}
 	opID, err := s.H.BatchUpdateTags(ctx, batch.BatchUpdateTagsArgs{
 		ObjectKey: objectKey,
