@@ -158,7 +158,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 
 	adminOpts := connect.WithInterceptors(
 		otelInt,
-		auth.Interceptor(verifierAdmin),
+		// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
+		// API-token interceptor below can authenticate them. Without this the
+		// JWT verifier rejects the bearer first with "jwt: malformed token" and
+		// a token carrying platform.capability-issuer never reaches the RPC it
+		// exists to call. Every other case is unchanged — a JWT is verified and
+		// a missing or invalid non-PAT bearer is still rejected, so auth stays
+		// mandatory; a roleless PAT gets no principal here and is denied
+		// downstream exactly as before.
+		auth.InterceptorSkipAPITokens(verifierAdmin),
 		auth.RequireAudience(auth.AudienceAdmin),
 		capAdmin,
 		apiTokAdmin,
