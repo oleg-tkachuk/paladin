@@ -486,3 +486,31 @@ func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
 		t.Fatalf("Issue as platform admin: %v", err)
 	}
 }
+
+// issuerCtx is the narrow grant: may mint a capability for any tenant, and
+// carries no other authority.
+func issuerCtx(tenant uuid.UUID) context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject: "apikey:consumer", TenantID: tenant,
+		Roles: []string{"platform.capability-issuer"},
+	})
+}
+
+// The whole point of the narrow role: a consumer serving many tenants mints
+// per-tenant capabilities without holding platform.admin.
+func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
+	store := &fakeStore{}
+	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+
+	_, err := h.Issue(issuerCtx(uuid.New()), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+		Subject: &adminv1.CapabilityPrincipal{
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "svc",
+		},
+		Audience:   []string{"paladin-data"},
+		TtlSeconds: 300,
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+	}))
+	if err != nil {
+		t.Fatalf("Issue as capability-issuer: %v", err)
+	}
+}

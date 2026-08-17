@@ -18,6 +18,13 @@ const (
 	RoleTenantAdmin   = "tenant.admin"
 	RoleTenantUser    = "tenant.user"
 	RoleMCPOperator   = "mcp.operator"
+	// RoleCapabilityIssuer may mint a capability for ANY tenant and nothing
+	// else: it cannot create or delete a tenant, and it cannot mint an API
+	// token. It exists so a consumer serving many tenants can hand out
+	// short-lived, tenant-scoped capabilities without holding either a
+	// long-lived credential per tenant or platform.admin, whose leak is
+	// unbounded.
+	RoleCapabilityIssuer = "platform.capability-issuer"
 )
 
 // RequireRole returns Unauthenticated when no principal is present and

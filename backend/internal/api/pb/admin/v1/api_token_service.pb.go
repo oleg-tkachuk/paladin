@@ -7,14 +7,13 @@
 package paladinadminv1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -33,9 +32,13 @@ type APIToken struct {
 	Name     string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	// prefix is the 8-char display string (first chars of the body
 	// after the `paladin_pat_` literal). Operators identify tokens by it.
-	Prefix     string                 `protobuf:"bytes,4,opt,name=prefix,proto3" json:"prefix,omitempty"`
-	Scopes     []string               `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	Audience   []string               `protobuf:"bytes,6,rep,name=audience,proto3" json:"audience,omitempty"`
+	Prefix   string   `protobuf:"bytes,4,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	Scopes   []string `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Audience []string `protobuf:"bytes,6,rep,name=audience,proto3" json:"audience,omitempty"`
+	// roles the token's principal carries — see
+	// APITokenServiceCreateRequest.roles. Returned so an operator listing tokens
+	// can see which ones carry authority beyond their tenant.
+	Roles      []string               `protobuf:"bytes,13,rep,name=roles,proto3" json:"roles,omitempty"`
 	ExpiresAt  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	RevokedAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
 	LastUsedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
@@ -121,6 +124,13 @@ func (x *APIToken) GetAudience() []string {
 	return nil
 }
 
+func (x *APIToken) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
 func (x *APIToken) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
@@ -178,7 +188,17 @@ type APITokenServiceCreateRequest struct {
 	// Recommended for any token whose blast radius matters: leaked
 	// tokens with a 60 rpm cap can do far less harm before discovery
 	// than uncapped equivalents.
-	RateLimitRpm  int32 `protobuf:"varint,6,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3" json:"rate_limit_rpm,omitempty"`
+	RateLimitRpm int32 `protobuf:"varint,6,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3" json:"rate_limit_rpm,omitempty"`
+	// roles the token's principal carries, so a machine caller can satisfy a
+	// role-gated policy without logging in as a human user and managing a
+	// session.
+	//
+	// Granting ANY role requires platform.admin: a token that could promote
+	// itself would make every other gate decorative. Prefer the narrowest role
+	// that does the job — `platform.capability-issuer` mints capabilities for any
+	// tenant and can neither create tenants nor mint further tokens — over
+	// `platform.admin`, whose leak is unbounded.
+	Roles         []string `protobuf:"bytes,7,rep,name=roles,proto3" json:"roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -253,6 +273,13 @@ func (x *APITokenServiceCreateRequest) GetRateLimitRpm() int32 {
 		return x.RateLimitRpm
 	}
 	return 0
+}
+
+func (x *APITokenServiceCreateRequest) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
 }
 
 type APITokenServiceCreateResponse struct {
@@ -748,14 +775,15 @@ var File_paladin_admin_v1_api_token_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/api_token_service.proto\x12\focp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x03\n" +
+	"$paladin/admin/v1/api_token_service.proto\x12\focp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe1\x03\n" +
 	"\bAPIToken\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x16\n" +
 	"\x06prefix\x18\x04 \x01(\tR\x06prefix\x12\x16\n" +
 	"\x06scopes\x18\x05 \x03(\tR\x06scopes\x12\x1a\n" +
-	"\baudience\x18\x06 \x03(\tR\baudience\x129\n" +
+	"\baudience\x18\x06 \x03(\tR\baudience\x12\x14\n" +
+	"\x05roles\x18\r \x03(\tR\x05roles\x129\n" +
 	"\n" +
 	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x129\n" +
 	"\n" +
@@ -767,7 +795,7 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"created_by\x18\v \x01(\tR\tcreatedBy\x12$\n" +
-	"\x0erate_limit_rpm\x18\f \x01(\x05R\frateLimitRpm\"\xf9\x01\n" +
+	"\x0erate_limit_rpm\x18\f \x01(\x05R\frateLimitRpm\"\x8f\x02\n" +
 	"\x1cAPITokenServiceCreateRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1b\n" +
 	"\x04name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12(\n" +
@@ -775,7 +803,8 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"ttlSeconds\x12\x16\n" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12$\n" +
 	"\baudience\x18\x05 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12-\n" +
-	"\x0erate_limit_rpm\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\frateLimitRpm\"j\n" +
+	"\x0erate_limit_rpm\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\frateLimitRpm\x12\x14\n" +
+	"\x05roles\x18\a \x03(\tR\x05roles\"j\n" +
 	"\x1dAPITokenServiceCreateResponse\x123\n" +
 	"\tapi_token\x18\x01 \x01(\v2\x16.paladin.admin.v1.APITokenR\bapiToken\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\"8\n" +

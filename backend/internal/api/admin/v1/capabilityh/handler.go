@@ -119,9 +119,16 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	// other tenant — and since ADR-0010 a capability authenticates as its
 	// subject's tenant, that is a full cross-tenant escalation, not merely an
 	// extra restriction on an existing caller.
-	if subj.TenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
+	if subj.TenantID != caller.TenantID &&
+		!caller.HasRole(apiutil.RolePlatformAdmin) &&
+		!caller.HasRole(apiutil.RoleCapabilityIssuer) {
+		// platform.capability-issuer is the narrow grant for exactly this: a
+		// consumer serving many tenants mints a short-lived capability per
+		// tenant. It carries no other authority — it cannot create or delete a
+		// tenant, and it cannot mint an API token — so handing it out is a much
+		// smaller decision than handing out platform.admin.
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("issuing a capability for another tenant requires platform.admin"))
+			errors.New("issuing a capability for another tenant requires platform.admin or platform.capability-issuer"))
 	}
 
 	caveats := protoToCaveats(req.Msg.GetCaveats())

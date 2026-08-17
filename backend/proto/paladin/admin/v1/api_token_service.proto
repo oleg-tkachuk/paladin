@@ -60,6 +60,10 @@ message APIToken {
   string prefix = 4;
   repeated string scopes = 5;
   repeated string audience = 6;
+  // roles the token's principal carries — see
+  // APITokenServiceCreateRequest.roles. Returned so an operator listing tokens
+  // can see which ones carry authority beyond their tenant.
+  repeated string roles = 13;
   google.protobuf.Timestamp expires_at = 7;
   google.protobuf.Timestamp revoked_at = 8;
   google.protobuf.Timestamp last_used_at = 9;
@@ -86,6 +90,16 @@ message APITokenServiceCreateRequest {
   // tokens with a 60 rpm cap can do far less harm before discovery
   // than uncapped equivalents.
   int32 rate_limit_rpm = 6 [(buf.validate.field).int32.gte = 0];
+  // roles the token's principal carries, so a machine caller can satisfy a
+  // role-gated policy without logging in as a human user and managing a
+  // session.
+  //
+  // Granting ANY role requires platform.admin: a token that could promote
+  // itself would make every other gate decorative. Prefer the narrowest role
+  // that does the job — `platform.capability-issuer` mints capabilities for any
+  // tenant and can neither create tenants nor mint further tokens — over
+  // `platform.admin`, whose leak is unbounded.
+  repeated string roles = 7;
 }
 
 message APITokenServiceCreateResponse {

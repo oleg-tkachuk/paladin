@@ -81,6 +81,12 @@ type Token struct {
 	Name       string
 	Prefix     string   // first PrefixLen base32 chars after `paladin_pat_`
 	Scopes     []string // coarse-grained: api:read, api:write, admin:*
+	// Roles the derived principal carries. Empty for an ordinary service
+	// token, which is what every token was until a consumer needed to satisfy
+	// a role-gated policy (minting capabilities for the tenants it serves)
+	// without logging in as a human and holding a session. Granting one is
+	// gated to platform.admin at the handler.
+	Roles      []string
 	Audience   []string // subset of {data, admin, iam, mcp}
 	ExpiresAt  time.Time
 	RevokedAt  *time.Time

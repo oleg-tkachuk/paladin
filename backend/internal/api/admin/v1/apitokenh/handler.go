@@ -132,12 +132,25 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 		}
 	}
 
+	// Granting a role is a platform operation, whoever the token is for.
+	//
+	// A token that could hand itself a role would make every other gate
+	// decorative: mint one with platform.admin and the tenant checks above and
+	// on every other admin RPC stop meaning anything. This is deliberately
+	// stricter than the cross-tenant check — that one is about WHOSE token this
+	// is, this one about WHAT AUTHORITY it carries.
+	if len(req.Msg.GetRoles()) > 0 && !caller.HasRole(apiutil.RolePlatformAdmin) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("granting roles to an api_token requires platform.admin"))
+	}
+
 	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second
 
 	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
 		TenantID:     tenantID,
 		Name:         req.Msg.GetName(),
 		Scopes:       req.Msg.GetScopes(),
+		Roles:        req.Msg.GetRoles(),
 		Audience:     req.Msg.GetAudience(),
 		TTL:          ttl,
 		RateLimitRPM: int(req.Msg.GetRateLimitRpm()),
@@ -264,6 +277,7 @@ func tokenToProto(t api_token.Token) *adminv1.APIToken {
 		TenantId:     t.TenantID.String(),
 		Name:         t.Name,
 		Prefix:       t.Prefix,
+		Roles:        t.Roles,
 		Scopes:       t.Scopes,
 		Audience:     t.Audience,
 		ExpiresAt:    timestamppb.New(t.ExpiresAt),

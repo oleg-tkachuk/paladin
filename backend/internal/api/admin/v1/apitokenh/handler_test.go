@@ -367,3 +367,56 @@ func TestCreate_NonPlatformAdminMintsForOwnTenant(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// ─── roles on tokens ───────────────────────────────────────────────────────
+
+// A token that could grant itself a role would make every other gate
+// decorative — mint one with platform.admin and the tenant checks stop meaning
+// anything. Granting is therefore platform-only, stricter than minting.
+func TestCreate_GrantingRolesRequiresPlatformAdmin(t *testing.T) {
+	own := uuid.New()
+	iss := &stubIssuer{}
+	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+
+	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: own.String(), Name: "self-promotion", Audience: []string{"data"},
+		Roles: []string{"platform.admin"},
+	}))
+
+	if code(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", code(err))
+	}
+	if iss.req.Name != "" {
+		t.Errorf("issuer was reached with %+v; the mint must not happen", iss.req)
+	}
+}
+
+// A platform admin grants the narrow role, which is how a consumer gets one.
+func TestCreate_PlatformAdminMayGrantTheNarrowRole(t *testing.T) {
+	iss := &stubIssuer{}
+	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+
+	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: uuid.NewString(), Name: "consumer-issuer", Audience: []string{"admin"},
+		Roles: []string{"platform.capability-issuer"},
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(iss.req.Roles) != 1 || iss.req.Roles[0] != "platform.capability-issuer" {
+		t.Errorf("roles reached the issuer as %v", iss.req.Roles)
+	}
+}
+
+// A roleless mint by a tenant-level caller is unaffected.
+func TestCreate_NoRolesNeedsNoPlatformAdmin(t *testing.T) {
+	own := uuid.New()
+	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
+
+	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+		TenantId: own.String(), Name: "ordinary", Audience: []string{"data"},
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

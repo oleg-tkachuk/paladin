@@ -61,6 +61,7 @@ type IssueRequest struct {
 	TenantID     uuid.UUID
 	Name         string
 	Scopes       []string
+	Roles        []string
 	Audience     []string
 	TTL          time.Duration // 0 → MaxTTL
 	RateLimitRPM int           // 0 → unlimited
@@ -115,6 +116,10 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 	if audience == nil {
 		audience = []string{}
 	}
+	roles := req.Roles
+	if roles == nil {
+		roles = []string{}
+	}
 
 	now := i.clock().UTC()
 	tok := Token{
@@ -123,6 +128,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 		Name:         req.Name,
 		Prefix:       prefix,
 		Scopes:       scopes,
+		Roles:        roles,
 		Audience:     audience,
 		ExpiresAt:    now.Add(ttl),
 		RateLimitRPM: req.RateLimitRPM,

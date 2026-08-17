@@ -137,6 +137,11 @@ func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal
 		Audience: principalAudienceFor(audienceLabel),
 		Kind:     PrincipalKindApiKey,
 		Scopes:   scopes,
+		// Roles were absent here, so a machine caller could not satisfy any
+		// role-gated policy and a consumer needing one had to log in as a
+		// human user and manage a session. Tokens carry none unless a
+		// platform admin granted them explicitly at creation (migration 063).
+		Roles: t.Roles,
 	}, nil
 }
 

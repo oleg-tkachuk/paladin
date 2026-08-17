@@ -56,12 +56,12 @@ func (s *Store) Insert(ctx context.Context, t api_token.Token, digest []byte) er
 	const stmt = `
 INSERT INTO api_tokens (
     id, tenant_id, name, prefix, token_hmac,
-    scopes, audience, expires_at, rate_limit_rpm,
+    scopes, roles, audience, expires_at, rate_limit_rpm,
     created_by, created_at
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9,
-    $10, $11
+    $6, $7, $8, $9, $10,
+    $11, $12
 );
 `
 	tx, err := s.pool.Begin(ctx)
@@ -81,6 +81,7 @@ INSERT INTO api_tokens (
 		t.Prefix,
 		digest,
 		t.Scopes,
+		t.Roles,
 		t.Audience,
 		t.ExpiresAt,
 		t.RateLimitRPM,
@@ -103,7 +104,7 @@ INSERT INTO api_tokens (
 func (s *Store) FindByDigest(ctx context.Context, digest []byte) (api_token.Token, error) {
 	const stmt = `
 SELECT id, tenant_id, name, prefix,
-       scopes, audience, expires_at, rate_limit_rpm,
+       scopes, roles, audience, expires_at, rate_limit_rpm,
        revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
 WHERE  token_hmac = $1;
@@ -112,7 +113,7 @@ WHERE  token_hmac = $1;
 	var revokedAt, lastUsedAt *time.Time
 	err := s.pool.QueryRow(ctx, stmt, digest).Scan(
 		&t.ID, &t.TenantID, &t.Name, &t.Prefix,
-		&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+		&t.Scopes, &t.Roles, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
 		&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 	)
 	if err != nil {
@@ -131,7 +132,7 @@ WHERE  token_hmac = $1;
 func (s *Store) Get(ctx context.Context, id uuid.UUID) (api_token.Token, error) {
 	const stmt = `
 SELECT id, tenant_id, name, prefix,
-       scopes, audience, expires_at, rate_limit_rpm,
+       scopes, roles, audience, expires_at, rate_limit_rpm,
        revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
 WHERE  id = $1;
@@ -140,7 +141,7 @@ WHERE  id = $1;
 	var revokedAt, lastUsedAt *time.Time
 	err := s.pool.QueryRow(ctx, stmt, id).Scan(
 		&t.ID, &t.TenantID, &t.Name, &t.Prefix,
-		&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+		&t.Scopes, &t.Roles, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
 		&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 	)
 	if err != nil {
@@ -226,7 +227,7 @@ func (s *Store) ListByTenant(ctx context.Context, args api_token.ListByTenantArg
 	bindArgs = append(bindArgs, limit+1) // +1 to detect next page
 	stmt := fmt.Sprintf(`
 SELECT id, tenant_id, name, prefix,
-       scopes, audience, expires_at, rate_limit_rpm,
+       scopes, roles, audience, expires_at, rate_limit_rpm,
        revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
 WHERE  tenant_id = $1
@@ -248,7 +249,7 @@ LIMIT  $%d;
 		var revokedAt, lastUsedAt *time.Time
 		err := rows.Scan(
 			&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
-			&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+			&t.Scopes, &t.Roles, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
 			&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 		)
 		if err != nil {
