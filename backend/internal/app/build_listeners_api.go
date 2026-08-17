@@ -215,10 +215,17 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
 		// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
 		// establishes the principal. Both paths land a principal before RequireAudience.
-		auth.InterceptorSkipAPITokens(verifierData),
+		// Also steps aside for a capability: since ADR-0010 one may be the whole
+		// credential, and it rides in its own header — so a capability-only
+		// request has no Authorization at all and this gate used to refuse it
+		// as "missing Authorization header" before it could be authenticated.
+		auth.InterceptorSkipTokensAndCapabilities(verifierData),
 		apiTokData,
-		auth.RequireAudience(auth.AudienceData),
+		// capData BEFORE RequireAudience for the same reason apiTokData is: the
+		// audience check reads the principal, so a credential that establishes
+		// one has to run first.
 		capData,
+		auth.RequireAudience(auth.AudienceData),
 		middleware.NewQuotaSoftCheck(repos.Quota),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,
