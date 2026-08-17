@@ -141,7 +141,12 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")
 	}
 	if deps.APIToken != nil {
-		apiTokAdmin = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "admin")
+		// Admin plane: a token carrying ROLES establishes the principal, so a
+		// consumer holding platform.capability-issuer can mint capabilities for
+		// the tenants it serves without a human session. A roleless service
+		// token still falls through to JWT, as before — it would gain nothing
+		// here and would newly reach any RPC gated on tenant alone.
+		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, "admin")
 	} else {
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}

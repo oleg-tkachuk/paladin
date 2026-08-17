@@ -227,3 +227,35 @@ func TestPrincipalAudienceFor(t *testing.T) {
 		}
 	}
 }
+
+// ─── roles on tokens ───────────────────────────────────────────────────────
+
+// A token's roles must reach the principal, or a machine caller can satisfy no
+// role-gated policy — the blocker that forced a consumer to hold either a
+// credential per tenant or a human session.
+func TestPrincipalFromAPIToken_CarriesRoles(t *testing.T) {
+	tok := &api_token.Token{
+		ID: uuid.New(), TenantID: uuid.New(),
+		Roles: []string{"platform.capability-issuer"},
+	}
+
+	p, err := principalFromAPIToken(tok, "admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !p.HasRole("platform.capability-issuer") {
+		t.Errorf("roles = %v, want the token's", p.Roles)
+	}
+}
+
+// An ordinary service token still carries none, so every role-gated policy
+// keeps denying it.
+func TestPrincipalFromAPIToken_RolelessStaysRoleless(t *testing.T) {
+	p, err := principalFromAPIToken(&api_token.Token{ID: uuid.New(), TenantID: uuid.New()}, "data")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(p.Roles) != 0 {
+		t.Errorf("roles = %v, want none", p.Roles)
+	}
+}

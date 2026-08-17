@@ -92,7 +92,8 @@ func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter rateli
 // the data plane (paired with auth.InterceptorSkipAPITokens, which lets a PAT bearer past
 // the JWT verifier) so a service (e.g. consumer) authenticates document uploads with a
 // long-lived service API key. The derived principal is tenant-scoped, Kind=ApiKey, carries
-// NO roles (role-gated ops like DeleteObject stay denied), and — opt-in — the token's own
+// the token's roles (empty unless a platform admin granted them at creation — migration
+// 063 — so role-gated ops stay denied for an ordinary service token), and — opt-in — its own
 // resource scopes: an unscoped token gets the default per-tenant baseline (Presign/Put its
 // own objects), while a scoped token is further confined to matching resources by the
 // scope-enforcement built-in policy. Its Audience is the plane label so a downstream
@@ -106,6 +107,29 @@ func APITokenAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Lim
 	return &apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience, establishPrincipal: true}
 }
 
+// APITokenRoleAuthInterceptor establishes the principal ONLY for a token that
+// carries roles.
+//
+// The admin plane is role-gated, so an ordinary service token authenticating
+// there would gain nothing and widen the surface for no benefit: every RPC that
+// matters would still deny it, and the ones gated on tenant alone would newly
+// admit it. A token with roles is different — only a platform admin can mint one
+// (granting roles is gated in APITokenService.Create), and it exists precisely
+// so a machine can satisfy a role-gated policy without a human session.
+//
+// A roleless token therefore falls through exactly as before, and the JWT path
+// stays the only way to authenticate one on this plane.
+func APITokenRoleAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
+	if verifier == nil {
+		return passthroughInterceptor{}
+	}
+
+	return &apiTokenInterceptor{
+		verifier: verifier, limiter: limiter, audience: audience,
+		establishPrincipal: true, requireRolesToEstablish: true,
+	}
+}
+
 type apiTokenInterceptor struct {
 	verifier *api_token.Verifier
 	limiter  ratelimit.Limiter
@@ -113,6 +137,9 @@ type apiTokenInterceptor struct {
 	// establishPrincipal makes a verified token also set an auth.Principal on the
 	// context (see APITokenAuthInterceptor). Off for the plain additive interceptor.
 	establishPrincipal bool
+	// requireRolesToEstablish narrows establishment to tokens that carry roles.
+	// See APITokenRoleAuthInterceptor.
+	requireRolesToEstablish bool
 }
 
 // principalFromAPIToken derives the request Principal from a verified API token. Tenant
@@ -168,7 +195,7 @@ func principalAudienceFor(label string) string {
 // derives a principal, so it never errors here.
 func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_token.Token) (context.Context, error) {
 	ctx = WithAPIToken(ctx, t)
-	if i.establishPrincipal {
+	if i.establishPrincipal && !(i.requireRolesToEstablish && len(t.Roles) == 0) {
 		if _, err := PrincipalFromContext(ctx); err != nil {
 			p, perr := principalFromAPIToken(t, i.audience)
 			if perr != nil {
