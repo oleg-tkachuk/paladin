@@ -49,6 +49,16 @@ const (
 	PrincipalKindUser
 	PrincipalKindApiKey
 	PrincipalKindServiceAccount // platform-issued, e.g. MCP server
+	// PrincipalKindCapability is a principal established by a verified
+	// capability token: short-lived, tenant-scoped, individually revocable,
+	// and carrying no roles. It authenticates its bearer AS the tenant the
+	// capability was issued for, which is what lets one service credential
+	// mint per-tenant access without holding a long-lived credential per
+	// tenant. Authorisation beyond identity stays with the capability's own
+	// caveats (ops, resource prefixes, budget) — enforced by the interceptor
+	// before this principal is ever established — and with Cedar, whose
+	// data-plane policies gate on tenant membership rather than on roles.
+	PrincipalKindCapability
 )
 
 // HasRole reports whether the principal carries the given role string.

@@ -128,9 +128,51 @@ func CapabilityInterceptorWithEvents(
 	}
 }
 
+// CapabilityEstablishingInterceptor is the data-plane variant, in which a
+// verified capability may BE the credential: when the request carries no other
+// identity, the capability's tenant becomes the caller's tenant.
+//
+// It is a separate constructor rather than a flag on the others because the
+// choice is security-relevant and belongs at the wiring site, where a reader
+// can see which plane grants it. The admin and IAM planes must keep the
+// additive interceptor: a capability names a tenant, not a role, so letting it
+// establish identity there would produce a caller with no roles for RPCs whose
+// policies are role-gated — refused, but for a confusing reason.
+func CapabilityEstablishingInterceptor(
+	verifier *capability.StandardVerifier,
+	audience string,
+	usage capability.UsageStore[pgx.Tx],
+	realIPHeader string,
+	chargePerRequestAmount float64,
+	chargePerRequestUnit string,
+	emitter ChargeEventEmitter,
+) connect.Interceptor {
+	i := CapabilityInterceptorWithEvents(verifier, audience, usage, realIPHeader,
+		chargePerRequestAmount, chargePerRequestUnit, emitter)
+	if ci, ok := i.(*capabilityInterceptor); ok {
+		ci.establishPrincipal = true
+	}
+
+	return i
+}
+
 type capabilityInterceptor struct {
 	verifier               *capability.StandardVerifier
 	audience               string
+	// establishPrincipal makes a verified capability an IDENTITY rather than
+	// only an extra restriction. On the data plane a capability is the whole
+	// credential a caller may present: it names its tenant, the verifier has
+	// checked the signature, expiry and revocation, and enforceCaveats has
+	// already narrowed what it may do. Without this the request reached the
+	// tenant gate with no principal and was refused as unauthenticated, so a
+	// capability could only ever narrow a caller who was already
+	// authenticated some other way — which made it useless as the mechanism
+	// for reaching a tenant whose long-lived credential we deliberately do
+	// not hold.
+	//
+	// An existing principal always wins: a capability presented alongside a
+	// JWT or API token stays additive, exactly as before.
+	establishPrincipal bool
 	usage                  capability.UsageStore[pgx.Tx]
 	realIPHeader           string
 	chargePerRequestAmount float64
@@ -156,6 +198,10 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 			return nil, err
 		}
 		ctx = WithCapability(ctx, cap)
+		ctx, err = i.withCapabilityPrincipal(ctx, cap)
+		if err != nil {
+			return nil, connect.NewError(connect.CodePermissionDenied, err)
+		}
 		ctx = WithChargeStore(ctx, i.usage)
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
 		ctx = WithChargeEventEmitter(ctx, i.emitter)
@@ -182,12 +228,55 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 			return err
 		}
 		ctx = WithCapability(ctx, cap)
+		ctx, err = i.withCapabilityPrincipal(ctx, cap)
+		if err != nil {
+			return connect.NewError(connect.CodePermissionDenied, err)
+		}
 		ctx = WithChargeStore(ctx, i.usage)
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
 		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
 		return next(ctx, conn)
 	}
+}
+
+// withCapabilityPrincipal derives a Principal from a verified capability and
+// stamps it on the context, unless one is already there.
+//
+// The tenant comes from the capability's own subject, which the verifier has
+// already required to be present and which the signature covers — a bearer
+// cannot widen it. No roles are attached, deliberately: a capability must never
+// satisfy a role-gated admin policy, and the data plane's Cedar policies gate
+// on tenant membership, not roles. What the bearer may DO is decided by the
+// caveats, checked in enforceCaveats before this runs.
+func (i *capabilityInterceptor) withCapabilityPrincipal(
+	ctx context.Context,
+	cap *capability.Capability,
+) (context.Context, error) {
+	if !i.establishPrincipal {
+		// The additive planes reach here too; the check lives inside rather
+		// than at each call site so the two cannot drift apart.
+		return ctx, nil
+	}
+	if _, err := PrincipalFromContext(ctx); err == nil {
+		// Already authenticated by JWT or API token; the capability stays
+		// additive so a caller who presents both is unaffected.
+		return ctx, nil
+	}
+	if cap.Subject.TenantID == uuid.Nil {
+		// The verifier rejects a tenant-less capability, so this is a
+		// belt-and-braces refusal rather than an expected path: establishing a
+		// principal with no tenant would produce a caller the tenant gate
+		// cannot scope.
+		return ctx, errors.New("capability: subject has no tenant")
+	}
+
+	return WithPrincipal(ctx, &Principal{
+		TenantID: cap.Subject.TenantID,
+		Subject:  "capability:" + cap.ID.String(),
+		Audience: i.audience,
+		Kind:     PrincipalKindCapability,
+	}), nil
 }
 
 // enforceCaveats runs the runtime-bound caveat checks: source-IP CIDR

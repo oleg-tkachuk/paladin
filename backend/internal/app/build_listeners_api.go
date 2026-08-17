@@ -152,7 +152,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		if cfg.Dispatcher.ChargeEventsEnabled {
 			chargeEm = newChargeEmitter(apiDispatcher, l.Named("charge-events"))
 		}
-		capData = auth.CapabilityInterceptorWithEvents(
+		// Establishing on the data plane: a capability names its tenant and
+		// the verifier has checked signature, expiry and revocation, so it is
+		// enough to authenticate ITS tenant's object operations. That is what
+		// lets a consumer reach a tenant without holding a long-lived
+		// credential for it. A capability presented alongside a JWT or API
+		// token stays additive — the existing principal wins.
+		capData = auth.CapabilityEstablishingInterceptor(
 			deps.Capability.Verifier,
 			capability.AudiencePlaneData,
 			deps.Capability.Usage,

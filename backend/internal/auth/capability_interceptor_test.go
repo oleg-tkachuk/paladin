@@ -1,7 +1,11 @@
 package auth
 
 import (
+	"context"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // TestExtractCapabilityToken covers the header parsing branches:
@@ -50,5 +54,91 @@ func TestCapabilityInterceptor_NilVerifier(t *testing.T) {
 	// switch works because we return the concrete passthroughInterceptor.
 	if _, ok := i.(passthroughInterceptor); !ok {
 		t.Fatalf("expected passthroughInterceptor, got %T", i)
+	}
+}
+
+// ─── capability as an identity ──────────────────────────────────────────────
+
+// A verified capability must authenticate its OWN tenant. Before this the
+// interceptor was additive only, so a capability could narrow a caller who was
+// already authenticated but could never reach a tenant on its own — which made
+// it unusable as the mechanism for serving a tenant whose long-lived credential
+// we deliberately do not hold.
+func TestWithCapabilityPrincipal_EstablishesTheCapabilitysTenant(t *testing.T) {
+	tenant := uuid.New()
+	capID := uuid.New()
+	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
+
+	ctx, err := i.withCapabilityPrincipal(context.Background(), &capability.Capability{
+		ID:      capID,
+		Subject: capability.Principal{TenantID: tenant, Subject: "svc"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	p, perr := PrincipalFromContext(ctx)
+	if perr != nil {
+		t.Fatalf("no principal established: %v", perr)
+	}
+	if p.TenantID != tenant {
+		t.Errorf("tenant = %v, want the capability's %v", p.TenantID, tenant)
+	}
+	if p.Kind != PrincipalKindCapability {
+		t.Errorf("kind = %v, want PrincipalKindCapability", p.Kind)
+	}
+	if len(p.Roles) != 0 {
+		t.Errorf("roles = %v; a capability must never satisfy a role-gated policy", p.Roles)
+	}
+	if p.Subject != "capability:"+capID.String() {
+		t.Errorf("subject = %q, want the capability id so audit can trace it", p.Subject)
+	}
+}
+
+// A capability presented alongside a JWT or API token stays additive: the
+// established identity wins, so adding one to an existing call cannot silently
+// re-scope it to another tenant.
+func TestWithCapabilityPrincipal_ExistingPrincipalWins(t *testing.T) {
+	original := &Principal{TenantID: uuid.New(), Subject: "user-1", Kind: PrincipalKindUser}
+	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
+
+	ctx, err := i.withCapabilityPrincipal(WithPrincipal(context.Background(), original),
+		&capability.Capability{ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	p, _ := PrincipalFromContext(ctx)
+	if p.TenantID != original.TenantID || p.Kind != PrincipalKindUser {
+		t.Errorf("principal was replaced: %+v", p)
+	}
+}
+
+// A tenant-less capability cannot scope anything. The verifier rejects one, so
+// this is the belt-and-braces path — it must refuse rather than establish a
+// principal the tenant gate cannot scope.
+func TestWithCapabilityPrincipal_RefusesATenantlessCapability(t *testing.T) {
+	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
+
+	_, err := i.withCapabilityPrincipal(context.Background(),
+		&capability.Capability{ID: uuid.New(), Subject: capability.Principal{}})
+
+	if err == nil {
+		t.Fatal("want an error for a capability with no tenant")
+	}
+}
+
+// The additive interceptor must stay additive: nothing establishes identity
+// unless the wiring asked for it.
+func TestWithCapabilityPrincipal_NoopWhenNotEstablishing(t *testing.T) {
+	i := &capabilityInterceptor{audience: "paladin-data"}
+
+	ctx, err := i.withCapabilityPrincipal(context.Background(),
+		&capability.Capability{ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, perr := PrincipalFromContext(ctx); perr == nil {
+		t.Error("a non-establishing interceptor must not stamp a principal")
 	}
 }
