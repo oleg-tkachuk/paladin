@@ -259,3 +259,50 @@ func TestPrincipalFromAPIToken_RolelessStaysRoleless(t *testing.T) {
 		t.Errorf("roles = %v, want none", p.Roles)
 	}
 }
+
+// The admin plane establishes identity only for a token carrying roles: a
+// roleless one would gain nothing there and would newly reach any RPC gated on
+// tenant alone. Pins both directions of that gate.
+func TestWithTokenIdentity_RolesOnlyEstablishment(t *testing.T) {
+	roleless := &api_token.Token{ID: uuid.New(), TenantID: uuid.New()}
+	withRole := &api_token.Token{
+		ID: uuid.New(), TenantID: uuid.New(),
+		Roles: []string{"platform.capability-issuer"},
+	}
+	i := &apiTokenInterceptor{audience: "admin", establishPrincipal: true, requireRolesToEstablish: true}
+
+	ctx, err := i.withTokenIdentity(context.Background(), roleless)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, perr := PrincipalFromContext(ctx); perr == nil {
+		t.Error("a roleless token must not establish a principal on this plane")
+	}
+
+	ctx, err = i.withTokenIdentity(context.Background(), withRole)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	p, perr := PrincipalFromContext(ctx)
+	if perr != nil {
+		t.Fatalf("a role-bearing token must establish one: %v", perr)
+	}
+	if !p.HasRole("platform.capability-issuer") {
+		t.Errorf("roles = %v", p.Roles)
+	}
+}
+
+// The data plane establishes for every valid token, roles or not — that is how a
+// service authenticates ordinary object operations.
+func TestWithTokenIdentity_DataPlaneEstablishesWithoutRoles(t *testing.T) {
+	i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
+
+	ctx, err := i.withTokenIdentity(context.Background(),
+		&api_token.Token{ID: uuid.New(), TenantID: uuid.New()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, perr := PrincipalFromContext(ctx); perr != nil {
+		t.Error("the data plane must still authenticate a roleless service token")
+	}
+}

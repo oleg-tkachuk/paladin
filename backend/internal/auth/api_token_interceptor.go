@@ -195,7 +195,7 @@ func principalAudienceFor(label string) string {
 // derives a principal, so it never errors here.
 func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_token.Token) (context.Context, error) {
 	ctx = WithAPIToken(ctx, t)
-	if i.establishPrincipal && !(i.requireRolesToEstablish && len(t.Roles) == 0) {
+	if i.establishPrincipal && (!i.requireRolesToEstablish || len(t.Roles) > 0) {
 		if _, err := PrincipalFromContext(ctx); err != nil {
 			p, perr := principalFromAPIToken(t, i.audience)
 			if perr != nil {
