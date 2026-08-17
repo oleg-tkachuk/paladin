@@ -123,6 +123,16 @@ spec:
               mountPath: {{ $.Values.postgresCa.mountPath }}
               readOnly: true
             {{- end }}
+            {{- if $.Values.capabilitySigningKeySecret.name }}
+            # Mounted here rather than through defaults.volumeMounts because
+            # every role needs it and per-role lists OVERRIDE the defaults —
+            # api and admin define their own for mTLS, so a key added to the
+            # defaults would silently miss exactly the roles that mint and
+            # verify capabilities.
+            - name: capability-signing-key
+              mountPath: {{ $.Values.capabilitySigningKeySecret.mountPath }}
+              readOnly: true
+            {{- end }}
             {{- with default $defaults.volumeMounts $spec.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -134,6 +144,14 @@ spec:
         - name: pg-ca
           secret:
             secretName: {{ $.Values.postgresCa.secretName }}
+        {{- end }}
+        {{- if $.Values.capabilitySigningKeySecret.name }}
+        - name: capability-signing-key
+          secret:
+            secretName: {{ $.Values.capabilitySigningKeySecret.name }}
+            items:
+              - key: {{ $.Values.capabilitySigningKeySecret.key }}
+                path: {{ $.Values.capabilitySigningKeySecret.key }}
         {{- end }}
         {{- with default $defaults.volumes $spec.volumes }}
         {{- toYaml . | nindent 8 }}

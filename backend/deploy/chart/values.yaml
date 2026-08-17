@@ -1103,6 +1103,26 @@ postgresCa:
   secretName: ""
   mountPath: /etc/paladin/pg-ca
 
+# ─── Capability signing key ────────────────────────────────────────────────
+#
+# Ed25519 private key (PKCS#8 PEM) that signs capability tokens, mounted into
+# EVERY role: the admin plane signs with it and the data plane verifies with it.
+#
+# Set `name` and point `config.capability.signing_key_path` at
+# `<mountPath>/<key>`. Leave `name` empty to run without a mounted key — the
+# server then generates an ephemeral keypair and every restart invalidates
+# every issued capability, which is only acceptable where capabilities are
+# disposable (see ADR-0010).
+#
+# Mounted by the chart rather than through `defaults.volumes` on purpose: a
+# per-role `volumes` list OVERRIDES the defaults, and api/admin define their own
+# for mTLS — so a key added to the defaults would miss precisely the roles that
+# mint and verify.
+capabilitySigningKeySecret:
+  name: ""
+  key: key.pem
+  mountPath: /etc/paladin-capability
+
 # ─── RBAC for K8sSecretResolver ────────────────────────────────────────────
 #
 # The resolver issues exactly one verb (GET) per referenced secret name.
