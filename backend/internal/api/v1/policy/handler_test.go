@@ -448,3 +448,31 @@ func TestExtractLayers(t *testing.T) {
 		}
 	})
 }
+
+// The simulated principal must carry the credential KIND, or a simulation
+// cannot reproduce a decision from a policy that reads `principal.kind` — the
+// built-in permit letting a machine delete its own objects is one — and would
+// answer "denied" for a call that succeeds in production.
+func TestSimulateAuthz_CarriesThePrincipalKind(t *testing.T) {
+	tid := uuid.New()
+	fe := allowEngine()
+	h := NewHandler(fe, &fakeStore{})
+
+	_, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
+		PrincipalSubject: "consumer",
+		PrincipalKind:    "capability",
+		Action:           "DeleteObject",
+		ResourceName:     "tenants/" + tid.String() + "/objectKeys/k",
+	})
+	if err != nil {
+		t.Fatalf("SimulateAuthz: %v", err)
+	}
+	// Two calls: the InspectPolicy gate, then the simulation itself.
+	if len(fe.calls) == 0 {
+		t.Fatal("the engine was never asked")
+	}
+	last := fe.calls[len(fe.calls)-1]
+	if last.princ.Kind != "capability" {
+		t.Fatalf("simulated principal kind = %q, want %q", last.princ.Kind, "capability")
+	}
+}

@@ -194,7 +194,14 @@ type SimulateAuthzRequest struct {
 	PrincipalRoles    []string `protobuf:"bytes,3,rep,name=principal_roles,json=principalRoles,proto3" json:"principal_roles,omitempty"`
 	Action            string   `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"`
 	// Resource name to authorize against.
-	ResourceName  string `protobuf:"bytes,5,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	ResourceName string `protobuf:"bytes,5,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	// Credential type behind the simulated principal: "user" | "api_key" |
+	// "service_account" | "capability" (auth.PrincipalKind). Without it a
+	// simulation cannot reproduce a decision from a policy that reads
+	// `principal.kind` — the built-in permit letting a machine delete its own
+	// objects is one — and would answer "denied" for a call that succeeds.
+	// Empty simulates a principal whose kind is unknown, which matches no kind.
+	PrincipalKind string `protobuf:"bytes,6,opt,name=principal_kind,json=principalKind,proto3" json:"principal_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -260,6 +267,13 @@ func (x *SimulateAuthzRequest) GetAction() string {
 func (x *SimulateAuthzRequest) GetResourceName() string {
 	if x != nil {
 		return x.ResourceName
+	}
+	return ""
+}
+
+func (x *SimulateAuthzRequest) GetPrincipalKind() string {
+	if x != nil {
+		return x.PrincipalKind
 	}
 	return ""
 }
@@ -488,13 +502,14 @@ const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\bseverity\x18\x01 \x01(\tR\bseverity\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
 	"\x04line\x18\x03 \x01(\x05R\x04line\x12\x16\n" +
-	"\x06column\x18\x04 \x01(\x05R\x06column\"\xf4\x01\n" +
+	"\x06column\x18\x04 \x01(\x05R\x06column\"\x9b\x02\n" +
 	"\x14SimulateAuthzRequest\x124\n" +
 	"\x11principal_subject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x10principalSubject\x12.\n" +
 	"\x13principal_tenant_id\x18\x02 \x01(\tR\x11principalTenantId\x12'\n" +
 	"\x0fprincipal_roles\x18\x03 \x03(\tR\x0eprincipalRoles\x12\x1f\n" +
 	"\x06action\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06action\x12,\n" +
-	"\rresource_name\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fresourceName\"~\n" +
+	"\rresource_name\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fresourceName\x12%\n" +
+	"\x0eprincipal_kind\x18\x06 \x01(\tR\rprincipalKind\"~\n" +
 	"\x15SimulateAuthzResponse\x12\x18\n" +
 	"\aallowed\x18\x01 \x01(\bR\aallowed\x12)\n" +
 	"\x10matched_policies\x18\x02 \x03(\tR\x0fmatchedPolicies\x12 \n" +

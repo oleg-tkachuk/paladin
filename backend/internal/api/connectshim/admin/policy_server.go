@@ -45,6 +45,7 @@ func (s *PolicyServer) SimulateAuthz(ctx context.Context, req *connect.Request[p
 		PrincipalSubject:  m.GetPrincipalSubject(),
 		PrincipalTenantID: tenantID,
 		PrincipalRoles:    m.GetPrincipalRoles(),
+		PrincipalKind:     m.GetPrincipalKind(),
 		Action:            m.GetAction(),
 		ResourceName:      m.GetResourceName(),
 	})

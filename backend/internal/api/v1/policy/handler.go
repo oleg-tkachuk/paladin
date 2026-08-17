@@ -81,6 +81,8 @@ type SimulateAuthzInput struct {
 	PrincipalSubject  string
 	PrincipalTenantID uuid.UUID
 	PrincipalRoles    []string
+	// PrincipalKind is the credential type the simulated caller would carry.
+	PrincipalKind string
 	Action            string
 	ResourceName      string
 }
@@ -106,13 +108,11 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 	}
 	// A hypothetical principal, built from the request rather than from a
 	// credential — the one place a literal is right, because there IS no
-	// auth.Principal to lift. Note the gap: SimulateAuthz cannot express a
-	// credential KIND, so it will not reproduce a decision from a policy that
-	// reads `principal.kind` (the built-in machine-delete permit is one). Worth
-	// adding to the RPC when somebody needs to simulate it.
+	// auth.Principal to lift.
 	princ := &cedar.Principal{
 		Subject:  in.PrincipalSubject,
 		TenantID: tenantID,
+		Kind:     in.PrincipalKind,
 		Roles:    in.PrincipalRoles,
 	}
 	decision, err := h.engine.IsAuthorized(ctx, princ, in.Action, res, cedar.RequestContext{Now: time.Now()})

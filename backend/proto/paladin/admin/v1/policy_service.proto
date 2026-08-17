@@ -47,6 +47,13 @@ message SimulateAuthzRequest {
   string action = 4 [(buf.validate.field).string.min_len = 1];
   // Resource name to authorize against.
   string resource_name = 5 [(buf.validate.field).string.min_len = 1];
+  // Credential type behind the simulated principal: "user" | "api_key" |
+  // "service_account" | "capability" (auth.PrincipalKind). Without it a
+  // simulation cannot reproduce a decision from a policy that reads
+  // `principal.kind` — the built-in permit letting a machine delete its own
+  // objects is one — and would answer "denied" for a call that succeeds.
+  // Empty simulates a principal whose kind is unknown, which matches no kind.
+  string principal_kind = 6;
 }
 
 message SimulateAuthzResponse {
