@@ -109,6 +109,21 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+
+	// Issuing FOR another tenant is a platform operation.
+	//
+	// The subject's tenant is chosen by the caller and Cedar authorises
+	// `capability:issue` against the CALLER's own tenant policy, which says
+	// nothing about the tenant named in the subject. So without this check any
+	// tenant granted `issue` in its own policy could mint a capability for any
+	// other tenant — and since ADR-0010 a capability authenticates as its
+	// subject's tenant, that is a full cross-tenant escalation, not merely an
+	// extra restriction on an existing caller.
+	if subj.TenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("issuing a capability for another tenant requires platform.admin"))
+	}
+
 	caveats := protoToCaveats(req.Msg.GetCaveats())
 
 	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second

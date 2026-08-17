@@ -415,3 +415,74 @@ func TestGetUsageIsCedarGated(t *testing.T) {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
 	}
 }
+
+// ─── cross-tenant issuance ─────────────────────────────────────────────────
+
+// tenantCtx is a caller scoped to one tenant with a tenant-level role — the
+// shape that could previously mint for anybody.
+func tenantCtx(tenant uuid.UUID) context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject: "tenant-operator", TenantID: tenant, Roles: []string{"tenant.admin"},
+	})
+}
+
+// Since ADR-0010 a capability authenticates AS its subject's tenant, so minting
+// one for another tenant is a full cross-tenant grant. Cedar authorises
+// `capability:issue` against the caller's own tenant policy and says nothing
+// about the subject's tenant, so the handler has to.
+func TestIssue_NonPlatformAdminCannotIssueForAnotherTenant(t *testing.T) {
+	store := &fakeStore{}
+	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+	caller, victim := uuid.New(), uuid.New()
+
+	_, err := h.Issue(tenantCtx(caller), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+		Subject: &adminv1.CapabilityPrincipal{
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: victim.String(), Subject: "victim",
+		},
+		Audience:   []string{"paladin-data"},
+		TtlSeconds: 300,
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+	}))
+
+	if codeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
+	}
+}
+
+// Issuing within one's own tenant stays available to a tenant-level caller.
+func TestIssue_TenantAdminMayIssueForItsOwnTenant(t *testing.T) {
+	store := &fakeStore{}
+	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+	own := uuid.New()
+
+	_, err := h.Issue(tenantCtx(own), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+		Subject: &adminv1.CapabilityPrincipal{
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: own.String(), Subject: "self",
+		},
+		Audience:   []string{"paladin-data"},
+		TtlSeconds: 300,
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+	}))
+	if err != nil {
+		t.Fatalf("Issue for own tenant: %v", err)
+	}
+}
+
+// A platform admin still mints for anybody — that is how a consumer serving
+// many tenants gets per-tenant credentials.
+func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
+	store := &fakeStore{}
+	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+
+	_, err := h.Issue(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+		Subject: &adminv1.CapabilityPrincipal{
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "svc",
+		},
+		Audience:   []string{"paladin-data"},
+		TtlSeconds: 300,
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+	}))
+	if err != nil {
+		t.Fatalf("Issue as platform admin: %v", err)
+	}
+}
