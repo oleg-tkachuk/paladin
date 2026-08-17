@@ -142,3 +142,20 @@ func TestWithCapabilityPrincipal_NoopWhenNotEstablishing(t *testing.T) {
 		t.Error("a non-establishing interceptor must not stamp a principal")
 	}
 }
+
+// RequireAudience compares against the canonical plane audience, so the
+// principal must carry that rather than the capability plane label.
+func TestWithCapabilityPrincipal_MapsThePlaneAudience(t *testing.T) {
+	i := &capabilityInterceptor{audience: "data", establishPrincipal: true}
+
+	ctx, err := i.withCapabilityPrincipal(context.Background(), &capability.Capability{
+		ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	p, _ := PrincipalFromContext(ctx)
+	if p.Audience != AudienceData {
+		t.Errorf("audience = %q, want the canonical %q", p.Audience, AudienceData)
+	}
+}

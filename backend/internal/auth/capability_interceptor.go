@@ -274,7 +274,13 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 	return WithPrincipal(ctx, &Principal{
 		TenantID: cap.Subject.TenantID,
 		Subject:  "capability:" + cap.ID.String(),
-		Audience: i.audience,
+		// The interceptor's audience is the capability PLANE label ("data"),
+		// while RequireAudience compares against the canonical plane audience
+		// ("paladin-data"). Mapping here is what the API-token path already does;
+		// carrying the label through unmapped produced `token audience "data"
+		// is not allowed on "paladin-data" plane` — a request that had just
+		// authenticated, refused for a naming mismatch.
+		Audience: principalAudienceFor(i.audience),
 		Kind:     PrincipalKindCapability,
 	}), nil
 }
