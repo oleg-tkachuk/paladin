@@ -153,7 +153,16 @@ type Principal struct {
 	Subject    string
 	TenantID   uuid.UUID
 	TenantSlug string
-	Roles      []string
+	// Kind is the wire name of the credential type behind this principal
+	// ("user", "api_key", "service_account", "capability") — see
+	// auth.PrincipalKind.String(). Exposed to Cedar as `principal.kind` so a
+	// policy can distinguish a machine credential from a person: the built-in
+	// delete permit turns on exactly that difference.
+	//
+	// Empty when the constructing path does not carry it. A policy comparing
+	// against a kind then matches nothing, which is the fail-closed default.
+	Kind  string
+	Roles []string
 	// Scopes are the JWT-carried scope strings (already in wire form,
 	// e.g. "objects:read:tenant_id/object_key/key"). Exposed to Cedar as
 	// `principal.scopes` so policies can match scope prefixes for
@@ -619,6 +628,49 @@ when {
   principal.tenant_id == resource.tenant_id
 };
 
+// Built-in: a MACHINE principal may delete and restore objects in its OWN
+// tenant.
+//
+// The per-tenant default policy gates the delete family on "objectKey:admin" or
+// "platform.admin", which is right for people — deletion is destructive and a
+// tenant member should not do it casually — and wrong for the service that owns
+// the object lifecycle. A consumer records an object, later removes the record,
+// and must be able to remove the object with it; a garbage collector must be
+// able to reap what nothing references. Neither can hold a role: an API token's
+// principal carries none, and a capability carries none BY DESIGN (ADR-0010).
+//
+// Before this, the consequence was silent. consumer's avatar replacement deleted
+// the previous object best-effort and swallowed the denial into a warning, so
+// every replacement orphaned a file; the sweeper written to reap those orphans
+// ran in dry-run and had never attempted a delete. Nothing failed loudly enough
+// to be found until somebody went looking.
+//
+// The grant is bounded three ways: the principal must be a machine credential
+// (minted deliberately — a platform admin issues an API token, a
+// capability-issuer issues a capability), the object must be in that
+// principal's OWN tenant, and a capability is additionally confined by its own
+// caveats, which the interceptor checks before Cedar ever runs. Deletion here is
+// also the soft kind: the row is marked, RestoreObject brings it back, and
+// physical removal is a separate lifecycle path.
+//
+// Built-in rather than per-tenant so it reaches tenants whose stored policy was
+// frozen at creation — the same reason EnsureTenantStorage lives here. A tenant
+// that wants machines held to the role can still "forbid" it; first-forbid wins.
+permit (
+  principal,
+  action in [Action::"DeleteObject", Action::"RestoreObject"],
+  resource
+)
+when {
+  principal has kind &&
+  (principal.kind == "api_key" ||
+   principal.kind == "service_account" ||
+   principal.kind == "capability") &&
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
 // Built-in: tenant provisioning. A principal holding
 // "platform.tenant-provisioner" may bring ANY tenant's storage into
 // existence — the tenant row, its bucket, its object keys, and its inherited
@@ -950,8 +1002,12 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 			"subject":     cedartypes.String(p.Subject),
 			"tenant_id":   cedartypes.String(p.TenantID.String()),
 			"tenant_slug": cedartypes.String(p.TenantSlug),
-			"roles":       cedartypes.NewSet(rolesSet...),
-			"scopes":      cedartypes.NewSet(scopesSet...),
+			// Always present, empty when unknown: a policy that reads
+			// `principal.kind` must not hit an evaluation error (Cedar fails
+			// closed on those, denying a legitimate call for the wrong reason).
+			"kind":   cedartypes.String(p.Kind),
+			"roles":  cedartypes.NewSet(rolesSet...),
+			"scopes": cedartypes.NewSet(scopesSet...),
 		}),
 	}
 

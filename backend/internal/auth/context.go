@@ -61,6 +61,55 @@ const (
 	PrincipalKindCapability
 )
 
+// Wire names for PrincipalKind, as Cedar sees them in `principal.kind`.
+//
+// Stable strings, not the numeric values: they appear in tenant-authored
+// policies, so renaming one silently changes what those policies match. An
+// unspecified kind is the EMPTY string — a policy comparing against it matches
+// nothing, which is the fail-closed default for a principal built by a path
+// that has not been taught to carry its kind.
+const (
+	PrincipalKindNameUser           = "user"
+	PrincipalKindNameApiKey         = "api_key"
+	PrincipalKindNameServiceAccount = "service_account"
+	PrincipalKindNameCapability     = "capability"
+)
+
+// String returns the wire name Cedar policies match on.
+func (k PrincipalKind) String() string {
+	switch k {
+	case PrincipalKindUser:
+		return PrincipalKindNameUser
+	case PrincipalKindApiKey:
+		return PrincipalKindNameApiKey
+	case PrincipalKindServiceAccount:
+		return PrincipalKindNameServiceAccount
+	case PrincipalKindCapability:
+		return PrincipalKindNameCapability
+	case PrincipalKindUnspecified:
+		return ""
+	default:
+		return ""
+	}
+}
+
+// IsMachine reports whether the credential behind this principal belongs to a
+// service rather than to a person. Machine principals are provisioned
+// deliberately — a platform admin mints an API token, a capability-issuer mints
+// a capability — and they act on storage as the consumer that owns it, which is
+// why the built-in policy trusts them with operations a human user must hold a
+// role for.
+func (k PrincipalKind) IsMachine() bool {
+	switch k {
+	case PrincipalKindApiKey, PrincipalKindServiceAccount, PrincipalKindCapability:
+		return true
+	case PrincipalKindUser, PrincipalKindUnspecified:
+		return false
+	default:
+		return false
+	}
+}
+
 // HasRole reports whether the principal carries the given role string.
 func (p *Principal) HasRole(role string) bool {
 	for _, r := range p.Roles {

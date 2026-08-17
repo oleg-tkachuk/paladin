@@ -85,6 +85,12 @@ entity User in [Tenant] = {
   // Principal-only
   subject: String,
   tenant_slug: String,
+  // Credential type behind the principal: "user" | "api_key" |
+  // "service_account" | "capability" (auth.PrincipalKind). Empty when the
+  // authorizing path does not carry it, so a comparison against a kind matches
+  // nothing rather than erroring. Lets a policy tell a machine from a person —
+  // the built-in delete permit turns on exactly that.
+  kind: String,
   roles: Set<String>,
   // Wire-form scopes from the JWT (e.g.
   // "objects:read:tenant_id/object_key/key"). Empty for role-only principals.

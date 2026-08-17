@@ -210,7 +210,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, objectKey, false)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
+		apiutil.CedarPrincipalFor(p, tenantID),
 		action,
 		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},

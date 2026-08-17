@@ -375,7 +375,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 // scoped principal — unscoped/roles-only callers are unaffected.
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, backendID, bucket, action string, sizeBytes int64, contentType string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
+		apiutil.CedarPrincipalFor(p, tenantID),
 		action,
 		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, BackendID: backendID, BucketName: bucket, SizeBytes: sizeBytes, ContentType: contentType},
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},

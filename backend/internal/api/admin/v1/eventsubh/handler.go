@@ -39,7 +39,7 @@ func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UU
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
+		apiutil.CedarPrincipal(p),
 		action,
 		&cedar.Resource{TenantID: tenantID},
 		cedar.RequestContext{Now: time.Now()},

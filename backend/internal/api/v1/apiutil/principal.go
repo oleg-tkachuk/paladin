@@ -1,6 +1,8 @@
 package apiutil
 
 import (
+	"github.com/google/uuid"
+
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -26,26 +28,39 @@ func ScopeStrings(scopes []auth.Scope) []string {
 // silently dropped on most paths until this helper landed. New code should
 // prefer this function over the literal form.
 //
-// `tenantOverride` lets the caller pin a different tenant on the resulting
-// principal — used by handlers that target cross-tenant resources but still
-// authorize as the calling principal (e.g. a platform admin reading another
-// tenant's data). When uuid.Nil, the principal's own tenant is used.
-//
 // The returned value is the principal-as-actor; the resource side is built
 // separately via cedar.Resource.
 func CedarPrincipal(p *auth.Principal) *cedar.Principal {
+	return CedarPrincipalFor(p, uuid.Nil)
+}
+
+// CedarPrincipalFor is CedarPrincipal with the tenant pinned.
+//
+// `tenantOverride` is for handlers that target a cross-tenant resource but still
+// authorize as the calling principal (a platform admin reading another tenant's
+// data): the resource tenant must be the one Cedar compares against, or a
+// tenant-equality policy would silently evaluate against the caller's own.
+// uuid.Nil keeps the principal's own tenant.
+func CedarPrincipalFor(p *auth.Principal, tenantOverride uuid.UUID) *cedar.Principal {
 	if p == nil {
 		return &cedar.Principal{}
 	}
-	scopes := make([]string, 0, len(p.Scopes))
-	for _, s := range p.Scopes {
-		scopes = append(scopes, s.String())
+	tenantID := p.TenantID
+	if tenantOverride != uuid.Nil {
+		tenantID = tenantOverride
 	}
+
 	return &cedar.Principal{
 		Subject:    p.Subject,
-		TenantID:   p.TenantID,
+		TenantID:   tenantID,
 		TenantSlug: p.TenantSlug,
-		Roles:      p.Roles,
-		Scopes:     scopes,
+		// The credential type, so a policy can tell a machine from a person.
+		// Populated HERE and only here, which is why every authorization site
+		// should build its principal through this helper rather than a literal:
+		// a site that forgets the field does not fail loudly, it just stops
+		// matching the built-in policies that read it.
+		Kind:   p.Kind.String(),
+		Roles:  p.Roles,
+		Scopes: ScopeStrings(p.Scopes),
 	}
 }

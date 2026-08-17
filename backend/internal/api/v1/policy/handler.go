@@ -44,7 +44,7 @@ func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, obje
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.engine.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
+		apiutil.CedarPrincipal(p),
 		cedar.ActionInspectPolicy,
 		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
 		cedar.RequestContext{Now: time.Now()},
@@ -104,6 +104,12 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 		TenantID:  tenantID,
 		ObjectKey: objectKey,
 	}
+	// A hypothetical principal, built from the request rather than from a
+	// credential — the one place a literal is right, because there IS no
+	// auth.Principal to lift. Note the gap: SimulateAuthz cannot express a
+	// credential KIND, so it will not reproduce a decision from a policy that
+	// reads `principal.kind` (the built-in machine-delete permit is one). Worth
+	// adding to the RPC when somebody needs to simulate it.
 	princ := &cedar.Principal{
 		Subject:  in.PrincipalSubject,
 		TenantID: tenantID,

@@ -266,7 +266,7 @@ func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action string, target authstore.User) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
+		apiutil.CedarPrincipal(p),
 		action,
 		&cedar.Resource{
 			TenantID:      target.TenantID,
@@ -286,7 +286,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action strin
 
 func (h *Handler) authorizeTenant(ctx context.Context, p *auth.Principal, action string, tenantID uuid.UUID) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
+		apiutil.CedarPrincipal(p),
 		action,
 		&cedar.Resource{TenantID: tenantID},
 		cedar.RequestContext{Now: time.Now()},
