@@ -619,6 +619,45 @@ when {
   principal.tenant_id == resource.tenant_id
 };
 
+// Built-in: tenant provisioning. A principal holding
+// "platform.tenant-provisioner" may bring ANY tenant's storage into
+// existence — the tenant row, its bucket, its object keys, and its inherited
+// policy — and nothing else.
+//
+// Cross-tenant on purpose: the whole point is a consumer that creates an
+// account and needs the matching tenant to exist without a human running a
+// command. Before this, the only credential that could do it was
+// platform.admin, which the built-in above grants EVERYTHING — including
+// deleting any tenant and reading any object. This is the narrow slice of that
+// authority which provisioning actually needs.
+//
+// The action list is exhaustive by intent, and the omissions are the point:
+// no DeleteObject/GetObject/PutObject (no data-plane reach at all), no
+// ManageBackend (it may bind to an existing backend, not create or rotate
+// one), no IAM or token actions (it cannot mint a credential), and nothing
+// that removes a tenant — DeleteTenant/PurgeTenant/RestoreTenant/
+// RenameTenantSlug all route through ManageTenant, so the handler-side gates
+// keep those on platform.admin and this permit alone cannot reach them.
+//
+// ManageObjectKey covers both reading and creating an object key: the
+// object-key handler authorises Get with the same action as Create.
+// A tenant policy can still forbid it (first-forbid wins).
+permit (
+  principal,
+  action in [
+    Action::"ManageTenant",
+    Action::"ReadTenant",
+    Action::"ManageBucket",
+    Action::"ReadBucket",
+    Action::"ManageObjectKey",
+    Action::"BindObjectKeyToBucket"
+  ],
+  resource
+)
+when {
+  principal has roles && principal.roles.contains("platform.tenant-provisioner")
+};
+
 // Built-in: OPT-IN resource-scope enforcement. A principal that carries a
 // NON-EMPTY scopes set (and not the "*" wildcard) is confined to resources
 // whose admitting scope-strings intersect its scopes. Principals with an EMPTY

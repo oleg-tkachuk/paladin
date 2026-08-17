@@ -20,6 +20,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0008](0008-mcp-oauth-resource-server.md) | MCP server as an OAuth 2.1 Resource Server | Accepted |
 | [0009](0009-oauth-authorization-server.md) | OAuth 2.1 Authorization Server (IAM-as-AS) | Accepted |
 | [0010](0010-capability-as-establishing-credential.md) | A capability may establish identity on the data plane | Accepted |
+| [0011](0011-narrow-role-for-tenant-provisioning.md) | A narrow role for tenant provisioning | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

@@ -25,6 +25,19 @@ const (
 	// long-lived credential per tenant or platform.admin, whose leak is
 	// unbounded.
 	RoleCapabilityIssuer = "platform.capability-issuer"
+	// RoleTenantProvisioner may bring a tenant's storage into existence —
+	// create the tenant, its bucket and its object keys, and set its inherited
+	// policy — for ANY tenant, and nothing else. It cannot delete, purge,
+	// rename or restore a tenant, it cannot rewrite a tenant's other fields,
+	// it cannot mint credentials, and it has no data-plane reach: it cannot
+	// read or write a single object.
+	//
+	// It exists because provisioning has to happen automatically when a
+	// consumer creates an account, and the only credential that could do it
+	// was platform.admin — whose leak deletes every tenant's data. Same
+	// reasoning as RoleCapabilityIssuer above: the authority a machine needs
+	// standing is the authority worth naming.
+	RoleTenantProvisioner = "platform.tenant-provisioner"
 )
 
 // RequireRole returns Unauthenticated when no principal is present and

@@ -171,9 +171,15 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	if args.TenantID == uuid.Nil {
 		args.TenantID = callerTenantID
 	} else if args.TenantID != callerTenantID {
-		if !principal.HasRole(apiutil.RolePlatformAdmin) {
+		// platform.tenant-provisioner too: creating another tenant's object
+		// keys IS provisioning, and it is the step that makes a freshly created
+		// tenant usable. Its authority stops there — the role carries no
+		// data-plane action, so it can name the namespace and never read or
+		// write an object in it.
+		if !principal.HasRole(apiutil.RolePlatformAdmin) &&
+			!principal.HasRole(apiutil.RoleTenantProvisioner) {
 			return nil, connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant CreateObjectKey requires platform.admin"))
+				errors.New("cross-tenant CreateObjectKey requires platform.admin or platform.tenant-provisioner"))
 		}
 	}
 	// A backend must be named explicitly — there is no default. The connectshim
@@ -293,9 +299,13 @@ func (h *Handler) GetObjectKey(ctx context.Context, tenantID uuid.UUID, objectKe
 	if tenantID == uuid.Nil {
 		tenantID = callerTenantID
 	}
-	if tenantID != callerTenantID && !principal.HasRole(apiutil.RolePlatformAdmin) {
+	// A provisioner reads before it creates — the ensure step is what makes
+	// re-running provisioning a no-op instead of a conflict.
+	if tenantID != callerTenantID &&
+		!principal.HasRole(apiutil.RolePlatformAdmin) &&
+		!principal.HasRole(apiutil.RoleTenantProvisioner) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("cross-tenant GetObjectKey requires platform.admin"))
+			errors.New("cross-tenant GetObjectKey requires platform.admin or platform.tenant-provisioner"))
 	}
 	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return nil, err

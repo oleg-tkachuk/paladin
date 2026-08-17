@@ -374,7 +374,11 @@ func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UU
 }
 
 func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Tenant, error) {
-	if err := requirePlatformAdmin(ctx); err != nil {
+	// Creating a tenant is provisioning, not tenant lifecycle: it brings a
+	// consumer's account into existence and takes nothing away. Delete, purge,
+	// restore and rename stay platform.admin-only below, so the provisioner
+	// role can add tenants and never remove one.
+	if err := requireProvisioningAuthority(ctx); err != nil {
 		return nil, err
 	}
 	// tenant_id: client-supplied or server-generated. Zero UUID is
@@ -485,9 +489,12 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
-	// Non-admins may only view their own tenant.
+	// Non-admins may only view their own tenant. A provisioner reads the
+	// tenant it is about to provision — to learn whether it exists at all, and
+	// to carry its resource_version into the policy write — so it is admitted
+	// here for the same reason it may create one.
 	if callerTenant != tenantID {
-		if err := requirePlatformAdmin(ctx); err != nil {
+		if err := requireProvisioningAuthority(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -671,8 +678,22 @@ func (h *Handler) ResolveRenamedSlug(ctx context.Context, oldSlug string) (strin
 }
 
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {
+	// SetInheritedPolicy lands here, and it is the one edit a provisioner must
+	// make: a freshly created tenant is unusable until its policy admits the
+	// consumer. Everything else UpdateTenant can change — display name, labels
+	// — stays platform.admin, so the gate is on the SHAPE of the update rather
+	// than on the RPC that produced it. A provisioner that tried to rename a
+	// tenant while setting its policy is refused outright rather than having
+	// the extra field quietly dropped.
 	if err := requirePlatformAdmin(ctx); err != nil {
-		return nil, err
+		policyOnly := args.InheritedCedarPolicy != nil &&
+			args.DisplayName == nil && args.Labels == nil
+		if !policyOnly {
+			return nil, err
+		}
+		if provErr := apiutil.RequireRole(ctx, apiutil.RoleTenantProvisioner); provErr != nil {
+			return nil, err
+		}
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
@@ -877,6 +898,21 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 		args.AfterID = id
 	}
 	return h.repo.List(ctx, args)
+}
+
+// requireProvisioningAuthority admits platform.admin or the narrow
+// platform.tenant-provisioner role.
+//
+// Split from requirePlatformAdmin so the provisioning RPCs are the ONLY ones
+// that widen: every other call site keeps the admin-only gate, and adding a
+// role to this helper cannot accidentally grant tenant deletion.
+func requireProvisioningAuthority(ctx context.Context) error {
+	if err := apiutil.RequireAnyRole(ctx,
+		apiutil.RolePlatformAdmin, apiutil.RoleTenantProvisioner); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func requirePlatformAdmin(ctx context.Context) error {
