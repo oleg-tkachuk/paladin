@@ -153,7 +153,13 @@ type CreateBucketInput struct {
 }
 
 func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admindomain.Bucket, error) {
-	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
+	// platform.tenant-provisioner too (ADR-0011): a consumer's tenant is
+	// unusable until its bucket exists, and provisioning has to run without a
+	// human. Creating a bucket only adds a destination — the role carries no
+	// authority to reconfigure or remove one (see Update/Delete/Configure*
+	// below, which stay bucket-admin), and none at all over its contents.
+	if err := apiutil.RequireAnyRole(ctx,
+		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantProvisioner); err != nil {
 		return nil, err
 	}
 	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
@@ -309,8 +315,12 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 // ─── Read ───────────────────────────────────────────────────────────────────
 
 func (h *Handler) GetBucket(ctx context.Context, backendID, bucketName string) (*admindomain.Bucket, error) {
+	// A provisioner reads before it creates — that read is what makes adopting
+	// an existing bucket a no-op instead of a conflict. It falls into the
+	// redacted branch below with tenant admins, so it never sees policy text.
 	if err := apiutil.RequireAnyRole(ctx,
-		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin); err != nil {
+		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin,
+		apiutil.RoleTenantProvisioner); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Get(ctx, backendID, bucketName)
