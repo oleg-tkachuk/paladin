@@ -35,6 +35,21 @@ spec:
         # rendered ConfigMap, so any tweak to `config.*` triggers a
         # fresh rollout instead of waiting for the next manual restart.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        # Same for the Secrets this chart renders. Every credential in them is
+        # resolved ONCE at boot (K8sSecretResolver), so rotating one without a
+        # restart leaves every pod running on the old value while the cluster
+        # says the rotation is done — the rotation looks complete and is not.
+        #
+        # This covers chart-rendered Secrets only. A credential in an
+        # externally-managed Secret (a SealedSecret, an ExternalSecret, the
+        # CNPG-generated Postgres users) cannot be hashed here: its content is
+        # not part of this render, and a `lookup` would return empty whenever
+        # Helm runs without cluster access — ArgoCD's client-side render, `helm
+        # template`, CI. Rotating one of those still needs an explicit restart;
+        # see the rotation note in values.yaml.
+        checksum/secrets: {{ printf "%s%s"
+          (include (print $.Template.BasePath "/secret-bootstrap-admin.yaml") $)
+          (include (print $.Template.BasePath "/secret-s3-credentials.yaml") $) | sha256sum }}
         {{- with default $defaults.podAnnotations $spec.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

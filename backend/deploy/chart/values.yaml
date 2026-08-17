@@ -954,6 +954,33 @@ config:
 # the Secret) is intentional — GitOps shapes use the SealedSecret path
 # and need to set the chart flag to false. See secret-bootstrap-admin.yaml
 # for the full matrix of combinations.
+
+# ─── Credential rotation and pod restarts ───────────────────────────────────
+#
+# Every credential this chart references is resolved ONCE at boot by
+# K8sSecretResolver. A rotation therefore only takes effect on a pod restart.
+#
+# Two cases, and only one of them is automatic:
+#
+#   * Values-driven changes — anything under `config.*`, and the Secrets THIS
+#     chart renders (bootstrap.admin, storage.s3CredentialsSecret) — are
+#     covered by the checksum/config and checksum/secrets pod annotations. A
+#     change rolls the Deployments on the next sync; nothing to do by hand.
+#
+#   * Externally-managed Secrets — a SealedSecret, an ExternalSecret, the
+#     CNPG-generated Postgres users, a signing key or api_token pepper written
+#     out of band — cannot be hashed here. Their content is not part of this
+#     render, and a `lookup` would return empty whenever Helm runs without
+#     cluster access (ArgoCD renders client-side, as do `helm template` and
+#     CI), so the annotation would flap and roll pods for no reason.
+#
+#     Rotating one of those means restarting the Deployments explicitly —
+#     `rollout restart` on the release's Deployments. Skip it and the cluster
+#     reports a completed rotation while every pod keeps using the old value.
+#     If a Reloader-style controller is available in the target cluster,
+#     annotating the Deployments for it removes this step — that is a
+#     deployment choice, not a chart default.
+
 bootstrap:
   admin:
     enabled: false
