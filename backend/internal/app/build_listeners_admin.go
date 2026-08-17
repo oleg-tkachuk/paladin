@@ -167,9 +167,14 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// mandatory; a roleless PAT gets no principal here and is denied
 		// downstream exactly as before.
 		auth.InterceptorSkipAPITokens(verifierAdmin),
+		// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
+		// check reads the principal, so with the API-token interceptor after it
+		// a PAT bearer was refused as "no authenticated principal" before it
+		// could be authenticated at all. Both paths — JWT and role-bearing PAT —
+		// must land a principal first.
+		apiTokAdmin,
 		auth.RequireAudience(auth.AudienceAdmin),
 		capAdmin,
-		apiTokAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		// Idempotency-Key gate. RequireOnCreate=true means every
 		// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
