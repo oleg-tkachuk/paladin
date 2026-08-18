@@ -397,6 +397,10 @@ worker.jobs.lifecycle.enabled
 worker.jobs.lifecycle.interval
 worker.jobs.operations
 worker.jobs.operations.interval
+worker.jobs.purge_drain
+worker.jobs.purge_drain.batch_size
+worker.jobs.purge_drain.interval
+worker.jobs.purge_drain.max_backoff
 worker.jobs.quota_reconcile
 worker.jobs.quota_reconcile.interval
 worker.jobs.reconciler

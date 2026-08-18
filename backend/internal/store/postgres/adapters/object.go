@@ -505,6 +505,28 @@ func (r *ObjectRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, obje
 	return hardDeleteObject(ctx, r.q.WithTx(tx), tenantID, objectID, expectedVersion)
 }
 
+// EnqueuePurgeTx records the byte-reclaim debt on the caller's tx — the same
+// tx that removes the objects row, so the handle outlives the row it describes.
+func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p object.PurgeDebt) error {
+	if err := r.q.WithTx(tx).InsertPendingPurge(ctx,
+		pgUUID(p.PurgeID), pgUUID(p.TenantID), pgUUID(p.ObjectID),
+		p.BackendID, p.BucketName, p.ObjectKey, p.Key,
+	); err != nil {
+		return fmt.Errorf("enqueue purge: %w", err)
+	}
+	return nil
+}
+
+// SettlePurgeTx clears one debt row. A zero-row result is not an error: the
+// purge drainer may have settled the same debt first, which is the expected
+// outcome of a race, not a fault.
+func (r *ObjectRepo) SettlePurgeTx(ctx context.Context, tx pgx.Tx, purgeID uuid.UUID) error {
+	if _, err := r.q.WithTx(tx).DeletePendingPurge(ctx, pgUUID(purgeID)); err != nil {
+		return fmt.Errorf("settle purge: %w", err)
+	}
+	return nil
+}
+
 func hardDeleteObject(ctx context.Context, q *sqlc.Queries, tenantID, objectID uuid.UUID, expectedVersion int64) error {
 	rows, err := q.HardDeleteObject(ctx, pgUUID(tenantID), pgUUID(objectID), expectedVersion)
 	if err != nil {

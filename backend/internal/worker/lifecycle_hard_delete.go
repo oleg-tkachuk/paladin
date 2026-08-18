@@ -3,10 +3,12 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -44,8 +46,16 @@ import (
 // Disabled when TTL (the cooling-off period) is 0; the typical pattern
 // is to leave hard-delete off in dev, on with a 7d window in prod.
 type LifecycleHardDeleter struct {
-	Q         *sqlc.Queries
-	Storage   StorageDeleter
+	Q       *sqlc.Queries
+	Pool    *pgxpool.Pool
+	Storage StorageDeleter
+	// Events is optional; when set, a confirmed byte-removal emits
+	// paladin.object.purged. This is the other place in the system where bytes
+	// actually disappear, so it carries the same obligation as PurgeDrainer:
+	// paladin.object.deleted announces a state transition, paladin.object.purged
+	// announces that the bytes are gone, and only the latter is emitted from
+	// a path that has observed the storage delete succeed.
+	Events    *Dispatcher
 	TTL       time.Duration
 	Interval  time.Duration
 	BatchSize int32
@@ -154,11 +164,7 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		return
 	}
 
-	n, err := w.Q.HardDeleteObjectIfStillDeleted(
-		ctx,
-		r.ObjectID,
-		r.ResourceVersion,
-	)
+	n, err := w.rowDeleteAndAnnounce(ctx, r, tenantID)
 	if err != nil {
 		logger.Warn("db hard-delete failed", zap.Error(err))
 		return
@@ -173,6 +179,55 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		return
 	}
 	logger.Info("hard-deleted")
+}
+
+// rowDeleteAndAnnounce removes the row and enqueues paladin.object.purged in one
+// transaction, so a consumer never sees the announcement without the deletion
+// or vice versa. When no dispatcher is wired it degrades to the plain
+// autocommit delete this used to do.
+//
+// The zero-row case (a concurrent Restore bumped the version) deliberately
+// emits nothing: the operator's restore intent won, the row is live again, and
+// the bytes we already deleted are the race-loss the existing comment
+// describes — announcing a purge there would be wrong.
+func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.ListHardDeletableRow, tenantID uuid.UUID) (int64, error) {
+	if w.Events == nil || w.Pool == nil {
+		return w.Q.HardDeleteObjectIfStillDeleted(ctx, r.ObjectID, r.ResourceVersion)
+	}
+	tx, err := w.Pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	n, err := w.Q.WithTx(tx).HardDeleteObjectIfStillDeleted(ctx, r.ObjectID, r.ResourceVersion)
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, tx.Commit(ctx)
+	}
+	objectID := uuid.UUID(r.ObjectID.Bytes)
+	if _, err := w.Events.DispatchTx(ctx, tx, tenantID.String(), Event{
+		Type:     "paladin.object.purged",
+		At:       time.Now().UTC(),
+		TenantID: tenantID.String(),
+		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/objectKeys/%s/objects-by-key/%s",
+			r.BackendID, r.BucketName, tenantID, r.ObjectKey, r.Key),
+		Payload: map[string]any{
+			"tenant_id":  tenantID.String(),
+			"object_key": r.ObjectKey,
+			"key":        r.Key,
+			"object_id":  objectID.String(),
+			"backend_id": r.BackendID,
+			"bucket":     r.BucketName,
+			"reclaimed":  true,
+			"source":     "lifecycle",
+		},
+	}); err != nil {
+		return 0, err
+	}
+	return n, tx.Commit(ctx)
 }
 
 func (w *LifecycleHardDeleter) log() *zap.Logger {

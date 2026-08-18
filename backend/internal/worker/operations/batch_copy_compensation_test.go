@@ -70,6 +70,12 @@ func (*copyFakeRepo) HardDeleteWithBypassTx(context.Context, pgx.Tx, uuid.UUID, 
 func (*copyFakeRepo) RunInTx(context.Context, func(context.Context, pgx.Tx) error) error {
 	panic("unused")
 }
+
+// Purge debt is a no-op in these fakes: the permanent-delete path is
+// covered end-to-end in internal/integration, where a real pending_purges
+// row is the assertion.
+func (*copyFakeRepo) EnqueuePurgeTx(context.Context, pgx.Tx, object.PurgeDebt) error { return nil }
+func (*copyFakeRepo) SettlePurgeTx(context.Context, pgx.Tx, uuid.UUID) error         { return nil }
 func (*copyFakeRepo) LiveCollision(context.Context, uuid.UUID, string, string) (bool, error) {
 	panic("unused")
 }

@@ -328,6 +328,16 @@ worker: {
   quota_reconcile: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   }
+  // Purge drainer: retries byte-reclaim for permanent deletes whose
+  // synchronous storage delete failed, and emits paladin.object.purged.
+  // The objects row is already gone when the debt is written, so this
+  // is the only remaining path to those bytes. interval=0 disables
+  // and reinstates the leak.
+  purge_drain: {
+    interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1m"
+    max_backoff: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    batch_size:  int & >= 1 | *100
+  }
   } // close worker.jobs
 } // close worker
 

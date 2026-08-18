@@ -114,6 +114,7 @@ type ApiToken struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	RateLimitRpm int32              `json:"rate_limit_rpm"`
 	TokenHmac    []byte             `json:"token_hmac"`
+	Roles        []string           `json:"roles"`
 }
 
 type ApiTokenRateBucket struct {
@@ -415,6 +416,20 @@ type Operation struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DoneAt       pgtype.Timestamptz `json:"done_at"`
+}
+
+type PendingPurge struct {
+	PurgeID       pgtype.UUID        `json:"purge_id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	ObjectID      pgtype.UUID        `json:"object_id"`
+	BackendID     string             `json:"backend_id"`
+	BucketName    string             `json:"bucket_name"`
+	ObjectKey     string             `json:"object_key"`
+	Key           string             `json:"key"`
+	Attempts      int32              `json:"attempts"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError     string             `json:"last_error"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type Quota struct {

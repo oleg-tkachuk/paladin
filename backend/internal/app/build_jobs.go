@@ -207,14 +207,44 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// duration enables the cascade. Routed: ListHardDeletable returns each
 	// object's backend, so the DELETE reclaims bytes on the object's own
 	// backend rather than the default.
+	// purgeEvents is the producer-only dispatcher the two byte-reclaiming
+	// workers share. Bound to the worker pool; the dispatcher pod drains
+	// event_deliveries, so enqueueing here never opens a socket. Same shape
+	// as the bucket reconciler's above.
+	purgeEvents := &worker.Dispatcher{
+		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),
+		Outbox:      worker.PgxOutboxWriter{Pool: reaperPool},
+		Logger:      l.Named("purge-events"),
+		MaxAttempts: 3,
+	}
+
 	if cfg.Worker.Jobs.Housekeeping.HardDeleteAfter > 0 {
 		out = append(out, &worker.LifecycleHardDeleter{
 			Q:         reaperQ,
+			Pool:      reaperPool,
 			Storage:   s3adapter.NewObjectRouter(deps.Registry),
+			Events:    purgeEvents,
 			TTL:       cfg.Worker.Jobs.Housekeeping.HardDeleteAfter,
 			Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
 			BatchSize: cfg.Worker.Jobs.Housekeeping.HardDeleteBatchSize,
 			Logger:    l.Named("hard-deleter"),
+		})
+	}
+
+	// Purge drainer — the retry half of the byte-reclaim outbox. Unlike the
+	// hard-deleter above this is NOT gated on a cooling-off window: the debt
+	// it drains describes objects whose row is already gone, so there is
+	// nothing left to restore and no reason to wait.
+	if cfg.Worker.Jobs.PurgeDrain.Interval > 0 {
+		out = append(out, &worker.PurgeDrainer{
+			Pool:       reaperPool,
+			Q:          reaperQ,
+			Storage:    s3adapter.NewObjectRouter(deps.Registry),
+			Events:     purgeEvents,
+			Interval:   cfg.Worker.Jobs.PurgeDrain.Interval,
+			BatchSize:  int32(cfg.Worker.Jobs.PurgeDrain.BatchSize),
+			MaxBackoff: cfg.Worker.Jobs.PurgeDrain.MaxBackoff,
+			Logger:     l.Named("purge-drainer"),
 		})
 	}
 

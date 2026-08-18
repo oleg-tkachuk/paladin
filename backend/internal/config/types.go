@@ -481,6 +481,23 @@ type WorkerJobs struct {
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
 	QuotaReconcile   QuotaReconcile   `yaml:"quota_reconcile" json:"quota_reconcile"`
+	PurgeDrain       PurgeDrain       `yaml:"purge_drain" json:"purge_drain"`
+}
+
+// PurgeDrain reclaims bytes owed by permanent deletes whose synchronous
+// storage delete failed (pending_purges, migration 069).
+//
+// Effectively mandatory wherever permanent delete is reachable: the objects
+// row is gone by the time the debt exists, so this loop is the only remaining
+// path to reclaiming those bytes and the only emitter of paladin.object.purged
+// for that path. interval=0 disables it and reinstates the leak.
+type PurgeDrain struct {
+	Interval time.Duration `yaml:"interval" json:"interval"`
+	// MaxBackoff caps the per-row retry curve (doubling from 1m). Debt is
+	// never discarded — a permanently failing row keeps retrying at this
+	// cadence so the backlog stays visible instead of being dropped.
+	MaxBackoff time.Duration `yaml:"max_backoff" json:"max_backoff"`
+	BatchSize  int           `yaml:"batch_size" json:"batch_size"`
 }
 
 // QuotaReconcile recomputes the `quotas` usage columns from live objects

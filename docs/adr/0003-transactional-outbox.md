@@ -88,6 +88,34 @@ Landed:
   the S3 byte-removal stays **after** commit (S3 is non-transactional and
   the DB-then-S3 ordering must hold): the event is enqueued atomically
   with the row removal, then the bytes are reclaimed best-effort.
+
+### The outbox one floor down: bytes, not just notifications (migration 069)
+
+"Reclaimed best-effort" was too generous a reading of what the permanent
+path used to do. Ordering the row delete first is correct — the reverse
+could delete a live object's bytes and then fail to remove its row — but it
+means a failed byte-delete leaves bytes with nothing pointing at them. The
+row was gone, the client's retry got `NotFound`, and no table recorded where
+the bytes had been; the only way to find one was to list the bucket. The
+code's own "log loudly so a sweeper can reclaim it" described a sweeper that
+was never written.
+
+`pending_purges` applies this ADR's pattern to the byte-reclaim itself. The
+debt row is written on the **same tx** as the row delete and the
+`paladin.object.deleted` enqueue, so the retry handle is durable before the
+storage call is ever attempted. The handler then tries the delete inline —
+the common case stays synchronous and settles the debt immediately — and
+`worker.PurgeDrainer` retries whatever did not finish, with backoff, never
+discarding a row.
+
+A sixth object event falls out of this, and it is the one that could not
+exist before: `paladin.object.purged`, emitted **only** from a path that has
+observed a storage delete succeed. `paladin.object.deleted` reports a state
+transition; `paladin.object.purged` reports that the bytes are gone. The two
+worker emitters are `PurgeDrainer` and `LifecycleHardDeleter` — the two
+places where bytes actually disappear — plus the handler's own fast path,
+which settles the debt and emits in one tx. Shape follows
+`paladin.tenant.purged`, the existing precedent for "the thing is really gone".
 - Unit tests: `DispatchTx` writes one row per matching sub on the tx
   (not the pool), skips disabled subs, and a nil-Outbox dispatcher works.
 

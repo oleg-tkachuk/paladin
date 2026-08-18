@@ -281,10 +281,33 @@ type Repository interface {
 	// update / permanent-delete handlers use to write the mutation and its
 	// outbox rows atomically.
 	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	// EnqueuePurgeTx records the byte-reclaim debt for a permanent delete on
+	// the SAME tx that removes the row. Written before the storage call is
+	// ever attempted, so the retry handle is durable even if this process
+	// dies immediately after commit — the row it refers to is gone, and
+	// nothing else in the schema remembers where its bytes live.
+	EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p PurgeDebt) error
+	// SettlePurgeTx clears one debt row. Called on the tx that also emits
+	// paladin.object.purged, so "bytes are gone" and "we told anyone" commit
+	// together or not at all.
+	SettlePurgeTx(ctx context.Context, tx pgx.Tx, purgeID uuid.UUID) error
 	// LiveCollision reports whether a non-DELETED row already occupies
 	// (tenant, object_key, key); used to refuse RestoreObject when the
 	// slot has been reused by a fresh upload.
 	LiveCollision(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (bool, error)
+}
+
+// PurgeDebt is one permanent delete's byte-reclaim obligation: everything the
+// drainer needs to find and remove the bytes after the row that described them
+// is gone. Denormalised on purpose — see migrations/069_pending_purges.sql.
+type PurgeDebt struct {
+	PurgeID    uuid.UUID
+	TenantID   uuid.UUID
+	ObjectID   uuid.UUID
+	BackendID  string
+	BucketName string
+	ObjectKey  string
+	Key        string
 }
 
 type Object struct {
@@ -1333,9 +1356,28 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// must hold — see the block comment above): once the row is gone the
 	// bytes are safe to reclaim, and a failure there only orphans an
 	// object, never resurrects a dangling row.
+	// The purge debt is written on this same tx, BEFORE the storage call is
+	// attempted. That is the whole fix: the row that says where these bytes
+	// live is about to be deleted, and nothing else in the schema records it,
+	// so without a durable handle a failed byte-delete leaves bytes that can
+	// only be found by listing the bucket. Same outbox discipline as the
+	// event above (ADR-0003), one floor down — over bytes instead of
+	// notifications.
+	debt := PurgeDebt{
+		PurgeID:    uuid.New(),
+		TenantID:   tenantID,
+		ObjectID:   obj.ObjectID,
+		BackendID:  backendID,
+		BucketName: bucket,
+		ObjectKey:  objectKey,
+		Key:        obj.Key,
+	}
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if derr := deleteFn(ctx, tx, tenantID, objectID, rv); derr != nil {
 			return derr
+		}
+		if perr := h.repo.EnqueuePurgeTx(ctx, tx, debt); perr != nil {
+			return perr
 		}
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
 			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
@@ -1350,16 +1392,58 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	}); err != nil {
 		return apiutil.MapError(err)
 	}
-	// DB row is gone (and the event is enqueued). Now remove the bytes; a
-	// failure here orphans the object in S3 but cannot resurrect a dangling
-	// row. Log loudly so a sweeper / operator can reclaim it.
+
+	// Fast path: reclaim the bytes now, so the common case stays synchronous
+	// and the debt table stays empty. A failure here is no longer terminal —
+	// the debt row survives and worker.PurgeDrainer retries it with backoff.
 	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, objectKey, obj.Key); err != nil {
 		if h.log != nil {
-			h.log.Error("permanent delete: DB row removed but storage delete failed; object orphaned in S3",
+			h.log.Warn("permanent delete: storage delete failed; queued for retry",
 				zap.String("tenant_id", tenantID.String()),
 				zap.String("object_key", objectKey),
 				zap.String("key", obj.Key),
 				zap.String("bucket", bucket),
+				zap.String("purge_id", debt.PurgeID.String()),
+				zap.Error(err),
+			)
+		}
+		// Deliberately NOT an error to the caller. The delete IS committed —
+		// the row is gone and paladin.object.deleted is enqueued — and the bytes
+		// are now owed rather than lost. Returning an error here would tell
+		// the client to retry a delete that already succeeded, and its retry
+		// would get NotFound. paladin.object.purged is what signals the bytes
+		// actually went; it fires from the drainer instead of here.
+		return nil
+	}
+
+	// Bytes confirmed gone. Clearing the debt and emitting paladin.object.purged
+	// in one tx keeps the two facts inseparable: a crash between them leaves
+	// the debt row, the drainer re-issues the (idempotent) storage delete,
+	// and the event still fires. The alternative — emit, then clear —
+	// could announce a purge that never gets recorded as done.
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if serr := h.repo.SettlePurgeTx(ctx, tx, debt.PurgeID); serr != nil {
+			return serr
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.purged",
+			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+			map[string]any{
+				"tenant_id":  tenantID.String(),
+				"object_key": obj.ObjectKey,
+				"key":        obj.Key,
+				"object_id":  obj.ObjectID.String(),
+				"backend_id": backendID,
+				"bucket":     bucket,
+				"reclaimed":  true,
+			})
+	}); err != nil {
+		// The bytes are gone but the bookkeeping did not commit. Harmless and
+		// self-correcting: the drainer will retry a DELETE against a key that
+		// no longer exists (S3 DELETE is idempotent), succeed, and emit the
+		// event then.
+		if h.log != nil {
+			h.log.Warn("permanent delete: bytes reclaimed but purge bookkeeping failed; drainer will settle",
+				zap.String("purge_id", debt.PurgeID.String()),
 				zap.Error(err),
 			)
 		}

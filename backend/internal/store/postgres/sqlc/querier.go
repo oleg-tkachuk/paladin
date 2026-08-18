@@ -54,6 +54,7 @@ type Querier interface {
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
+	CountPendingPurges(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
 	// (backend_id, bucket_name) composite key.
@@ -95,6 +96,7 @@ type Querier interface {
 	DeleteObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, expectedVersion int64) (int64, error)
 	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
+	DeletePendingPurge(ctx context.Context, purgeID pgtype.UUID) (int64, error)
 	DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -179,6 +181,9 @@ type Querier interface {
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
 	InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, s3Key string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error
+	// Purge debt: the retry handle for bytes whose DB row is already gone.
+	// See migrations/069_pending_purges.sql for why this table exists.
+	InsertPendingPurge(ctx context.Context, purgeID pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, backendID string, bucketName string, objectKey string, key string) error
 	InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
 	// Streams a window of AVAILABLE-only objects under (tenant, object_key)
 	// newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
@@ -223,6 +228,10 @@ type Querier interface {
 	// replicating into or out of any of those is at best wasted work and at
 	// worst ships objects into a bucket that's about to be torn down.
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
+	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
+	// concurrent worker replicas divide the backlog instead of colliding on it —
+	// the same claim discipline the event-delivery outbox uses.
+	ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error)
 	// Cursor pagination with optional tenant filter. The after_id branch
 	// MUST be wrapped in `IS NULL OR …` — first-page callers pass
 	// uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
@@ -401,6 +410,11 @@ type Querier interface {
 	// spend doesn't go negative (which would silently grant the
 	// difference back as future budget).
 	RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) error
+	// ReschedulePendingPurge records a failed attempt and pushes the row out by
+	// the caller-computed backoff. Attempts is bumped here rather than in the
+	// worker so a crash between the storage call and this update cannot lose the
+	// count.
+	ReschedulePendingPurge(ctx context.Context, purgeID pgtype.UUID, lastError string, column3 pgtype.Interval) error
 	ResetQuotaDaily(ctx context.Context, quotaID pgtype.UUID, lastResetAt pgtype.Timestamptz) error
 	// Longest registered object_key that is a prefix of $2 (the recombined
 	// "<object_key>/<key>" tail of an ingest event) for the tenant. Multi-segment

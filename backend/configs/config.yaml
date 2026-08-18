@@ -256,6 +256,17 @@ worker:
       enabled: false
       interval: 5m
       lookback_window: 1h
+    purge_drain:                        # reclaims bytes owed by permanent deletes
+      # The permanent-delete API removes the DB row first and the S3
+      # bytes second (safe ordering: the reverse could strand a live row
+      # pointing at nothing). When the byte-delete fails, a row in
+      # pending_purges is the ONLY remaining record of where those bytes
+      # are — the object row is gone. This loop drains that debt and
+      # emits paladin.object.purged once the bytes are confirmed gone.
+      # 0 disables and reinstates the leak.
+      interval: 1m
+      max_backoff: 1h                   # per-row retry cap; debt is never dropped
+      batch_size: 100
     quota_reconcile:                    # keeps quotas.usage_* honest
       # Recomputes usage_total_bytes / usage_object_count from live
       # objects and zeroes the per-day counters at the UTC day boundary.
