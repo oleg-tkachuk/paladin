@@ -226,7 +226,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// one has to run first.
 		capData,
 		auth.RequireAudience(auth.AudienceData),
-		middleware.NewQuotaSoftCheck(repos.Quota),
+		// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
+		// resolves the upload's ObjectKey to its (backend, bucket) so a
+		// bucket quota row can be found. Without WithBucketScope those rows
+		// are maintained by the reconciler and shown on /stats but reject
+		// nothing. Both scopes cost a point lookup on the upload path —
+		// object_keys by PK, then quotas by its unique index.
+		middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,
 	)

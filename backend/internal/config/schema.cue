@@ -316,6 +316,18 @@ worker: {
   operations: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
   }
+  // Quota reconciler: recomputes quotas.usage_total_bytes /
+  // usage_object_count from live objects and rolls the per-day
+  // counters at the UTC day boundary. The upload path only
+  // increments those columns and QuotaSoftCheck rejects uploads
+  // against them, so without this a tenant that deletes its
+  // objects stays counted and eventually cannot write.
+  // interval=0 disables — only safe with no quotas configured. The
+  // per-day caps reject against these counters, so skipping the roll
+  // turns a daily budget into a lifetime one.
+  quota_reconcile: {
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  }
   } // close worker.jobs
 } // close worker
 

@@ -1609,8 +1609,12 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 // ─── shared internals ──────────────────────────────────────────────────────
 
 // touchQuota increments usage counters after a successful promote. Failures
-// are logged-only — quota drift gets reconciled by the nightly accounting
-// job; a transient pgx error must NOT undo a successful state transition.
+// are swallowed on purpose: a transient pgx error must NOT undo a committed
+// state transition. That makes this path lossy by design, which is safe only
+// because worker.QuotaReconciler recomputes usage_total_bytes /
+// usage_object_count from live objects on an interval (worker.jobs.
+// quota_reconcile). Drop that job and this becomes a counter that only
+// climbs — and QuotaSoftCheck rejects uploads against it.
 func (h *Handler) touchQuota(ctx context.Context, obj Object) {
 	if h.quota == nil {
 		return

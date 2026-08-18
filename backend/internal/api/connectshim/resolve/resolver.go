@@ -65,27 +65,41 @@ const (
 )
 
 // ResolveObjectKeyName parses any of the three object_key name shapes into a
-// CanonicalRef. `ok` may contain '/'. The bare (B) shape carries no tenant in
-// the name, so the caller's tenant is read from ctx. The shape is recorded.
+// CanonicalRef and records the shape. `ok` may contain '/'. The bare (B)
+// shape carries no tenant in the name, so the caller's tenant is read from
+// ctx.
+//
+// This is the entry point for the connectshim edge — exactly one shape
+// observation per inbound request. Interceptors and other in-process
+// readers that need the same parse must call ParseObjectKeyName instead, or
+// the shape distribution (which Phase 3 uses to decide whether a shape can
+// be deprecated) would count the same request twice.
 func ResolveObjectKeyName(ctx context.Context, name string) (CanonicalRef, error) {
+	ref, err := ParseObjectKeyName(ctx, name)
+	if err != nil {
+		return CanonicalRef{}, err
+	}
+	metrics.RecordResourceNameShape(ctx, string(ref.Shape))
+	return ref, nil
+}
+
+// ParseObjectKeyName is ResolveObjectKeyName without the metric. Use it when
+// something other than the request edge needs the tuple — the quota
+// interceptor re-parses the same name the shim will parse, and both
+// recording would double-count the shape.
+func ParseObjectKeyName(ctx context.Context, name string) (CanonicalRef, error) {
 	if name == "" {
 		return CanonicalRef{}, fmt.Errorf("empty object_key name")
 	}
 	switch {
 	case strings.HasPrefix(name, prefixCanonical):
-		ref, err := parseCanonical(name)
-		if err != nil {
-			return CanonicalRef{}, err
-		}
-		metrics.RecordResourceNameShape(ctx, string(ShapeCanonical))
-		return ref, nil
+		return parseCanonical(name)
 
 	case strings.HasPrefix(name, prefixTenant):
 		tid, ok, err := splitTenantObjectKey(strings.TrimPrefix(name, prefixTenant))
 		if err != nil {
 			return CanonicalRef{}, fmt.Errorf("invalid object_key name %q: %w", name, err)
 		}
-		metrics.RecordResourceNameShape(ctx, string(ShapeTenant))
 		return CanonicalRef{TenantID: tid, ObjectKey: ok, Shape: ShapeTenant}, nil
 
 	default:
@@ -93,7 +107,6 @@ func ResolveObjectKeyName(ctx context.Context, name string) (CanonicalRef, error
 		if err != nil {
 			return CanonicalRef{}, fmt.Errorf("bare object_key %q requires a caller tenant: %w", name, err)
 		}
-		metrics.RecordResourceNameShape(ctx, string(ShapeBare))
 		return CanonicalRef{TenantID: tid, ObjectKey: name, Shape: ShapeBare}, nil
 	}
 }

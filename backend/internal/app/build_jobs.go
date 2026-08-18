@@ -246,6 +246,23 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
+	// Quota reconciler — recomputes quotas.usage_* from live objects and
+	// rolls the per-day counters at the UTC day boundary. The upload path
+	// only ever increments those columns (best-effort, never decremented
+	// on delete) and middleware.QuotaSoftCheck rejects uploads against
+	// them, so without this job a tenant that deletes its objects stays
+	// counted and eventually cannot write. Runs on the BYPASSRLS pool
+	// because both `quotas` and `objects` are RLS'd — on the runtime pool
+	// the reconcile statement would match zero rows and quietly no-op,
+	// which is exactly the failure it is here to prevent.
+	if cfg.Worker.Jobs.QuotaReconcile.Interval > 0 {
+		out = append(out, &worker.QuotaReconciler{
+			Store:    adapters.NewQuotaReconcileRepo(reaperPool),
+			Interval: cfg.Worker.Jobs.QuotaReconcile.Interval,
+			Logger:   l.Named("quota-reconciler"),
+		})
+	}
+
 	// Operations runner — dequeues PENDING rows from the operations
 	// table and dispatches to per-type Executors. Without this every
 	// BatchXxx RPC stages a row that never reaches a terminal state.

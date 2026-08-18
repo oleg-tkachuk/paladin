@@ -61,12 +61,24 @@ that scan starts showing up in `pg_stat_statements`.
 
 ## Reading the quota card
 
-`quotas.usage_object_count` / `usage_total_bytes` are **not** a measurement.
-They are incremented best-effort when an object is promoted (`touchQuota` in
-the object and multipart handlers), never decremented on delete, and no job
-reconciles them — so they read as "ever admitted", not "currently stored".
-Quota *enforcement* compares against these counters, so they are the right
-number when debugging a spurious quota rejection; they are the wrong number
-for "how much are we storing". The object census answers that, and the card
-says so inline. Quotas are also opt-in, so the card states how many of the
-active tenants the counter covers at all.
+`quotas.usage_object_count` / `usage_total_bytes` are a **reconciled
+snapshot**, not a live measurement. Two writers maintain them:
+
+- the upload path increments them on promote (`touchQuota` in the object and
+  multipart handlers), deliberately swallowing write errors so a transient DB
+  fault cannot undo a committed state transition — which makes the increment
+  lossy by design;
+- `worker.QuotaReconciler` (`worker.jobs.quota_reconcile.interval`, default
+  15m) recomputes them from live `objects` and rolls the per-day counters at
+  midnight UTC.
+
+So the counter converges on the object census but can trail it by up to one
+reconcile interval. `middleware.QuotaSoftCheck` rejects uploads against these
+columns, so they are the right number when debugging an unexpected
+`ResourceExhausted`, and the wrong number for "how much are we storing" — the
+object census answers that. Quotas are opt-in, so the card also states how
+many active tenants the counter covers at all.
+
+If the reconciler is disabled (`interval: 0`) the counters only ever climb
+and tenants that delete their objects eventually cannot write. See
+[`quota-usage-drift.md`](quota-usage-drift.md).

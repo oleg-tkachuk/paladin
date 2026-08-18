@@ -256,6 +256,17 @@ worker:
       enabled: false
       interval: 5m
       lookback_window: 1h
+    quota_reconcile:                    # keeps quotas.usage_* honest
+      # Recomputes usage_total_bytes / usage_object_count from live
+      # objects and zeroes the per-day counters at the UTC day boundary.
+      # The upload path only ever INCREMENTS those columns (best-effort,
+      # never decremented on delete) and the upload interceptor rejects
+      # with ResourceExhausted against them — so without this loop a
+      # tenant that deletes what it uploaded stays counted and eventually
+      # cannot write at all. 0 disables; only appropriate for a
+      # deployment that configures no quotas.
+      interval: 15m
+
 # ─── dispatcher role: durable webhook fan-out ──────────────────────────────
 # `serve dispatcher` polls the event_deliveries outbox (migration 028) and
 # POSTs to customer sinks. Producer (admin pod) writes rows on each event;

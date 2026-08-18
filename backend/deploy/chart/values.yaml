@@ -804,6 +804,13 @@ config:
         enabled: false
         interval: 5m
         lookback_window: 1h
+      # Recomputes quotas.usage_* from live objects and rolls the
+      # per-day counters at midnight UTC. Required whenever quotas are
+      # in use: the upload path only increments those columns and the
+      # upload interceptor rejects against them, so an unreconciled
+      # deployment wedges tenants that delete what they uploaded.
+      quota_reconcile:
+        interval: 15m
 
   # Dispatcher role — durable webhook fan-out. The pod polls the
   # event_deliveries outbox (migration 028) and POSTs to customer

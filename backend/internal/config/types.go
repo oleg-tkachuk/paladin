@@ -480,6 +480,20 @@ type WorkerJobs struct {
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
+	QuotaReconcile   QuotaReconcile   `yaml:"quota_reconcile" json:"quota_reconcile"`
+}
+
+// QuotaReconcile recomputes the `quotas` usage columns from live objects
+// and rolls the per-day admission counters at the UTC day boundary.
+//
+// Not optional in spirit: middleware.QuotaSoftCheck rejects uploads
+// against usage_total_bytes / usage_object_count, and the upload path only
+// ever increments them (best-effort, never decremented on delete). Without
+// this job a tenant that deletes what it uploaded stays counted and
+// eventually cannot write. interval=0 disables it — only appropriate for a
+// deployment that sets no quotas at all.
+type QuotaReconcile struct {
+	Interval time.Duration `yaml:"interval" json:"interval"`
 }
 
 // Dispatcher is the per-role config block for the `serve dispatcher`

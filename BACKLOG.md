@@ -751,14 +751,63 @@ open deliberately — each notes why._
   materialized rollup is a correctness surface (staleness window, refresh
   scheduling, backfill on restore) that shouldn't be paid for before the scan
   actually hurts.
+- **Sequencing (decided):** do NOT introduce a second denormalised counter for
+  this. The repo already had one — `quotas.usage_*` — and it drifted into
+  uselessness precisely because the reconciler was assumed rather than
+  written. `worker.QuotaReconciler` now exists and already performs the exact
+  rollup this entry wants (per-tenant bytes + object count from live rows) on
+  a schedule. When the census scan starts to hurt, the move is to persist that
+  job's intermediate result and have `/stats` read it — one mechanism, two
+  consumers, one source of truth — not to add a parallel summary table.
 - **Definition of Done:**
-  - Either a materialized view / summary table refreshed by a worker job, or a
-    server-side TTL cache in front of `platformstats.CollectRLS`, with the
-    staleness window shown in the UI ("as of" already has the slot).
+  - First and cheapest: a covering index on `objects (tenant_id, state)
+    INCLUDE (size_bytes)` to turn the seq scan into an index-only scan.
+    Measure both sides before committing — `state` is a key column and it is
+    UPDATEd on every promote, so the index makes those writes non-HOT, which
+    works against migration 008's deliberate `fillfactor` tuning.
+  - Only if that is not enough: persist the reconciler's per-tenant rollup and
+    read it from `/stats`, with the staleness window shown in the UI ("as of"
+    already has the slot).
   - A measurement in the runbook that says when to switch: a p95 for the
-    aggregate from `pg_stat_statements`, not a row-count guess.
-- **Blockers:** none — needs a real fleet to measure against. Watch
-  `pg_stat_statements` for the census query.
+    aggregate from `pg_stat_statements`, not a row-count guess. Suggested
+    trigger: mean_exec_time > 1s.
+- **Blockers:** none — needs a real fleet to measure against. Note the load is
+  on-demand, not background: the page polls only while an operator has it open
+  in a visible tab.
+
+### Announce that bucket-scoped and per-day quota caps now reject
+
+- **Status:** Blocked (operator action — a coding session cannot send the
+  announcement).
+- **Reason:** `QuotaSoftCheck` used to compare only `max_total_bytes` /
+  `max_object_count`, and only against the caller's tenant row. It now also
+  enforces `max_bytes_per_day` / `max_objects_per_day`, and checks the bucket
+  the upload's ObjectKey resolves to. Anyone who set one of those caps while
+  it was inert has a live rejection waiting: the caps were settable through
+  QuotaService and MCP the whole time, and the console displayed their usage,
+  so "nobody could have set one" is not a safe assumption.
+- **Definition of Done:**
+  - Run the over-cap query below against each environment before the rollout
+    reaches it, and contact the owners of anything it returns:
+
+    ```sql
+    SELECT quota_id, tenant_id, backend_id, bucket_name,
+           usage_total_bytes,  max_total_bytes,
+           usage_object_count, max_object_count,
+           usage_bytes_today,  max_bytes_per_day,
+           usage_objects_today, max_objects_per_day
+      FROM quotas
+     WHERE (max_total_bytes     > 0 AND usage_total_bytes   >= max_total_bytes)
+        OR (max_object_count    > 0 AND usage_object_count  >= max_object_count)
+        OR (max_bytes_per_day   > 0 AND usage_bytes_today   >= max_bytes_per_day)
+        OR (max_objects_per_day > 0 AND usage_objects_today >= max_objects_per_day);
+    ```
+
+    Run it as a BYPASSRLS role — `quotas` is RLS'd.
+  - Release note names both changes explicitly.
+- **Blockers:** none technical. Deliberately left as a human step: the rollout
+  is safe on dev (where this landed) and needs a heads-up before it reaches an
+  environment with real tenants.
 
 ### Platform Stats: no per-tenant breakdown for quotas / capabilities / tokens / subscriptions
 
