@@ -407,6 +407,14 @@ func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, ob
 		Key:    aws.String(composeKey(tenantID, objectKey, key)),
 	})
 	if err != nil {
+		// Object-absent gets the sentinel so callers can make a terminal
+		// decision on it (see ErrObjectNotFound). Two %w verbs, not one:
+		// errors.Is finds the sentinel while the AWS error stays in the
+		// chain, so the operator log keeps the status code, request id and
+		// endpoint that make a HEAD failure diagnosable.
+		if notFound(err) {
+			return "", 0, "", "", fmt.Errorf("head: %w: %w", ErrObjectNotFound, err)
+		}
 		return "", 0, "", "", fmt.Errorf("head: %w", err)
 	}
 	etag := strings.Trim(aws.ToString(out.ETag), `"`)

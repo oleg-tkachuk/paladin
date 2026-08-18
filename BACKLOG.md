@@ -734,6 +734,38 @@ open deliberately — each notes why._
 
 ---
 
+## Storage
+
+### A bodiless 404 cannot separate "no such object" from "no such bucket"
+
+- **Status:** Deferred (known limitation, pinned by a characterization test).
+- **Reason:** `s3adapter.notFound` classifies a HEAD failure so ReconcilerV2
+  can decide between retrying and the terminal PENDING → FAILED. It rejects
+  bucket-level error codes before accepting anything — but a HEAD response
+  carries no body, so aws-sdk-go-v2's HeadObject deserialiser never reads a
+  code and synthesises `*s3types.NotFound` from the 404 status alone. A
+  backend answering "that bucket is gone" is therefore byte-identical to "that
+  key is gone", and the reject list never sees it.
+  Consequence: a wrong or deleted bucket binding makes the reconciler mark
+  that binding's pending-expired objects FAILED. Recoverable **today** —
+  nothing reclaims FAILED object bytes (the lifecycle hard-deleter filters on
+  `state='DELETED'`, housekeeping's `pending_ttl` sweep on `PENDING`), so both
+  the row and the bytes survive for an operator to re-promote. It stops being
+  recoverable the moment anything reaps FAILED.
+  `TestHeadCannotDistinguishMissingBucket` asserts the current behaviour so
+  the gap is visible and change-detecting rather than folklore.
+- **Definition of Done:**
+  - Before returning not-found for a terminal decision, confirm the bucket is
+    reachable — a HeadBucket on the not-found path only (rare in steady
+    state), or a per-backend reachability cache the reconciler consults once
+    per tick instead of once per object.
+  - The characterization test flips to asserting the two are distinguished.
+  - Revisit sooner if a FAILED-object reaper is ever added; that inverts the
+    risk from "objects stop being served" to "bytes are deleted".
+- **Blockers:** none. Deliberately not bundled with the classification fix —
+  that fix strictly improves on a `return false` stub, and adding an S3 call
+  to the reconciler's hot path is a separate decision with its own cost.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

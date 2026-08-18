@@ -8,13 +8,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // HeadProber is the storage-side seam: HEAD an S3 object given the routing
 // triplet. Satisfied by *s3adapter.Client (which already has Head with the
-// same shape). Defined here so the adapter package owns the worker-side
-// translation without forcing a dependency on s3adapter.
+// same shape) and by the ObjectRouter that fronts it.
+//
+// The seam is about the CALL, not the package: it keeps a unit test from
+// having to stand up an S3 client. The package does import s3adapter — for
+// ErrObjectNotFound, and only for that. That is the deliberate half of the
+// trade: one sentinel comparison here beats re-deriving "is this a 404?"
+// from AWS error types in the persistence layer, which is what the stub this
+// replaced was written to avoid.
 type HeadProber interface {
 	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 }
@@ -56,14 +63,20 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 	return etag, sizeBytes, checksum, sequencer, true, nil
 }
 
-// isNotFoundErr is a tiny heuristic: storage adapters wrap S3 NotFound /
-// NoSuchKey distinctly per backend. We only need to know *whether* the
-// reconciler should mark the object FAILED — and that's the case for any
-// error that isn't transient. Conservative: treat all errors as transient
-// (return them) except when we can clearly attribute to "missing".
+// isNotFoundErr reports whether a HEAD failure means the object genuinely is
+// not on the backend, as opposed to the backend being unreachable, slow, or
+// refusing us.
+//
+// The distinction is terminal: a true here sends ReconcilerV2 down the
+// MarkFailed branch, and FAILED objects stop being served and become
+// eligible for reclamation. So the classification deliberately lives in
+// s3adapter, next to the SDK error shapes it has to reason about, and this
+// stays a single errors.Is — no AWS types in the persistence layer, and no
+// second place where "is this a 404?" can be got subtly wrong.
+//
+// This used to be a `return false` stub, which made MarkFailed unreachable:
+// every object whose bytes were genuinely absent logged a HEAD warning and
+// was retried on the next tick, forever.
 func isNotFoundErr(err error) bool {
-	// Avoid pulling AWS SDK error types here. The s3adapter package is
-	// expected to wrap NotFound/NoSuchKey using a sentinel; until that
-	// is added, we degrade open and let the reconciler log+skip.
-	return false
+	return errors.Is(err, s3adapter.ErrObjectNotFound)
 }
