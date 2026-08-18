@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -33,6 +34,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	}
 	reaperQ := sqlc.New(reaperPool)
 
+	// Object state transitions for the same fan, on the same pool and for the
+	// same reason. deps.SM is bound to the RLS-scoped runtime pool, so a job
+	// that transitions objects through it reads zero rows and silently does
+	// nothing — the hazard above, reached through the state machine rather
+	// than a repo. ReconcilerV2 sat in exactly that state: lease healthy, tick
+	// every 30s, ScanPendingExpired returning nothing while pending-expired
+	// objects piled up for weeks. Nothing logged it, because finding nothing
+	// is its success path.
+	smReaper := statemachine.New(reaperPool)
+
 	// partitionPool is the DDL-capable pool for PartitionMaintainer (the only
 	// background job that runs CREATE/ATTACH/DROP PARTITION). It needs the
 	// migrate role's table ownership, which the least-privilege reaper role
@@ -55,7 +66,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		out = append(out, &worker.LifecycleWorker{
 			Buckets:      adapters.NewLifecycleSource(reaperQ),
 			Objects:      adapters.NewLifecycleObjectIter(reaperQ),
-			SoftDeleter:  deps.SM,
+			SoftDeleter:  smReaper,
 			CELEvaluator: deps.CELEval,
 			Interval:     cfg.Worker.Jobs.Lifecycle.Interval,
 			Logger:       l.Named("lifecycle"),
@@ -81,7 +92,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	if cfg.Worker.Jobs.Reconciler.Interval > 0 {
 		// Reuse the SharedDeps S3 client; same default backend as listeners.
 		out = append(out, worker.NewReconcilerV2(
-			deps.SM,
+			smReaper,
 			adapters.NewReconcilerProbe(reaperQ, s3adapter.NewObjectRouter(deps.Registry)),
 			worker.ReconcilerV2Config{
 				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
@@ -244,7 +255,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		executors := map[string]operations.Executor{
 			"BatchDelete": &operations.BatchDeleteExecutor{
 				Objects:     deps.Repos.Object,
-				Transitions: deps.SM,
+				Transitions: smReaper,
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
@@ -252,7 +263,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				// and builds Locations carrying BackendID, so the router
 				// dispatches each copy to the right backend.
 				Storage:           s3adapter.NewObjectRouter(deps.Registry),
-				Transitions:       deps.SM,
+				Transitions:       smReaper,
 				PresignDefaultTTL: cfg.Limits.Presign.DefaultTTL,
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
@@ -260,7 +271,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			},
 			"BatchRestoreObjects": &operations.BatchRestoreExecutor{
 				Objects:     deps.Repos.Object,
-				Transitions: deps.SM,
+				Transitions: smReaper,
 			},
 		}
 		out = append(out, &operations.Runner{
