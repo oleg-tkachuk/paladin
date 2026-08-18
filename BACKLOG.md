@@ -734,6 +734,55 @@ open deliberately — each notes why._
 
 ---
 
+## Database
+
+### Index candidates considered and rejected (2026-08-18 audit)
+
+- **Status:** Deferred — decisions recorded so the audit is not repeated from
+  scratch. Migrations 064–068 added the five indexes this pass judged worth
+  their write cost; these are the ones it did not.
+- **Reason (per candidate):**
+  - **`objects (tenant_id, state) INCLUDE (size_bytes)`** — would turn the
+    /stats object census and the quota reconciler's recompute into index-only
+    scans. Rejected: `state` is UPDATEd on every PENDING→AVAILABLE promote and
+    every delete, so the index makes the hottest write path's UPDATEs non-HOT,
+    working directly against the `fillfactor` tuning migration 008 applied for
+    that exact reason. Paying on every upload to speed a 15-minute background
+    job and a dashboard poll is the wrong trade.
+  - **`audit_log (at DESC, entry_id DESC)`** — ListAuditEntries pages by that
+    composite keyset while `idx_audit_log_at` covers only `at`. Rejected: ties
+    on `at` are rare, audit_log is partitioned and already carries six
+    indexes, and every PALADIN mutation writes a row — a seventh index taxes the
+    write path of the whole control plane for a tiebreak.
+  - **`objects (tenant_id, object_key, key text_pattern_ops)`** — would make
+    ListObjects' `key LIKE 'prefix%'` a range scan instead of a recheck.
+    Rejected for now: the `(tenant_id, object_key)` equality already bounds
+    the scan to one ObjectKey, so the recheck is over a page, not the table.
+    Revisit if a single ObjectKey grows large enough that prefix browsing
+    shows up in `pg_stat_statements`.
+- **Definition of Done:** revisit each when there is production evidence —
+  `pg_stat_statements` mean_exec_time, or `pg_stat_user_tables` seq_scan
+  counts — rather than on inspection.
+- **Blockers:** none; needs a real fleet to measure against.
+
+### Index-usage tests are pinned to measured table sizes
+
+- **Status:** Deferred (works today; a trap for later).
+- **Reason:** `internal/integration/index_usage_test.go` proves the planner
+  *chooses* each new index rather than merely being able to. That makes the
+  tests sensitive to seed size: the operations keyset index is not chosen
+  below roughly 8k rows / 40 tenants (the primary key is a UUIDv7, so it
+  already yields creation order and wins on a small table), and the objects
+  keyset index is not exercised meaningfully unless rows span several
+  ObjectKeys. Both tests seed past the measured crossover and say so, but the
+  numbers are empirical and could drift with a Postgres version bump or a
+  cost-setting change.
+- **Definition of Done:** if one of these starts failing after an upgrade,
+  re-measure the crossover before assuming the index became useless — the
+  probe is a few lines of EXPLAIN over a scaled seed, and the failure message
+  prints the plan that replaced it.
+- **Blockers:** none.
+
 ## Configuration
 
 ### `ingest:` has no CUE schema block — its knobs run on Go zero values
