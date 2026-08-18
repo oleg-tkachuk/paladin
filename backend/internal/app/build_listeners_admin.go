@@ -262,7 +262,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		adminOpts,
 	))
 	mux.Handle(paladinadminv1connect.NewSystemServiceHandler(
-		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath)),
+		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool)),
 		adminOpts,
 	))
 

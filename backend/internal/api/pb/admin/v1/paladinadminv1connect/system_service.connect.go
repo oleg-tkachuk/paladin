@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -38,6 +39,9 @@ const (
 	// SystemServiceGetDispatcherStatsProcedure is the fully-qualified name of the SystemService's
 	// GetDispatcherStats RPC.
 	SystemServiceGetDispatcherStatsProcedure = "/paladin.admin.v1.SystemService/GetDispatcherStats"
+	// SystemServiceGetPlatformStatsProcedure is the fully-qualified name of the SystemService's
+	// GetPlatformStats RPC.
+	SystemServiceGetPlatformStatsProcedure = "/paladin.admin.v1.SystemService/GetPlatformStats"
 )
 
 // SystemServiceClient is a client for the paladin.admin.v1.SystemService service.
@@ -57,6 +61,17 @@ type SystemServiceClient interface {
 	// ops endpoint is unconfigured or unreachable — the console renders
 	// "stats unavailable" rather than erroring.
 	GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error)
+	// GetPlatformStats returns a cross-tenant census of the control plane:
+	// how many tenants / storage backends / buckets / object keys / users
+	// exist and how they break down, plus per-tenant object counts by
+	// state. Backs the console's /stats page.
+	//
+	// Two data sources, one response (see GetPlatformStatsResponse): the
+	// control-plane counts come from this pod's pool; the object census
+	// is proxied from the worker pod's BYPASSRLS ops endpoint and
+	// degrades to `objects.available=false` when that is unconfigured or
+	// unreachable. Read-only, no audit row — it is a dashboard poll.
+	GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the paladin.admin.v1.SystemService service. By
@@ -82,6 +97,12 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
 			connect.WithClientOptions(opts...),
 		),
+		getPlatformStats: connect.NewClient[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse](
+			httpClient,
+			baseURL+SystemServiceGetPlatformStatsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("GetPlatformStats")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -89,6 +110,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 type systemServiceClient struct {
 	getConfig          *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
 	getDispatcherStats *connect.Client[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse]
+	getPlatformStats   *connect.Client[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse]
 }
 
 // GetConfig calls paladin.admin.v1.SystemService.GetConfig.
@@ -99,6 +121,11 @@ func (c *systemServiceClient) GetConfig(ctx context.Context, req *connect.Reques
 // GetDispatcherStats calls paladin.admin.v1.SystemService.GetDispatcherStats.
 func (c *systemServiceClient) GetDispatcherStats(ctx context.Context, req *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error) {
 	return c.getDispatcherStats.CallUnary(ctx, req)
+}
+
+// GetPlatformStats calls paladin.admin.v1.SystemService.GetPlatformStats.
+func (c *systemServiceClient) GetPlatformStats(ctx context.Context, req *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error) {
+	return c.getPlatformStats.CallUnary(ctx, req)
 }
 
 // SystemServiceHandler is an implementation of the paladin.admin.v1.SystemService service.
@@ -118,6 +145,17 @@ type SystemServiceHandler interface {
 	// ops endpoint is unconfigured or unreachable — the console renders
 	// "stats unavailable" rather than erroring.
 	GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error)
+	// GetPlatformStats returns a cross-tenant census of the control plane:
+	// how many tenants / storage backends / buckets / object keys / users
+	// exist and how they break down, plus per-tenant object counts by
+	// state. Backs the console's /stats page.
+	//
+	// Two data sources, one response (see GetPlatformStatsResponse): the
+	// control-plane counts come from this pod's pool; the object census
+	// is proxied from the worker pod's BYPASSRLS ops endpoint and
+	// degrades to `objects.available=false` when that is unconfigured or
+	// unreachable. Read-only, no audit row — it is a dashboard poll.
+	GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -139,12 +177,20 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceGetPlatformStatsHandler := connect.NewUnaryHandler(
+		SystemServiceGetPlatformStatsProcedure,
+		svc.GetPlatformStats,
+		connect.WithSchema(systemServiceMethods.ByName("GetPlatformStats")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServiceGetConfigProcedure:
 			systemServiceGetConfigHandler.ServeHTTP(w, r)
 		case SystemServiceGetDispatcherStatsProcedure:
 			systemServiceGetDispatcherStatsHandler.ServeHTTP(w, r)
+		case SystemServiceGetPlatformStatsProcedure:
+			systemServiceGetPlatformStatsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -160,4 +206,8 @@ func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *connect.Req
 
 func (UnimplementedSystemServiceHandler) GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetDispatcherStats is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetPlatformStats is not implemented"))
 }

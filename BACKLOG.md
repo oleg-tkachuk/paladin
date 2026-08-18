@@ -736,6 +736,65 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
+### Platform Stats: no cached rollup — the object census is a live GROUP BY
+
+- **Status:** Deferred (correct at current scale; revisit on fleet growth).
+- **Reason:** `/stats` computes the per-tenant/per-state object census with a
+  single `GROUP BY (tenant_id, state)` over `objects`, run on the worker's
+  BYPASSRLS pool on every poll (30s while the tab is visible). The four
+  sibling censuses beside it are cheap counts over small tables; this one is
+  the only O(rows) query in the set. At today's row
+  counts that is a cheap index-less aggregate, and a live number is strictly
+  more useful to an operator than a stale one. It does NOT stay cheap: the scan
+  is O(rows), so a fleet in the tens of millions of objects turns a dashboard
+  poll into a recurring seq-scan. Deliberately not pre-optimised — a
+  materialized rollup is a correctness surface (staleness window, refresh
+  scheduling, backfill on restore) that shouldn't be paid for before the scan
+  actually hurts.
+- **Definition of Done:**
+  - Either a materialized view / summary table refreshed by a worker job, or a
+    server-side TTL cache in front of `platformstats.CollectRLS`, with the
+    staleness window shown in the UI ("as of" already has the slot).
+  - A measurement in the runbook that says when to switch: a p95 for the
+    aggregate from `pg_stat_statements`, not a row-count guess.
+- **Blockers:** none — needs a real fleet to measure against. Watch
+  `pg_stat_statements` for the census query.
+
+### Platform Stats: no per-tenant breakdown for quotas / capabilities / tokens / subscriptions
+
+- **Status:** Deferred (scope cut, deliberate).
+- **Reason:** The four RLS'd censuses added alongside objects are fleet-wide
+  aggregates — "12 capabilities expiring in 24h" without saying whose. That
+  matches how the inventory cards (backends, buckets) already read, and the
+  per-tenant table on the page is object-shaped: bolting four more dimensions
+  onto it would make the busiest surface on the page unreadable. The queries
+  themselves would be trivial to group by tenant_id; the UI is the hard part.
+- **Definition of Done:**
+  - Either a per-tenant drill-down (click a card → filtered table) or a second
+    table keyed by tenant with a column group per census.
+  - The ops payload carries per-tenant rows for whichever censuses the UI
+    actually drills into — not all four speculatively, since each multiplies
+    the payload by the tenant count.
+- **Blockers:** none. Wants a design pass on the page first — it already
+  carries five cards plus a wide table.
+
+### Platform Stats: per-tenant table caps at 200 rows
+
+- **Status:** Deferred (bounded payload beats a complete one, for now).
+- **Reason:** `platformstats.maxTenantRows` trims the census to the 200 busiest
+  tenants and reports the omitted count; the rollup row still totals every
+  tenant, so the aggregate is never wrong — only the drill-down is partial. A
+  paginated or sortable table is the real answer, but it needs a page token on
+  the RPC and column-sort state in the UI, which is a bigger surface than the
+  first cut of the page justified.
+- **Definition of Done:**
+  - The RPC takes a page token / sort key, or the console filters server-side
+    by tenant slug.
+  - The "N smaller tenant(s) omitted" note becomes a link that pages rather
+    than a dead end.
+- **Blockers:** none.
+
+
 ### UI/UX refactor (2026-07-24): flatten the deep tenant→bucket→surface URLs
 
 - **Status:** Deferred (the identity + navigation-legibility pass landed this

@@ -455,8 +455,17 @@ type Worker struct {
 	// future ops endpoints. Defaults to :8090 to match the chart's
 	// containerPort. Was server.admin_http re-read in the legacy
 	// flat config.
-	Ops  HTTPServer `yaml:"ops" json:"ops"`
-	Jobs WorkerJobs `yaml:"jobs" json:"jobs"`
+	Ops HTTPServer `yaml:"ops" json:"ops"`
+	// OpsURL is where OTHER pods reach that ops listener — the admin
+	// plane's SystemService.GetPlatformStats proxies
+	// <ops_url>/system/rls-census.json from it, because objects, quotas,
+	// capability_records, api_tokens and event_subscriptions are all RLS'd
+	// and only the worker holds a BYPASSRLS pool. Cluster-internal Service
+	// URL (e.g. "http://paladin-core-worker:8099"); empty disables the proxy
+	// and the RPC reports rls.available=false. Same shape and contract as
+	// Dispatcher.OpsURL.
+	OpsURL string     `yaml:"ops_url" json:"ops_url"`
+	Jobs   WorkerJobs `yaml:"jobs" json:"jobs"`
 }
 
 // WorkerJobs is the catalog of background-job configs the worker

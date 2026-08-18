@@ -776,6 +776,14 @@ config:
     ops:
       <<: *http_defaults
       addr: "0.0.0.0:8090"
+    # Where the ADMIN pod reaches the worker's ops listener —
+    # SystemService.GetPlatformStats proxies
+    # <ops_url>/system/rls-census.json (the worker computes the
+    # cross-tenant census of every RLS'd table; its pool is the
+    # BYPASSRLS one).
+    # Port 8099 is the SERVICE port; it targets container port 8090.
+    # Empty disables the proxy.
+    ops_url: "http://paladin-core-worker:8099"
     jobs:
       reconciler:
         interval: 30s

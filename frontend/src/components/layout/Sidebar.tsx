@@ -10,6 +10,7 @@ import {
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
   ShieldCheckIcon,
+  ChartBarSquareIcon,
   CheckCircleIcon,
   UserCircleIcon,
   ChevronDoubleLeftIcon,
@@ -146,6 +147,11 @@ const navigationGroups: Array<{
   {
     title: "System",
     items: [
+      // Platform Statistics — cross-tenant census (tenants / backends /
+      // buckets / object keys / users + objects by state). Sits above
+      // Health because "what do we hold" is the question operators open
+      // the System group for; Health answers "is it up".
+      { name: "Platform Stats", path: "/stats", icon: ChartBarSquareIcon },
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
       { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
       { name: "Health Status", path: "/health", icon: CheckCircleIcon },

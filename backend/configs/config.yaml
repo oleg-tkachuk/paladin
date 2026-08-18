@@ -219,6 +219,15 @@ worker:
   ops:
     <<: *http_defaults
     addr: "0.0.0.0:8090"
+  # Where the ADMIN pod reaches this ops listener. The console's /stats
+  # page needs a cross-tenant census of every RLS'd table (objects,
+  # quotas, capability records, API tokens, event subscriptions —
+  # migration 023) and only the worker holds a BYPASSRLS pool, so it
+  # computes the census and admin's SystemService.GetPlatformStats
+  # proxies <ops_url>/system/rls-census.json. Empty (the default here;
+  # the chart sets the in-cluster Service URL) disables the proxy and the
+  # RPC reports rls.available=false instead of erroring.
+  ops_url: ""
   jobs:
     reconciler:                         # closes gaps when S3 events are unavailable / lost
       interval: 30s                     # how often to run a reconcile pass
@@ -247,7 +256,6 @@ worker:
       enabled: false
       interval: 5m
       lookback_window: 1h
-
 # ─── dispatcher role: durable webhook fan-out ──────────────────────────────
 # `serve dispatcher` polls the event_deliveries outbox (migration 028) and
 # POSTs to customer sinks. Producer (admin pod) writes rows on each event;

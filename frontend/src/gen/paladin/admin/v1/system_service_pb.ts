@@ -12,6 +12,8 @@ import {
   messageDesc,
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -20,7 +22,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_system_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvc3lzdGVtX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSISChBHZXRDb25maWdSZXF1ZXN0IjYKEUdldENvbmZpZ1Jlc3BvbnNlEgwKBHlhbWwYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkiGwoZR2V0RGlzcGF0Y2hlclN0YXRzUmVxdWVzdCKvAQoaR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEg8KB3BlbmRpbmcYAiABKAMSDgoGZmFpbGVkGAMgASgDEh4KFm9sZGVzdF9wZW5kaW5nX3NlY29uZHMYBCABKAMSPQoNc3Vic2NyaXB0aW9ucxgFIAMoCzImLm9jcC5hZG1pbi52MS5TdWJzY3JpcHRpb25EZWxpdmVyeVN0YXQirgEKGFN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdBIXCg9zdWJzY3JpcHRpb25faWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEg8KB3BlbmRpbmcYAyABKAMSDgoGZmFpbGVkGAQgASgDEhIKCmxhc3RfZXJyb3IYBSABKAkSGAoQbGFzdF9zdGF0dXNfY29kZRgGIAEoBRIXCg9sYXN0X2F0dGVtcHRfYXQYByABKAkyxgEKDVN5c3RlbVNlcnZpY2USTAoJR2V0Q29uZmlnEh4ub2NwLmFkbWluLnYxLkdldENvbmZpZ1JlcXVlc3QaHy5vY3AuYWRtaW4udjEuR2V0Q29uZmlnUmVzcG9uc2USZwoSR2V0RGlzcGF0Y2hlclN0YXRzEicub2NwLmFkbWluLnYxLkdldERpc3BhdGNoZXJTdGF0c1JlcXVlc3QaKC5vY3AuYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    "CiFvY3AvYWRtaW4vdjEvc3lzdGVtX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSISChBHZXRDb25maWdSZXF1ZXN0IjYKEUdldENvbmZpZ1Jlc3BvbnNlEgwKBHlhbWwYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkiGwoZR2V0RGlzcGF0Y2hlclN0YXRzUmVxdWVzdCKvAQoaR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEg8KB3BlbmRpbmcYAiABKAMSDgoGZmFpbGVkGAMgASgDEh4KFm9sZGVzdF9wZW5kaW5nX3NlY29uZHMYBCABKAMSPQoNc3Vic2NyaXB0aW9ucxgFIAMoCzImLm9jcC5hZG1pbi52MS5TdWJzY3JpcHRpb25EZWxpdmVyeVN0YXQirgEKGFN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdBIXCg9zdWJzY3JpcHRpb25faWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEg8KB3BlbmRpbmcYAyABKAMSDgoGZmFpbGVkGAQgASgDEhIKCmxhc3RfZXJyb3IYBSABKAkSGAoQbGFzdF9zdGF0dXNfY29kZRgGIAEoBRIXCg9sYXN0X2F0dGVtcHRfYXQYByABKAkiGQoXR2V0UGxhdGZvcm1TdGF0c1JlcXVlc3Qi4QIKGEdldFBsYXRmb3JtU3RhdHNSZXNwb25zZRIqCgd0ZW5hbnRzGAEgASgLMhkub2NwLmFkbWluLnYxLlRlbmFudFN0YXRzEiwKCGJhY2tlbmRzGAIgASgLMhoub2NwLmFkbWluLnYxLkJhY2tlbmRTdGF0cxIqCgdidWNrZXRzGAMgASgLMhkub2NwLmFkbWluLnYxLkJ1Y2tldFN0YXRzEjEKC29iamVjdF9rZXlzGAQgASgLMhwub2NwLmFkbWluLnYxLk9iamVjdEtleVN0YXRzEiYKBXVzZXJzGAUgASgLMhcub2NwLmFkbWluLnYxLlVzZXJTdGF0cxIwCgxjb2xsZWN0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiMKA3JscxgIIAEoCzIWLm9jcC5hZG1pbi52MS5STFNTdGF0c0oECAYQB1IHb2JqZWN0cyKRAgoIUkxTU3RhdHMSEQoJYXZhaWxhYmxlGAEgASgIEioKB29iamVjdHMYAiABKAsyGS5vY3AuYWRtaW4udjEuT2JqZWN0U3RhdHMSKAoGcXVvdGFzGAMgASgLMhgub2NwLmFkbWluLnYxLlF1b3RhU3RhdHMSMwoMY2FwYWJpbGl0aWVzGAQgASgLMh0ub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cxIvCgphcGlfdG9rZW5zGAUgASgLMhsub2NwLmFkbWluLnYxLkFQSVRva2VuU3RhdHMSNgoNc3Vic2NyaXB0aW9ucxgGIAEoCzIfLm9jcC5hZG1pbi52MS5TdWJzY3JpcHRpb25TdGF0cyK7AQoKUXVvdGFTdGF0cxINCgV0b3RhbBgBIAEoAxIVCg10ZW5hbnRfc2NvcGVkGAIgASgDEhUKDWJ1Y2tldF9zY29wZWQYAyABKAMSEwoLd2l0aF9saW1pdHMYBCABKAMSEAoIYXRfbGltaXQYBSABKAMSEgoKbmVhcl9saW1pdBgGIAEoAxIaChJ1c2FnZV9vYmplY3RfY291bnQYByABKAMSGQoRdXNhZ2VfdG90YWxfYnl0ZXMYCCABKAMigwIKD0NhcGFiaWxpdHlTdGF0cxINCgV0b3RhbBgBIAEoAxIOCgZhY3RpdmUYAiABKAMSDwoHZXhwaXJlZBgDIAEoAxIPCgdyZXZva2VkGAQgASgDEhEKCWRlbGVnYXRlZBgFIAEoAxIVCg1leHBpcmluZ19zb29uGAYgASgDEk0KEWJ5X3ByaW5jaXBhbF9raW5kGAcgAygLMjIub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cy5CeVByaW5jaXBhbEtpbmRFbnRyeRo2ChRCeVByaW5jaXBhbEtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBInsKDUFQSVRva2VuU3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB2V4cGlyZWQYAyABKAMSDwoHcmV2b2tlZBgEIAEoAxIVCg1leHBpcmluZ19zb29uGAUgASgDEhIKCm5ldmVyX3VzZWQYBiABKAMi1AEKEVN1YnNjcmlwdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEwoLd2l0aF9maWx0ZXIYBCABKAMSRQoMYnlfc2lua19raW5kGAUgAygLMi8ub2NwLmFkbWluLnYxLlN1YnNjcmlwdGlvblN0YXRzLkJ5U2lua0tpbmRFbnRyeRoxCg9CeVNpbmtLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASKPAQoLVGVuYW50U3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB3RyYXNoZWQYAyABKAMSFQoNc2hhcmVkX2xheW91dBgEIAEoAxIYChBkZWRpY2F0ZWRfbGF5b3V0GAUgASgDEh8KF3dpdGhvdXRfZGVmYXVsdF9iaW5kaW5nGAYgASgDItABCgxCYWNrZW5kU3RhdHMSDQoFdG90YWwYASABKAMSDwoHZW5hYmxlZBgCIAEoAxIQCghkaXNhYmxlZBgDIAEoAxIRCglyZWFkX29ubHkYBCABKAMSEwoLbWFpbnRlbmFuY2UYBSABKAMSNwoHYnlfa2luZBgGIAMoCzImLm9jcC5hZG1pbi52MS5CYWNrZW5kU3RhdHMuQnlLaW5kRW50cnkaLQoLQnlLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASKOAwoLQnVja2V0U3RhdHMSDQoFdG90YWwYASABKAMSSwoSYnlfcHJvdmlzaW9uX3N0YXRlGAIgAygLMi8ub2NwLmFkbWluLnYxLkJ1Y2tldFN0YXRzLkJ5UHJvdmlzaW9uU3RhdGVFbnRyeRI8CgpieV9iYWNrZW5kGAMgAygLMigub2NwLmFkbWluLnYxLkJ1Y2tldFN0YXRzLkJ5QmFja2VuZEVudHJ5EhQKDHRlbmFudF9vd25lZBgEIAEoAxIOCgZzaGFyZWQYBSABKAMSGgoSdmVyc2lvbmluZ19lbmFibGVkGAYgASgDEhsKE29iamVjdF9sb2NrX2VuYWJsZWQYByABKAMSGwoTcmVwbGljYXRpb25fZW5hYmxlZBgIIAEoAxo3ChVCeVByb3Zpc2lvblN0YXRlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ARowCg5CeUJhY2tlbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIqMBCg5PYmplY3RLZXlTdGF0cxINCgV0b3RhbBgBIAEoAxI/CgpieV9iYWNrZW5kGAIgAygLMisub2NwLmFkbWluLnYxLk9iamVjdEtleVN0YXRzLkJ5QmFja2VuZEVudHJ5Eg8KB3VuYm91bmQYAyABKAMaMAoOQnlCYWNrZW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASIsCglVc2VyU3RhdHMSDQoFdG90YWwYASABKAMSEAoIZGlzYWJsZWQYAiABKAMiPgoPT2JqZWN0U3RhdGVTdGF0Eg0KBXN0YXRlGAEgASgJEg0KBWNvdW50GAIgASgDEg0KBWJ5dGVzGAMgASgDIqMBChFUZW5hbnRPYmplY3RTdGF0cxIRCgl0ZW5hbnRfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSLQoGc3RhdGVzGAQgAygLMh0ub2NwLmFkbWluLnYxLk9iamVjdFN0YXRlU3RhdBITCgt0b3RhbF9jb3VudBgFIAEoAxITCgt0b3RhbF9ieXRlcxgGIAEoAyLEAQoLT2JqZWN0U3RhdHMSLQoGc3RhdGVzGAIgAygLMh0ub2NwLmFkbWluLnYxLk9iamVjdFN0YXRlU3RhdBITCgt0b3RhbF9jb3VudBgDIAEoAxITCgt0b3RhbF9ieXRlcxgEIAEoAxIwCgd0ZW5hbnRzGAUgAygLMh8ub2NwLmFkbWluLnYxLlRlbmFudE9iamVjdFN0YXRzEhkKEXRlbmFudHNfdHJ1bmNhdGVkGAYgASgDSgQIARACUglhdmFpbGFibGUyqQIKDVN5c3RlbVNlcnZpY2USTAoJR2V0Q29uZmlnEh4ub2NwLmFkbWluLnYxLkdldENvbmZpZ1JlcXVlc3QaHy5vY3AuYWRtaW4udjEuR2V0Q29uZmlnUmVzcG9uc2USZwoSR2V0RGlzcGF0Y2hlclN0YXRzEicub2NwLmFkbWluLnYxLkdldERpc3BhdGNoZXJTdGF0c1JlcXVlc3QaKC5vY3AuYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2USYQoQR2V0UGxhdGZvcm1TdGF0cxIlLm9jcC5hZG1pbi52MS5HZXRQbGF0Zm9ybVN0YXRzUmVxdWVzdBomLm9jcC5hZG1pbi52MS5HZXRQbGF0Zm9ybVN0YXRzUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [file_google_protobuf_timestamp],
   );
 
 /**
@@ -185,6 +188,711 @@ export const SubscriptionDeliveryStatSchema: GenMessage<SubscriptionDeliveryStat
   messageDesc(file_paladin_admin_v1_system_service, 4);
 
 /**
+ * @generated from message paladin.admin.v1.GetPlatformStatsRequest
+ */
+export type GetPlatformStatsRequest =
+  Message<"paladin.admin.v1.GetPlatformStatsRequest"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.GetPlatformStatsRequest.
+ * Use `create(GetPlatformStatsRequestSchema)` to create a new message.
+ */
+export const GetPlatformStatsRequestSchema: GenMessage<GetPlatformStatsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 5);
+
+/**
+ * GetPlatformStatsResponse is the /stats page's whole payload. Split by
+ * data source: the inventory fields come from the admin pod's own pool
+ * (tenants / storage_backends / buckets / object_keys / users are
+ * deliberately NOT RLS'd — migration 023 — precisely so platform-admin
+ * reads span tenants). Everything under `rls` covers tables that ARE
+ * row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
+ * endpoint and degrades to rls.available=false.
+ *
+ * @generated from message paladin.admin.v1.GetPlatformStatsResponse
+ */
+export type GetPlatformStatsResponse =
+  Message<"paladin.admin.v1.GetPlatformStatsResponse"> & {
+    /**
+     * @generated from field: paladin.admin.v1.TenantStats tenants = 1;
+     */
+    tenants?: TenantStats | undefined;
+
+    /**
+     * @generated from field: paladin.admin.v1.BackendStats backends = 2;
+     */
+    backends?: BackendStats | undefined;
+
+    /**
+     * @generated from field: paladin.admin.v1.BucketStats buckets = 3;
+     */
+    buckets?: BucketStats | undefined;
+
+    /**
+     * @generated from field: paladin.admin.v1.ObjectKeyStats object_keys = 4;
+     */
+    objectKeys?: ObjectKeyStats | undefined;
+
+    /**
+     * @generated from field: paladin.admin.v1.UserStats users = 5;
+     */
+    users?: UserStats | undefined;
+
+    /**
+     * Server clock at collection time — the console renders it as
+     * "as of …" rather than trusting the browser's tab age.
+     *
+     * @generated from field: google.protobuf.Timestamp collected_at = 7;
+     */
+    collectedAt?: Timestamp | undefined;
+
+    /**
+     * The RLS'd half: objects, quotas, capabilities, M2M tokens, event
+     * subscriptions. Present but with available=false when the worker leg
+     * is unreachable.
+     *
+     * @generated from field: paladin.admin.v1.RLSStats rls = 8;
+     */
+    rls?: RLSStats | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.GetPlatformStatsResponse.
+ * Use `create(GetPlatformStatsResponseSchema)` to create a new message.
+ */
+export const GetPlatformStatsResponseSchema: GenMessage<GetPlatformStatsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 6);
+
+/**
+ * RLSStats bundles every aggregate that lives behind row-level security.
+ * One availability flag covers the lot because they share one source —
+ * the worker pod's ops endpoint — and therefore fail together.
+ *
+ * @generated from message paladin.admin.v1.RLSStats
+ */
+export type RLSStats = Message<"paladin.admin.v1.RLSStats"> & {
+  /**
+   * available=false means worker.ops_url is unconfigured or the worker
+   * pod is unreachable; every other field is empty. The console renders
+   * "census unavailable" instead of erroring — same graceful degrade
+   * contract as GetDispatcherStats.
+   *
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * @generated from field: paladin.admin.v1.ObjectStats objects = 2;
+   */
+  objects?: ObjectStats | undefined;
+
+  /**
+   * @generated from field: paladin.admin.v1.QuotaStats quotas = 3;
+   */
+  quotas?: QuotaStats | undefined;
+
+  /**
+   * @generated from field: paladin.admin.v1.CapabilityStats capabilities = 4;
+   */
+  capabilities?: CapabilityStats | undefined;
+
+  /**
+   * @generated from field: paladin.admin.v1.APITokenStats api_tokens = 5;
+   */
+  apiTokens?: APITokenStats | undefined;
+
+  /**
+   * @generated from field: paladin.admin.v1.SubscriptionStats subscriptions = 6;
+   */
+  subscriptions?: SubscriptionStats | undefined;
+};
+
+/**
+ * Describes the message paladin.admin.v1.RLSStats.
+ * Use `create(RLSStatsSchema)` to create a new message.
+ */
+export const RLSStatsSchema: GenMessage<RLSStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 7);
+
+/**
+ * QuotaStats counts quota rows and how close they sit to their caps.
+ *
+ * Authority note the console repeats to the operator: `usage_*` here is a
+ * reconciled snapshot, not a live measurement. The upload path increments
+ * the columns best-effort and the worker's quota reconciler recomputes
+ * them from live objects on an interval, so they converge but can trail by
+ * up to one reconcile period. Where they disagree with ObjectStats,
+ * ObjectStats is the ground truth — it counts rows at read time.
+ *
+ * @generated from message paladin.admin.v1.QuotaStats
+ */
+export type QuotaStats = Message<"paladin.admin.v1.QuotaStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * Scope split; the CHECK on `quotas` makes these exclusive and
+   * exhaustive (tenant-scoped rows carry tenant_id, bucket-scoped rows
+   * carry backend_id + bucket_name).
+   *
+   * @generated from field: int64 tenant_scoped = 2;
+   */
+  tenantScoped: bigint;
+
+  /**
+   * @generated from field: int64 bucket_scoped = 3;
+   */
+  bucketScoped: bigint;
+
+  /**
+   * Rows with at least one non-zero cap. All-zero caps = usage tracking
+   * only, nothing enforced.
+   *
+   * @generated from field: int64 with_limits = 4;
+   */
+  withLimits: bigint;
+
+  /**
+   * Counted once per row across all four caps; at/over beats near.
+   *
+   * @generated from field: int64 at_limit = 5;
+   */
+  atLimit: bigint;
+
+  /**
+   * @generated from field: int64 near_limit = 6;
+   */
+  nearLimit: bigint;
+
+  /**
+   * Accounting counters, summed over TENANT-scoped rows only (summing
+   * bucket-scoped rows too would double-count the same bytes).
+   *
+   * @generated from field: int64 usage_object_count = 7;
+   */
+  usageObjectCount: bigint;
+
+  /**
+   * @generated from field: int64 usage_total_bytes = 8;
+   */
+  usageTotalBytes: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.QuotaStats.
+ * Use `create(QuotaStatsSchema)` to create a new message.
+ */
+export const QuotaStatsSchema: GenMessage<QuotaStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 8);
+
+/**
+ * CapabilityStats counts issued capability tokens by disposition.
+ * active + expired + revoked == total: revocation beats expiry, expiry
+ * beats active.
+ *
+ * @generated from message paladin.admin.v1.CapabilityStats
+ */
+export type CapabilityStats = Message<"paladin.admin.v1.CapabilityStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * @generated from field: int64 active = 2;
+   */
+  active: bigint;
+
+  /**
+   * @generated from field: int64 expired = 3;
+   */
+  expired: bigint;
+
+  /**
+   * @generated from field: int64 revoked = 4;
+   */
+  revoked: bigint;
+
+  /**
+   * Rows with a parent capability (attenuated re-issue).
+   *
+   * @generated from field: int64 delegated = 5;
+   */
+  delegated: bigint;
+
+  /**
+   * Active rows expiring within 24h — what an agent runtime is about to
+   * lose unless something re-issues.
+   *
+   * @generated from field: int64 expiring_soon = 6;
+   */
+  expiringSoon: bigint;
+
+  /**
+   * principal_kind → count, over ACTIVE rows only.
+   *
+   * @generated from field: map<string, int64> by_principal_kind = 7;
+   */
+  byPrincipalKind: { [key: string]: bigint };
+};
+
+/**
+ * Describes the message paladin.admin.v1.CapabilityStats.
+ * Use `create(CapabilityStatsSchema)` to create a new message.
+ */
+export const CapabilityStatsSchema: GenMessage<CapabilityStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 9);
+
+/**
+ * APITokenStats counts hashed-bearer M2M tokens. Same exclusive
+ * active/expired/revoked contract as CapabilityStats.
+ *
+ * @generated from message paladin.admin.v1.APITokenStats
+ */
+export type APITokenStats = Message<"paladin.admin.v1.APITokenStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * @generated from field: int64 active = 2;
+   */
+  active: bigint;
+
+  /**
+   * @generated from field: int64 expired = 3;
+   */
+  expired: bigint;
+
+  /**
+   * @generated from field: int64 revoked = 4;
+   */
+  revoked: bigint;
+
+  /**
+   * Active tokens expiring within 7 days — longer warning than
+   * capabilities because a human has to go rotate these.
+   *
+   * @generated from field: int64 expiring_soon = 5;
+   */
+  expiringSoon: bigint;
+
+  /**
+   * Active tokens that never authenticated a request: incomplete
+   * provisioning or an abandoned credential. Either way, pure risk.
+   *
+   * @generated from field: int64 never_used = 6;
+   */
+  neverUsed: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.APITokenStats.
+ * Use `create(APITokenStatsSchema)` to create a new message.
+ */
+export const APITokenStatsSchema: GenMessage<APITokenStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 10);
+
+/**
+ * SubscriptionStats is the event-subscription inventory. The dispatcher's
+ * delivery backlog is a separate view (GetDispatcherStats) because it
+ * lives on a different pod's pool.
+ *
+ * @generated from message paladin.admin.v1.SubscriptionStats
+ */
+export type SubscriptionStats = Message<"paladin.admin.v1.SubscriptionStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * @generated from field: int64 enabled = 2;
+   */
+  enabled: bigint;
+
+  /**
+   * @generated from field: int64 disabled = 3;
+   */
+  disabled: bigint;
+
+  /**
+   * Subscriptions carrying a CEL filter; the rest receive every event
+   * their tenant produces.
+   *
+   * @generated from field: int64 with_filter = 4;
+   */
+  withFilter: bigint;
+
+  /**
+   * sink_kind → count, over ENABLED rows.
+   *
+   * @generated from field: map<string, int64> by_sink_kind = 5;
+   */
+  bySinkKind: { [key: string]: bigint };
+};
+
+/**
+ * Describes the message paladin.admin.v1.SubscriptionStats.
+ * Use `create(SubscriptionStatsSchema)` to create a new message.
+ */
+export const SubscriptionStatsSchema: GenMessage<SubscriptionStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 11);
+
+/**
+ * @generated from message paladin.admin.v1.TenantStats
+ */
+export type TenantStats = Message<"paladin.admin.v1.TenantStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * active + trashed == total. Trashed rows are soft-deleted
+   * (deleted_at IS NOT NULL) and still hold their slug.
+   *
+   * @generated from field: int64 active = 2;
+   */
+  active: bigint;
+
+  /**
+   * @generated from field: int64 trashed = 3;
+   */
+  trashed: bigint;
+
+  /**
+   * storage_layout split (ADR-0011). Counted over ACTIVE tenants only.
+   *
+   * @generated from field: int64 shared_layout = 4;
+   */
+  sharedLayout: bigint;
+
+  /**
+   * @generated from field: int64 dedicated_layout = 5;
+   */
+  dedicatedLayout: bigint;
+
+  /**
+   * Active tenants with no row in tenant_default_bindings — they can't
+   * accept an ObjectKey bind without an explicit backend/bucket.
+   *
+   * @generated from field: int64 without_default_binding = 6;
+   */
+  withoutDefaultBinding: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.TenantStats.
+ * Use `create(TenantStatsSchema)` to create a new message.
+ */
+export const TenantStatsSchema: GenMessage<TenantStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 12);
+
+/**
+ * @generated from message paladin.admin.v1.BackendStats
+ */
+export type BackendStats = Message<"paladin.admin.v1.BackendStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * @generated from field: int64 enabled = 2;
+   */
+  enabled: bigint;
+
+  /**
+   * @generated from field: int64 disabled = 3;
+   */
+  disabled: bigint;
+
+  /**
+   * read_only = drained (reads served, writes refused); maintenance is
+   * the advisory operator flag. Both counted across all backends.
+   *
+   * @generated from field: int64 read_only = 4;
+   */
+  readOnly: bigint;
+
+  /**
+   * @generated from field: int64 maintenance = 5;
+   */
+  maintenance: bigint;
+
+  /**
+   * kind → count ("aws-s3", "s3-compatible", "gcs", …).
+   *
+   * @generated from field: map<string, int64> by_kind = 6;
+   */
+  byKind: { [key: string]: bigint };
+};
+
+/**
+ * Describes the message paladin.admin.v1.BackendStats.
+ * Use `create(BackendStatsSchema)` to create a new message.
+ */
+export const BackendStatsSchema: GenMessage<BackendStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 13);
+
+/**
+ * @generated from message paladin.admin.v1.BucketStats
+ */
+export type BucketStats = Message<"paladin.admin.v1.BucketStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * provision_state → count ("ready", "pending", "failed", "deleting",
+   * "deletion_failed"). Anything but "ready" is un-bindable.
+   *
+   * @generated from field: map<string, int64> by_provision_state = 2;
+   */
+  byProvisionState: { [key: string]: bigint };
+
+  /**
+   * backend_id → count.
+   *
+   * @generated from field: map<string, int64> by_backend = 3;
+   */
+  byBackend: { [key: string]: bigint };
+
+  /**
+   * owner_tenant_id IS NOT NULL — a dedicated bucket owned by one tenant.
+   *
+   * @generated from field: int64 tenant_owned = 4;
+   */
+  tenantOwned: bigint;
+
+  /**
+   * owner_tenant_id IS NULL — shared across tenants by prefix.
+   *
+   * @generated from field: int64 shared = 5;
+   */
+  shared: bigint;
+
+  /**
+   * @generated from field: int64 versioning_enabled = 6;
+   */
+  versioningEnabled: bigint;
+
+  /**
+   * @generated from field: int64 object_lock_enabled = 7;
+   */
+  objectLockEnabled: bigint;
+
+  /**
+   * @generated from field: int64 replication_enabled = 8;
+   */
+  replicationEnabled: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.BucketStats.
+ * Use `create(BucketStatsSchema)` to create a new message.
+ */
+export const BucketStatsSchema: GenMessage<BucketStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 14);
+
+/**
+ * @generated from message paladin.admin.v1.ObjectKeyStats
+ */
+export type ObjectKeyStats = Message<"paladin.admin.v1.ObjectKeyStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * backend_id → count.
+   *
+   * @generated from field: map<string, int64> by_backend = 2;
+   */
+  byBackend: { [key: string]: bigint };
+
+  /**
+   * ObjectKeys whose bucket_name is NULL — bound to a backend but not
+   * yet to a physical bucket.
+   *
+   * @generated from field: int64 unbound = 3;
+   */
+  unbound: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.ObjectKeyStats.
+ * Use `create(ObjectKeyStatsSchema)` to create a new message.
+ */
+export const ObjectKeyStatsSchema: GenMessage<ObjectKeyStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 15);
+
+/**
+ * @generated from message paladin.admin.v1.UserStats
+ */
+export type UserStats = Message<"paladin.admin.v1.UserStats"> & {
+  /**
+   * @generated from field: int64 total = 1;
+   */
+  total: bigint;
+
+  /**
+   * @generated from field: int64 disabled = 2;
+   */
+  disabled: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.UserStats.
+ * Use `create(UserStatsSchema)` to create a new message.
+ */
+export const UserStatsSchema: GenMessage<UserStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 16);
+
+/**
+ * ObjectStateStat is one (state, count, bytes) triple. Carried as a
+ * repeated list keyed by the state's wire name ("PENDING", "AVAILABLE",
+ * "FAILED", "DELETED") rather than a fixed field per state so a new
+ * object_state enum member doesn't need a proto change to show up.
+ *
+ * @generated from message paladin.admin.v1.ObjectStateStat
+ */
+export type ObjectStateStat = Message<"paladin.admin.v1.ObjectStateStat"> & {
+  /**
+   * @generated from field: string state = 1;
+   */
+  state: string;
+
+  /**
+   * @generated from field: int64 count = 2;
+   */
+  count: bigint;
+
+  /**
+   * Sum of size_bytes. NULL sizes (PENDING rows, pre-commit) count as 0.
+   *
+   * @generated from field: int64 bytes = 3;
+   */
+  bytes: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.ObjectStateStat.
+ * Use `create(ObjectStateStatSchema)` to create a new message.
+ */
+export const ObjectStateStatSchema: GenMessage<ObjectStateStat> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 17);
+
+/**
+ * @generated from message paladin.admin.v1.TenantObjectStats
+ */
+export type TenantObjectStats = Message<"paladin.admin.v1.TenantObjectStats"> & {
+  /**
+   * @generated from field: string tenant_id = 1;
+   */
+  tenantId: string;
+
+  /**
+   * slug / display_name are joined in by the admin pod from `tenants`
+   * — the worker only knows tenant_id. Empty when the tenant row was
+   * purged out from under still-present object rows.
+   *
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string display_name = 3;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: repeated paladin.admin.v1.ObjectStateStat states = 4;
+   */
+  states: ObjectStateStat[];
+
+  /**
+   * @generated from field: int64 total_count = 5;
+   */
+  totalCount: bigint;
+
+  /**
+   * @generated from field: int64 total_bytes = 6;
+   */
+  totalBytes: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.TenantObjectStats.
+ * Use `create(TenantObjectStatsSchema)` to create a new message.
+ */
+export const TenantObjectStatsSchema: GenMessage<TenantObjectStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 18);
+
+/**
+ * @generated from message paladin.admin.v1.ObjectStats
+ */
+export type ObjectStats = Message<"paladin.admin.v1.ObjectStats"> & {
+  /**
+   * Global rollup across every tenant.
+   *
+   * @generated from field: repeated paladin.admin.v1.ObjectStateStat states = 2;
+   */
+  states: ObjectStateStat[];
+
+  /**
+   * @generated from field: int64 total_count = 3;
+   */
+  totalCount: bigint;
+
+  /**
+   * @generated from field: int64 total_bytes = 4;
+   */
+  totalBytes: bigint;
+
+  /**
+   * Per-tenant breakdown, biggest total_count first. Capped server-side
+   * (see systemh.maxTenantObjectRows); `tenants_truncated` is the count
+   * of tenants omitted past the cap.
+   *
+   * @generated from field: repeated paladin.admin.v1.TenantObjectStats tenants = 5;
+   */
+  tenants: TenantObjectStats[];
+
+  /**
+   * @generated from field: int64 tenants_truncated = 6;
+   */
+  tenantsTruncated: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.ObjectStats.
+ * Use `create(ObjectStatsSchema)` to create a new message.
+ */
+export const ObjectStatsSchema: GenMessage<ObjectStats> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 19);
+
+/**
  * SystemService on the admin plane exposes operator-only diagnostics
  * that contain redacted-but-sensitive configuration. Distinct from
  * paladin.iam.v1.SystemService (which is open to any authenticated user
@@ -226,5 +934,24 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof GetDispatcherStatsRequestSchema;
     output: typeof GetDispatcherStatsResponseSchema;
+  };
+  /**
+   * GetPlatformStats returns a cross-tenant census of the control plane:
+   * how many tenants / storage backends / buckets / object keys / users
+   * exist and how they break down, plus per-tenant object counts by
+   * state. Backs the console's /stats page.
+   *
+   * Two data sources, one response (see GetPlatformStatsResponse): the
+   * control-plane counts come from this pod's pool; the object census
+   * is proxied from the worker pod's BYPASSRLS ops endpoint and
+   * degrades to `objects.available=false` when that is unconfigured or
+   * unreachable. Read-only, no audit row — it is a dashboard poll.
+   *
+   * @generated from rpc paladin.admin.v1.SystemService.GetPlatformStats
+   */
+  getPlatformStats: {
+    methodKind: "unary";
+    input: typeof GetPlatformStatsRequestSchema;
+    output: typeof GetPlatformStatsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_system_service, 0);

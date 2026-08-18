@@ -8,7 +8,8 @@
     api        ← ingress-controller / UI / mcp     → common + storage
     admin      ← ingress-controller / UI / mcp     → common + storage + NATS
                                                      + adminBrokerPorts (Test)
-    worker     ← monitoring (ops)                  → common + storage
+                                                     + dispatcher/worker ops
+    worker     ← monitoring / admin (ops)          → common + storage
     dispatcher ← monitoring (ops)                  → OPEN egress (customer
                                                      sinks live anywhere)
     ingest     ← storage ns (webhook) / monitoring → common + NATS
@@ -122,6 +123,15 @@ spec:
               app.kubernetes.io/component: dispatcher
       ports:
         - { protocol: TCP, port: 8099 }
+    # SystemService.GetPlatformStats proxies the worker's ops listener for
+    # the cross-tenant RLS census (container port 8090).
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: worker
+      ports:
+        - { protocol: TCP, port: 8090 }
 {{- end }}
 {{- if .Values.deployments.worker.enabled }}
 ---
@@ -137,10 +147,20 @@ spec:
       {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "worker") | nindent 6 }}
   policyTypes: [Ingress, Egress]
   ingress:
+    # Port here is the CONTAINER port (8090, config worker.ops.addr) —
+    # the Service publishes it as 8099. The previous value matched the
+    # Service port, which never selects anything on the pod.
     - from:
         - {{ $fromMonitoring | toJson }}
+        # Admin proxies /system/rls-census.json for the console's /stats
+        # page — the worker's pool is the BYPASSRLS one, so the
+        # cross-tenant census of the RLS'd tables is computed there.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: admin
       ports:
-        - { protocol: TCP, port: 8099 }
+        - { protocol: TCP, port: 8090 }
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}

@@ -4,6 +4,8 @@ package paladin.admin.v1;
 
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
 
+import "google/protobuf/timestamp.proto";
+
 // SystemService on the admin plane exposes operator-only diagnostics
 // that contain redacted-but-sensitive configuration. Distinct from
 // paladin.iam.v1.SystemService (which is open to any authenticated user
@@ -28,6 +30,18 @@ service SystemService {
   // ops endpoint is unconfigured or unreachable — the console renders
   // "stats unavailable" rather than erroring.
   rpc GetDispatcherStats(GetDispatcherStatsRequest) returns (GetDispatcherStatsResponse);
+
+  // GetPlatformStats returns a cross-tenant census of the control plane:
+  // how many tenants / storage backends / buckets / object keys / users
+  // exist and how they break down, plus per-tenant object counts by
+  // state. Backs the console's /stats page.
+  //
+  // Two data sources, one response (see GetPlatformStatsResponse): the
+  // control-plane counts come from this pod's pool; the object census
+  // is proxied from the worker pod's BYPASSRLS ops endpoint and
+  // degrades to `objects.available=false` when that is unconfigured or
+  // unreachable. Read-only, no audit row — it is a dashboard poll.
+  rpc GetPlatformStats(GetPlatformStatsRequest) returns (GetPlatformStatsResponse);
 }
 
 message GetConfigRequest {}
@@ -70,4 +84,218 @@ message SubscriptionDeliveryStat {
   int32 last_status_code = 6;
   // RFC3339 UTC; empty = never attempted.
   string last_attempt_at = 7;
+}
+
+// ─── Platform census ────────────────────────────────────────────────────────
+
+message GetPlatformStatsRequest {}
+
+// GetPlatformStatsResponse is the /stats page's whole payload. Split by
+// data source: the inventory fields come from the admin pod's own pool
+// (tenants / storage_backends / buckets / object_keys / users are
+// deliberately NOT RLS'd — migration 023 — precisely so platform-admin
+// reads span tenants). Everything under `rls` covers tables that ARE
+// row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
+// endpoint and degrades to rls.available=false.
+message GetPlatformStatsResponse {
+  TenantStats tenants = 1;
+  BackendStats backends = 2;
+  BucketStats buckets = 3;
+  ObjectKeyStats object_keys = 4;
+  UserStats users = 5;
+  // Server clock at collection time — the console renders it as
+  // "as of …" rather than trusting the browser's tab age.
+  google.protobuf.Timestamp collected_at = 7;
+  // The RLS'd half: objects, quotas, capabilities, M2M tokens, event
+  // subscriptions. Present but with available=false when the worker leg
+  // is unreachable.
+  RLSStats rls = 8;
+
+  reserved 6;
+  reserved "objects";
+}
+
+// RLSStats bundles every aggregate that lives behind row-level security.
+// One availability flag covers the lot because they share one source —
+// the worker pod's ops endpoint — and therefore fail together.
+message RLSStats {
+  // available=false means worker.ops_url is unconfigured or the worker
+  // pod is unreachable; every other field is empty. The console renders
+  // "census unavailable" instead of erroring — same graceful degrade
+  // contract as GetDispatcherStats.
+  bool available = 1;
+  ObjectStats objects = 2;
+  QuotaStats quotas = 3;
+  CapabilityStats capabilities = 4;
+  APITokenStats api_tokens = 5;
+  SubscriptionStats subscriptions = 6;
+}
+
+// QuotaStats counts quota rows and how close they sit to their caps.
+//
+// Authority note the console repeats to the operator: `usage_*` here is a
+// reconciled snapshot, not a live measurement. The upload path increments
+// the columns best-effort and the worker's quota reconciler recomputes
+// them from live objects on an interval, so they converge but can trail by
+// up to one reconcile period. Where they disagree with ObjectStats,
+// ObjectStats is the ground truth — it counts rows at read time.
+message QuotaStats {
+  int64 total = 1;
+  // Scope split; the CHECK on `quotas` makes these exclusive and
+  // exhaustive (tenant-scoped rows carry tenant_id, bucket-scoped rows
+  // carry backend_id + bucket_name).
+  int64 tenant_scoped = 2;
+  int64 bucket_scoped = 3;
+  // Rows with at least one non-zero cap. All-zero caps = usage tracking
+  // only, nothing enforced.
+  int64 with_limits = 4;
+  // Counted once per row across all four caps; at/over beats near.
+  int64 at_limit = 5;
+  int64 near_limit = 6;
+  // Accounting counters, summed over TENANT-scoped rows only (summing
+  // bucket-scoped rows too would double-count the same bytes).
+  int64 usage_object_count = 7;
+  int64 usage_total_bytes = 8;
+}
+
+// CapabilityStats counts issued capability tokens by disposition.
+// active + expired + revoked == total: revocation beats expiry, expiry
+// beats active.
+message CapabilityStats {
+  int64 total = 1;
+  int64 active = 2;
+  int64 expired = 3;
+  int64 revoked = 4;
+  // Rows with a parent capability (attenuated re-issue).
+  int64 delegated = 5;
+  // Active rows expiring within 24h — what an agent runtime is about to
+  // lose unless something re-issues.
+  int64 expiring_soon = 6;
+  // principal_kind → count, over ACTIVE rows only.
+  map<string, int64> by_principal_kind = 7;
+}
+
+// APITokenStats counts hashed-bearer M2M tokens. Same exclusive
+// active/expired/revoked contract as CapabilityStats.
+message APITokenStats {
+  int64 total = 1;
+  int64 active = 2;
+  int64 expired = 3;
+  int64 revoked = 4;
+  // Active tokens expiring within 7 days — longer warning than
+  // capabilities because a human has to go rotate these.
+  int64 expiring_soon = 5;
+  // Active tokens that never authenticated a request: incomplete
+  // provisioning or an abandoned credential. Either way, pure risk.
+  int64 never_used = 6;
+}
+
+// SubscriptionStats is the event-subscription inventory. The dispatcher's
+// delivery backlog is a separate view (GetDispatcherStats) because it
+// lives on a different pod's pool.
+message SubscriptionStats {
+  int64 total = 1;
+  int64 enabled = 2;
+  int64 disabled = 3;
+  // Subscriptions carrying a CEL filter; the rest receive every event
+  // their tenant produces.
+  int64 with_filter = 4;
+  // sink_kind → count, over ENABLED rows.
+  map<string, int64> by_sink_kind = 5;
+}
+
+message TenantStats {
+  int64 total = 1;
+  // active + trashed == total. Trashed rows are soft-deleted
+  // (deleted_at IS NOT NULL) and still hold their slug.
+  int64 active = 2;
+  int64 trashed = 3;
+  // storage_layout split (ADR-0011). Counted over ACTIVE tenants only.
+  int64 shared_layout = 4;
+  int64 dedicated_layout = 5;
+  // Active tenants with no row in tenant_default_bindings — they can't
+  // accept an ObjectKey bind without an explicit backend/bucket.
+  int64 without_default_binding = 6;
+}
+
+message BackendStats {
+  int64 total = 1;
+  int64 enabled = 2;
+  int64 disabled = 3;
+  // read_only = drained (reads served, writes refused); maintenance is
+  // the advisory operator flag. Both counted across all backends.
+  int64 read_only = 4;
+  int64 maintenance = 5;
+  // kind → count ("aws-s3", "s3-compatible", "gcs", …).
+  map<string, int64> by_kind = 6;
+}
+
+message BucketStats {
+  int64 total = 1;
+  // provision_state → count ("ready", "pending", "failed", "deleting",
+  // "deletion_failed"). Anything but "ready" is un-bindable.
+  map<string, int64> by_provision_state = 2;
+  // backend_id → count.
+  map<string, int64> by_backend = 3;
+  // owner_tenant_id IS NOT NULL — a dedicated bucket owned by one tenant.
+  int64 tenant_owned = 4;
+  // owner_tenant_id IS NULL — shared across tenants by prefix.
+  int64 shared = 5;
+  int64 versioning_enabled = 6;
+  int64 object_lock_enabled = 7;
+  int64 replication_enabled = 8;
+}
+
+message ObjectKeyStats {
+  int64 total = 1;
+  // backend_id → count.
+  map<string, int64> by_backend = 2;
+  // ObjectKeys whose bucket_name is NULL — bound to a backend but not
+  // yet to a physical bucket.
+  int64 unbound = 3;
+}
+
+message UserStats {
+  int64 total = 1;
+  int64 disabled = 2;
+}
+
+// ObjectStateStat is one (state, count, bytes) triple. Carried as a
+// repeated list keyed by the state's wire name ("PENDING", "AVAILABLE",
+// "FAILED", "DELETED") rather than a fixed field per state so a new
+// object_state enum member doesn't need a proto change to show up.
+message ObjectStateStat {
+  string state = 1;
+  int64 count = 2;
+  // Sum of size_bytes. NULL sizes (PENDING rows, pre-commit) count as 0.
+  int64 bytes = 3;
+}
+
+message TenantObjectStats {
+  string tenant_id = 1;
+  // slug / display_name are joined in by the admin pod from `tenants`
+  // — the worker only knows tenant_id. Empty when the tenant row was
+  // purged out from under still-present object rows.
+  string slug = 2;
+  string display_name = 3;
+  repeated ObjectStateStat states = 4;
+  int64 total_count = 5;
+  int64 total_bytes = 6;
+}
+
+message ObjectStats {
+  // Global rollup across every tenant.
+  repeated ObjectStateStat states = 2;
+  int64 total_count = 3;
+  int64 total_bytes = 4;
+  // Per-tenant breakdown, biggest total_count first. Capped server-side
+  // (see systemh.maxTenantObjectRows); `tenants_truncated` is the count
+  // of tenants omitted past the cap.
+  repeated TenantObjectStats tenants = 5;
+  int64 tenants_truncated = 6;
+
+  // Field 1 was `available`; it moved to RLSStats, which owns the one
+  // flag for the whole worker-proxied leg.
+  reserved 1;
+  reserved "available";
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/worker/lease"
 )
@@ -249,6 +251,35 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = "/livez"
 		mux.ServeHTTP(w, r2)
+	})
+	// Cross-tenant census of every RLS'd table (objects, quotas,
+	// capability records, API tokens, event subscriptions) for the
+	// console's /stats page. Computed HERE, not in the admin pod, because
+	// migration 023 puts those tables behind row-level security and only
+	// this pod holds a BYPASSRLS pool. The admin plane's
+	// SystemService.GetPlatformStats proxies this endpoint behind its
+	// platform-admin gate; the ops listener itself stays cluster-internal,
+	// same trust posture as /system/health.json. Mirrors the dispatcher's
+	// /system/dispatcher-stats.json.
+	mux.HandleFunc("GET /system/rls-census.json", func(w http.ResponseWriter, r *http.Request) {
+		// No BYPASSRLS pool means the deployment never set migrate_dsn /
+		// reaper_dsn. Answering off deps.Pool would return zero rows (no
+		// tenant GUC) and read as "the fleet is empty" — a 503 makes the
+		// console say "unavailable" instead of lying.
+		if deps.ReaperPool == nil {
+			l.Warn("RLS census requested but no BYPASSRLS pool is configured")
+			http.Error(w, "no bypassrls pool", http.StatusServiceUnavailable)
+			return
+		}
+		census, err := platformstats.CollectRLS(r.Context(), deps.ReaperPool)
+		if err != nil {
+			l.Warn("RLS census failed", zap.Error(err))
+			http.Error(w, "census unavailable", http.StatusInternalServerError)
+			return
+		}
+		census.CollectedAt = time.Now().UTC().Format(time.RFC3339)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(census)
 	})
 	return mux, healthH
 }

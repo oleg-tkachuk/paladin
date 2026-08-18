@@ -167,11 +167,10 @@ export function CommandPalette() {
       {
         id: "nav-stats",
         type: "nav",
-        title: "System Stats",
-        subtitle: "View real-time metrics and charts",
+        title: "Platform Stats",
+        subtitle: "Tenant / storage / object census across the fleet",
         icon: ChartBarIcon,
-        shortcut: "G S",
-        onSelect: () => router.push("/health"),
+        onSelect: () => router.push("/stats"),
       },
       {
         id: "nav-health",
