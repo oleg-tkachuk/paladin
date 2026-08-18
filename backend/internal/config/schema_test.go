@@ -23,26 +23,11 @@ func TestCueSchema(t *testing.T) {
 		t.Fatalf("CUE schema invalid: %v", schemaVal.Err())
 	}
 
-	yamlInput := []byte(`
-app:
-  name: "test-app"
-  env: "local"
-server:
-  data_http: { addr: ":8080" }
-  admin_http: { addr: ":8090" }
-  iam_http: { addr: ":8085" }
-datastores:
-  postgres:
-    dsn: "postgres://localhost/test"
-storage:
-  backends:
-    primary:
-      kind: "s3-compatible"
-      auth:
-        mode: "static_keys"
-        access_key: "a"
-        secret_key: "b"
-`)
+	// minimalConfigYAML (drift_test.go) is the shared definition of
+	// "only the fields schema.cue declares without a default". Sharing it
+	// means a new no-default field breaks both tests at once, instead of
+	// this one drifting quietly the way its stale `server:` block did.
+	yamlInput := []byte(minimalConfigYAML)
 
 	yamlFile, err := cueyaml.Extract("test.yaml", yamlInput)
 	if err != nil {

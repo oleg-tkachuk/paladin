@@ -734,6 +734,77 @@ open deliberately — each notes why._
 
 ---
 
+## Configuration
+
+### `ingest:` has no CUE schema block — its knobs run on Go zero values
+
+- **Status:** Deferred (real gap, surfaced by the config-drift tests).
+- **Reason:** `Config.Ingest` is a top-level block in types.go, but
+  `internal/config/schema.cue` never declares it and `configs/config.yaml`
+  never sets it. So nothing supplies defaults: every field falls back to its
+  Go zero value. Two of those matter — `cmd/server/serve_ingest.go` passes
+  `cfg.Ingest.ReaperInterval` and `cfg.Ingest.DedupTTL` straight through with
+  no fallback, and `worker.RunTicker` treats `interval <= 0` as "disabled".
+  An ingest deployment that doesn't spell both out therefore never reaps
+  `ingested_events`, and the table grows without bound. The doc comments on
+  the struct say "Default 24h" / "Default 1h", which is true of nothing.
+  Recorded in `schemaGapAllowlist` (internal/config/drift_test.go) so the
+  gap is explicit and a NEW one fails the build.
+- **Definition of Done:**
+  - `ingest:` declared in schema.cue with the defaults the struct comments
+    already promise, mirroring how `worker:` / `dispatcher:` are declared.
+  - The allowlist entry deleted — the test errors if a block is declared AND
+    still allowlisted, so it cannot rot.
+  - Either a documented `ingest:` block in configs/config.yaml, or a note
+    there saying the role is opt-in and configured per-overlay.
+- **Blockers:** none. Deliberately not done in the same pass as the drift
+  tests: injecting defaults where zero values are live today is a behaviour
+  change and belongs in its own commit, measured against a deploy that
+  actually runs the ingest role.
+
+### MCP `allow_write` was a dead knob that read as a security control
+
+- **Status:** Deferred (schema entry removed; the question it raises is open).
+- **Reason:** `schema.cue` declared `mcp.stdio.allow_write` and
+  `mcp.http.allow_write`, both defaulting to `false`. Neither had a Go field
+  or a single consumer — the value was computed by CUE and dropped on decode.
+  An operator reading the schema would reasonably conclude the MCP bridge was
+  read-only by default and that flipping the knob was what enabled writes.
+  Neither is true. Worse, the strict loader rejects unknown keys, so actually
+  setting it in a config file crashes the pod. The schema entries are gone;
+  what is NOT resolved is whether the bridge should have such a gate.
+- **Definition of Done:**
+  - A decision, written down: either the MCP bridge grows a real read-only
+    mode (field + enforcement in internal/mcp/bridge.go + tests), or
+    docs/security.md states plainly that MCP write access is governed only by
+    the caller's token scopes and Cedar policy.
+  - If it becomes real, the config knob comes back — with the enforcement,
+    not before it.
+- **Blockers:** needs a product/security call on whether a transport-level
+  write gate adds anything over the existing per-call authorization.
+
+### `llm:` and `vector:` schema blocks removed — features never landed
+
+- **Status:** Deferred (schema cleaned; reinstate with the implementation).
+- **Reason:** `schema.cue` carried fully-specified `llm:` (litellm + ollama)
+  and `vector:` (pgvector + qdrant) blocks with defaults, secret refs and
+  timeouts. No Go struct, no yaml tag, no consumer anywhere in the tree — and
+  because the loader is strict, an operator who followed the schema and set
+  `llm.enabled: true` would fail config load and crashloop the pod. A schema
+  block for an unimplemented feature is not a placeholder, it is a trap.
+  Removed; the CUE is recoverable from git history when the work starts.
+  The shape they described: `llm` selected between a LiteLLM gateway and a
+  local Ollama, with per-binding `{provider, model}` entries; `vector` chose
+  between pgvector and Qdrant at 1536 dimensions. That is the config surface
+  the aspirational **Role split: `indexer` / `embedder`** entry above would
+  need — so this is a schema that ran ahead of its feature by a release or
+  more, not a mistake.
+- **Definition of Done:** the blocks return in the same change that adds the
+  Go structs and the code that reads them, not before. When that happens,
+  reconcile the naming with that entry's `cfg.Indexer` block — two different
+  names for the same subsystem is how this drift starts.
+- **Blockers:** none — gated on semantic search becoming a committed feature.
+
 ## UI / Admin Console
 
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY

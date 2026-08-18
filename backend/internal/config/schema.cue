@@ -413,13 +413,11 @@ mcp: {
     iam_url:   string | *"http://localhost:8085"
   }
   stdio: {
-    enabled:     bool | *true
-    allow_write: bool | *false
+    enabled: bool | *true
   }
   http: {
     enabled:         bool   | *true
     addr:            string | *":8095"
-    allow_write:     bool   | *false
     session_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"
   }
   // OAuth 2.1 Resource-Server posture for the streamable-HTTP MCP server
@@ -438,42 +436,6 @@ mcp: {
       registration_endpoint:  string | *""
       jwks_uri:               string | *""
     }
-  }
-}
-
-llm: {
-  enabled: bool | *false
-  litellm: {
-    base_url:        string | *""
-    api_key:         string | *""
-    api_key_secret?: #SecretRef
-    timeout:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-  }
-  ollama: {
-    base_url: string | *""
-    // Local inference is slower than cloud — wider default timeout.
-    timeout:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"120s"
-  }
-  bindings: [string]: {
-    provider: "litellm" | "ollama"
-    model:    string
-  }
-}
-
-vector: {
-  enabled: bool | *false
-  backend: "pgvector" | "qdrant" | *"pgvector"
-  pgvector: {
-    dimension:     int | *1536
-    default_model: string | *""
-  }
-  qdrant: {
-    url:             string | *""
-    api_key:         string | *""
-    api_key_secret?: #SecretRef
-    collection:      string | *"paladin"
-    dimension:       int | *1536
-    timeout:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10s"
   }
 }
 
