@@ -1548,8 +1548,8 @@ of the pipeline._
 ### Playwright e2e suite wired into CI
 
 - **Status:** Workflow AUTHORED (2026-07-02), storage reworked into the
-  compose stack (2026-08-19) — one confirming run and the required-check
-  flip remain.
+  compose stack and confirmed green locally (2026-08-19) — the Actions run
+  and the required-check flip remain.
 - **Shipped:** `.github/workflows/e2e.yml` — builds both images from the
   deploy Dockerfiles (`:latest` tags the compose file references), installs
   pnpm + Chromium, pre-pulls the stack's third-party images, runs
@@ -1565,18 +1565,20 @@ of the pipeline._
   repository (previously a cluster-shared Garage reached by
   `kubectl port-forward`, with credentials extracted from a K8s Secret),
   which made the suite unrunnable for anyone outside that cluster.
-  **The compose change itself is unverified** — it was authored in an
-  environment with no Docker daemon, so first-run confirmation is part of
-  the remaining DoD below.
+  **Confirmed 2026-08-19:** first `compose up` against the MinIO services
+  ran 18/18 green in 1.5 min on Docker 29.4.0 (darwin/arm64), from the two
+  locally built `:latest` images and nothing else — no cluster, no
+  `kubectl port-forward`, no `PALADIN_E2E_S3_*` overrides. `minio` and
+  `minio-setup` came up in the declared order, the bucket was created, and
+  the browser's presigned PUT to `localhost:9000` passed SigV4 — which is
+  the assertion that the two-endpoint split (`endpoint` vs
+  `public_endpoint`) exists to make.
 - **Definition of Done (remaining):**
-  - A green run of the reworked stack, locally or on Actions. Nothing has
-    executed `compose up` against the MinIO services yet.
   - First green run on Actions — was unverifiable under the billing
     failure; free public-repo minutes remove that gate.
   - Flip to a required check alongside `test` / `security` (see the
     *Branch protection* entry).
-- **Blockers:** none remaining that are outside the maintainer's control;
-  needs one local run to confirm the compose rework.
+- **Blockers:** none remaining that are outside the maintainer's control.
 
 
 ### Branch protection on `main` and `develop` — require status checks
