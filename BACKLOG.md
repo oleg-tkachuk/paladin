@@ -1620,6 +1620,26 @@ of the pipeline._
   the unblock, and until then nothing on Actions can go green.** Everything
   the pipeline would check is green locally (`task verify-all`, integration,
   e2e 18/18), so the gap is quota, not correctness.
+- **The quota is not this repository's doing.** Billing usage for August 2026
+  (`/users/oleg-tkachuk/settings/billing/usage`) puts the account at 4734.7
+  Actions Linux minutes, of which **`paladin-private` accounts for 109.0 —
+  2.3%**. `another-project` (2781.7) and `gitops` (1752.0) are 96% between
+  them. The spending limit is account-wide, so this repository is blocked by
+  neighbours rather than by anything it runs. Do NOT come here to trim
+  Paladin's CI: 109 minutes a month is already nothing, and halving it would
+  change the date this unblocks by zero days.
+  The money line is gross $28.41, free-tier discount $18.41 (= 3068 minutes,
+  i.e. the Pro plan's 3000/month), net **$10.00**. July was the same shape:
+  4674.7 minutes, net exactly $10.00. Two consecutive months landing on the
+  same round number is a spending ceiling being hit, not usage that happens
+  to match — the limit itself is not readable via the API (the budgets
+  endpoints 404 and the old billing ones are 410 Gone), so this is inferred
+  from the figures rather than quoted.
+  Options, in the order they actually help: publish the repository (public
+  repos consume no quota at all, so this stops recurring and is already the
+  plan); raise the spending limit (unblocks every private repo at once, and
+  costs); or wait for the 1st (free minutes reset, but the ceiling was
+  reached in both July and August, so it returns).
 - **Definition of Done:** once Actions runs go green, add
   `required_status_checks` (strict) for the four check contexts. Use the
   dedicated sub-resource endpoint so the already-applied protections
