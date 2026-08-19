@@ -42,7 +42,7 @@
 
 set -euo pipefail
 
-REPO="${REPO:-oleg-tkachuk/paladin}"
+REPO="${REPO:-oleg-tkachuk/paladin-private}"
 RULESET_NAME="protect-main-develop"
 REQUIRE_CHECKS="${REQUIRE_CHECKS:-0}"
 

@@ -77,35 +77,41 @@ the same commit. Treat this file like a runtime invariant.
   **`oleg-tkachuk/paladin-private`** — renamed from `paladin`
   on 2026-08-19 as an interim private name. The final name is `paladin`.
 - **Reason:** The *service* is called `paladin` and that is not changing;
-  `paladin-private` is a temporary repository name only. Everything in the
-  tree already spells `paladin`, so nothing here should be rewritten to
-  `paladin-private` — the references become correct the moment the repository
-  is renamed, and rewriting them now would only have to be undone.
-  Of the 1172 `github.com/oleg-tkachuk/paladin` references in the tree, 1161
-  are **Go import paths**, which never reach GitHub: the backend is built
-  from its own directory and is not `go install`-able (see
-  `backend/README.md`), and `capability/` is consumed through a `replace`.
-  Builds, tests and codegen are therefore unaffected by the interim name.
-  Only 11 are real URLs, and those 404 until the rename.
-- **Two things actually break while the interim name is in force:**
-  - `release.config.cjs` pins
-    `repositoryUrl: "https://github.com/oleg-tkachuk/paladin.git"`, which does
-    not exist yet. A release fires on push to `main`, so **do not merge this
-    work to `main` before renaming** — semantic-release would fail against a
-    non-existent repository. If a release is needed sooner, point the URL at
-    `paladin-private` and change it back after the rename.
-  - `.github/scripts/apply-repo-settings.sh` defaults to
-    `REPO="${REPO:-oleg-tkachuk/paladin}"`. Until the rename, run it as
-    `REPO=oleg-tkachuk/paladin-private REQUIRE_CHECKS=1 .github/scripts/apply-repo-settings.sh`.
-    The variable exists for exactly this; do not edit the default.
+  `paladin-private` is a temporary **repository** name only. The two are
+  tracked separately in the tree, and only one of them moves:
+  - **Repository references — now spell `paladin-private`.** Twelve places
+    address the GitHub repository itself, and per the maintainer's call
+    (2026-08-19) they carry the real, current name so nothing is broken
+    while the interim name is in force. They are the ones to flip back on
+    the rename: `release.config.cjs` (`repositoryUrl`),
+    `.github/scripts/apply-repo-settings.sh` (`REPO` default), the three
+    `.github/ISSUE_TEMPLATE/*` files (5 URLs), `SECURITY.md`,
+    `CODE_OF_CONDUCT.md`, `deploy/grafana/worker-alerts.yaml` (2
+    `runbook_url`s) and `backend/deploy/Dockerfile`
+    (`org.opencontainers.image.source`).
+  - **Go module paths — still spell `paladin`, and must stay that way.**
+    The remaining ~1160 `github.com/oleg-tkachuk/paladin/...` occurrences are
+    import paths, not URLs. They never reach GitHub: the backend builds from
+    its own directory and is not `go install`-able (see `backend/README.md`),
+    and `capability/` resolves through a `replace`. Rewriting them would
+    churn every file in the repository to no effect and then have to be
+    undone. Same for `otel.Meter("github.com/oleg-tkachuk/paladin")` in
+    `backend/internal/metrics/otel.go` — an instrumentation-scope name
+    conventionally equal to the module path; changing it renames a metric
+    attribute at runtime.
+  - `specs/**` is left alone: those are historical records of what was done
+    at the time, not live configuration.
 - **Definition of Done:**
-  - Repository renamed to `paladin`; confirm GitHub's redirect from the old
-    name resolves and that the 11 in-tree URLs load.
+  - Repository renamed to `paladin`.
+  - Flip the twelve repository references back to `paladin` —
+    `grep -rn "oleg-tkachuk/paladin-private"` finds exactly those twelve plus
+    this entry, and nothing else, because no Go import path carries that
+    spelling.
   - `git remote set-url origin git@github.com:oleg-tkachuk/paladin.git` — the
     remote currently points at `paladin-private`. GitHub redirects keep pushes
     working either way, so this is hygiene, not a break.
-  - Re-run `apply-repo-settings.sh` without the `REPO` override and confirm
-    it targets the right repository.
+  - Re-run `apply-repo-settings.sh` and confirm it targets the right
+    repository.
   - Check the name is actually free where it matters — GitHub org, npm,
     pkg.go.dev, trademark. **Not done yet**; "paladin" is an ordinary English
     word, so this is a real check rather than a formality.

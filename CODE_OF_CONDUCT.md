@@ -60,7 +60,7 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the maintainers responsible for enforcement by opening a
-[private security advisory](https://github.com/oleg-tkachuk/paladin/security/advisories/new)
+[private security advisory](https://github.com/oleg-tkachuk/paladin-private/security/advisories/new)
 — it is the private channel this project has, and it is monitored — or by
 contacting [@oleg-tkachuk](https://github.com/oleg-tkachuk) directly on GitHub.
 
