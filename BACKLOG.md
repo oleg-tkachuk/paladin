@@ -1661,18 +1661,6 @@ of the pipeline._
   both branches.
 
 
-### Publish the Helm charts
-
-- **Status:** Deferred — depends on image publishing above.
-- **Reason:** `backend/deploy/chart` and `frontend/deploy/chart` are
-  installable only from a clone. There is no chart repository, so there is
-  no `helm repo add` path and no versioned chart artifact to pin.
-- **Definition of Done:** both charts pushed as OCI artifacts to GHCR on
-  release, chart version tracking the app version, and an install snippet
-  in the README that does not involve cloning.
-- **Blockers:** image publishing — a chart that references unpullable
-  images is not usable, so it lands second.
-
 ### `frontend/tasks/docker.task.yaml` defaults an overlay path into a private repo
 
 - **Status:** Deferred — considered and consciously kept.

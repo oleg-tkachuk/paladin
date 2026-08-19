@@ -99,22 +99,22 @@ optional hook tooling.
 
 ### On a cluster, without building anything
 
-Released images are published multi-arch (`linux/amd64`, `linux/arm64`) to
-GHCR, and the charts default to them:
+Charts and multi-arch images (`linux/amd64`, `linux/arm64`) are published to
+GHCR on every release, so no clone and no build are involved:
 
 ```bash
-helm install paladin-core ./backend/deploy/chart
-helm install paladin-console ./frontend/deploy/chart
+helm install paladin-core   oci://ghcr.io/oleg-tkachuk/charts/paladin-core   --version X.Y.Z
+helm install paladin-console oci://ghcr.io/oleg-tkachuk/charts/paladin-console --version X.Y.Z
 ```
 
-- `ghcr.io/oleg-tkachuk/paladin-core`
-- `ghcr.io/oleg-tkachuk/paladin-console`
+The charts default to the matching images, `ghcr.io/oleg-tkachuk/paladin-core`
+and `…/paladin-console`. Chart version, app version and image tag are the same
+release number, so pinning one pins all three.
 
-Both carry a `latest` tag and a tag per release version; pin the version in
-anything you care about. Images exist only for released versions — there is
-no image for an unreleased `main`, so build from source for that. The dev
-loop overrides the charts back to a local registry via
-`values-local.yaml`.
+Images also carry `latest`, but pin the version in anything you care about.
+Artifacts exist only for released versions — there is no image for an
+unreleased `main`, so build from source for that. The dev loop overrides the
+charts back to a local registry via `values-local.yaml`.
 
 ## Where to read next
 

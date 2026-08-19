@@ -137,3 +137,37 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.semantic.outputs.new_release_version }}
             GIT_COMMIT_HASH=${{ github.sha }}
+
+      # ── publish the charts ───────────────────────────────────────────────
+      #
+      # A chart referencing an image nobody can pull is not installable, so
+      # the charts go out after the images, in the same job and gated on the
+      # same condition.
+      #
+      # Chart version == app version == the release version. The charts carry
+      # 0.1.0 in Chart.yaml as a placeholder and are versioned at package
+      # time — same as the dev-loop path in tasks/_service.task.yaml, which
+      # packages with --version/--app-version rather than editing the file.
+      #
+      # `helm registry login` is separate from the docker login above: helm
+      # keeps its own registry config and does not read docker's.
+      - name: Set up Helm
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: azure/setup-helm@v5.0.1
+
+      - name: Package and push the charts
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          VERSION: ${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for chart in backend/deploy/chart frontend/deploy/chart; do
+            helm package "$chart" --version "$VERSION" --app-version "$VERSION" \
+              --destination /tmp/charts
+          done
+          for tgz in /tmp/charts/*.tgz; do
+            echo "pushing $tgz"
+            helm push "$tgz" oci://ghcr.io/oleg-tkachuk/charts
+          done
