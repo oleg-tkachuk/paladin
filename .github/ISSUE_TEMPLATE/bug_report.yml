@@ -1,0 +1,76 @@
+name: Bug report
+description: Something behaves differently than documented or intended.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for security issues.** If this is a way for a principal to gain
+        authority it should not have, close this and follow
+        [SECURITY.md](https://github.com/oleg-tkachuk/paladin/blob/main/SECURITY.md)
+        instead.
+
+        Worth checking first: [BACKLOG.md](https://github.com/oleg-tkachuk/paladin/blob/main/BACKLOG.md)
+        records what this project has deliberately not implemented, with
+        reasons. A surprising gap is often a documented one.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - backend — API / admin plane
+        - backend — worker / dispatcher / ingest
+        - backend — auth, policy, capability
+        - capability module (standalone)
+        - frontend — admin console / BFF
+        - deployment — Helm chart, compose, migrations
+        - docs
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: >
+        What you did, what you expected, and what you got instead. For an
+        authorisation bug, say which principal you started as and what
+        authority you ended up with.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: >
+        Commands, a request sequence, a config fragment, or a failing test.
+        A reproduction against `task e2e-up` is the most useful kind,
+        because it is the stack everyone has.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >
+        Commit or release, how you are running it (compose / Helm / `go
+        run`), Postgres version, and the storage backend if relevant.
+      value: |
+        - Version / commit:
+        - Running via:
+        - Postgres:
+        - Storage backend:
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        Redact credentials before pasting. Structured log lines around the
+        failure beat a full dump.
+      render: shell

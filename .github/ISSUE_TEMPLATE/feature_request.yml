@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose something the project should do and currently does not.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search [BACKLOG.md](https://github.com/oleg-tkachuk/paladin/blob/main/BACKLOG.md)
+        first. It is the register of work that was deliberately deferred,
+        and each entry records why and what would unblock it. If your idea
+        is already there, comment on the blocker rather than opening a new
+        issue — that is more likely to move it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What are you trying to do that you cannot do today? Describe the
+        situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: >
+        Optional. If you already have a shape in mind, sketch it — including
+        which plane or module it would live in.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: >
+        Workarounds you have used, and why they are not enough.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This would change an existing API, schema or policy decision (rather than only adding something new)
+        - label: I would be willing to implement this

@@ -1,0 +1,13 @@
+# Every path has an owner so no PR sits unrouted. Broad by design — this is
+# a small project, and a CODEOWNERS file full of aspirational team names is
+# worse than one honest line.
+*                       @oleg-tkachuk
+
+# The pieces where a wrong merge is expensive, called out so they are never
+# swept along in a large diff:
+/backend/internal/auth/   @oleg-tkachuk
+/backend/internal/policy/ @oleg-tkachuk
+/capability/              @oleg-tkachuk
+/backend/migrations/      @oleg-tkachuk
+/.github/                 @oleg-tkachuk
+/SECURITY.md              @oleg-tkachuk

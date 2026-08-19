@@ -1,9 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":dependencyDashboard"],
-  "labels": ["dependencies", "base-image"],
-  "description": "Scoped to container base images only. The backend + frontend Dockerfiles pin FROM tags by @sha256 digest for bit-reproducible builds; a digest pin without automation rots, so Renovate keeps the tag + digest in lockstep. Broaden enabledManagers (gomod, npm) deliberately when ready for that PR volume.",
-  "enabledManagers": ["dockerfile", "docker-compose"],
+  "labels": ["dependencies"],
+  "description": [
+    "Container base images: the Dockerfiles pin FROM tags by @sha256 for bit-reproducible builds, and a digest pin without automation rots — Renovate keeps tag and digest in lockstep.",
+    "Go and npm: enabled for minor/patch only, grouped into one PR per half per month. Majors stay manual, matching `task deps:update` (minor/patch, no majors, cross a major deliberately per CHANGELOG). Grouping rather than disabling: a public repository needs the security half of dependency automation to work, and a manager that is switched off raises no PR when an advisory lands.",
+    "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window."
+  ],
+  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm"],
   "pinDigests": true,
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 2,
@@ -17,6 +21,37 @@
       "matchManagers": ["dockerfile", "docker-compose"],
       "matchUpdateTypes": ["digest"],
       "groupName": "base-image digests"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "description": "Actions run with repository write scopes on release, so keeping them current is supply-chain hygiene. A handful of PRs a year."
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "go dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "matchManagers": ["gomod", "npm"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false,
+      "description": "Majors are crossed by hand — a Go major can break the generated Connect stubs the frontend consumes, which no lockfile bump can tell you."
     }
-  ]
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"],
+    "prCreation": "immediate",
+    "groupName": null
+  },
+  "osvVulnerabilityAlerts": true
 }
