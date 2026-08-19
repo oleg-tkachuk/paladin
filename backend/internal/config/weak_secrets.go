@@ -87,8 +87,6 @@ var weakSecretMarkers = []string{
 	"replaceme",
 	"insert-",
 	"your-secret",
-	"<prod-",
-	"<staging-",
 	"xxxxx",
 }
 
@@ -102,6 +100,13 @@ func isWeakSecret(v string) bool {
 	}
 	lower := strings.ToLower(strings.TrimSpace(v))
 	if weakSecretValues[lower] {
+		return true
+	}
+	// `<staging-signing-key>`, `<prod-health-token-from-sealed-secret>`,
+	// `<oidc-client-id>` — the angle brackets ARE the convention for "an
+	// operator fills this in", used throughout the chart values files. One
+	// shape check beats chasing each new bracket text with a marker.
+	if strings.HasPrefix(lower, "<") && strings.HasSuffix(lower, ">") {
 		return true
 	}
 	for _, marker := range weakSecretMarkers {

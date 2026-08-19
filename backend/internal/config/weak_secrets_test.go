@@ -63,6 +63,14 @@ func TestWeakSecretGateRejectsCommittedDefaults(t *testing.T) {
 			field:  "runtime.health_snapshot_token",
 		},
 		{
+			// Every chart values file spells "fill this in" with angle
+			// brackets, and the texts inside them differ per file — the
+			// shape is what is recognised, not the wording.
+			name:   "angle-bracket placeholder with unseen wording",
+			mutate: func(c *Config) { c.Auth.SigningKey = "<dev-cluster-signing-key>" },
+			field:  "auth.signing_key",
+		},
+		{
 			name: "storage backend secret key",
 			mutate: func(c *Config) {
 				b := c.Storage.Backends["primary"]
