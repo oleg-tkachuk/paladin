@@ -50,10 +50,18 @@ RUN apk add --no-cache git && \
 # -----------------------------------------------------------------------------
 FROM gobase AS tools
 
-ARG PROTOC_GEN_GO_VERSION=v1.36.11
-ARG PROTOC_GEN_CONNECT_GO_VERSION=v1.19.1
+# The two protoc plugins MUST match the library versions backend/go.mod pins
+# (google.golang.org/protobuf, connectrpc.com/connect). The builder stage
+# below REGENERATES the stubs rather than using the committed ones, so a
+# mismatch here silently compiles the binary against stubs that differ from
+# the ones in the repository. Bump these and go.mod together.
+ARG PROTOC_GEN_GO_VERSION=v1.36.12
+ARG PROTOC_GEN_CONNECT_GO_VERSION=v1.20.0
+# sqlc's output IS committed and is NOT regenerated in this image, so this pin
+# only has to stay resolvable. Bumping it means regenerating and committing
+# the diff, not editing this line alone.
 ARG SQLC_VERSION=v1.30.0
-ARG BUF_VERSION=v1.50.0
+ARG BUF_VERSION=v1.72.0
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
