@@ -10,9 +10,10 @@
 # Storage is NOT prepared here: the compose file brings up its own MinIO,
 # so this job and a contributor's laptop run byte-identical stacks.
 #
-# NOT a required check yet: enabling required status checks is blocked on
-# the account's Actions billing (see BACKLOG "Branch protection"). Flip it
-# together with the other contexts once runs go green.
+# NOT a required check yet — see BACKLOG "Branch protection". Public-repo
+# Actions minutes are free, so the billing block that kept every required
+# check off is gone; what remains is knowing this job's runtime on public
+# runners before making it blocking.
 
 name: E2E
 

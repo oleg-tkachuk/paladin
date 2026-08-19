@@ -1498,21 +1498,36 @@ of the pipeline._
 
 ### Playwright e2e suite wired into CI
 
-- **Status:** Workflow AUTHORED (2026-07-02) — first green run + the
-  required-check flip remain, both blocked on Actions billing.
+- **Status:** Workflow AUTHORED (2026-07-02), storage reworked into the
+  compose stack (2026-08-19) — one confirming run and the required-check
+  flip remain.
 - **Shipped:** `.github/workflows/e2e.yml` — builds both images from the
-  deploy Dockerfiles (`:latest` tags the compose file references), starts a
-  MinIO service as the S3 endpoint (compose containers reach it via the
-  docker0 gateway, the Playwright host's presigned PUTs via localhost),
-  installs pnpm + Chromium, runs `pnpm run test:e2e` (Playwright's webServer
-  boots the compose stack itself), uploads the report artifact + stack logs
-  on failure. Suite is currently 18/18 locally (incl. tenant switching).
+  deploy Dockerfiles (`:latest` tags the compose file references), installs
+  pnpm + Chromium, pre-pulls the stack's third-party images, runs
+  `pnpm run test:e2e` (Playwright's webServer boots the compose stack
+  itself), uploads the report artifact + stack logs on failure. Suite is
+  currently 18/18 locally (incl. tenant switching).
+- **2026-08-19 update:** storage moved INTO
+  `frontend/tests/e2e/docker-compose.test.yaml` as a `minio` +
+  `minio-setup` pair. The workflow no longer starts its own MinIO on the
+  runner host, and the docker0-gateway address and `PALADIN_E2E_S3_*` env
+  block are gone with it — CI now runs the same stack a contributor runs.
+  This also removed the suite's last dependency on the private `gitops`
+  repository (previously a cluster-shared Garage reached by
+  `kubectl port-forward`, with credentials extracted from a K8s Secret),
+  which made the suite unrunnable for anyone outside that cluster.
+  **The compose change itself is unverified** — it was authored in an
+  environment with no Docker daemon, so first-run confirmation is part of
+  the remaining DoD below.
 - **Definition of Done (remaining):**
-  - First green run on Actions — unverifiable until the account's billing
-    is fixed (every run currently fails at startup with steps=0).
+  - A green run of the reworked stack, locally or on Actions. Nothing has
+    executed `compose up` against the MinIO services yet.
+  - First green run on Actions — was unverifiable under the billing
+    failure; free public-repo minutes remove that gate.
   - Flip to a required check alongside `test` / `security` (see the
-    *Branch protection* entry — same billing gate).
-- **Blockers:** GitHub Actions billing (account-level, repo owner only).
+    *Branch protection* entry).
+- **Blockers:** none remaining that are outside the maintainer's control;
+  needs one local run to confirm the compose rework.
 
 
 ### Branch protection on `main` and `develop` — require status checks
@@ -1565,14 +1580,122 @@ of the pipeline._
   contexts = the job ids: test.yml → `backend`, `frontend`; security.yml →
   `gitleaks`, `trivy-fs`, `trivy-image` (DoD covers the first four; add
   `trivy-image` only if image scans should gate too).
-- **Blockers:** GitHub Actions billing — RE-VERIFIED 2026-06-30: every run
-  still fails with `steps=0` and "The job was not started because recent
-  account payments have failed or your spending limit needs to be
-  increased." Account-level (Settings → Billing → spending limit / payment
-  method); only the repo owner can resolve it. Enabling required checks
-  before this is fixed would block ALL merges + direct pushes on both
-  branches (enforce_admins is on), so it stays OFF until CI goes green.
+- **2026-08-19 update:** `apply-repo-settings.sh` now composes the ruleset
+  with `jq` and takes `REQUIRE_CHECKS=1` to add the four contexts, so
+  turning them on is one env var rather than a hand-written API call. The
+  script also enables private vulnerability reporting (SECURITY.md links
+  to the advisory form, which 404s without it) and Dependabot alerts. It
+  still leaves visibility alone — flipping a repository public is a
+  one-way door and belongs to a human.
+- **Blockers:** GitHub Actions billing — every run failed with `steps=0`
+  and "The job was not started because recent account payments have
+  failed or your spending limit needs to be increased" (re-verified
+  2026-06-30). **Publishing the repository dissolves this**: Actions
+  minutes are free on public repositories, so the account-level spending
+  limit stops applying. What remains after that is not a blocker but a
+  precondition — confirm a run actually goes green on each of the four
+  contexts before requiring them, because `enforce_admins` is on and a
+  required check that never reports blocks every merge and direct push on
+  both branches.
 
+
+### Publish container images to a registry
+
+- **Status:** Deferred — blocks anyone using this project without building
+  it themselves.
+- **Reason:** The Helm charts and both compose files reference `paladin-core`
+  and `paladin-console` (and `registry.local/paladin/*` in the e2e stack) — local
+  tags that exist in no registry. Every consumer must therefore build both
+  images from source before anything runs on a cluster, and the charts
+  cannot be installed as published. The release workflow produces a GitHub
+  Release and a version tag; it produces no artifact anyone can pull.
+- **Definition of Done:**
+  - The release workflow builds and pushes both images to GHCR
+    (`ghcr.io/oleg-tkachuk/paladin-core`, `…/paladin-console`) on every release,
+    tagged with the semantic version and `latest`, multi-arch if the
+    runners allow.
+  - Chart `image.repository` defaults point at the published images, with
+    `values-local.yaml` keeping the local tags for the dev loop.
+  - Provenance/SBOM attached, or a note here saying why not.
+  - README documents pulling rather than building.
+- **Blockers:** none technical. Needs a decision on whether images are
+  published from `main` on every release or only on tagged releases, and
+  whether the e2e stack should consume published images (drift risk) or
+  keep building locally (current behaviour, and probably right).
+
+### Publish the Helm charts
+
+- **Status:** Deferred — depends on image publishing above.
+- **Reason:** `backend/deploy/chart` and `frontend/deploy/chart` are
+  installable only from a clone. There is no chart repository, so there is
+  no `helm repo add` path and no versioned chart artifact to pin.
+- **Definition of Done:** both charts pushed as OCI artifacts to GHCR on
+  release, chart version tracking the app version, and an install snippet
+  in the README that does not involve cloning.
+- **Blockers:** image publishing — a chart that references unpullable
+  images is not usable, so it lands second.
+
+### `backend/go.mod` declares a module path that does not match its directory
+
+- **Status:** Deferred — decide, then either fix or document.
+- **Reason:** `backend/go.mod` declares `module
+  github.com/oleg-tkachuk/paladin` while living in
+  `backend/`. Go resolves a module path to a repository path plus
+  subdirectory, so once the repository is public,
+  `go install github.com/oleg-tkachuk/paladin/cmd/server@latest`
+  fails: the proxy looks for a `go.mod` at the repository root and finds
+  none. Nothing inside the repo notices, because the backend is only ever
+  built from its own directory.
+  The `capability` module does not have this problem — its path ends in
+  `/capability` and it sits in `capability/`, which is why it resolves
+  correctly.
+- **Definition of Done:** either
+  (a) rename the module to `…/paladin/backend` and update
+  every import path, the `replace` directive, sqlc/mockery output paths
+  and the Dockerfiles; or
+  (b) record here and in `backend/README.md` that the backend is not
+  `go install`-able and that container images are the distribution path
+  (which makes this depend on image publishing above).
+- **Blockers:** the rename touches every Go file in the repository, so it
+  wants its own PR and a quiet moment. Option (b) is cheap and honest if
+  nobody actually wants to `go install` a control plane.
+
+### Capability module has no version tags Go can resolve
+
+- **Status:** Deferred.
+- **Reason:** `release.config.cjs` uses `tagFormat: "v${version}"`. Go
+  resolves versions for a module in a subdirectory from tags prefixed with
+  that subdirectory — `capability/v1.2.3`. With only root `vX.Y.Z` tags,
+  `go get github.com/oleg-tkachuk/paladin/capability@v1.2.3`
+  cannot resolve, and consumers are stuck on pseudo-versions from commit
+  hashes. The module's README advertises a plain `go get`, so this is a
+  documented capability that does not work.
+- **Definition of Done:** `capability/vX.Y.Z` tags published for the
+  module — either a second semantic-release configuration scoped to
+  `capability/**`, or a release job that mirrors the root tag with the
+  prefix — and `go get …/capability@vX.Y.Z` verified against the public
+  proxy.
+- **Blockers:** needs a decision on whether the module versions
+  independently of PALADIN (it should — that is the point of extracting it)
+  and, if so, whether it eventually moves to its own repository, which
+  would make this moot.
+
+### `frontend/tasks/docker.task.yaml` defaults an overlay path into a private repo
+
+- **Status:** Deferred — considered and consciously kept.
+- **Reason:** `OVERLAY` defaults to
+  `../../gitops/deploy/argocd-apps/applications/overlays/local/values/paladin/…`,
+  a sibling repository that is not public. For anyone else that path does
+  not exist, so the task silently falls back or fails depending on the
+  code path. The e2e and compose stacks no longer depend on `gitops`;
+  this deploy helper is the last coupling, and it only affects the
+  maintainer's own cluster deploys.
+- **Definition of Done:** either the default becomes empty (overlay opt-in
+  via `OVERLAY=…`), or the task documents that it is maintainer-specific
+  and exits cleanly when the path is absent.
+- **Blockers:** none. Left as-is deliberately so the maintainer's deploy
+  loop keeps working; revisit if an outside contributor ever needs the
+  Kubernetes deploy tasks.
 
 ---
 
