@@ -33,12 +33,14 @@ database driver and no storage SDK anywhere in its dependency graph, a
 property CI enforces against the resolved graph rather than against
 `go.mod`.
 
-```bash
-go get github.com/oleg-tkachuk/paladin/capability
+```go
+import "github.com/oleg-tkachuk/paladin/capability"
 ```
 
 You supply storage; a bundled in-memory implementation is enough to get
-started. See [`capability/README.md`](capability/README.md).
+started. It is in-tree rather than published, though — there is no version
+stream to `go get`; see
+[`capability/README.md`](capability/README.md#versioning).
 
 ## What's in the box
 

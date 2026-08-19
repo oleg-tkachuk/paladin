@@ -1650,26 +1650,6 @@ of the pipeline._
 - **Blockers:** image publishing — a chart that references unpullable
   images is not usable, so it lands second.
 
-### Capability module has no version tags Go can resolve
-
-- **Status:** Deferred.
-- **Reason:** `release.config.cjs` uses `tagFormat: "v${version}"`. Go
-  resolves versions for a module in a subdirectory from tags prefixed with
-  that subdirectory — `capability/v1.2.3`. With only root `vX.Y.Z` tags,
-  `go get github.com/oleg-tkachuk/paladin/capability@v1.2.3`
-  cannot resolve, and consumers are stuck on pseudo-versions from commit
-  hashes. The module's README advertises a plain `go get`, so this is a
-  documented capability that does not work.
-- **Definition of Done:** `capability/vX.Y.Z` tags published for the
-  module — either a second semantic-release configuration scoped to
-  `capability/**`, or a release job that mirrors the root tag with the
-  prefix — and `go get …/capability@vX.Y.Z` verified against the public
-  proxy.
-- **Blockers:** needs a decision on whether the module versions
-  independently of Paladin (it should — that is the point of extracting it)
-  and, if so, whether it eventually moves to its own repository, which
-  would make this moot.
-
 ### `frontend/tasks/docker.task.yaml` defaults an overlay path into a private repo
 
 - **Status:** Deferred — considered and consciously kept.

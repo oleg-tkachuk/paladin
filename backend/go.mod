@@ -206,10 +206,13 @@ require (
 	modernc.org/sqlite v1.54.0 // indirect
 )
 
-// The capability primitive lives in a sibling module so third parties can
-// consume it without Paladin. `replace` keeps the working tree building against
-// local source; the standalone CI job is what proves the module stands alone
+// The capability primitive lives in a sibling module so the boundary is
+// mechanical rather than a convention: a separate go.mod is what lets the
+// standalone CI job build it with no Paladin checkout and assert that no
+// database driver and no storage SDK reach its resolved dependency graph
 // (research R-004 — without that job, `replace` would mask a broken module).
+// It is NOT published: no version stream is cut for it, and consumption is
+// in-tree through the replace below. See capability/README.md §Versioning.
 require github.com/oleg-tkachuk/paladin/capability v0.1.0
 
 replace github.com/oleg-tkachuk/paladin/capability => ../capability
