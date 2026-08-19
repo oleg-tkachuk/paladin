@@ -53,7 +53,11 @@ import (
 // prefix end up in the display column (8 chars = 5 bytes of entropy →
 // 1 in 2^40 collisions on the index lookup).
 const (
-	TokenPrefix = "paladin_pat_"
+	// G101 reads `paladin_pat_` as a hardcoded credential. It is the
+	// opposite: a public, documented format marker that secret scanners
+	// pin so they can FIND real tokens. Suppressed per-site rather than
+	// repo-wide so a genuine literal secret still trips the linter.
+	TokenPrefix = "paladin_pat_" //nolint:gosec // G101: public token prefix, not a credential
 	PrefixLen   = 8
 	// SecretBytes is the random-byte length encoded after the literal
 	// prefix. 32 bytes = 256 bits of entropy = sufficient even with

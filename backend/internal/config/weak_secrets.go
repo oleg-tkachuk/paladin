@@ -162,7 +162,7 @@ func validateNoWeakSecrets(c *Config) error {
 			"effectively unauthenticated:\n  %s\n"+
 			"Set a real secret (or the `_secret` SecretRef sibling) for each, "+
 			"or set app.env to a disposable environment (%s) if this really is "+
-			"a throwaway stack.",
+			"a throwaway stack",
 		c.App.Env,
 		strings.Join(offenders, "\n  "),
 		strings.Join(sortedDisposableEnvs(), ", "))
