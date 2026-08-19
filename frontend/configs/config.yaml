@@ -12,8 +12,19 @@ runtimeConfig:
       scope: "openid profile email"
       disableAuth: true
     auth:
-      # DEV ONLY. Pre-minted JWT used as a fallback Bearer token when
-      # localStorage.paladin_token is empty. Do not set in production builds —
-      # the value is exposed to the browser. Leave empty to require that
-      # each developer pastes their own token via /config.
-      devToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvY3AtZGV2IiwiYXVkIjoib2NwLWFwaSIsInN1YiI6ImRldi11c2VyIiwiaWF0IjoxNzc3NzU3MzU2LCJuYmYiOjE3Nzc3NTczNTYsImV4cCI6MTc4MzgwNTM1Niwicm9sZXMiOlsicGxhdGZvcm0tYWRtaW4iXSwidGVuYW50IjoiM2E4MjNmZDQtMGIzZC00Y2UyLWEyODAtOTNiOGQ3NWNjMDdiIn0.zbTxsSNcB4fSPgepQ-bR2UDJwLePgpg6IKOJuaaxs0g"
+      # DEV ONLY. Fallback Bearer token used when localStorage.paladin_token is
+      # empty. The value is served to the browser, so it must NEVER be set in
+      # a production build — and it is deliberately left empty here rather
+      # than committed, because this repository is public: a checked-in JWT is
+      # a JWT everyone has.
+      #
+      # Mint your own for a local stack (prints a token valid for the
+      # committed dev signing key):
+      #
+      #     task backend:auth:mint-token
+      #
+      # Then paste it into the console's /config page (it is stored in
+      # localStorage as `paladin_token`). There is no env-var override for this
+      # key — the loader reads this file only (src/config.ts) — so setting it
+      # here means editing a tracked file: keep that edit out of your commits.
+      devToken: ""
