@@ -1,0 +1,28 @@
+Paladin (PALADIN)
+Copyright 2026 Oleg Tkachuk
+
+This product includes software developed by the Paladin
+contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may
+not use this file except in compliance with the License. You may obtain
+a copy of the License in the LICENSE file at the root of this repository,
+or at http://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------
+
+This distribution bundles no third-party source. Dependencies are resolved
+at build time and retain their own licenses:
+
+  - Go module dependencies: see backend/go.sum and capability/go.sum;
+    resolve with `go mod download` and inspect with
+    `go list -m -json all`.
+  - Node dependencies: see frontend/pnpm-lock.yaml.
+  - Container base images: pinned by digest in backend/deploy/Dockerfile
+    and frontend/deploy/Dockerfile.
+
+Every direct dependency is under a permissive licence (Apache-2.0, MIT,
+BSD-3-Clause or BSD-2-Clause). Adding a dependency under a copyleft or
+source-available licence requires an ADR — see docs/adr/.
