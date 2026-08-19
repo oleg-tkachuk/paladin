@@ -53,7 +53,7 @@ type DefaultBindingLookup interface {
 var ErrNoDefaultBinding = errors.New("bare object_key name requires a tenant default binding; none is set")
 
 // The shape distribution is recorded via metrics.RecordResourceNameShape so
-// it flows over the OTLP pipeline PALADIN actually exports — the previous
+// it flows over the OTLP pipeline Paladin actually exports — the previous
 // prometheus default-registry counter was never served, so it collected no
 // observable data (Phase 3 needs the real distribution to decide on
 // deprecating a shape).

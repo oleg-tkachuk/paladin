@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end smoke test exercising every Connect service against a running
-# PALADIN backend.  Asserts the full hierarchy:
+# Paladin backend.  Asserts the full hierarchy:
 #
 #   storage_backend (config-seeded)
 #     └── bucket  (created via BucketService)

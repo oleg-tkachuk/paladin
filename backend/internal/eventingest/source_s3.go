@@ -42,7 +42,7 @@ import (
 // One CloudEvent is emitted per envelope (the first Records entry — see the
 // batching note in Parse). The object key is bucket-RELATIVE (the bucket is
 // carried separately in `s3.bucket.name`), so — unlike SeaweedFS' filer path
-// — there is no bucket segment to strip; the key already starts at the PALADIN
+// — there is no bucket segment to strip; the key already starts at the Paladin
 // 3-segment layout.
 //
 // NOTE ON GARAGE: Garage does NOT emit these. `Get/PutBucketNotification
@@ -134,7 +134,7 @@ func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 
 	subj, ok := parseS3Key(r.S3.Object.Key)
 	if !ok {
-		// Not the PALADIN layout — a non-PALADIN object dropped in the same bucket.
+		// Not the Paladin layout — a non-Paladin object dropped in the same bucket.
 		// Ignore so we don't fill the dedup table with junk.
 		return CloudEvent{}, ErrIgnoredEvent
 	}
@@ -163,7 +163,7 @@ func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	}, nil
 }
 
-// s3EventType maps S3 eventName strings to the PALADIN taxonomy. All "created"
+// s3EventType maps S3 eventName strings to the Paladin taxonomy. All "created"
 // variants (Put / Post / Copy / CompleteMultipartUpload) collapse to uploaded;
 // all "removed" variants (Delete / DeleteMarkerCreated) collapse to deleted.
 // ObjectAccessed / lifecycle-internal / replication events return ok=false.
@@ -179,7 +179,7 @@ func s3EventType(name string) (EventType, bool) {
 }
 
 // parseS3Key URL-decodes the notification object key, then splits it into the
-// PALADIN 3-segment layout "<tenant_uuid>/<object_key>/<key...>".
+// Paladin 3-segment layout "<tenant_uuid>/<object_key>/<key...>".
 //
 // S3 event notifications form-encode the key: space → '+', '/' → '%2F', other
 // bytes → '%XX' (AWS docs: "red flower.jpg" → "red+flower.jpg"). MinIO uses

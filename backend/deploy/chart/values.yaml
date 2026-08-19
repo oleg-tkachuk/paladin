@@ -1,4 +1,4 @@
-# PALADIN Helm chart — per-role Deployments.
+# Paladin Helm chart — per-role Deployments.
 #
 # The chart renders one Deployment per entry in `deployments:` plus a
 # matching Service / ServiceAccount / optional HPA. Each role boots the
@@ -891,7 +891,7 @@ config:
       # below are rendered via `tpl` in templates/configmap.yaml so the
       # Service names track chart.fullname automatically — override only
       # for cross-release setups (sidecar MCP pointing at a different
-      # PALADIN install) or when terminating TLS in front of those Services.
+      # Paladin install) or when terminating TLS in front of those Services.
       admin_url: 'http://{{ include "chart.fullname" . }}-admin:8090'
       data_url: 'http://{{ include "chart.fullname" . }}-api:8080'
       iam_url: 'http://{{ include "chart.fullname" . }}-api:8085'
@@ -962,7 +962,7 @@ config:
       #   name: paladin-ingest-hmac
       #   key: secret
       #   namespace: ""
-      signature_header: "X-PALADIN-Signature"
+      signature_header: "X-Paladin-Signature"
       max_body_bytes: 1048576
     dedup_ttl: 24h
     reaper_interval: 1h
@@ -1120,7 +1120,7 @@ tls:
 # DSN stays `sslmode=require` (encrypt without authenticating the server),
 # which works dev/local where the CA isn't provisioned. CNPG publishes
 # the CA as `<cluster>-ca` in the database namespace; replicate/sync it
-# into the PALADIN namespace (ExternalSecret / kubectl) so the pods can mount
+# into the Paladin namespace (ExternalSecret / kubectl) so the pods can mount
 # it cross-namespace mounts aren't allowed.
 postgresCa:
   secretName: ""

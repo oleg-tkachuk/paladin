@@ -5,12 +5,13 @@
 package paladiniamv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -52,10 +53,10 @@ type SystemServiceClient interface {
 	GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error)
 }
 
-// NewSystemServiceClient constructs a client for the paladin.iam.v1.SystemService service. By default,
-// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
-// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
-// or connect.WithGRPCWeb() options.
+// NewSystemServiceClient constructs a client for the paladin.iam.v1.SystemService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).

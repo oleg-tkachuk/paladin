@@ -1,14 +1,14 @@
 # Storage event ingest — sources, wire formats & config
 
 The ingest plane (`internal/eventingest`) lets objects written **directly to
-the storage bucket** — bypassing PALADIN's data-plane RPCs — still get promoted to
+the storage bucket** — bypassing Paladin's data-plane RPCs — still get promoted to
 `AVAILABLE`. A storage backend fires a notification when a key lands; the
 ingest pod (`serve ingest`) consumes it, normalises it to a CloudEvents 1.0
 envelope, parses the object path into `(tenant_id, object_key, key)`, and runs
 the same PROMOTE the data plane would have.
 
 This is a safety net for the "someone wrote straight to S3" case (a legacy
-pipeline, `mc cp`, another service). Without it PALADIN's DB would never learn the
+pipeline, `mc cp`, another service). Without it Paladin's DB would never learn the
 object exists. The data-plane **Reconciler** is the second safety net — it
 re-promotes `PENDING` rows on a schedule regardless of events — so a missed or
 absent notification degrades *latency*, not correctness.
@@ -70,7 +70,7 @@ Every source normalises to `eventingest.CloudEvent` (`cloudevent.go`):
 | `SubjectFields` | parsed `(TenantID, ObjectKey, Key, Etag, SizeBytes, Sequencer)` |
 
 The **object path** the parser depends on is an *observed* contract with the
-backend, not one PALADIN controls — a backend upgrade that changes the shape
+backend, not one Paladin controls — a backend upgrade that changes the shape
 silently stops promotions. After per-source normalisation the key is always:
 
 ```
@@ -78,11 +78,11 @@ silently stops promotions. After per-source normalisation the key is always:
 ```
 
 - `tenant_uuid` — owning tenant (UUID). All three segments must be non-empty.
-- `object_key` — the PALADIN object-key namespace.
+- `object_key` — the Paladin object-key namespace.
 - `key` — the object key; **may contain `/`** (parsed with `SplitN(…, 3)`
   so the remainder is kept whole).
 
-A path that doesn't match (a non-PALADIN object dropped in the same bucket) is
+A path that doesn't match (a non-Paladin object dropped in the same bucket) is
 **ignored** — logged, no dedup row, no error — so junk never fills the dedup
 table.
 
@@ -118,7 +118,7 @@ enabled  = true
 topic_url = "nats://seaweedfs.filer"   # publishes onto subject seaweedfs.filer
 ```
 
-PALADIN overlay (`ingest.nats`): `subject: seaweedfs.filer`,
+Paladin overlay (`ingest.nats`): `subject: seaweedfs.filer`,
 `source_format: seaweedfs_nats`, `jetstream: true`,
 `durable_name: paladin-ingest-sf`.
 
@@ -264,7 +264,7 @@ Authoritative (verified 2026-07-06):
 - `garage.toml` in gitops (`charts/garage/templates/configmap.yaml`) has no
   `[notification.*]` block — there is nothing to configure.
 
-**Consequence:** even when Garage is the primary (or only) backend, PALADIN cannot
+**Consequence:** even when Garage is the primary (or only) backend, Paladin cannot
 ingest its writes via events. This is exactly why the lab runs the ingest
 source on **SeaweedFS** (the `secondary` backend), not Garage. Direct writes to
 Garage are caught by the **data-plane Reconciler** (it lists/compares on a

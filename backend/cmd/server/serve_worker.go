@@ -68,7 +68,7 @@ func runWorker(
 	deps *app.SharedDeps,
 ) error {
 	// Background jobs are cross-tenant with no request principal, so they must
-	// bypass RLS — a query on the RLS runtime pool without an paladin.tenant_id GUC
+	// bypass RLS — a query on the RLS runtime pool without a paladin.tenant_id GUC
 	// returns ZERO rows and every job silently no-ops. Two BYPASSRLS pools,
 	// split by privilege (migration 058):
 	//

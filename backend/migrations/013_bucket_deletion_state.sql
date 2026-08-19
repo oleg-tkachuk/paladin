@@ -15,7 +15,7 @@
 -- gone but the row claimed it still existed; lifecycle / replication
 -- workers would then NOT-FOUND on every iteration. The reverse
 -- (`delete_on_backend=false`) leaves the row gone but the bucket
--- linguishing in S3 — invisible to PALADIN for cleanup.
+-- linguishing in S3 — invisible to Paladin for cleanup.
 --
 -- New flow: the handler flips provision_state='deleting' (and clears
 -- provision_attempts so the new operation gets the full retry budget).

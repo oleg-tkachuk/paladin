@@ -1,4 +1,4 @@
-# Repo-root .gitignore for the PALADIN monorepo. Path-specific ignores
+# Repo-root .gitignore for the Paladin monorepo. Path-specific ignores
 # live in backend/ and frontend/ where applicable; this file covers
 # the cross-cutting cases (compiled binaries, OS junk, dotenv files,
 # IDE detritus that may land in either half or in tasks/).

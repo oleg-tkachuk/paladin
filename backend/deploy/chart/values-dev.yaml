@@ -1,4 +1,4 @@
-# PALADIN Helm values overlay for the SHARED DEV cluster (vc-dev).
+# Paladin Helm values overlay for the SHARED DEV cluster (vc-dev).
 #
 #   helm upgrade --install paladin ./deploy/chart \
 #     -n paladin \

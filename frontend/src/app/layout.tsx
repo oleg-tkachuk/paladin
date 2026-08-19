@@ -17,7 +17,7 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PALADIN — Paladin",
+  title: "Paladin — Paladin",
   description: "Control plane for object storage",
 };
 

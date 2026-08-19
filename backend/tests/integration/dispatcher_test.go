@@ -371,10 +371,10 @@ func TestDispatcher_OutboxToHTTPDelivery_HappyPath(t *testing.T) {
 	if got.SpecVersion != "1.0" || got.Type != "paladin.object.uploaded" || got.TenantID != tenant.String() {
 		t.Errorf("event envelope = %+v", got)
 	}
-	if reqs[0].Header.Get("X-PALADIN-Subscription-Id") != subID.String() {
+	if reqs[0].Header.Get("X-Paladin-Subscription-Id") != subID.String() {
 		t.Errorf("missing/wrong subscription id header: %v", reqs[0].Header)
 	}
-	if reqs[0].Header.Get("X-PALADIN-Signature") == "" {
+	if reqs[0].Header.Get("X-Paladin-Signature") == "" {
 		t.Errorf("missing signature header")
 	}
 }

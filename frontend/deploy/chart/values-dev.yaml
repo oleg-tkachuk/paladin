@@ -1,4 +1,4 @@
-# PALADIN UI overlay for the SHARED DEV cluster.
+# Paladin UI overlay for the SHARED DEV cluster.
 #
 # TODO before first apply: replace `<...>` placeholders with real
 # dev-cluster values.

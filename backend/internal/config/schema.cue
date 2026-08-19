@@ -1,4 +1,4 @@
-// CUE schema for the PALADIN YAML config. Defaults defined here are applied at
+// CUE schema for the Paladin YAML config. Defaults defined here are applied at
 // load time before validation, so any field omitted from the YAML lands at
 // the value declared as `*<default>` below.
 //
@@ -153,7 +153,7 @@ limits: {
   }
 }
 
-// Auth is the PALADIN IAM-plane JWT issuer + verifier. The same signing_key is
+// Auth is the Paladin IAM-plane JWT issuer + verifier. The same signing_key is
 // used to mint tokens (Login / RefreshToken) and to verify them on each
 // plane interceptor; three audiences are recognised: paladin-data, paladin-admin,
 // paladin-iam. JWKSURL is reserved for federated IdP integration and unused
@@ -431,7 +431,7 @@ mcp: {
     session_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"
   }
   // OAuth 2.1 Resource-Server posture for the streamable-HTTP MCP server
-  // (ADR-0008). Disabled by default — the X-PALADIN-Token header path is
+  // (ADR-0008). Disabled by default — the X-Paladin-Token header path is
   // unchanged. When enabled, set resource_url + authorization_servers so
   // standard MCP clients can discover where to authenticate.
   oauth: {

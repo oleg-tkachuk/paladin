@@ -236,9 +236,9 @@ individually distinguishable by an end consumer mapping to transport codes.
 > **Corrected 2026-07-23, during implementation.** An earlier revision of this
 > document listed `ErrNotFound` as already module-published and omitted
 > `ErrUnknownKID` entirely. Verified against source: `ErrNotFound` exists only
-> in `capability/postgres` — the implementation that stays in PALADIN — so the
+> in `capability/postgres` — the implementation that stays in Paladin — so the
 > `Store` contract as written was **not implementable by a third party**, who
-> would have had to import PALADIN's postgres package to satisfy it. T006 moves
+> would have had to import Paladin's postgres package to satisfy it. T006 moves
 > the sentinel into the core package. `ErrUnknownKID` is defined in
 > `verifier.go` and was simply missed.
 >
@@ -249,8 +249,8 @@ individually distinguishable by an end consumer mapping to transport codes.
 
 **Contract**: consumers match with `errors.Is`. Every rejection path must wrap
 (never replace) its sentinel, so a consumer can map each to its own transport
-status. PALADIN maps budget sentinels to a resource-exhausted status and the rest
-to unauthenticated/permission-denied — that mapping stays in PALADIN.
+status. Paladin maps budget sentinels to a resource-exhausted status and the rest
+to unauthenticated/permission-denied — that mapping stays in Paladin.
 
 ---
 
@@ -283,7 +283,7 @@ consumer that configures no provider gets OTel's no-op and pays nothing
 
 | Not published | Rationale |
 |---|---|
-| Any relational/SQL implementation | Reference implementation, stays in PALADIN (FR-015) |
+| Any relational/SQL implementation | Reference implementation, stays in Paladin (FR-015) |
 | Transaction management | The consumer owns it; the module only threads `TX` |
 | Policy evaluation (Cedar or otherwise) | Authorisation *policy* is a separate concern from *authority* |
 | Transport (RPC, HTTP handlers) | The primitive is transport-agnostic |
@@ -299,11 +299,11 @@ consumer that configures no provider gets OTel's no-op and pays nothing
 | **Charge atomicity — an `onCharged` failure leaves both counters unmutated (FR-011)** | **Induced-failure rollback test against `memstore`'s staging-commit semantic (SC-008)** |
 | Two-ceiling rule — a rejection by either ceiling mutates neither counter (FR-013) | `memstore` conformance tests |
 | Generation fencing — a write decided pre-revocation must not land after (FR-009) | Fencing test in the module's own suite |
-| All nine sentinels distinguishable (FR-007) | This document + PALADIN's unchanged suites (SC-005) |
+| All nine sentinels distinguishable (FR-007) | This document + Paladin's unchanged suites (SC-005) |
 | No database driver in the dependency graph (FR-003) | Standalone CI job ([R-004](../research.md)) |
 | No object-storage dependency (FR-002) | Same standalone job (SC-002) |
 | Contracts satisfiable in memory (FR-005) | `memstore` package, used by the module's own tests |
-| Every sentinel a `Store` implementer must return is module-owned (FR-004) | T006 moves `ErrNotFound` into the core package; `memstore` compiles without importing PALADIN |
+| Every sentinel a `Store` implementer must return is module-owned (FR-004) | T006 moves `ErrNotFound` into the core package; `memstore` compiles without importing Paladin |
 
 The atomicity row is listed second deliberately: it is the property the whole
 `TX` parameterisation exists to preserve, and the one with **no test anywhere

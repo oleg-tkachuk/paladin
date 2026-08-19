@@ -12,7 +12,7 @@ and where its boundaries are. This directory holds the detail.
   layout, wire contracts, database.
 - [`../frontend/README.md`](../frontend/README.md) — console and BFF.
 - [`../capability/README.md`](../capability/README.md) — the standalone
-  authorisation primitive, usable without the rest of PALADIN.
+  authorisation primitive, usable without the rest of Paladin.
 
 ## Subsystems
 

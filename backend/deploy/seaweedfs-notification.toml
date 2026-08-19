@@ -1,5 +1,5 @@
 # SeaweedFS filer notification config — drives the webhook publish for
-# PALADIN's ingest plane.
+# Paladin's ingest plane.
 #
 # In compose `seaweedfs` mounts this at /etc/seaweedfs/notification.toml
 # and runs with `-filer.notification=/etc/seaweedfs/notification.toml`.
@@ -10,7 +10,7 @@
 #
 # bearer_token / shared_secret: leave blank in compose. Production
 # deploys MUST set both — wire `bearer_token` here and the matching
-# value in cfg.ingest.webhook.shared_secret on the PALADIN side. The PALADIN
+# value in cfg.ingest.webhook.shared_secret on the Paladin side. The Paladin
 # side then verifies HMAC on the body using that shared secret.
 
 [notification.log]

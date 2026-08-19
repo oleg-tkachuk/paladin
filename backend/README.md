@@ -1,4 +1,4 @@
-# PALADIN backend
+# Paladin backend
 
 Go control plane: one binary, several modes. `paladin serve <role>` runs a
 plane or a worker; `paladin migrate` and `paladin bootstrap` are one-shot
@@ -36,7 +36,7 @@ backend/
 │   ├── app/          fx modules — the composition root for each role
 │   ├── auth/         JWT, API tokens, capability principals, context plumbing
 │   ├── policy/       Cedar engine + CEL scope evaluation
-│   ├── capability/   the PALADIN-side adapter over the standalone capability module
+│   ├── capability/   the Paladin-side adapter over the standalone capability module
 │   ├── store/        sqlc-generated queries + hand-written SQL mapping
 │   ├── storage/      S3 backend routing, presign, multipart, migration
 │   ├── worker/       background jobs and their leases

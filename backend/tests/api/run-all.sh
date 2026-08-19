@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Top-level test orchestrator. Runs the full test pyramid against a
-# live PALADIN backend:
+# live Paladin backend:
 #
 #   1. health probes        (zero auth, sub-second)
 #   2. functional smoke     (every Connect service, realistic flows)
@@ -29,7 +29,7 @@ stage() {
 # backend.
 stage "0. Liveness ping"
 if ! curl --silent --fail --max-time 5 "$PALADIN_HOST/livez" >/dev/null; then
-    echo "PALADIN not reachable at $PALADIN_HOST — set PALADIN_HOST or start the server." >&2
+    echo "Paladin not reachable at $PALADIN_HOST — set PALADIN_HOST or start the server." >&2
     exit 1
 fi
 echo "  ✓ $PALADIN_HOST/livez"

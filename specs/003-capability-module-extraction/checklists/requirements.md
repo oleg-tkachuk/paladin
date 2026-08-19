@@ -41,7 +41,7 @@
    which is where they belong.
 
 2. *Untestable "no coupling" claim* — an early phrasing asserted the module
-   "has no PALADIN dependencies", which cannot be verified from outside.
+   "has no Paladin dependencies", which cannot be verified from outside.
    Resolved: restated as an observable property of a consumer's resolved
    dependency graph (SC-002), which a reviewer can check mechanically.
 

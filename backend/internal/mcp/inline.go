@@ -1,6 +1,6 @@
 // Inline transport for the MCP bridge.
 //
-// Default mode (cmd/server `serve mcp`) speaks to the PALADIN planes over
+// Default mode (cmd/server `serve mcp`) speaks to the Paladin planes over
 // HTTP, so the MCP pod can run independently of the api/admin pods.
 // Embedded mode (`serve mcp --embedded`) co-hosts everything in one
 // process and routes Connect calls in-memory: no kernel TCP, no port
@@ -105,7 +105,7 @@ func NewInlineClients(h InlineHandlers, bearer string) *Clients {
 }
 
 // NewInlineClientsWithCapability is the cap-aware inline constructor.
-// capabilityToken (when non-empty) is forwarded as `X-PALADIN-Capability`
+// capabilityToken (when non-empty) is forwarded as `X-Paladin-Capability`
 // to the in-process plane handler so the data plane's interceptor sees
 // it identically to the network path.
 func NewInlineClientsWithCapability(h InlineHandlers, bearer, capabilityToken string) *Clients {

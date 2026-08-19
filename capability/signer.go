@@ -103,11 +103,11 @@ type jwtClaims struct {
 	ExpiresAt int64    `json:"exp"`
 	ID        string   `json:"jti"`
 
-	// PALADIN capability claims.
-	PALADINPrincipal *Principal `json:"paladin_principal,omitempty"`
-	PALADINCaveats   Caveats    `json:"paladin_caveats"`
-	PALADINParentID  string     `json:"paladin_parent_id,omitempty"`
-	PALADINGen       int64      `json:"paladin_gen,omitempty"`
+	// Paladin capability claims.
+	PaladinPrincipal *Principal `json:"paladin_principal,omitempty"`
+	PaladinCaveats   Caveats    `json:"paladin_caveats"`
+	PaladinParentID  string     `json:"paladin_parent_id,omitempty"`
+	PaladinGen       int64      `json:"paladin_gen,omitempty"`
 }
 
 // Sign implements Signer. Encodes the header + claims, signs the
@@ -131,21 +131,21 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 
 	header := jwtHeader{Alg: "EdDSA", Kid: s.keyID, Typ: "paladin-cap+jwt"}
 	claims := jwtClaims{
-		Issuer:       c.Issuer,
-		Subject:      c.Subject.Subject,
-		Audience:     c.Audience,
-		IssuedAt:     c.IssuedAt.Unix(),
-		ExpiresAt:    c.ExpiresAt.Unix(),
-		ID:           c.ID.String(),
-		PALADINPrincipal: &c.Subject,
-		PALADINCaveats:   c.Caveats,
-		PALADINGen:       c.Generation,
+		Issuer:          c.Issuer,
+		Subject:         c.Subject.Subject,
+		Audience:        c.Audience,
+		IssuedAt:        c.IssuedAt.Unix(),
+		ExpiresAt:       c.ExpiresAt.Unix(),
+		ID:              c.ID.String(),
+		PaladinPrincipal: &c.Subject,
+		PaladinCaveats:   c.Caveats,
+		PaladinGen:       c.Generation,
 	}
 	if !c.NotBefore.IsZero() {
 		claims.NotBefore = c.NotBefore.Unix()
 	}
 	if c.ParentID != uuid.Nil {
-		claims.PALADINParentID = c.ParentID.String()
+		claims.PaladinParentID = c.ParentID.String()
 	}
 
 	headerJSON, err := json.Marshal(header)
@@ -209,21 +209,21 @@ func Decode(token string) (*Capability, error) {
 		ID:         id,
 		Issuer:     claims.Issuer,
 		Audience:   claims.Audience,
-		Caveats:    claims.PALADINCaveats,
+		Caveats:    claims.PaladinCaveats,
 		IssuedAt:   time.Unix(claims.IssuedAt, 0).UTC(),
 		ExpiresAt:  time.Unix(claims.ExpiresAt, 0).UTC(),
-		Generation: claims.PALADINGen,
+		Generation: claims.PaladinGen,
 	}
 	if claims.NotBefore != 0 {
 		cap.NotBefore = time.Unix(claims.NotBefore, 0).UTC()
 	}
-	if claims.PALADINPrincipal != nil {
-		cap.Subject = *claims.PALADINPrincipal
+	if claims.PaladinPrincipal != nil {
+		cap.Subject = *claims.PaladinPrincipal
 	} else {
 		cap.Subject = Principal{Subject: claims.Subject}
 	}
-	if claims.PALADINParentID != "" {
-		pid, err := uuid.Parse(claims.PALADINParentID)
+	if claims.PaladinParentID != "" {
+		pid, err := uuid.Parse(claims.PaladinParentID)
 		if err != nil {
 			return nil, fmt.Errorf("capability: parse parent_id: %w", err)
 		}

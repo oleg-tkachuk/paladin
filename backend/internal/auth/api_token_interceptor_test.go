@@ -6,28 +6,28 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
 )
 
-// TestExtractAPIToken covers the header parsing branches: X-PALADIN-API-Token
+// TestExtractAPIToken covers the header parsing branches: X-Paladin-API-Token
 // wins, Authorization Bearer with `paladin_pat_` prefix is parsed, Bearer
 // values without the prefix are skipped (so OIDC JWTs flow downstream),
 // other schemes ignored.
 func TestExtractAPIToken(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
-		xocp  string
-		authz string
-		want  string
+		xlegate string
+		authz   string
+		want    string
 	}{
-		"x-paladin wins":                   {xocp: "paladin_pat_AAA", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_AAA"},
-		"authz bearer with prefix":     {xocp: "", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_BBB"},
-		"authz bearer non-pat ignored": {xocp: "", authz: "Bearer some.jwt.value", want: ""},
-		"authz scheme not bearer":      {xocp: "", authz: "Basic paladin_pat_BBB", want: ""},
-		"authz malformed":              {xocp: "", authz: "Bearer", want: ""},
-		"authz empty":                  {xocp: "", authz: "", want: ""},
-		"x-paladin without prefix":         {xocp: "not-a-pat", authz: "", want: ""},
+		"x-paladin wins":                {xlegate: "paladin_pat_AAA", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_AAA"},
+		"authz bearer with prefix":     {xlegate: "", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_BBB"},
+		"authz bearer non-pat ignored": {xlegate: "", authz: "Bearer some.jwt.value", want: ""},
+		"authz scheme not bearer":      {xlegate: "", authz: "Basic paladin_pat_BBB", want: ""},
+		"authz malformed":              {xlegate: "", authz: "Bearer", want: ""},
+		"authz empty":                  {xlegate: "", authz: "", want: ""},
+		"x-paladin without prefix":      {xlegate: "not-a-pat", authz: "", want: ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := extractAPIToken(tc.xocp, tc.authz)
+			got := extractAPIToken(tc.xlegate, tc.authz)
 			if got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}

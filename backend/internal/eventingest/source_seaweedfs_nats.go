@@ -33,7 +33,7 @@ import (
 // pulls in `Entry`, `FileChunk`, `FuseAttributes`, the whole filer
 // metadata graph — hundreds of generated types we don't use. We only
 // need to know whether the EventNotification carries an `old_entry`
-// (tag 1) and / or a `new_entry` (tag 2) to derive the PALADIN event type:
+// (tag 1) and / or a `new_entry` (tag 2) to derive the Paladin event type:
 //
 //	   old=nil, new=present → create
 //	   old=present, new=present → update

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs every hurl file in this directory against a live PALADIN backend.
+# Runs every hurl file in this directory against a live Paladin backend.
 #
 # A fresh tenant + bucket + object_key is provisioned for each invocation
 # via the helper RPCs — the per-flow .hurl files only assert their own

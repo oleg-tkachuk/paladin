@@ -1,4 +1,4 @@
-# PALADIN Helm values overlay for the LOCAL development cluster
+# Paladin Helm values overlay for the LOCAL development cluster
 # (minikube / kind / k3d — anything tagged *.local).
 #
 # Install / upgrade against the local cluster:

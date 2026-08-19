@@ -1,9 +1,9 @@
-// Package eventingest is PALADIN's storage-event consumer.
+// Package eventingest is Paladin's storage-event consumer.
 //
 // External storage backends (SeaweedFS, MinIO) publish object-lifecycle
 // events as a file is uploaded / deleted / moved. The ingest plane
 // receives those events, normalises them to a CloudEvents 1.0 envelope,
-// and dispatches to the handler — typically promoting an PALADIN row from
+// and dispatches to the handler — typically promoting a Paladin row from
 // PENDING → AVAILABLE.
 //
 // Architecture (ports & adapters):
@@ -37,7 +37,7 @@ type EventType string
 
 const (
 	// EventTypeUploaded fires when a new object body has been
-	// committed to the storage backend. Maps to the PALADIN transition
+	// committed to the storage backend. Maps to the Paladin transition
 	// PENDING → AVAILABLE.
 	EventTypeUploaded EventType = "paladin.object.uploaded"
 
@@ -76,7 +76,7 @@ type CloudEvent struct {
 	SubjectFields SubjectFields
 }
 
-// SubjectFields is the parsed view of the PALADIN resource the event
+// SubjectFields is the parsed view of the Paladin resource the event
 // refers to. The handler resolves an object_id from this tuple and
 // promotes the matching row.
 //

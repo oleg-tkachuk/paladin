@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -51,9 +52,9 @@ type OperationServiceClient interface {
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 
-// NewOperationServiceClient constructs a client for the paladin.admin.v1.OperationService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// NewOperationServiceClient constructs a client for the paladin.admin.v1.OperationService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
 // connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,

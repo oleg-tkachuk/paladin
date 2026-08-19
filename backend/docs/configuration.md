@@ -1,14 +1,14 @@
-# Configuration - Paladin (PALADIN)
+# Configuration - Paladin
 
 ## Overview
 
-PALADIN uses [Koanf](https://github.com/knadh/koanf) to load and merge configuration from multiple sources. Validation is enforced via [CUE](https://cuelang.org/).
+Paladin uses [Koanf](https://github.com/knadh/koanf) to load and merge configuration from multiple sources. Validation is enforced via [CUE](https://cuelang.org/).
 
 ## Configuration Sources
 
 - **YAML**: `configs/paladin.yaml`
 - **Environment**: Prefixed with `PALADIN_`. Nested fields use underscores (e.g., `PALADIN_DATASTORES_POSTGRES_DSN`).
-- **K8s Secrets**: If running in Kubernetes (`KUBERNETES_SERVICE_HOST` is set), PALADIN resolves secrets in the current namespace.
+- **K8s Secrets**: If running in Kubernetes (`KUBERNETES_SERVICE_HOST` is set), Paladin resolves secrets in the current namespace.
 
 ## Key Configuration Sections
 

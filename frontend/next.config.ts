@@ -65,7 +65,7 @@ const nextConfig: NextConfig = {
   env: {
     PALADIN_GRPC_URL:
       process.env.PALADIN_GRPC_URL ||
-      yamlConfig.runtimeConfig.public.objectControlPlane.upstreamUrl,
+      yamlConfig.runtimeConfig.public.paladin.upstreamUrl,
     // NEXT_PUBLIC_* prefix is required for client-side access — without
     // it Next.js strips the var from the browser bundle and the
     // values render as undefined at runtime.

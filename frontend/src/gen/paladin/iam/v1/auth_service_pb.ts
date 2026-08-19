@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_auth_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIikKDVdob0FtSVJlcXVlc3QSGAoQcm91dGVfcGFnZV90b2tlbhgBIAEoCSK2AQoOV2hvQW1JUmVzcG9uc2USHgoEdXNlchgBIAEoCzIQLm9jcC5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCRIqCgZyb3V0ZXMYBCADKAsyGi5vY3AuaWFtLnYxLk9iamVjdEtleVJvdXRlEhgKEHJvdXRlc190cnVuY2F0ZWQYBSABKAgSFwoPbmV4dF9wYWdlX3Rva2VuGAYgASgJIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAkiGgoYTGlzdE15TWVtYmVyc2hpcHNSZXF1ZXN0ImYKCk1lbWJlcnNoaXASEQoJdGVuYW50X2lkGAEgASgJEhMKC3RlbmFudF9zbHVnGAIgASgJEg0KBXJvbGVzGAMgAygJEhAKCGRpc2FibGVkGAQgASgIEg8KB2N1cnJlbnQYBSABKAgiSAoZTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRIrCgttZW1iZXJzaGlwcxgBIAMoCzIWLm9jcC5pYW0udjEuTWVtYmVyc2hpcCJUChNTd2l0Y2hUZW5hbnRSZXF1ZXN0EiEKEHRhcmdldF90ZW5hbnRfaWQYASABKAlCB7pIBHICEAESGgoScmVxdWVzdGVkX2F1ZGllbmNlGAIgASgJIl0KFFN3aXRjaFRlbmFudFJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIyjQUKC0F1dGhTZXJ2aWNlEjwKBUxvZ2luEhgub2NwLmlhbS52MS5Mb2dpblJlcXVlc3QaGS5vY3AuaWFtLnYxLkxvZ2luUmVzcG9uc2USUQoMUmVmcmVzaFRva2VuEh8ub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiAub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRI/CgZSZXZva2USGS5vY3AuaWFtLnYxLlJldm9rZVJlcXVlc3QaGi5vY3AuaWFtLnYxLlJldm9rZVJlc3BvbnNlEj8KBldob0FtSRIZLm9jcC5pYW0udjEuV2hvQW1JUmVxdWVzdBoaLm9jcC5pYW0udjEuV2hvQW1JUmVzcG9uc2USVwoOQ2hhbmdlUGFzc3dvcmQSIS5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBoiLm9jcC5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJdChBFeGNoYW5nZUF1ZGllbmNlEiMub2NwLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBokLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEmAKEUxpc3RNeU1lbWJlcnNoaXBzEiQub2NwLmlhbS52MS5MaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QaJS5vY3AuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVzcG9uc2USUQoMU3dpdGNoVGVuYW50Eh8ub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXF1ZXN0GiAub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
+    "CiBsZWdhdGUvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxINbGVnYXRlLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJcCg1Mb2dpblJlc3BvbnNlEigKBnRva2VucxgBIAEoCzIYLmxlZ2F0ZS5pYW0udjEuVG9rZW5QYWlyEiEKBHVzZXIYAiABKAsyEy5sZWdhdGUuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSJAChRSZWZyZXNoVG9rZW5SZXNwb25zZRIoCgZ0b2tlbnMYASABKAsyGC5sZWdhdGUuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIikKDVdob0FtSVJlcXVlc3QSGAoQcm91dGVfcGFnZV90b2tlbhgBIAEoCSK8AQoOV2hvQW1JUmVzcG9uc2USIQoEdXNlchgBIAEoCzITLmxlZ2F0ZS5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCRItCgZyb3V0ZXMYBCADKAsyHS5sZWdhdGUuaWFtLnYxLk9iamVjdEtleVJvdXRlEhgKEHJvdXRlc190cnVuY2F0ZWQYBSABKAgSFwoPbmV4dF9wYWdlX3Rva2VuGAYgASgJIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAkiGgoYTGlzdE15TWVtYmVyc2hpcHNSZXF1ZXN0ImYKCk1lbWJlcnNoaXASEQoJdGVuYW50X2lkGAEgASgJEhMKC3RlbmFudF9zbHVnGAIgASgJEg0KBXJvbGVzGAMgAygJEhAKCGRpc2FibGVkGAQgASgIEg8KB2N1cnJlbnQYBSABKAgiSwoZTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRIuCgttZW1iZXJzaGlwcxgBIAMoCzIZLmxlZ2F0ZS5pYW0udjEuTWVtYmVyc2hpcCJUChNTd2l0Y2hUZW5hbnRSZXF1ZXN0EiEKEHRhcmdldF90ZW5hbnRfaWQYASABKAlCB7pIBHICEAESGgoScmVxdWVzdGVkX2F1ZGllbmNlGAIgASgJImMKFFN3aXRjaFRlbmFudFJlc3BvbnNlEigKBnRva2VucxgBIAEoCzIYLmxlZ2F0ZS5pYW0udjEuVG9rZW5QYWlyEiEKBHVzZXIYAiABKAsyEy5sZWdhdGUuaWFtLnYxLlVzZXIyvQUKC0F1dGhTZXJ2aWNlEkIKBUxvZ2luEhsubGVnYXRlLmlhbS52MS5Mb2dpblJlcXVlc3QaHC5sZWdhdGUuaWFtLnYxLkxvZ2luUmVzcG9uc2USVwoMUmVmcmVzaFRva2VuEiIubGVnYXRlLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiMubGVnYXRlLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRJFCgZSZXZva2USHC5sZWdhdGUuaWFtLnYxLlJldm9rZVJlcXVlc3QaHS5sZWdhdGUuaWFtLnYxLlJldm9rZVJlc3BvbnNlEkUKBldob0FtSRIcLmxlZ2F0ZS5pYW0udjEuV2hvQW1JUmVxdWVzdBodLmxlZ2F0ZS5pYW0udjEuV2hvQW1JUmVzcG9uc2USXQoOQ2hhbmdlUGFzc3dvcmQSJC5sZWdhdGUuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBolLmxlZ2F0ZS5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJjChBFeGNoYW5nZUF1ZGllbmNlEiYubGVnYXRlLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBonLmxlZ2F0ZS5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEmYKEUxpc3RNeU1lbWJlcnNoaXBzEicubGVnYXRlLmlhbS52MS5MaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QaKC5sZWdhdGUuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVzcG9uc2USVwoMU3dpdGNoVGVuYW50EiIubGVnYXRlLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXF1ZXN0GiMubGVnYXRlLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXNwb25zZUJDWkFnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtsZWdhdGVpYW12MWIGcHJvdG8z",
     [file_buf_validate_validate, file_paladin_iam_v1_types],
   );
 
@@ -96,21 +96,22 @@ export const LoginResponseSchema: GenMessage<LoginResponse> =
 /**
  * @generated from message paladin.iam.v1.RefreshTokenRequest
  */
-export type RefreshTokenRequest = Message<"paladin.iam.v1.RefreshTokenRequest"> & {
-  /**
-   * @generated from field: string refresh_token = 1;
-   */
-  refreshToken: string;
+export type RefreshTokenRequest =
+  Message<"paladin.iam.v1.RefreshTokenRequest"> & {
+    /**
+     * @generated from field: string refresh_token = 1;
+     */
+    refreshToken: string;
 
-  /**
-   * Audience the caller wants on the new access token. Empty defaults to
-   * `paladin-data` server-side; SPAs that pin a refresh chain to a particular
-   * plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
-   *
-   * @generated from field: string requested_audience = 2;
-   */
-  requestedAudience: string;
-};
+    /**
+     * Audience the caller wants on the new access token. Empty defaults to
+     * `paladin-data` server-side; SPAs that pin a refresh chain to a particular
+     * plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
+     *
+     * @generated from field: string requested_audience = 2;
+     */
+    requestedAudience: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.RefreshTokenRequest.
@@ -495,23 +496,24 @@ export const ListMyMembershipsResponseSchema: GenMessage<ListMyMembershipsRespon
 /**
  * @generated from message paladin.iam.v1.SwitchTenantRequest
  */
-export type SwitchTenantRequest = Message<"paladin.iam.v1.SwitchTenantRequest"> & {
-  /**
-   * The tenant to switch into. The caller MUST have a (non-disabled) user row
-   * there or the call is PermissionDenied.
-   *
-   * @generated from field: string target_tenant_id = 1;
-   */
-  targetTenantId: string;
+export type SwitchTenantRequest =
+  Message<"paladin.iam.v1.SwitchTenantRequest"> & {
+    /**
+     * The tenant to switch into. The caller MUST have a (non-disabled) user row
+     * there or the call is PermissionDenied.
+     *
+     * @generated from field: string target_tenant_id = 1;
+     */
+    targetTenantId: string;
 
-  /**
-   * Audience for the new access token. Empty keeps the caller's current
-   * audience (so a switch preserves the plane they were working in).
-   *
-   * @generated from field: string requested_audience = 2;
-   */
-  requestedAudience: string;
-};
+    /**
+     * Audience for the new access token. Empty keeps the caller's current
+     * audience (so a switch preserves the plane they were working in).
+     *
+     * @generated from field: string requested_audience = 2;
+     */
+    requestedAudience: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.SwitchTenantRequest.

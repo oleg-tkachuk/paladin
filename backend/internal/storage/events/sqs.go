@@ -1,9 +1,9 @@
 // Package events consumes S3 object-level notifications and drives the
-// PENDING → AVAILABLE transition in PALADIN's object state machine.
+// PENDING → AVAILABLE transition in Paladin's object state machine.
 //
 // Only s3:ObjectCreated:* notifications are interpreted. Other event types
 // (Delete, Replication, Lifecycle) are observed but not consumed — they come
-// from PALADIN itself or from lifecycle rules owned by the storage team.
+// from Paladin itself or from lifecycle rules owned by the storage team.
 package events
 
 import (
@@ -30,8 +30,8 @@ type SQSClient interface {
 	DeleteMessage(ctx context.Context, in *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 }
 
-// Resolver maps (objectKey, key) pairs to PALADIN object_ids. Event payloads carry
-// physical S3 coordinates, not PALADIN logical identity.
+// Resolver maps (objectKey, key) pairs to Paladin object_ids. Event payloads carry
+// physical S3 coordinates, not Paladin logical identity.
 type Resolver interface {
 	ResolveObjectID(ctx context.Context, physicalBucket, key string) (uuid.UUID, error)
 }
@@ -146,7 +146,7 @@ func (c *Consumer) delete(ctx context.Context, handle *string) error {
 	return err
 }
 
-// s3Event is the flattened shape PALADIN cares about, extracted from the S3
+// s3Event is the flattened shape Paladin cares about, extracted from the S3
 // notification JSON envelope.
 type s3Event struct {
 	EventName string

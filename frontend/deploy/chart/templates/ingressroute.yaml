@@ -1,5 +1,5 @@
 {{/*
-IngressRoute — Traefik CRD that PALADIN UI exposes its Next.js SSR
+IngressRoute — Traefik CRD that Paladin UI exposes its Next.js SSR
 through. Same shape as acme's IngressRoute pattern — uniform
 routing model across consumer-shipped services.
 

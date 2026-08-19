@@ -14,7 +14,7 @@ var (
 
 	// resourceNameShapeTotal feeds the Phase-3 decision on deprecating a
 	// redundant object-name shape (see internal/api/connectshim/resolve).
-	// Flows over the OTLP pipeline like every other PALADIN metric.
+	// Flows over the OTLP pipeline like every other Paladin metric.
 	resourceNameShapeTotal metric.Int64Counter
 )
 
@@ -43,7 +43,7 @@ func RecordResourceNameShape(ctx context.Context, shape string) {
 //
 //	time() - paladin_worker_last_run_timestamp_seconds > 5 * paladin_worker_interval_seconds
 //
-// All flow over the same OTLP pipeline as every other PALADIN metric (otel: false
+// All flow over the same OTLP pipeline as every other Paladin metric (otel: false
 // locally → no-op).
 var (
 	workerRunsTotal     metric.Int64Counter

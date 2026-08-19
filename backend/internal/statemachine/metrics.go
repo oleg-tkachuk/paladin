@@ -20,7 +20,7 @@ import (
 //
 // → event pipeline broken or latency ≫ reconciler TTL.
 //
-// (Was a prometheus.NewCounterVec on the default registry, which PALADIN never
+// (Was a prometheus.NewCounterVec on the default registry, which Paladin never
 // served — so it collected no observable data. Migrated to the OTel meter
 // 2026-06-29.)
 var transitionsTotal metric.Int64Counter

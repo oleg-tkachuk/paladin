@@ -18,7 +18,7 @@ import (
 // deliberately omitted — high-cardinality dims blow OTLP exporters.
 // "allowed" / "code" are bounded enums; safe.
 //
-// Metric naming follows the PALADIN convention: `paladin.<subsystem>.<name>`.
+// Metric naming follows the Paladin convention: `paladin.<subsystem>.<name>`.
 // Counters end with their unit; histograms note the unit on the
 // instrument options.
 var (

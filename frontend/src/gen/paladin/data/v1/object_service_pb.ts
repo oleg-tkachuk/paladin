@@ -48,7 +48,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_object_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiBvY3AvZGF0YS92MS9vYmplY3Rfc2VydmljZS5wcm90bxILb2NwLmRhdGEudjEikwQKDU9iamVjdFZlcnNpb24SDAoEbmFtZRgBIAEoCRISCgp2ZXJzaW9uX2lkGAIgASgJEhEKCW9iamVjdF9pZBgDIAEoCRIYChBpc19kZWxldGVfbWFya2VyGAQgASgIEg4KBnMzX2tleRgFIAEoCRISCgpzaXplX2J5dGVzGAYgASgDEgwKBGV0YWcYByABKAkSLQoIY2hlY2tzdW0YCCABKAsyGy5vY3AuZGF0YS52MS5DaGVja3N1bURpZ2VzdBIUCgxjb250ZW50X3R5cGUYCSABKAkSOgoIbWV0YWRhdGEYCiADKAsyKC5vY3AuZGF0YS52MS5PYmplY3RWZXJzaW9uLk1ldGFkYXRhRW50cnkSMgoEdGFncxgLIAMoCzIkLm9jcC5kYXRhLnYxLk9iamVjdFZlcnNpb24uVGFnc0VudHJ5EioKBGxvY2sYDCABKAsyHC5vY3AuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSLgoKY3JlYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfY3VycmVudBgOIAEoCBovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXgoZTGlzdE9iamVjdFZlcnNpb25zUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QidQoaTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USLAoIdmVyc2lvbnMYASADKAsyGi5vY3AuZGF0YS52MS5PYmplY3RWZXJzaW9uEikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIwChdHZXRPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIk4KG1Jlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAki9gMKE1VwbG9hZE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEgsKA2tleRgCIAEoCRIdCgxjb250ZW50X3R5cGUYAyABKAlCB7pIBHICEAESFwoPc2l6ZV9oaW50X2J5dGVzGAQgASgDEkYKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIgLm9jcC5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCLpIBYIBAhABEkAKCG1ldGFkYXRhGAYgAygLMi4ub2NwLmRhdGEudjEuVXBsb2FkT2JqZWN0UmVxdWVzdC5NZXRhZGF0YUVudHJ5EjgKBHRhZ3MYByADKAsyKi5vY3AuZGF0YS52MS5VcGxvYWRPYmplY3RSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSMAoJdHJhbnNwb3J0GAkgASgOMh0ub2NwLmRhdGEudjEuUHJlc2lnblRyYW5zcG9ydBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIqQBChRVcGxvYWRPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSLwoKdXBsb2FkX3VybBgCIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsEjYKD2NvbXBsZXRpb25fbW9kZRgDIAEoDjIdLm9jcC5jb21tb24udjEuQ29tcGxldGlvbk1vZGUicwoVRG93bmxvYWRPYmplY3RSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkicAoWRG93bmxvYWRPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSMQoMZG93bmxvYWRfdXJsGAIgASgLMhsub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwiKQoQR2V0T2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIkQKE0xvb2t1cE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASKOAwoTVXBkYXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESQAoIbWV0YWRhdGEYBCADKAsyLi5vY3AuZGF0YS52MS5VcGRhdGVPYmplY3RSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSOAoEdGFncxgFIAMoCzIqLm9jcC5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QuVGFnc0VudHJ5EhQKDGNvbnRlbnRfdHlwZRgGIAEoCRIUCgxleHRlcm5hbF9yZWYYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlQKFUNvbXBsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkifgoTRGVsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSEQoJcGVybWFuZW50GAMgASgIEiMKG2J5cGFzc19nb3Zlcm5hbmNlX3JldGVudGlvbhgEIAEoCCI7ChREZWxldGVPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QiRwoUUmVzdG9yZU9iamVjdFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJIpoCChFDb3B5T2JqZWN0UmVxdWVzdBIcCgtzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARInChZkZXN0aW5hdGlvbl9vYmplY3Rfa2V5GAIgASgJQge6SARyAhABEiAKD2Rlc3RpbmF0aW9uX2tleRgDIAEoCUIHukgEcgIQARI9ChFtZXRhZGF0YV9vdmVycmlkZRgEIAEoCzIdLm9jcC5kYXRhLnYxLk1ldGFkYXRhT3ZlcnJpZGVIAIgBARI1Cg10YWdzX292ZXJyaWRlGAUgASgLMhkub2NwLmRhdGEudjEuVGFnc092ZXJyaWRlSAGIAQFCFAoSX21ldGFkYXRhX292ZXJyaWRlQhAKDl90YWdzX292ZXJyaWRlIoIBChBNZXRhZGF0YU92ZXJyaWRlEj0KCG1ldGFkYXRhGAEgAygLMisub2NwLmRhdGEudjEuTWV0YWRhdGFPdmVycmlkZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJuCgxUYWdzT3ZlcnJpZGUSMQoEdGFncxgBIAMoCzIjLm9jcC5kYXRhLnYxLlRhZ3NPdmVycmlkZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEipwEKEkxpc3RPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhAKCG9yZGVyX2J5GAQgASgJEiwKCnNvcnRfb3JkZXIYBSABKA4yGC5vY3AuY29tbW9uLnYxLlNvcnRPcmRlciJmChNMaXN0T2JqZWN0c1Jlc3BvbnNlEiQKB29iamVjdHMYASADKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSKQoEcGFnZRgCIAEoCzIbLm9jcC5jb21tb24udjEuUGFnZVJlc3BvbnNlIj4KE0NvdW50T2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEg4KBmZpbHRlchgCIAEoCSJAChRDb3VudE9iamVjdHNSZXNwb25zZRIZChFhcHByb3hpbWF0ZV9jb3VudBgBIAEoAxINCgVleGFjdBgCIAEoCCpsChBQcmVzaWduVHJhbnNwb3J0EiEKHVBSRVNJR05fVFJBTlNQT1JUX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0lHTl9UUkFOU1BPUlRfUFVUEAESGgoWUFJFU0lHTl9UUkFOU1BPUlRfUE9TVBACMvUICg1PYmplY3RTZXJ2aWNlElMKDFVwbG9hZE9iamVjdBIgLm9jcC5kYXRhLnYxLlVwbG9hZE9iamVjdFJlcXVlc3QaIS5vY3AuZGF0YS52MS5VcGxvYWRPYmplY3RSZXNwb25zZRJZCg5Eb3dubG9hZE9iamVjdBIiLm9jcC5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVxdWVzdBojLm9jcC5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVzcG9uc2USPwoJR2V0T2JqZWN0Eh0ub2NwLmRhdGEudjEuR2V0T2JqZWN0UmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJFCgxMb29rdXBPYmplY3QSIC5vY3AuZGF0YS52MS5Mb29rdXBPYmplY3RSZXF1ZXN0GhMub2NwLmRhdGEudjEuT2JqZWN0EkUKDFVwZGF0ZU9iamVjdBIgLm9jcC5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSSQoOQ29tcGxldGVPYmplY3QSIi5vY3AuZGF0YS52MS5Db21wbGV0ZU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSUwoMRGVsZXRlT2JqZWN0EiAub2NwLmRhdGEudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBohLm9jcC5kYXRhLnYxLkRlbGV0ZU9iamVjdFJlc3BvbnNlEkcKDVJlc3RvcmVPYmplY3QSIS5vY3AuZGF0YS52MS5SZXN0b3JlT2JqZWN0UmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJBCgpDb3B5T2JqZWN0Eh4ub2NwLmRhdGEudjEuQ29weU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSUAoLTGlzdE9iamVjdHMSHy5vY3AuZGF0YS52MS5MaXN0T2JqZWN0c1JlcXVlc3QaIC5vY3AuZGF0YS52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlElMKDENvdW50T2JqZWN0cxIgLm9jcC5kYXRhLnYxLkNvdW50T2JqZWN0c1JlcXVlc3QaIS5vY3AuZGF0YS52MS5Db3VudE9iamVjdHNSZXNwb25zZRJlChJMaXN0T2JqZWN0VmVyc2lvbnMSJi5vY3AuZGF0YS52MS5MaXN0T2JqZWN0VmVyc2lvbnNSZXF1ZXN0Gicub2NwLmRhdGEudjEuTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USVAoQR2V0T2JqZWN0VmVyc2lvbhIkLm9jcC5kYXRhLnYxLkdldE9iamVjdFZlcnNpb25SZXF1ZXN0Ghoub2NwLmRhdGEudjEuT2JqZWN0VmVyc2lvbhJVChRSZXN0b3JlT2JqZWN0VmVyc2lvbhIoLm9jcC5kYXRhLnYxLlJlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdEJQWk5naXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtvY3BkYXRhdjFiBnByb3RvMw",
+    "CiNsZWdhdGUvZGF0YS92MS9vYmplY3Rfc2VydmljZS5wcm90bxIObGVnYXRlLmRhdGEudjEinwQKDU9iamVjdFZlcnNpb24SDAoEbmFtZRgBIAEoCRISCgp2ZXJzaW9uX2lkGAIgASgJEhEKCW9iamVjdF9pZBgDIAEoCRIYChBpc19kZWxldGVfbWFya2VyGAQgASgIEg4KBnMzX2tleRgFIAEoCRISCgpzaXplX2J5dGVzGAYgASgDEgwKBGV0YWcYByABKAkSMAoIY2hlY2tzdW0YCCABKAsyHi5sZWdhdGUuZGF0YS52MS5DaGVja3N1bURpZ2VzdBIUCgxjb250ZW50X3R5cGUYCSABKAkSPQoIbWV0YWRhdGEYCiADKAsyKy5sZWdhdGUuZGF0YS52MS5PYmplY3RWZXJzaW9uLk1ldGFkYXRhRW50cnkSNQoEdGFncxgLIAMoCzInLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdFZlcnNpb24uVGFnc0VudHJ5Ei0KBGxvY2sYDCABKAsyHy5sZWdhdGUuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSLgoKY3JlYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfY3VycmVudBgOIAEoCBovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiYQoZTGlzdE9iamVjdFZlcnNpb25zUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QiewoaTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USLwoIdmVyc2lvbnMYASADKAsyHS5sZWdhdGUuZGF0YS52MS5PYmplY3RWZXJzaW9uEiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIwChdHZXRPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIk4KG1Jlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkiggQKE1VwbG9hZE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEgsKA2tleRgCIAEoCRIdCgxjb250ZW50X3R5cGUYAyABKAlCB7pIBHICEAESFwoPc2l6ZV9oaW50X2J5dGVzGAQgASgDEkkKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIjLmxlZ2F0ZS5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCLpIBYIBAhABEkMKCG1ldGFkYXRhGAYgAygLMjEubGVnYXRlLmRhdGEudjEuVXBsb2FkT2JqZWN0UmVxdWVzdC5NZXRhZGF0YUVudHJ5EjsKBHRhZ3MYByADKAsyLS5sZWdhdGUuZGF0YS52MS5VcGxvYWRPYmplY3RSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSMwoJdHJhbnNwb3J0GAkgASgOMiAubGVnYXRlLmRhdGEudjEuUHJlc2lnblRyYW5zcG9ydBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIq0BChRVcGxvYWRPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSMgoKdXBsb2FkX3VybBgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUHJlc2lnbmVkVXJsEjkKD2NvbXBsZXRpb25fbW9kZRgDIAEoDjIgLmxlZ2F0ZS5jb21tb24udjEuQ29tcGxldGlvbk1vZGUicwoVRG93bmxvYWRPYmplY3RSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkidgoWRG93bmxvYWRPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSNAoMZG93bmxvYWRfdXJsGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QcmVzaWduZWRVcmwiKQoQR2V0T2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIkQKE0xvb2t1cE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASKUAwoTVXBkYXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESQwoIbWV0YWRhdGEYBCADKAsyMS5sZWdhdGUuZGF0YS52MS5VcGRhdGVPYmplY3RSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSOwoEdGFncxgFIAMoCzItLmxlZ2F0ZS5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QuVGFnc0VudHJ5EhQKDGNvbnRlbnRfdHlwZRgGIAEoCRIUCgxleHRlcm5hbF9yZWYYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlQKFUNvbXBsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkifgoTRGVsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSEQoJcGVybWFuZW50GAMgASgIEiMKG2J5cGFzc19nb3Zlcm5hbmNlX3JldGVudGlvbhgEIAEoCCI+ChREZWxldGVPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QiRwoUUmVzdG9yZU9iamVjdFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJIqACChFDb3B5T2JqZWN0UmVxdWVzdBIcCgtzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARInChZkZXN0aW5hdGlvbl9vYmplY3Rfa2V5GAIgASgJQge6SARyAhABEiAKD2Rlc3RpbmF0aW9uX2tleRgDIAEoCUIHukgEcgIQARJAChFtZXRhZGF0YV9vdmVycmlkZRgEIAEoCzIgLmxlZ2F0ZS5kYXRhLnYxLk1ldGFkYXRhT3ZlcnJpZGVIAIgBARI4Cg10YWdzX292ZXJyaWRlGAUgASgLMhwubGVnYXRlLmRhdGEudjEuVGFnc092ZXJyaWRlSAGIAQFCFAoSX21ldGFkYXRhX292ZXJyaWRlQhAKDl90YWdzX292ZXJyaWRlIoUBChBNZXRhZGF0YU92ZXJyaWRlEkAKCG1ldGFkYXRhGAEgAygLMi4ubGVnYXRlLmRhdGEudjEuTWV0YWRhdGFPdmVycmlkZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJxCgxUYWdzT3ZlcnJpZGUSNAoEdGFncxgBIAMoCzImLmxlZ2F0ZS5kYXRhLnYxLlRhZ3NPdmVycmlkZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEirQEKEkxpc3RPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhAKCG9yZGVyX2J5GAQgASgJEi8KCnNvcnRfb3JkZXIYBSABKA4yGy5sZWdhdGUuY29tbW9uLnYxLlNvcnRPcmRlciJsChNMaXN0T2JqZWN0c1Jlc3BvbnNlEicKB29iamVjdHMYASADKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSLAoEcGFnZRgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlc3BvbnNlIj4KE0NvdW50T2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEg4KBmZpbHRlchgCIAEoCSJAChRDb3VudE9iamVjdHNSZXNwb25zZRIZChFhcHByb3hpbWF0ZV9jb3VudBgBIAEoAxINCgVleGFjdBgCIAEoCCpsChBQcmVzaWduVHJhbnNwb3J0EiEKHVBSRVNJR05fVFJBTlNQT1JUX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0lHTl9UUkFOU1BPUlRfUFVUEAESGgoWUFJFU0lHTl9UUkFOU1BPUlRfUE9TVBACMskJCg1PYmplY3RTZXJ2aWNlElkKDFVwbG9hZE9iamVjdBIjLmxlZ2F0ZS5kYXRhLnYxLlVwbG9hZE9iamVjdFJlcXVlc3QaJC5sZWdhdGUuZGF0YS52MS5VcGxvYWRPYmplY3RSZXNwb25zZRJfCg5Eb3dubG9hZE9iamVjdBIlLmxlZ2F0ZS5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVxdWVzdBomLmxlZ2F0ZS5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVzcG9uc2USRQoJR2V0T2JqZWN0EiAubGVnYXRlLmRhdGEudjEuR2V0T2JqZWN0UmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJLCgxMb29rdXBPYmplY3QSIy5sZWdhdGUuZGF0YS52MS5Mb29rdXBPYmplY3RSZXF1ZXN0GhYubGVnYXRlLmRhdGEudjEuT2JqZWN0EksKDFVwZGF0ZU9iamVjdBIjLmxlZ2F0ZS5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSTwoOQ29tcGxldGVPYmplY3QSJS5sZWdhdGUuZGF0YS52MS5Db21wbGV0ZU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSWQoMRGVsZXRlT2JqZWN0EiMubGVnYXRlLmRhdGEudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBokLmxlZ2F0ZS5kYXRhLnYxLkRlbGV0ZU9iamVjdFJlc3BvbnNlEk0KDVJlc3RvcmVPYmplY3QSJC5sZWdhdGUuZGF0YS52MS5SZXN0b3JlT2JqZWN0UmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJHCgpDb3B5T2JqZWN0EiEubGVnYXRlLmRhdGEudjEuQ29weU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSVgoLTGlzdE9iamVjdHMSIi5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0c1JlcXVlc3QaIy5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlElkKDENvdW50T2JqZWN0cxIjLmxlZ2F0ZS5kYXRhLnYxLkNvdW50T2JqZWN0c1JlcXVlc3QaJC5sZWdhdGUuZGF0YS52MS5Db3VudE9iamVjdHNSZXNwb25zZRJrChJMaXN0T2JqZWN0VmVyc2lvbnMSKS5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0VmVyc2lvbnNSZXF1ZXN0GioubGVnYXRlLmRhdGEudjEuTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USWgoQR2V0T2JqZWN0VmVyc2lvbhInLmxlZ2F0ZS5kYXRhLnYxLkdldE9iamVjdFZlcnNpb25SZXF1ZXN0Gh0ubGVnYXRlLmRhdGEudjEuT2JqZWN0VmVyc2lvbhJbChRSZXN0b3JlT2JqZWN0VmVyc2lvbhIrLmxlZ2F0ZS5kYXRhLnYxLlJlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdEJFWkNnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7bGVnYXRlZGF0YXYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_duration,
@@ -243,70 +243,71 @@ export const RestoreObjectVersionRequestSchema: GenMessage<RestoreObjectVersionR
 /**
  * @generated from message paladin.data.v1.UploadObjectRequest
  */
-export type UploadObjectRequest = Message<"paladin.data.v1.UploadObjectRequest"> & {
-  /**
-   * Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type UploadObjectRequest =
+  Message<"paladin.data.v1.UploadObjectRequest"> & {
+    /**
+     * Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * empty → server uses object_id as key
-   *
-   * @generated from field: string key = 2;
-   */
-  key: string;
+    /**
+     * empty → server uses object_id as key
+     *
+     * @generated from field: string key = 2;
+     */
+    key: string;
 
-  /**
-   * @generated from field: string content_type = 3;
-   */
-  contentType: string;
+    /**
+     * @generated from field: string content_type = 3;
+     */
+    contentType: string;
 
-  /**
-   * @generated from field: int64 size_hint_bytes = 4;
-   */
-  sizeHintBytes: bigint;
+    /**
+     * @generated from field: int64 size_hint_bytes = 4;
+     */
+    sizeHintBytes: bigint;
 
-  /**
-   * UNSPECIFIED is allowed and means "let the server pick" — handler
-   * resolves the empty value to SHA256 (the data-plane default the
-   * PresignedPUT verification path expects). The earlier
-   * `not_in: [0]` rule was failing every JSON client that omits
-   * enum-zero on the wire, including stale browser bundles.
-   *
-   * @generated from field: paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5;
-   */
-  checksumAlgorithm: ChecksumAlgorithm;
+    /**
+     * UNSPECIFIED is allowed and means "let the server pick" — handler
+     * resolves the empty value to SHA256 (the data-plane default the
+     * PresignedPUT verification path expects). The earlier
+     * `not_in: [0]` rule was failing every JSON client that omits
+     * enum-zero on the wire, including stale browser bundles.
+     *
+     * @generated from field: paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5;
+     */
+    checksumAlgorithm: ChecksumAlgorithm;
 
-  /**
-   * @generated from field: map<string, string> metadata = 6;
-   */
-  metadata: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> metadata = 6;
+     */
+    metadata: { [key: string]: string };
 
-  /**
-   * @generated from field: map<string, string> tags = 7;
-   */
-  tags: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> tags = 7;
+     */
+    tags: { [key: string]: string };
 
-  /**
-   * @generated from field: string external_ref = 8;
-   */
-  externalRef: string;
+    /**
+     * @generated from field: string external_ref = 8;
+     */
+    externalRef: string;
 
-  /**
-   * @generated from field: paladin.data.v1.PresignTransport transport = 9;
-   */
-  transport: PresignTransport;
+    /**
+     * @generated from field: paladin.data.v1.PresignTransport transport = 9;
+     */
+    transport: PresignTransport;
 
-  /**
-   * Idempotency key — if a request with the same key is replayed, the
-   * server returns the cached response instead of creating a duplicate.
-   *
-   * @generated from field: string idempotency_key = 10;
-   */
-  idempotencyKey: string;
-};
+    /**
+     * Idempotency key — if a request with the same key is replayed, the
+     * server returns the cached response instead of creating a duplicate.
+     *
+     * @generated from field: string idempotency_key = 10;
+     */
+    idempotencyKey: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.UploadObjectRequest.
@@ -419,19 +420,20 @@ export const GetObjectRequestSchema: GenMessage<GetObjectRequest> =
 /**
  * @generated from message paladin.data.v1.LookupObjectRequest
  */
-export type LookupObjectRequest = Message<"paladin.data.v1.LookupObjectRequest"> & {
-  /**
-   * Parent ObjectKey — required to disambiguate `key` lookups.
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type LookupObjectRequest =
+  Message<"paladin.data.v1.LookupObjectRequest"> & {
+    /**
+     * Parent ObjectKey — required to disambiguate `key` lookups.
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: string key = 2;
-   */
-  key: string;
-};
+    /**
+     * @generated from field: string key = 2;
+     */
+    key: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.LookupObjectRequest.
@@ -444,42 +446,43 @@ export const LookupObjectRequestSchema: GenMessage<LookupObjectRequest> =
 /**
  * @generated from message paladin.data.v1.UpdateObjectRequest
  */
-export type UpdateObjectRequest = Message<"paladin.data.v1.UpdateObjectRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type UpdateObjectRequest =
+  Message<"paladin.data.v1.UpdateObjectRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: google.protobuf.FieldMask update_mask = 3;
-   */
-  updateMask?: FieldMask | undefined;
+    /**
+     * @generated from field: google.protobuf.FieldMask update_mask = 3;
+     */
+    updateMask?: FieldMask | undefined;
 
-  /**
-   * @generated from field: map<string, string> metadata = 4;
-   */
-  metadata: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> metadata = 4;
+     */
+    metadata: { [key: string]: string };
 
-  /**
-   * @generated from field: map<string, string> tags = 5;
-   */
-  tags: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> tags = 5;
+     */
+    tags: { [key: string]: string };
 
-  /**
-   * @generated from field: string content_type = 6;
-   */
-  contentType: string;
+    /**
+     * @generated from field: string content_type = 6;
+     */
+    contentType: string;
 
-  /**
-   * @generated from field: string external_ref = 7;
-   */
-  externalRef: string;
-};
+    /**
+     * @generated from field: string external_ref = 7;
+     */
+    externalRef: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.UpdateObjectRequest.
@@ -521,33 +524,34 @@ export const CompleteObjectRequestSchema: GenMessage<CompleteObjectRequest> =
 /**
  * @generated from message paladin.data.v1.DeleteObjectRequest
  */
-export type DeleteObjectRequest = Message<"paladin.data.v1.DeleteObjectRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DeleteObjectRequest =
+  Message<"paladin.data.v1.DeleteObjectRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: bool permanent = 3;
-   */
-  permanent: boolean;
+    /**
+     * @generated from field: bool permanent = 3;
+     */
+    permanent: boolean;
 
-  /**
-   * Only honored on bucket-locked objects when caller has GOVERNANCE bypass
-   * (role `lock.governance.bypass` or `platform.admin`). The server sets
-   * a `SET LOCAL paladin.governance_bypass = true` GUC inside the deletion
-   * transaction; the DB trigger on object_versions checks for it before
-   * refusing to drop locked rows.
-   *
-   * @generated from field: bool bypass_governance_retention = 4;
-   */
-  bypassGovernanceRetention: boolean;
-};
+    /**
+     * Only honored on bucket-locked objects when caller has GOVERNANCE bypass
+     * (role `lock.governance.bypass` or `platform.admin`). The server sets
+     * a `SET LOCAL paladin.governance_bypass = true` GUC inside the deletion
+     * transaction; the DB trigger on object_versions checks for it before
+     * refusing to drop locked rows.
+     *
+     * @generated from field: bool bypass_governance_retention = 4;
+     */
+    bypassGovernanceRetention: boolean;
+  };
 
 /**
  * Describes the message paladin.data.v1.DeleteObjectRequest.
@@ -682,34 +686,35 @@ export const TagsOverrideSchema: GenMessage<TagsOverride> =
 /**
  * @generated from message paladin.data.v1.ListObjectsRequest
  */
-export type ListObjectsRequest = Message<"paladin.data.v1.ListObjectsRequest"> & {
-  /**
-   * Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type ListObjectsRequest =
+  Message<"paladin.data.v1.ListObjectsRequest"> & {
+    /**
+     * Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 2;
-   */
-  page?: PageRequest | undefined;
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
 
-  /**
-   * @generated from field: string filter = 3;
-   */
-  filter: string;
+    /**
+     * @generated from field: string filter = 3;
+     */
+    filter: string;
 
-  /**
-   * @generated from field: string order_by = 4;
-   */
-  orderBy: string;
+    /**
+     * @generated from field: string order_by = 4;
+     */
+    orderBy: string;
 
-  /**
-   * @generated from field: paladin.common.v1.SortOrder sort_order = 5;
-   */
-  sortOrder: SortOrder;
-};
+    /**
+     * @generated from field: paladin.common.v1.SortOrder sort_order = 5;
+     */
+    sortOrder: SortOrder;
+  };
 
 /**
  * Describes the message paladin.data.v1.ListObjectsRequest.
@@ -722,17 +727,18 @@ export const ListObjectsRequestSchema: GenMessage<ListObjectsRequest> =
 /**
  * @generated from message paladin.data.v1.ListObjectsResponse
  */
-export type ListObjectsResponse = Message<"paladin.data.v1.ListObjectsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.data.v1.Object objects = 1;
-   */
-  objects: Object$[];
+export type ListObjectsResponse =
+  Message<"paladin.data.v1.ListObjectsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.data.v1.Object objects = 1;
+     */
+    objects: Object$[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.ListObjectsResponse.
@@ -745,17 +751,18 @@ export const ListObjectsResponseSchema: GenMessage<ListObjectsResponse> =
 /**
  * @generated from message paladin.data.v1.CountObjectsRequest
  */
-export type CountObjectsRequest = Message<"paladin.data.v1.CountObjectsRequest"> & {
-  /**
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type CountObjectsRequest =
+  Message<"paladin.data.v1.CountObjectsRequest"> & {
+    /**
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: string filter = 2;
-   */
-  filter: string;
-};
+    /**
+     * @generated from field: string filter = 2;
+     */
+    filter: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.CountObjectsRequest.
@@ -817,7 +824,7 @@ export const PresignTransportSchema: GenEnum<PresignTransport> =
   enumDesc(file_paladin_data_v1_object_service, 0);
 
 /**
- * ObjectService is the canonical data-plane API. PALADIN never proxies bytes —
+ * ObjectService is the canonical data-plane API. Paladin never proxies bytes —
  * every upload/download happens directly between the client and the storage
  * backend via presigned URLs returned by these RPCs.
  *

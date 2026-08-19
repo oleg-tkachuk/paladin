@@ -1,4 +1,4 @@
-// Typography pattern — single source of truth for the PALADIN admin UI.
+// Typography pattern — single source of truth for the Paladin admin UI.
 //
 // Distilled from the /health page rebalance (commit "fix(health):
 // correct worker Service port + larger fonts + expandable errors").

@@ -475,7 +475,7 @@ func pickSource(format string) (eventingest.Source, error) {
 // the bucket name is taken from cfg.Storage.DefaultBackend.
 //
 // CloudEvents passthrough endpoint is always available so operators
-// can use PALADIN's ingest plane as a generic CloudEvents 1.0 sink during
+// can use Paladin's ingest plane as a generic CloudEvents 1.0 sink during
 // integration without a custom adapter.
 func buildWebhookDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, error) {
 	sources := map[string]eventingest.Source{}

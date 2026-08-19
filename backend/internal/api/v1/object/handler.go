@@ -122,14 +122,14 @@ func (l ObjectLock) Reason() string {
 // ErrBackendDisabled is returned by the bucket-resolution path
 // (LookupBucket / LookupBucketMeta) when the resolved storage backend
 // has been disabled (feature 002). It is the single chokepoint that
-// guarantees a disabled backend processes NO PALADIN-mediated operation:
+// guarantees a disabled backend processes NO Paladin-mediated operation:
 // every object/presign/multipart/copy path resolves its bucket through
 // the resolver first, so none can reach the object store. Handlers map
 // it to CodeFailedPrecondition via mapResolveErr.
 //
 // NOTE: this cannot revoke presigned URLs already issued — those hit the
-// object store directly, bypassing PALADIN, and expire on their own TTL.
-// Disabling only blocks issuance of NEW presigns and PALADIN-mediated ops.
+// object store directly, bypassing Paladin, and expire on their own TTL.
+// Disabling only blocks issuance of NEW presigns and Paladin-mediated ops.
 var ErrBackendDisabled = errors.New("storage backend is disabled")
 
 // ErrBackendReadOnly is returned by the resolution path for a MUTATION
@@ -179,7 +179,7 @@ type Location struct {
 	BackendID string // storage backend id; "" = default backend
 	TenantID  uuid.UUID
 	Bucket    string // physical S3 bucket
-	ObjectKey string // PALADIN namespace within the bucket
+	ObjectKey string // Paladin namespace within the bucket
 	Key       string // storage key inside the prefix
 }
 

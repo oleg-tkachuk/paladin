@@ -9,7 +9,7 @@ was chosen, why, and what was rejected.
 
 ## R-001: Baseline coupling survey (input to every other decision)
 
-**Finding**: `internal/capability` imports **zero** PALADIN-internal packages.
+**Finding**: `internal/capability` imports **zero** Paladin-internal packages.
 
 Verified by:
 
@@ -32,8 +32,8 @@ only genuine architectural work is R-002. Everything else is mechanical.
 | Unit | LOC | Destination |
 |---|---:|---|
 | Core (`types/signer/verifier/issuer/delegate/cache/jwks/keyloader/store/usage/metering_store/metrics`) | 2 701 | **Module** |
-| `internal/capability/postgres` (`store.go`, `usage.go`) | 856 | **Stays in PALADIN** |
-| Consumer files across PALADIN | 28 files (16 prod, 12 test) | **Stays in PALADIN** |
+| `internal/capability/postgres` (`store.go`, `usage.go`) | 856 | **Stays in Paladin** |
+| Consumer files across Paladin | 28 files (16 prod, 12 test) | **Stays in Paladin** |
 
 ---
 
@@ -70,7 +70,7 @@ type MeteringStore[TX any] struct { Inner UsageStore[TX] }
 ```
 
 ```go
-// PALADIN, one line, keeps all 28 consumers source-compatible
+// Paladin, one line, keeps all 28 consumers source-compatible
 type UsageStore = capability.UsageStore[pgx.Tx]
 ```
 
@@ -78,13 +78,13 @@ type UsageStore = capability.UsageStore[pgx.Tx]
 
 - The library never names, imports, or constrains a driver — FR-003 and
   FR-012 satisfied structurally rather than by convention.
-- Type safety is preserved end-to-end. PALADIN's callback keeps its exact
+- Type safety is preserved end-to-end. Paladin's callback keeps its exact
   `pgx.Tx` signature; the compiler still checks it.
 - A consumer with no transactions instantiates `UsageStore[struct{}]` (or
   any placeholder) and passes `nil` — the contract already documents "pass
   nil to skip fan-out", so the no-transaction path is a supported mode, not
   a degradation.
-- The alias absorbs the churn: consumers referencing PALADIN's `UsageStore`
+- The alias absorbs the churn: consumers referencing Paladin's `UsageStore`
   compile unchanged. Only the two declaration sites gain a type parameter.
 - A non-generic alias to an instantiated generic type is valid Go on every
   supported release; this does not depend on the Go 1.24 generic-alias
@@ -97,9 +97,9 @@ type UsageStore = capability.UsageStore[pgx.Tx]
 | `onCharged func(ctx, tx any) error` + type assertion at the call site | Trades a compile-time guarantee for a runtime panic on the **charge** path — the one path where a mistake corrupts money counters. Cheapest to write, worst place to be wrong. |
 | Define a narrow `Tx` interface in the module | `pgx.Tx` would have to satisfy it, which means either an adapter at every call site or a method set the library has no business specifying. Reintroduces the coupling as a shape instead of an import. |
 | Drop `onCharged`; let the caller run the fan-out after `Charge` returns | Reopens the ADR-0003 dual-write window the callback was introduced to close. Non-starter. |
-| Split `Charge` into a base method plus an optional `TransactionalCharger` interface | The transactional variant is the *only* one PALADIN uses; the split would leave a contract whose primary implementation is the optional half. Complexity with no consumer. |
+| Split `Charge` into a base method plus an optional `TransactionalCharger` interface | The transactional variant is the *only* one Paladin uses; the split would leave a contract whose primary implementation is the optional half. Complexity with no consumer. |
 
-**Cost**: two declarations gain `[TX any]`; every PALADIN consumer is untouched
+**Cost**: two declarations gain `[TX any]`; every Paladin consumer is untouched
 behind the alias.
 
 ---
@@ -116,7 +116,7 @@ behind the alias.
 - Root-level (not `backend/pkg/...`) keeps the import path one segment deep
   and signals that the module is not a subordinate of the backend service.
 - Cross-cutting changes stay atomic: a change touching both the module and
-  its PALADIN consumer remains one commit, one review, one CI run.
+  its Paladin consumer remains one commit, one review, one CI run.
 
 **Known downside, accepted deliberately**: the import path still contains
 `paladin`, which works against the positioning that the
@@ -139,12 +139,12 @@ repository-split overhead for a hypothetical audience. Recorded in
 
 ## R-004: `replace` directive vs published version during development
 
-**Decision**: PALADIN's `backend/go.mod` uses a `replace` directive pointing at
+**Decision**: Paladin's `backend/go.mod` uses a `replace` directive pointing at
 the sibling module for local development, with a real version requirement
 recorded alongside it.
 
 **Rationale**: without `replace`, every module change would need a tag before
-PALADIN could consume it, which makes the extraction unworkable day to day. With
+Paladin could consume it, which makes the extraction unworkable day to day. With
 `replace`, the working tree always builds against the local source while the
 `require` line documents the intended version.
 
@@ -152,7 +152,7 @@ PALADIN could consume it, which makes the extraction unworkable day to day. With
 CI MUST additionally build the module **standalone** (its own `go build ./...`
 and `go test ./...` from its own directory) to prove it is self-contained.
 That standalone job is what actually enforces FR-002/FR-003 — not the
-PALADIN build.
+Paladin build.
 
 ---
 
@@ -164,7 +164,7 @@ relying on OTel's no-op default provider.
 **Rationale**: `otel` is a widely-accepted dependency, and its global default
 is a no-op — a consumer that never configures a provider pays nothing and is
 not required to run a collector (spec assumption "consumers supply their own
-observability"). Stripping instrumentation would regress PALADIN's existing
+observability"). Stripping instrumentation would regress Paladin's existing
 dashboards for no consumer benefit.
 
 **Alternatives rejected**: a hand-rolled metrics interface (reinvents OTel and
@@ -185,10 +185,10 @@ forces an adapter on the one consumer that already speaks OTel); build tags
    doubling as the worked example for FR-019. It carries a **staging-commit
    semantic** for `Charge` — without one, no implementation in the module is
    capable of demonstrating rollback, and SC-008 stays unverifiable.
-3. PALADIN's existing capability/auth/billing/outbox tests stay in PALADIN and must
+3. Paladin's existing capability/auth/billing/outbox tests stay in Paladin and must
    pass with **no assertion changed** (FR-017, SC-003).
 4. A new **standalone CI job** builds and tests the module from its own
-   directory with no PALADIN checkout on the module path (R-004).
+   directory with no Paladin checkout on the module path (R-004).
 5. **Guards** are added for every property this refactor could break
    silently. The authoritative list is `tasks.md` Phases 3–4; deliberately
    *not* restated as a count here, because a hardcoded number has already gone
@@ -246,16 +246,16 @@ build.
 
 ---
 
-## R-008: Sequencing to keep PALADIN green at every commit
+## R-008: Sequencing to keep Paladin green at every commit
 
 **Decision**: land in this order, each step independently building and
 passing tests:
 
 1. **Parameterise `onCharged` in place** (still under `internal/`), add the
-   PALADIN-side alias. PALADIN compiles, all tests pass, no module exists yet.
+   Paladin-side alias. Paladin compiles, all tests pass, no module exists yet.
 2. **Create the module skeleton** (`go.mod`, `replace`, standalone CI job)
    with no code moved.
-3. **Move core files** into the module; rewrite PALADIN imports to the module
+3. **Move core files** into the module; rewrite Paladin imports to the module
    path. Postgres implementations stay put. **The golden-token test ships in
    this step**, not the next — it guards the move, so deferring it would leave
    one commit where the wire format is unguarded (Principle I; amended after
@@ -277,7 +277,7 @@ commit rule (Principle II) with one scope per step.
 |---|---|
 | Language/Version | Go 1.26 (matches `backend/deploy/Dockerfile` `GO_VERSION`) |
 | Module deps | `github.com/google/uuid`, `go.opentelemetry.io/otel` — **no** database driver, **no** storage SDK |
-| Storage | None in the module; contracts only. Reference relational implementation stays in PALADIN |
+| Storage | None in the module; contracts only. Reference relational implementation stays in Paladin |
 | Testing | `go test`, in-memory store, golden-token fixture, standalone module CI job |
 | Target platform | Any Go-supported platform; library, no runtime assumptions |
 | Project type | Library (nested module) + existing web service as reference consumer |

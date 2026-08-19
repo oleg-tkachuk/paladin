@@ -1,8 +1,8 @@
-# Async & Jobs - Paladin (PALADIN)
+# Async & Jobs - Paladin
 
 ## Overview
 
-PALADIN uses internal background workers to manage object lifecycle tasks that don't need to happen synchronously with request processing.
+Paladin uses internal background workers to manage object lifecycle tasks that don't need to happen synchronously with request processing.
 
 ## Current Workers
 
@@ -21,9 +21,9 @@ PALADIN uses internal background workers to manage object lifecycle tasks that d
 
 ## Async Patterns
 
-PALADIN relies on **S3 Post-Object Deletion** and **Pre-signed URLs** to offload heavy I/O tasks.
+Paladin relies on **S3 Post-Object Deletion** and **Pre-signed URLs** to offload heavy I/O tasks.
 
-- **Upload Completion**: When a client completes an upload, it notifies PALADIN asynchronously. PALADIN then verifies the size/etag from S3 and updates the metadata record to `active`.
+- **Upload Completion**: When a client completes an upload, it notifies Paladin asynchronously. Paladin then verifies the size/etag from S3 and updates the metadata record to `active`.
 - **Soft Delete**: Deletion is marked immediately in Postgres. The physical deletion from S3 can happen asynchronously via the Reaper or a scheduled purge request.
 
 ## Resilience

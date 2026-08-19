@@ -12,7 +12,7 @@ One-page operator manual for running and extending the suite.
   install path: `corepack enable && corepack prepare
   pnpm@11.3.0 --activate` (no separate `npm i -g pnpm` needed).
 - 16 GB RAM developer-class machine (per SC-002).
-- Latest PALADIN backend image present locally as
+- Latest Paladin backend image present locally as
   `registry.local/paladin/paladin:latest` —
   build via `task -d backend build:image` if absent.
 - **Garage** reachable from the docker-compose network.
@@ -125,7 +125,7 @@ starts from zero.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `webServer` times out after 120s | PALADIN backend image not built locally | `task -d backend build:image` |
+| `webServer` times out after 120s | Paladin backend image not built locally | `task -d backend build:image` |
 | `compose up` errors `required variable PALADIN_E2E_S3_ACCESS_KEY is missing` | Garage credentials not exported from the kubectl Secret | Run the two `export PALADIN_E2E_S3_*` commands from the Prerequisites section |
 | Backend containers log `s3: dial tcp 3900: connection refused` | `kubectl port-forward` not running or stopped | Restart `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
 | Backend can reach Garage but every bucket op 403s | Wrong key/secret pair (e.g. extracted from a different cluster's Secret) | Re-extract from the current cluster context: `kubectl config current-context` then re-export PALADIN_E2E_S3_* |

@@ -96,7 +96,7 @@ WHERE-clause OCC pattern.)
 
 ## 4. Data-plane gate contract
 
-**Guarantee (FR-002, SC-001)**: every PALADIN-mediated op that resolves to a
+**Guarantee (FR-002, SC-001)**: every Paladin-mediated op that resolves to a
 disabled backend is refused with `CodeFailedPrecondition` **before** any
 object-store call.
 
@@ -136,7 +136,7 @@ object resolver, so it gets an explicit pre-check: after validating
 if disabled — before persisting the bucket row.
 
 **Out of gate scope**: already-issued presigned URLs (D6) — they bypass
-PALADIN and expire on TTL. A comment at the presign gate documents this.
+Paladin and expire on TTL. A comment at the presign gate documents this.
 
 ## 5. Required test coverage (Constitution I — ships with the code)
 

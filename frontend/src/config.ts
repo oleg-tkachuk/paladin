@@ -42,7 +42,7 @@ const buildTime = resolveMeta(
 const configSchema = z.object({
   runtimeConfig: z.object({
     public: z.object({
-      objectControlPlane: z
+      paladin: z
         .object({
           baseUrl: z.string().default("/api/paladin"),
           upstreamUrl: z.string().default("http://localhost:8082"),

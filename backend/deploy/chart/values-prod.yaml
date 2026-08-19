@@ -1,4 +1,4 @@
-# PALADIN Helm values overlay for PRODUCTION.
+# Paladin Helm values overlay for PRODUCTION.
 #
 # Treat this file as the canonical "this is what runs in production"
 # document. Any change here merits a code review, a runbook update,
@@ -9,7 +9,7 @@
 
 # CNPG CA for sslmode=verify-full. Sync the `paladin-postgresql-ca` Secret
 # (CNPG publishes `<cluster>-ca` in the database ns; key `ca.crt`) into
-# the PALADIN namespace via ExternalSecret. Pods mount it at /etc/paladin/pg-ca;
+# the Paladin namespace via ExternalSecret. Pods mount it at /etc/paladin/pg-ca;
 # the prod DSNs below reference sslrootcert=/etc/paladin/pg-ca/ca.crt.
 postgresCa:
   secretName: paladin-postgresql-ca
@@ -146,7 +146,7 @@ config:
         - "https://paladin.example.com"
       scopes_supported: ["paladin.read", "paladin.write"]
       # RFC 8414 AS metadata served at /.well-known/oauth-authorization-server
-      # (PALADIN-IAM-is-the-AS, same origin). issuer MUST equal config.auth.issuer.
+      # (Paladin-IAM-is-the-AS, same origin). issuer MUST equal config.auth.issuer.
       authorization_server:
         issuer: "https://paladin.example.com"
         authorization_endpoint: "https://paladin.example.com/oauth/authorize"

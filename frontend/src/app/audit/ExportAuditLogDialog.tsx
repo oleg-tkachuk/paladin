@@ -4,7 +4,7 @@
 // ExportAuditLog. The RPC returns an Operation (not the bytes), so the export
 // runs server-side and streams to the destination; the operator tracks
 // completion in the Operations drawer. The destination is either an object
-// name inside the PALADIN bucket or an EventSubscription resource name to fan out
+// name inside the Paladin bucket or an EventSubscription resource name to fan out
 // to. The filter is a CEL expression (same grammar as the list filter).
 
 import { useState } from "react";
@@ -110,7 +110,7 @@ function ExportForm({
             onChange={(e) => setDestination(e.target.value)}
           />
           <p className="text-[11px] text-muted-foreground">
-            An object name inside the PALADIN bucket, or an EventSubscription
+            An object name inside the Paladin bucket, or an EventSubscription
             resource name to fan out to.
           </p>
         </div>

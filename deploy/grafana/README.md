@@ -7,10 +7,10 @@ when prompted.
 ## Datasource provisioning + log↔trace correlation
 
 [`datasources.example.yaml`](datasources.example.yaml) is a reference Grafana
-datasource provisioning file that wires the three PALADIN signals together so a
+datasource provisioning file that wires the three Paladin signals together so a
 single click pivots between them:
 
-- **Log → trace.** PALADIN stamps `trace_id` / `span_id` / `request_id` /
+- **Log → trace.** Paladin stamps `trace_id` / `span_id` / `request_id` /
   `tenant_id` onto every structured log line (`internal/logger`
   `logger.enrich`). The Loki datasource's *derived field* extracts `trace_id`
   and turns it into a "View trace" link into Tempo.
@@ -19,14 +19,14 @@ single click pivots between them:
 - **Metric → trace.** Prometheus exemplars (SDK-default, trace-based) link a
   RED histogram bucket to the sampled trace behind an outlier latency.
 
-It's an *example* — PALADIN only speaks OTLP (push) and is backend-agnostic.
+It's an *example* — Paladin only speaks OTLP (push) and is backend-agnostic.
 Tempo / Loki / Prometheus are the OSS reference set; swap the types/uids for
 Honeycomb / Datadog / etc. The collector that bridges OTLP → these backends
 is an operator concern (see ADR-0001).
 
 ## `paladin-rpc-red.json` — RPC RED
 
-Rate / Errors / Duration for every PALADIN Connect RPC across all three planes
+Rate / Errors / Duration for every Paladin Connect RPC across all three planes
 (data / iam / admin). The signal comes from the `otelconnect` interceptor's
 `rpc.server.*` instruments, which only emit once OTel is **enabled**
 (`otel.enabled: true`, `otel.endpoint: otel-collector:4317`) — see ADR-0001.
@@ -34,7 +34,7 @@ Rate / Errors / Duration for every PALADIN Connect RPC across all three planes
 ### Assumptions (adjust if your pipeline differs)
 
 - **Datasource:** Prometheus scraping the OTLP collector's Prometheus
-  exporter. PALADIN itself only speaks OTLP (push); the collector is the
+  exporter. Paladin itself only speaks OTLP (push); the collector is the
   metrics→Prometheus bridge.
 - **Metric name:** `rpc_server_duration_milliseconds_{bucket,sum,count}`.
   This is the Prometheus rendering of OTel `rpc.server.duration` (unit `ms`,
@@ -61,9 +61,9 @@ Prometheus alerting rules for the periodic workers (reconciler, purgers,
 reapers, lifecycle, replication). Two rules, each fanned out per `worker`
 label so there is no per-worker threshold to maintain:
 
-- **`PALADINWorkerStalled`** — no completed tick in >5× the worker's own
+- **`PaladinWorkerStalled`** — no completed tick in >5× the worker's own
   `paladin_worker_interval_seconds`.
-- **`PALADINWorkerTicksAllFailing`** — only `outcome="error"` and zero successes
+- **`PaladinWorkerTicksAllFailing`** — only `outcome="error"` and zero successes
   over 15m.
 
 Signal: the `paladin_worker_*` instruments emitted by `internal/worker.RunTicker`

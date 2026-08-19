@@ -44,7 +44,7 @@ type UserResolver interface {
 	FindBySubjectGlobal(ctx context.Context, subject string) ([]authstore.User, error)
 }
 
-// Handler implements the PALADIN IAM OAuth 2.1 Authorization Server endpoints
+// Handler implements the Paladin IAM OAuth 2.1 Authorization Server endpoints
 // (ADR-0009): /oauth/authorize, /oauth/token, /oauth/register. Tokens are
 // minted by the same issuer.Issuer the Connect login path uses, so the bearer
 // validates on the target plane (and at the MCP Resource Server, ADR-0008).
@@ -138,7 +138,7 @@ func parseAuthorizeParams(q url.Values) authorizeParams {
 }
 
 // handleAuthorize renders a combined login+consent screen (GET) and processes
-// the decision (POST). PALADIN IAM has no browser session, so the AS authenticates
+// the decision (POST). Paladin IAM has no browser session, so the AS authenticates
 // the resource owner here with username+password and, on approval, issues a
 // PKCE-bound single-use code redirected to the registered redirect_uri.
 func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {

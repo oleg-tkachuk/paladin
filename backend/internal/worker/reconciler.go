@@ -1,4 +1,4 @@
-// Reconciler v2 is the self-healing loop behind PALADIN's idempotent state
+// Reconciler v2 is the self-healing loop behind Paladin's idempotent state
 // machine. It covers three gaps:
 //
 //   1. S3 event pipeline outage — promotes PENDING rows whose object is

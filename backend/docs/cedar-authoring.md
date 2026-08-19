@@ -1,6 +1,6 @@
 # Cedar policy authoring guide
 
-PALADIN authorizes every RPC against a tenant-scoped Cedar policy. This guide
+Paladin authorizes every RPC against a tenant-scoped Cedar policy. This guide
 walks operators through the policy surface — entities, actions, attributes,
 context — and shows the patterns that come up in real deployments.
 
@@ -12,7 +12,7 @@ This doc explains the **why**; the schema is the **what**.
 ## 1. Mental model
 
 A Cedar decision answers: **may `principal` perform `action` on `resource`,
-under `context`?** PALADIN fills the four slots like this:
+under `context`?** Paladin fills the four slots like this:
 
 | Slot       | Source                                                      |
 |------------|-------------------------------------------------------------|
@@ -179,7 +179,7 @@ when { resource.object_key == "invoices" && resource.tenant_id == principal.tena
 permit (principal, action, resource == ObjectKey::"…/objectKeys/invoices");
 ```
 
-The default template and every policy PALADIN ships use unconstrained `resource` +
+The default template and every policy Paladin ships use unconstrained `resource` +
 attribute conditions, so the canonical-EUID switch is transparent to them.
 
 ---

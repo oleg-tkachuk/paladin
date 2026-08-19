@@ -1,4 +1,4 @@
-# PALADIN UI overlay for PRODUCTION.
+# Paladin UI overlay for PRODUCTION.
 #
 # User-facing UI. Aim for 3+ replicas across zones for AZ-failure
 # survival.

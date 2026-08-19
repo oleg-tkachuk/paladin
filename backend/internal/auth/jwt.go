@@ -19,7 +19,7 @@ import (
 )
 
 // JWTVerifier is a minimal JWT verifier that supports ES256/RS256/HS256 and
-// exposes only the claims PALADIN needs. Intentionally small: swap for a full
+// exposes only the claims Paladin needs. Intentionally small: swap for a full
 // library (go-jose, lestrrat-go/jwx) when multi-key rotation / JWKS caching
 // is required in production.
 type JWTVerifier struct {
@@ -41,7 +41,7 @@ type jwtClaims struct {
 	Aud json.RawMessage `json:"aud"`
 	Exp int64           `json:"exp"`
 	Nbf int64           `json:"nbf"`
-	// Tenant — canonical claim name. PALADIN's own issuer always emits this.
+	// Tenant — canonical claim name. Paladin's own issuer always emits this.
 	Tenant string `json:"tenant"`
 	// TenantAlt — accepted alias for compatibility with third-party IdPs
 	// (Auth0, Keycloak, custom dev tooling) that conventionally emit

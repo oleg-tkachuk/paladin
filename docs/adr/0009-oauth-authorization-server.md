@@ -10,10 +10,10 @@
   Server — it advertises where to authenticate and validates bearers — but
   nothing *mints* those bearers via a browser auth-code flow. Standard MCP
   clients (Claude Desktop / Cursor) open a browser at the AS's `/authorize`,
-  consent, and exchange a code for a token. We choose **PALADIN IAM as the
+  consent, and exchange a code for a token. We choose **Paladin IAM as the
   Authorization Server** (not a federated IdP) so the agentic plane has a
   self-contained auth story; the federated-OIDC option (Phase 5b.1) is **not
-  on the roadmap** (PALADIN is engineer-operated and owns its IAM — withdrawn
+  on the roadmap** (Paladin is engineer-operated and owns its IAM — withdrawn
   2026-06-30, see [ADR-0006](0006-deferred-roadmap.md)) but stays a cheap
   future swap because the discovery + endpoint shapes match.
 
@@ -65,7 +65,7 @@ may grant which scopes to which clients.
 ## Consequences
 
 - Standard MCP clients get an end-to-end browser auth-code + PKCE flow
-  against PALADIN, with the bearer the ADR-0008 RS already validates.
+  against Paladin, with the bearer the ADR-0008 RS already validates.
 - Audience binding is explicit: the access token's `aud` is the resource the
   client requested, so it works on exactly the plane(s) the MCP profile
   targets — same single-audience reality as today, now spec-driven.
@@ -109,7 +109,7 @@ may grant which scopes to which clients.
   the operator pre-authorizes a first-party app (claude-desktop/cursor), so
   `/authorize` renders a plain login with no per-user consent screen. Never
   available to dynamically-registered clients. This is the
-  sessionless-appropriate form of "skip re-consent": PALADIN has no browser
+  sessionless-appropriate form of "skip re-consent": Paladin has no browser
   session, so per-user remembered consent can't skip the login step anyway —
   the operator grants consent once via config instead. Per-user remembered
   consent is revisitable if/when a browser session lands (ADR-0006 Phase

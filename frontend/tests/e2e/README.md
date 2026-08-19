@@ -1,6 +1,6 @@
-# PALADIN Frontend E2E (Playwright)
+# Paladin Frontend E2E (Playwright)
 
-Operator-facing UI regression guards for the PALADIN admin UI. 15
+Operator-facing UI regression guards for the Paladin admin UI. 15
 test scenarios across 5 user stories. Design rationale + the
 SDD audit trail live at
 [`specs/001-frontend-playwright-e2e/`](../../../specs/001-frontend-playwright-e2e/).
@@ -10,7 +10,7 @@ SDD audit trail live at
 ```bash
 # Prerequisites (one-time):
 #   - Docker daemon running
-#   - PALADIN backend + UI images present locally as
+#   - Paladin backend + UI images present locally as
 #     registry.local/paladin/paladin-core:latest
 #     registry.local/paladin/paladin-console:latest
 #     (build via `task -d backend build:image` if missing)
@@ -20,7 +20,7 @@ SDD audit trail live at
 cd frontend
 
 # Run the suite. Playwright's webServer config brings up the
-# docker-compose test stack — Postgres, MinIO and the PALADIN planes —
+# docker-compose test stack — Postgres, MinIO and the Paladin planes —
 # and tears it down on exit.
 pnpm run test:e2e
 ```
@@ -107,7 +107,7 @@ pnpm exec playwright show-trace tests/e2e/test-results/<failed-test-dir>/trace.z
 
 | Symptom                                          | Likely cause                | Fix                                                        |
 | ------------------------------------------------ | --------------------------- | ---------------------------------------------------------- |
-| `webServer` times out                            | PALADIN backend image not built | `task -d backend build:image`                              |
+| `webServer` times out                            | Paladin backend image not built | `task -d backend build:image`                              |
 | `required variable PALADIN_E2E_S3_ACCESS_KEY`        | Garage creds not exported   | Re-run the two `export` commands in Quick start            |
 | Backend logs `dial tcp 3900: connection refused` | port-forward not running    | `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
 | Tests pass once, fail on second run              | Stale postgres data         | `pnpm run test:e2e:stack:down` then `:stack`               |

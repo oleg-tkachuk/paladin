@@ -21,10 +21,10 @@ import (
 //   timestamp_ns   — nanosecond unix timestamp
 //
 // Since SeaweedFS is configured to publish via S3 path-style buckets
-// the PALADIN backend creates, the path follows the PALADIN composeKey
+// the Paladin backend creates, the path follows the Paladin composeKey
 // pattern: "<bucket>/<tenant_uuid>/<object_key>/<key>". The adapter
 // strips the leading bucket segment (operators set it; not part of
-// the PALADIN resource ref) and parses the rest into SubjectFields.
+// the Paladin resource ref) and parses the rest into SubjectFields.
 //
 // id derivation: webhook payloads carry no broker-assigned id, so we
 // hash (key + event_type + timestamp_ns). Same logical event from a
@@ -73,8 +73,8 @@ func (s *SeaweedFSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 
 	subjFields, ok := parseSeaweedFSPath(p.Key, s.BucketName)
 	if !ok {
-		// Path didn't match the PALADIN layout — could be a legitimate
-		// non-PALADIN file dropped into the same bucket. Ignore so we
+		// Path didn't match the Paladin layout — could be a legitimate
+		// non-Paladin file dropped into the same bucket. Ignore so we
 		// don't fill the dedup table with junk.
 		return CloudEvent{}, ErrIgnoredEvent
 	}
@@ -103,7 +103,7 @@ func (s *SeaweedFSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	}, nil
 }
 
-// seaweedFSEventType maps SeaweedFS event_type values to the PALADIN
+// seaweedFSEventType maps SeaweedFS event_type values to the Paladin
 // taxonomy. Returns ok=false for events we don't act on.
 func seaweedFSEventType(srcType string) (EventType, bool) {
 	switch strings.ToLower(srcType) {

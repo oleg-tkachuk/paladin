@@ -2,7 +2,7 @@
 
 -- ─── Minimum-privilege runtime role ────────────────────────────────────────
 --
--- PALADIN runs as `paladin_app` at runtime. Migrations run as a separate
+-- Paladin runs as `paladin_app` at runtime. Migrations run as a separate
 -- DDL-capable role (`paladin_migrate` by convention; whatever the operator
 -- supplies via `datastores.postgres.migrate_dsn`). This split protects
 -- against:

@@ -58,7 +58,7 @@ Setup/Foundational/Polish carry no story label.
 
 ## Phase 3: User Story 1 — Disabling stops all access (P1) 🎯 MVP
 
-**Story goal**: A disabled backend rejects EVERY PALADIN-mediated op before any S3 call.
+**Story goal**: A disabled backend rejects EVERY Paladin-mediated op before any S3 call.
 
 **Independent test**: Disable a non-default backend that owns a bucket; every op type returns `CodeFailedPrecondition` and the mock storage records zero invocations (SC-001).
 
@@ -136,7 +136,7 @@ Setup/Foundational/Polish carry no story label.
 
 - [X] T030 [P] Add a BACKLOG.md entry (Status `Aspirational` / Reason / DoD / Blockers) covering the deferred scope: read-only **drain** mode, richer lifecycle states (draining/maintenance/error), and bulk enable/disable (Constitution III, research D7). Ship as `docs(backlog)`.
 - [X] T031 [P] Backend gates: `go vet ./...` and `go test ./...` from `backend/` exit zero.
-- [X] T032 Verified against the live e2e stack (locally-built PALADIN images + local Garage v2.3 at :3900): `backend-disabled.spec.ts` passes 2/2 on Chromium — disabled-backend "Disabled" badge + re-enable toggle (SC-006/SC-007) and the non-selectable scope-picker row. Bringing the stack up surfaced four never-before-run stack bugs, all fixed: (1) `bootstrap.admin` set both password + password_secret (config validation reject); (2) api/admin healthchecks used `wget` absent from the distroless image; (3) the UI BFF read `PALADIN_{DATA,IAM,ADMIN}_URL` but compose set `PALADIN_BACKEND_URLS_*`; (4) the e2e seed transport didn't inject an `Idempotency-Key` for `Create*` RPCs. Combined with 501 unit tests + 7 integration tests, the full SC-001…SC-007 set is now verified.
+- [X] T032 Verified against the live e2e stack (locally-built Paladin images + local Garage v2.3 at :3900): `backend-disabled.spec.ts` passes 2/2 on Chromium — disabled-backend "Disabled" badge + re-enable toggle (SC-006/SC-007) and the non-selectable scope-picker row. Bringing the stack up surfaced four never-before-run stack bugs, all fixed: (1) `bootstrap.admin` set both password + password_secret (config validation reject); (2) api/admin healthchecks used `wget` absent from the distroless image; (3) the UI BFF read `PALADIN_{DATA,IAM,ADMIN}_URL` but compose set `PALADIN_BACKEND_URLS_*`; (4) the e2e seed transport didn't inject an `Idempotency-Key` for `Create*` RPCs. Combined with 501 unit tests + 7 integration tests, the full SC-001…SC-007 set is now verified.
 
 **Checkpoint**: Feature signed off.
 

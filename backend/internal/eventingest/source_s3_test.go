@@ -138,7 +138,7 @@ func TestS3Source_BucketFilter(t *testing.T) {
 	}
 }
 
-func TestS3Source_NonOCPLayoutIgnored(t *testing.T) {
+func TestS3Source_NonPaladinLayoutIgnored(t *testing.T) {
 	src := &S3EventSource{URI: "s3://primary"}
 	for _, key := range []string{
 		"flat-key", // no slashes

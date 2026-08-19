@@ -1,4 +1,4 @@
-# PALADIN background-worker alerting rules (ADR-0001 observability baseline).
+# Paladin background-worker alerting rules (ADR-0001 observability baseline).
 #
 # Plain Prometheus rule group — drop into `rule_files:` directly, or use it as
 # the `spec.groups` body of a Prometheus-Operator `PrometheusRule` CR. The
@@ -20,7 +20,7 @@ groups:
       # lease holder died without a successor taking over). `paladin_worker_*`
       # series only exist once a worker has run at least once, so a fresh boot
       # doesn't false-fire; `for:` rides out a single slow tick.
-      - alert: PALADINWorkerStalled
+      - alert: PaladinWorkerStalled
         expr: |
           (time() - paladin_worker_last_run_timestamp_seconds)
             > 5 * paladin_worker_interval_seconds
@@ -28,7 +28,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "PALADIN worker {{ $labels.worker }} stalled"
+          summary: "Paladin worker {{ $labels.worker }} stalled"
           description: >-
             Worker {{ $labels.worker }} has not completed a tick in over 5× its
             configured interval ({{ $value | humanizeDuration }} since the last
@@ -39,7 +39,7 @@ groups:
       # Every tick in the last 15m failed (errors, zero successes) — the worker
       # is running but wedged on a persistent failure (bad migration, perms,
       # downstream outage), distinct from "not running at all" above.
-      - alert: PALADINWorkerTicksAllFailing
+      - alert: PaladinWorkerTicksAllFailing
         expr: |
           sum by (worker) (increase(paladin_worker_runs_total{outcome="error"}[15m])) > 0
           unless
@@ -48,7 +48,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "PALADIN worker {{ $labels.worker }} failing every tick"
+          summary: "Paladin worker {{ $labels.worker }} failing every tick"
           description: >-
             Worker {{ $labels.worker }} has logged only error outcomes and no
             successes in the last 15m. The loop is alive but every tick is

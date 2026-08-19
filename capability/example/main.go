@@ -1,7 +1,7 @@
 // Command example is the quickstart walkthrough as a runnable program:
 // issue → verify → delegate → revoke, against the in-memory reference store.
 //
-// It deliberately mentions no object storage, no database and no PALADIN concept.
+// It deliberately mentions no object storage, no database and no Paladin concept.
 // If this program needs any of those to run, the extraction has failed its
 // central promise (FR-019, and the acceptance target for SC-001).
 //

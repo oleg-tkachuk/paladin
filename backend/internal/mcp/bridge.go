@@ -1,4 +1,4 @@
-// Package mcp wires the PALADIN three-plane Connect API into a Model Context
+// Package mcp wires the Paladin three-plane Connect API into a Model Context
 // Protocol server.
 //
 // Built on top of github.com/modelcontextprotocol/go-sdk: tool schemas are
@@ -67,7 +67,7 @@ func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) *C
 }
 
 // NewClientsWithCapability is the cap-aware constructor. capabilityToken
-// (when non-empty) is forwarded as `X-PALADIN-Capability` on every outbound
+// (when non-empty) is forwarded as `X-Paladin-Capability` on every outbound
 // Connect call so the destination plane's auth.CapabilityInterceptor
 // sees and stamps it on the request context.
 //
@@ -75,7 +75,7 @@ func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) *C
 // capabilityToken is the optional capability that grants fine-grained
 // caveats. Either or both may be present. Empty values are not sent.
 //
-// MCP HTTP transport forwards the capability via the same X-PALADIN-Capability
+// MCP HTTP transport forwards the capability via the same X-Paladin-Capability
 // header the streamable-HTTP getServer hook reads — see cmd/server/serve_mcp.go.
 func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bearer, capabilityToken string) *Clients {
 	if httpc == nil {
@@ -88,7 +88,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 					req.Header().Set("Authorization", "Bearer "+bearer)
 				}
 				if capabilityToken != "" {
-					req.Header().Set("X-PALADIN-Capability", capabilityToken)
+					req.Header().Set("X-Paladin-Capability", capabilityToken)
 				}
 				return next(ctx, req)
 			}
@@ -124,7 +124,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 	}
 }
 
-// NewServer constructs an MCP server with the PALADIN tool / resource / prompt
+// NewServer constructs an MCP server with the Paladin tool / resource / prompt
 // catalog wired up. The ToolFilter selects which tools are registered;
 // see internal/mcp/profile.go for the YAML-driven gating model.
 func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Server {
@@ -303,7 +303,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_validate_policy",
-		Description: "Type-check a Cedar policy against the PALADIN schema.",
+		Description: "Type-check a Cedar policy against the Paladin schema.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in validatePolicyArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Policy.Validate(ctx, connect.NewRequest(&adminv1.ValidateRequest{
 			CedarPolicy: in.CedarPolicy,
@@ -442,12 +442,12 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	// CEL expression validator. Same trust posture as PolicyService.Validate
 	// — admin audience, no DB, no audit. Lets the agent type-check a CEL
-	// expression against a named PALADIN schema (Object | ObjectKey |
+	// expression against a named Paladin schema (Object | ObjectKey |
 	// AuditLogEntry | EventEnvelope) before passing it into a list-RPC
 	// query, lifecycle.match, or eventsub.filter.
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_validate_cel",
-		Description: "Compile-check a CEL expression against an PALADIN schema. Returns {valid, message, line, column}. Empty expression always validates.",
+		Description: "Compile-check a CEL expression against a Paladin schema. Returns {valid, message, line, column}. Empty expression always validates.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in validateCELArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.CEL.Validate(ctx, connect.NewRequest(&adminv1.ValidateCELRequest{
 			Schema:     in.Schema,
@@ -765,7 +765,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	})
 
 	// ─── Presign trio ──────────────────────────────────────────────────
-	// Lets the agent move object bytes WITHOUT routing them through PALADIN
+	// Lets the agent move object bytes WITHOUT routing them through Paladin
 	// itself. Flow:
 	//
 	//   paladin_upload_object(parent, key, content_type, size_hint) →
@@ -1237,7 +1237,7 @@ func registerPrompts(s *mcpsdk.Server) {
 				Content: &mcpsdk.TextContent{Text: fmt.Sprintf(
 					"Audit access for tenant %s.\n"+
 						"1) Use paladin_list_object_keys to enumerate the namespaces.\n"+
-						"2) For each, fetch its Cedar policy via the PALADIN admin API.\n"+
+						"2) For each, fetch its Cedar policy via the Paladin admin API.\n"+
 						"3) Identify which user_ids hold scopes that match.\n"+
 						"4) Summarise findings with concrete principal→action→resource bindings.\n",
 					t,

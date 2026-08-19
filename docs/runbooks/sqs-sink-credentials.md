@@ -1,7 +1,7 @@
 # Runbook: SQS event-sink credentials (on- and off-AWS)
 
 How the dispatcher authenticates to Amazon SQS when delivering an event
-subscription whose sink is `sqs`, and how to wire credentials when PALADIN runs
+subscription whose sink is `sqs`, and how to wire credentials when Paladin runs
 **outside** EKS (or off AWS entirely), where there is no IRSA to lean on.
 
 ## How the sink resolves credentials
@@ -20,7 +20,7 @@ in order:
 4. EC2 / ECS instance-metadata (IMDS).
 
 The dispatcher only ever calls `LoadDefaultConfig` — it never reads a static
-key from the sink config or the PALADIN database. Credentials are a **deployment**
+key from the sink config or the Paladin database. Credentials are a **deployment**
 concern, injected into the dispatcher pod's environment; a sink config carries
 only `queue_url`, `region`, and the optional cross-account `role_arn`.
 
@@ -29,7 +29,7 @@ chain above resolved (cached ~1h). So the chain still has to yield a usable
 identity first — `role_arn` layers cross-account on top, it does not replace
 the base credentials.
 
-## On EKS (the common case) — nothing to wire in PALADIN
+## On EKS (the common case) — nothing to wire in Paladin
 
 Annotate the **dispatcher** ServiceAccount with the IAM role and let IRSA (or
 EKS Pod Identity) inject the web-identity token. Chain step 3 picks it up; the
@@ -79,7 +79,7 @@ Secret** — never inline the key into values or the sink config.
 
    `extraEnvFrom` (and the sibling `extraEnv`, for one-off `valueFrom` refs)
    are appended after the chart's built-in env, so `envFrom` overrides nothing
-   PALADIN sets itself. The hook is per-role — only the dispatcher pod, the only
+   Paladin sets itself. The hook is per-role — only the dispatcher pod, the only
    one that talks to customer sinks, gets the credentials.
 
 Because the whole material lives in a Secret, rotation is a Secret update plus

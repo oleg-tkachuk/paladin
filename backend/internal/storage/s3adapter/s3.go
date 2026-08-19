@@ -3,8 +3,8 @@
 // on top of an aws-sdk-go-v2 S3 client.
 //
 // One adapter instance fronts a single physical S3 bucket configured under
-// `storage.backends.<name>.bucket`. The PALADIN "ObjectKey" is a tenant-scoped
-// prefix inside that bucket; the full S3 key for any PALADIN object is:
+// `storage.backends.<name>.bucket`. The Paladin "ObjectKey" is a tenant-scoped
+// prefix inside that bucket; the full S3 key for any Paladin object is:
 //
 //	<tenant_id>/<object_key>/<storage_key>
 //
@@ -55,7 +55,7 @@ type Client struct {
 // Two distinct S3 clients are constructed:
 //
 //   - `s3` — bound to `backend.Endpoint` (the *internal* address). Used for
-//     server-side calls the PALADIN backend issues itself: HeadObject,
+//     server-side calls the Paladin backend issues itself: HeadObject,
 //     CreateBucket, CreateMultipartUpload, CompleteMultipartUpload,
 //     CopyObject, DeleteObject, etc. These run from inside the cluster and
 //     should hit the in-cluster service hostname.

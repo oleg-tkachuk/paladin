@@ -60,6 +60,6 @@ Endpoint / enable flow from `config.otel` (`endpoint`, `protocol`,
 - **Exemplars:** handled by the SDK default (trace-based exemplar filter)
   once OTel is active — measurements taken inside a sampled span carry a
   trace exemplar over OTLP. Rendering them (Tempo/Prometheus exemplars) is
-  an operator/backend concern; no extra PALADIN code is required.
+  an operator/backend concern; no extra Paladin code is required.
 - Collector choice (Tempo / Honeycomb / Datadog) is an operator concern
-  — PALADIN only speaks OTLP.
+  — Paladin only speaks OTLP.

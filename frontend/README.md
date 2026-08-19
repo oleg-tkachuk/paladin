@@ -1,4 +1,4 @@
-# PALADIN console
+# Paladin console
 
 Next.js admin console for the Paladin, plus the BFF that
 sits between the browser and the control plane's Connect-RPC services.
@@ -27,7 +27,7 @@ pnpm dev            # http://localhost:3000
 
 `configs/config.yaml` points the BFF at its upstreams. The defaults are
 in-cluster service DNS, so for a locally running backend you will want to
-override `runtimeConfig.public.objectControlPlane.upstreamUrl` and the
+override `runtimeConfig.public.paladin.upstreamUrl` and the
 `admin` / `iam` URLs.
 
 ## Authentication in development
@@ -90,5 +90,5 @@ npx tsc --noEmit
 ```
 
 `pnpm run test:e2e` brings its own stack up and tears it down — Postgres,
-MinIO and the PALADIN planes. It needs nothing but Docker and the two locally
+MinIO and the Paladin planes. It needs nothing but Docker and the two locally
 built images; see [`tests/e2e/README.md`](tests/e2e/README.md).

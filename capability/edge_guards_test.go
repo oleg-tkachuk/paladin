@@ -150,7 +150,7 @@ func TestForgedSignatureRejected(t *testing.T) {
 }
 
 // An untrusted issuer must be refused even when the signature is valid — a
-// multi-tenant control plane deploying several PALADIN instances depends on it.
+// multi-tenant control plane deploying several Paladin instances depends on it.
 func TestUntrustedIssuerRejected(t *testing.T) {
 	priv := ed25519.NewKeyFromSeed(goldenSeed[:])
 	pub := priv.Public().(ed25519.PublicKey)

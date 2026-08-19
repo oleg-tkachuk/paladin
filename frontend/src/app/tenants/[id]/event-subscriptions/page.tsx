@@ -299,7 +299,7 @@ export default function EventsPage() {
                         No event subscriptions
                       </p>
                       <p className={cn(T.helper, "mt-1 text-balance")}>
-                        Forward PALADIN events to a webhook (HTTP) or NATS subject.
+                        Forward Paladin events to a webhook (HTTP) or NATS subject.
                         Kafka / SQS sinks are roadmap stubs.
                       </p>
                     </div>

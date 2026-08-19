@@ -3,7 +3,7 @@
 -- 037_storage_backend_enabled.sql
 --
 -- Adds the durable enable/disable state to storage backends. A disabled
--- backend (`enabled = false`) processes NO PALADIN-mediated requests — the
+-- backend (`enabled = false`) processes NO Paladin-mediated requests — the
 -- object resolver and CreateBucket reject any operation that resolves to
 -- it before contacting the object store. `enabled` is operator-managed
 -- via the SetBackendEnabled RPC and is intentionally NOT mirrored from

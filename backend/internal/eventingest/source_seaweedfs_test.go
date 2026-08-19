@@ -65,8 +65,8 @@ func TestSeaweedFSSource_Parse_IgnoredEventType(t *testing.T) {
 	}
 }
 
-func TestSeaweedFSSource_Parse_NonOCPPath(t *testing.T) {
-	// Path doesn't have the 3-segment PALADIN layout — ignored not error.
+func TestSeaweedFSSource_Parse_NonPaladinPath(t *testing.T) {
+	// Path doesn't have the 3-segment Paladin layout — ignored not error.
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/random/file.txt","event_type":"create","timestamp_ns":1}`)
 	_, err := src.Parse(body, "application/json")

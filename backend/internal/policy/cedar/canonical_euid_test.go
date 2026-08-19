@@ -30,7 +30,7 @@ func authzObjectKey(t *testing.T, policy string, canonical bool, r *Resource) De
 }
 
 // TestCanonicalEUID_AttributePolicyUnaffected is the core safety claim: an
-// attribute/parent-based policy (the only kind PALADIN ships) yields the SAME
+// attribute/parent-based policy (the only kind Paladin ships) yields the SAME
 // decision whether the ObjectKey EUID is legacy or canonical — because the
 // entity's attributes/parents don't depend on the UID string. This is why the
 // switch is behaviourally invisible to real policies.
@@ -59,7 +59,7 @@ func TestCanonicalEUID_AttributePolicyUnaffected(t *testing.T) {
 // TestCanonicalEUID_LiteralShapeFlips proves the flag actually changes the
 // entity UID: a policy that pins the legacy `resource == ObjectKey::"{tid}/{ok}"`
 // literal matches ONLY with the flag off, and a policy pinning the canonical
-// A-shape literal matches ONLY with the flag on. (PALADIN ships no such literal
+// A-shape literal matches ONLY with the flag on. (Paladin ships no such literal
 // policies — cedar-authoring.md steers against them — this test just pins the
 // shape switch.)
 func TestCanonicalEUID_LiteralShapeFlips(t *testing.T) {

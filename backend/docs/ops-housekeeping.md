@@ -1,6 +1,6 @@
 # Operator runbook — housekeeping tuning
 
-PALADIN ships four reaper workers that keep tables bounded:
+Paladin ships four reaper workers that keep tables bounded:
 
 | Worker             | Targets             | Knob                                  |
 |--------------------|---------------------|---------------------------------------|

@@ -30,44 +30,93 @@ When work lands that surfaces *new* deferred items, add them here in
 the same commit. Treat this file like a runtime invariant.
 
 ---
-
-## Deploy cutover: `paladin`→`paladin-core`, `paladin-ui`→`paladin-console`
+## Deploy cutover: rename to `paladin`
 
 ### Push renamed charts/images before syncing the renamed ApplicationSet
 
 - **Status:** Blocked (operator action — cannot deploy from a coding session).
-- **Reason:** The chart names, image repos, Helm release/app names, and every
-  in-cluster resource name were renamed to `paladin-core` / `paladin-console` (this repo +
-  gitops). The ArgoCD `paladin-core` ApplicationSet now pulls
+- **Reason:** The project was renamed from `paladin` / `paladin` to
+  `paladin` (2026-08-19). Chart names, image repos, Helm release/app names and
+  every in-cluster resource name follow: `paladin-core` / `paladin-console`.
+  This supersedes the earlier, never-completed
+  `paladin`→`paladin-core` cutover — do NOT run that one; go
+  straight from whatever is deployed to the `paladin-*` names, so the cluster
+  takes one disruption instead of two.
+  The ArgoCD ApplicationSet must pull
   `oci://registry.local/charts/{paladin-core,paladin-console}` and images
-  `registry.local/paladin/{paladin-core,paladin-console}`. Until those new-named artifacts are
-  published, a sync of the renamed ApplicationSet cannot resolve its sources.
+  `registry.local/paladin/{paladin-core,paladin-console}`. Until those exist, a
+  sync cannot resolve its sources.
 - **Definition of Done:**
   - Build+push the renamed charts and images first (`task -d backend deploy`,
-    `task -d frontend deploy`) so `charts/paladin-core`, `charts/paladin-console`, and the
-    `paladin/{paladin-core,paladin-console}` images exist in the registry.
-  - Then let ArgoCD sync gitops. Because the release name changed, the old
-    `paladin*` Deployments/Services/ServiceAccounts/Certificates/
-    Linkerd Servers are pruned and new `paladin-core-*` / `paladin-console` ones created —
-    mTLS certs (SANs `paladin-core-api`/`paladin-core-admin`, SPIFFE `…/sa/paladin-core-api`)
-    regenerate. Expect a brief in-namespace disruption; confirm the `/login`
-    redirect, BFF→backend health aggregation, and internal mTLS all recover.
-  - Delete the orphaned `charts/paladin*` OCI repos and
-    `paladin/paladin*` images from the registry once the cutover is
-    verified.
+    `task -d frontend deploy`) so `charts/paladin-core`, `charts/paladin-console`
+    and the `paladin/{paladin-core,paladin-console}` images exist in the registry.
+  - Update the gitops ApplicationSet + overlays to the new names, then sync.
+    Because the release name changed, the old `paladin*` /
+    `paladin-*` Deployments/Services/ServiceAccounts/Certificates/Linkerd Servers
+    are pruned and new `paladin-core-*` / `paladin-console` ones created — mTLS
+    certs (SANs `paladin-core-api`/`paladin-core-admin`, SPIFFE
+    `…/sa/paladin-core-api`) regenerate. Expect a brief in-namespace
+    disruption; confirm the `/login` redirect, BFF→backend health aggregation
+    and internal mTLS all recover.
+  - Apply the runtime migrations in the entry below BEFORE the new pods start,
+    or they will not reach the database.
+  - Delete the orphaned `charts/{paladin*,paladin-*}` OCI repos and
+    the matching images once the cutover is verified.
   - Delete this entry when the cutover is done and verified.
 - **Blockers:** operator must run the deploy + sync; not automatable from here.
+
+### The rename changed runtime contracts, not just source identifiers
+
+- **Status:** Open — must be executed by an operator against any existing
+  deployment. A fresh install needs none of it.
+- **Reason:** The `paladin`→`paladin` rename went all the way down. Source-level
+  renames were verified by build and test; these are the ones that live in a
+  running system or in someone else's client, and no test in this repository
+  can catch them:
+  - **Postgres roles** `paladin_app` / `paladin_migrate` / `paladin_reaper` →
+    `paladin_app` / `paladin_migrate` / `paladin_reaper`. The migrations create
+    the new names; an existing database still has the old ones, and the DSNs
+    now point at roles that do not exist.
+  - **RLS session GUC** `paladin.tenant_id` → `paladin.tenant_id`. Every row-level
+    security policy reads it. A pod on the new code against old policies sees
+    NULL and therefore no rows — a silent empty-result failure, not an error.
+  - **API token prefix** `paladin_pat_` → `paladin_pat_`. Every issued token stops
+    being recognised; they must be reissued.
+  - **Event type names** `paladin.object.uploaded`, `paladin.bucket.updated`, … →
+    `paladin.*`. Every subscriber filtering on type stops matching.
+  - **RPC paths** — the proto package moved `paladin.*` → `paladin.*`, so
+    `/paladin.data.v1.ObjectService/GetObject` is now
+    `/paladin.data.v1.ObjectService/GetObject`. Every generated client must be
+    regenerated; old clients get "unimplemented".
+  - **HTTP headers** `X-PALADIN-*` → `X-Paladin-*`.
+  - **Env prefix** `PALADIN_` → `PALADIN_` (57 variables). Anything setting the old
+    names is now silently ignored, which is the worst failure mode here —
+    the process starts on defaults instead of refusing.
+  - **OAuth scopes** `paladin.read` etc. → `paladin.*`.
+  - **Bucket names** `paladin-primary` / `paladin-archive` / `paladin-data` → `paladin-*`
+    as config defaults; existing buckets keep their names and must either be
+    overridden in config or migrated.
+- **Definition of Done:**
+  - A documented upgrade path — either a migration that renames the roles and
+    GUC in place, or an explicit "reprovision from scratch" statement in the
+    release notes. Pre-1.0 makes the second answer legitimate (Constitution
+    Principle IV), but it has to be *said*.
+  - Release notes enumerating every breaking item above.
+  - A decision on whether the API-token prefix change warrants a grace period
+    accepting both prefixes, or a straight reissue.
+- **Blockers:** needs the maintainer's call on reprovision-vs-migrate. That
+  choice determines whether any of the rest gets written.
 
 ---
 
 ## MCP bridge
 
-### Tool-coverage gaps vs the PALADIN RPC surface
+### Tool-coverage gaps vs the Paladin RPC surface
 
 - **Status:** Deferred (partial — the data-plane cluster + admin read gaps
   landed 2026-06-26; 59 tools). Remaining items below need a product call.
 - **Reason:** The MCP bridge (`internal/mcp/bridge.go`) exposes a curated
-  subset of the ~110 PALADIN RPCs (59 tools). `DefaultCatalog` in
+  subset of the ~110 Paladin RPCs (59 tools). `DefaultCatalog` in
   `internal/mcp/profile.go` is the ground-truth list and is pinned to the
   real registrations by `TestServerRegistersDefaultCatalog`. Now wired:
   `UpdateObject`, `DeleteObjectTags`, `ListDistinctTags`, `BatchUpdateTags`,
@@ -75,7 +124,7 @@ the same commit. Treat this file like a runtime invariant.
   `CancelOperation`, admin `ResetUsage` / `GetAuditLogEntry` / `GetConfig`
   (`SystemService` client added). The agent-usable upload/tag mutations are
   in `agent_safe`; `ResetUsage` / `system_config` / batch tools stay
-  admin-only. The following PALADIN capabilities are still **not** reachable
+  admin-only. The following Paladin capabilities are still **not** reachable
   from an MCP agent. Some are deliberate (see the next entry); the rest are
   unfilled coverage pending a product decision:
   - **Whole services with no client wired:** BillingService,
@@ -98,7 +147,7 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** `DefaultAlwaysDeny` blocks `paladin_capability_*` and
   `paladin_apitoken_*`: an agent minting/delegating/revoking its own capability
   or M2M token is a trivial bypass of the caveat model the agentic plane is
-  built on. The bridge forwards `X-PALADIN-Capability` but must never let the
+  built on. The bridge forwards `X-Paladin-Capability` but must never let the
   callee issue new authority. Recorded so the absence reads as a decision,
   not an oversight.
 - **Definition of Done (only if revisited):** a separate, explicitly
@@ -113,7 +162,7 @@ the same commit. Treat this file like a runtime invariant.
 - **Status:** Deferred
 - **Reason:** `internal/mcp/inline.go` routes Connect calls through
   `httptest.ResponseRecorder` — perfect for unary RPCs (which is all
-  PALADIN exposes today) but the recorder buffers the full response before
+  Paladin exposes today) but the recorder buffers the full response before
   the round-trip returns. A streaming RPC would deadlock waiting for
   EOF that never comes until the handler also finishes reading the
   request body.
@@ -283,11 +332,11 @@ the same commit. Treat this file like a runtime invariant.
 ### Phase 5b.1 — Drop user-authn IAM, accept OIDC — WITHDRAWN
 
 - **Status:** Won't-do (for now) — direction reversed 2026-06-30.
-- **Decision:** PALADIN is an **engineer-operated control plane** that
+- **Decision:** Paladin is an **engineer-operated control plane** that
   integrates with other services and exposes an API for bucket access
-  and management. Human authentication stays in PALADIN's **own IAM** (local
+  and management. Human authentication stays in Paladin's **own IAM** (local
   `users` + HS256, and the OAuth Authorization Server in
-  [ADR-0009](docs/adr/0009-oauth-authorization-server.md) = PALADIN IAM
+  [ADR-0009](docs/adr/0009-oauth-authorization-server.md) = Paladin IAM
   itself); service-to-service is `api_keys` + capabilities. An external /
   federated IdP is **not needed now**, so the earlier premise — "user
   authn is a B2B anti-feature, offload to the customer's Okta / Auth0 /
@@ -320,7 +369,7 @@ open deliberately — each notes why._
 ### Federated IdP via JWKS
 
 - **Status:** Won't-do (for now) — not on the roadmap (2026-06-30).
-- **Reason:** PALADIN is engineer-operated and owns its own IAM (see the
+- **Reason:** Paladin is engineer-operated and owns its own IAM (see the
   withdrawn *Phase 5b.1* above), so accepting tokens minted by an
   external IdP is **not needed now**. `auth.jwks_url` + the stub
   `auth.NewJWKSVerifier` constructor (wired in `cmd/server/root.go`)
@@ -329,7 +378,7 @@ open deliberately — each notes why._
 - **Reconsider only if:** a customer mandates SSO against their own IdP.
   Then finish the verifier (cache + rotation grace window, required
   `kid` matched against the active key set, role-claim mapping such as
-  `cognito:groups` → PALADIN roles) plus an end-to-end test issuing a token
+  `cognito:groups` → Paladin roles) plus an end-to-end test issuing a token
   from a mock OAuth2 provider and verifying it through the data plane.
 
 ### Audit-log encryption at rest beyond filesystem-level
@@ -390,15 +439,15 @@ open deliberately — each notes why._
 ### `ResetPassword` — self-service email delivery
 
 - **Status:** Won't-do (2026-06-30) — out of scope by product direction.
-- **Reason:** PALADIN is an **engineer-operated** service: its `users` are
+- **Reason:** Paladin is an **engineer-operated** service: its `users` are
   operators, not end-customers, so password resets are an operational task,
   not a self-service flow. An admin already calls
   [userh/handler.go](internal/api/iam/v1/userh/handler.go) `ResetPassword`,
   which returns the new password to hand off out-of-band — that is the
   intended model and it is sufficient. Same direction as withdrawing the
-  external/federated IdP: human auth stays PALADIN's own IAM, kept deliberately
+  external/federated IdP: human auth stays Paladin's own IAM, kept deliberately
   minimal. Wiring an email-link self-service flow (and an email sender) would
-  add surface area PALADIN's audience doesn't need.
+  add surface area Paladin's audience doesn't need.
 
 ### Event dispatcher: producer wiring — handler-class integration tests + adoption
 
@@ -618,16 +667,16 @@ open deliberately — each notes why._
 
 ### NATS auth: NKey / JWT support — broker-side (gitops)
 
-- **Status:** Partially done — the PALADIN-side (client) half shipped 2026-06-29.
+- **Status:** Partially done — the Paladin-side (client) half shipped 2026-06-29.
   The remaining work is **broker-side** (enable auth on the NATS broker), which
   lives in gitops (separate repo). Two client-side surfaces publish to that
-  broker unauthenticated today: the PALADIN dispatcher NATS sink **and** the
+  broker unauthenticated today: the Paladin dispatcher NATS sink **and** the
   SeaweedFS filer→NATS publisher — both verified live 2026-07-05 (see below).
 - **Correction (2026-07-05):** an earlier revision of this entry claimed the
   SeaweedFS-publisher leg was *moot because the cluster moved to Garage*. That
   was wrong. Garage became the `primary` backend, but SeaweedFS is still
   deployed as **`secondary`** (`seaweedfs-filer.storage:8333`) with its
-  `gocdk_pub_sub` publisher active, and the full SF→NATS→PALADIN ingest pipeline is
+  `gocdk_pub_sub` publisher active, and the full SF→NATS→Paladin ingest pipeline is
   live. The "Garage" move was a `primary`-pointer change, not an SF teardown.
 - **Shipped (this repo):** the outbound `Dispatcher` → NATS sink supports NKey /
   JWT. `NatsSink.credentials_ref` honours `token:`, `nkey:<seed>` (in-memory
@@ -642,7 +691,7 @@ open deliberately — each notes why._
     `[notification.gocdk_pub_sub] topic_url = "nats://seaweedfs.filer"`, dialing
     `NATS_SERVER_URL=nats://nats.nats.svc.cluster.local:4222` with no
     credentials (gocloud.dev's natspubsub driver surfaces no auth fields). Fires
-    on every filer write; PALADIN ingest consumes on subject `seaweedfs.filer`.
+    on every filer write; Paladin ingest consumes on subject `seaweedfs.filer`.
   - **The broker itself** — the gitops `nats` chart runs auth-free, so the
     dispatcher's shipped NKey/JWT support has nothing to authenticate against.
 - **Definition of Done (remaining — all gitops / out of this repo):**
@@ -662,19 +711,19 @@ open deliberately — each notes why._
 
 - **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
 - **Live in the lab cluster — re-verified 2026-07-05.** SeaweedFS is deployed as
-  the **`secondary`** backend (Garage is `primary`), and the SF filer→NATS→PALADIN
+  the **`secondary`** backend (Garage is `primary`), and the SF filer→NATS→Paladin
   ingest pipeline is running: a live S3 PUT to the SF gateway made the filer
   publish to NATS `seaweedfs.filer` (broker `in_msgs` incremented), the broker
   delivered to the `paladin-ingest` subscriber (`out_msgs` incremented), and the
   ingest handler decoded the gob+protobuf envelope, classified it
   `paladin.object.uploaded`, parsed the `<bucket>/<tenant_uuid>/<object_key>/<key>`
   path, and ran the DB lookup (logged `ingest.handler "no matching object for
-  event; skipping"` for a probe with no matching PALADIN row). Transport + decode +
+  event; skipping"` for a probe with no matching Paladin row). Transport + decode +
   parse + lookup all confirmed. (An earlier note calling this "dormant under
   Garage" was wrong — corrected here and in the NATS-auth item above.)
-- **State as of 2026-05-10:** Full SF → NATS → PALADIN ingest pipeline
+- **State as of 2026-05-10:** Full SF → NATS → Paladin ingest pipeline
   works end-to-end on the local cluster, **including PROMOTE on
-  a real PALADIN data-plane upload**. Verified live:
+  a real Paladin data-plane upload**. Verified live:
     1. `seed-fixture smoke-upload` → UploadObject creates a
        PENDING row, hands back a presigned PUT.
     2. PUT to the SF S3 gateway → 200, bytes land.
@@ -711,7 +760,7 @@ open deliberately — each notes why._
     `source_format` `s3` and `minio` both resolve to it (distinct
     labels); `/webhook/s3` + `/webhook/minio` routes. Covered by
     `source_s3_test.go` (13 cases: AWS+MinIO shapes, event
-    variants, url-decode, bucket filter, non-PALADIN key, id
+    variants, url-decode, bucket filter, non-Paladin key, id
     stability) + `pick_source_test.go`. **Garage is explicitly
     rejected** — it emits no notifications (Get/PutBucketNotification
     Configuration are 501; no non-S3 event mechanism), so
@@ -728,7 +777,7 @@ open deliberately — each notes why._
     the `buckets/` prefix is stripped (two publishers disagree on it), the
     drift risk, delivery semantics, and the MinIO path.
 - **Trigger to act:** customer pipeline that writes directly
-  to the storage bucket bypassing PALADIN RPCs (the entire
+  to the storage bucket bypassing Paladin RPCs (the entire
   raison d'être of the ingest plane), or production at-least-
   once requirement that needs JetStream.
 
@@ -810,7 +859,7 @@ open deliberately — each notes why._
   - **`audit_log (at DESC, entry_id DESC)`** — ListAuditEntries pages by that
     composite keyset while `idx_audit_log_at` covers only `at`. Rejected: ties
     on `at` are rare, audit_log is partitioned and already carries six
-    indexes, and every PALADIN mutation writes a row — a seventh index taxes the
+    indexes, and every Paladin mutation writes a row — a seventh index taxes the
     write path of the whole control plane for a tiebreak.
   - **`objects (tenant_id, object_key, key text_pattern_ops)`** — would make
     ListObjects' `key LIKE 'prefix%'` a range scan instead of a recheck.
@@ -1174,11 +1223,11 @@ open deliberately — each notes why._
   `connectshim/admin/object_key_server.go` swapped to it.
 - **2026-06-29 — metric is now actually exported.** The
   `paladin_resource_name_shape_total{shape}` counter was registered on the
-  Prometheus *default registry*, which PALADIN never serves (no `/metrics`
-  handler, no Prom→OTLP bridge — PALADIN exports via OTLP only). So it collected
+  Prometheus *default registry*, which Paladin never serves (no `/metrics`
+  handler, no Prom→OTLP bridge — Paladin exports via OTLP only). So it collected
   **zero observable data**. Migrated to the OTel meter
   (`metrics.RecordResourceNameShape`), so it now flows over the OTLP pipeline
-  like every other PALADIN metric. A deprecation decision is finally *possible*
+  like every other Paladin metric. A deprecation decision is finally *possible*
   once traffic accrues.
 - **Reason this remains:** the decision needs the real distribution. A local
   lab has no representative traffic (and runs `otel.enabled: false`), so the
@@ -1206,11 +1255,11 @@ open deliberately — each notes why._
 ### `pg_cron` integration as alternative to in-process reapers
 
 - **Status:** Won't-do (2026-06-30) — in-process reapers are the right model
-  for PALADIN; `pg_cron` is not an improvement here.
-- **Reason:** Reviewed against PALADIN's actual deployment. PALADIN runs on **CNPG**,
+  for Paladin; `pg_cron` is not an improvement here.
+- **Reason:** Reviewed against Paladin's actual deployment. Paladin runs on **CNPG**,
   which does not ship `pg_cron` (confirmed: `pg_available_extensions` has no
   row) — enabling it needs a custom image + `shared_preload_libraries`, an
-  infra dependency PALADIN doesn't carry. The in-process reapers
+  infra dependency Paladin doesn't carry. The in-process reapers
   (`housekeeping.go`: RefreshTokenPurger, AuditLogPurger, IdempotencyKeyPurger,
   OperationsReaper) are partition-aware (DROP PARTITION on the partitioned
   tables), bounded-batch, observable via the app's OTel metrics/logs, unit +
@@ -1218,7 +1267,7 @@ open deliberately — each notes why._
   `pg_cron` would split cleanup logic into raw SQL (away from Go and its
   tests), need separate observability (`cron.job_run_details`), and add a
   "worker exits when DB-side scheduling is on" mode — real complexity for a
-  marginal "cheaper scheduling" win on an environment PALADIN doesn't run. If a
+  marginal "cheaper scheduling" win on an environment Paladin doesn't run. If a
   self-hosted-PG-with-pg_cron customer ever appears, revisit; until then the
   Go reapers are correct by design, not a stopgap.
 
@@ -1238,7 +1287,7 @@ open deliberately — each notes why._
 ### Cross-region DB replication
 
 - **Status:** Blocked
-- **Reason:** Disaster-recovery posture for the PALADIN DB itself. Not
+- **Reason:** Disaster-recovery posture for the Paladin DB itself. Not
   the same as `replication.enabled` on object storage.
 - **Definition of Done:**
   - Streaming replica in a second region with documented failover
@@ -1425,13 +1474,13 @@ open deliberately — each notes why._
   (auto-capped by disk → 18 volumes) ~10 buckets exhausted it
   (`No writable volumes and no free volumes left`) and **every** PUT (shared
   `paladin-1` included) 500-ed `InternalError` — an infra-capacity issue, not an
-  PALADIN defect. Garage has no per-bucket volume reservation; verified
+  Paladin defect. Garage has no per-bucket volume reservation; verified
   end-to-end (shared security-probe 6/6 + dedicated provision→upload→read).
   **Garage prerequisite:** the S3 access key needs the global create-bucket
   grant (`garage key allow --create-bucket <key>`) or the ADR-0011
   reconciler's `CreateBucket` is rejected. **Follow-ups:** (1) to move the
   change into the registry-pulled chart, `task deploy:backend`, then re-enable
-  the PALADIN ArgoCD app's `automated` sync (paused during the live cutover);
+  the Paladin ArgoCD app's `automated` sync (paused during the live cutover);
   (2) if a SeaweedFS-class backend is ever reused, consider a
   shared-bucket-with-prefix option since collection-per-tenant is costly
   there (real S3 / MinIO / Garage have no such reservation).
@@ -1676,7 +1725,7 @@ of the pipeline._
   prefix — and `go get …/capability@vX.Y.Z` verified against the public
   proxy.
 - **Blockers:** needs a decision on whether the module versions
-  independently of PALADIN (it should — that is the point of extracting it)
+  independently of Paladin (it should — that is the point of extracting it)
   and, if so, whether it eventually moves to its own repository, which
   would make this moot.
 

@@ -1,8 +1,8 @@
 # JetStream event bus
 
-PALADIN can publish its events onto a NATS **JetStream** stream so downstream
+Paladin can publish its events onto a NATS **JetStream** stream so downstream
 services (analytics, a search index, other agents) consume them durably, fan out
-independently, and **replay** from any point — without PALADIN knowing who the
+independently, and **replay** from any point — without Paladin knowing who the
 consumers are or widening the SQL outbox.
 
 This builds on the transactional outbox
@@ -12,7 +12,7 @@ more sink the outbox drains into, distinguished by durability + replay.
 
 ## The stream
 
-A single stream carries every PALADIN event:
+A single stream carries every Paladin event:
 
 | Field | Value |
 |---|---|
@@ -23,9 +23,9 @@ A single stream carries every PALADIN event:
 | Duplicate window | ≥ the outbox's max redelivery span (e.g. `2m`) |
 
 It is provisioned declaratively by gitops (a one-shot idempotent `nats stream
-add` Job alongside the NATS app), not by PALADIN at boot — PALADIN only *publishes*.
+add` Job alongside the NATS app), not by Paladin at boot — Paladin only *publishes*.
 
-## Producing (an PALADIN subscription → the bus)
+## Producing (a Paladin subscription → the bus)
 
 Create an event subscription with a **NATS sink in JetStream mode**. The
 `subject` must fall under the stream's `paladin.events.>` filter:
@@ -66,7 +66,7 @@ nats consumer add PALADIN_EVENTS search-indexer \
   --filter 'paladin.events.*.object' --ack explicit --deliver new --pull
 ```
 
-An HTTP-sink subscription stays a first-class consumer of PALADIN events too — it
+An HTTP-sink subscription stays a first-class consumer of Paladin events too — it
 just consumes via the outbox → HTTP path instead of the stream. JetStream is
 additive: it does not replace the per-subscription sinks.
 

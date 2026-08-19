@@ -6,7 +6,7 @@
   Same shape as `platform.capability-issuer`
   ([ADR-0010](0010-capability-as-establishing-credential.md)).
 
-- **Context:** a consumer that creates accounts needs the matching PALADIN tenant to
+- **Context:** a consumer that creates accounts needs the matching Paladin tenant to
   exist before its first upload, and it cannot wait for an operator to run a
   command. Provisioning takes four things: create the tenant, create (or adopt)
   its bucket, create its object keys, and set its inherited policy so the

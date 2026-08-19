@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# PALADIN container image — three stages:
+# Paladin container image — three stages:
 #
 #   1. tools   — installs codegen binaries (buf, sqlc, protoc-gen-*)
 #                on BUILDPLATFORM. Pinned versions + cache mounts.

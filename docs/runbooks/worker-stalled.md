@@ -1,11 +1,11 @@
-# Runbook: PALADIN background worker stalled / failing
+# Runbook: Paladin background worker stalled / failing
 
 Covers the two alerts in [`deploy/grafana/worker-alerts.yaml`](../../deploy/grafana/worker-alerts.yaml):
 
 | Alert | Fires when | Meaning |
 |-------|-----------|---------|
-| `PALADINWorkerStalled` | `time() - paladin_worker_last_run_timestamp_seconds > 5 × paladin_worker_interval_seconds` for 2m | The worker has not completed a tick in over 5× its interval. |
-| `PALADINWorkerTicksAllFailing` | only `outcome="error"` and zero `outcome="success"` in 15m | The loop is alive but every tick errors. |
+| `PaladinWorkerStalled` | `time() - paladin_worker_last_run_timestamp_seconds > 5 × paladin_worker_interval_seconds` for 2m | The worker has not completed a tick in over 5× its interval. |
+| `PaladinWorkerTicksAllFailing` | only `outcome="error"` and zero `outcome="success"` in 15m | The loop is alive but every tick errors. |
 
 Both carry a `worker` label (`reconciler`, `audit_purger`, `refresh_token_reaper`,
 `api_token_purger`, `lifecycle`, `replication`, …) identifying which one.
@@ -20,7 +20,7 @@ emits, per `worker` label:
 - `paladin_worker_last_run_timestamp_seconds{worker}` — unix ts of the last tick.
 - `paladin_worker_interval_seconds{worker}` — configured interval (published at startup).
 
-These flow over OTLP like every other PALADIN metric (ADR-0001). Locally (`otel.enabled: false`)
+These flow over OTLP like every other Paladin metric (ADR-0001). Locally (`otel.enabled: false`)
 they are no-ops, so these alerts only have data in a deployment with the OTLP pipeline wired.
 
 ## Triage
@@ -40,7 +40,7 @@ they are no-ops, so these alerts only have data in a deployment with the OTLP pi
    log lines. No `running job under lease` for that job ⇒ nobody holds the
    lease — see step 4.
 
-3. **`PALADINWorkerStalled` — the loop is wedged.** A tick is blocked (slow/locked
+3. **`PaladinWorkerStalled` — the loop is wedged.** A tick is blocked (slow/locked
    query, downstream S3/NATS hang, deadlock). Confirm with
    `paladin_worker_run_duration_seconds{worker=...}` (last bucket huge / no recent
    observation) and the DB:
@@ -67,7 +67,7 @@ they are no-ops, so these alerts only have data in a deployment with the OTLP pi
    A stale `renewed_at` with no new claim ⇒ all worker replicas are down or
    DB-partitioned. Restore worker pods / DB connectivity.
 
-5. **`PALADINWorkerTicksAllFailing` — every tick errors.** The loop runs but the
+5. **`PaladinWorkerTicksAllFailing` — every tick errors.** The loop runs but the
    work fails. Grep the worker's logs for the error it logs each tick (kept
    intact through the `RunTicker` migration). Common causes: a missing/blocked
    migration, revoked DB grant, a downstream (S3 / NATS) outage, or a poison row.

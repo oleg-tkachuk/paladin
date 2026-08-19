@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: User description: "Frontend Playwright E2E test suite for the PALADIN admin UI — automated regression coverage for the critical operator journeys (login, AuthGate, tenant scope switching, bucket browsing, capability lifecycle, tenant restore from trash). Replaces today's manual smoke testing on minikube. Must be reliable, fast, and authored in the same TypeScript flavour as the application."
+**Input**: User description: "Frontend Playwright E2E test suite for the Paladin admin UI — automated regression coverage for the critical operator journeys (login, AuthGate, tenant scope switching, bucket browsing, capability lifecycle, tenant restore from trash). Replaces today's manual smoke testing on minikube. Must be reliable, fast, and authored in the same TypeScript flavour as the application."
 
 ## Clarifications
 
@@ -16,7 +16,7 @@
 - Q: Should the suite integrate with a specific CI platform for artifact upload? → A: No — CI integration is explicitly deferred. v1 is locally runnable only; Playwright's failure artifacts (screenshot, video, trace) land in a known local directory (`frontend/tests/e2e/test-results/`). When CI lands later, the artifact path will already exist and only the upload step will need wiring.
 - Q: How are tests isolated from each other at the database layer? → A: Shared Postgres for the entire run; each test seeds its own fixtures (`seedTenant()`, etc.) with UUID-suffixed identifiers (e.g. `slug: "acme-" + crypto.randomUUID().slice(0,8)`) to avoid uniqueness collisions without per-test schema churn. Cheap and fast — keeps the 3-min budget intact.
 - Q: How is the seeded admin credential delivered to the test stack? → A: Fixed dev-only credential hardcoded in the test stack config (e.g. `e2e-admin / e2e-not-a-secret-2026`). Mirrors the `local-dev-admin-pw-*` pattern already used in `gitops` overlays. MUST carry an inline `NEVER true in prod` comment per Constitution Principle V. Tradeoff: weaker than per-run-generated, but keeps bootstrap deterministic and lets a debugging operator log in manually when a test fails.
-- Q: Which S3-compatible backend powers the test stack? → A: **Garage** (`dxflrs/garage:v2.3.0` or later). Single binary, env-var bootstrap (`GARAGE_DEFAULT_ACCESS_KEY/SECRET_KEY/BUCKET`), Rust runtime, fast startup. Supports every S3 operation PALADIN backend actually calls: PutObject, GetObject, ListObjects, HeadObject, CreateBucket, Sigv4 + presigned URLs, multipart upload. Garage's "missing" features (object versioning, tagging at the S3 layer) don't matter because PALADIN tracks those in Postgres (`object_versions`, `object_tags` tables), not via S3 API calls. Aligned with the lightweight-OSS philosophy of the broader gitops stack.
+- Q: Which S3-compatible backend powers the test stack? → A: **Garage** (`dxflrs/garage:v2.3.0` or later). Single binary, env-var bootstrap (`GARAGE_DEFAULT_ACCESS_KEY/SECRET_KEY/BUCKET`), Rust runtime, fast startup. Supports every S3 operation Paladin backend actually calls: PutObject, GetObject, ListObjects, HeadObject, CreateBucket, Sigv4 + presigned URLs, multipart upload. Garage's "missing" features (object versioning, tagging at the S3 layer) don't matter because Paladin tracks those in Postgres (`object_versions`, `object_tags` tables), not via S3 API calls. Aligned with the lightweight-OSS philosophy of the broader gitops stack.
 - Q: Which package manager? → A: **pnpm** (`^11.3.0`). Adopting pnpm requires migrating the frontend from `package-lock.json` → `pnpm-lock.yaml` and pinning the package manager via the `"packageManager": "pnpm@11.3.0"` field in `package.json`. Rationale: faster install (~3× cold), strict dependency resolution (avoids accidental phantom-dep imports — relevant because Playwright pulls in deep dev trees), better disk usage via content-addressable store. The migration touches `frontend/` only; backend tooling stays unchanged. Implies a new Setup task to perform the lockfile migration in the same commit train as the Playwright dep adoption.
 - Q: Garage in the test stack — sidecar container or external dependency? → A: **External cluster service.** Garage is deployed by gitops (`specs/001-garage-object-storage`) as a platform service shared across consumers — the test stack consumes it via `kubectl port-forward` (laptop dev) or in-cluster DNS (CI-on-cluster). The Garage container previously planned for docker-compose.test.yaml is removed. Credentials come from the K8s Secret `garage-paladin-credentials` that gitops provisions; the compose file requires `PALADIN_E2E_S3_ACCESS_KEY` + `PALADIN_E2E_S3_SECRET_KEY` env vars (gated via `?:` fail-fast) so missing creds produce a clear error instead of a runtime S3 failure.
 - Q: Does the idempotency gate cover `CapabilityService.Issue`? → A: **Now yes — extended during /speckit-implement Phase 6.** US4's premise (double-submit of CreateCapability collapses via the middleware) initially didn't hold: the RPC is named `Issue`, not `Create*`, so neither the backend matcher (`isMutationMethod`) nor the frontend transport interceptor recognised it. Option C ships a two-place extension: `isMutationMethod` and the transport matcher now accept BOTH `Create*` and `Issue*` prefixes (with explicit comments noting the policy expansion). The change is symmetric — server enforces, client auto-injects, the contract holds end-to-end. Future mutation-shaped verbs (e.g. `Submit*`) would need an analogous two-place update; documented inline.
@@ -83,7 +83,7 @@ dependency on any other story.
 > 1:1 user-tenant model (see `frontend/src/context/
 > ScopeContext.tsx:23–29`). Cross-tenant switching is a
 > planned backend feature (`ListMyMemberships +
-> SwitchTenant`); a BACKLOG entry tracks it in PALADIN's
+> SwitchTenant`); a BACKLOG entry tracks it in Paladin's
 > `BACKLOG.md`. This story is therefore re-scoped to the
 > scope-axis the UI ACTUALLY exposes today: backend + bucket
 > selection.
@@ -347,7 +347,7 @@ at RESTORE. The scenario will be added when the BACKLOG'd
 
 ## Assumptions
 
-- The PALADIN backend supports a "single-binary all-in-one" mode
+- The Paladin backend supports a "single-binary all-in-one" mode
   (or all six planes can be co-located on one container) for
   the test stack. If this isn't already true, the test stack
   may need to run multiple containers — adding ~10s to
@@ -355,9 +355,9 @@ at RESTORE. The scenario will be added when the BACKLOG'd
   inspection of `cmd/server` subcommands during planning.
 - The test stack uses **Garage** (`dxflrs/garage`) as the
   S3-compatible backend (see Clarifications Q5). It supports
-  every S3 op PALADIN backend actually calls; tag/version S3
-  operations PALADIN would otherwise miss are not actually called
-  by PALADIN (they're tracked in Postgres tables instead).
+  every S3 op Paladin backend actually calls; tag/version S3
+  operations Paladin would otherwise miss are not actually called
+  by Paladin (they're tracked in Postgres tables instead).
 - The test stack uses a clean, ephemeral Postgres per run —
   no shared schema state across CI invocations. Migration
   cost (running the full `goose up`) is acceptable inside the

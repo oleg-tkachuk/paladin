@@ -32,7 +32,7 @@ import (
 //
 // It is a SEPARATE type from UsageStore because the two contracts both declare
 // a method named Get with different signatures, so no single type can satisfy
-// both. PALADIN's relational implementation splits them for exactly this reason;
+// both. Paladin's relational implementation splits them for exactly this reason;
 // a third-party implementer will hit the same constraint and should expect to
 // write two types too.
 type Store[TX any] struct {

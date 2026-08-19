@@ -213,7 +213,7 @@ type ExportAuditLogEntry struct {
 //
 // `destination` is currently advisory — recorded in the result envelope
 // for traceability but not acted upon. A future slice may persist the
-// dump to an PALADIN bucket and return a presigned URL instead.
+// dump to a Paladin bucket and return a presigned URL instead.
 func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string) (*ExportAuditLogResult, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {

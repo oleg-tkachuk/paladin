@@ -15,9 +15,9 @@ import (
 
 func TestBearerToken(t *testing.T) {
 	cases := []struct {
-		name        string
-		authz, xocp string
-		want        string
+		name           string
+		authz, xlegate string
+		want           string
 	}{
 		{"authorization bearer", "Bearer abc.def.ghi", "", "abc.def.ghi"},
 		{"bearer case-insensitive", "bearer tok", "", "tok"},
@@ -32,8 +32,8 @@ func TestBearerToken(t *testing.T) {
 			if tc.authz != "" {
 				r.Header.Set("Authorization", tc.authz)
 			}
-			if tc.xocp != "" {
-				r.Header.Set("X-PALADIN-Token", tc.xocp)
+			if tc.xlegate != "" {
+				r.Header.Set("X-Paladin-Token", tc.xlegate)
 			}
 			if got := BearerToken(r); got != tc.want {
 				t.Errorf("BearerToken = %q, want %q", got, tc.want)
@@ -154,13 +154,13 @@ func TestRequireBearer(t *testing.T) {
 		}
 	})
 
-	t.Run("valid token via X-PALADIN-Token fallback", func(t *testing.T) {
+	t.Run("valid token via X-Paladin-Token fallback", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
-		r.Header.Set("X-PALADIN-Token", "valid-tok")
+		r.Header.Set("X-Paladin-Token", "valid-tok")
 		h.ServeHTTP(rec, r)
 		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (X-PALADIN-Token back-compat)", rec.Code)
+			t.Fatalf("status = %d, want 200 (X-Paladin-Token back-compat)", rec.Code)
 		}
 	})
 }

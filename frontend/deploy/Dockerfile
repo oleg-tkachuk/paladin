@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# PALADIN UI container image — three stages:
+# Paladin UI container image — three stages:
 #
 #   1. deps    — installs pnpm dependencies from a clean lockfile on
 #                BUILDPLATFORM. Cached when package.json / lockfile

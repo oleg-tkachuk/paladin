@@ -10,7 +10,7 @@ import "buf/validate/validate.proto";
 // dry-run evaluation, and inspection of effective (merged) policies.
 // Used heavily by the MCP server and the admin UI.
 service PolicyService {
-  // Validate parses + type-checks Cedar text against the PALADIN schema.
+  // Validate parses + type-checks Cedar text against the Paladin schema.
   rpc Validate(ValidateRequest) returns (ValidateResponse);
 
   // SimulateAuthz answers "would this principal be allowed to take this

@@ -1,5 +1,5 @@
 // Package bootstrap implements one-shot startup steps that prepare a fresh
-// PALADIN cluster for first-time use. Each step is opt-in via config, runs once
+// Paladin cluster for first-time use. Each step is opt-in via config, runs once
 // per process boot, and is idempotent — restarting the server doesn't
 // duplicate state.
 //

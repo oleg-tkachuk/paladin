@@ -1,4 +1,4 @@
-// Package lease provides Postgres-backed leader election for PALADIN
+// Package lease provides Postgres-backed leader election for Paladin
 // background workers.
 //
 // Why not pg_try_advisory_lock: a session-scoped advisory lock releases
@@ -60,7 +60,7 @@ type Config struct {
 
 	// TTL is how long a claim survives without renewal. Smaller means
 	// faster failover after a crash; bigger means more tolerance to
-	// transient renewer stalls. 30s is the PALADIN default.
+	// transient renewer stalls. 30s is the Paladin default.
 	TTL time.Duration
 
 	// RenewInterval is the cadence at which the leader updates expires_at.

@@ -1,4 +1,4 @@
-# PALADIN E2E test stack — Playwright suite runtime.
+# Paladin E2E test stack — Playwright suite runtime.
 #
 # Spec: specs/001-frontend-playwright-e2e/data-model.md §"Entity:
 # Test Stack". SIX services: postgres, migrate, bootstrap, api,
@@ -205,7 +205,7 @@ services:
       # write fails just as hard against a live server with no bucket.
       minio-setup:
         condition: service_completed_successfully
-    # NOTE: the PALADIN backend image is distroless (no shell / wget), so a
+    # NOTE: the Paladin backend image is distroless (no shell / wget), so a
     # CMD-SHELL HTTP probe can't run in-container. The plane is ready
     # within ~1s of "plane listening"; downstream services gate on
     # service_started and the suite's own readiness waits cover the gap.

@@ -4,8 +4,8 @@
 
 This is the acceptance target for FR-018/FR-019 and SC-007: a developer must
 reach a working issue → verify cycle using only this document. It mentions no
-object storage, no database, and no PALADIN concept — deliberately. If a reader
-needs PALADIN's docs to get through it, the extraction has not met its goal.
+object storage, no database, and no Paladin concept — deliberately. If a reader
+needs Paladin's docs to get through it, the extraction has not met its goal.
 
 ---
 
@@ -224,5 +224,5 @@ the wait is short — that is part of why short TTLs are the default posture.
 
 - `contracts/module-api.md` — the complete public surface.
 - `data-model.md` — entity invariants, including the full delegation rules.
-- PALADIN itself — a production reference consumer with relational storage,
+- Paladin itself — a production reference consumer with relational storage,
   policy evaluation, and an admin API on top of this primitive.

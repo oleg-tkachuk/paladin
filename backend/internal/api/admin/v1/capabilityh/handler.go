@@ -158,7 +158,7 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 //     call. Admin may delegate from any parent in the store.
 //
 //  2. Capability-bearing caller (the agent share-tool path) — caller
-//     must present a verified capability via the X-PALADIN-Capability
+//     must present a verified capability via the X-Paladin-Capability
 //     header. The caller's capability MUST include `OpShare` in its
 //     allowed ops, AND `parent_id` MUST equal the caller's own
 //     capability ID. This prevents an agent from delegating off some

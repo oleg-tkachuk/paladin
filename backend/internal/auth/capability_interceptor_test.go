@@ -9,29 +9,29 @@ import (
 )
 
 // TestExtractCapabilityToken covers the header parsing branches:
-// X-PALADIN-Capability wins over Authorization, Authorization with the
+// X-Paladin-Capability wins over Authorization, Authorization with the
 // "Capability" scheme is parsed, other schemes are ignored, malformed
 // values return empty.
 func TestExtractCapabilityToken(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		xocp  string
-		authz string
-		want  string
+		xlegate string
+		authz   string
+		want    string
 	}{
-		"x-paladin wins":           {xocp: "tok-a", authz: "Capability tok-b", want: "tok-a"},
-		"authz capability":     {xocp: "", authz: "Capability tok-b", want: "tok-b"},
-		"authz lowercase":      {xocp: "", authz: "capability tok-b", want: "tok-b"},
-		"authz bearer ignored": {xocp: "", authz: "Bearer tok-b", want: ""},
-		"authz malformed":      {xocp: "", authz: "Capability", want: ""},
-		"authz empty":          {xocp: "", authz: "", want: ""},
-		"x-paladin whitespace":     {xocp: "  tok-c  ", authz: "", want: "tok-c"},
-		"both empty":           {xocp: "   ", authz: "", want: ""},
+		"x-paladin wins":        {xlegate: "tok-a", authz: "Capability tok-b", want: "tok-a"},
+		"authz capability":     {xlegate: "", authz: "Capability tok-b", want: "tok-b"},
+		"authz lowercase":      {xlegate: "", authz: "capability tok-b", want: "tok-b"},
+		"authz bearer ignored": {xlegate: "", authz: "Bearer tok-b", want: ""},
+		"authz malformed":      {xlegate: "", authz: "Capability", want: ""},
+		"authz empty":          {xlegate: "", authz: "", want: ""},
+		"x-paladin whitespace":  {xlegate: "  tok-c  ", authz: "", want: "tok-c"},
+		"both empty":           {xlegate: "   ", authz: "", want: ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := extractCapabilityToken(tc.xocp, tc.authz)
+			got := extractCapabilityToken(tc.xlegate, tc.authz)
 			if got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}

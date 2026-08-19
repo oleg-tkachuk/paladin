@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -116,7 +117,8 @@ func (c *tenantBudgetServiceClient) Summarize(ctx context.Context, req *connect.
 	return c.summarize.CallUnary(ctx, req)
 }
 
-// TenantBudgetServiceHandler is an implementation of the paladin.admin.v1.TenantBudgetService service.
+// TenantBudgetServiceHandler is an implementation of the paladin.admin.v1.TenantBudgetService
+// service.
 type TenantBudgetServiceHandler interface {
 	// Get returns the current snapshot for a tenant. Returns NOT_FOUND
 	// when the tenant has never had a budget configured AND has never

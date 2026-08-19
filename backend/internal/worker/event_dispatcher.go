@@ -623,12 +623,12 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 			return 0, fmt.Errorf("new request: %w", err)
 		}
 		req.Header.Set("Content-Type", contentType)
-		req.Header.Set("X-PALADIN-Event-Type", evt.Type)
-		req.Header.Set("X-PALADIN-Subscription-Id", sub.SubscriptionID.String())
+		req.Header.Set("X-Paladin-Event-Type", evt.Type)
+		req.Header.Set("X-Paladin-Subscription-Id", sub.SubscriptionID.String())
 		// Dedup key (= CloudEvents `id`), stable across retries. Emitted on both
 		// formats so a raw-format subscriber — whose body carries no CE id — can
 		// still dedup an at-least-once redelivery.
-		req.Header.Set("X-PALADIN-Event-Id", dedupID)
+		req.Header.Set("X-Paladin-Event-Id", dedupID)
 		// signing_secret_ref: either the HMAC key inline (lab-grade) or a
 		// "k8s:<name>/<key>" Secret ref resolved at delivery time — see
 		// sink_secrets.go. Resolution errors fail the attempt (retryable):
@@ -640,7 +640,7 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 				return 0, serr
 			}
 			sig := signHMAC(body, secret)
-			req.Header.Set("X-PALADIN-Signature", "sha256="+sig)
+			req.Header.Set("X-Paladin-Signature", "sha256="+sig)
 		}
 		resp, err := httpClient.Do(req)
 		if err != nil {

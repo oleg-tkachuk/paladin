@@ -1,4 +1,4 @@
-// Package cedar wraps the Cedar policy engine for PALADIN authorization decisions.
+// Package cedar wraps the Cedar policy engine for Paladin authorization decisions.
 //
 // Decisions are synchronous, in-process, and sub-millisecond. Policies are
 // loaded from Postgres (see Store) and compiled on change. Hot-path callers
@@ -799,7 +799,7 @@ const (
 // canonical A-shape name; otherwise the legacy `{tenant_uuid}/{object_key}`
 // form. Both keep identical entity attributes/parents, so attribute/parent
 // policies are unaffected — only a hardcoded `resource == ObjectKey::"literal"`
-// would see the difference (PALADIN ships none; see cedar-authoring.md §4).
+// would see the difference (Paladin ships none; see cedar-authoring.md §4).
 func (e *Engine) objectKeyUIDFor(r *Resource) cedartypes.EntityUID {
 	if e.canonicalObjectKeyEUID && r.BackendID != "" && r.BucketName != "" {
 		name := cedarCanonBackendPrefix + r.BackendID +
@@ -914,7 +914,7 @@ func scopeKeysValue(r *Resource) cedartypes.Value {
 }
 
 // buildEntities assembles the transient entity graph passed to Authorize.
-// PALADIN treats all attribute data as request-scoped — nothing is stored as
+// Paladin treats all attribute data as request-scoped — nothing is stored as
 // long-lived entities in cedar-go.
 //
 // Entities are emitted only when the corresponding resource fields are

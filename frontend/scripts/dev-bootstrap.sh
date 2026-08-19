@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dev-bootstrap.sh — idempotently provision the resources the UI dev token
-# expects to find on a fresh PALADIN backend, plus a fully permissive Cedar
+# expects to find on a fresh Paladin backend, plus a fully permissive Cedar
 # policy so the dev tenant can do everything in its bucket.
 #
 # The dev JWT in configs/config.yaml carries:
@@ -67,7 +67,7 @@ ensure() {
 
 build_permissive_policy() {
     cat <<EOF
-// dev-bootstrap.sh: fully permissive policy for the PALADIN dev tenant.
+// dev-bootstrap.sh: fully permissive policy for the Paladin dev tenant.
 // DO NOT USE IN PRODUCTION — overrides every guard the default policy puts
 // on uploads, deletes, copies, and admin operations.
 

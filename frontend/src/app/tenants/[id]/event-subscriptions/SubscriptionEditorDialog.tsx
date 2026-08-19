@@ -304,7 +304,7 @@ export function SubscriptionEditorDialog({
                 <Field
                   label="Max attempts"
                   htmlFor="sub-http-attempts"
-                  hint="PALADIN retries with exponential backoff up to this many times."
+                  hint="Paladin retries with exponential backoff up to this many times."
                   error={errors.httpMaxAttempts}
                 >
                   <Input

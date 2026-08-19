@@ -21,31 +21,32 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_cel_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch5vY3AvYWRtaW4vdjEvY2VsX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJBChJWYWxpZGF0ZUNFTFJlcXVlc3QSFwoGc2NoZW1hGAEgASgJQge6SARyAhABEhIKCmV4cHJlc3Npb24YAiABKAkiUwoTVmFsaWRhdGVDRUxSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEgwKBGxpbmUYAyABKAUSDgoGY29sdW1uGAQgASgFMl0KCkNFTFNlcnZpY2USTwoIVmFsaWRhdGUSIC5vY3AuYWRtaW4udjEuVmFsaWRhdGVDRUxSZXF1ZXN0GiEub2NwLmFkbWluLnYxLlZhbGlkYXRlQ0VMUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    "CiFsZWdhdGUvYWRtaW4vdjEvY2VsX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSJBChJWYWxpZGF0ZUNFTFJlcXVlc3QSFwoGc2NoZW1hGAEgASgJQge6SARyAhABEhIKCmV4cHJlc3Npb24YAiABKAkiUwoTVmFsaWRhdGVDRUxSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEgwKBGxpbmUYAyABKAUSDgoGY29sdW1uGAQgASgFMmMKCkNFTFNlcnZpY2USVQoIVmFsaWRhdGUSIy5sZWdhdGUuYWRtaW4udjEuVmFsaWRhdGVDRUxSZXF1ZXN0GiQubGVnYXRlLmFkbWluLnYxLlZhbGlkYXRlQ0VMUmVzcG9uc2VCR1pFZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtsZWdhdGVhZG1pbnYxYgZwcm90bzM",
     [file_buf_validate_validate],
   );
 
 /**
  * @generated from message paladin.admin.v1.ValidateCELRequest
  */
-export type ValidateCELRequest = Message<"paladin.admin.v1.ValidateCELRequest"> & {
-  /**
-   * Schema the expression is validated against. One of:
-   *   "Object" | "ObjectKey" | "AuditLogEntry" | "EventEnvelope"
-   * Unknown names return InvalidArgument.
-   *
-   * @generated from field: string schema = 1;
-   */
-  schema: string;
+export type ValidateCELRequest =
+  Message<"paladin.admin.v1.ValidateCELRequest"> & {
+    /**
+     * Schema the expression is validated against. One of:
+     *   "Object" | "ObjectKey" | "AuditLogEntry" | "EventEnvelope"
+     * Unknown names return InvalidArgument.
+     *
+     * @generated from field: string schema = 1;
+     */
+    schema: string;
 
-  /**
-   * CEL source. Empty is treated as valid (the match-all sentinel — same
-   * semantics as cel.Validate / cel.Compile in internal/filter/cel).
-   *
-   * @generated from field: string expression = 2;
-   */
-  expression: string;
-};
+    /**
+     * CEL source. Empty is treated as valid (the match-all sentinel — same
+     * semantics as cel.Validate / cel.Compile in internal/filter/cel).
+     *
+     * @generated from field: string expression = 2;
+     */
+    expression: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ValidateCELRequest.

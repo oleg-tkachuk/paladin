@@ -9,7 +9,7 @@
 Add a Playwright 1.60.0 (Chromium-only) test suite under
 `frontend/tests/e2e/` that exercises the operator-critical UI
 journeys end-to-end against a docker-compose stack: Postgres 16
-+ PALADIN backend + Next.js frontend in production-mode bundle
++ Paladin backend + Next.js frontend in production-mode bundle
 (`next start`). The S3 backend (Garage v2.3) is an **external,
 cluster-shared** dependency (Clarification Q7) — consumed via
 `kubectl port-forward`, not bundled into the compose file. Six+
@@ -74,7 +74,7 @@ the 6-test count.
     through the real `/login` form (FR-003); seed data MAY use
     Connect-RPC because it's setup, not verification.
   - Garage's missing S3 features (versioning, tagging) MUST
-    NOT be hit — confirmed safe because PALADIN tracks those in
+    NOT be hit — confirmed safe because Paladin tracks those in
     Postgres tables (`object_versions`, `object_tags`).
 
 **Scale/Scope**: 6+ test cases across 5 user stories. ~500
@@ -135,7 +135,7 @@ frontend/
         ├── buckets.spec.ts                   # US3 — bucket list & object key open
         ├── capabilities.spec.ts              # US4 — capability create + revoke + idempotency
         ├── trash.spec.ts                     # US5 — tenant restore from trash
-        ├── docker-compose.test.yaml          # NEW — Postgres + PALADIN + Garage + frontend
+        ├── docker-compose.test.yaml          # NEW — Postgres + Paladin + Garage + frontend
         ├── README.md                         # NEW — how to run, troubleshoot, add a test
         └── test-results/                     # generated; gitignored
             └── (screenshots, videos, traces from failures)
@@ -145,7 +145,7 @@ gitops/                                      # NO INFRA CHANGES (test stack is c
 ```
 
 **Structure Decision**: Web application (Option 2 from the
-template). The PALADIN repo already has the `backend/` +
+template). The Paladin repo already has the `backend/` +
 `frontend/` split. All test infrastructure lives under
 `frontend/tests/e2e/` because that's the package whose
 quality the suite guards. `docker-compose.test.yaml`
@@ -162,10 +162,10 @@ See [research.md](research.md). Highlights:
   - pnpm 11.3.0 confirmed latest stable via
     `npm view pnpm version`.
   - Garage v2.3.0+ confirmed via official docs; supports every
-    S3 op PALADIN backend actually calls (Sigv4, presigned URLs,
+    S3 op Paladin backend actually calls (Sigv4, presigned URLs,
     multipart upload). Tag/version S3 ops are missing but
-    PALADIN tracks those in Postgres tables.
-  - PALADIN backend per-plane container layout reused from
+    Paladin tracks those in Postgres tables.
+  - Paladin backend per-plane container layout reused from
     existing `backend/deploy/docker-compose.yaml`.
   - All 5 NEEDS CLARIFICATION items from the spec resolved in
     /speckit-clarify.

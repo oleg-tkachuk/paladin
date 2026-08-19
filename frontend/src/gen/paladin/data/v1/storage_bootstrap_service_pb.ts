@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_storage_bootstrap_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CitvY3AvZGF0YS92MS9zdG9yYWdlX2Jvb3RzdHJhcF9zZXJ2aWNlLnByb3RvEgtvY3AuZGF0YS52MSJpChpFbnN1cmVUZW5hbnRTdG9yYWdlUmVxdWVzdBIbCgpiYWNrZW5kX2lkGAEgASgJQge6SARyAhABEhkKBmJ1Y2tldBgCIAEoCUIJukgGcgQQAxg/EhMKC29iamVjdF9rZXlzGAMgAygJInAKG0Vuc3VyZVRlbmFudFN0b3JhZ2VSZXNwb25zZRIWCg5idWNrZXRfY3JlYXRlZBgBIAEoCBIbChNvYmplY3Rfa2V5c19jcmVhdGVkGAIgAygJEhwKFG9iamVjdF9rZXlzX2V4aXN0aW5nGAMgAygJMoMBChdTdG9yYWdlQm9vdHN0cmFwU2VydmljZRJoChNFbnN1cmVUZW5hbnRTdG9yYWdlEicub2NwLmRhdGEudjEuRW5zdXJlVGVuYW50U3RvcmFnZVJlcXVlc3QaKC5vY3AuZGF0YS52MS5FbnN1cmVUZW5hbnRTdG9yYWdlUmVzcG9uc2VCUFpOZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7b2NwZGF0YXYxYgZwcm90bzM",
+    "Ci5sZWdhdGUvZGF0YS92MS9zdG9yYWdlX2Jvb3RzdHJhcF9zZXJ2aWNlLnByb3RvEg5sZWdhdGUuZGF0YS52MSJpChpFbnN1cmVUZW5hbnRTdG9yYWdlUmVxdWVzdBIbCgpiYWNrZW5kX2lkGAEgASgJQge6SARyAhABEhkKBmJ1Y2tldBgCIAEoCUIJukgGcgQQAxg/EhMKC29iamVjdF9rZXlzGAMgAygJInAKG0Vuc3VyZVRlbmFudFN0b3JhZ2VSZXNwb25zZRIWCg5idWNrZXRfY3JlYXRlZBgBIAEoCBIbChNvYmplY3Rfa2V5c19jcmVhdGVkGAIgAygJEhwKFG9iamVjdF9rZXlzX2V4aXN0aW5nGAMgAygJMokBChdTdG9yYWdlQm9vdHN0cmFwU2VydmljZRJuChNFbnN1cmVUZW5hbnRTdG9yYWdlEioubGVnYXRlLmRhdGEudjEuRW5zdXJlVGVuYW50U3RvcmFnZVJlcXVlc3QaKy5sZWdhdGUuZGF0YS52MS5FbnN1cmVUZW5hbnRTdG9yYWdlUmVzcG9uc2VCRVpDZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO2xlZ2F0ZWRhdGF2MWIGcHJvdG8z",
     [file_buf_validate_validate],
   );
 
@@ -100,7 +100,7 @@ export const EnsureTenantStorageResponseSchema: GenMessage<EnsureTenantStorageRe
   messageDesc(file_paladin_data_v1_storage_bootstrap_service, 1);
 
 /**
- * StorageBootstrapService lets a tenant self-provision its own PALADIN storage
+ * StorageBootstrapService lets a tenant self-provision its own Paladin storage
  * (a shared bucket + object-keys) using its EXISTING data-plane API token
  * (aud=data) — no platform-admin credential is required. It exists so a
  * consumer (e.g. acme) can ensure its storage at startup with the same PAT
@@ -115,7 +115,7 @@ export const EnsureTenantStorageResponseSchema: GenMessage<EnsureTenantStorageRe
  */
 export const StorageBootstrapService: GenService<{
   /**
-   * EnsureTenantStorage idempotently ensures the shared PALADIN bucket exists and
+   * EnsureTenantStorage idempotently ensures the shared Paladin bucket exists and
    * that each requested object-key is bound to (backend_id, bucket) under the
    * caller's tenant. Reuses the same physical bucket-provisioning path as the
    * admin BucketService.CreateBucket(provision_on_backend=true).
@@ -127,4 +127,6 @@ export const StorageBootstrapService: GenService<{
     input: typeof EnsureTenantStorageRequestSchema;
     output: typeof EnsureTenantStorageResponseSchema;
   };
-}> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_storage_bootstrap_service, 0);
+}> =
+  /*@__PURE__*/
+  serviceDesc(file_paladin_data_v1_storage_bootstrap_service, 0);

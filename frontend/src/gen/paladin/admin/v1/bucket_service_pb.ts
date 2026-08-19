@@ -34,7 +34,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_bucket_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvYnVja2V0X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSKaAQoTQ3JlYXRlQnVja2V0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHgoLYnVja2V0X25hbWUYAiABKAlCCbpIBnIEEAMYPxIsCgZidWNrZXQYAyABKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0Qga6SAPIAQESHAoUcHJvdmlzaW9uX29uX2JhY2tlbmQYBCABKAgiKQoQR2V0QnVja2V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZidWNrZXQYBCABKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0ImEKE0RlbGV0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhkKEWRlbGV0ZV9vbl9iYWNrZW5kGAMgASgIIhYKFERlbGV0ZUJ1Y2tldFJlc3BvbnNlIncKEkxpc3RCdWNrZXRzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhcKD293bmVyX3RlbmFudF9pZBgEIAEoCSJnChNMaXN0QnVja2V0c1Jlc3BvbnNlEiUKB2J1Y2tldHMYASADKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChZTZXRCdWNrZXRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkidwoYU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIqCgVydWxlcxgDIAMoCzIbLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVSdWxlIn8KFFNldE9iamVjdExvY2tSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI2CgZjb25maWcYAyABKAsyHi5vY3AuYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZ0IGukgDyAEBIoMBChRTZXRWZXJzaW9uaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSOgoKdmVyc2lvbmluZxgDIAEoCzIeLm9jcC5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nQga6SAPIAQEihgEKFVNldFJlcGxpY2F0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSPAoLcmVwbGljYXRpb24YAyABKAsyHy5vY3AuYWRtaW4udjEuQnVja2V0UmVwbGljYXRpb25CBrpIA8gBASJhChxMaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0EhcKBnRlbmFudBgBIAEoCUIHukgEcgIQARIoCgRwYWdlGAIgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdDL8BgoNQnVja2V0U2VydmljZRJHCgxDcmVhdGVCdWNrZXQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlQnVja2V0UmVxdWVzdBoULm9jcC5hZG1pbi52MS5CdWNrZXQSQQoJR2V0QnVja2V0Eh4ub2NwLmFkbWluLnYxLkdldEJ1Y2tldFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EkcKDFVwZGF0ZUJ1Y2tldBIhLm9jcC5hZG1pbi52MS5VcGRhdGVCdWNrZXRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJVCgxEZWxldGVCdWNrZXQSIS5vY3AuYWRtaW4udjEuRGVsZXRlQnVja2V0UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXNwb25zZRJSCgtMaXN0QnVja2V0cxIgLm9jcC5hZG1pbi52MS5MaXN0QnVja2V0c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXNwb25zZRJNCg9TZXRCdWNrZXRQb2xpY3kSJC5vY3AuYWRtaW4udjEuU2V0QnVja2V0UG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5CdWNrZXQSUQoRU2V0TGlmZWN5Y2xlUnVsZXMSJi5vY3AuYWRtaW4udjEuU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJJCg1TZXRPYmplY3RMb2NrEiIub2NwLmFkbWluLnYxLlNldE9iamVjdExvY2tSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJJCg1TZXRWZXJzaW9uaW5nEiIub2NwLmFkbWluLnYxLlNldFZlcnNpb25pbmdSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJLCg5TZXRSZXBsaWNhdGlvbhIjLm9jcC5hZG1pbi52MS5TZXRSZXBsaWNhdGlvblJlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EmYKFUxpc3RBY2Nlc3NpYmxlQnVja2V0cxIqLm9jcC5hZG1pbi52MS5MaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0GiEub2NwLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    "CiRsZWdhdGUvYWRtaW4vdjEvYnVja2V0X3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSKdAQoTQ3JlYXRlQnVja2V0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHgoLYnVja2V0X25hbWUYAiABKAlCCbpIBnIEEAMYPxIvCgZidWNrZXQYAyABKAsyFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0Qga6SAPIAQESHAoUcHJvdmlzaW9uX29uX2JhY2tlbmQYBCABKAgiKQoQR2V0QnVja2V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqgBChNVcGRhdGVCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARInCgZidWNrZXQYBCABKAsyFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0ImEKE0RlbGV0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhkKEWRlbGV0ZV9vbl9iYWNrZW5kGAMgASgIIhYKFERlbGV0ZUJ1Y2tldFJlc3BvbnNlInoKEkxpc3RCdWNrZXRzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhcKD293bmVyX3RlbmFudF9pZBgEIAEoCSJtChNMaXN0QnVja2V0c1Jlc3BvbnNlEigKB2J1Y2tldHMYASADKAsyFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0EiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChZTZXRCdWNrZXRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkiegoYU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRItCgVydWxlcxgDIAMoCzIeLmxlZ2F0ZS5hZG1pbi52MS5MaWZlY3ljbGVSdWxlIoIBChRTZXRPYmplY3RMb2NrUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSOQoGY29uZmlnGAMgASgLMiEubGVnYXRlLmFkbWluLnYxLk9iamVjdExvY2tDb25maWdCBrpIA8gBASKGAQoUU2V0VmVyc2lvbmluZ1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEj0KCnZlcnNpb25pbmcYAyABKAsyIS5sZWdhdGUuYWRtaW4udjEuQnVja2V0VmVyc2lvbmluZ0IGukgDyAEBIokBChVTZXRSZXBsaWNhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEj8KC3JlcGxpY2F0aW9uGAMgASgLMiIubGVnYXRlLmFkbWluLnYxLkJ1Y2tldFJlcGxpY2F0aW9uQga6SAPIAQEiZAocTGlzdEFjY2Vzc2libGVCdWNrZXRzUmVxdWVzdBIXCgZ0ZW5hbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QyvgcKDUJ1Y2tldFNlcnZpY2USTQoMQ3JlYXRlQnVja2V0EiQubGVnYXRlLmFkbWluLnYxLkNyZWF0ZUJ1Y2tldFJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0EkcKCUdldEJ1Y2tldBIhLmxlZ2F0ZS5hZG1pbi52MS5HZXRCdWNrZXRSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJNCgxVcGRhdGVCdWNrZXQSJC5sZWdhdGUuYWRtaW4udjEuVXBkYXRlQnVja2V0UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSWwoMRGVsZXRlQnVja2V0EiQubGVnYXRlLmFkbWluLnYxLkRlbGV0ZUJ1Y2tldFJlcXVlc3QaJS5sZWdhdGUuYWRtaW4udjEuRGVsZXRlQnVja2V0UmVzcG9uc2USWAoLTGlzdEJ1Y2tldHMSIy5sZWdhdGUuYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXF1ZXN0GiQubGVnYXRlLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVzcG9uc2USUwoPU2V0QnVja2V0UG9saWN5EicubGVnYXRlLmFkbWluLnYxLlNldEJ1Y2tldFBvbGljeVJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0ElcKEVNldExpZmVjeWNsZVJ1bGVzEikubGVnYXRlLmFkbWluLnYxLlNldExpZmVjeWNsZVJ1bGVzUmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSTwoNU2V0T2JqZWN0TG9jaxIlLmxlZ2F0ZS5hZG1pbi52MS5TZXRPYmplY3RMb2NrUmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSTwoNU2V0VmVyc2lvbmluZxIlLmxlZ2F0ZS5hZG1pbi52MS5TZXRWZXJzaW9uaW5nUmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSUQoOU2V0UmVwbGljYXRpb24SJi5sZWdhdGUuYWRtaW4udjEuU2V0UmVwbGljYXRpb25SZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJsChVMaXN0QWNjZXNzaWJsZUJ1Y2tldHMSLS5sZWdhdGUuYWRtaW4udjEuTGlzdEFjY2Vzc2libGVCdWNrZXRzUmVxdWVzdBokLmxlZ2F0ZS5hZG1pbi52MS5MaXN0QnVja2V0c1Jlc3BvbnNlQkdaRWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7bGVnYXRlYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -66,7 +66,7 @@ export type CreateBucketRequest =
     bucket?: Bucket | undefined;
 
     /**
-     * When true, PALADIN also calls the backend to physically create the bucket.
+     * When true, Paladin also calls the backend to physically create the bucket.
      * When false, the bucket is assumed to exist out-of-band.
      *
      * @generated from field: bool provision_on_backend = 4;
@@ -182,38 +182,39 @@ export const DeleteBucketResponseSchema: GenMessage<DeleteBucketResponse> =
 /**
  * @generated from message paladin.admin.v1.ListBucketsRequest
  */
-export type ListBucketsRequest = Message<"paladin.admin.v1.ListBucketsRequest"> & {
-  /**
-   * Parent: "storageBackends/{backend_id}" or empty for cross-backend.
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type ListBucketsRequest =
+  Message<"paladin.admin.v1.ListBucketsRequest"> & {
+    /**
+     * Parent: "storageBackends/{backend_id}" or empty for cross-backend.
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 2;
-   */
-  page?: PageRequest | undefined;
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
 
-  /**
-   * CEL over Bucket (reserved — not yet evaluated)
-   *
-   * @generated from field: string filter = 3;
-   */
-  filter: string;
+    /**
+     * CEL over Bucket (reserved — not yet evaluated)
+     *
+     * @generated from field: string filter = 3;
+     */
+    filter: string;
 
-  /**
-   * owner_tenant_id narrows the listing to buckets owned by exactly
-   * this tenant (matches buckets.owner_tenant_id). UUID or slug;
-   * empty = no tenant filter (cross-tenant listing for platform-
-   * admin). Backed by the partial index on
-   * buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
-   * (migration 006), so per-tenant lookups are cheap.
-   *
-   * @generated from field: string owner_tenant_id = 4;
-   */
-  ownerTenantId: string;
-};
+    /**
+     * owner_tenant_id narrows the listing to buckets owned by exactly
+     * this tenant (matches buckets.owner_tenant_id). UUID or slug;
+     * empty = no tenant filter (cross-tenant listing for platform-
+     * admin). Backed by the partial index on
+     * buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+     * (migration 006), so per-tenant lookups are cheap.
+     *
+     * @generated from field: string owner_tenant_id = 4;
+     */
+    ownerTenantId: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListBucketsRequest.

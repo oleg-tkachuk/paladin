@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -53,7 +54,8 @@ const (
 	EventSubscriptionServiceTestSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/TestSubscription"
 )
 
-// EventSubscriptionServiceClient is a client for the paladin.admin.v1.EventSubscriptionService service.
+// EventSubscriptionServiceClient is a client for the paladin.admin.v1.EventSubscriptionService
+// service.
 type EventSubscriptionServiceClient interface {
 	CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
 	GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
@@ -65,9 +67,9 @@ type EventSubscriptionServiceClient interface {
 }
 
 // NewEventSubscriptionServiceClient constructs a client for the
-// paladin.admin.v1.EventSubscriptionService service. By default, it uses the Connect protocol with the
-// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
-// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+// paladin.admin.v1.EventSubscriptionService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
@@ -154,8 +156,8 @@ func (c *eventSubscriptionServiceClient) TestSubscription(ctx context.Context, r
 	return c.testSubscription.CallUnary(ctx, req)
 }
 
-// EventSubscriptionServiceHandler is an implementation of the paladin.admin.v1.EventSubscriptionService
-// service.
+// EventSubscriptionServiceHandler is an implementation of the
+// paladin.admin.v1.EventSubscriptionService service.
 type EventSubscriptionServiceHandler interface {
 	CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
 	GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)

@@ -15,7 +15,7 @@ import (
 // Useful for:
 //
 //   - Operators with a Knative / Kafka / NATS-JetStream pipeline that
-//     already speaks CloudEvents and want PALADIN downstream.
+//     already speaks CloudEvents and want Paladin downstream.
 //   - In-house publishers (a custom replication agent, a partner
 //     control plane) that prefer the standard envelope to inventing
 //     their own.
@@ -27,7 +27,7 @@ import (
 // binary mode, it can wrap the body in the structured envelope
 // before posting.
 //
-// Type taxonomy: only events whose `type` matches the PALADIN namespace
+// Type taxonomy: only events whose `type` matches the Paladin namespace
 // (`paladin.object.uploaded`, `paladin.object.deleted`) are acted on. Other
 // types — even valid CloudEvents — return ErrIgnoredEvent. This
 // keeps the dedup table from filling with unrelated events on a
@@ -37,7 +37,7 @@ import (
 //
 //   tenants/<tenant_uuid>/objectKeys/<ok>/objects-by-key/<key>
 //
-// (the PALADIN canonical form, what SeaweedFSSource / S3EventSource emit)
+// (the Paladin canonical form, what SeaweedFSSource / S3EventSource emit)
 // or as a plain `<tenant_uuid>/<object_key>/<key>` triple. The
 // parser tries the structured form first, falls back to the bare
 // triple. Empty `subject` → ErrIgnoredEvent.
@@ -74,9 +74,9 @@ type cloudEventEnvelope struct {
 	Subject         string `json:"subject,omitempty"`
 
 	// Extension attributes we honour.
-	PALADINEtag      string `json:"paladinetag,omitempty"`
-	PALADINSize      int64  `json:"paladinsize,omitempty"`
-	PALADINSequencer string `json:"paladinsequencer,omitempty"`
+	PaladinEtag      string `json:"paladinetag,omitempty"`
+	PaladinSize      int64  `json:"paladinsize,omitempty"`
+	PaladinSequencer string `json:"paladinsequencer,omitempty"`
 
 	// Data is preserved for handlers that want native fields.
 	Data json.RawMessage `json:"data,omitempty"`
@@ -99,7 +99,7 @@ func (s *CloudEventsSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 		)
 	}
 
-	// Type filter: act only on the PALADIN taxonomy. Unknown types are
+	// Type filter: act only on the Paladin taxonomy. Unknown types are
 	// ignored without erroring (shared-bus tolerance).
 	var evType EventType
 	switch env.Type {
@@ -115,9 +115,9 @@ func (s *CloudEventsSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	if !ok {
 		return CloudEvent{}, ErrIgnoredEvent
 	}
-	subjFields.Etag = env.PALADINEtag
-	subjFields.SizeBytes = env.PALADINSize
-	subjFields.Sequencer = env.PALADINSequencer
+	subjFields.Etag = env.PaladinEtag
+	subjFields.SizeBytes = env.PaladinSize
+	subjFields.Sequencer = env.PaladinSequencer
 
 	t, err := time.Parse(time.RFC3339Nano, env.Time)
 	if err != nil {
@@ -154,7 +154,7 @@ func (s *CloudEventsSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 
 // parseCloudEventsSubject accepts two forms:
 //
-//  1. PALADIN canonical:
+//  1. Paladin canonical:
 //     tenants/<uuid>/objectKeys/<ok>/objects-by-key/<key...>
 //  2. Bare triple:
 //     <uuid>/<object_key>/<key...>

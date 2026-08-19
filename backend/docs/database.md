@@ -1,8 +1,8 @@
-# Database - Paladin (PALADIN)
+# Database - Paladin
 
 ## Overview
 
-PALADIN uses **PostgreSQL** as its primary metadata store. The schema is optimized for multi-tenant isolation and object lifecycle tracking.
+Paladin uses **PostgreSQL** as its primary metadata store. The schema is optimized for multi-tenant isolation and object lifecycle tracking.
 
 ## Tables
 

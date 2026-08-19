@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Mints an HS256 JWT for the dev backend.
 #
-# The PALADIN dev config (configs/config.yaml) verifies tokens with
+# The Paladin dev config (configs/config.yaml) verifies tokens with
 #   issuer:  paladin-dev
 #   aud:     paladin-api
 #   secret:  dev-secret-change-me-32-bytes-min

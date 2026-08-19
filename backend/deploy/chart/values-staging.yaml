@@ -1,4 +1,4 @@
-# PALADIN Helm values overlay for STAGING. Mirrors prod's config as
+# Paladin Helm values overlay for STAGING. Mirrors prod's config as
 # closely as feasible — same auth mode, same logger level (info),
 # same TLS strategies — so a regression that surfaces here is a
 # real prod risk.

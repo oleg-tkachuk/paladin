@@ -91,7 +91,7 @@ scope each.
 
 ⚠️ Lands **alone**, before any file moves, so a bisect isolates it (plan Risks, row 1).
 
-- [X] T006 Define `ErrNotFound` in the core package (`backend/internal/capability/store.go`) and re-point `backend/internal/capability/postgres/store.go` at it (its own `ErrNotFound` becomes an alias or is dropped). ⚠️ **Discovered during implementation, not by five analysis passes**: `store.go:26` documents `Get` as returning `ErrNotFound`, but that sentinel is defined *only* in `capability/postgres` — the implementation FR-015 keeps in PALADIN. A third party writing its own `Store` therefore has nothing to return, and would have to import PALADIN's postgres package to satisfy the contract — precisely the coupling this extraction removes. Blocks `memstore` (T039) and violates FR-004 as the code stands
+- [X] T006 Define `ErrNotFound` in the core package (`backend/internal/capability/store.go`) and re-point `backend/internal/capability/postgres/store.go` at it (its own `ErrNotFound` becomes an alias or is dropped). ⚠️ **Discovered during implementation, not by five analysis passes**: `store.go:26` documents `Get` as returning `ErrNotFound`, but that sentinel is defined *only* in `capability/postgres` — the implementation FR-015 keeps in Paladin. A third party writing its own `Store` therefore has nothing to return, and would have to import Paladin's postgres package to satisfy the contract — precisely the coupling this extraction removes. Blocks `memstore` (T039) and violates FR-004 as the code stands
 - [X] T007 Add the type parameter to the usage contract in `backend/internal/capability/usage.go`: change `UsageStore` to `UsageStore[TX any]` and `onCharged func(ctx context.Context, tx pgx.Tx) error` to `onCharged func(ctx context.Context, tx TX) error` (line ~78) — expresses the atomicity contract without naming a database technology (FR-012)
 - [X] T008 Add the matching type parameter to `MeteringStore` in `backend/internal/capability/metering_store.go` (line ~66), so it wraps `UsageStore[TX]` and threads `TX` through unchanged
 - [X] T009 ~~Create `backend/internal/capability/alias.go`~~ — **superseded during implementation.** The alias cannot exist while the code is still *in* package `capability`: a `type UsageStore = capability.UsageStore[pgx.Tx]` declared in that same package collides with the generic type it aliases. Consumers reference the type **qualified** (`capability.UsageStore`), so the working alternative is an explicit type argument at each site — 15 references across 8 files, all mechanical. This is strictly clearer than an alias and avoids two packages named `capability` post-move. The plan's "28 consumers compile unchanged" claim was only ever true for consumers that never name `UsageStore`/`MeteringStore`; those that do need the argument
@@ -113,17 +113,17 @@ edits, the ripple exceeded its containment boundary — halt before Step 2.
 - [X] T017 Add a CI assertion that the module's resolved dependency graph contains no database driver and no object-storage package (compare against T002; satisfies SC-002)
 - [X] T018 Commit as `build(capability): add the module skeleton and standalone CI job`
 
-**Checkpoint**: module exists and is empty; PALADIN still builds; the guard that
+**Checkpoint**: module exists and is empty; Paladin still builds; the guard that
 makes the rest of the work honest is in place.
 
 ---
 
-## Phase 3: User Story 2 — PALADIN keeps working unchanged (Priority: P1)
+## Phase 3: User Story 2 — Paladin keeps working unchanged (Priority: P1)
 
-**Goal**: the primitive lives in the module; PALADIN consumes it through published
+**Goal**: the primitive lives in the module; Paladin consumes it through published
 contracts only, with no observable behavioural change.
 
-**Independent Test**: run PALADIN's existing capability, authorisation, billing,
+**Independent Test**: run Paladin's existing capability, authorisation, billing,
 and outbox suites unchanged — every assertion must pass untouched (SC-003).
 
 ### Step 3 — move the core (`refactor(capability)`)
@@ -189,16 +189,16 @@ with Phase 3, this is the MVP.
 
 ---
 
-## Phase 5: User Story 3 — reference storage implementation stays with PALADIN (Priority: P2)
+## Phase 5: User Story 3 — reference storage implementation stays with Paladin (Priority: P2)
 
-**Goal**: PALADIN ships a production-grade persistent implementation; a third party
+**Goal**: Paladin ships a production-grade persistent implementation; a third party
 can read it as a worked example without being forced to adopt it.
 
 **Independent Test**: the module's suite passes with no persistent storage
-available, while PALADIN's relational store satisfies the same published contracts.
+available, while Paladin's relational store satisfies the same published contracts.
 
 - [X] T054 [P] [US3] Add compile-time conformance assertions in `backend/internal/capability/postgres/` (`var _ capability.Store = (*Store)(nil)`, `var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)`) so contract drift fails the build rather than a runtime call
-- [X] T055 [US3] Confirm PALADIN supplies its store to the module through published contracts only, with no privileged access unavailable to third parties (FR-014) — review `backend/internal/app/build_capability.go` for any non-contract coupling
+- [X] T055 [US3] Confirm Paladin supplies its store to the module through published contracts only, with no privileged access unavailable to third parties (FR-014) — review `backend/internal/app/build_capability.go` for any non-contract coupling
 - [X] T056 [US3] Confirm the module suite passes in isolation with no persistent storage present (SC-006 re-verified after Phase 4 additions), then commit as `test(capability): assert store conformance at compile time`
 
 ---
@@ -206,7 +206,7 @@ available, while PALADIN's relational store satisfies the same published contrac
 ## Phase 6: User Story 4 — independent release and adoption signal (Priority: P3)
 
 **Goal**: a prospective adopter can discover, understand, and pin the module
-without tracking PALADIN's release cadence.
+without tracking Paladin's release cadence.
 
 **Independent Test**: from a clean environment, following only the module's own
 documentation reaches a working issue → verify cycle (SC-007).
@@ -216,7 +216,7 @@ documentation reaches a working issue → verify cycle (SC-007).
 - [X] T057 [US4] Write `capability/README.md` explaining the primitive **without any reference to object storage** (FR-018) — adapt [quickstart.md](./quickstart.md), which was authored to this constraint
 - [X] T058 [P] [US4] Add package-level doc comments to `capability/doc.go` covering the three contracts a consumer implements and the no-transaction mode
 - [ ] T059 [US4] **Deferred — tagging is a publish action, not a code change; see commit.** Tag the module's first version (`capability/vX.Y.Z` per Go's nested-module tagging convention) and pin it in `backend/go.mod`'s `require`, keeping `replace` for local development (FR-020, [R-004](./research.md))
-- [X] T060 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with PALADIN's documentation closed
+- [X] T060 [US4] Validate SC-007 by having the walkthrough followed end to end using **only** `capability/README.md`, with Paladin's documentation closed
 - [X] T061 [US4] Commit as `docs(capability): document and version the module`
 
 ---
@@ -301,11 +301,11 @@ T039 → (T042 ‖ T043 ‖ T044 ‖ T045)
 
 **Phases 1–4 (T001–T053).** Unusually, the MVP spans **two** P1 stories rather
 than one. This is deliberate and is argued in [spec.md](./spec.md): an
-extraction that makes the module importable but regresses PALADIN has not
-succeeded, and one that keeps PALADIN green without producing a usable module has
+extraction that makes the module importable but regresses Paladin has not
+succeeded, and one that keeps Paladin green without producing a usable module has
 not either. Neither story is a viable slice alone.
 
-Delivering Phases 1–4 yields: a module a third party can adopt, PALADIN unchanged
+Delivering Phases 1–4 yields: a module a third party can adopt, Paladin unchanged
 in behaviour, and executable guards on both claims — including, for the first
 time, a test for the charge-atomicity guarantee.
 
@@ -313,7 +313,7 @@ time, a test for the charge-atomicity guarantee.
 
 1. **Phases 1–2** — de-risked foundation; nothing has moved yet, and the
    riskiest change is isolated in its own commit.
-2. **Phase 3** — the move, with its wire-format guard in the same commit. PALADIN
+2. **Phase 3** — the move, with its wire-format guard in the same commit. Paladin
    green. Stop here and the feature is *technically* complete but unproven.
 3. **Phase 4** — the proof. **Ship no earlier than here.**
 4. **Phases 5–7** — conformance hardening, adoption enablement, hygiene.

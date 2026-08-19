@@ -29,7 +29,7 @@ func Interceptor(v TokenVerifier) connect.Interceptor {
 }
 
 // InterceptorSkipAPITokens is Interceptor that PASSES THROUGH (setting no principal) when
-// the bearer is an PALADIN API token (`paladin_pat_…`), deferring authentication to a downstream
+// the bearer is a Paladin API token (`paladin_pat_…`), deferring authentication to a downstream
 // APITokenAuthInterceptor. Every other case is handled exactly like Interceptor — a JWT is
 // verified, and a missing/invalid non-PAT bearer is rejected — so auth stays mandatory.
 // Used on the data plane so a caller may authenticate with EITHER an OIDC JWT or a PAT.
@@ -62,7 +62,7 @@ type authInterceptor struct {
 	skipCapabilities bool
 }
 
-// isAPIToken reports whether the Authorization header carries an PALADIN API token, which this
+// isAPIToken reports whether the Authorization header carries a Paladin API token, which this
 // interceptor should defer to the PAT interceptor rather than verify as a JWT.
 func (a *authInterceptor) isAPIToken(authz string) bool {
 	return a.skipAPITokens && extractAPIToken("", authz) != ""
@@ -114,7 +114,7 @@ func annotateSpan(ctx context.Context, p *Principal) {
 }
 
 func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	// Server-side PALADIN: no outbound calls. Pass through unchanged.
+	// Server-side Paladin: no outbound calls. Pass through unchanged.
 	return next
 }
 

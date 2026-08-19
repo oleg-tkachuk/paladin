@@ -1,6 +1,6 @@
 {{ include "chart.fullname" . }} ({{ .Chart.AppVersion }}) installed in {{ .Release.Namespace }}.
 
-PALADIN runs as one binary in multiple Deployments — one per role:
+Paladin runs as one binary in multiple Deployments — one per role:
 
   api      data + iam Connect listeners (public-ish traffic)
   admin    admin Connect listener (privileged operations)

@@ -1,6 +1,6 @@
 // UploadSmall is a client-streaming RPC for objects ≤ 100 MiB where the client
 // doesn't want to bother with presigned URLs (e.g. from a mobile app, or an
-// edge function with no direct S3 access). PALADIN acts as a bounded proxy.
+// edge function with no direct S3 access). Paladin acts as a bounded proxy.
 //
 // The stream contract:
 //

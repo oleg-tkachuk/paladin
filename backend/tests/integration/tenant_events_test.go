@@ -10,7 +10,7 @@
 //
 // History: commit c713f77 ("durable webhook fan-out") wired
 // the consumer half but no production handler ever called the
-// producer, so real PALADIN events silently never fanned out (only
+// producer, so real Paladin events silently never fanned out (only
 // TestSubscription's DeliverOne path lit up). This test guards
 // the wiring landed in the same change as itself, and gives
 // the next handler-class (bucket / objectKey / object lifecycle)
@@ -30,7 +30,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
-// TestTenantHandler_UpdateDispatchesOcpTenantUpdated exercises the
+// TestTenantHandler_UpdateDispatchesPaladinTenantUpdated exercises the
 // full producer chain: handler → outbox writer → dispatcher pod loop
 // → embedded NATS subscriber. Asserts the subscriber receives a
 // CloudEvents 1.0 envelope with `type == "paladin.tenant.updated"` and
@@ -44,7 +44,7 @@ import (
 // have to fabricate the subscription out-of-order. Update events
 // fan out cleanly because the tenant exists by the time we
 // subscribe.
-func TestTenantHandler_UpdateDispatchesOcpTenantUpdated(t *testing.T) {
+func TestTenantHandler_UpdateDispatchesPaladinTenantUpdated(t *testing.T) {
 	t.Parallel()
 	f := setupDispatcher(t)
 

@@ -620,7 +620,7 @@ func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error
 // ─── internals ──────────────────────────────────────────────────────────────
 
 // assertAudienceAllowed prevents privilege escalation: a user without
-// admin-tier roles cannot mint an paladin-admin token. The Cedar engine handles
+// admin-tier roles cannot mint a paladin-admin token. The Cedar engine handles
 // fine-grained per-resource policy at handler-time; this is just a gate so
 // the user can't even get an admin-aud JWT minted.
 func (h *Handler) assertAudienceAllowed(u authstore.User, audience string) error {

@@ -25,7 +25,7 @@ import (
 // source adapter lands its handler attaches at /webhook/minio.
 //
 // Auth: HMAC-SHA256 on the raw body, header configured by the
-// operator (default X-PALADIN-Signature). Empty SharedSecret disables
+// operator (default X-Paladin-Signature). Empty SharedSecret disables
 // the check — fine for laptop-dev, dangerous in prod. The handler
 // constant-time-compares the hex digest to defeat timing oracles.
 //
@@ -126,7 +126,7 @@ func (d *WebhookDriver) handler(src Source, deliver func(context.Context, CloudE
 		}
 
 		if d.SharedSecret != "" {
-			sig := r.Header.Get(headerOrDefault(d.SignatureHdr, "X-PALADIN-Signature"))
+			sig := r.Header.Get(headerOrDefault(d.SignatureHdr, "X-Paladin-Signature"))
 			if !verifyHMAC(body, d.SharedSecret, sig) {
 				d.log().Warn("webhook signature mismatch",
 					zap.String("source", src.Name()),
@@ -141,7 +141,7 @@ func (d *WebhookDriver) handler(src Source, deliver func(context.Context, CloudE
 		if err != nil {
 			if errors.Is(err, ErrIgnoredEvent) {
 				// Adapter recognised the shape but chose to skip
-				// (uninteresting event type, non-PALADIN path). 200 so
+				// (uninteresting event type, non-Paladin path). 200 so
 				// the publisher doesn't retry — no work for us.
 				w.WriteHeader(http.StatusOK)
 				return

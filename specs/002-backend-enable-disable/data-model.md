@@ -59,7 +59,7 @@ maintenance / error) — those are BACKLOG (research D7).
    │                                                        │
    └─ default state for new rows (DB DEFAULT true)          │
                                                             │
-   While DISABLED: every PALADIN-mediated op resolving to this  │
+   While DISABLED: every Paladin-mediated op resolving to this  │
    backend → CodeFailedPrecondition (before any S3 call).   │
    Stored data is untouched; re-enable fully restores it. ◄─┘
 ```

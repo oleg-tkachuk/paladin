@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -45,7 +46,7 @@ const (
 
 // PolicyServiceClient is a client for the paladin.admin.v1.PolicyService service.
 type PolicyServiceClient interface {
-	// Validate parses + type-checks Cedar text against the PALADIN schema.
+	// Validate parses + type-checks Cedar text against the Paladin schema.
 	Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error)
 	// SimulateAuthz answers "would this principal be allowed to take this
 	// action against this resource right now?" without performing the action.
@@ -112,7 +113,7 @@ func (c *policyServiceClient) GetEffectivePolicy(ctx context.Context, req *conne
 
 // PolicyServiceHandler is an implementation of the paladin.admin.v1.PolicyService service.
 type PolicyServiceHandler interface {
-	// Validate parses + type-checks Cedar text against the PALADIN schema.
+	// Validate parses + type-checks Cedar text against the Paladin schema.
 	Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error)
 	// SimulateAuthz answers "would this principal be allowed to take this
 	// action against this resource right now?" without performing the action.

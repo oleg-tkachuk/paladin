@@ -88,7 +88,7 @@ func TestCloudEventsSource_Parse_DeleteEvent(t *testing.T) {
 }
 
 func TestCloudEventsSource_Parse_UnknownTypeIgnored(t *testing.T) {
-	// Shared-bus tolerance: events with a non-PALADIN type return
+	// Shared-bus tolerance: events with a non-Paladin type return
 	// ErrIgnoredEvent so the dedup table doesn't fill with junk.
 	src := &CloudEventsSource{URI: "cloudevents://primary"}
 	body := []byte(`{
@@ -99,7 +99,7 @@ func TestCloudEventsSource_Parse_UnknownTypeIgnored(t *testing.T) {
 		"subject": "t/ok/k"
 	}`)
 	if _, err := src.Parse(body, ""); !errors.Is(err, ErrIgnoredEvent) {
-		t.Errorf("non-PALADIN type should be ignored, got %v", err)
+		t.Errorf("non-Paladin type should be ignored, got %v", err)
 	}
 }
 

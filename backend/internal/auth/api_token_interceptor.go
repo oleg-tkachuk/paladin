@@ -15,9 +15,9 @@ import (
 )
 
 // HeaderAPIToken is the additional accepted header for API tokens.
-// Both `Authorization: Bearer paladin_pat_…` and `X-PALADIN-API-Token: paladin_pat_…`
-// route to the same verifier; X-PALADIN wins on duplicate (explicit > overloaded).
-const HeaderAPIToken = "X-PALADIN-API-Token" //nolint:gosec // G101: HTTP header name, not a credential
+// Both `Authorization: Bearer paladin_pat_…` and `X-Paladin-API-Token: paladin_pat_…`
+// route to the same verifier; X-Paladin wins on duplicate (explicit > overloaded).
+const HeaderAPIToken = "X-Paladin-API-Token" //nolint:gosec // G101: HTTP header name, not a credential
 
 // apiTokenKey is the context value the interceptor stashes the verified
 // *api_token.Token under. Read via APITokenFromContext from handler code.
@@ -48,12 +48,12 @@ func WithAPIToken(ctx context.Context, t *api_token.Token) context.Context {
 // Distinct from CapabilityInterceptor:
 //
 //   - Reads `Authorization: Bearer paladin_pat_…` (NOT `Capability` scheme).
-//     The literal `paladin_pat_` prefix is what disambiguates an PALADIN API
+//     The literal `paladin_pat_` prefix is what disambiguates a Paladin API
 //     token from a federated OIDC bearer when both Authorization
 //     headers compete; non-`paladin_pat_` Bearer values are left alone for
 //     the JWT verifier downstream.
 //
-//   - Also accepts `X-PALADIN-API-Token` for clients that already use
+//   - Also accepts `X-Paladin-API-Token` for clients that already use
 //     Authorization for an OIDC bearer.
 //
 //   - Verification = DB lookup + argon2id compare (slow). The Verifier
@@ -297,8 +297,8 @@ func (i *apiTokenInterceptor) WrapStreamingHandler(next connect.StreamingHandler
 // "" when no recognisable API token is present — Bearer values that
 // don't start with `paladin_pat_` are skipped so the OIDC JWT verifier can
 // process them downstream.
-func extractAPIToken(xocp, authz string) string {
-	if t := strings.TrimSpace(xocp); strings.HasPrefix(t, api_token.TokenPrefix) {
+func extractAPIToken(xlegate, authz string) string {
+	if t := strings.TrimSpace(xlegate); strings.HasPrefix(t, api_token.TokenPrefix) {
 		return t
 	}
 	if authz == "" {

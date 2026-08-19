@@ -1,10 +1,10 @@
 # PostgreSQL role split — `paladin_migrate` and `paladin_app`
 
-PALADIN uses **two distinct database roles** at runtime:
+Paladin uses **two distinct database roles** at runtime:
 
 | Role          | Used by                        | Privileges                                  |
 |---------------|--------------------------------|---------------------------------------------|
-| `paladin_migrate` | goose (schema migrations)      | DDL on the PALADIN database. Owns objects.      |
+| `paladin_migrate` | goose (schema migrations)      | DDL on the Paladin database. Owns objects.      |
 | `paladin_app`     | the running service            | DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE`). |
 
 The split is a defence-in-depth measure: a SQL-injection bug or a

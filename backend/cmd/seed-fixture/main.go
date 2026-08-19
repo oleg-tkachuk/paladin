@@ -1,4 +1,4 @@
-// Package main implements the seed-fixture CLI — populates a dev PALADIN
+// Package main implements the seed-fixture CLI — populates a dev Paladin
 // cluster with realistic, deterministic data so designers / operators
 // can exercise UI states (populated tables, time-series, error chips,
 // pagination boundaries) without hand-clicking through the API.
@@ -81,7 +81,7 @@ const (
 func main() {
 	root := &cobra.Command{
 		Use:   "seed-fixture",
-		Short: "Populate a dev PALADIN cluster with realistic UI/UX fixture data",
+		Short: "Populate a dev Paladin cluster with realistic UI/UX fixture data",
 		Long: "Seed-fixture is a dev tool. It refuses to run against any " +
 			"deployment that doesn't smell like a dev cluster (admin URL must " +
 			"contain `local`, `test`, `cluster.local`, or `127.`/`localhost` — " +
@@ -684,7 +684,7 @@ func subSinkMatches(a, b *adminv1.EventSink) bool {
 //     PromoteToAvailable.
 //
 // This proves that everything between "client wrote bytes" and
-// "PALADIN knows the bytes are there" works without PALADIN RPC's normal
+// "Paladin knows the bytes are there" works without Paladin RPC's normal
 // synchronous CompleteObject path. Operators verify the row's
 // state by re-running with an extra query or by inspecting
 // /objects in the UI a few seconds after the PUT.

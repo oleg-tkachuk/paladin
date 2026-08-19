@@ -1,7 +1,7 @@
 // Package mcpinspecth implements admin/v1.MCPInspectService — read-
 // only operator visibility into the MCP bridge configuration.
 //
-// The MCP bridge sits between agentic runtimes and the PALADIN Connect
+// The MCP bridge sits between agentic runtimes and the Paladin Connect
 // API. What tools agents see, which are denied, and which upstreams
 // the bridge dispatches to is config + built-in defaults merged at
 // boot. This handler flattens that resolution so an admin UI can

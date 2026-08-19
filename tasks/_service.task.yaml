@@ -1,4 +1,4 @@
-# Shared deploy chain reusable by every PALADIN component (backend, frontend).
+# Shared deploy chain reusable by every Paladin component (backend, frontend).
 # Each component's Taskfile `includes:` this as `svc:` and sets:
 #
 #   vars:

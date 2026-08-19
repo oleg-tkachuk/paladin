@@ -69,7 +69,7 @@ func TestWebhookHandler_HMACGate(t *testing.T) {
 	d := &WebhookDriver{
 		Sources:      map[string]Source{"/webhook/stub": src},
 		SharedSecret: "secret",
-		SignatureHdr: "X-PALADIN-Signature",
+		SignatureHdr: "X-Paladin-Signature",
 		MaxBodyBytes: 1024,
 	}
 	delivered := false
@@ -83,7 +83,7 @@ func TestWebhookHandler_HMACGate(t *testing.T) {
 	// Wrong signature → 401 + handler not called.
 	r := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), "POST", "/webhook/stub", bytes.NewReader(body))
-	req.Header.Set("X-PALADIN-Signature", "deadbeef")
+	req.Header.Set("X-Paladin-Signature", "deadbeef")
 	h(r, req)
 	if r.Code != http.StatusUnauthorized {
 		t.Errorf("bad sig got %d, want 401", r.Code)
@@ -95,7 +95,7 @@ func TestWebhookHandler_HMACGate(t *testing.T) {
 	// Correct signature → 200 + handler called.
 	r = httptest.NewRecorder()
 	req = httptest.NewRequestWithContext(t.Context(), "POST", "/webhook/stub", bytes.NewReader(body))
-	req.Header.Set("X-PALADIN-Signature", sign(body, "secret"))
+	req.Header.Set("X-Paladin-Signature", sign(body, "secret"))
 	h(r, req)
 	if r.Code != http.StatusOK {
 		t.Errorf("good sig got %d, want 200", r.Code)

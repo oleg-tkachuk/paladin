@@ -1,4 +1,4 @@
-// Provider set for the single-stack PALADIN server. Repositories, storage
+// Provider set for the single-stack Paladin server. Repositories, storage
 // adapters, and the Connect routing shim are accepted as external
 // dependencies (`Repos`, `Storage`) so tests can substitute fakes.
 //

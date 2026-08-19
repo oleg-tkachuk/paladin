@@ -159,11 +159,11 @@ codebase. Consistency lets the frontend map codes to messages uniformly
 
 **Decision**: Disabling blocks issuance of *new* presigned URLs (the
 presign handlers resolve the backend and hit the same gate) and all
-PALADIN-mediated ops. Already-issued presigned URLs are honoured directly by
-the object store, bypassing PALADIN, and cannot be revoked here — they expire
+Paladin-mediated ops. Already-issued presigned URLs are honoured directly by
+the object store, bypassing Paladin, and cannot be revoked here — they expire
 on their existing short TTL (`config.limits.presign.*_ttl`, default 15m).
 
-**Why**: A presigned URL is a self-contained, signed S3 request; PALADIN is
+**Why**: A presigned URL is a self-contained, signed S3 request; Paladin is
 not in its request path. Revocation would require rotating the backend's
 S3 credentials (out of scope; `RotateCredentials` RPC exists separately)
 or S3-side policy — neither is part of an enable/disable toggle. Captured

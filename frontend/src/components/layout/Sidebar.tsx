@@ -274,7 +274,7 @@ function SidebarBody({
           </div>
           {!collapsed && (
             <div className="min-w-0 leading-tight">
-              <div className="text-sm font-semibold tracking-tight">PALADIN</div>
+              <div className="text-sm font-semibold tracking-tight">Paladin</div>
               <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Control Plane
               </div>

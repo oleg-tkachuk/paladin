@@ -19,13 +19,13 @@ import (
 //     scheme; tools that already speak Authorization for JWT can switch
 //     by changing the scheme keyword.
 //
-//   - "X-PALADIN-Capability: <token>" — convenience for clients that already
+//   - "X-Paladin-Capability: <token>" — convenience for clients that already
 //     use Authorization for an OIDC bearer and need a separate slot.
 //
-// Either is accepted; if both are present, X-PALADIN-Capability wins because
+// Either is accepted; if both are present, X-Paladin-Capability wins because
 // the explicit per-product header is the unambiguous signal.
 const (
-	HeaderCapability       = "X-PALADIN-Capability"
+	HeaderCapability       = "X-Paladin-Capability"
 	AuthorizationCapScheme = "capability"
 )
 
@@ -157,8 +157,8 @@ func CapabilityEstablishingInterceptor(
 }
 
 type capabilityInterceptor struct {
-	verifier               *capability.StandardVerifier
-	audience               string
+	verifier *capability.StandardVerifier
+	audience string
 	// establishPrincipal makes a verified capability an IDENTITY rather than
 	// only an extra restriction. On the data plane a capability is the whole
 	// credential a caller may present: it names its tenant, the verifier has
@@ -172,7 +172,7 @@ type capabilityInterceptor struct {
 	//
 	// An existing principal always wins: a capability presented alongside a
 	// JWT or API token stays additive, exactly as before.
-	establishPrincipal bool
+	establishPrincipal     bool
 	usage                  capability.UsageStore[pgx.Tx]
 	realIPHeader           string
 	chargePerRequestAmount float64
@@ -379,10 +379,10 @@ func ipInAnyCIDR(ip net.IP, cidrs []string) bool {
 }
 
 // extractCapabilityToken reads the token from either of the supported
-// headers. X-PALADIN-Capability wins over Authorization scheme=capability
+// headers. X-Paladin-Capability wins over Authorization scheme=capability
 // when both are present (explicit > overloaded).
-func extractCapabilityToken(xocp, authz string) string {
-	if t := strings.TrimSpace(xocp); t != "" {
+func extractCapabilityToken(xlegate, authz string) string {
+	if t := strings.TrimSpace(xlegate); t != "" {
 		return t
 	}
 	if authz == "" {

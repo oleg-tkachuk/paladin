@@ -19,7 +19,7 @@ import (
 //
 //  1. Issues storage.DeleteObject against the S3 backend so the
 //     bytes actually go away (soft-delete leaves them in S3).
-//  2. Removes the PALADIN row, freeing the (tenant, object_key, key)
+//  2. Removes the Paladin row, freeing the (tenant, object_key, key)
 //     slot for a fresh PUT.
 //
 // Why the cooling-off matters:

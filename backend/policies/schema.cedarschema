@@ -1,4 +1,4 @@
-// Cedar schema for PALADIN authorization model.
+// Cedar schema for Paladin authorization model.
 //
 // Mirrors the Action constants in internal/policy/cedar/engine.go and the
 // entity attributes emitted by buildEntities. Update this file when those

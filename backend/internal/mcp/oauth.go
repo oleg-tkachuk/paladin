@@ -36,7 +36,7 @@ const WellKnownAuthorizationServer = "/.well-known/oauth-authorization-server"
 
 // BearerToken extracts the caller's access token from a request, preferring
 // the standard `Authorization: Bearer <token>` header (what OAuth-aware MCP
-// clients send) and falling back to the legacy `X-PALADIN-Token` header so
+// clients send) and falling back to the legacy `X-Paladin-Token` header so
 // existing bridge deployments keep working. Returns "" when neither is set.
 func BearerToken(r *http.Request) string {
 	if authz := r.Header.Get("Authorization"); authz != "" {
@@ -45,7 +45,7 @@ func BearerToken(r *http.Request) string {
 			return strings.TrimSpace(authz[len(prefix):])
 		}
 	}
-	return r.Header.Get("X-PALADIN-Token")
+	return r.Header.Get("X-Paladin-Token")
 }
 
 // protectedResourceMetadata is the RFC 9728 document.
@@ -69,7 +69,7 @@ func ProtectedResourceMetadataHandler(cfg config.MCPOAuth) http.Handler {
 	return jsonDocHandler(body)
 }
 
-// authorizationServerMetadata is the subset of RFC 8414 fields PALADIN advertises
+// authorizationServerMetadata is the subset of RFC 8414 fields Paladin advertises
 // when it is itself the AS. Endpoint fields are omitted when unset so we never
 // publish a URL that 404s.
 type authorizationServerMetadata struct {
@@ -85,7 +85,7 @@ type authorizationServerMetadata struct {
 }
 
 // AuthorizationServerMetadataHandler serves RFC 8414 metadata describing the
-// PALADIN-as-AS endpoints. Only mounted when cfg.AuthorizationServer.Issuer is
+// Paladin-as-AS endpoints. Only mounted when cfg.AuthorizationServer.Issuer is
 // set (the same-origin AS case); when delegating to an external IdP the
 // client fetches that IdP's own metadata instead. PKCE S256 is mandatory and
 // auth-code + refresh are the advertised grants — the contract the deferred

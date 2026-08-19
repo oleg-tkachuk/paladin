@@ -1,6 +1,6 @@
 # Configuration
 
-Every PALADIN process reads one YAML file, optionally layered with overlays,
+Every Paladin process reads one YAML file, optionally layered with overlays,
 optionally overridden by environment variables, and then validated three
 separate ways before the process starts. This page is the map.
 
@@ -159,8 +159,8 @@ The keys that matter:
 
 | Key | Meaning |
 | --- | --- |
-| `objectControlPlane.upstreamUrl` | where the BFF forwards data-plane RPCs |
-| `objectControlPlane.baseUrl` | the browser-facing path, `/api/paladin` |
+| `paladin.upstreamUrl` | where the BFF forwards data-plane RPCs |
+| `paladin.baseUrl` | the browser-facing path, `/api/paladin` |
 | `oidc.*` | the identity provider; `disableAuth: true` is dev-only |
 | `auth.devToken` | dev-only fallback Bearer. Ships empty — see `frontend/README.md` |
 

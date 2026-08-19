@@ -1,6 +1,6 @@
 package app
 
-// appfx wires the PALADIN runtime with Uber fx (go.uber.org/fx). fx is the DI
+// appfx wires the Paladin runtime with Uber fx (go.uber.org/fx). fx is the DI
 // container + lifecycle driver: every heavy constructor is registered with
 // fx.Provide and the dependency graph is resolved by fx; fx.App.Run() owns
 // signal handling (SIGINT/SIGTERM) and drives start/stop.

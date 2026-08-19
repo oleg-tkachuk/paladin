@@ -19,7 +19,7 @@ message StorageBackend {
   string backend_id = 2;
   string display_name = 3;
   StorageKind kind = 4;
-  string endpoint = 5;          // internal endpoint PALADIN uses
+  string endpoint = 5;          // internal endpoint Paladin uses
   string public_endpoint = 6;   // endpoint embedded into presigned URLs
   string region = 7;
   bool force_path_style = 8;
@@ -34,8 +34,8 @@ message StorageBackend {
   string resource_version = 13;
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
-  // Durable enable/disable state. true → backend serves PALADIN requests.
-  // false → every PALADIN-mediated operation resolving to this backend is
+  // Durable enable/disable state. true → backend serves Paladin requests.
+  // false → every Paladin-mediated operation resolving to this backend is
   // refused (FailedPrecondition) before any object-store call. Operator
   // managed via SetBackendEnabled; NOT mirrored from static config.
   bool enabled = 16;
@@ -325,7 +325,7 @@ message AuditLogEntry {
 
 // ─── Event subscription ─────────────────────────────────────────────────────
 
-// EventSubscription describes a webhook / queue sink for PALADIN events.
+// EventSubscription describes a webhook / queue sink for Paladin events.
 // Replaces the need for clients to consume S3 events directly.
 message EventSubscription {
   string name = 1; // "tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"
@@ -368,7 +368,7 @@ message EventSink {
 
 message HttpSink {
   string url = 1;
-  // HMAC-SHA256 signing secret reference; PALADIN signs each delivery with this.
+  // HMAC-SHA256 signing secret reference; Paladin signs each delivery with this.
   string signing_secret_ref = 2;
   // Server applies exponential backoff up to max_attempts.
   int32 max_attempts = 3;

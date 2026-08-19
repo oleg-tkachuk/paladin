@@ -23,7 +23,7 @@ type DedupStore interface {
 }
 
 // Handler is the business-logic seam. Implementations decide what to
-// do with a deduplicated event — typically resolve the PALADIN object and
+// do with a deduplicated event — typically resolve the Paladin object and
 // call statemachine.PromoteToAvailable / SoftDelete.
 type Handler interface {
 	Handle(ctx context.Context, ev CloudEvent) error

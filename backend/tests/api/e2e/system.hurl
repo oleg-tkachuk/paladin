@@ -1,7 +1,7 @@
 # SystemService — version + config introspection over Connect/JSON.
 #
 # Variables expected from the runner (`hurl --variable host=... --variable jwt=...`):
-#   host  — base URL of the PALADIN backend (e.g. http://127.0.0.1:8080)
+#   host  — base URL of the Paladin backend (e.g. http://127.0.0.1:8080)
 #   jwt   — bearer token; SystemService is open but other RPCs need it,
 #           so the runner ships one for the whole suite.
 

@@ -1,4 +1,4 @@
-// Package oauth implements the PALADIN IAM OAuth 2.1 Authorization Server
+// Package oauth implements the Paladin IAM OAuth 2.1 Authorization Server
 // (ADR-0009): the /authorize + /token + /register endpoints that mint the
 // bearers the MCP Resource Server (ADR-0008) validates. This file is the
 // PKCE (RFC 7636) primitive — the cryptographic heart of the public-client

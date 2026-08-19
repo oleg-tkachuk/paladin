@@ -33,7 +33,7 @@ import (
 // surface (admin/v1.MCPInspectService) can render the catalog without
 // importing the heavy bridge package.
 //
-// Audience pins which PALADIN plane the underlying Connect RPC lands on:
+// Audience pins which Paladin plane the underlying Connect RPC lands on:
 // "admin" / "data" / "iam". CapabilityOp is the capability.Op the
 // caller's capability must include for the call to succeed (empty
 // when the tool is JWT-only). Mutates is true when the tool issues
@@ -75,7 +75,7 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_delete_subscription", Audience: "admin", Description: "Delete an event subscription.", Mutates: true},
 	{Name: "paladin_test_subscription", Audience: "admin", Description: "Deliver a synthetic event to a subscription's sink (non-mutating)."},
 	{Name: "paladin_set_lifecycle_rules", Audience: "admin", Description: "Update bucket lifecycle (CEL-based expiration).", Mutates: true},
-	{Name: "paladin_validate_cel", Audience: "admin", Description: "Compile-check a CEL expression against an PALADIN schema (Object | ObjectKey | AuditLogEntry | EventEnvelope)."},
+	{Name: "paladin_validate_cel", Audience: "admin", Description: "Compile-check a CEL expression against a Paladin schema (Object | ObjectKey | AuditLogEntry | EventEnvelope)."},
 	{Name: "paladin_get_audit_entry", Audience: "admin", Description: "Read a single audit-log entry by id."},
 	{Name: "paladin_system_config", Audience: "admin", Description: "Read the platform's effective runtime config (admin profile only)."},
 	{Name: "paladin_reset_usage", Audience: "admin", Description: "Reset accumulated usage counters on a quota (limits unchanged).", Mutates: true},

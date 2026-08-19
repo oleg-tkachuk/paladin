@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Live adversarial security probe against a running PALADIN cluster.
+# Live adversarial security probe against a running Paladin cluster.
 #
 # Exercises the boundaries that Cedar delegates to the edge (cross-tenant
 # isolation via assertJWTTenant, audience separation) plus the dedicated-tenant

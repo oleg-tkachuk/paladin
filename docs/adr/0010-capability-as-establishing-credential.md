@@ -12,7 +12,7 @@
   authenticate one on its own.
 
   That made capabilities unusable for the case they are shaped for. A consumer
-  such as consumer serves many tenants from one process. An PALADIN API token is
+  such as consumer serves many tenants from one process. A Paladin API token is
   bound to one tenant for its whole life — the principal derived from it carries
   no roles, the only cross-tenant bypass is role-based, and `tenant:` scopes are
   read by no authorization site — so serving N tenants meant holding N

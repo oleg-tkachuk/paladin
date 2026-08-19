@@ -83,8 +83,8 @@ type SimulateAuthzInput struct {
 	PrincipalRoles    []string
 	// PrincipalKind is the credential type the simulated caller would carry.
 	PrincipalKind string
-	Action            string
-	ResourceName      string
+	Action        string
+	ResourceName  string
 }
 
 type SimulateAuthzOutput struct {

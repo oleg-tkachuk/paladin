@@ -1,8 +1,8 @@
-# Telemetry - Paladin (PALADIN)
+# Telemetry - Paladin
 
 ## Overview
 
-PALADIN is instrumented with [OpenTelemetry](https://opentelemetry.io/) for distributed tracing and exports metrics for [Prometheus](https://prometheus.io/).
+Paladin is instrumented with [OpenTelemetry](https://opentelemetry.io/) for distributed tracing and exports metrics for [Prometheus](https://prometheus.io/).
 
 ## 1. Metrics
 

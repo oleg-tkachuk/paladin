@@ -12,7 +12,7 @@ import "paladin/common/v1/pagination.proto";
 import "paladin/common/v1/resource.proto";
 import "paladin/data/v1/types.proto";
 
-// ObjectService is the canonical data-plane API. PALADIN never proxies bytes —
+// ObjectService is the canonical data-plane API. Paladin never proxies bytes —
 // every upload/download happens directly between the client and the storage
 // backend via presigned URLs returned by these RPCs.
 service ObjectService {

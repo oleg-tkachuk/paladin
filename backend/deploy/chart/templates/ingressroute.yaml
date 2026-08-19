@@ -1,5 +1,5 @@
 {{/*
-IngressRoute — Traefik CRD that fronts the PALADIN backend Connect-RPC
+IngressRoute — Traefik CRD that fronts the Paladin backend Connect-RPC
 planes. One hostname, three plane rules dispatched by procedure-prefix:
 
   /paladin.iam.v1.<Service>/<Method>    → api role,   iam port   (8085)

@@ -18,7 +18,7 @@ import (
 
 // BuildHTTPServer wraps a mux into an h2c-enabled http.Server with
 // per-plane timeouts taken from cfg.HTTPServer. Connect over HTTP/2 cleartext
-// is the PALADIN default — the plane is fronted by an ingress that terminates TLS,
+// is the Paladin default — the plane is fronted by an ingress that terminates TLS,
 // so h2c keeps the binary contract simple and lets the gateway handle ALPN.
 func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http.Server {
 	// HTTP/2 cleartext (h2c) via the stdlib Protocols API (Go 1.24+), replacing

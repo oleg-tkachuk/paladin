@@ -3,14 +3,14 @@
     {
       "name": "DS_PROMETHEUS",
       "label": "Prometheus",
-      "description": "Prometheus datasource scraping the OTLP collector's exported PALADIN RPC metrics.",
+      "description": "Prometheus datasource scraping the OTLP collector's exported Paladin RPC metrics.",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
     }
   ],
   "annotations": { "list": [] },
-  "description": "RED (Rate / Errors / Duration) for every PALADIN Connect RPC, sourced from the otelconnect rpc.server.* metrics activated by ADR-0001. See README.md for metric-name / datasource assumptions.",
+  "description": "RED (Rate / Errors / Duration) for every Paladin Connect RPC, sourced from the otelconnect rpc.server.* metrics activated by ADR-0001. See README.md for metric-name / datasource assumptions.",
   "editable": true,
   "graphTooltip": 1,
   "tags": ["paladin", "rpc", "red"],
@@ -37,7 +37,7 @@
   },
   "time": { "from": "now-6h", "to": "now" },
   "timezone": "",
-  "title": "PALADIN — RPC RED",
+  "title": "Paladin — RPC RED",
   "schemaVersion": 39,
   "version": 1,
   "panels": [

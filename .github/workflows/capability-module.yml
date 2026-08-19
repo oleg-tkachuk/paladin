@@ -2,7 +2,7 @@ name: Capability module
 
 # Standalone verification for the extracted capability module.
 #
-# This job exists because PALADIN consumes the module through a `replace`
+# This job exists because Paladin consumes the module through a `replace`
 # directive, and `replace` silently masks a module that cannot build on its
 # own. The backend build passing therefore proves nothing about whether a
 # third party could actually import this — which is the entire point of the
@@ -64,7 +64,7 @@ jobs:
           fi
 
       # No `replace` is in effect here and backend/ is never entered. If the
-      # module needs anything from PALADIN, this step is where it fails.
+      # module needs anything from Paladin, this step is where it fails.
       - name: Build standalone
         if: steps.pkgs.outputs.present == 'true'
         run: go build ./...

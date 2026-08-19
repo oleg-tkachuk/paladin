@@ -1,8 +1,8 @@
-# Logging - Paladin (PALADIN)
+# Logging - Paladin
 
 ## Overview
 
-PALADIN uses [Zap](https://github.com/uber-go/zap) for high-performance, structured logging. Logs are emitted in JSON format by default in production.
+Paladin uses [Zap](https://github.com/uber-go/zap) for high-performance, structured logging. Logs are emitted in JSON format by default in production.
 
 ## Configuration
 

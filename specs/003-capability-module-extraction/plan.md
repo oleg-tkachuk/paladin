@@ -6,17 +6,17 @@
 
 ## Summary
 
-Extract PALADIN's capability authorisation primitive — short-lived, signed,
+Extract Paladin's capability authorisation primitive — short-lived, signed,
 delegable, individually revocable tokens carrying budget caveats and per-call
-attribution — into an independently importable Go module, with PALADIN remaining
+attribution — into an independently importable Go module, with Paladin remaining
 its reference consumer.
 
 A code survey ([R-001](./research.md)) established that the package already
-imports **zero** PALADIN-internal code. This is therefore a packaging exercise
+imports **zero** Paladin-internal code. This is therefore a packaging exercise
 with exactly one piece of real design work: the usage contract names `pgx.Tx`
 in its `onCharged` callback, which would force a database driver onto every
 consumer. That is resolved by parameterising the transaction handle as a
-generic type argument ([R-002](./research.md)), absorbed on PALADIN's side by a
+generic type argument ([R-002](./research.md)), absorbed on Paladin's side by a
 one-line alias so all 28 consumer files (16 production, 12 test) compile
 unchanged.
 
@@ -31,12 +31,12 @@ so `develop` stays green at every commit.
 `go.opentelemetry.io/otel` only — **no database driver, no storage SDK**
 
 **Storage**: none in the module (contracts only); the relational reference
-implementation stays in PALADIN at `backend/internal/capability/postgres/`
+implementation stays in Paladin at `backend/internal/capability/postgres/`
 
 **Testing**: `go test`; relocated unit suites + in-memory reference store with a
 staging-commit semantic; three guards for properties nothing currently asserts
 — golden-token (wire format), induced-failure rollback (charge atomicity),
-generation fencing; standalone module CI job that builds with no PALADIN checkout
+generation fencing; standalone module CI job that builds with no Paladin checkout
 
 **Target Platform**: any Go-supported platform — library, no runtime assumptions
 
@@ -131,7 +131,7 @@ backend/
 └── internal/
     ├── capability/
     │   ├── alias.go                 # NEW — type UsageStore = capability.UsageStore[pgx.Tx]
-    │   └── postgres/                # UNCHANGED — stays in PALADIN (856 LOC)
+    │   └── postgres/                # UNCHANGED — stays in Paladin (856 LOC)
     │       ├── store.go
     │       └── usage.go
     ├── auth/capability_interceptor.go        # import path only
@@ -145,15 +145,15 @@ backend/
 
 **Structure Decision**: root-level nested module (`capability/`), not
 `backend/pkg/...` — rationale and the accepted import-path branding cost are
-recorded in [R-003](./research.md). PALADIN consumes it via `require` + `replace`
-([R-004](./research.md)); a standalone CI job builds the module with no PALADIN
+recorded in [R-003](./research.md). Paladin consumes it via `require` + `replace`
+([R-004](./research.md)); a standalone CI job builds the module with no Paladin
 checkout, which is what actually enforces the no-driver guarantee.
 
 ## Boundary Summary
 
 The question this plan answers is *where the line falls*. It falls here:
 
-| Concern | Module | PALADIN |
+| Concern | Module | Paladin |
 |---|:---:|:---:|
 | Token format, sign, verify | ✅ | |
 | Issue, delegate, narrowing rules | ✅ | |
@@ -169,9 +169,9 @@ The question this plan answers is *where the line falls*. It falls here:
 | Admin RPC surface (issue/revoke/list/usage) | | ✅ |
 | Config schema, worker wiring, Helm/deploy | | ✅ |
 
-The line is: **the module defines the primitive and its contracts; PALADIN
+The line is: **the module defines the primitive and its contracts; Paladin
 supplies persistence, transport, and policy.** Anything that names a database,
-an RPC framework, or a policy engine stays in PALADIN.
+an RPC framework, or a policy engine stays in Paladin.
 
 ## Phase 0 — Research
 
@@ -263,7 +263,7 @@ If that count differs when the work starts, the task enumeration in
 This list **extends** [spec.md](./spec.md)'s Out of Scope with
 implementation-level exclusions; where the two overlap the spec is
 authoritative. Items the spec excludes and this list does not repeat —
-notably *"extracting any other PALADIN component"* — remain excluded.
+notably *"extracting any other Paladin component"* — remain excluded.
 
 
 - **Repository split** — deferred until there is a real external adopter;

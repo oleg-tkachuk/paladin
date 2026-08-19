@@ -1,8 +1,8 @@
-# API — Paladin (PALADIN)
+# API — Paladin
 
 ## Interface
 
-PALADIN exposes a single Connect RPC API (Connect + Connect-Web + HTTP/JSON via transcoding).
+Paladin exposes a single Connect RPC API (Connect + Connect-Web + HTTP/JSON via transcoding).
 All requests are validated against `buf.validate` proto annotations.
 
 - **Proto definitions**: `proto/paladin/v1/`

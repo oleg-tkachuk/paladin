@@ -1,8 +1,8 @@
-# Architecture Snapshot - Paladin (PALADIN)
+# Architecture Snapshot - Paladin
 
 ## Overview
 
-The Paladin (PALADIN) is a multi-tenant service responsible for managing the lifecycle of binary objects (files, documents, images). It provides a unified API for object storage, abstraction over physical storage (S3/SeaweedFS), and tenant isolation enforced by Cedar policies.
+The Paladin is a multi-tenant service responsible for managing the lifecycle of binary objects (files, documents, images). It provides a unified API for object storage, abstraction over physical storage (S3/SeaweedFS), and tenant isolation enforced by Cedar policies.
 
 ## Inventory Map
 
@@ -25,15 +25,15 @@ The Paladin (PALADIN) is a multi-tenant service responsible for managing the lif
 
 ### Downstream Consumers
 
-- **Tenant applications**: Consume PALADIN for document and asset management.
-- **Workflow workers**: Use PALADIN for hard deletion and object lifecycle management.
+- **Tenant applications**: Consume Paladin for document and asset management.
+- **Workflow workers**: Use Paladin for hard deletion and object lifecycle management.
 - **Frontend applications**: Directly consume signed URLs for uploads and downloads.
 
 ### Data Flow
 
 1. **Metadata Registration**: Metadata for an object is stored in Postgres.
-2. **Signed Action**: PALADIN provides pre-signed S3 URLs for direct client-to-storage upload/download.
-3. **Completion**: Clients notify PALADIN when an upload is complete to finalize metadata.
+2. **Signed Action**: Paladin provides pre-signed S3 URLs for direct client-to-storage upload/download.
+3. **Completion**: Clients notify Paladin when an upload is complete to finalize metadata.
 4. **Lifecycle**: Background workers (Reaper) handle cleanup of failed or expired uploads.
 
 ## Transport Layer

@@ -1,4 +1,4 @@
-// Package main implements the PALADIN server binary.
+// Package main implements the Paladin server binary.
 //
 // Single-binary, multiple-mode pattern (Phase 2 of the agentic-plane
 // migration). Subcommands:

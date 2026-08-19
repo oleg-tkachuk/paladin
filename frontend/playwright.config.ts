@@ -1,5 +1,5 @@
 /**
- * Playwright config for the PALADIN E2E suite.
+ * Playwright config for the Paladin E2E suite.
  *
  * Design rationale: specs/001-frontend-playwright-e2e/contracts/
  *   fixtures-api.md §"playwright.config.ts (root config)" and

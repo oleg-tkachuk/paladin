@@ -6,16 +6,16 @@
 
 **Status**: Draft
 
-**Input**: User description: "Enable/disable storage backends — a disabled backend processes no PALADIN requests of any kind, is shown as disabled in the UI, and all other operations against it are inactive in the UI. Single `SetBackendEnabled` RPC (OCC-guarded), strict reject semantics, default-backend guard, reversible."
+**Input**: User description: "Enable/disable storage backends — a disabled backend processes no Paladin requests of any kind, is shown as disabled in the UI, and all other operations against it are inactive in the UI. Single `SetBackendEnabled` RPC (OCC-guarded), strict reject semantics, default-backend guard, reversible."
 
 ## Clarifications
 
 ### Session 2026-05-28
 
-- Q: When a backend is disabled, which operations are rejected? → A: **All of them (strict).** A disabled backend rejects every PALADIN-plane request that resolves to it — object upload/download/head/copy, presigned URL issuance (GET and PUT), multipart, and bucket creation. Reads are not exempt. Rationale: "disabled" must be an unambiguous, auditable boundary; a half-disabled backend that still serves reads invites confusion about whether the off-switch actually worked. A read-only "drain" mode can be added later as a distinct state if a migration use-case demands it.
+- Q: When a backend is disabled, which operations are rejected? → A: **All of them (strict).** A disabled backend rejects every Paladin-plane request that resolves to it — object upload/download/head/copy, presigned URL issuance (GET and PUT), multipart, and bucket creation. Reads are not exempt. Rationale: "disabled" must be an unambiguous, auditable boundary; a half-disabled backend that still serves reads invites confusion about whether the off-switch actually worked. A read-only "drain" mode can be added later as a distinct state if a migration use-case demands it.
 - Q: How is the state change exposed as an operation? → A: A single new admin RPC `SetBackendEnabled(backend_id, enabled, resource_version)`. It is naturally idempotent (setting `enabled=false` on an already-disabled backend is a no-op success), guarded by optimistic concurrency (`resource_version`), and authorized by the existing `ManageBackend` permission (platform-admin). It is a state mutation, not a creation, so it does not require an idempotency key.
 - Q: Are there backends that must NOT be disable-able? → A: **The configured default backend.** Disabling the backend that is the platform's default would break creation of any new bucket that does not name an explicit backend, so the system refuses to disable it. A backend that merely *has* existing buckets CAN be disabled — stopping access to those buckets is the entire point of the feature.
-- Q: Does disabling a backend revoke already-issued presigned URLs? → A: **No, and this is a documented limitation.** Presigned URLs are honoured directly by the underlying object store, bypassing PALADIN, so PALADIN cannot retroactively revoke them. They expire on their own short time-to-live. The guarantee is precise: disabling stops PALADIN from issuing *new* presigned URLs and rejects all PALADIN-mediated operations; URLs already handed out remain valid until they expire.
+- Q: Does disabling a backend revoke already-issued presigned URLs? → A: **No, and this is a documented limitation.** Presigned URLs are honoured directly by the underlying object store, bypassing Paladin, so Paladin cannot retroactively revoke them. They expire on their own short time-to-live. The guarantee is precise: disabling stops Paladin from issuing *new* presigned URLs and rejects all Paladin-mediated operations; URLs already handed out remain valid until they expire.
 - Q: What happens to the disabled state across a platform restart? → A: **It persists.** The platform mirrors its static backend configuration into its control-plane store at startup. That mirroring MUST preserve the operator-set enabled/disabled state — a backend an operator disabled stays disabled after a restart; it does not silently re-enable.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -28,10 +28,10 @@ transition, the operator-facing surface, and the guard rails.
 ### User Story 1 — Disabling a backend stops all access (Priority: P1)
 
 A platform operator disables a storage backend. From that moment, every
-operation PALADIN performs against that backend — uploading an object,
+operation Paladin performs against that backend — uploading an object,
 downloading one, listing, requesting a presigned link, starting a
 multipart upload, or creating a bucket on it — is refused with a clear
-"backend is disabled" error, before PALADIN ever contacts the object store.
+"backend is disabled" error, before Paladin ever contacts the object store.
 
 **Why this priority**: This is the entire safety contract of the
 feature. Without server-side enforcement, "disabled" is a cosmetic UI
@@ -205,7 +205,7 @@ the backend is still reported as disabled and still rejects operations.
 - **FR-001**: Each storage backend MUST carry a durable enabled/disabled
   state, defaulting to enabled for any backend that has no prior stored
   state.
-- **FR-002**: The system MUST reject **every** PALADIN-mediated operation that
+- **FR-002**: The system MUST reject **every** Paladin-mediated operation that
   resolves to a disabled backend — object upload, download, head, copy,
   list, presigned-URL issuance (GET and PUT), multipart upload, and bucket
   creation — with a clear "backend is disabled" failure, and MUST do so
@@ -258,7 +258,7 @@ the backend is still reported as disabled and still rejects operations.
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of PALADIN-mediated operation types that resolve to a
+- **SC-001**: 100% of Paladin-mediated operation types that resolve to a
   disabled backend (upload, download, head, copy, list, presign GET,
   presign PUT, multipart, bucket-create) are refused — verified by an
   automated test exercising each type and asserting no object-store call

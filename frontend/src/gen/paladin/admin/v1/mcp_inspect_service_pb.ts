@@ -22,14 +22,15 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_mcp_inspect_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZvY3AvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIMb2NwLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IhUKE0xpc3RTZXNzaW9uc1JlcXVlc3QiQgoUTGlzdFNlc3Npb25zUmVzcG9uc2USKgoIc2Vzc2lvbnMYASADKAsyGC5vY3AuYWRtaW4udjEuTUNQU2Vzc2lvbiK+AQoKTUNQU2Vzc2lvbhIKCgJpZBgBIAEoCRIVCg1hZ2VudF9zdWJqZWN0GAIgASgJEi4KCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWxhc3Rfc2VlbhgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoPdG9vbF9jYWxsX2NvdW50GAUgASgDEhUKDXJlcXVlc3RfY291bnQYBiABKAMi4gEKEk1DUEluc3BlY3RSZXNwb25zZRIqCghwcm9maWxlcxgBIAMoCzIYLm9jcC5hZG1pbi52MS5NQ1BQcm9maWxlEhMKC2Fsd2F5c19kZW55GAIgAygJEisKDHRvb2xfY2F0YWxvZxgDIAMoCzIVLm9jcC5hZG1pbi52MS5NQ1BUb29sEi0KCXVwc3RyZWFtcxgEIAEoCzIaLm9jcC5hZG1pbi52MS5NQ1BVcHN0cmVhbXMSLwoKdHJhbnNwb3J0cxgFIAEoCzIbLm9jcC5hZG1pbi52MS5NQ1BUcmFuc3BvcnRzIl0KCk1DUFByb2ZpbGUSDAoEbmFtZRgBIAEoCRINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkiZgoHTUNQVG9vbBIMCgRuYW1lGAEgASgJEhAKCGF1ZGllbmNlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWNhcGFiaWxpdHlfb3AYBCABKAkSDwoHbXV0YXRlcxgFIAEoCCJECgxNQ1BVcHN0cmVhbXMSEQoJYWRtaW5fdXJsGAEgASgJEhAKCGRhdGFfdXJsGAIgASgJEg8KB2lhbV91cmwYAyABKAkibQoNTUNQVHJhbnNwb3J0cxIuCgVzdGRpbxgBIAEoCzIfLm9jcC5hZG1pbi52MS5NQ1BUcmFuc3BvcnRTdGRpbxIsCgRodHRwGAIgASgLMh4ub2NwLmFkbWluLnYxLk1DUFRyYW5zcG9ydEhUVFAiNQoRTUNQVHJhbnNwb3J0U3RkaW8SDwoHZW5hYmxlZBgBIAEoCBIPCgdwcm9maWxlGAIgASgJImMKEE1DUFRyYW5zcG9ydEhUVFASDwoHZW5hYmxlZBgBIAEoCBIMCgRhZGRyGAIgASgJEg8KB3Byb2ZpbGUYAyABKAkSHwoXc2Vzc2lvbl90aW1lb3V0X3NlY29uZHMYBCABKAMyuAEKEU1DUEluc3BlY3RTZXJ2aWNlEkwKB0luc3BlY3QSHy5vY3AuYWRtaW4udjEuTUNQSW5zcGVjdFJlcXVlc3QaIC5vY3AuYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlElUKDExpc3RTZXNzaW9ucxIhLm9jcC5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlQlJaUGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtvY3BhZG1pbnYxYgZwcm90bzM",
+    "CilsZWdhdGUvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IhUKE0xpc3RTZXNzaW9uc1JlcXVlc3QiRQoUTGlzdFNlc3Npb25zUmVzcG9uc2USLQoIc2Vzc2lvbnMYASADKAsyGy5sZWdhdGUuYWRtaW4udjEuTUNQU2Vzc2lvbiK+AQoKTUNQU2Vzc2lvbhIKCgJpZBgBIAEoCRIVCg1hZ2VudF9zdWJqZWN0GAIgASgJEi4KCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWxhc3Rfc2VlbhgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoPdG9vbF9jYWxsX2NvdW50GAUgASgDEhUKDXJlcXVlc3RfY291bnQYBiABKAMi7gEKEk1DUEluc3BlY3RSZXNwb25zZRItCghwcm9maWxlcxgBIAMoCzIbLmxlZ2F0ZS5hZG1pbi52MS5NQ1BQcm9maWxlEhMKC2Fsd2F5c19kZW55GAIgAygJEi4KDHRvb2xfY2F0YWxvZxgDIAMoCzIYLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUb29sEjAKCXVwc3RyZWFtcxgEIAEoCzIdLmxlZ2F0ZS5hZG1pbi52MS5NQ1BVcHN0cmVhbXMSMgoKdHJhbnNwb3J0cxgFIAEoCzIeLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUcmFuc3BvcnRzIl0KCk1DUFByb2ZpbGUSDAoEbmFtZRgBIAEoCRINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkiZgoHTUNQVG9vbBIMCgRuYW1lGAEgASgJEhAKCGF1ZGllbmNlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWNhcGFiaWxpdHlfb3AYBCABKAkSDwoHbXV0YXRlcxgFIAEoCCJECgxNQ1BVcHN0cmVhbXMSEQoJYWRtaW5fdXJsGAEgASgJEhAKCGRhdGFfdXJsGAIgASgJEg8KB2lhbV91cmwYAyABKAkicwoNTUNQVHJhbnNwb3J0cxIxCgVzdGRpbxgBIAEoCzIiLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUcmFuc3BvcnRTdGRpbxIvCgRodHRwGAIgASgLMiEubGVnYXRlLmFkbWluLnYxLk1DUFRyYW5zcG9ydEhUVFAiNQoRTUNQVHJhbnNwb3J0U3RkaW8SDwoHZW5hYmxlZBgBIAEoCBIPCgdwcm9maWxlGAIgASgJImMKEE1DUFRyYW5zcG9ydEhUVFASDwoHZW5hYmxlZBgBIAEoCBIMCgRhZGRyGAIgASgJEg8KB3Byb2ZpbGUYAyABKAkSHwoXc2Vzc2lvbl90aW1lb3V0X3NlY29uZHMYBCABKAMyxAEKEU1DUEluc3BlY3RTZXJ2aWNlElIKB0luc3BlY3QSIi5sZWdhdGUuYWRtaW4udjEuTUNQSW5zcGVjdFJlcXVlc3QaIy5sZWdhdGUuYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlElsKDExpc3RTZXNzaW9ucxIkLmxlZ2F0ZS5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiUubGVnYXRlLmFkbWluLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlQkdaRWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7bGVnYXRlYWRtaW52MWIGcHJvdG8z",
     [file_google_protobuf_timestamp],
   );
 
 /**
  * @generated from message paladin.admin.v1.MCPInspectRequest
  */
-export type MCPInspectRequest = Message<"paladin.admin.v1.MCPInspectRequest"> & {};
+export type MCPInspectRequest =
+  Message<"paladin.admin.v1.MCPInspectRequest"> & {};
 
 /**
  * Describes the message paladin.admin.v1.MCPInspectRequest.
@@ -122,50 +123,51 @@ export const MCPSessionSchema: GenMessage<MCPSession> =
 /**
  * @generated from message paladin.admin.v1.MCPInspectResponse
  */
-export type MCPInspectResponse = Message<"paladin.admin.v1.MCPInspectResponse"> & {
-  /**
-   * Profiles is the merged map: built-in DefaultProfiles overlaid by
-   * operator overrides from cfg.MCP.Profiles. Keys are profile names
-   * (read_only, agent_safe, admin, plus operator-defined).
-   *
-   * @generated from field: repeated paladin.admin.v1.MCPProfile profiles = 1;
-   */
-  profiles: MCPProfile[];
+export type MCPInspectResponse =
+  Message<"paladin.admin.v1.MCPInspectResponse"> & {
+    /**
+     * Profiles is the merged map: built-in DefaultProfiles overlaid by
+     * operator overrides from cfg.MCP.Profiles. Keys are profile names
+     * (read_only, agent_safe, admin, plus operator-defined).
+     *
+     * @generated from field: repeated paladin.admin.v1.MCPProfile profiles = 1;
+     */
+    profiles: MCPProfile[];
 
-  /**
-   * AlwaysDeny is the global blacklist applied AFTER profile
-   * expansion. cfg.MCP.AlwaysDeny when set; otherwise the built-in
-   * DefaultAlwaysDeny.
-   *
-   * @generated from field: repeated string always_deny = 2;
-   */
-  alwaysDeny: string[];
+    /**
+     * AlwaysDeny is the global blacklist applied AFTER profile
+     * expansion. cfg.MCP.AlwaysDeny when set; otherwise the built-in
+     * DefaultAlwaysDeny.
+     *
+     * @generated from field: repeated string always_deny = 2;
+     */
+    alwaysDeny: string[];
 
-  /**
-   * ToolCatalog is the full list of MCP tools the bridge registers.
-   * Mirrors internal/mcp.DefaultCatalog. Per-tool metadata lets the
-   * UI explain what the tool does + which plane it dispatches to.
-   *
-   * @generated from field: repeated paladin.admin.v1.MCPTool tool_catalog = 3;
-   */
-  toolCatalog: MCPTool[];
+    /**
+     * ToolCatalog is the full list of MCP tools the bridge registers.
+     * Mirrors internal/mcp.DefaultCatalog. Per-tool metadata lets the
+     * UI explain what the tool does + which plane it dispatches to.
+     *
+     * @generated from field: repeated paladin.admin.v1.MCPTool tool_catalog = 3;
+     */
+    toolCatalog: MCPTool[];
 
-  /**
-   * Upstreams reflects cfg.MCP.Upstreams. Not secrets; the per-
-   * request bearer token is what gates access.
-   *
-   * @generated from field: paladin.admin.v1.MCPUpstreams upstreams = 4;
-   */
-  upstreams?: MCPUpstreams | undefined;
+    /**
+     * Upstreams reflects cfg.MCP.Upstreams. Not secrets; the per-
+     * request bearer token is what gates access.
+     *
+     * @generated from field: paladin.admin.v1.MCPUpstreams upstreams = 4;
+     */
+    upstreams?: MCPUpstreams | undefined;
 
-  /**
-   * Transports describes which MCP transports are enabled and their
-   * active profile.
-   *
-   * @generated from field: paladin.admin.v1.MCPTransports transports = 5;
-   */
-  transports?: MCPTransports | undefined;
-};
+    /**
+     * Transports describes which MCP transports are enabled and their
+     * active profile.
+     *
+     * @generated from field: paladin.admin.v1.MCPTransports transports = 5;
+     */
+    transports?: MCPTransports | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.MCPInspectResponse.
@@ -237,7 +239,7 @@ export type MCPTool = Message<"paladin.admin.v1.MCPTool"> & {
   name: string;
 
   /**
-   * Audience: "admin" | "data" | "iam" — which PALADIN plane the
+   * Audience: "admin" | "data" | "iam" — which Paladin plane the
    * underlying Connect call lands on.
    *
    * @generated from field: string audience = 2;
@@ -387,7 +389,7 @@ export const MCPTransportHTTPSchema: GenMessage<MCPTransportHTTP> =
 /**
  * MCPInspectService — read-only operator visibility into the MCP
  * (Model Context Protocol) bridge. The MCP plane sits between agentic
- * runtimes (Claude Desktop, Cursor, Hatchet workers) and the PALADIN
+ * runtimes (Claude Desktop, Cursor, Hatchet workers) and the Paladin
  * Connect API; what tools agents see, which are denied, and which
  * upstreams the bridge dispatches to is config + built-in defaults
  * merged at boot. This service flattens that resolution so an admin

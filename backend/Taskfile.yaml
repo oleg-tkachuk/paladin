@@ -27,7 +27,7 @@ vars:
   # PROJECT_NAME:VERSION; Helm chart pushes at CHART_REPO/PROJECT_NAME
   # :VERSION (separate /charts path, no collision).
   #
-  # IMAGE_NAMESPACE is the registry sub-path under which all PALADIN images
+  # IMAGE_NAMESPACE is the registry sub-path under which all Paladin images
   # live; the Helm chart's values.yaml and the ArgoCD overlay both pin
   # this prefix, so the push path here MUST match or Pods
   # ImagePullBackOff with a 404.

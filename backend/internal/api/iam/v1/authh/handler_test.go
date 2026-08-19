@@ -179,7 +179,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 }
 
 func TestLogin_AudienceEscalationDenied(t *testing.T) {
-	// A plain tenant.user must not be able to mint an paladin-admin audience token.
+	// A plain tenant.user must not be able to mint a paladin-admin audience token.
 	u := userWithPassword(t, "pw", "tenant.user")
 	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{})
 	_, err := h.Login(context.Background(), LoginInput{

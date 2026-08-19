@@ -210,7 +210,7 @@ func (v *JWKSVerifier) refresh(ctx context.Context) error {
 	return nil
 }
 
-// jwk is the wire shape of a JSON Web Key (subset PALADIN needs).
+// jwk is the wire shape of a JSON Web Key (subset Paladin needs).
 type jwk struct {
 	Kid string `json:"kid"`
 	Kty string `json:"kty"` // "RSA" | "EC"

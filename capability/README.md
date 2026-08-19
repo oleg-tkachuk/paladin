@@ -225,7 +225,7 @@ v3.7.2                ← Paladin, unrelated cadence
 
 v0.1.0 — an **internal library** of [Paladin](../README.md),
 extracted so the primitive is clean, self-contained and reusable, not to ship
-it as a separate product. PALADIN is its reference consumer: a deployment with
+it as a separate product. Paladin is its reference consumer: a deployment with
 relational storage, policy evaluation and an admin API on top of it. It stays
 in-tree, consumed via a `replace` directive; the tag exists as hygiene, not as
 a promise of external support. The Go API is pre-1.0 — read the diff before

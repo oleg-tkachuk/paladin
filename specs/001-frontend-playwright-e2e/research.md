@@ -39,10 +39,10 @@ findings on the technology choices the plan makes.
 - **Decision**: Consume the **cluster-shared** Garage deployed
   by `gitops/specs/001-garage-object-storage`. The e2e
   docker-compose stack does NOT bring up its own Garage
-  sidecar — it points the PALADIN backend at the cluster service.
+  sidecar — it points the Paladin backend at the cluster service.
 - **Rationale**:
   - Single source of truth: one Garage instance per cluster,
-    shared by every consumer (PALADIN control plane, e2e tests,
+    shared by every consumer (Paladin control plane, e2e tests,
     future tooling). Avoids drift between
     test-fixture-version vs prod-version.
   - Same credentials path as production: the
@@ -59,14 +59,14 @@ findings on the technology choices the plan makes.
     `host.docker.internal:3900` (overridable via
     `PALADIN_E2E_S3_ENDPOINT`).
 - **What Garage gives us**:
-  - Implements every S3 operation PALADIN backend actually
+  - Implements every S3 operation Paladin backend actually
     calls: `PutObject`, `GetObject`, `HeadObject`,
     `DeleteObject`, `ListObjects(V2)`, `CreateBucket`,
     `DeleteBucket`, Sigv4 auth, **presigned URLs**, multipart
-    upload (the critical surface for PALADIN's capability tokens
+    upload (the critical surface for Paladin's capability tokens
     and admin object operations).
   - Object versioning / tagging at the S3 layer are **not**
-    implemented by Garage. Confirmed safe: PALADIN tracks
+    implemented by Garage. Confirmed safe: Paladin tracks
     versions in the `object_versions` Postgres table and
     tags in `object_tags`. Neither hits S3 API calls.
 - **Alternatives considered**:
@@ -127,7 +127,7 @@ findings on the technology choices the plan makes.
 ## R-005 — Browser engine matrix
 
 - **Decision**: Chromium only.
-- **Rationale**: see Clarification Q1. PALADIN is an internal
+- **Rationale**: see Clarification Q1. Paladin is an internal
   operator tool; cross-browser parity is not a stated
   requirement. Multi-engine matrix triples test runtime AND
   the flake surface (each engine has its own auto-wait
@@ -168,7 +168,7 @@ findings on the technology choices the plan makes.
   - Multi-process container via `supervisord` running api +
     admin + iam in one image: avoids 2 container startups
     but ships a non-supported topology and breaks parity
-    with how PALADIN runs in prod. Not worth ~10s saved.
+    with how Paladin runs in prod. Not worth ~10s saved.
 
 ## R-007 — Playwright parallelism + flake guard
 

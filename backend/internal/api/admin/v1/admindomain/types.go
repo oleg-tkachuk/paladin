@@ -36,7 +36,7 @@ type StorageBackend struct {
 	Events                        EventSourceConfig
 	CedarPolicy                   string
 	// Enabled is the durable enable/disable state. false → the backend
-	// rejects every PALADIN-mediated operation that resolves to it. Operator
+	// rejects every Paladin-mediated operation that resolves to it. Operator
 	// managed via SetBackendEnabled; never mirrored from static config.
 	Enabled bool
 	// ReadOnly is the drain state (migration 047). When true on an enabled

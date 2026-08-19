@@ -1,4 +1,4 @@
-// Package api_token is PALADIN's machine-to-machine token primitive.
+// Package api_token is Paladin's machine-to-machine token primitive.
 //
 // Distinct from capability tokens (capability JWTs — short-lived, signed,
 // delegable, agent-runtime) and from JWT user-authn (federated OIDC).
@@ -76,11 +76,11 @@ var (
 // mirrors that schema 1:1, plus a Plaintext field that's populated
 // only on Issue (the only moment the caller ever sees the secret).
 type Token struct {
-	ID         uuid.UUID
-	TenantID   uuid.UUID
-	Name       string
-	Prefix     string   // first PrefixLen base32 chars after `paladin_pat_`
-	Scopes     []string // coarse-grained: api:read, api:write, admin:*
+	ID       uuid.UUID
+	TenantID uuid.UUID
+	Name     string
+	Prefix   string   // first PrefixLen base32 chars after `paladin_pat_`
+	Scopes   []string // coarse-grained: api:read, api:write, admin:*
 	// Roles the derived principal carries. Empty for an ordinary service
 	// token, which is what every token was until a consumer needed to satisfy
 	// a role-gated policy (minting capabilities for the tenants it serves)

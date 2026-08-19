@@ -5,12 +5,13 @@
 package paladindatav1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -40,17 +41,17 @@ const (
 
 // StorageBootstrapServiceClient is a client for the paladin.data.v1.StorageBootstrapService service.
 type StorageBootstrapServiceClient interface {
-	// EnsureTenantStorage idempotently ensures the shared PALADIN bucket exists and
+	// EnsureTenantStorage idempotently ensures the shared Paladin bucket exists and
 	// that each requested object-key is bound to (backend_id, bucket) under the
 	// caller's tenant. Reuses the same physical bucket-provisioning path as the
 	// admin BucketService.CreateBucket(provision_on_backend=true).
 	EnsureTenantStorage(context.Context, *connect.Request[v1.EnsureTenantStorageRequest]) (*connect.Response[v1.EnsureTenantStorageResponse], error)
 }
 
-// NewStorageBootstrapServiceClient constructs a client for the paladin.data.v1.StorageBootstrapService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+// NewStorageBootstrapServiceClient constructs a client for the
+// paladin.data.v1.StorageBootstrapService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
@@ -80,7 +81,7 @@ func (c *storageBootstrapServiceClient) EnsureTenantStorage(ctx context.Context,
 // StorageBootstrapServiceHandler is an implementation of the paladin.data.v1.StorageBootstrapService
 // service.
 type StorageBootstrapServiceHandler interface {
-	// EnsureTenantStorage idempotently ensures the shared PALADIN bucket exists and
+	// EnsureTenantStorage idempotently ensures the shared Paladin bucket exists and
 	// that each requested object-key is bound to (backend_id, bucket) under the
 	// caller's tenant. Reuses the same physical bucket-provisioning path as the
 	// admin BucketService.CreateBucket(provision_on_backend=true).

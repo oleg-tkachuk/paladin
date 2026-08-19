@@ -1,4 +1,4 @@
-# PALADIN test suite
+# Paladin test suite
 
 End-to-end + fuzz tests that exercise the **live Connect API** against a
 running backend. They do not stub anything — every call lands in the real
@@ -74,7 +74,7 @@ Every flow:
 ## Quick start
 
 ```bash
-# Smoke against a locally-running PALADIN (default http://127.0.0.1:8080):
+# Smoke against a locally-running Paladin (default http://127.0.0.1:8080):
 tests/api/run-all.sh
 
 # Single stage:

@@ -21,7 +21,7 @@
 # the pre-version.sh info.env seed).
 #
 # `api/*` tags are EXCLUDED: those version the proto contract (consumed by
-# external repos via `buf generate <repo>.git#tag=api/vX`), not the PALADIN
+# external repos via `buf generate <repo>.git#tag=api/vX`), not the Paladin
 # image/chart. They carry a `/` that is invalid in a Docker tag, and a
 # contract bump must not restamp the image. Never let them leak in here.
 #

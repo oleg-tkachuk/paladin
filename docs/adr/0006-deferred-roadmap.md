@@ -10,10 +10,10 @@
 
 ## Decision
 
-> **Amendment 2026-06-30 — IAM direction settled.** PALADIN is an
+> **Amendment 2026-06-30 — IAM direction settled.** Paladin is an
 > engineer-operated control plane that integrates with other services and
-> exposes an API for bucket access/management. Human authn stays in PALADIN's
-> own IAM (local users + HS256, plus PALADIN-IAM-as-AS per
+> exposes an API for bucket access/management. Human authn stays in Paladin's
+> own IAM (local users + HS256, plus Paladin-IAM-as-AS per
 > [ADR-0009](0009-oauth-authorization-server.md)); service-to-service stays
 > on `api_keys` + capabilities. **"Phase 5b.1 — drop user-authn IAM, accept
 > OIDC"** and **"Federated IdP via JWKS"** are **withdrawn** from this

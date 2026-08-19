@@ -30,7 +30,7 @@ import (
 // X-Paladin-Reason header to render a different toast ("This feature is
 // disabled in this deployment — ask your platform admin to enable
 // `capability`") than for genuinely unimplemented methods ("This
-// version of PALADIN does not implement this RPC").
+// version of Paladin does not implement this RPC").
 //
 // We deliberately do NOT invent a new Connect code (no NotStarted,
 // SubsystemDisabled, etc.) — clients that auto-retry on

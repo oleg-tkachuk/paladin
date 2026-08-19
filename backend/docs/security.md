@@ -1,8 +1,8 @@
-# Security - Paladin (PALADIN)
+# Security - Paladin
 
 ## Overview
 
-PALADIN is designed with a "Secure by Default" mindset, focusing on tenant isolation and least-privilege access.
+Paladin is designed with a "Secure by Default" mindset, focusing on tenant isolation and least-privilege access.
 
 ## 1. Authentication
 
@@ -14,18 +14,18 @@ Access is controlled via two primary mechanisms:
 ## 2. Authorization & Isolation
 
 - **Tenant Scoping**: All database queries and storage operations are strictly scoped by `tenant_id`.
-- **Reject Tenant Mismatch**: If enabled (`security.reject_tenant_mismatch`), PALADIN will reject any request where the derived tenant ID doesn't match the one explicitly provided in the request body or path.
+- **Reject Tenant Mismatch**: If enabled (`security.reject_tenant_mismatch`), Paladin will reject any request where the derived tenant ID doesn't match the one explicitly provided in the request body or path.
 - **RLS (Planned)**: Future support for PostgreSQL Row Level Security to provide an additional layer of isolation at the database level.
 
 ## 3. Storage Security
 
-- **Signed URLs**: Clients never get direct access to storage credentials. PALADIN issues time-limited pre-signed URLs (HMAC) for specific objects.
-- **SSE (Server Side Encryption)**: PALADIN supports AES-256 or KMS-based encryption for objects at rest in S3/SeaweedFS.
+- **Signed URLs**: Clients never get direct access to storage credentials. Paladin issues time-limited pre-signed URLs (HMAC) for specific objects.
+- **SSE (Server Side Encryption)**: Paladin supports AES-256 or KMS-based encryption for objects at rest in S3/SeaweedFS.
 
 ## 4. Input Validation
 
 - **JSON Schema**: All REST request bodies are validated against the OpenAPI specification.
-- **Content Type Enforcement**: PALADIN rejects uploads with content types not in the `allowed_content_types` whitelist.
+- **Content Type Enforcement**: Paladin rejects uploads with content types not in the `allowed_content_types` whitelist.
 - **Size Limits**: Enforced at the control plane layer (`max_object_size`) and propagated to S3 via pre-signed URL conditions.
 
 ## 5. Secret Management
@@ -93,7 +93,7 @@ name. The SealedSecrets **controller install** and the sealed YAML live in
 
 ## 6. Bootstrap admin (ArgoCD-style)
 
-A fresh PALADIN cluster has no users. To avoid the chicken-and-egg of "you
+A fresh Paladin cluster has no users. To avoid the chicken-and-egg of "you
 need an admin token to create the first user, but you need the first
 user to mint a token", the server can provision a platform-admin on
 first boot from a Kubernetes Secret — exactly like ArgoCD's

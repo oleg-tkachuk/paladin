@@ -7,7 +7,7 @@ A multi-tenant control plane in front of object storage, built for
 workloads where the thing calling you is an agent rather than a person.
 
 Applications do not hold S3 credentials or a bucket name. They hold an
-PALADIN credential scoped to a tenant, and PALADIN decides what it may do, routes
+Paladin credential scoped to a tenant, and Paladin decides what it may do, routes
 the bytes to whichever backend that tenant is on, meters what was spent,
 and emits an auditable event trail.
 

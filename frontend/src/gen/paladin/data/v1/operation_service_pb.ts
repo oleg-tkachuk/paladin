@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiNvY3AvZGF0YS92MS9vcGVyYXRpb25fc2VydmljZS5wcm90bxILb2NwLmRhdGEudjEiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkibwoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIqCgpvcGVyYXRpb25zGAEgAygLMhYub2NwLmRhdGEudjEuT3BlcmF0aW9uEikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEyhwIKEE9wZXJhdGlvblNlcnZpY2USSAoMR2V0T3BlcmF0aW9uEiAub2NwLmRhdGEudjEuR2V0T3BlcmF0aW9uUmVxdWVzdBoWLm9jcC5kYXRhLnYxLk9wZXJhdGlvbhJZCg5MaXN0T3BlcmF0aW9ucxIiLm9jcC5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBojLm9jcC5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2USTgoPQ2FuY2VsT3BlcmF0aW9uEiMub2NwLmRhdGEudjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBoWLm9jcC5kYXRhLnYxLk9wZXJhdGlvbkJQWk5naXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtvY3BkYXRhdjFiBnByb3RvMw",
+    "CiZsZWdhdGUvZGF0YS92MS9vcGVyYXRpb25fc2VydmljZS5wcm90bxIObGVnYXRlLmRhdGEudjEiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlQKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIrCgRwYWdlGAEgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkidQoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRItCgpvcGVyYXRpb25zGAEgAygLMhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uEiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEymQIKEE9wZXJhdGlvblNlcnZpY2USTgoMR2V0T3BlcmF0aW9uEiMubGVnYXRlLmRhdGEudjEuR2V0T3BlcmF0aW9uUmVxdWVzdBoZLmxlZ2F0ZS5kYXRhLnYxLk9wZXJhdGlvbhJfCg5MaXN0T3BlcmF0aW9ucxIlLmxlZ2F0ZS5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBomLmxlZ2F0ZS5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2USVAoPQ2FuY2VsT3BlcmF0aW9uEiYubGVnYXRlLmRhdGEudjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBoZLmxlZ2F0ZS5kYXRhLnYxLk9wZXJhdGlvbkJFWkNnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7bGVnYXRlZGF0YXYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_paladin_common_v1_pagination,
@@ -36,12 +36,13 @@ export const file_paladin_data_v1_operation_service: GenFile =
 /**
  * @generated from message paladin.data.v1.GetOperationRequest
  */
-export type GetOperationRequest = Message<"paladin.data.v1.GetOperationRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type GetOperationRequest =
+  Message<"paladin.data.v1.GetOperationRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.GetOperationRequest.

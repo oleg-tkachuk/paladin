@@ -342,7 +342,7 @@ export function IssueCapabilityDialog({
                   </Field>
                   <Field
                     label="Audience (planes)"
-                    hint="Which PALADIN planes accept this token."
+                    hint="Which Paladin planes accept this token."
                   >
                     <ToggleRow
                       options={AUDIENCE_CHOICES}

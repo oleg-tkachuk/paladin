@@ -108,7 +108,7 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger, opts ...Opti
 		poolCfg.ConnConfig.RuntimeParams["lock_timeout"] = "5000"
 	}
 	// Application name surfaces in pg_stat_activity so DBAs can tell
-	// PALADIN traffic from migrations / ad-hoc queries.
+	// Paladin traffic from migrations / ad-hoc queries.
 	if _, set := poolCfg.ConnConfig.RuntimeParams["application_name"]; !set {
 		poolCfg.ConnConfig.RuntimeParams["application_name"] = "paladin"
 	}

@@ -2,7 +2,7 @@ version: "3"
 
 # Helm chart hygiene tasks for backend/deploy/chart.
 #
-# Why this file exists: the PALADIN chart had a multi-doc YAML bug where
+# Why this file exists: the Paladin chart had a multi-doc YAML bug where
 # `{{- range }}` blocks stripped the newline before `---`, gluing the
 # document separator to the previous line (e.g.
 # `automountServiceAccountToken: true---`). YAML parsers treated the
@@ -28,7 +28,7 @@ tasks:
   # ─── Component checks ────────────────────────────────────────────────────
 
   lint:
-    desc: "Run `helm lint` against the PALADIN chart"
+    desc: "Run `helm lint` against the Paladin chart"
     cmds:
       - cmd: |-
           set -euo pipefail

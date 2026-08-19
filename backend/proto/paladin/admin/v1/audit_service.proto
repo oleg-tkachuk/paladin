@@ -38,7 +38,7 @@ message GetAuditLogEntryRequest {
 
 message ExportAuditLogRequest {
   string filter = 1;
-  // "object_name" of the destination object inside an PALADIN bucket, OR an
+  // "object_name" of the destination object inside a Paladin bucket, OR an
   // EventSubscription resource name to fan-out to.
   string destination = 2 [(buf.validate.field).string.min_len = 1];
 }

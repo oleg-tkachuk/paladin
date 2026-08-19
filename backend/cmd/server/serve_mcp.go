@@ -39,11 +39,11 @@ var (
 //     logs route to stderr to keep the protocol stream clean.
 //
 //   - http:   streamable-HTTP per the MCP spec, mounted on /mcp. Token
-//     comes from X-PALADIN-Token per request; getServer mints a fresh
+//     comes from X-Paladin-Token per request; getServer mints a fresh
 //     server (and Clients bundle) per session so concurrent MCP
 //     clients never share auth state.
 //
-// Two transports for PALADIN-internal Connect dispatch:
+// Two transports for Paladin-internal Connect dispatch:
 //
 //   - bridge (default): MCP server holds Connect HTTP clients pointed at
 //     cfg.MCP.Upstreams.{admin,data,iam}URL. Suitable when MCP runs in
@@ -150,7 +150,7 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 			}
 			// Capability optional — forwarded only when the MCP host
 			// supplies it. Absent capability → JWT-only auth flow.
-			return makeClients(token, r.Header.Get("X-PALADIN-Capability"))
+			return makeClients(token, r.Header.Get("X-Paladin-Capability"))
 		},
 	}
 }
@@ -192,7 +192,7 @@ func provideMCPEmbeddedRunner(
 			if token == "" {
 				return nil
 			}
-			return makeInlineClients(token, r.Header.Get("X-PALADIN-Capability"))
+			return makeInlineClients(token, r.Header.Get("X-Paladin-Capability"))
 		},
 		onStop: func(context.Context) {
 			// Bounded (5s) fresh-context OTel flush — see the same note in the
@@ -309,7 +309,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// so the middleware records Mcp-Session-Id activity into a process-local
 	// registry. A reaper (below) evicts idle sessions.
 	//
-	// agent_subject enrichment: the agent's bearer JWT rides in X-PALADIN-Token.
+	// agent_subject enrichment: the agent's bearer JWT rides in X-Paladin-Token.
 	// subjectFn verifies its signature (NOT its audience — an agent token
 	// targets whichever plane it calls: admin/data/iam) and reads the `sub`
 	// claim for the session's display label. Degrades to blank when no signing
@@ -324,7 +324,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// endpoint advertises where to authenticate (RFC 9728 / RFC 8414) and
 	// challenges unauthenticated requests with 401 + WWW-Authenticate so a
 	// standard MCP client can run discovery. Disabled → the legacy
-	// X-PALADIN-Token path is unchanged (missing token → 400 from getServer).
+	// X-Paladin-Token path is unchanged (missing token → 400 from getServer).
 	mcpHandler := http.Handler(tracked)
 	if cfg.MCP.OAuth.Enabled {
 		mux.Handle(mcp.WellKnownProtectedResource, mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth))
@@ -433,7 +433,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 }
 
 // agentSubjectFn returns a TrackSessions subjectFn that extracts the verified
-// `sub` claim from the agent's X-PALADIN-Token for the session display label. It is
+// `sub` claim from the agent's X-Paladin-Token for the session display label. It is
 // audience-agnostic on purpose (ExpectedAudience left empty) — an agent token
 // targets whichever plane it calls (admin/data/iam). Returns a no-op (blank
 // subject) when no usable verifier can be built (e.g. a thin bridge with no

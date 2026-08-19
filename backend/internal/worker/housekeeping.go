@@ -11,7 +11,7 @@
 // Both share the same scheduler shape: tick on Interval, log errors,
 // continue. They are NOT redundant with DB-side TTLs — running on Postgres
 // 17 you'd use pg_cron or partitioning instead. We keep the worker form so
-// PALADIN runs identically on managed Postgres tiers without extensions.
+// Paladin runs identically on managed Postgres tiers without extensions.
 package worker
 
 import (

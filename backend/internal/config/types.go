@@ -710,7 +710,7 @@ type StorageBackend struct {
 	// so Provider records which one for UI display. Mirrored into
 	// storage_backends.provider by the bootstrap reconciler.
 	Provider string `yaml:"provider" json:"provider"`
-	// Bucket is the physical S3 bucket name. PALADIN "ObjectKey" entries
+	// Bucket is the physical S3 bucket name. Paladin "ObjectKey" entries
 	// become a tenant-scoped prefix within this bucket; the full S3 key
 	// for any object is "<tenant_id>/<object_key>/<key>".
 	Bucket         string               `yaml:"bucket" json:"bucket"`
@@ -725,7 +725,7 @@ type StorageBackend struct {
 	Events         StorageBackendEvents `yaml:"events" json:"events"`
 }
 
-// StorageBackendAuth selects how the PALADIN control plane authenticates to a
+// StorageBackendAuth selects how the Paladin control plane authenticates to a
 // physical S3 backend. Only one mode is active per backend.
 //
 // Modes:
@@ -855,7 +855,7 @@ type MCP struct {
 	// OAuth 2.1 Resource Server (ADR-0008): it advertises where to
 	// authenticate (RFC 9728 / RFC 8414 metadata) and challenges
 	// unauthenticated requests with 401 + WWW-Authenticate. Disabled by
-	// default — the legacy X-PALADIN-Token header keeps working untouched.
+	// default — the legacy X-Paladin-Token header keeps working untouched.
 	OAuth MCPOAuth `yaml:"oauth" json:"oauth"`
 }
 
@@ -866,7 +866,7 @@ type MCP struct {
 type MCPOAuth struct {
 	// Enabled gates the whole RS behaviour: the 401 challenge and the
 	// metadata endpoints. When false the transport behaves exactly as
-	// before (X-PALADIN-Token, missing token → 400).
+	// before (X-Paladin-Token, missing token → 400).
 	Enabled bool `yaml:"enabled" json:"enabled"`
 	// ResourceURL is this MCP server's OAuth resource identifier — the
 	// canonical URL clients bind their token to (RFC 8707), e.g.
@@ -877,14 +877,14 @@ type MCPOAuth struct {
 	// AuthorizationServers lists the issuer URLs of the OAuth Authorization
 	// Servers that can mint tokens for this resource (RFC 9728). A standard
 	// MCP client fetches each AS's own metadata from these URLs. Typically
-	// one entry: PALADIN IAM, or a federated IdP.
+	// one entry: Paladin IAM, or a federated IdP.
 	AuthorizationServers []string `yaml:"authorization_servers" json:"authorization_servers"`
 	// ScopesSupported is advertised in the protected-resource metadata so
 	// clients know which scopes to request. Optional.
 	ScopesSupported []string `yaml:"scopes_supported" json:"scopes_supported"`
 	// AuthorizationServer, when its Issuer is set, makes this process ALSO
 	// serve RFC 8414 Authorization-Server metadata at
-	// /.well-known/oauth-authorization-server — the PALADIN-IAM-is-the-AS case
+	// /.well-known/oauth-authorization-server — the Paladin-IAM-is-the-AS case
 	// (same origin). Leave Issuer empty when delegating to an external IdP
 	// that serves its own metadata. The endpoint paths it advertises are
 	// the contract the deferred AS phase fulfils.
@@ -910,7 +910,7 @@ type MCPProfile struct {
 	Deny  []string `yaml:"deny,omitempty" json:"deny,omitempty"`
 }
 
-// MCPUpstreams holds the PALADIN plane URLs the MCP bridge dispatches to. They
+// MCPUpstreams holds the Paladin plane URLs the MCP bridge dispatches to. They
 // are not secrets; the per-request bearer token is what gates access.
 type MCPUpstreams struct {
 	AdminURL string `yaml:"admin_url" json:"admin_url"`
@@ -963,13 +963,13 @@ type Capability struct {
 
 	// IssuerName is placed in the `iss` claim of every minted token
 	// and required to be in TrustedIssuers on the verifier side.
-	// Conventional value: the PALADIN deployment's external URL or a
+	// Conventional value: the Paladin deployment's external URL or a
 	// stable label like "paladin-prod-eu".
 	IssuerName string `yaml:"issuer_name" json:"issuer_name"`
 
 	// TrustedIssuers is the set of `iss` values the verifier accepts.
 	// Always include IssuerName; add others when federating across
-	// PALADIN instances.
+	// Paladin instances.
 	TrustedIssuers []string `yaml:"trusted_issuers" json:"trusted_issuers"`
 
 	// SigningKeyPath is a filesystem path to the Ed25519 private key
@@ -1074,9 +1074,9 @@ type APIToken struct {
 
 // ─── Ingest plane (storage events) ──────────────────────────────────────────
 //
-// The ingest plane is PALADIN as a CONSUMER of storage-backend events. When
+// The ingest plane is Paladin as a CONSUMER of storage-backend events. When
 // SeaweedFS or MinIO publishes "object uploaded" / "object deleted",
-// the ingest worker receives the event and promotes the matching PALADIN
+// the ingest worker receives the event and promotes the matching Paladin
 // row from PENDING → AVAILABLE (or marks it deleted).
 //
 // Three transport drivers, mutually exclusive — operator picks one
@@ -1145,7 +1145,7 @@ type IngestWebhook struct {
 	SharedSecretRef SecretRef `yaml:"shared_secret_ref" json:"shared_secret_ref"`
 
 	// SignatureHeader names the header carrying the HMAC. Defaults
-	// to "X-PALADIN-Signature". SeaweedFS webhook uses an empty bearer
+	// to "X-Paladin-Signature". SeaweedFS webhook uses an empty bearer
 	// pattern by default; configure the source to send this header.
 	SignatureHeader string `yaml:"signature_header" json:"signature_header"`
 

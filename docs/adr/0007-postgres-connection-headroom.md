@@ -8,7 +8,7 @@
   its HPA ceiling (`maxReplicas: 12`). New connections past the ceiling fail
   with `FATAL: sorry, too many clients already`.
 
-  Per [ADR-0005](0005-cnpg-ha-ownership.md), the PALADIN chart does **not** own
+  Per [ADR-0005](0005-cnpg-ha-ownership.md), the Paladin chart does **not** own
   the CNPG `Cluster` — it lives in the sibling **gitops** repo, and every
   DSN points cross-namespace at `paladin-postgresql-rw.database.svc.cluster.local`.
   So `max_connections` (and any PgBouncer deployment fronting the cluster) is
@@ -16,15 +16,15 @@
 
 ## Decision
 
-1. **The durable headroom fix lives in gitops, not the PALADIN chart.** The
+1. **The durable headroom fix lives in gitops, not the Paladin chart.** The
    two durable options — raise the CNPG `Cluster`'s `max_connections` to
    ≥300, or deploy PgBouncer (transaction pooling) in front of the cluster —
    are both properties of the database tier gitops owns. Adding a PgBouncer
-   Deployment to the PALADIN chart that re-points every DSN would split ownership
+   Deployment to the Paladin chart that re-points every DSN would split ownership
    of the connection path across two repos (the same two-owners anti-pattern
    ADR-0005 rejected for the `Cluster`).
 
-2. **The PALADIN chart owns a bounded, published connection budget.** The chart's
+2. **The Paladin chart owns a bounded, published connection budget.** The chart's
    contract is: a small per-pod pool (`pool.max_conns`) and a documented
    worst-case budget the operator can check against the cluster's
    `max_connections`. `values-prod.yaml` carries the budget table inline.
@@ -45,13 +45,13 @@
 
 ## Consequences
 
-- No PgBouncer is added to the PALADIN chart; the alarmist "WARNING" comment in
+- No PgBouncer is added to the Paladin chart; the alarmist "WARNING" comment in
   `values-prod.yaml` is replaced by the budget table + this ADR pointer, so
   the constraint is an owned, documented operational contract rather than an
   open risk note.
 - A handoff item for gitops (raise `max_connections` or add PgBouncer)
   remains, but it is correctly located in the repo that owns the database —
   same disposition as ADR-0005's HA recommendation.
-- If PALADIN ever vendors its own Postgres (no gitops), this ADR is revisited:
+- If Paladin ever vendors its own Postgres (no gitops), this ADR is revisited:
   a chart-owned PgBouncer becomes the right call because ownership would no
   longer be split.

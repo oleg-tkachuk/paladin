@@ -148,7 +148,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		// Promote + paladin.object.uploaded fan-out in one tx (ADR-0003). In
 		// explicit-mode buckets the storage event is what drives the
 		// promote, so without this the webhook subscribers would never see
-		// the upload — PALADIN is their unified notification channel. The
+		// the upload — Paladin is their unified notification channel. The
 		// `changed` guard keeps it exactly-once across producers: an
 		// implicit-mode CompleteObject already fired the event, so a later
 		// storage event for the same object promotes to a no-op and emits

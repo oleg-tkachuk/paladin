@@ -1,4 +1,4 @@
-// Package issuer mints PALADIN-internal JWT access + refresh tokens.
+// Package issuer mints Paladin-internal JWT access + refresh tokens.
 //
 // Two token types:
 //

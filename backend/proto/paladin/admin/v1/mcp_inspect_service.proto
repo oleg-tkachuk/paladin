@@ -8,7 +8,7 @@ import "google/protobuf/timestamp.proto";
 
 // MCPInspectService — read-only operator visibility into the MCP
 // (Model Context Protocol) bridge. The MCP plane sits between agentic
-// runtimes (Claude Desktop, Cursor, Hatchet workers) and the PALADIN
+// runtimes (Claude Desktop, Cursor, Hatchet workers) and the Paladin
 // Connect API; what tools agents see, which are denied, and which
 // upstreams the bridge dispatches to is config + built-in defaults
 // merged at boot. This service flattens that resolution so an admin
@@ -98,7 +98,7 @@ message MCPProfile {
 
 message MCPTool {
   string name = 1;
-  // Audience: "admin" | "data" | "iam" — which PALADIN plane the
+  // Audience: "admin" | "data" | "iam" — which Paladin plane the
   // underlying Connect call lands on.
   string audience = 2;
   string description = 3;

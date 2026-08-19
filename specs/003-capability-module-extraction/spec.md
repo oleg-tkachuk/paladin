@@ -6,17 +6,17 @@
 
 **Status**: Draft
 
-**Input**: User description: "Extract the capability authorisation primitive (internal/capability) from the PALADIN monorepo into a standalone, independently-consumable Go module. The module must be importable by third parties who do not use object storage at all, with PALADIN remaining the reference implementation that consumes it."
+**Input**: User description: "Extract the capability authorisation primitive (internal/capability) from the Paladin monorepo into a standalone, independently-consumable Go module. The module must be importable by third parties who do not use object storage at all, with Paladin remaining the reference implementation that consumes it."
 
 ## Context
 
-PALADIN's capability primitive is a short-lived, signed, delegable, individually
+Paladin's capability primitive is a short-lived, signed, delegable, individually
 revocable authorisation token carrying **budget and lifetime caveats** and
 per-call attribution — designed for agentic workloads where an orchestrator
 issues strictly-narrower sub-tokens to the agents it spawns.
 
 That primitive has no conceptual dependency on object storage. A code survey
-confirms the coupling is already near-nil: the package imports **zero** PALADIN
+confirms the coupling is already near-nil: the package imports **zero** Paladin
 internal packages. Its value is currently unreachable to anyone who does not
 want an S3 control plane, which is the problem this feature solves.
 
@@ -60,25 +60,25 @@ its resolved dependency graph for absence of storage/database packages.
 
 ---
 
-### User Story 2 - PALADIN keeps working unchanged (Priority: P1)
+### User Story 2 - Paladin keeps working unchanged (Priority: P1)
 
-PALADIN continues to issue, verify, delegate, revoke, and meter capabilities
+Paladin continues to issue, verify, delegate, revoke, and meter capabilities
 exactly as before, now consuming the extracted module instead of an internal
 package. Operators observe no behavioural change: the same tokens verify, the
 same budgets enforce, the same revocations propagate, the same metrics and
 audit records appear.
 
 **Why this priority**: Equal-highest with US1. An extraction that regresses
-the reference implementation is not a success — PALADIN is both the proof the
+the reference implementation is not a success — Paladin is both the proof the
 module works and the thing currently in production use.
 
-**Independent Test**: Run PALADIN's existing capability, authorisation,
+**Independent Test**: Run Paladin's existing capability, authorisation,
 budget/charge, and outbox test suites unchanged against the extracted module
 and confirm they pass without modification to their assertions.
 
 **Acceptance Scenarios**:
 
-1. **Given** PALADIN built against the extracted module, **When** the existing
+1. **Given** Paladin built against the extracted module, **When** the existing
    automated suites run, **Then** every capability, authorisation, billing,
    and transactional-outbox test passes with no assertion changed.
 2. **Given** a capability token issued by the pre-extraction build, **When**
@@ -92,25 +92,25 @@ and confirm they pass without modification to their assertions.
 
 ---
 
-### User Story 3 - Reference storage implementation stays with PALADIN (Priority: P2)
+### User Story 3 - Reference storage implementation stays with Paladin (Priority: P2)
 
-An operator running PALADIN gets a production-grade persistent implementation of
+An operator running Paladin gets a production-grade persistent implementation of
 the capability storage contracts out of the box. A third party who wants the
 same persistence can read that implementation as a worked example rather than
 being forced to adopt it.
 
 **Why this priority**: Valuable but not blocking. The module is usable with a
-consumer-supplied store; shipping the persistent one is what makes PALADIN a
+consumer-supplied store; shipping the persistent one is what makes Paladin a
 credible reference rather than a toy.
 
-**Independent Test**: Confirm PALADIN's persistent store satisfies the module's
+**Independent Test**: Confirm Paladin's persistent store satisfies the module's
 published contracts and that the module's own test suite passes without it.
 
 **Acceptance Scenarios**:
 
 1. **Given** the extracted module, **When** its test suite runs in isolation,
    **Then** it passes without any persistent storage available.
-2. **Given** PALADIN, **When** it starts, **Then** it supplies its persistent
+2. **Given** Paladin, **When** it starts, **Then** it supplies its persistent
    store to the module through the published contracts only.
 
 ---
@@ -119,7 +119,7 @@ published contracts and that the module's own test suite passes without it.
 
 A prospective adopter can discover the module, read a focused document that
 explains the primitive on its own terms, see a runnable example, and pin a
-specific released version without tracking PALADIN's release cadence.
+specific released version without tracking Paladin's release cadence.
 
 **Why this priority**: Adoption enablement. The extraction is technically
 complete without it, but unreleased and undocumented code gets no adopters,
@@ -132,9 +132,9 @@ documentation to reach a working issue/verify cycle.
 
 1. **Given** only the module's documentation, **When** a developer follows it
    end to end, **Then** they reach a working issue → verify cycle without
-   consulting PALADIN's documentation.
+   consulting Paladin's documentation.
 2. **Given** a published version, **When** a consumer pins it, **Then**
-   subsequent PALADIN changes do not alter that consumer's resolved dependency.
+   subsequent Paladin changes do not alter that consumer's resolved dependency.
 
 ---
 
@@ -167,7 +167,7 @@ documentation to reach a working issue/verify cycle.
 #### Module boundary
 
 - **FR-001**: The capability primitive MUST be consumable as an independently
-  versioned unit, resolvable without depending on PALADIN.
+  versioned unit, resolvable without depending on Paladin.
 - **FR-002**: The module MUST NOT require any consumer to take on an
   object-storage dependency.
 - **FR-003**: The module MUST NOT require any consumer to take on a specific
@@ -205,17 +205,17 @@ documentation to reach a working issue/verify cycle.
 - **FR-013**: When any ceiling rejects a charge, no counter may be left
   mutated.
 
-#### PALADIN as consumer
+#### Paladin as consumer
 
-- **FR-014**: PALADIN MUST consume the module through its published contracts
+- **FR-014**: Paladin MUST consume the module through its published contracts
   only, with no privileged access unavailable to third parties.
-- **FR-015**: PALADIN MUST retain its persistent implementation of the storage
+- **FR-015**: Paladin MUST retain its persistent implementation of the storage
   contracts, and that implementation MUST NOT ship inside the module.
-- **FR-016**: All existing PALADIN consumers of the primitive — the request
+- **FR-016**: All existing Paladin consumers of the primitive — the request
   authorisation path, the administrative issue/revoke/list surface, the
   billing surface, the data-plane handlers, the background expiry worker, and
   configuration — MUST continue to function unchanged in observable behaviour.
-- **FR-017**: PALADIN's existing automated coverage of the primitive MUST continue
+- **FR-017**: Paladin's existing automated coverage of the primitive MUST continue
   to pass without assertion changes.
 
 #### Adoption
@@ -225,7 +225,7 @@ documentation to reach a working issue/verify cycle.
 - **FR-019**: The module MUST include at least one runnable example covering
   issue → verify → delegate → revoke against a consumer-supplied store.
 - **FR-020**: The module MUST be independently versioned, so a consumer can
-  pin a version unaffected by PALADIN's release cadence.
+  pin a version unaffected by Paladin's release cadence.
 
 ### Key Entities
 
@@ -256,7 +256,7 @@ documentation to reach a working issue/verify cycle.
   storage implementation.
 - **SC-002**: The dependency set that such a consumer inherits contains zero
   object-storage packages and zero database drivers.
-- **SC-003**: 100% of PALADIN's existing capability, authorisation, billing, and
+- **SC-003**: 100% of Paladin's existing capability, authorisation, billing, and
   outbox tests pass after the extraction with no assertion modified.
 - **SC-004**: A token issued before the extraction verifies after it, and the
   reverse, with no migration step.
@@ -265,7 +265,7 @@ documentation to reach a working issue/verify cycle.
 - **SC-006**: The module's own test suite passes with no external
   infrastructure — no database, no network, no container.
 - **SC-007**: A developer reaches a working issue → verify cycle using only
-  the module's own documentation, without opening PALADIN's.
+  the module's own documentation, without opening Paladin's.
 - **SC-008**: Charge atomicity is demonstrated: an induced failure in the
   consumer-side side effect leaves the spend counter and ledger unchanged.
 - **SC-009**: Token verification on the request path shows **no more than 5%
@@ -287,7 +287,7 @@ documentation to reach a working issue/verify cycle.
   existing CI, while still delivering independent importability and
   versioning. Splitting the repository later remains possible and is out of
   scope here.
-- **The persistent store stays with PALADIN.** The relational implementation is
+- **The persistent store stays with Paladin.** The relational implementation is
   the reference, not part of the module's contract surface.
 - **Consumers supply their own observability.** The module may emit
   instrumentation but must not require a specific collector to function.
@@ -303,4 +303,4 @@ documentation to reach a working issue/verify cycle.
 - Any change to the token format, caveat semantics, or delegation rules.
 - Externally-managed signing keys (tracked separately in the backlog).
 - Publishing to a package registry or announcing the module.
-- Extracting any other PALADIN component.
+- Extracting any other Paladin component.

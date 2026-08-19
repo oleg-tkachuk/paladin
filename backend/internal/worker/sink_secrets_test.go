@@ -105,7 +105,7 @@ func TestResolveSinkValue_NoResolverIsHardError(t *testing.T) {
 func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 	var gotSig string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotSig = r.Header.Get("X-PALADIN-Signature")
+		gotSig = r.Header.Get("X-Paladin-Signature")
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))

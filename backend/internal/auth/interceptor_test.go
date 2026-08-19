@@ -14,7 +14,7 @@ func TestInterceptorSkipTokensAndCapabilities_DefersACapability(t *testing.T) {
 	h := http.Header{}
 	h.Set(HeaderCapability, "eyJ0eXAiOiJKV1QifQ.e30.sig")
 	if !a.hasCapability(h) {
-		t.Error("X-PALADIN-Capability must be recognised")
+		t.Error("X-Paladin-Capability must be recognised")
 	}
 
 	h2 := http.Header{}

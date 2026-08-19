@@ -28,7 +28,7 @@ type Config struct {
 }
 
 // Safety bounds applied when Config leaves TTLs unset. A presigned URL
-// bypasses PALADIN and hits S3 directly, so it cannot be revoked before it
+// bypasses Paladin and hits S3 directly, so it cannot be revoked before it
 // expires — an unbounded MaxTTL (the zero value) would let a caller mint
 // effectively permanent links. These ceilings are the last line of
 // defense; operators tune the real values via config.

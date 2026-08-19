@@ -100,11 +100,11 @@ func (d *RabbitMQDriver) runOnce(
 	msgs, err := ch.Consume(
 		d.Queue,
 		"paladin-ingest", // consumer tag
-		false,        // autoAck=false — we ack/nack explicitly
-		false,        // exclusive
-		false,        // noLocal
-		false,        // noWait
-		nil,          // args
+		false,           // autoAck=false — we ack/nack explicitly
+		false,           // exclusive
+		false,           // noLocal
+		false,           // noWait
+		nil,             // args
 	)
 	if err != nil {
 		return fmt.Errorf("amqp consume %q: %w", d.Queue, err)

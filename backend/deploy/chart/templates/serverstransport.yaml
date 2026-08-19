@@ -1,5 +1,5 @@
 {{/*
-ServersTransport — makes Traefik dial the PALADIN backend planes over HTTPS.
+ServersTransport — makes Traefik dial the Paladin backend planes over HTTPS.
 The planes terminate TLS at the pod (config.api.server.{data,iam}.tls);
 without this, Traefik speaks plain HTTP and the backend answers 400
 ("Client sent an HTTP request to an HTTPS server") before the auth chain.

@@ -130,7 +130,7 @@ service:
   stickySessions: false
 
 # ─── Traefik IngressRoute ──────────────────────────────────────────────────
-# PALADIN UI fronted by Traefik (consistent with acme's IngressRoute
+# Paladin UI fronted by Traefik (consistent with acme's IngressRoute
 # pattern). The chart previously shipped both generic Ingress AND
 # Gateway API HTTPRoute gated off; both removed — one routing model.
 traefik:
@@ -230,7 +230,7 @@ podDisruptionBudget:
 config:
   runtimeConfig:
     public:
-      objectControlPlane:
+      paladin:
         baseUrl: "/api/paladin"
         upstreamUrl: "http://paladin-core.paladin.svc.cluster.local:8080"
         timeoutMs: 5000

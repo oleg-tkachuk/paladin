@@ -34,7 +34,7 @@ spec:
     - name: {{ $apiFullname }}.lifecycle
       rules:
         {{- if $rules.crashLooping.enabled }}
-        - alert: PALADINApiCrashLooping
+        - alert: PaladinApiCrashLooping
           expr: |
             increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}"}[15m]) > 2
           for: {{ $rules.crashLooping.for }}
@@ -42,7 +42,7 @@ spec:
             severity: {{ $rules.crashLooping.severity }}
             service: paladin-api
           annotations:
-            summary: "PALADIN api pod is crash-looping"
+            summary: "Paladin api pod is crash-looping"
             description: |
               Pod {{ "{{ $labels.pod }}" }} in namespace {{ .Release.Namespace }}
               has restarted more than 2 times in 15m. Likely panic on startup,
@@ -50,7 +50,7 @@ spec:
                 kubectl -n {{ .Release.Namespace }} logs <pod> --previous
         {{- end }}
         {{- if $rules.notReady.enabled }}
-        - alert: PALADINApiNotReady
+        - alert: PaladinApiNotReady
           expr: |
             kube_pod_status_ready{namespace="{{ .Release.Namespace }}",condition="true"} == 0
             and on (pod, namespace) kube_pod_labels{label_app_kubernetes_io_component="api"}
@@ -59,20 +59,20 @@ spec:
             severity: {{ $rules.notReady.severity }}
             service: paladin-api
           annotations:
-            summary: "PALADIN api pod stuck NotReady"
+            summary: "Paladin api pod stuck NotReady"
             description: |
               Pod {{ "{{ $labels.pod }}" }} has been NotReady for {{ $rules.notReady.for }}.
               Readiness probe failing — check /readyz on the api Service.
         {{- end }}
         {{- if $rules.oomKilled.enabled }}
-        - alert: PALADINApiOOMKilled
+        - alert: PaladinApiOOMKilled
           expr: |
             increase(kube_pod_container_status_last_terminated_reason{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}",reason="OOMKilled"}[{{ $rules.oomKilled.window }}]) > 0
           labels:
             severity: {{ $rules.oomKilled.severity }}
             service: paladin-api
           annotations:
-            summary: "PALADIN api was OOMKilled"
+            summary: "Paladin api was OOMKilled"
             description: |
               Container {{ .Chart.Name }} was OOMKilled in the last {{ $rules.oomKilled.window }}.
               Bump deployments.api.resources.limits.memory in the env overlay,
@@ -81,7 +81,7 @@ spec:
     - name: {{ $apiFullname }}.traffic
       rules:
         {{- if $rules.highErrorRate.enabled }}
-        - alert: PALADINApiHighErrorRate
+        - alert: PaladinApiHighErrorRate
           expr: |
             (
               sum(rate(promhttp_metric_handler_requests_total{code=~"5..",service="{{ $apiFullname }}"}[5m]))
@@ -93,13 +93,13 @@ spec:
             severity: {{ $rules.highErrorRate.severity }}
             service: paladin-api
           annotations:
-            summary: "PALADIN api error rate above {{ $rules.highErrorRate.threshold | mulf 100.0 }}%"
+            summary: "Paladin api error rate above {{ $rules.highErrorRate.threshold | mulf 100.0 }}%"
             description: |
               Sustained 5xx rate over 5m exceeded {{ $rules.highErrorRate.threshold | mulf 100.0 }}%
               for {{ $rules.highErrorRate.for }}.
         {{- end }}
         {{- if $rules.highLatency.enabled }}
-        - alert: PALADINApiHighLatency
+        - alert: PaladinApiHighLatency
           expr: |
             histogram_quantile(
               0.99,
@@ -110,7 +110,7 @@ spec:
             severity: {{ $rules.highLatency.severity }}
             service: paladin-api
           annotations:
-            summary: "PALADIN api p99 latency > {{ $rules.highLatency.thresholdSeconds }}s"
+            summary: "Paladin api p99 latency > {{ $rules.highLatency.thresholdSeconds }}s"
             description: |
               p99 latency exceeded {{ $rules.highLatency.thresholdSeconds }}s for
               {{ $rules.highLatency.for }}. Check Postgres + SeaweedFS responsiveness.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Helpers for talking to the PALADIN Connect API over plain HTTP/JSON.
+# Helpers for talking to the Paladin Connect API over plain HTTP/JSON.
 #
 # All RPCs are POST `/<package>.<Service>/<Method>` with a JSON body.
 # Connect over JSON does not need HTTP/2 nor protobuf framing — `curl`

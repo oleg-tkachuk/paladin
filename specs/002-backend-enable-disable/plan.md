@@ -7,7 +7,7 @@
 ## Summary
 
 Add a durable `enabled` flag to each storage backend and enforce it as a
-hard server-side gate: any PALADIN-mediated operation that resolves to a
+hard server-side gate: any Paladin-mediated operation that resolves to a
 disabled backend is refused with `CodeFailedPrecondition` **before** any
 object-store call. State is flipped through a single new admin RPC
 `SetBackendEnabled(backend_id, enabled, resource_version)` —
@@ -38,7 +38,7 @@ connectshim coverage/mapping); frontend Playwright E2E reuse pattern is
 out of scope for this feature's tests but UI unit/interaction covered by
 existing frontend test setup.
 
-**Target Platform**: Linux server (multi-plane PALADIN binary); admin plane
+**Target Platform**: Linux server (multi-plane Paladin binary); admin plane
 listener `:8090`, data plane `:8080`.
 
 **Project Type**: web-application (existing `backend/` + `frontend/`

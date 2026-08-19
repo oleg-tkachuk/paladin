@@ -1,4 +1,4 @@
-// Package logger wires zap into the PALADIN request pipeline.
+// Package logger wires zap into the Paladin request pipeline.
 //
 // # Log message style guide
 //
@@ -6,7 +6,7 @@
 // below are enforced by code review — there's no automatic linter for them.
 //
 //   - Sentence-case off: messages are lowercase except for proper nouns
-//     (HTTP, SQS, S3, PALADIN, …) and acronyms.
+//     (HTTP, SQS, S3, Paladin, …) and acronyms.
 //   - No trailing punctuation. The level + structured fields carry the
 //     information; periods and ellipses add noise.
 //   - Failures use the "failed to $verb" idiom and always attach the cause

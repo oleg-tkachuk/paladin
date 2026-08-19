@@ -1,6 +1,6 @@
 runtimeConfig:
   public:
-    objectControlPlane:
+    paladin:
       baseUrl: "/api/paladin"
       upstreamUrl: "http://paladin-core.paladin.svc.cluster.local:8080"
       timeoutMs: 5000

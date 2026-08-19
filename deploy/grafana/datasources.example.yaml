@@ -1,7 +1,7 @@
 # Grafana datasource provisioning — log ↔ trace ↔ metric correlation (ADR-0001)
 #
-# This wires the three PALADIN signals together so a single click pivots between
-# them. It is an EXAMPLE: PALADIN only speaks OTLP (push) and is agnostic to the
+# This wires the three Paladin signals together so a single click pivots between
+# them. It is an EXAMPLE: Paladin only speaks OTLP (push) and is agnostic to the
 # backend you run. Tempo / Loki / Prometheus are the OSS reference set; swap
 # the types/uids if you front OTLP with Honeycomb, Datadog, etc.
 #
@@ -12,7 +12,7 @@
 # actually navigable in the UI.
 #
 # What makes the correlation work end to end:
-#   - PALADIN stamps trace_id / span_id / request_id / tenant_id onto every
+#   - Paladin stamps trace_id / span_id / request_id / tenant_id onto every
 #     structured log line (internal/logger logger.enrich). The Loki derived
 #     field below extracts trace_id and links the log to its Tempo trace.
 #   - Tempo's tracesToLogsV2 links the other way (trace → its logs), filtered
@@ -42,7 +42,7 @@ datasources:
     access: proxy
     url: http://loki:3100
     jsonData:
-      # Extract trace_id from PALADIN's JSON log lines and turn it into a link to
+      # Extract trace_id from Paladin's JSON log lines and turn it into a link to
       # the matching Tempo trace. The regex matches the `"trace_id":"..."`
       # field emitted by logger.enrich.
       derivedFields:
@@ -66,7 +66,7 @@ datasources:
       tracesToLogsV2:
         datasourceUid: loki
         filterByTraceID: true
-        # PALADIN tags traces with service.name + paladin.tenant_id (see ADR-0001).
+        # Paladin tags traces with service.name + paladin.tenant_id (see ADR-0001).
         tags:
           - key: service.name
             value: service

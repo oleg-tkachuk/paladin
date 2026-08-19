@@ -3,7 +3,7 @@
 
 -- ─── Recovery: legacy "buckets" → "object_keys" rename ────────────────────
 -- Goose tracks version numbers, not file content. Databases that ran
--- migration 001 *before* the PALADIN "Bucket → ObjectKey" rename still have a
+-- migration 001 *before* the Paladin "Bucket → ObjectKey" rename still have a
 -- `buckets` table (with column `bucket_id`) and no `object_keys` table.
 -- Migration 001 was rewritten in-place but goose won't re-run it. So we
 -- pick up the slack here: if the legacy shape is detected, perform the

@@ -5,9 +5,9 @@ One-page operator + developer manual for the feature.
 ## What it does
 
 Each storage backend has a durable `enabled` flag. A **disabled** backend
-processes **no** PALADIN requests of any kind — upload, download, head, copy,
+processes **no** Paladin requests of any kind — upload, download, head, copy,
 list, presign (GET/PUT), multipart, and bucket-create are all refused
-with `FailedPrecondition` before PALADIN ever contacts the object store.
+with `FailedPrecondition` before Paladin ever contacts the object store.
 Disabling is reversible (data is untouched) and survives restarts.
 
 ## Operator: toggle a backend
@@ -49,9 +49,9 @@ SetBackendEnabled { backend_id: "primary", enabled: false, resource_version: "<c
 
 ## Known limitation — presigned URLs
 
-Disabling stops PALADIN from issuing **new** presigned URLs and rejects all
-PALADIN-mediated ops. It does **not** revoke presigned URLs already handed
-out — those hit the object store directly, bypassing PALADIN, and expire on
+Disabling stops Paladin from issuing **new** presigned URLs and rejects all
+Paladin-mediated ops. It does **not** revoke presigned URLs already handed
+out — those hit the object store directly, bypassing Paladin, and expire on
 their own TTL (default 15 min, `config.limits.presign.*_ttl`). To kill
 existing URLs immediately, rotate the backend's S3 credentials
 (`RotateCredentials`) — that is a separate operation.

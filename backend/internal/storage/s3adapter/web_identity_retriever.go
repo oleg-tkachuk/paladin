@@ -11,7 +11,7 @@ import (
 // returns a typed wrapper that's hard to test against — and any future
 // switch to embedded-string token sources would silently regress to a
 // captured value. This explicit type makes the rotation contract a
-// first-class part of PALADIN's adapter surface.
+// first-class part of Paladin's adapter surface.
 //
 // EKS IRSA writes the token file via an atomic-rename pattern (the kubelet
 // rewrites the projected service-account token roughly every 80% of the

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// serveCmd is the parent for every long-running PALADIN role. Children:
+// serveCmd is the parent for every long-running Paladin role. Children:
 // `api`, `admin`, `worker`, `mcp`, `ingest`, `dispatcher`. The collapsed
 // "all-in-one" mode that used to live in rootCmd is intentionally absent —
 // Helm deploys one Deployment per child.
@@ -15,7 +15,7 @@ import (
 // commands still use the boot() helper in common.go.
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Run an PALADIN plane or worker",
+	Short: "Run a Paladin plane or worker",
 }
 
 func init() {

@@ -2,7 +2,7 @@
 // self-service storage provisioning for a tenant using its EXISTING data-plane
 // API token (aud=data), with no platform-admin credential.
 //
-// The single RPC, EnsureTenantStorage, idempotently ensures a shared PALADIN
+// The single RPC, EnsureTenantStorage, idempotently ensures a shared Paladin
 // bucket exists and that each requested object-key is bound to it under the
 // caller's tenant. The core least-privilege guarantee: the tenant is ALWAYS
 // resolved from the request principal (auth.TenantFromContext), never from the
@@ -29,7 +29,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
-// BucketEnsurer idempotently ensures the physical PALADIN bucket exists, reusing
+// BucketEnsurer idempotently ensures the physical Paladin bucket exists, reusing
 // the admin BucketService create path (physical garage provisioning + row).
 // *bucketh.Handler satisfies it; it is pre-authorized by this package's Cedar
 // gate and performs no role/Cedar check of its own.
