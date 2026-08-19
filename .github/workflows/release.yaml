@@ -90,7 +90,7 @@ jobs:
 
       # GHCR package names are owner-scoped, not repository-scoped, so these
       # stay `paladin-core` / `paladin-console` regardless of the repository
-      # being named `paladin-private` for now. The image's
+      # being named `paladin` for now. The image's
       # org.opencontainers.image.source label is what links the package back
       # to the repository.
       - name: Log in to GHCR

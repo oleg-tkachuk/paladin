@@ -199,7 +199,7 @@ const file_paladin_common_v1_pagination_proto_rawDesc = "" +
 	"\tSortOrder\x12\x1a\n" +
 	"\x16SORT_ORDER_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSORT_ORDER_ASC\x10\x01\x12\x13\n" +
-	"\x0fSORT_ORDER_DESC\x10\x02BQZOgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
+	"\x0fSORT_ORDER_DESC\x10\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_pagination_proto_rawDescOnce sync.Once

@@ -24,10 +24,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/eventingest"
-	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
 )
 
 // TestIngest_SeaweedFSWebhookPromotesPending — the canonical flow:

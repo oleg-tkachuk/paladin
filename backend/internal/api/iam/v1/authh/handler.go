@@ -14,11 +14,11 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth/issuer"
-	authstore "github.com/oleg-tkachuk/paladin-private/internal/auth/store"
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
+	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // reuseAuditor records refresh-token reuse to the audit log (admin console).

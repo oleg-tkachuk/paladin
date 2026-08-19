@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	authstore "github.com/oleg-tkachuk/paladin-private/internal/auth/store"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 type RefreshTokenRepo struct {

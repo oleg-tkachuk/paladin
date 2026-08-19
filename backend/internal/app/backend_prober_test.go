@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
-	"github.com/oleg-tkachuk/paladin-private/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 )
 
 func TestParseDynamicCredsRef(t *testing.T) {

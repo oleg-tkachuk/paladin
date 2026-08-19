@@ -32,9 +32,9 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin-private/migrations"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/migrations"
 )
 
 func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {

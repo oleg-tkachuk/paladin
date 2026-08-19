@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin-private/internal/auth/store"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // UserRepo satisfies authstore.UserRepository.

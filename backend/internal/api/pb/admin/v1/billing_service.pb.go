@@ -465,7 +465,7 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount2\xeb\x01\n" +
 	"\x0eBillingService\x12g\n" +
 	"\x10GetTenantSummary\x12(.paladin.admin.v1.GetTenantSummaryRequest\x1a).paladin.admin.v1.GetTenantSummaryResponse\x12p\n" +
-	"\x13GetTenantTimeSeries\x12+.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a,.paladin.admin.v1.GetTenantTimeSeriesResponseBOZMgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x13GetTenantTimeSeries\x12+.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a,.paladin.admin.v1.GetTenantTimeSeriesResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_billing_service_proto_rawDescOnce sync.Once

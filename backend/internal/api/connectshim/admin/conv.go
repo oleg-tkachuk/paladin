@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
-	commonpb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────

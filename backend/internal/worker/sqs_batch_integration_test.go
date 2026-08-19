@@ -17,7 +17,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
 
 // TestSQSSinkBatchDelivery_Wire pins the SendMessageBatch fan-in against a

@@ -426,7 +426,7 @@ const file_paladin_iam_v1_system_service_proto_rawDesc = "" +
 	"\rSystemService\x12J\n" +
 	"\n" +
 	"GetVersion\x12 .paladin.iam.v1.GetVersionRequest\x1a\x1a.paladin.iam.v1.VersionInfo\x12G\n" +
-	"\tGetHealth\x12\x1f.paladin.iam.v1.GetHealthRequest\x1a\x19.paladin.iam.v1.HealthInfoBKZIgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\tGetHealth\x12\x1f.paladin.iam.v1.GetHealthRequest\x1a\x19.paladin.iam.v1.HealthInfoBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_system_service_proto_rawDescOnce sync.Once

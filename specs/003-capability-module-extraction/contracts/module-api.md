@@ -6,7 +6,7 @@ This is the surface the module publishes. Everything listed here is **exported
 and frozen for the duration of this feature** — the extraction may relocate it
 but must not change its shape. Anything not listed stays unexported.
 
-Module path: `github.com/oleg-tkachuk/paladin-private/capability`
+Module path: `github.com/oleg-tkachuk/paladin/capability`
 
 ---
 

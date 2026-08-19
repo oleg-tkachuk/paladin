@@ -8,10 +8,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/quotah"
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 )
 
 type QuotaServer struct {

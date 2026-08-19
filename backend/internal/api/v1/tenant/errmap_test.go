@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 )
 
 // Guards the ADR-0002 wiring: the package init() must register every

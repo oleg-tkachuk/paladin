@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // MultipartRepo satisfies multipart.Repository. InitiateSession writes two

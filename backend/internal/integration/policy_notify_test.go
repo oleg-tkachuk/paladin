@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // TestPolicyChangedNotify proves migration 051: writes to the two Cedar

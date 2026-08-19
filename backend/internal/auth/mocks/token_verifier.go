@@ -7,7 +7,7 @@ package auth
 import (
 	"context"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	mock "github.com/stretchr/testify/mock"
 )
 

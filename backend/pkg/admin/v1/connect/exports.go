@@ -3,7 +3,7 @@
 // without touching internal packages.
 package adminv1connect
 
-import internal "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 
 // Service handler interfaces.
 type (

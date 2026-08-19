@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // storageCopier adapts object.Storage (the s3 router) to worker.ObjectCopier,

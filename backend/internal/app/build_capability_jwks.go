@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"net/http"
 
-	"github.com/oleg-tkachuk/paladin-private/capability"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // JWKSHandler returns an http.Handler that serves the supplied public

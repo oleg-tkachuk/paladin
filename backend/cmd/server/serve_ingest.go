@@ -17,15 +17,15 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/app"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
-	"github.com/oleg-tkachuk/paladin-private/internal/eventingest"
-	"github.com/oleg-tkachuk/paladin-private/internal/observability"
-	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // serveIngestCmd runs the storage-event consumer plane. Subscribes to

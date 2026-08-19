@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/oleg-tkachuk/paladin-private/security/advisories/new
+    url: https://github.com/oleg-tkachuk/paladin/security/advisories/new
     about: Report privately. Never open a public issue for a security problem.
   - name: Deferred work register
-    url: https://github.com/oleg-tkachuk/paladin-private/blob/main/BACKLOG.md
+    url: https://github.com/oleg-tkachuk/paladin/blob/main/BACKLOG.md
     about: Everything this project decided not to build yet, with the reason and what would unblock it.

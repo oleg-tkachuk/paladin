@@ -71,42 +71,25 @@ the same commit. Treat this file like a runtime invariant.
   - Delete this entry when the cutover is done and verified.
 - **Blockers:** operator must run the deploy + sync; not automatable from here.
 
-### Finish the GitHub rename: `paladin-private` → `paladin`
+### The `paladin` name was never checked for collisions
 
-- **Status:** Open (operator action). The repository is
-  **`oleg-tkachuk/paladin-private`** — renamed from `paladin`
-  on 2026-08-19 as an interim private name. The final name is `paladin`.
-- **Reason:** The tree now spells the repository's *real, current* name
-  everywhere (maintainer's call, 2026-08-19): 1167 occurrences across 461
-  files, covering both Go module paths (`backend` and the nested
-  `capability` module, plus its `require`/`replace` pair), every import, the
-  buf output-module option, the mockery package keys, the otel
-  instrumentation scope, the GitHub URLs, and the prose. Spelling the future
-  name instead left the tree describing a repository that does not exist,
-  which breaks anything resolving a path rather than reading it.
-- **What is NOT renamed, and must stay that way:** the *service* names
-  `paladin-core` and `paladin-console`. They name the service, not the
-  repository, and the GHCR packages carrying them are owner-scoped, so the
-  repository's name never enters them. Seven occurrences of
-  `oleg-tkachuk/paladin-{core,console}` are deliberately untouched.
-- **Definition of Done:**
-  - Repository renamed to `paladin`.
-  - Flip the paths back in one mechanical pass. Guard the replacement so it
-    does not eat the service names or double-apply — the pass that got here
-    protected `oleg-tkachuk/paladin-{core,console,private}` before replacing
-    a bare `oleg-tkachuk/paladin`, and the reverse needs the mirror of that.
-    Confirm afterwards that no `paladin-private` remains, that the 7 service
-    names are intact, and that there is no doubled spelling.
-  - `git remote set-url origin git@github.com:oleg-tkachuk/paladin.git`.
-    GitHub redirects keep pushes working either way, so this is hygiene.
-  - Re-verify: both modules build, `task backend:generate` stays a no-op,
-    `task verify-all` green, e2e 18/18 against freshly built images. That is
-    the set that caught nothing this time and is cheap to repeat.
-  - Check the name is actually free where it matters — GitHub org, npm,
-    pkg.go.dev, trademark. **Not done yet**; "paladin" is an ordinary English
-    word, so this is a real check rather than a formality.
-  - Delete this entry once the rename is done.
-- **Blockers:** maintainer's action — a session cannot rename a repository.
+- **Status:** Open — never done, and cheap to get wrong quietly.
+- **Reason:** "Paladin" is an ordinary English word, not a coined one. The
+  GitHub side is now settled by construction — `oleg-tkachuk/paladin` was
+  taken successfully — but that is the only namespace anyone checked, and it
+  is the one that mattered least. Nothing here publishes to npm, and the Go
+  module path is not resolvable through the proxy (see `backend/README.md`),
+  so those two are theoretical today and become real the moment either
+  changes. A trademark collision is the one that does not care whether we
+  publish: it applies to the name as used, and a public repository is use.
+- **Definition of Done:** check the name against npm, pkg.go.dev and a
+  trademark register in the relevant jurisdictions; write the result here —
+  including "clear", which is the answer most likely to be lost otherwise.
+  If a collision turns up, decide rename-vs-qualify BEFORE the repository is
+  widely linked, because the cost is in other people's bookmarks, not in
+  this tree.
+- **Blockers:** none — it is a decision to spend twenty minutes, not a
+  technical dependency.
 
 ---
 
@@ -1622,7 +1605,7 @@ of the pipeline._
   e2e 18/18), so the gap is quota, not correctness.
 - **The quota is not this repository's doing.** Billing usage for August 2026
   (`/users/oleg-tkachuk/settings/billing/usage`) puts the account at 4734.7
-  Actions Linux minutes, of which **`paladin-private` accounts for 109.0 —
+  Actions Linux minutes, of which **`paladin` accounts for 109.0 —
   2.3%**. `another-project` (2781.7) and `gitops` (1752.0) are 96% between
   them. The spending limit is account-wide, so this repository is blocked by
   neighbours rather than by anything it runs. Do NOT come here to trim
@@ -1648,7 +1631,7 @@ of the pipeline._
 
   ```bash
   for br in main develop; do
-    gh api -X PATCH "repos/oleg-tkachuk/paladin-private/branches/$br/protection/required_status_checks" \
+    gh api -X PATCH "repos/oleg-tkachuk/paladin/branches/$br/protection/required_status_checks" \
       --input - <<'JSON'
   { "strict": true,
     "checks": [ {"context":"backend"}, {"context":"frontend"},

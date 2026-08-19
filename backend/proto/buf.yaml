@@ -1,7 +1,7 @@
 version: v2
 modules:
   - path: .
-    name: buf.build/oleg-tkachuk/paladin-private
+    name: buf.build/oleg-tkachuk/paladin
 deps:
   - buf.build/bufbuild/protovalidate
   - buf.build/googleapis/googleapis

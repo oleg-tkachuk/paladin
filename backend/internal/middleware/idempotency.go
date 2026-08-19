@@ -60,7 +60,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 const idempotencyHeader = "Idempotency-Key"

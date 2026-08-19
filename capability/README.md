@@ -3,7 +3,7 @@
 Budgeted, delegable, individually revocable authority for agentic workloads.
 
 ```go
-import "github.com/oleg-tkachuk/paladin-private/capability"
+import "github.com/oleg-tkachuk/paladin/capability"
 ```
 
 You are not taking on a database driver or a storage SDK. This module ships

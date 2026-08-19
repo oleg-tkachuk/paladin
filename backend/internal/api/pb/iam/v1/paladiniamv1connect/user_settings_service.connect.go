@@ -11,7 +11,7 @@ import (
 	strings "strings"
 
 	connect "connectrpc.com/connect"
-	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are

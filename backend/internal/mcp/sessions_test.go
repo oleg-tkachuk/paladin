@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 type fakeVerifier struct {

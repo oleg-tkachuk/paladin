@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // sinkSecretResolver adapts config.K8sSecretResolver (SecretRef-shaped) to

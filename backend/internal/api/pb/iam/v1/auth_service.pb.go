@@ -1114,7 +1114,7 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x0eChangePassword\x12$.paladin.iam.v1.ChangePasswordRequest\x1a%.paladin.iam.v1.ChangePasswordResponse\x12c\n" +
 	"\x10ExchangeAudience\x12&.paladin.iam.v1.ExchangeAudienceRequest\x1a'.paladin.iam.v1.ExchangeAudienceResponse\x12f\n" +
 	"\x11ListMyMemberships\x12'.paladin.iam.v1.ListMyMembershipsRequest\x1a(.paladin.iam.v1.ListMyMembershipsResponse\x12W\n" +
-	"\fSwitchTenant\x12\".paladin.iam.v1.SwitchTenantRequest\x1a#.paladin.iam.v1.SwitchTenantResponseBKZIgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\fSwitchTenant\x12\".paladin.iam.v1.SwitchTenantRequest\x1a#.paladin.iam.v1.SwitchTenantResponseBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_auth_service_proto_rawDescOnce sync.Once

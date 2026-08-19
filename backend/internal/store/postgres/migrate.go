@@ -12,7 +12,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 // openMigrationDB returns the *sql.DB goose runs against. When

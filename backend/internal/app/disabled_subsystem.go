@@ -6,8 +6,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	adminv1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 )
 
 // Disabled-subsystem error contract.

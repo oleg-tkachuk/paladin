@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // mcpSessionIDHeader is the header the MCP streamable-HTTP transport uses to

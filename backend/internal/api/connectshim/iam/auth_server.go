@@ -7,10 +7,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/iam/v1/authh"
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1/paladiniamv1connect"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // AuthServer bridges generated Connect handlers to authh.Handler.

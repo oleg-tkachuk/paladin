@@ -6,7 +6,7 @@
 
 Report privately through GitHub:
 
-1. Go to the [Security tab](https://github.com/oleg-tkachuk/paladin-private/security/advisories/new).
+1. Go to the [Security tab](https://github.com/oleg-tkachuk/paladin/security/advisories/new).
 2. Open a draft advisory ("Report a vulnerability").
 
 That channel is private until an advisory is published, and it gives us a

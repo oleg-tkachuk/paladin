@@ -16,10 +16,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
-	"github.com/oleg-tkachuk/paladin-private/internal/platformstats"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/platformstats"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // Handler holds an immutable reference to the loaded config plus the

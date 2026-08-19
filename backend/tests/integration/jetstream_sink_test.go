@@ -13,8 +13,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // runEmbeddedJetStream boots an in-process nats-server with JetStream enabled

@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	objectkey "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object_key"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // ObjectKeyRepo satisfies objectkey.Repository. Stats require an aggregation that

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 // BackendRegistry hands out one *Client per storage backend, keyed by

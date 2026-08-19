@@ -3,8 +3,8 @@ package apiutil
 import (
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // ScopeStrings flattens an auth.Scope slice into the wire-form strings that

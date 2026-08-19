@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	meter = otel.Meter("github.com/oleg-tkachuk/paladin-private")
+	meter = otel.Meter("github.com/oleg-tkachuk/paladin")
 
 	// resourceNameShapeTotal feeds the Phase-3 decision on deprecating a
 	// redundant object-name shape (see internal/api/connectshim/resolve).

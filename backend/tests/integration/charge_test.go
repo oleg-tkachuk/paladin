@@ -13,10 +13,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/capability"
-	capabilitypg "github.com/oleg-tkachuk/paladin-private/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/capability"
+	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
 )
 
 // TestCharge_TwoPhase_TenantCapCompensatesCapability:

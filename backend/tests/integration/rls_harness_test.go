@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
 )
 
 // TestRLSHarness_HidesCrossTenant_DispatcherOutbox: event_deliveries (the

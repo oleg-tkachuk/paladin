@@ -504,7 +504,7 @@ const file_paladin_data_v1_object_tag_service_proto_rawDesc = "" +
 	"\rGetObjectTags\x12$.paladin.data.v1.GetObjectTagsRequest\x1a%.paladin.data.v1.GetObjectTagsResponse\x12\\\n" +
 	"\rPutObjectTags\x12$.paladin.data.v1.PutObjectTagsRequest\x1a%.paladin.data.v1.PutObjectTagsResponse\x12e\n" +
 	"\x10DeleteObjectTags\x12'.paladin.data.v1.DeleteObjectTagsRequest\x1a(.paladin.data.v1.DeleteObjectTagsResponse\x12e\n" +
-	"\x10ListDistinctTags\x12'.paladin.data.v1.ListDistinctTagsRequest\x1a(.paladin.data.v1.ListDistinctTagsResponseBMZKgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x10ListDistinctTags\x12'.paladin.data.v1.ListDistinctTagsRequest\x1a(.paladin.data.v1.ListDistinctTagsResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_tag_service_proto_rawDescOnce sync.Once

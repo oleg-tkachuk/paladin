@@ -35,7 +35,7 @@ var (
 // are no-ops.
 func initAPITokenMetrics() {
 	apiTokMetricsOnce.Do(func() {
-		meter := otel.Meter("github.com/oleg-tkachuk/paladin-private/internal/auth")
+		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/auth")
 
 		apiTokVerifyDuration, _ = meter.Float64Histogram(
 			"paladin.api_token.verify.duration_ms",

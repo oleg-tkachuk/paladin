@@ -14,7 +14,7 @@ was chosen, why, and what was rejected.
 Verified by:
 
 ```bash
-grep -rhn "oleg-tkachuk/paladin-private" internal/capability/*.go \
+grep -rhn "oleg-tkachuk/paladin" internal/capability/*.go \
   | grep -v _test | sed -E 's|.*paladin/||; s|".*||' | sort -u
 # → internal/capability   (self-reference only)
 ```
@@ -107,7 +107,7 @@ behind the alias.
 ## R-003: Module location and import path
 
 **Decision**: a nested module at repository-root `capability/`, module path
-`github.com/oleg-tkachuk/paladin-private/capability`.
+`github.com/oleg-tkachuk/paladin/capability`.
 
 **Rationale**:
 

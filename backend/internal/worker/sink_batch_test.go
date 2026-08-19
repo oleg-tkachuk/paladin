@@ -13,7 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 	kafka "github.com/segmentio/kafka-go"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
 
 // ─── Kafka batch (outbox fan-in) ─────────────────────────────────────────────

@@ -45,8 +45,8 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin-private/migrations"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/migrations"
 )
 
 // Harness is the per-test (or per-suite) Postgres environment.

@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -797,7 +797,7 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\vTestBackend\x12#.paladin.admin.v1.TestBackendRequest\x1a$.paladin.admin.v1.TestBackendResponse\x12_\n" +
 	"\x11SetBackendEnabled\x12).paladin.admin.v1.SetBackendEnabledRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12a\n" +
 	"\x12SetBackendReadOnly\x12*.paladin.admin.v1.SetBackendReadOnlyRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12g\n" +
-	"\x15SetBackendMaintenance\x12-.paladin.admin.v1.SetBackendMaintenanceRequest\x1a\x1f.paladin.admin.v1.StorageBackendBOZMgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x15SetBackendMaintenance\x12-.paladin.admin.v1.SetBackendMaintenanceRequest\x1a\x1f.paladin.admin.v1.StorageBackendBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_backend_service_proto_rawDescOnce sync.Once

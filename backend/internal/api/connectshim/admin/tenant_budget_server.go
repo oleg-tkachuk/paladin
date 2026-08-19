@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/paladin-private/capability"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // TenantBudgetServer is the Connect adapter for capability.UsageStore[pgx.Tx]'s

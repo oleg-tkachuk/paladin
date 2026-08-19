@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -236,7 +236,7 @@ const file_paladin_data_v1_operation_service_proto_rawDesc = "" +
 	"\x10OperationService\x12N\n" +
 	"\fGetOperation\x12#.paladin.data.v1.GetOperationRequest\x1a\x19.paladin.data.v1.Operation\x12_\n" +
 	"\x0eListOperations\x12%.paladin.data.v1.ListOperationsRequest\x1a&.paladin.data.v1.ListOperationsResponse\x12T\n" +
-	"\x0fCancelOperation\x12&.paladin.data.v1.CancelOperationRequest\x1a\x19.paladin.data.v1.OperationBMZKgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x0fCancelOperation\x12&.paladin.data.v1.CancelOperationRequest\x1a\x19.paladin.data.v1.OperationBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_operation_service_proto_rawDescOnce sync.Once

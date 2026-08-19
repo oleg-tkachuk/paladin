@@ -510,7 +510,7 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\x12BatchDeleteObjects\x12).paladin.data.v1.BatchDeleteObjectsRequest\x1a\x19.paladin.data.v1.Operation\x12V\n" +
 	"\x10BatchCopyObjects\x12'.paladin.data.v1.BatchCopyObjectsRequest\x1a\x19.paladin.data.v1.Operation\x12\\\n" +
 	"\x13BatchRestoreObjects\x12*.paladin.data.v1.BatchRestoreObjectsRequest\x1a\x19.paladin.data.v1.Operation\x12T\n" +
-	"\x0fBatchUpdateTags\x12&.paladin.data.v1.BatchUpdateTagsRequest\x1a\x19.paladin.data.v1.OperationBMZKgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x0fBatchUpdateTags\x12&.paladin.data.v1.BatchUpdateTagsRequest\x1a\x19.paladin.data.v1.OperationBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_batch_service_proto_rawDescOnce sync.Once

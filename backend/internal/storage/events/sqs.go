@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
 
 // SQSClient is the subset of aws/sqs Client used here. Narrowed to keep tests

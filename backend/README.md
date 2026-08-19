@@ -101,13 +101,13 @@ task e2e-up
 
 ### Not `go install`-able
 
-`go.mod` here declares `module github.com/oleg-tkachuk/paladin-private` while the
+`go.mod` here declares `module github.com/oleg-tkachuk/paladin` while the
 file lives in `backend/`. Go resolves a module path to a repository plus a
 subdirectory, so the proxy looks for a `go.mod` at the repository root, finds
 none, and
 
 ```bash
-go install github.com/oleg-tkachuk/paladin-private/cmd/server@latest   # does not work
+go install github.com/oleg-tkachuk/paladin/cmd/server@latest   # does not work
 ```
 
 fails. Nothing inside the repository notices, because the backend is only

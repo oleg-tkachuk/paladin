@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	cedar "github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	cedar "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // Permanent delete removes the DB row first and the S3 bytes second. That

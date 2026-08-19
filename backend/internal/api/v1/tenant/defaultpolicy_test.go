@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 func TestRenderDefaultPolicy(t *testing.T) {

@@ -14,12 +14,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth/issuer"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth/oauth"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/internal/auth/oauth"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"go.uber.org/zap"
 )
 

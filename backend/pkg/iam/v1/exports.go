@@ -1,7 +1,7 @@
 // Package iamv1 re-exports the protobuf-generated types for paladin.iam.v1.
 package iamv1
 
-import internal "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
+import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 
 type (
 	User      = internal.User

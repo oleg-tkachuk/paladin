@@ -148,7 +148,7 @@ LABEL org.opencontainers.image.title="paladin-core" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT_HASH}" \
       org.opencontainers.image.created="${BUILD_TIME}" \
-      org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin-private"
+      org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin"
 
 WORKDIR /app
 

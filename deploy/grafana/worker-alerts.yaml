@@ -34,7 +34,7 @@ groups:
             configured interval ({{ $value | humanizeDuration }} since the last
             run). Background maintenance it owns (reconciliation, purges,
             reaping, lifecycle, replication) is not running.
-          runbook_url: "https://github.com/oleg-tkachuk/paladin-private/blob/main/docs/runbooks/worker-stalled.md"
+          runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/worker-stalled.md"
 
       # Every tick in the last 15m failed (errors, zero successes) — the worker
       # is running but wedged on a persistent failure (bad migration, perms,
@@ -53,4 +53,4 @@ groups:
             Worker {{ $labels.worker }} has logged only error outcomes and no
             successes in the last 15m. The loop is alive but every tick is
             failing.
-          runbook_url: "https://github.com/oleg-tkachuk/paladin-private/blob/main/docs/runbooks/worker-stalled.md"
+          runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/worker-stalled.md"

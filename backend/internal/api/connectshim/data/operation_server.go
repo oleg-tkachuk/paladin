@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1/paladindatav1connect"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/operation"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 )
 
 // OperationServer is the data-plane mirror — caller sees only operations

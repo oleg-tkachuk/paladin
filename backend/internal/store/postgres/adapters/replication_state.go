@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // ReplicationWatermarkRepo persists per-bucket replication watermarks.

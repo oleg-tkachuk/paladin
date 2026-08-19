@@ -21,8 +21,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 // WellKnownProtectedResource is the RFC 9728 path the RS serves its

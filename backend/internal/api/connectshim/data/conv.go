@@ -23,11 +23,11 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	commonpb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────

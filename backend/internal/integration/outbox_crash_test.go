@@ -23,11 +23,11 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin-private/internal/worker"
-	"github.com/oleg-tkachuk/paladin-private/migrations"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/migrations"
 )
 
 // startPostgres boots a throwaway Postgres, applies the full goose schema,

@@ -9,9 +9,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/app"
-	"github.com/oleg-tkachuk/paladin-private/internal/auditstream"
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/auditstream"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // TestShutdownReleasesWatcherConns reproduces the fx-migration shutdown deadlock

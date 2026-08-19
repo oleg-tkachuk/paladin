@@ -26,7 +26,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 )
 
 // Executor is the per-operation-type seam. Implementations parse the

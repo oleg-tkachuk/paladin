@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // RunTicker drives a periodic background worker. It publishes the worker's

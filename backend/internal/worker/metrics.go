@@ -27,7 +27,7 @@ var (
 
 func initOutboxMetrics() {
 	outboxMetricsOnce.Do(func() {
-		meter := otel.Meter("github.com/oleg-tkachuk/paladin-private/internal/worker")
+		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/worker")
 
 		outboxPendingTotal, _ = meter.Int64Gauge(
 			"paladin.outbox.pending",

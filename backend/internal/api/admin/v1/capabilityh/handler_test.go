@@ -11,10 +11,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/capability"
-	adminv1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/capability"
+	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // allowAuthorizer / denyAuthorizer let us assert which Cedar branch the

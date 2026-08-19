@@ -27,7 +27,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/migrations"
+	"github.com/oleg-tkachuk/paladin/migrations"
 )
 
 func startPostgres(t testing.TB) *pgxpool.Pool {

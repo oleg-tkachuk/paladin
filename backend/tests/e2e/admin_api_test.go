@@ -45,8 +45,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 )
 
 // envOrSkip reads a required env var, t.Skip'ing when absent so the

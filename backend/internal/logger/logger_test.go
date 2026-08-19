@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )

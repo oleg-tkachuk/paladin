@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -253,7 +253,7 @@ const file_paladin_data_v1_presign_service_proto_rawDesc = "" +
 	"\fdownload_url\x18\x01 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\vdownloadUrl2\xe4\x01\n" +
 	"\x0ePresignService\x12n\n" +
 	"\x13RegenerateUploadUrl\x12*.paladin.data.v1.RegenerateUploadUrlRequest\x1a+.paladin.data.v1.RegenerateUploadUrlResponse\x12b\n" +
-	"\x0fPresignDownload\x12&.paladin.data.v1.PresignDownloadRequest\x1a'.paladin.data.v1.PresignDownloadResponseBMZKgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x0fPresignDownload\x12&.paladin.data.v1.PresignDownloadRequest\x1a'.paladin.data.v1.PresignDownloadResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_presign_service_proto_rawDescOnce sync.Once

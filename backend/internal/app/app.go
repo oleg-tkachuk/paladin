@@ -11,11 +11,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
-	"github.com/oleg-tkachuk/paladin-private/internal/health"
-	"github.com/oleg-tkachuk/paladin-private/internal/observability"
-	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin-private/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/health"
+	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // HTTPListener bundles one *http.Server with its plane label, used for

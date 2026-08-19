@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1380,7 +1380,7 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x12ResolveRenamedSlug\x12*.paladin.admin.v1.ResolveRenamedSlugRequest\x1a+.paladin.admin.v1.ResolveRenamedSlugResponse\x12q\n" +
 	"\x17GetTenantDefaultBinding\x12/.paladin.admin.v1.GetTenantDefaultBindingRequest\x1a%.paladin.admin.v1.TenantDefaultBinding\x12q\n" +
 	"\x17SetTenantDefaultBinding\x12/.paladin.admin.v1.SetTenantDefaultBindingRequest\x1a%.paladin.admin.v1.TenantDefaultBinding\x12\x82\x01\n" +
-	"\x19ClearTenantDefaultBinding\x121.paladin.admin.v1.ClearTenantDefaultBindingRequest\x1a2.paladin.admin.v1.ClearTenantDefaultBindingResponseBOZMgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x19ClearTenantDefaultBinding\x121.paladin.admin.v1.ClearTenantDefaultBindingRequest\x1a2.paladin.admin.v1.ClearTenantDefaultBindingResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_tenant_service_proto_rawDescOnce sync.Once

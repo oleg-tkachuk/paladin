@@ -9,10 +9,10 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	commonpb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin-private/internal/auth/store"
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 )
 
 func tsProto(t time.Time) *timestamppb.Timestamp {

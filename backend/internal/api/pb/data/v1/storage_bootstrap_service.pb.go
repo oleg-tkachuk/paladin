@@ -169,7 +169,7 @@ const file_paladin_data_v1_storage_bootstrap_service_proto_rawDesc = "" +
 	"\x13object_keys_created\x18\x02 \x03(\tR\x11objectKeysCreated\x120\n" +
 	"\x14object_keys_existing\x18\x03 \x03(\tR\x12objectKeysExisting2\x89\x01\n" +
 	"\x17StorageBootstrapService\x12n\n" +
-	"\x13EnsureTenantStorage\x12*.paladin.data.v1.EnsureTenantStorageRequest\x1a+.paladin.data.v1.EnsureTenantStorageResponseBMZKgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x13EnsureTenantStorage\x12*.paladin.data.v1.EnsureTenantStorageRequest\x1a+.paladin.data.v1.EnsureTenantStorageResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_storage_bootstrap_service_proto_rawDescOnce sync.Once

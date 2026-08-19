@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
-	commonpb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 )
 
 // The admin shim is a pile of symmetric domain↔proto converters. Round-trip is

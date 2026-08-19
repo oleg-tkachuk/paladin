@@ -774,7 +774,7 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2\xc4\x01\n" +
 	"\x11MCPInspectService\x12R\n" +
 	"\aInspect\x12\".paladin.admin.v1.MCPInspectRequest\x1a#.paladin.admin.v1.MCPInspectResponse\x12[\n" +
-	"\fListSessions\x12$.paladin.admin.v1.ListSessionsRequest\x1a%.paladin.admin.v1.ListSessionsResponseBOZMgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\fListSessions\x12$.paladin.admin.v1.ListSessionsRequest\x1a%.paladin.admin.v1.ListSessionsResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_mcp_inspect_service_proto_rawDescOnce sync.Once

@@ -8,11 +8,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
-	apitokenpg "github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/postgres"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/ratelimit"
-	ratelimitpg "github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/ratelimit/postgres"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	apitokenpg "github.com/oleg-tkachuk/paladin/internal/auth/api_token/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	ratelimitpg "github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 // hmacKeyDerivationLabel domain-separates the api-token HMAC key derived

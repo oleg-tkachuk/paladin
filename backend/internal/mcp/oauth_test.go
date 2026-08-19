@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 func TestBearerToken(t *testing.T) {

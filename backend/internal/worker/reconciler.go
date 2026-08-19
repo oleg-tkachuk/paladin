@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
 
 // ReconcilerV2Config governs poll cadence and per-tick ceilings.

@@ -13,11 +13,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin-private/internal/auth"
-	celpkg "github.com/oleg-tkachuk/paladin-private/internal/filter/cel"
-	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // exportRowCap bounds how many entries one ExportAuditLog call materialises.
