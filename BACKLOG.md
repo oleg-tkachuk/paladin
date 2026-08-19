@@ -73,45 +73,35 @@ the same commit. Treat this file like a runtime invariant.
 
 ### Finish the GitHub rename: `paladin-private` → `paladin`
 
-- **Status:** Open (operator action). The repository is currently
+- **Status:** Open (operator action). The repository is
   **`oleg-tkachuk/paladin-private`** — renamed from `paladin`
   on 2026-08-19 as an interim private name. The final name is `paladin`.
-- **Reason:** The *service* is called `paladin` and that is not changing;
-  `paladin-private` is a temporary **repository** name only. The two are
-  tracked separately in the tree, and only one of them moves:
-  - **Repository references — now spell `paladin-private`.** Twelve places
-    address the GitHub repository itself, and per the maintainer's call
-    (2026-08-19) they carry the real, current name so nothing is broken
-    while the interim name is in force. They are the ones to flip back on
-    the rename: `release.config.cjs` (`repositoryUrl`),
-    `.github/scripts/apply-repo-settings.sh` (`REPO` default), the three
-    `.github/ISSUE_TEMPLATE/*` files (5 URLs), `SECURITY.md`,
-    `CODE_OF_CONDUCT.md`, `deploy/grafana/worker-alerts.yaml` (2
-    `runbook_url`s) and `backend/deploy/Dockerfile`
-    (`org.opencontainers.image.source`).
-  - **Go module paths — still spell `paladin`, and must stay that way.**
-    The remaining ~1160 `github.com/oleg-tkachuk/paladin-private/...` occurrences are
-    import paths, not URLs. They never reach GitHub: the backend builds from
-    its own directory and is not `go install`-able (see `backend/README.md`),
-    and `capability/` resolves through a `replace`. Rewriting them would
-    churn every file in the repository to no effect and then have to be
-    undone. Same for `otel.Meter("github.com/oleg-tkachuk/paladin-private")` in
-    `backend/internal/metrics/otel.go` — an instrumentation-scope name
-    conventionally equal to the module path; changing it renames a metric
-    attribute at runtime.
-  - `specs/**` is left alone: those are historical records of what was done
-    at the time, not live configuration.
+- **Reason:** The tree now spells the repository's *real, current* name
+  everywhere (maintainer's call, 2026-08-19): 1167 occurrences across 461
+  files, covering both Go module paths (`backend` and the nested
+  `capability` module, plus its `require`/`replace` pair), every import, the
+  buf output-module option, the mockery package keys, the otel
+  instrumentation scope, the GitHub URLs, and the prose. Spelling the future
+  name instead left the tree describing a repository that does not exist,
+  which breaks anything resolving a path rather than reading it.
+- **What is NOT renamed, and must stay that way:** the *service* names
+  `paladin-core` and `paladin-console`. They name the service, not the
+  repository, and the GHCR packages carrying them are owner-scoped, so the
+  repository's name never enters them. Seven occurrences of
+  `oleg-tkachuk/paladin-{core,console}` are deliberately untouched.
 - **Definition of Done:**
   - Repository renamed to `paladin`.
-  - Flip the twelve repository references back to `paladin` —
-    `grep -rn "oleg-tkachuk/paladin-private"` finds exactly those twelve plus
-    this entry, and nothing else, because no Go import path carries that
-    spelling.
-  - `git remote set-url origin git@github.com:oleg-tkachuk/paladin-private.git` — the
-    remote currently points at `paladin-private`. GitHub redirects keep pushes
-    working either way, so this is hygiene, not a break.
-  - Re-run `apply-repo-settings.sh` and confirm it targets the right
-    repository.
+  - Flip the paths back in one mechanical pass. Guard the replacement so it
+    does not eat the service names or double-apply — the pass that got here
+    protected `oleg-tkachuk/paladin-{core,console,private}` before replacing
+    a bare `oleg-tkachuk/paladin`, and the reverse needs the mirror of that.
+    Confirm afterwards that no `paladin-private` remains, that the 7 service
+    names are intact, and that there is no doubled spelling.
+  - `git remote set-url origin git@github.com:oleg-tkachuk/paladin.git`.
+    GitHub redirects keep pushes working either way, so this is hygiene.
+  - Re-verify: both modules build, `task backend:generate` stays a no-op,
+    `task verify-all` green, e2e 18/18 against freshly built images. That is
+    the set that caught nothing this time and is cheap to repeat.
   - Check the name is actually free where it matters — GitHub org, npm,
     pkg.go.dev, trademark. **Not done yet**; "paladin" is an ordinary English
     word, so this is a real check rather than a formality.
@@ -1585,8 +1575,10 @@ of the pipeline._
   the assertion that the two-endpoint split (`endpoint` vs
   `public_endpoint`) exists to make.
 - **Definition of Done (remaining):**
-  - First green run on Actions — was unverifiable under the billing
-    failure; free public-repo minutes remove that gate.
+  - First green run on Actions. Still blocked 2026-08-19: the repository is
+    private and its Actions runs fail at startup with zero steps executed
+    (see *Branch protection* for the confirmation). Publishing the
+    repository is what removes this.
   - Flip to a required check alongside `test` / `security` (see the
     *Branch protection* entry).
 - **Blockers:** none remaining that are outside the maintainer's control.
@@ -1618,6 +1610,16 @@ of the pipeline._
   because every Actions run currently fails at startup (0 steps executed) —
   the signature of an exhausted private-repo Actions minutes / spending
   limit. Requiring red checks would block all merges and direct pushes.
+- **Confirmed 2026-08-19** against the live repository: the five most recent
+  runs on `claude/open-source-prep-85tasf` (Test, E2E, Integration, Security,
+  Capability module) all end `failure` after 5–7 seconds, and
+  `…/actions/runs/<id>/jobs` reports each job with an EMPTY `steps` array —
+  the jobs never start, so this is not a code failure and no log exists to
+  read. The repository is still `"private": true`, so the free-minutes
+  argument below has not taken effect yet: **publishing the repository is
+  the unblock, and until then nothing on Actions can go green.** Everything
+  the pipeline would check is green locally (`task verify-all`, integration,
+  e2e 18/18), so the gap is quota, not correctness.
 - **Definition of Done:** once Actions runs go green, add
   `required_status_checks` (strict) for the four check contexts. Use the
   dedicated sub-resource endpoint so the already-applied protections
