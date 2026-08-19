@@ -230,6 +230,14 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// ── Committed-default credentials are public credentials ────────
+	// Last, so an operator sees the structural errors above first: a
+	// config that fails both is more likely mis-assembled than merely
+	// under-secured.
+	if err := validateNoWeakSecrets(c); err != nil {
+		return err
+	}
+
 	return nil
 }
 
