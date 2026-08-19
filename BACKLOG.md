@@ -1650,31 +1650,6 @@ of the pipeline._
 - **Blockers:** image publishing — a chart that references unpullable
   images is not usable, so it lands second.
 
-### `backend/go.mod` declares a module path that does not match its directory
-
-- **Status:** Deferred — decide, then either fix or document.
-- **Reason:** `backend/go.mod` declares `module
-  github.com/oleg-tkachuk/paladin` while living in
-  `backend/`. Go resolves a module path to a repository path plus
-  subdirectory, so once the repository is public,
-  `go install github.com/oleg-tkachuk/paladin/cmd/server@latest`
-  fails: the proxy looks for a `go.mod` at the repository root and finds
-  none. Nothing inside the repo notices, because the backend is only ever
-  built from its own directory.
-  The `capability` module does not have this problem — its path ends in
-  `/capability` and it sits in `capability/`, which is why it resolves
-  correctly.
-- **Definition of Done:** either
-  (a) rename the module to `…/paladin/backend` and update
-  every import path, the `replace` directive, sqlc/mockery output paths
-  and the Dockerfiles; or
-  (b) record here and in `backend/README.md` that the backend is not
-  `go install`-able and that container images are the distribution path
-  (which makes this depend on image publishing above).
-- **Blockers:** the rename touches every Go file in the repository, so it
-  wants its own PR and a quiet moment. Option (b) is cheap and honest if
-  nobody actually wants to `go install` a control plane.
-
 ### Capability module has no version tags Go can resolve
 
 - **Status:** Deferred.
