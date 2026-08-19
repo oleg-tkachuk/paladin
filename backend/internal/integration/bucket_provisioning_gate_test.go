@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/uuid"
 
-	objecth "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	objecth "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // TestBucketProvisioningGate proves the ADR-0011 Phase 1 write gate: while a

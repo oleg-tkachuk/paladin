@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -1701,7 +1701,7 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\fCountObjects\x12#.paladin.data.v1.CountObjectsRequest\x1a$.paladin.data.v1.CountObjectsResponse\x12k\n" +
 	"\x12ListObjectVersions\x12).paladin.data.v1.ListObjectVersionsRequest\x1a*.paladin.data.v1.ListObjectVersionsResponse\x12Z\n" +
 	"\x10GetObjectVersion\x12'.paladin.data.v1.GetObjectVersionRequest\x1a\x1d.paladin.data.v1.ObjectVersion\x12[\n" +
-	"\x14RestoreObjectVersion\x12+.paladin.data.v1.RestoreObjectVersionRequest\x1a\x16.paladin.data.v1.ObjectBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x14RestoreObjectVersion\x12+.paladin.data.v1.RestoreObjectVersionRequest\x1a\x16.paladin.data.v1.ObjectBMZKgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_service_proto_rawDescOnce sync.Once

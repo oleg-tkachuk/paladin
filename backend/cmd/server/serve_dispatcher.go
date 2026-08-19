@@ -16,15 +16,15 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/app"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/health"
-	"github.com/oleg-tkachuk/paladin/internal/observability"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/app"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/health"
+	"github.com/oleg-tkachuk/paladin-private/internal/observability"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker"
 )
 
 // serveDispatcherCmd runs the durable webhook fan-out loop introduced

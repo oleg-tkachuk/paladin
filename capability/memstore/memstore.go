@@ -25,7 +25,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin-private/capability"
 )
 
 // Store implements capability.Store — capability records and revocations.

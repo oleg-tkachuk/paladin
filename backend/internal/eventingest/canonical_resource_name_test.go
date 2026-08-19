@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // ADR-0010 Phase 1: ingest-side object events must carry the SAME canonical

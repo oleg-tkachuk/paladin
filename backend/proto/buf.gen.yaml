@@ -4,7 +4,7 @@ plugins:
   # Requires: protoc-gen-go, protoc-gen-connect-go on PATH.
   - local: protoc-gen-go
     out: .
-    opt: module=github.com/oleg-tkachuk/paladin
+    opt: module=github.com/oleg-tkachuk/paladin-private
   - local: protoc-gen-connect-go
     out: .
-    opt: module=github.com/oleg-tkachuk/paladin
+    opt: module=github.com/oleg-tkachuk/paladin-private

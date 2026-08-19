@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	tenantapi "github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	tenantapi "github.com/oleg-tkachuk/paladin-private/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // TestRenameRecordsSlugHistory proves migration 039 + the transactional

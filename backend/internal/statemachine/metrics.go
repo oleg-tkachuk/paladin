@@ -27,7 +27,7 @@ var transitionsTotal metric.Int64Counter
 
 func init() {
 	var err error
-	transitionsTotal, err = otel.Meter("github.com/oleg-tkachuk/paladin/statemachine").
+	transitionsTotal, err = otel.Meter("github.com/oleg-tkachuk/paladin-private/statemachine").
 		Int64Counter(
 			"paladin_object_transitions",
 			metric.WithDescription("Object state transitions by source signal."),

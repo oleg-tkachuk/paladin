@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -697,7 +697,7 @@ const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\tListUsers\x12\x1f.paladin.iam.v1.ListUsersRequest\x1a .paladin.iam.v1.ListUsersResponse\x12E\n" +
 	"\vGrantScopes\x12!.paladin.iam.v1.GrantScopesRequest\x1a\x13.paladin.iam.v1.User\x12G\n" +
 	"\fRevokeScopes\x12\".paladin.iam.v1.RevokeScopesRequest\x1a\x13.paladin.iam.v1.User\x12Z\n" +
-	"\rResetPassword\x12#.paladin.iam.v1.ResetPasswordRequest\x1a$.paladin.iam.v1.ResetPasswordResponseBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\rResetPassword\x12#.paladin.iam.v1.ResetPasswordRequest\x1a$.paladin.iam.v1.ResetPasswordResponseBKZIgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_user_service_proto_rawDescOnce sync.Once

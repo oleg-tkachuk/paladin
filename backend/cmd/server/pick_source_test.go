@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin-private/internal/eventingest"
 )
 
 // TestPickSource covers the ingest source_format → adapter factory, including

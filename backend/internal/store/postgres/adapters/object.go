@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // ObjectRepo satisfies object.Repository. BucketCompletionMode walks the

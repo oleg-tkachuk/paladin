@@ -18,8 +18,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/capability"
-	"github.com/oleg-tkachuk/paladin/capability/memstore"
+	"github.com/oleg-tkachuk/paladin-private/capability"
+	"github.com/oleg-tkachuk/paladin-private/capability/memstore"
 )
 
 func main() {

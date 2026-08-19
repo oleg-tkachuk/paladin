@@ -9,8 +9,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
 )
 
 // fakeEngine is a configurable cedar.Authorizer. It records every

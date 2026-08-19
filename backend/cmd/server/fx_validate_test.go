@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin-private/internal/app"
 )
 
 // TestRoleModulesValidate asserts that every serve role's fx dependency graph is

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/dustin/go-humanize"
-	"github.com/oleg-tkachuk/paladin/internal/safecast"
+	"github.com/oleg-tkachuk/paladin-private/internal/safecast"
 )
 
 func ParseSizeString(s string) (int64, error) {

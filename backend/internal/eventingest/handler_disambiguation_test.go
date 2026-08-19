@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // fakeLookup records the (object_key, key) the handler resolves to and returns

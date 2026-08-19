@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	objecth "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	objecth "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // mkTenant inserts a bare tenant and returns its id + slug.

@@ -12,8 +12,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/storage/s3adapter"
 )
 
 // minioImage pins the same MinIO release the e2e workflow uses, for a

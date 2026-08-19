@@ -27,8 +27,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/utils"
 )
 
 // New builds the application logger from config. Sampling, structured

@@ -27,12 +27,12 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	mcppkg "github.com/oleg-tkachuk/paladin/internal/mcp"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	adminv1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	mcppkg "github.com/oleg-tkachuk/paladin-private/internal/mcp"
+	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
 )
 
 // Handler builds an MCPInspectService implementation from the live

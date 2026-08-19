@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/eventingest"
 )
 
 // The SQS driver and pickSource already have tests; NATS, RabbitMQ and the

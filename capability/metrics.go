@@ -38,7 +38,7 @@ var (
 
 func initMetrics() {
 	capMetricsOnce.Do(func() {
-		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/capability")
+		meter := otel.Meter("github.com/oleg-tkachuk/paladin-private/internal/capability")
 
 		capChargeAmount, _ = meter.Float64Counter(
 			"paladin.capability.charge.amount_usd",

@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
 )
 
 // ErrNotFound / ErrVersionMismatch are the canonical not-found / OCC errors

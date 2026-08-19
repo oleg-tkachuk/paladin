@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
 )
 
 func TestResolveObjectKeyName(t *testing.T) {

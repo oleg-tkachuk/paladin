@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
 )
 
 // EnsureBucket is idempotent: an existing bucket is a no-op success

@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
 )
 
 // ─── fakes ──────────────────────────────────────────────────────────────────

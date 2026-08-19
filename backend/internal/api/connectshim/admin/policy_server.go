@@ -6,10 +6,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+	policyh "github.com/oleg-tkachuk/paladin-private/internal/api/v1/policy"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
 )
 
 type PolicyServer struct {

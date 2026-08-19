@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	bootstrappkg "github.com/oleg-tkachuk/paladin/internal/bootstrap"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	bootstrappkg "github.com/oleg-tkachuk/paladin-private/internal/bootstrap"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
 )
 
 // bootstrapCmd seeds the platform-admin user (when bootstrap.admin.enabled

@@ -10,11 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker"
 )
 
 // ─── Extra test doubles ──────────────────────────────────────────────────────

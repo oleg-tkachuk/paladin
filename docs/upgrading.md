@@ -77,7 +77,7 @@ working system:
 | Environment prefix | `PALADIN_` (57 variables) | `PALADIN_` |
 | OAuth scopes | `paladin.read`, … | `paladin.*` |
 | Default bucket names | `paladin-primary`, `paladin-archive`, `paladin-data` | `paladin-primary`, `paladin-archive`, `paladin-data` |
-| Go module path | `github.com/oleg-tkachuk/paladin` | `github.com/oleg-tkachuk/paladin` |
+| Go module path | `github.com/oleg-tkachuk/paladin` | `github.com/oleg-tkachuk/paladin-private` |
 | Chart / image names | `paladin`, `paladin-*` | `paladin-core`, `paladin-console` |
 
 Two entries need a word of explanation.

@@ -56,8 +56,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/filter/cel"
 )
 
 // Event is the wire payload delivered to subscribers. The shape is JSON-

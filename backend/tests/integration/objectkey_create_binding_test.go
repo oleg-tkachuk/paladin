@@ -14,11 +14,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/connectshim/admin"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	objectkey "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object_key"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 func TestCreateObjectKey_UsesDefaultBinding(t *testing.T) {

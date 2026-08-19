@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
 )
 
 func newTestIssuer(t *testing.T) *Issuer {

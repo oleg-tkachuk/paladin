@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
 )
 
 // stripVersionSuffix removes "/versions/{ver}" tail. Returns the parent name.

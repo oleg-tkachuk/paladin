@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
 )
 
 // Store implements api_token.Store against api_tokens (migration 017).

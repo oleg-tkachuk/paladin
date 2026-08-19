@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	objecttag "github.com/oleg-tkachuk/paladin/internal/api/v1/object_tag"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	objecttag "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object_tag"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // ObjectTagRepo satisfies objecttag.Repository.

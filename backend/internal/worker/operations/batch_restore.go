@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/batch"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/operation"
 )
 
 // BatchRestoreExecutor implements the BatchRestoreObjects operation type.

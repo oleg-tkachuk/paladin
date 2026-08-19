@@ -2,7 +2,7 @@
 // paladin.data.v1 services.
 package datav1connect
 
-import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
+import internal "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1/paladindatav1connect"
 
 type (
 	ObjectServiceHandler           = internal.ObjectServiceHandler

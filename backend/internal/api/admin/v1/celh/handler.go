@@ -16,9 +16,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	celfilter "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
+	celfilter "github.com/oleg-tkachuk/paladin-private/internal/filter/cel"
 )
 
 // Handler implements paladinadminv1connect.CELServiceHandler.

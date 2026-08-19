@@ -26,8 +26,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	v1admindomain "github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/config"
+	v1admindomain "github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
 )
 
 // BackendStore is the subset of admindomain.BackendRepository we actually

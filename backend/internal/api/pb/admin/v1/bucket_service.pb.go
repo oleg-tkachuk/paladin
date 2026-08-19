@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -853,7 +853,7 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\rSetObjectLock\x12%.paladin.admin.v1.SetObjectLockRequest\x1a\x17.paladin.admin.v1.Bucket\x12O\n" +
 	"\rSetVersioning\x12%.paladin.admin.v1.SetVersioningRequest\x1a\x17.paladin.admin.v1.Bucket\x12Q\n" +
 	"\x0eSetReplication\x12&.paladin.admin.v1.SetReplicationRequest\x1a\x17.paladin.admin.v1.Bucket\x12l\n" +
-	"\x15ListAccessibleBuckets\x12-.paladin.admin.v1.ListAccessibleBucketsRequest\x1a$.paladin.admin.v1.ListBucketsResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x15ListAccessibleBuckets\x12-.paladin.admin.v1.ListAccessibleBucketsRequest\x1a$.paladin.admin.v1.ListBucketsResponseBOZMgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_bucket_service_proto_rawDescOnce sync.Once

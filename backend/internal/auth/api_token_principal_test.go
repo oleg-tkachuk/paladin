@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
 )
 
 // recordingVerifier is a TokenVerifier that records whether it was called — so a test can

@@ -5,8 +5,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
 )
 
 // A consumer's tenant is unusable until its bucket exists, and provisioning has

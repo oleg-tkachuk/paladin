@@ -19,12 +19,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/capability"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin-private/capability"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	capabilitypg "github.com/oleg-tkachuk/paladin-private/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
 )
 
 // insertOutboxOnTx is a stand-in fan-out hook: it writes one

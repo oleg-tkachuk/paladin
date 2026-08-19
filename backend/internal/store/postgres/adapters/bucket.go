@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/bucket"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // BucketRepo satisfies bucket.Repository.

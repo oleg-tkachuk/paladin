@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	objpkg "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
+	objpkg "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/storage/s3adapter"
 )
 
 // TestStorageMigration_CrossBackendStreamThrough is the ADR-0011 Phase 3 slice-3

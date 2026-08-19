@@ -8,9 +8,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/resolve"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/connectshim/resolve"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
 )
 
 // QuotaReader is the read-only slice of the QuotaRepository the interceptor

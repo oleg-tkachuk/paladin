@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin-private/internal/api/v1/object_key"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/tenant"
 )
 
 type fakeOKLister struct {

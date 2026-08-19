@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin-private/internal/app"
 )
 
 // configSource resolves the CLI config path + PALADIN_CONFIG_OVERLAYS chain into

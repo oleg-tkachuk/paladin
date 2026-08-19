@@ -3,7 +3,7 @@ package auth
 import (
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
 )
 
 // TestExtractAPIToken covers the header parsing branches: X-Paladin-API-Token

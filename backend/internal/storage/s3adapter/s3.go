@@ -34,9 +34,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
 )
 
 // Client is the all-in-one S3-compatible adapter.

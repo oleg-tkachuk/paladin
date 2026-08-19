@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
 )
 
 // Routers implement the handler-facing storage interfaces (object.Storage,

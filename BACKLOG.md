@@ -90,12 +90,12 @@ the same commit. Treat this file like a runtime invariant.
     `runbook_url`s) and `backend/deploy/Dockerfile`
     (`org.opencontainers.image.source`).
   - **Go module paths — still spell `paladin`, and must stay that way.**
-    The remaining ~1160 `github.com/oleg-tkachuk/paladin/...` occurrences are
+    The remaining ~1160 `github.com/oleg-tkachuk/paladin-private/...` occurrences are
     import paths, not URLs. They never reach GitHub: the backend builds from
     its own directory and is not `go install`-able (see `backend/README.md`),
     and `capability/` resolves through a `replace`. Rewriting them would
     churn every file in the repository to no effect and then have to be
-    undone. Same for `otel.Meter("github.com/oleg-tkachuk/paladin")` in
+    undone. Same for `otel.Meter("github.com/oleg-tkachuk/paladin-private")` in
     `backend/internal/metrics/otel.go` — an instrumentation-scope name
     conventionally equal to the module path; changing it renames a metric
     attribute at runtime.
@@ -107,7 +107,7 @@ the same commit. Treat this file like a runtime invariant.
     `grep -rn "oleg-tkachuk/paladin-private"` finds exactly those twelve plus
     this entry, and nothing else, because no Go import path carries that
     spelling.
-  - `git remote set-url origin git@github.com:oleg-tkachuk/paladin.git` — the
+  - `git remote set-url origin git@github.com:oleg-tkachuk/paladin-private.git` — the
     remote currently points at `paladin-private`. GitHub redirects keep pushes
     working either way, so this is hygiene, not a break.
   - Re-run `apply-repo-settings.sh` and confirm it targets the right
@@ -1626,7 +1626,7 @@ of the pipeline._
 
   ```bash
   for br in main develop; do
-    gh api -X PATCH "repos/oleg-tkachuk/paladin/branches/$br/protection/required_status_checks" \
+    gh api -X PATCH "repos/oleg-tkachuk/paladin-private/branches/$br/protection/required_status_checks" \
       --input - <<'JSON'
   { "strict": true,
     "checks": [ {"context":"backend"}, {"context":"frontend"},

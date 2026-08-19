@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -589,7 +589,7 @@ const file_paladin_admin_v1_object_key_service_proto_rawDesc = "" +
 	"\x0fDeleteObjectKey\x12'.paladin.admin.v1.DeleteObjectKeyRequest\x1a(.paladin.admin.v1.DeleteObjectKeyResponse\x12a\n" +
 	"\x0eListObjectKeys\x12&.paladin.admin.v1.ListObjectKeysRequest\x1a'.paladin.admin.v1.ListObjectKeysResponse\x12\\\n" +
 	"\x12SetObjectKeyPolicy\x12*.paladin.admin.v1.SetObjectKeyPolicyRequest\x1a\x1a.paladin.admin.v1.ObjectKey\x12b\n" +
-	"\x15BindObjectKeyToBucket\x12-.paladin.admin.v1.BindObjectKeyToBucketRequest\x1a\x1a.paladin.admin.v1.ObjectKeyBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x15BindObjectKeyToBucket\x12-.paladin.admin.v1.BindObjectKeyToBucketRequest\x1a\x1a.paladin.admin.v1.ObjectKeyBOZMgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_object_key_service_proto_rawDescOnce sync.Once

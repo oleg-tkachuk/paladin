@@ -12,10 +12,10 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/audith"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/audith"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1/paladinadminv1connect"
 )
 
 type AuditServer struct {

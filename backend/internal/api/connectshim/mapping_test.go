@@ -50,9 +50,9 @@ import (
 
 	// Side-effect imports: registers every proto descriptor in
 	// the global registry so FindMessageByName below succeeds.
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	_ "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	_ "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1"
+	_ "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
 )
 
 // shimPlanes lists every (filesystem dir, proto package) pair we

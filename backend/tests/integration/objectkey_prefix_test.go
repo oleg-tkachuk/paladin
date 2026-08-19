@@ -15,7 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 func TestResolveObjectKeyPrefix_LongestPrefixWins(t *testing.T) {

@@ -9,7 +9,7 @@
 // Persistence is the consumer's concern — the module publishes Store,
 // UsageStore[TX] and KeyResolver contracts and nothing more. See
 // specs/003-capability-module-extraction/contracts/module-api.md.
-module github.com/oleg-tkachuk/paladin/capability
+module github.com/oleg-tkachuk/paladin-private/capability
 
 go 1.26.0
 

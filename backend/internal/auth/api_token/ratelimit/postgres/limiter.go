@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/ratelimit"
 )
 
 // Limiter implements ratelimit.Limiter against api_token_rate_buckets.

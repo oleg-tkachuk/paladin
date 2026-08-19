@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
 )
 
 func ctxWithRoles(roles ...string) context.Context {

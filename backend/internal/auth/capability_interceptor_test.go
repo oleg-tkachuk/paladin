@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin-private/capability"
 )
 
 // TestExtractCapabilityToken covers the header parsing branches:

@@ -15,13 +15,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/app"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/health"
-	"github.com/oleg-tkachuk/paladin/internal/observability"
-	"github.com/oleg-tkachuk/paladin/internal/platformstats"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/worker/lease"
+	"github.com/oleg-tkachuk/paladin-private/internal/app"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/health"
+	"github.com/oleg-tkachuk/paladin-private/internal/observability"
+	"github.com/oleg-tkachuk/paladin-private/internal/platformstats"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker/lease"
 )
 
 // serveWorkerCmd runs the background-job fan with per-job leader election via

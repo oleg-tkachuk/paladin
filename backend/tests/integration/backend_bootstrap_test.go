@@ -11,11 +11,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/bootstrap"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin-private/internal/bootstrap"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
 )
 
 func TestBootstrapPreservesDisabledState(t *testing.T) {

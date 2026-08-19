@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/ratelimit"
 )
 
 // smokeStore is the inline Store used by the end-to-end smoke test.

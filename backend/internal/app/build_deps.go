@@ -9,14 +9,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
-	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/wire"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/filter/cel"
+	policy "github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin-private/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/wire"
 )
 
 // SharedDeps is the heavy build product every plane and worker subcommand

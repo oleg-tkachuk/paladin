@@ -295,7 +295,7 @@ const file_paladin_common_v1_resource_proto_rawDesc = "" +
 	"\x1eCHECKSUM_ALGORITHM_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CHECKSUM_ALGORITHM_CRC32C\x10\x01\x12\x1d\n" +
 	"\x19CHECKSUM_ALGORITHM_SHA256\x10\x02\x12\x1a\n" +
-	"\x16CHECKSUM_ALGORITHM_MD5\x10\x03BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
+	"\x16CHECKSUM_ALGORITHM_MD5\x10\x03BQZOgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_resource_proto_rawDescOnce sync.Once

@@ -22,13 +22,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/internal/worker/operations"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/batch"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin-private/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker/operations"
+	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
 )
 
 // TestBatchExecutor_Delete: 3 AVAILABLE rows + 1 nonexistent id ⇒

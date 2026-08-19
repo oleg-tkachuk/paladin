@@ -34,7 +34,7 @@ property CI enforces against the resolved graph rather than against
 `go.mod`.
 
 ```go
-import "github.com/oleg-tkachuk/paladin/capability"
+import "github.com/oleg-tkachuk/paladin-private/capability"
 ```
 
 You supply storage; a bundled in-memory implementation is enough to get

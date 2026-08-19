@@ -12,8 +12,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/ratelimit"
 )
 
 // APITokenPurger periodically calls api_token.Store.PurgeExpired plus

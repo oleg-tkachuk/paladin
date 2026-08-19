@@ -13,9 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/schema"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // TenantRepo satisfies tenant.Repository. The raw pool is needed because the

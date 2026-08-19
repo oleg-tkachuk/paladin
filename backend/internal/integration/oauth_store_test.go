@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/oauth"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/oauth"
 )
 
 // TestOAuthStore exercises the ADR-0009 OAuth AS store against real Postgres:

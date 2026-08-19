@@ -20,8 +20,8 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin/internal/worker"
-	"github.com/oleg-tkachuk/paladin/migrations"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin-private/migrations"
 )
 
 func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {

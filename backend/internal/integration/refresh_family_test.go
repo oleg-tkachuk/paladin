@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	authstore "github.com/oleg-tkachuk/paladin-private/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
 )
 
 // TestRefreshTokenFamilyRevoke verifies the ADR-0009 per-family reuse

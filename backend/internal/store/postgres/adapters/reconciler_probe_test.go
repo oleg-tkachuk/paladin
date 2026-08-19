@@ -7,7 +7,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin-private/internal/storage/s3adapter"
 )
 
 // isNotFoundErr decides whether ReconcilerV2 takes the terminal MarkFailed

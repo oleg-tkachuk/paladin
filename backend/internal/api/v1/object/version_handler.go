@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/apiutil"
 )
 
 // VersionHandler implements the data-plane versioning RPCs. It is a sibling

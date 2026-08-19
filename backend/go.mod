@@ -1,4 +1,4 @@
-module github.com/oleg-tkachuk/paladin
+module github.com/oleg-tkachuk/paladin-private
 
 go 1.26.0
 
@@ -213,6 +213,6 @@ require (
 // (research R-004 — without that job, `replace` would mask a broken module).
 // It is NOT published: no version stream is cut for it, and consumption is
 // in-tree through the replace below. See capability/README.md §Versioning.
-require github.com/oleg-tkachuk/paladin/capability v0.1.0
+require github.com/oleg-tkachuk/paladin-private/capability v0.1.0
 
-replace github.com/oleg-tkachuk/paladin/capability => ../capability
+replace github.com/oleg-tkachuk/paladin-private/capability => ../capability

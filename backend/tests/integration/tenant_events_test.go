@@ -24,10 +24,10 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	tenantpkg "github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	tenantpkg "github.com/oleg-tkachuk/paladin-private/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker"
 )
 
 // TestTenantHandler_UpdateDispatchesPaladinTenantUpdated exercises the

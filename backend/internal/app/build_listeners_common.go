@@ -9,11 +9,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/health"
-	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/config"
+	"github.com/oleg-tkachuk/paladin-private/internal/health"
+	"github.com/oleg-tkachuk/paladin-private/internal/logger"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres"
 )
 
 // BuildHTTPServer wraps a mux into an h2c-enabled http.Server with

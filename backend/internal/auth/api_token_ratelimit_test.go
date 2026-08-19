@@ -10,8 +10,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth/api_token/ratelimit"
 )
 
 // recordingLimiter is the interceptor-side test stub. Tracks call count

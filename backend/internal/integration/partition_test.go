@@ -24,7 +24,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin/migrations"
+	"github.com/oleg-tkachuk/paladin-private/migrations"
 )
 
 // prePartitionVersion is the last migration before the partitioning pair.

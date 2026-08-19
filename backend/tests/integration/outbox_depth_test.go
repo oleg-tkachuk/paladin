@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/worker"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin-private/internal/worker"
+	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
 )
 
 func TestOutboxDepth_TotalAndMaxPerTenant(t *testing.T) {

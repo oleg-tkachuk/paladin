@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/capability"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin-private/capability"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
 )
 
 // fakeUsageStore is a minimal in-memory capability.UsageStore[pgx.Tx] that

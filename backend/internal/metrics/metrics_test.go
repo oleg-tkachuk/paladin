@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin-private/internal/metrics"
 )
 
 func TestRecordResourceNameShape(t *testing.T) {

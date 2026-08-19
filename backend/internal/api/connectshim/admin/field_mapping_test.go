@@ -21,7 +21,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
 )
 
 // TestTenantServer_CreateTenant_FieldMapping pins every proto field

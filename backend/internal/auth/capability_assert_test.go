@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin-private/capability"
 )
 
 // TestAssertCapabilityOp_NoCapability covers the load-bearing

@@ -8,10 +8,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/userh"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/iam/v1/userh"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1/paladiniamv1connect"
+	authstore "github.com/oleg-tkachuk/paladin-private/internal/auth/store"
 )
 
 type UserServer struct {

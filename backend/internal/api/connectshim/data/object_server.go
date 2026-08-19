@@ -6,9 +6,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	pb "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/v1/object"
 )
 
 type ObjectServer struct {

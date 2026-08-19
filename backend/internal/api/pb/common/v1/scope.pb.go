@@ -152,7 +152,7 @@ const file_paladin_common_v1_scope_proto_rawDesc = "" +
 	"\x11SCOPE_TYPE_TENANT\x10\x01\x12\x16\n" +
 	"\x12SCOPE_TYPE_BACKEND\x10\x02\x12\x15\n" +
 	"\x11SCOPE_TYPE_BUCKET\x10\x03\x12\x19\n" +
-	"\x15SCOPE_TYPE_OBJECT_KEY\x10\x04BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
+	"\x15SCOPE_TYPE_OBJECT_KEY\x10\x04BQZOgithub.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_scope_proto_rawDescOnce sync.Once

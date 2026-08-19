@@ -20,13 +20,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/capability"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin-private/capability"
+	"github.com/oleg-tkachuk/paladin-private/internal/api/admin/v1/billingh"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	capabilitypg "github.com/oleg-tkachuk/paladin-private/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin-private/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin-private/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin-private/tests/integration/pgharness"
 )
 
 // allowAuth is the permit-everything Cedar authorizer used by the

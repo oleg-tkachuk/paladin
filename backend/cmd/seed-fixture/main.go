@@ -60,12 +60,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	commonv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
-	datav1 "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/mcp"
+	adminv1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/common/v1"
+	datav1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/data/v1"
+	iamv1 "github.com/oleg-tkachuk/paladin-private/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin-private/internal/auth"
+	"github.com/oleg-tkachuk/paladin-private/internal/mcp"
 )
 
 const (
