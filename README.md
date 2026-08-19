@@ -97,6 +97,25 @@ Building from source additionally needs Go 1.26+, Node 24 and pnpm 11 —
 see [CONTRIBUTING.md](CONTRIBUTING.md) for the full list and the
 optional hook tooling.
 
+### On a cluster, without building anything
+
+Released images are published multi-arch (`linux/amd64`, `linux/arm64`) to
+GHCR, and the charts default to them:
+
+```bash
+helm install paladin-core ./backend/deploy/chart
+helm install paladin-console ./frontend/deploy/chart
+```
+
+- `ghcr.io/oleg-tkachuk/paladin-core`
+- `ghcr.io/oleg-tkachuk/paladin-console`
+
+Both carry a `latest` tag and a tag per release version; pin the version in
+anything you care about. Images exist only for released versions — there is
+no image for an unreleased `main`, so build from source for that. The dev
+loop overrides the charts back to a local registry via
+`values-local.yaml`.
+
 ## Where to read next
 
 | | |

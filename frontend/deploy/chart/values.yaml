@@ -67,10 +67,10 @@ extraEnv: []
 healthSnapshotTokenSecret: {}
 
 image:
-  # Registry host overridden per env. Local default points at the
-  # dev-cluster registry; envs other than local flip via
-  # values-{dev,staging,prod}.yaml.
-  repository: registry.local/paladin/paladin-console
+  # The published multi-arch image, so `helm install` works without building
+  # anything. The dev loop overrides this back to the in-cluster registry in
+  # values-local.yaml, and other envs flip it via values-{dev,staging,prod}.
+  repository: ghcr.io/oleg-tkachuk/paladin-console
   # Prod-safe default. Local overlay flips to Always because the
   # local registry rebuilds the same tag in-place.
   pullPolicy: IfNotPresent

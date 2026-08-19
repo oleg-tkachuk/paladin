@@ -1661,30 +1661,6 @@ of the pipeline._
   both branches.
 
 
-### Publish container images to a registry
-
-- **Status:** Deferred — blocks anyone using this project without building
-  it themselves.
-- **Reason:** The Helm charts and both compose files reference `paladin-core`
-  and `paladin-console` (and `registry.local/paladin/*` in the e2e stack) — local
-  tags that exist in no registry. Every consumer must therefore build both
-  images from source before anything runs on a cluster, and the charts
-  cannot be installed as published. The release workflow produces a GitHub
-  Release and a version tag; it produces no artifact anyone can pull.
-- **Definition of Done:**
-  - The release workflow builds and pushes both images to GHCR
-    (`ghcr.io/oleg-tkachuk/paladin-core`, `…/paladin-console`) on every release,
-    tagged with the semantic version and `latest`, multi-arch if the
-    runners allow.
-  - Chart `image.repository` defaults point at the published images, with
-    `values-local.yaml` keeping the local tags for the dev loop.
-  - Provenance/SBOM attached, or a note here saying why not.
-  - README documents pulling rather than building.
-- **Blockers:** none technical. Needs a decision on whether images are
-  published from `main` on every release or only on tagged releases, and
-  whether the e2e stack should consume published images (drift risk) or
-  keep building locally (current behaviour, and probably right).
-
 ### Publish the Helm charts
 
 - **Status:** Deferred — depends on image publishing above.

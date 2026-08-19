@@ -20,6 +20,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  packages: write # pushing the release images to GHCR
 
 # One release at a time. Two quick merges to main must not run semantic-release
 # concurrently (they would race to compute + publish the next version).
@@ -51,6 +52,7 @@ jobs:
       # never pushing a commit to the protected main. So the default GITHUB_TOKEN
       # (contents: write) is sufficient; no PAT / bypass is needed.
       - name: Semantic Release
+        id: semantic
         # This action publishes only full-version tags (no moving `v6`), so pin
         # the exact release rather than a major that would fail to resolve.
         uses: cycjimmy/semantic-release-action@v6.0.0
@@ -60,3 +62,78 @@ jobs:
           semantic_version: 25
           extra_plugins: |
             conventional-changelog-conventionalcommits@10.2.1
+
+      # ── publish the release images ───────────────────────────────────────
+      #
+      # Images are published ONLY on a release (maintainer's call,
+      # 2026-08-19): a tag in the registry then means exactly what the same
+      # tag means in git, and nothing accumulates for un-released commits.
+      # The trade-off accepted is that there is no image for the tip of
+      # `main` between releases — build from source for that.
+      #
+      # These steps run inside the release job, AFTER the GitHub Release
+      # exists. If a push fails the release is already cut, so recovery is
+      # re-running this workflow rather than re-releasing; that is the normal
+      # shape for publish-after-tag and is preferable to holding the tag
+      # hostage to a registry outage.
+      #
+      # The e2e stack deliberately does NOT consume these images — it builds
+      # locally from the working tree, so the suite tests the code on the
+      # branch rather than the last published artifact.
+      - name: Set up QEMU
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/setup-qemu-action@v4.2.0
+
+      - name: Set up Buildx
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/setup-buildx-action@v4.3.0
+
+      # GHCR package names are owner-scoped, not repository-scoped, so these
+      # stay `paladin-core` / `paladin-console` regardless of the repository
+      # being named `paladin-private` for now. The image's
+      # org.opencontainers.image.source label is what links the package back
+      # to the repository.
+      - name: Log in to GHCR
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Repo-root context (not backend/): the Dockerfile COPYs backend/ AND
+      # the nested capability/ module, which a backend/-scoped context cannot
+      # reach. Mirrors the e2e workflow and the Taskfile.
+      - name: Build and push paladin-core
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: .
+          file: backend/deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ghcr.io/oleg-tkachuk/paladin-core:${{ steps.semantic.outputs.new_release_version }}
+            ghcr.io/oleg-tkachuk/paladin-core:latest
+          build-args: |
+            APP_VERSION=${{ steps.semantic.outputs.new_release_version }}
+            GIT_COMMIT_HASH=${{ github.sha }}
+
+      - name: Build and push paladin-console
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: frontend
+          file: frontend/deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ghcr.io/oleg-tkachuk/paladin-console:${{ steps.semantic.outputs.new_release_version }}
+            ghcr.io/oleg-tkachuk/paladin-console:latest
+          build-args: |
+            APP_VERSION=${{ steps.semantic.outputs.new_release_version }}
+            GIT_COMMIT_HASH=${{ github.sha }}

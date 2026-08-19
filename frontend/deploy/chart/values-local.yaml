@@ -14,6 +14,10 @@
 #     paladin_token used in prod path.
 
 image:
+  # The dev loop builds and pushes to the in-cluster registry, so the local
+  # overlay keeps pointing there — values.yaml now defaults to the published
+  # GHCR image for everyone who is NOT rebuilding from source.
+  repository: registry.local/paladin/paladin-console
   pullPolicy: Always
 
 # Replica pinning for the minikube memory budget. Base values.yaml
