@@ -58,54 +58,18 @@ the same commit. Treat this file like a runtime invariant.
     `…/sa/paladin-core-api`) regenerate. Expect a brief in-namespace
     disruption; confirm the `/login` redirect, BFF→backend health aggregation
     and internal mTLS all recover.
-  - Apply the runtime migrations in the entry below BEFORE the new pods start,
-    or they will not reach the database.
+  - Reprovision the database rather than migrating it — the maintainer's
+    call, 2026-08-19. Follow [docs/upgrading.md](docs/upgrading.md): drop the
+    old database and roles, let `migrate` build the schema from empty, run
+    `bootstrap`, reissue every API token, and rewrite every `PALADIN_*` variable
+    in the overlays to `PALADIN_*` BEFORE the new pods start. The control-plane
+    rows (tenants, buckets, ObjectKeys, capabilities, subscriptions, audit
+    log) are lost by design; object bytes in the S3 backend survive but are
+    orphaned, and Paladin will not adopt them on its own.
   - Delete the orphaned `charts/{paladin*,paladin-*}` OCI repos and
     the matching images once the cutover is verified.
   - Delete this entry when the cutover is done and verified.
 - **Blockers:** operator must run the deploy + sync; not automatable from here.
-
-### The rename changed runtime contracts, not just source identifiers
-
-- **Status:** Open — must be executed by an operator against any existing
-  deployment. A fresh install needs none of it.
-- **Reason:** The `paladin`→`paladin` rename went all the way down. Source-level
-  renames were verified by build and test; these are the ones that live in a
-  running system or in someone else's client, and no test in this repository
-  can catch them:
-  - **Postgres roles** `paladin_app` / `paladin_migrate` / `paladin_reaper` →
-    `paladin_app` / `paladin_migrate` / `paladin_reaper`. The migrations create
-    the new names; an existing database still has the old ones, and the DSNs
-    now point at roles that do not exist.
-  - **RLS session GUC** `paladin.tenant_id` → `paladin.tenant_id`. Every row-level
-    security policy reads it. A pod on the new code against old policies sees
-    NULL and therefore no rows — a silent empty-result failure, not an error.
-  - **API token prefix** `paladin_pat_` → `paladin_pat_`. Every issued token stops
-    being recognised; they must be reissued.
-  - **Event type names** `paladin.object.uploaded`, `paladin.bucket.updated`, … →
-    `paladin.*`. Every subscriber filtering on type stops matching.
-  - **RPC paths** — the proto package moved `paladin.*` → `paladin.*`, so
-    `/paladin.data.v1.ObjectService/GetObject` is now
-    `/paladin.data.v1.ObjectService/GetObject`. Every generated client must be
-    regenerated; old clients get "unimplemented".
-  - **HTTP headers** `X-PALADIN-*` → `X-Paladin-*`.
-  - **Env prefix** `PALADIN_` → `PALADIN_` (57 variables). Anything setting the old
-    names is now silently ignored, which is the worst failure mode here —
-    the process starts on defaults instead of refusing.
-  - **OAuth scopes** `paladin.read` etc. → `paladin.*`.
-  - **Bucket names** `paladin-primary` / `paladin-archive` / `paladin-data` → `paladin-*`
-    as config defaults; existing buckets keep their names and must either be
-    overridden in config or migrated.
-- **Definition of Done:**
-  - A documented upgrade path — either a migration that renames the roles and
-    GUC in place, or an explicit "reprovision from scratch" statement in the
-    release notes. Pre-1.0 makes the second answer legitimate (Constitution
-    Principle IV), but it has to be *said*.
-  - Release notes enumerating every breaking item above.
-  - A decision on whether the API-token prefix change warrants a grace period
-    accepting both prefixes, or a straight reissue.
-- **Blockers:** needs the maintainer's call on reprovision-vs-migrate. That
-  choice determines whether any of the rest gets written.
 
 ---
 
