@@ -71,6 +71,47 @@ the same commit. Treat this file like a runtime invariant.
   - Delete this entry when the cutover is done and verified.
 - **Blockers:** operator must run the deploy + sync; not automatable from here.
 
+### Finish the GitHub rename: `paladin-private` → `paladin`
+
+- **Status:** Open (operator action). The repository is currently
+  **`oleg-tkachuk/paladin-private`** — renamed from `paladin`
+  on 2026-08-19 as an interim private name. The final name is `paladin`.
+- **Reason:** The *service* is called `paladin` and that is not changing;
+  `paladin-private` is a temporary repository name only. Everything in the
+  tree already spells `paladin`, so nothing here should be rewritten to
+  `paladin-private` — the references become correct the moment the repository
+  is renamed, and rewriting them now would only have to be undone.
+  Of the 1172 `github.com/oleg-tkachuk/paladin` references in the tree, 1161
+  are **Go import paths**, which never reach GitHub: the backend is built
+  from its own directory and is not `go install`-able (see
+  `backend/README.md`), and `capability/` is consumed through a `replace`.
+  Builds, tests and codegen are therefore unaffected by the interim name.
+  Only 11 are real URLs, and those 404 until the rename.
+- **Two things actually break while the interim name is in force:**
+  - `release.config.cjs` pins
+    `repositoryUrl: "https://github.com/oleg-tkachuk/paladin.git"`, which does
+    not exist yet. A release fires on push to `main`, so **do not merge this
+    work to `main` before renaming** — semantic-release would fail against a
+    non-existent repository. If a release is needed sooner, point the URL at
+    `paladin-private` and change it back after the rename.
+  - `.github/scripts/apply-repo-settings.sh` defaults to
+    `REPO="${REPO:-oleg-tkachuk/paladin}"`. Until the rename, run it as
+    `REPO=oleg-tkachuk/paladin-private REQUIRE_CHECKS=1 .github/scripts/apply-repo-settings.sh`.
+    The variable exists for exactly this; do not edit the default.
+- **Definition of Done:**
+  - Repository renamed to `paladin`; confirm GitHub's redirect from the old
+    name resolves and that the 11 in-tree URLs load.
+  - `git remote set-url origin git@github.com:oleg-tkachuk/paladin.git` — the
+    remote currently points at `paladin-private`. GitHub redirects keep pushes
+    working either way, so this is hygiene, not a break.
+  - Re-run `apply-repo-settings.sh` without the `REPO` override and confirm
+    it targets the right repository.
+  - Check the name is actually free where it matters — GitHub org, npm,
+    pkg.go.dev, trademark. **Not done yet**; "paladin" is an ordinary English
+    word, so this is a real check rather than a formality.
+  - Delete this entry once the rename is done.
+- **Blockers:** maintainer's action — a session cannot rename a repository.
+
 ---
 
 ## MCP bridge
