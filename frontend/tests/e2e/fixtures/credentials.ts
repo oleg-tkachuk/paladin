@@ -1,12 +1,11 @@
 // NEVER true in prod. e2e-only fixture credentials.
 //
-// Mirrors the local-overlay convention from gitops/.../overlays/
-// local/values/paladin/paladin-core.yaml (the `local-dev-admin-
-// pw-*` pattern). Constitution Principle V requires the
-// NEVER-in-prod marker above this comment to remain in place — these
-// credentials are baked into the test stack's bootstrap step, so
-// reusing them anywhere a real user can reach is a real
-// privilege-escalation hazard.
+// Constitution Principle V requires the NEVER-in-prod marker above this
+// comment to remain in place — these credentials are baked into the test
+// stack's bootstrap step, so reusing them anywhere a real user can reach is a
+// real privilege-escalation hazard. They are also listed in the backend's
+// weak-secret deny-list (backend/internal/config/weak_secrets.go), which
+// refuses to boot a non-disposable environment that inherits one.
 //
 // The seeded admin is provisioned by the `bootstrap` one-shot
 // container in tests/e2e/docker-compose.test.yaml. Every test logs

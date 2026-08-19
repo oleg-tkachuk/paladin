@@ -6,10 +6,9 @@
 # The suite's Playwright webServer boots tests/e2e/docker-compose.test.yaml
 # itself; this job only prepares what the compose stack can't provide:
 #   - the two images the compose file references by :latest tag
-#   - an S3-compatible endpoint (MinIO here; the lab uses Garage) exported
-#     via PALADIN_E2E_S3_* — compose containers reach it via the docker0
-#     gateway (172.17.0.1 on GitHub's Linux runners), the presigned-PUT
-#     path from the Playwright host via localhost.
+#
+# Storage is NOT prepared here: the compose file brings up its own MinIO,
+# so this job and a contributor's laptop run byte-identical stacks.
 #
 # NOT a required check yet: enabling required status checks is blocked on
 # the account's Actions billing (see BACKLOG "Branch protection"). Flip it
@@ -73,32 +72,6 @@ jobs:
             --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             .
 
-      - name: Start MinIO (S3 endpoint for the stack)
-        run: |
-          set -euo pipefail
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=paladin-e2e-access \
-            -e MINIO_ROOT_PASSWORD=paladin-e2e-secret-key \
-            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
-          # Wait until MinIO is actually live, and FAIL LOUDLY if it never is —
-          # the old loop fell through silently, so a slow start surfaced as a
-          # cryptic `mc mb` error instead of "MinIO didn't come up".
-          ready=""
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
-              ready=1; echo "MinIO live after ${i}s"; break
-            fi
-            sleep 1
-          done
-          if [ -z "$ready" ]; then
-            echo "::error::MinIO did not become healthy within 60s"
-            docker logs minio --tail 50 || true
-            exit 1
-          fi
-          docker run --rm --network host --entrypoint sh minio/mc:RELEASE.2025-04-16T18-13-26Z -c "
-            mc alias set local http://localhost:9000 paladin-e2e-access paladin-e2e-secret-key &&
-            mc mb local/paladin-e2e"
-
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
@@ -118,17 +91,30 @@ jobs:
         working-directory: frontend
         run: pnpm exec playwright install chromium --with-deps
 
+      # Pull the stack's third-party images BEFORE Playwright starts timing.
+      # The webServer step allows 120s for `compose up --wait`, which was
+      # sized when postgres was the only image to fetch; a cold MinIO pull
+      # inside that window would surface as a webServer timeout rather than
+      # as what it is.
+      #
+      # Services named explicitly rather than a bare `pull`: the paladin-core /
+      # paladin-console images were built into the local daemon by the steps
+      # above and exist in no registry, so pulling them fails.
+      - name: Pre-pull compose images
+        run: |
+          docker compose -p paladin-e2e \
+            -f frontend/tests/e2e/docker-compose.test.yaml \
+            pull --quiet postgres minio minio-setup
+
       - name: Run Playwright suite
         working-directory: frontend
         env:
           CI: "true"
-          # Compose containers reach the runner's MinIO through the docker0
-          # gateway; the Playwright host (presigned PUTs) via localhost.
-          PALADIN_E2E_S3_ENDPOINT: http://172.17.0.1:9000
-          PALADIN_E2E_S3_PUBLIC_ENDPOINT: http://localhost:9000
-          PALADIN_E2E_S3_BUCKET: paladin-e2e
-          PALADIN_E2E_S3_ACCESS_KEY: paladin-e2e-access
-          PALADIN_E2E_S3_SECRET_KEY: paladin-e2e-secret-key
+          # No PALADIN_E2E_S3_* here on purpose. Storage is a service inside
+          # docker-compose.test.yaml, so CI runs the same stack a
+          # contributor runs — the runner-host MinIO this job used to
+          # start, and the docker0-gateway address needed to reach it,
+          # were a CI-only third configuration and are gone.
         run: pnpm run test:e2e
 
       - name: Upload Playwright report

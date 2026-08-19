@@ -16,38 +16,43 @@ SDD audit trail live at
 #     (build via `task -d backend build:image` if missing)
 #   - pnpm 11.3.0+: `corepack enable && corepack prepare pnpm@11.3.0 --activate`
 #   - Chromium binary: `pnpm exec playwright install chromium`
-#   - Garage reachable on host port 3900: see "Garage" below.
 
 cd frontend
 
-# Export Garage credentials (required by docker-compose.test.yaml).
-export PALADIN_E2E_S3_ACCESS_KEY=$(kubectl -n paladin \
-  get secret garage-paladin-credentials \
-  -o jsonpath='{.data.accessKeyId}' | base64 -d)
-export PALADIN_E2E_S3_SECRET_KEY=$(kubectl -n paladin \
-  get secret garage-paladin-credentials \
-  -o jsonpath='{.data.secretAccessKey}' | base64 -d)
-
-# Run the suite. Playwright's webServer config will bring up
-# the docker-compose test stack and tear it down on exit.
+# Run the suite. Playwright's webServer config brings up the
+# docker-compose test stack — Postgres, MinIO and the PALADIN planes —
+# and tears it down on exit.
 pnpm run test:e2e
 ```
 
-## Garage (external dependency)
+There is nothing else to arrange: no cluster, no port-forward, no
+credential export.
 
-Garage is a cluster-shared platform service from
-[`gitops/specs/001-garage-object-storage`](../../../../gitops/specs/001-garage-object-storage/),
-not bundled in the test stack. The PALADIN backend containers in
-`docker-compose.test.yaml` point at `host.docker.internal:3900`,
-so the operator MUST forward Garage to the host before
-`compose up`:
+## Storage
+
+MinIO runs as a service inside `docker-compose.test.yaml`, with a
+one-shot `minio-setup` container that creates the bucket before the
+API plane starts. Credentials are the committed dev pair
+(`paladin-e2e-access` / `paladin-e2e-secret-key`) — dev-only, and listed in the
+backend's weak-secret deny-list so no real deployment can inherit them.
+
+Two endpoints are configured and they are not interchangeable:
+`endpoint` (`http://minio:9000`) is what the backend talks to over
+container DNS, and `public_endpoint` (`http://localhost:9000`) is what
+presigned URLs are signed for, because the browser uploads from the
+host. SigV4 covers the Host header, so swapping them produces a
+signature failure rather than a connection error.
+
+To run against an external S3 endpoint instead — Garage, SeaweedFS, a
+real bucket — set all five variables before `pnpm run test:e2e`:
 
 ```bash
-kubectl port-forward -n garage svc/garage-s3 3900:3900 &
+export PALADIN_E2E_S3_ENDPOINT=https://s3.example.com
+export PALADIN_E2E_S3_PUBLIC_ENDPOINT=https://s3.example.com
+export PALADIN_E2E_S3_BUCKET=paladin-e2e
+export PALADIN_E2E_S3_ACCESS_KEY=…
+export PALADIN_E2E_S3_SECRET_KEY=…
 ```
-
-If `compose up` errors with `required variable PALADIN_E2E_S3_ACCESS_KEY
-is missing`, the credential export above wasn't run.
 
 ## Layout
 

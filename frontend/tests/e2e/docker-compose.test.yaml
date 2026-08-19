@@ -6,19 +6,26 @@
 # deliberately ABSENT — the Playwright tests never exercise
 # background jobs (R-006).
 #
-# Storage backend: Garage is a SHARED cluster service from
-# gitops (`specs/001-garage-object-storage`), reachable in-
-# cluster at `http://garage-s3.garage.svc.cluster.local:3900`.
-# The test stack consumes it — does NOT bring up its own. For
-# docker-compose running on the operator's host, the Garage URL
-# isn't directly routable; the recommended path is
-# `kubectl port-forward -n garage svc/garage-s3 3900:3900` in a
-# separate terminal before running the suite, and the
-# PALADIN_E2E_S3_* env vars below default to localhost:3900.
-# Override per-environment as needed.
+# Storage backend: MinIO, brought up IN THIS FILE. The stack has
+# no external prerequisite beyond Docker and the two locally
+# built images — `git clone && pnpm run test:e2e` works, which is
+# the whole point of a suite other people are meant to run.
+#
+# It did not always: storage used to be a Garage instance shared
+# from a private infrastructure repo, reached via
+# `kubectl port-forward`, with its credentials pulled out of a
+# Kubernetes Secret by hand. That made the suite unrunnable for
+# anyone without that cluster, and made CI a THIRD configuration
+# (the workflow started its own MinIO on the runner host and
+# pointed the stack at the docker0 gateway) — so local, CI and
+# the documented path all differed. One MinIO, declared here,
+# collapses the three into one.
+#
+# An external S3 endpoint is still supported: set every
+# PALADIN_E2E_S3_* var below and the in-compose MinIO is bypassed
+# (it still starts; ignore it, or `--scale minio=0`).
 #
 # Bring up:
-#   kubectl port-forward -n garage svc/garage-s3 3900:3900 &
 #   docker compose -p paladin-e2e \
 #       -f frontend/tests/e2e/docker-compose.test.yaml up --wait
 # Tear down (removes the tmpfs Postgres volume):
@@ -34,18 +41,11 @@
 #
 # Credentials are dev-only and committed (per Clarification Q4 +
 # Constitution Principle V). The NEVER-in-prod marker lives both
-# here and in fixtures/credentials.ts. Garage credentials are
-# supplied by gitops's `garage-paladin-credentials` Secret — for
-# local docker-compose runs they MUST be exported as
-# PALADIN_E2E_S3_ACCESS_KEY + PALADIN_E2E_S3_SECRET_KEY before
-# `compose up`, e.g.:
-#
-#   export PALADIN_E2E_S3_ACCESS_KEY=$(kubectl -n paladin \
-#     get secret garage-paladin-credentials -o jsonpath='{.data.accessKeyId}' \
-#     | base64 -d)
-#   export PALADIN_E2E_S3_SECRET_KEY=$(kubectl -n paladin \
-#     get secret garage-paladin-credentials -o jsonpath='{.data.secretAccessKey}' \
-#     | base64 -d)
+# here and in fixtures/credentials.ts. They are also listed in
+# the backend's weak-secret deny-list
+# (backend/internal/config/weak_secrets.go), so a real deployment
+# that inherits one refuses to boot rather than running on a
+# credential published in this repository.
 
 x-paladin-base: &paladin-base
   image: registry.local/paladin/paladin-core:latest
@@ -62,22 +62,83 @@ x-paladin-base: &paladin-base
     # koanf's env provider maps PALADIN_FOO_BAR by replacing every "_" with ".",
     # so a multi-word key like login_rate_limit_per_subject_per_minute can't be
     # reached via env; only single-word path segments (storage.backends.…) can.
-    # ── storage: cluster-shared Garage (gitops) ────────────
-    # Default endpoint assumes operator ran
-    # `kubectl port-forward -n garage svc/garage-s3 3900:3900`
-    # in a sibling terminal. host.docker.internal lets the
-    # in-compose backend reach the host's forwarded port.
-    # Override PALADIN_E2E_S3_* to point at a different Garage if
-    # running directly inside the cluster network.
-    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: ${PALADIN_E2E_S3_ENDPOINT:-http://host.docker.internal:3900}
-    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:3900}
+    # ── storage: in-compose MinIO ────────────────────────────
+    # Two endpoints, and they are NOT interchangeable. The backend
+    # signs presigned URLs against public_endpoint, and SigV4 covers
+    # the Host header — sign for `minio:9000` and the browser's PUT
+    # to localhost fails the signature check, not the connection.
+    #   endpoint        — container DNS, used by the backend itself
+    #   public_endpoint — host-reachable, used by the Playwright browser
+    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: ${PALADIN_E2E_S3_ENDPOINT:-http://minio:9000}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:9000}
     PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
-    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:?Garage access key required — export from kubectl secret per file header}
-    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:?Garage secret key required — export from kubectl secret per file header}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
     # ── postgres connection ──────────────────────────────────
     PALADIN_DATABASE_DSN: postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable
 
 services:
+  # S3-compatible storage. Pinned to the same MinIO release the CI
+  # workflow used when it started MinIO itself, so moving it in here
+  # changed the topology and nothing else.
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: paladin-e2e-minio
+    command: ["server", "/data"]
+    environment:
+      # dev-only credentials — e2e compose only, NEVER reused outside it.
+      MINIO_ROOT_USER: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
+      MINIO_ROOT_PASSWORD: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
+    # Objects live for one run, same as the Postgres above: a suite that
+    # inherits state from the previous run passes for the wrong reason.
+    tmpfs:
+      - /data
+    ports:
+      # Published because the browser uploads straight to it via a
+      # presigned PUT — this is not a debugging convenience, the suite
+      # fails without it.
+      - "9000:9000"
+
+  # One-shot: waits for MinIO and creates the bucket, then exits 0.
+  #
+  # A healthcheck on the minio service would be the obvious alternative,
+  # but the MinIO image carries neither curl nor wget, so there is
+  # nothing to probe /minio/health/live WITH from inside it. mc is a
+  # separate image that has both the client and a shell.
+  minio-setup:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: paladin-e2e-minio-setup
+    restart: "no"
+    environment:
+      S3_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
+      S3_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
+      S3_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      # `mc alias set` round-trips to the server, so it doubles as the
+      # readiness probe. Bounded and loud: an unbounded wait turns "MinIO
+      # never came up" into a job that hangs until the 30-minute timeout.
+      - |
+        set -eu
+        ready=""
+        for i in $$(seq 1 60); do
+          if mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" >/dev/null 2>&1; then
+            ready=1
+            echo "MinIO ready after $${i}s"
+            break
+          fi
+          sleep 1
+        done
+        if [ -z "$$ready" ]; then
+          echo "MinIO did not accept connections within 60s" >&2
+          exit 1
+        fi
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        echo "bucket $$S3_BUCKET ready"
+    depends_on:
+      minio:
+        condition: service_started
+
   postgres:
     image: postgres:16
     container_name: paladin-e2e-postgres
@@ -140,9 +201,10 @@ services:
     depends_on:
       bootstrap:
         condition: service_completed_successfully
-      # Garage is an EXTERNAL prerequisite — operator must have an
-      # S3-compatible endpoint reachable at PALADIN_E2E_S3_ENDPOINT
-      # (default host.docker.internal:3900) before `compose up`.
+      # Gate on the bucket, not on MinIO being up: the backend's first
+      # write fails just as hard against a live server with no bucket.
+      minio-setup:
+        condition: service_completed_successfully
     # NOTE: the PALADIN backend image is distroless (no shell / wget), so a
     # CMD-SHELL HTTP probe can't run in-container. The plane is ready
     # within ~1s of "plane listening"; downstream services gate on
