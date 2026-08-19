@@ -46,8 +46,10 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observ
 	// Optional overlay chain via PALADIN_CONFIG_OVERLAYS env var (colon-
 	// separated paths). Operators stack environment-specific deltas
 	// over a shared base.yaml without touching the binary's CLI.
-	// Files merge in order; later wins. Common pattern in K8s:
-	//   PALADIN_CONFIG_PATH=/etc/paladin/base.yaml
+	// Files merge in order; later wins. Common pattern in K8s (note the
+	// base path is the --config flag, NOT an env var — there is no
+	// PALADIN_CONFIG_PATH):
+	//   paladin serve api --config /etc/paladin/base.yaml
 	//   PALADIN_CONFIG_OVERLAYS=/etc/paladin/local.yaml:/etc/paladin/secrets.yaml
 	paths := []string{configPath}
 	if overlays := os.Getenv("PALADIN_CONFIG_OVERLAYS"); overlays != "" {

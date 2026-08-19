@@ -1,0 +1,169 @@
+# Configuration
+
+Every PALADIN process reads one YAML file, optionally layered with overlays,
+optionally overridden by environment variables, and then validated three
+separate ways before the process starts. This page is the map.
+
+## Where configuration comes from
+
+In order, later wins:
+
+1. **Base file** — `--config <path>`, default `/app/configs/config.yaml`.
+   Must contain every required field.
+2. **Overlays** — `PALADIN_CONFIG_OVERLAYS`, a colon-separated list of paths.
+   Each may be a partial tree carrying only its deltas. The common
+   Kubernetes shape is a shared base plus an environment overlay plus a
+   secrets overlay:
+
+   ```
+   paladin serve api --config /etc/paladin/base.yaml
+   PALADIN_CONFIG_OVERLAYS=/etc/paladin/staging.yaml:/etc/paladin/secrets.yaml
+   ```
+
+   Note the asymmetry: the base path is a flag, only the overlay chain is
+   an environment variable. There is no `PALADIN_CONFIG_PATH`.
+3. **Environment variables** — `PALADIN_`-prefixed, `_` translated to `.`.
+4. **CUE defaults** — the schema fills anything still unset.
+
+The files that ship in the repository:
+
+| File | Role |
+| --- | --- |
+| `backend/configs/config.yaml` | the base; every key, documented inline |
+| `backend/configs/local.yaml` | overlay for `go run` on a laptop |
+| `backend/configs/compose.yaml` | overlay for the compose stacks, dev-loop and e2e |
+| `backend/deploy/chart/values-*.yaml` | Helm renders these into a ConfigMap |
+
+## Environment overrides have a hard limit
+
+The env provider lowercases the name, strips `PALADIN_`, and replaces **every**
+underscore with a dot. So the path segment must itself be a single word:
+
+```bash
+PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT=http://minio:9000   # → storage.backends.primary.endpoint ✓
+PALADIN_AUTH_SIGNING_KEY=…                                    # → auth.signing.key ✗ — no such key
+```
+
+Multi-word keys — `login_rate_limit_per_subject_per_minute`,
+`shutdown_timeout`, `min_part_size` — are **not reachable** by environment
+variable and must be set in a file. This trips people up regularly; if an
+override appears to do nothing, this is usually why.
+
+## Secrets
+
+Any credential field has a `_secret` sibling that resolves from a
+Kubernetes Secret at boot:
+
+```yaml
+auth:
+  signing_key_secret:
+    name: paladin-auth
+    key: signing-key        # defaults to "password" when omitted
+    namespace: paladin          # defaults to the pod's namespace
+```
+
+A bare string is accepted as shorthand for `{name: <string>}`.
+
+**Setting both the inline field and its `_secret` sibling is a load
+error.** Which one wins is not a question the runtime should have to
+answer, so it refuses instead of picking.
+
+### Committed credentials will not boot a real environment
+
+The defaults shipped in this repository — `dev-secret-change-me-32-bytes-min`,
+`admin-dev-password-change-me`, the e2e fixture keys — are public. The
+loader rejects them, and any value carrying a placeholder marker
+(`change-me`, `<prod-…>`, `not-a-secret`, `dummy`), unless `app.env` is
+one of the allow-listed disposable environments: `local`, `dev`,
+`development`, `test`, `ci`, `e2e`, or unset.
+
+An unrecognised `app.env` is treated as real and refuses. That is
+deliberate — a new environment name defaults to safe, not to convenient.
+The list and the reasoning live in
+[`backend/internal/config/weak_secrets.go`](../backend/internal/config/weak_secrets.go).
+
+## Validation
+
+Three independent gates, each catching what the others cannot:
+
+1. **CUE schema** (`backend/internal/config/schema.cue`) — types, ranges,
+   enums, and default injection.
+2. **Strict unknown-key check** — a key with no matching struct field
+   fails the load, listing every offender. A typo'd option that silently
+   has no effect is a worse outcome than a refused start. Runs against
+   the *merged* tree, so an overlay that omits most of the schema is not
+   penalised for keys it never set.
+3. **`Config.Validate()`** — cross-field invariants that a schema cannot
+   express: required fields, inline-vs-secret conflicts, per-mode storage
+   backend rules, the ingest webhook's authentication requirement outside
+   dev, and the weak-secret gate.
+
+Note that the strict-key check does **not** cover environment overrides.
+An `PALADIN_` variable that maps to no key is ignored rather than rejected.
+
+## The blocks
+
+`backend/configs/config.yaml` is the reference: every key is there with a
+comment. What each top-level block owns:
+
+| Block | Owns |
+| --- | --- |
+| `app` | name and `env` — `env` drives several safety gates, so it is not cosmetic |
+| `logger` | level, encoding, sampling, static fields |
+| `otel` | traces and metrics export (ADR-0001); disabled costs nothing |
+| `runtime` | process-wide HTTP flags, shutdown timeout, `health_snapshot_token` |
+| `api` | the data (`:8080`) and iam (`:8085`) listeners |
+| `admin` | the admin listener (`:8090`) |
+| `datastores` | Postgres DSN and the separate migrate / reaper credentials |
+| `limits` | request and object size ceilings, part sizes |
+| `auth` | JWT signing, token TTLs, login rate limiting |
+| `security` | transport and header policy |
+| `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
+| `middleware` | interceptor defaults shared by every plane |
+| `worker` | job intervals, leases, reaper batch sizes |
+| `dispatcher` | outbox drain loop and sink behaviour |
+| `storage` | backends, routing, presign, SSE, per-backend auth mode |
+| `cedar` | policy engine sources and evaluation |
+| `mcp` | the MCP server and its upstreams |
+| `capability` | issuer, signing key, verification, budgets |
+| `api_token` | the HMAC key for token lookup digests |
+
+### Storage backend auth modes
+
+`storage.backends.<name>.auth.mode` is mandatory — there is no default,
+because an implicit fallback to the AWS credential chain is the kind of
+mistake you find in production:
+
+| Mode | Requires | Rejects |
+| --- | --- | --- |
+| `static_keys` | `access_key` + `secret_key` (or their `_secret` siblings) | `role_arn` |
+| `default_chain` | nothing — env vars or instance role | any static key, `role_arn` |
+| `assume_role` | `role_arn` | — |
+| `web_identity` | `role_arn` | — |
+
+`sse.type: aws:kms` additionally requires `sse.key_id`.
+
+Backends also carry two endpoints. `endpoint` is what the control plane
+connects to; `public_endpoint` is what presigned URLs are signed for, and
+it matters whenever the browser reaches storage by a different name than
+the plane does. Leaving `public_endpoint` empty reuses `endpoint`.
+
+## Frontend configuration
+
+The console reads `frontend/configs/config.yaml` server-side at boot,
+validated with zod (`frontend/src/config.ts`). It is a separate mechanism
+from the backend's — no `PALADIN_` env translation, no overlay chain — and
+the loader tries `/app/configs/config.yaml` then `configs/config.yaml`.
+
+The keys that matter:
+
+| Key | Meaning |
+| --- | --- |
+| `objectControlPlane.upstreamUrl` | where the BFF forwards data-plane RPCs |
+| `objectControlPlane.baseUrl` | the browser-facing path, `/api/paladin` |
+| `oidc.*` | the identity provider; `disableAuth: true` is dev-only |
+| `auth.devToken` | dev-only fallback Bearer. Ships empty — see `frontend/README.md` |
+
+The Helm chart passes plane URLs through separately as `PALADIN_DATA_URL`,
+`PALADIN_IAM_URL` and `PALADIN_ADMIN_URL`, which is what the BFF actually reads
+at request time.
