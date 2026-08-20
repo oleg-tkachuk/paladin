@@ -29,9 +29,9 @@ func (s *LifecycleSource) ListBucketsWithLifecycle(ctx context.Context) ([]admin
 	out := make([]admindomain.Bucket, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, decodeBucketRow(
-			row.BackendID, row.BucketName, row.DisplayName, row.Region, row.Labels,
+			row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
 			row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-			row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
+			row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 			row.VersioningEnabled, row.VersioningKeepDeletesForever,
 			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 			row.ProvisionState,
@@ -50,7 +50,7 @@ func (s *LifecycleSource) ListCollectionBindings(ctx context.Context, backendID,
 	for _, row := range rows {
 		out = append(out, worker.CollectionBinding{
 			TenantID:   uuidFrom(row.TenantID),
-			Collection: row.Collection,
+			Collection: row.CollectionName,
 		})
 	}
 	return out, nil
@@ -66,9 +66,9 @@ func (s *LifecycleSource) ListBucketsWithReplication(ctx context.Context) ([]adm
 	out := make([]admindomain.Bucket, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, decodeBucketRow(
-			row.BackendID, row.BucketName, row.DisplayName, row.Region, row.Labels,
+			row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
 			row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-			row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
+			row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 			row.VersioningEnabled, row.VersioningKeepDeletesForever,
 			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 			row.ProvisionState,
@@ -108,7 +108,7 @@ func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid
 				size = *row.SizeBytes
 			}
 			err := cb(worker.LifecycleObjectRow{
-				ObjectID:    uuidFrom(row.ObjectID),
+				ObjectID:    uuidFrom(row.ID),
 				State:       string(row.State),
 				ContentType: row.ContentType,
 				SizeBytes:   size,
@@ -123,7 +123,7 @@ func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid
 		}
 		// Advance cursor to the oldest object_id in this page.
 		last := rows[len(rows)-1]
-		afterID = last.ObjectID
+		afterID = last.ID
 		// Short page → no more rows.
 		if int32(len(rows)) < it.pageSize {
 			return nil

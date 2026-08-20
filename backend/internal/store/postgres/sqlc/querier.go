@@ -68,12 +68,12 @@ type Querier interface {
 	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte) error
 	CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error
 	// Multipart upload queries.
-	// backend_id / bucket_name anchor the upload to the physical location resolved
-	// at initiate time, so the rest of the lifecycle targets it regardless of a
-	// later collection rebind (see migration 053).
-	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, bucketID pgtype.UUID, clientID string, userID pgtype.UUID) error
+	// bucket_id anchors the upload to the physical location resolved at initiate
+	// time, so the rest of the lifecycle targets it regardless of a later
+	// collection rebind. Resolved from the (backend, bucket) name pair here.
+	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string) error
 	// Object queries.
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
 	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
 	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte) error
 	// Long-running operation queries.
@@ -198,7 +198,7 @@ type Querier interface {
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
-	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
+	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
@@ -240,7 +240,7 @@ type Querier interface {
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
 	// Lists every (tenant_id, collection name) bound to a given bucket. Used by
 	// lifecycle + replication workers to scope their object scans.
-	ListCollectionBindingsForBucket(ctx context.Context, bucketID pgtype.UUID) ([]ListCollectionBindingsForBucketRow, error)
+	ListCollectionBindingsForBucket(ctx context.Context, name string, name_2 string) ([]ListCollectionBindingsForBucketRow, error)
 	// Every registered name name for the tenant. Backs the in-process
 	// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
 	// not a per-event query on the ingest hot path. collections is small per tenant

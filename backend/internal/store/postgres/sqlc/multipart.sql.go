@@ -15,15 +15,18 @@ const createMultipartUpload = `-- name: CreateMultipartUpload :exec
 
 INSERT INTO multipart_uploads (
     id, tenant_id, object_id, storage_upload_id, part_size_bytes, total_parts,
-    bucket_id, client_id, user_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    bucket_id
+) VALUES ($1, $2, $3, $4, $5, $6,
+          (SELECT b.id FROM buckets b
+             JOIN storage_backends sb ON sb.id = b.backend_id
+            WHERE sb.name = $7 AND b.name = $8))
 `
 
 // Multipart upload queries.
-// backend_id / bucket_name anchor the upload to the physical location resolved
-// at initiate time, so the rest of the lifecycle targets it regardless of a
-// later collection rebind (see migration 053).
-func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, bucketID pgtype.UUID, clientID string, userID pgtype.UUID) error {
+// bucket_id anchors the upload to the physical location resolved at initiate
+// time, so the rest of the lifecycle targets it regardless of a later
+// collection rebind. Resolved from the (backend, bucket) name pair here.
+func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string) error {
 	_, err := q.db.Exec(ctx, createMultipartUpload,
 		iD,
 		tenantID,
@@ -31,9 +34,8 @@ func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, ten
 		storageUploadID,
 		partSizeBytes,
 		totalParts,
-		bucketID,
-		clientID,
-		userID,
+		name,
+		name_2,
 	)
 	return err
 }

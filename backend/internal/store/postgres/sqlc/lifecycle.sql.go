@@ -12,14 +12,15 @@ import (
 )
 
 const iterateObjectsForLifecycle = `-- name: IterateObjectsForLifecycle :many
-SELECT id, state, content_type, size_bytes,
-       metadata, tags, created_at, committed_at
-FROM objects
-WHERE tenant_id = $1
-  AND collection_id = $2
-  AND state = 'AVAILABLE'
-  AND ($3::uuid IS NULL OR id < $3::uuid)
-ORDER BY id DESC
+SELECT o.id, o.state, o.content_type, o.size_bytes,
+       o.metadata, o.tags, o.created_at, o.committed_at
+FROM objects o
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND o.state = 'AVAILABLE'
+  AND ($3::uuid IS NULL OR o.id < $3::uuid)
+ORDER BY o.id DESC
 LIMIT $4
 `
 
@@ -37,10 +38,10 @@ type IterateObjectsForLifecycleRow struct {
 // Streams a window of AVAILABLE-only objects under (tenant, collection)
 // newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 // Lifecycle worker walks via repeated calls until empty page.
-func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
+func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
 	rows, err := q.db.Query(ctx, iterateObjectsForLifecycle,
 		tenantID,
-		collectionID,
+		name,
 		column3,
 		limit,
 	)
@@ -257,21 +258,23 @@ func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBuckets
 }
 
 const listCollectionBindingsForBucket = `-- name: ListCollectionBindingsForBucket :many
-SELECT tenant_id, name
-FROM collections
-WHERE bucket_id = $1
-ORDER BY tenant_id, name
+SELECT c.tenant_id, c.name AS collection_name
+FROM collections c
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2
+ORDER BY c.tenant_id, c.name
 `
 
 type ListCollectionBindingsForBucketRow struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	Name     string      `json:"name"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	CollectionName string      `json:"collection_name"`
 }
 
 // Lists every (tenant_id, collection name) bound to a given bucket. Used by
 // lifecycle + replication workers to scope their object scans.
-func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, bucketID pgtype.UUID) ([]ListCollectionBindingsForBucketRow, error) {
-	rows, err := q.db.Query(ctx, listCollectionBindingsForBucket, bucketID)
+func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, name string, name_2 string) ([]ListCollectionBindingsForBucketRow, error) {
+	rows, err := q.db.Query(ctx, listCollectionBindingsForBucket, name, name_2)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +282,7 @@ func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, bucketID 
 	var items []ListCollectionBindingsForBucketRow
 	for rows.Next() {
 		var i ListCollectionBindingsForBucketRow
-		if err := rows.Scan(&i.TenantID, &i.Name); err != nil {
+		if err := rows.Scan(&i.TenantID, &i.CollectionName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

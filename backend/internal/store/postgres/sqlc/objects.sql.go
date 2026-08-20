@@ -51,18 +51,21 @@ INSERT INTO objects (
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5,
+    $1, $2,
+    -- Callers know the collection by name; the id never leaves the schema.
+    (SELECT c.id FROM collections c WHERE c.tenant_id = $2 AND c.name = $3),
+    $4, $5,
     $6, $7, $8, $9,
     $10, $11, $12, $13
 )
 `
 
 // Object queries.
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, createObject,
 		iD,
 		tenantID,
-		collectionID,
+		name,
 		path,
 		state,
 		contentType,

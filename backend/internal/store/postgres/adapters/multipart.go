@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -63,7 +65,8 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 	}
 
 	if err := qtx.CreateMultipartUpload(ctx,
-		uploadID,
+		pgUUIDFromString(uploadID),
+		pgUUID(args.TenantID),
 		pgUUID(objectID),
 		storageUploadID,
 		args.PartSizeBytes,
@@ -143,7 +146,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 
 func (r *MultipartRepo) RecordPart(ctx context.Context, uploadID string, part multipart.PartETag, sizeBytes int64, checksum string) error {
 	return r.q.RecordMultipartPart(ctx,
-		uploadID,
+		pgUUIDFromString(uploadID),
 		part.PartNumber,
 		sizeBytes,
 		part.ETag,
@@ -152,7 +155,7 @@ func (r *MultipartRepo) RecordPart(ctx context.Context, uploadID string, part mu
 }
 
 func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) error {
-	return r.q.DeleteMultipartUpload(ctx, uploadID)
+	return r.q.DeleteMultipartUpload(ctx, pgUUIDFromString(uploadID))
 }
 
 func (r *MultipartRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUID) (collection, key string, err error) {
@@ -171,7 +174,7 @@ func (r *MultipartRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUI
 // returns the full set; pagination is applied in-memory because the parts
 // table is small (<= 10_000 rows per upload by S3 contract).
 func (r *MultipartRepo) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]multipart.Part, string, error) {
-	rows, err := r.q.ListMultipartParts(ctx, uploadID)
+	rows, err := r.q.ListMultipartParts(ctx, pgUUIDFromString(uploadID))
 	if err != nil {
 		return nil, "", fmt.Errorf("list parts: %w", err)
 	}
@@ -243,4 +246,15 @@ func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, co
 		return "", "", object.ErrBucketProvisioning
 	}
 	return backendID, bucket, nil
+}
+
+// upload_id is a uuid in the schema and a string on the API surface, so the
+// boundary parses it. An unparseable id yields the zero uuid, which matches
+// no row — the same outcome as an unknown id, without a second error path.
+func pgUUIDFromString(s string) pgtype.UUID {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return pgUUID(id)
 }

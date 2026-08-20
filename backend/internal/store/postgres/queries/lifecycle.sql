@@ -48,21 +48,24 @@ ORDER BY name;
 -- name: ListCollectionBindingsForBucket :many
 -- Lists every (tenant_id, collection name) bound to a given bucket. Used by
 -- lifecycle + replication workers to scope their object scans.
-SELECT tenant_id, name
-FROM collections
-WHERE bucket_id = $1
-ORDER BY tenant_id, name;
+SELECT c.tenant_id, c.name AS collection_name
+FROM collections c
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2
+ORDER BY c.tenant_id, c.name;
 
 -- name: IterateObjectsForLifecycle :many
 -- Streams a window of AVAILABLE-only objects under (tenant, collection)
 -- newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 -- Lifecycle worker walks via repeated calls until empty page.
-SELECT id, state, content_type, size_bytes,
-       metadata, tags, created_at, committed_at
-FROM objects
-WHERE tenant_id = $1
-  AND collection_id = $2
-  AND state = 'AVAILABLE'
-  AND ($3::uuid IS NULL OR id < $3::uuid)
-ORDER BY id DESC
+SELECT o.id, o.state, o.content_type, o.size_bytes,
+       o.metadata, o.tags, o.created_at, o.committed_at
+FROM objects o
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND o.state = 'AVAILABLE'
+  AND ($3::uuid IS NULL OR o.id < $3::uuid)
+ORDER BY o.id DESC
 LIMIT $4;

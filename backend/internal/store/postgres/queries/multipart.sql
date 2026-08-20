@@ -1,13 +1,16 @@
 -- Multipart upload queries.
 
 -- name: CreateMultipartUpload :exec
--- backend_id / bucket_name anchor the upload to the physical location resolved
--- at initiate time, so the rest of the lifecycle targets it regardless of a
--- later collection rebind (see migration 053).
+-- bucket_id anchors the upload to the physical location resolved at initiate
+-- time, so the rest of the lifecycle targets it regardless of a later
+-- collection rebind. Resolved from the (backend, bucket) name pair here.
 INSERT INTO multipart_uploads (
     id, tenant_id, object_id, storage_upload_id, part_size_bytes, total_parts,
-    bucket_id, client_id, user_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+    bucket_id
+) VALUES ($1, $2, $3, $4, $5, $6,
+          (SELECT b.id FROM buckets b
+             JOIN storage_backends sb ON sb.id = b.backend_id
+            WHERE sb.name = $7 AND b.name = $8));
 
 -- name: GetMultipartUpload :one
 SELECT sqlc.embed(multipart_uploads)

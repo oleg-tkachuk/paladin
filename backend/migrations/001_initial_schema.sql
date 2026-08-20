@@ -461,8 +461,11 @@ CREATE TABLE multipart_uploads (
     storage_upload_id text NOT NULL,
     part_size_bytes   bigint NOT NULL,
     total_parts       integer NOT NULL,
-    client_id         text NOT NULL,
-    user_id           uuid NOT NULL,
+    -- Attribution of who initiated the upload. Optional: the initiate path
+    -- does not always carry a principal, and an upload without one is still
+    -- a valid upload.
+    client_id         text NOT NULL DEFAULT '',
+    user_id           uuid,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
