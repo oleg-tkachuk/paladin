@@ -298,20 +298,19 @@ func seedObjectsUnder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f f
 // bucket and returns their names.
 func seedCollections(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, n int) []string {
 	t.Helper()
-	var backendID, bucketName string
+	// One lookup of the fixture's bucket, reused for every collection below.
+	var bucketID uuid.UUID
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
-		f.tenantID, f.collection).Scan(&backendID, &bucketName); err != nil {
+		`SELECT bucket_id FROM collections WHERE tenant_id = $1 AND name = $2`,
+		f.tenantID, f.collection).Scan(&bucketID); err != nil {
 		t.Fatalf("lookup fixture binding: %v", err)
 	}
 	out := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		name := "ok-" + uuid.NewString()[:8]
 		mustExec(t, ctx, pool,
-			`INSERT INTO collections (tenant_id, name, bucket_id)
-		 SELECT $1, $2, b.id FROM buckets b
-		   JOIN storage_backends sb ON sb.id = b.backend_id
-		  WHERE sb.name = $3 AND b.name = $4`, f.tenantID, name, backendID, bucketName)
+			`INSERT INTO collections (tenant_id, name, bucket_id) VALUES ($1, $2, $3)`,
+			f.tenantID, name, bucketID)
 		out = append(out, name)
 	}
 	return out

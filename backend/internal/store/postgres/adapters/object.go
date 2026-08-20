@@ -303,9 +303,11 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, collection string) (map[string][]string, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT t.key, array_agg(DISTINCT t.value ORDER BY t.value)
-		   FROM objects o, LATERAL jsonb_each_text(o.tags) AS t(key, value)
-		  WHERE o.tenant_id  = $1
-		    AND o.collection = $2
+		   FROM objects o
+		   JOIN collections c ON c.id = o.collection_id,
+		        LATERAL jsonb_each_text(o.tags) AS t(key, value)
+		  WHERE o.tenant_id = $1
+		    AND c.name      = $2
 		    AND o.state <> 'DELETED'
 		  GROUP BY t.key
 		  ORDER BY t.key`,

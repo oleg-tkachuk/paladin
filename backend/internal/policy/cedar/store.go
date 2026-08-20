@@ -82,8 +82,8 @@ func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collectio
             COALESCE(t.slug, '')                   AS slug
         FROM tenants t
         LEFT JOIN collections b
-               ON b.tenant_id = t.tenant_id AND b.collection = $2
-        WHERE t.tenant_id = $1
+               ON b.tenant_id = t.id AND b.name = $2
+        WHERE t.id = $1
     `
 	var tPol, bPol, slug string
 	if err := s.pool.QueryRow(ctx, q, tenantID, collection).Scan(&tPol, &bPol, &slug); err != nil {

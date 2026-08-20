@@ -76,7 +76,7 @@ type BucketCensus struct {
 type CollectionCensus struct {
 	Total     int64            `json:"total"`
 	ByBackend map[string]int64 `json:"by_backend"`
-	// Unbound = bucket_name IS NULL: bound to a backend but never to a
+	// Unbound = bucket_id IS NULL: registered but never bound to a
 	// physical bucket, so uploads through it have nowhere to land.
 	Unbound int64 `json:"unbound"`
 }
@@ -153,7 +153,7 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 	}
 
 	if err := pool.QueryRow(ctx, `
-		SELECT count(*), count(*) FILTER (WHERE bucket_name IS NULL) FROM collections`,
+		SELECT count(*), count(*) FILTER (WHERE bucket_id IS NULL) FROM collections`,
 	).Scan(&out.Collections.Total, &out.Collections.Unbound); err != nil {
 		return nil, fmt.Errorf("census: object keys: %w", err)
 	}
@@ -361,7 +361,7 @@ type QuotaCensus struct {
 	Total int64 `json:"total"`
 	// Scope split — the CHECK constraint on `quotas` makes these exclusive
 	// and exhaustive: tenant-scoped rows carry tenant_id, bucket-scoped
-	// rows carry (backend_id, bucket_name).
+	// rows carry bucket_id.
 	TenantScoped int64 `json:"tenant_scoped"`
 	BucketScoped int64 `json:"bucket_scoped"`
 	// Rows with at least one non-zero cap. A row with every cap at 0 is
