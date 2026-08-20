@@ -63,7 +63,7 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // The SET LOCAL scope dies with the transaction, so the connection's
 // pool-level GUC (set by PrepareConn) is restored automatically on
 // release without an explicit reset.
-func (s *Store) Insert(ctx context.Context, c capability.Capability) error {
+func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy capability.Principal) error {
 	principalPayload, err := json.Marshal(c.Subject)
 	if err != nil {
 		return fmt.Errorf("capability/postgres: marshal principal: %w", err)
@@ -124,14 +124,10 @@ INSERT INTO capability_records (
 		c.IssuedAt,
 		nbf,
 		c.ExpiresAt,
-		// The issuer is the accountable party this layer can actually name.
-		// The capability module has no auth context by design (it depends on
-		// neither a database nor a request pipeline), so the initiating
-		// principal cannot be read here — it would have to travel on Record.
-		// Recording the issuer is weaker attribution than a subject, but it is
-		// true, and "" was not: an empty created_by reads as "nobody made
-		// this", which is never the case. See BACKLOG.
-		c.Issuer,
+		// The principal that requested the issuance, passed down the Store
+		// contract rather than read from a request context — the capability
+		// module still depends on no auth pipeline.
+		issuedBy.Subject,
 	); err != nil {
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}

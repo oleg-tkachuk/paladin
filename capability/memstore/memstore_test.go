@@ -29,7 +29,7 @@ func TestRevokeIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	s := New[struct{}]()
 	id := uuid.New()
-	if err := s.Insert(ctx, mkCap(id, uuid.Nil, uuid.New(), "a")); err != nil {
+	if err := s.Insert(ctx, mkCap(id, uuid.Nil, uuid.New(), "a"), capability.Principal{Subject: "test-operator"}); err != nil {
 		t.Fatalf("Insert: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestRevokeCascadesToDescendants(t *testing.T) {
 		mkCap(child, root, tenant, "worker"),
 		mkCap(grandchild, child, tenant, "sub-worker"),
 	} {
-		if err := s.Insert(ctx, c); err != nil {
+		if err := s.Insert(ctx, c, capability.Principal{Subject: "test-operator"}); err != nil {
 			t.Fatalf("Insert: %v", err)
 		}
 	}
@@ -81,8 +81,8 @@ func TestRevokeWithoutCascadeLeavesChildren(t *testing.T) {
 	s := New[struct{}]()
 	tenant := uuid.New()
 	root, child := uuid.New(), uuid.New()
-	_ = s.Insert(ctx, mkCap(root, uuid.Nil, tenant, "parent"))
-	_ = s.Insert(ctx, mkCap(child, root, tenant, "child"))
+	_ = s.Insert(ctx, mkCap(root, uuid.Nil, tenant, "parent"), capability.Principal{Subject: "test-operator"})
+	_ = s.Insert(ctx, mkCap(child, root, tenant, "child"), capability.Principal{Subject: "test-operator"})
 
 	if err := s.Revoke(ctx, capability.RevokeArgs{ID: root}); err != nil {
 		t.Fatalf("Revoke: %v", err)
@@ -145,9 +145,9 @@ func TestListByPrincipalFilters(t *testing.T) {
 	tenantA, tenantB := uuid.New(), uuid.New()
 	idA, idB, revoked := uuid.New(), uuid.New(), uuid.New()
 
-	_ = s.Insert(ctx, mkCap(idA, uuid.Nil, tenantA, "alice"))
-	_ = s.Insert(ctx, mkCap(idB, uuid.Nil, tenantB, "bob"))
-	_ = s.Insert(ctx, mkCap(revoked, uuid.Nil, tenantA, "carol"))
+	_ = s.Insert(ctx, mkCap(idA, uuid.Nil, tenantA, "alice"), capability.Principal{Subject: "test-operator"})
+	_ = s.Insert(ctx, mkCap(idB, uuid.Nil, tenantB, "bob"), capability.Principal{Subject: "test-operator"})
+	_ = s.Insert(ctx, mkCap(revoked, uuid.Nil, tenantA, "carol"), capability.Principal{Subject: "test-operator"})
 	_ = s.Revoke(ctx, capability.RevokeArgs{ID: revoked})
 
 	got, _, err := s.ListByPrincipal(ctx, capability.ListByPrincipalArgs{TenantID: tenantA})
@@ -175,7 +175,7 @@ func TestListByPrincipalExcludesExpired(t *testing.T) {
 	id := uuid.New()
 	c := mkCap(id, uuid.Nil, tenant, "old")
 	c.ExpiresAt = time.Now().Add(-time.Hour)
-	_ = s.Insert(ctx, c)
+	_ = s.Insert(ctx, c, capability.Principal{Subject: "test-operator"})
 
 	got, _, _ := s.ListByPrincipal(ctx, capability.ListByPrincipalArgs{TenantID: tenant})
 	if len(got) != 0 {

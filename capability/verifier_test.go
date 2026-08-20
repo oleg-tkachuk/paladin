@@ -29,7 +29,7 @@ func newMemStore() *memStore {
 	}
 }
 
-func (m *memStore) Insert(_ context.Context, c Capability) error {
+func (m *memStore) Insert(_ context.Context, c Capability, _ Principal) error {
 	m.caps[c.ID] = c
 	return nil
 }
@@ -99,6 +99,7 @@ func TestIssue_VerifyHappyPath(t *testing.T) {
 
 	ctx := context.Background()
 	cap, token, err := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject: Principal{
 			Type:     PrincipalAgent,
 			TenantID: uuid.New(),
@@ -128,6 +129,7 @@ func TestVerify_AudienceMismatch(t *testing.T) {
 	issuer, verifier, _, _ := buildIssuerVerifier(t)
 	ctx := context.Background()
 	_, token, _ := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalAgent, TenantID: uuid.New()},
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
@@ -169,6 +171,7 @@ func TestVerify_Expired(t *testing.T) {
 
 	ctx := context.Background()
 	_, token, _ := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalAgent, TenantID: uuid.New()},
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
@@ -187,6 +190,7 @@ func TestVerify_Revoked(t *testing.T) {
 	issuer, verifier, store, _ := buildIssuerVerifier(t)
 	ctx := context.Background()
 	cap, token, _ := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalAgent, TenantID: uuid.New()},
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
@@ -214,6 +218,7 @@ func TestVerify_UntrustedIssuer(t *testing.T) {
 		IssuerName: "paladin-rogue",
 	})
 	_, token, _ := rogueIssuer.Issue(context.Background(), IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalAgent, TenantID: uuid.New()},
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
@@ -241,6 +246,7 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 	tenantID := uuid.New()
 
 	parent, _, err := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
 		Audience: []string{AudiencePlaneData, AudiencePlaneMCP},
 		Caveats: Caveats{
@@ -287,6 +293,7 @@ func TestDelegate_RejectsWidening(t *testing.T) {
 	ctx := context.Background()
 	tenantID := uuid.New()
 	parent, _, _ := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},

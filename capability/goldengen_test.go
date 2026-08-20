@@ -50,7 +50,7 @@ func goldenClock() time.Time {
 // genStore is a no-op Store — issuance only needs Insert to succeed.
 type genStore struct{}
 
-func (genStore) Insert(context.Context, Capability) error { return nil }
+func (genStore) Insert(context.Context, Capability, Principal) error { return nil }
 func (genStore) Get(context.Context, uuid.UUID) (*Capability, error) {
 	return nil, errors.New("not found")
 }
@@ -86,6 +86,7 @@ func TestGenerateGoldenToken(t *testing.T) {
 	}
 
 	_, token, err := issuer.Issue(context.Background(), IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject: Principal{
 			Type:     PrincipalAgent,
 			TenantID: uuid.MustParse(goldenTenant),

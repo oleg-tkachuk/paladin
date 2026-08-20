@@ -84,6 +84,11 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 // ExpiresAt, Issuer, Generation when not supplied.
 type IssueRequest struct {
 	Subject    Principal
+	// IssuedBy is the principal REQUESTING the capability — an operator for a
+	// root issuance, the parent's holder for a delegation. Distinct from
+	// Subject, which is who the capability authorises. Required: a capability
+	// nobody requested cannot be audited, and the store rejects an empty one.
+	IssuedBy   Principal
 	Audience   []string
 	Caveats    Caveats
 	TTL        time.Duration // 0 → DefaultTTL
@@ -130,7 +135,11 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 		cap.NotBefore = req.NotBefore.UTC()
 	}
 
-	if err := i.store.Insert(ctx, cap); err != nil {
+	if req.IssuedBy.Subject == "" {
+		return nil, "", errors.New("capability: IssuedBy is required")
+	}
+
+	if err := i.store.Insert(ctx, cap, req.IssuedBy); err != nil {
 		return nil, "", fmt.Errorf("capability: persist issuance: %w", err)
 	}
 	token, err := i.signer.Sign(cap)
@@ -200,7 +209,10 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 		return nil, "", fmt.Errorf("capability: delegate %w", err)
 	}
 
-	if err := i.store.Insert(ctx, child); err != nil {
+	// A delegation is requested by whoever holds the parent — that is not a
+	// caller-supplied fact, it is what delegation means, so it is derived
+	// rather than accepted as an argument.
+	if err := i.store.Insert(ctx, child, req.Parent.Subject); err != nil {
 		return nil, "", fmt.Errorf("capability: persist delegation: %w", err)
 	}
 	token, err := i.signer.Sign(child)

@@ -21,7 +21,14 @@ type Store interface {
 	// the full claim set so admin tooling can render `paladin cap show`
 	// without parsing the JWT, and so audit can correlate without
 	// keeping every issued token.
-	Insert(ctx context.Context, c Capability) error
+	//
+	// issuedBy is the principal that ASKED for the capability, which is not
+	// c.Subject (the principal it authorises) and not c.Issuer (the service
+	// that minted it). A delegated capability is requested by its parent's
+	// holder; a root one by an operator. Passed as an argument rather than
+	// carried on Capability because it is issuance metadata, not a claim —
+	// putting it in the struct would change the token's frozen wire format.
+	Insert(ctx context.Context, c Capability, issuedBy Principal) error
 
 	// Get fetches a capability record by ID. Returns ErrNotFound when
 	// no row exists; callers normally treat that as ErrInvalidSignature

@@ -44,6 +44,7 @@ func TestLatencyBaseline(t *testing.T) {
 		t.Fatalf("issuer: %v", err)
 	}
 	_, token, err := issuer.Issue(context.Background(), IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
 		Subject:  Principal{Type: PrincipalService, TenantID: uuid.MustParse(goldenTenant), Subject: "bench"},
 		Audience: []string{goldenAudience},
 		Caveats:  Caveats{Ops: []Op{OpGet}},

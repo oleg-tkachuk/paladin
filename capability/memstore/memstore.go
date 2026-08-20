@@ -38,9 +38,10 @@ import (
 type Store[TX any] struct {
 	mu sync.Mutex
 
-	caps    map[uuid.UUID]capability.Capability
-	revoked map[uuid.UUID]bool
-	nowFn   func() time.Time
+	caps     map[uuid.UUID]capability.Capability
+	issuedBy map[uuid.UUID]capability.Principal
+	revoked  map[uuid.UUID]bool
+	nowFn    func() time.Time
 }
 
 // UsageStore implements capability.UsageStore[TX] — request and spend counters.
@@ -77,9 +78,10 @@ type LedgerEntry struct {
 //	memstore.New[pgx.Tx]()     // consumer threading a real handle
 func New[TX any]() *Store[TX] {
 	return &Store[TX]{
-		caps:    map[uuid.UUID]capability.Capability{},
-		revoked: map[uuid.UUID]bool{},
-		nowFn:   time.Now,
+		caps:     map[uuid.UUID]capability.Capability{},
+		issuedBy: map[uuid.UUID]capability.Principal{},
+		revoked:  map[uuid.UUID]bool{},
+		nowFn:    time.Now,
 	}
 }
 
@@ -124,11 +126,23 @@ func (s *UsageStore[TX]) Ledger() []LedgerEntry {
 
 // ─── capability.Store ──────────────────────────────────────────────────────
 
-func (s *Store[TX]) Insert(_ context.Context, c capability.Capability) error {
+// issuedBy is recorded alongside the capability so the in-memory store answers
+// the same attribution questions the relational one does — a test double that
+// silently drops the initiator would let an unattributed issuance pass.
+func (s *Store[TX]) Insert(_ context.Context, c capability.Capability, issuedBy capability.Principal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.caps[c.ID] = c
+	s.issuedBy[c.ID] = issuedBy
 	return nil
+}
+
+// IssuedBy returns the principal that requested the capability, if known.
+func (s *Store[TX]) IssuedBy(id uuid.UUID) (capability.Principal, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.issuedBy[id]
+	return p, ok
 }
 
 // Get returns capability.ErrNotFound when absent. Callers treat that as
