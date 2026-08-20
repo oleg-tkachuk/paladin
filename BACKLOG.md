@@ -93,6 +93,44 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+### Hand-written SQL has no schema gate — add PREPARE, don't port to sqlc
+
+- **Status:** Open. Investigated 2026-08-20 during the identity refactor;
+  the recommendation below is the finding, not a guess.
+- **Reason:** 77 query calls in the tree are raw SQL in backtick constants
+  passed to `pool.Query` / `Exec`. Nothing validates them: sqlc reads only its
+  own `queries/*.sql`, and the Go compiler does not read string literals. The
+  identity rename broke four of them silently, and each was found by a
+  different accident rather than by a check:
+  - `cedar/store.go` resolved a tenant's effective policy through stale
+    columns. It would not error — it would return "no policy", and Cedar's
+    deny-by-default turns that into an unexplained `forbidden`.
+  - `platformstats` counted collections by a dropped column, failing an
+    operator dashboard at runtime.
+  - `ListDistinctTags` and the duplicated `LookupBucket` in two adapters.
+- **Why not just port everything to sqlc:**
+  - 6 of the 77 cannot be ported at all: `partition_maintainer.go` issues
+    `CREATE TABLE … PARTITION OF` with a runtime-computed name, and sqlc
+    supports neither DDL nor dynamic table names.
+  - `internal/capability/postgres` is hand-written on purpose (see its package
+    comment): the JSON claim payload is awkward through sqlc's typed mapping.
+  - sqlc is a weaker gate than it looks. During this same refactor it
+    generated `ListHardDeletable` referencing FOUR non-existent columns
+    without complaint, and it reports syntax errors at the position of the
+    first query in the file rather than the failing one — which cost three
+    wrong fixes before bisection found the real cause.
+- **Definition of Done:** an integration test that starts a Postgres
+  container, applies the migrations, extracts every backtick SQL constant in
+  the tree, and `PREPARE`s each one. Postgres is the authority on its own
+  columns, unlike a third-party parser, so this catches the whole class —
+  including the queries sqlc can never cover. Failure output must name the
+  file. Port individual queries to sqlc opportunistically when they are being
+  edited anyway; do not schedule a 72-call migration for its own sake.
+- **Blockers:** none. Sequence after the identity refactor lands, so the gate
+  is added against a settled schema.
+
+---
+
 ## MCP bridge
 
 ### Tool-coverage gaps vs the Paladin RPC surface
