@@ -908,13 +908,13 @@ type StorageMigrationStatus struct {
 	// tenant — "tenants/{tenant_id}".
 	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	// state — provisioning | copying | rebinding | verifying | completed | failed.
-	State           string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	ObjectsTotal    int64  `protobuf:"varint,3,opt,name=objects_total,json=objectsTotal,proto3" json:"objects_total,omitempty"`
-	ObjectsCopied   int64  `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
-	SourceBackendId string `protobuf:"bytes,5,opt,name=source_backend_id,json=sourceBackendId,proto3" json:"source_backend_id,omitempty"`
-	SourceBucketId  string `protobuf:"bytes,6,opt,name=source_bucket_id,json=sourceBucketId,proto3" json:"source_bucket_id,omitempty"`
-	TargetBackendId string `protobuf:"bytes,7,opt,name=target_backend_id,json=targetBackendId,proto3" json:"target_backend_id,omitempty"`
-	TargetBucketId  string `protobuf:"bytes,8,opt,name=target_bucket_id,json=targetBucketId,proto3" json:"target_bucket_id,omitempty"`
+	State         string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	ObjectsTotal  int64  `protobuf:"varint,3,opt,name=objects_total,json=objectsTotal,proto3" json:"objects_total,omitempty"`
+	ObjectsCopied int64  `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
+	// Bucket references as resource names, consistent with
+	// TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+	SourceBucket string `protobuf:"bytes,5,opt,name=source_bucket,json=sourceBucket,proto3" json:"source_bucket,omitempty"`
+	TargetBucket string `protobuf:"bytes,6,opt,name=target_bucket,json=targetBucket,proto3" json:"target_bucket,omitempty"`
 	// error — non-empty only in the `failed` state.
 	Error         string `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -979,30 +979,16 @@ func (x *StorageMigrationStatus) GetObjectsCopied() int64 {
 	return 0
 }
 
-func (x *StorageMigrationStatus) GetSourceBackendId() string {
+func (x *StorageMigrationStatus) GetSourceBucket() string {
 	if x != nil {
-		return x.SourceBackendId
+		return x.SourceBucket
 	}
 	return ""
 }
 
-func (x *StorageMigrationStatus) GetSourceBucketId() string {
+func (x *StorageMigrationStatus) GetTargetBucket() string {
 	if x != nil {
-		return x.SourceBucketId
-	}
-	return ""
-}
-
-func (x *StorageMigrationStatus) GetTargetBackendId() string {
-	if x != nil {
-		return x.TargetBackendId
-	}
-	return ""
-}
-
-func (x *StorageMigrationStatus) GetTargetBucketId() string {
-	if x != nil {
-		return x.TargetBucketId
+		return x.TargetBucket
 	}
 	return ""
 }
@@ -1323,17 +1309,15 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x11target_backend_id\x18\x02 \x01(\tR\x0ftargetBackendId\x12:\n" +
 	"\x19cleanup_retention_seconds\x18\x03 \x01(\x03R\x17cleanupRetentionSeconds\"?\n" +
 	" GetTenantStorageMigrationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xd4\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfe\x01\n" +
 	"\x16StorageMigrationStatus\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12#\n" +
 	"\robjects_total\x18\x03 \x01(\x03R\fobjectsTotal\x12%\n" +
-	"\x0eobjects_copied\x18\x04 \x01(\x03R\robjectsCopied\x12*\n" +
-	"\x11source_backend_id\x18\x05 \x01(\tR\x0fsourceBackendId\x12(\n" +
-	"\x10source_bucket_id\x18\x06 \x01(\tR\x0esourceBucketId\x12*\n" +
-	"\x11target_backend_id\x18\a \x01(\tR\x0ftargetBackendId\x12(\n" +
-	"\x10target_bucket_id\x18\b \x01(\tR\x0etargetBucketId\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05error\"\x8c\x01\n" +
+	"\x0eobjects_copied\x18\x04 \x01(\x03R\robjectsCopied\x12#\n" +
+	"\rsource_bucket\x18\x05 \x01(\tR\fsourceBucket\x12#\n" +
+	"\rtarget_bucket\x18\x06 \x01(\tR\ftargetBucket\x12\x14\n" +
+	"\x05error\x18\t \x01(\tR\x05errorJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"\x8c\x01\n" +
 	"\x14TenantDefaultBinding\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x121\n" +

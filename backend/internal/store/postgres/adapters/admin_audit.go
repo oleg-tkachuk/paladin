@@ -117,7 +117,7 @@ func (r *AuditRepoV2) Get(ctx context.Context, entryID uuid.UUID) (admindomain.A
 		}
 		return admindomain.AuditEntry{}, err
 	}
-	return auditEntryFromModel(row), nil
+	return auditEntryFromModel(row.AuditLog), nil
 }
 
 func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
@@ -152,7 +152,7 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 	}
 	out := make([]admindomain.AuditEntry, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, auditEntryFromModel(row))
+		out = append(out, auditEntryFromModel(row.AuditLog))
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {
@@ -212,7 +212,7 @@ func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 		ActorAudience: row.ActorAudience,
 		Action:        row.Action,
 		ResourceName:  row.ResourceName,
-		RequestID:     derefStr(row.RequestID),
+		RequestID:     row.RequestID,
 		SourceIP:      derefStr(row.SourceIp),
 		BeforeJSON:    row.BeforeJson,
 		AfterJSON:     row.AfterJson,

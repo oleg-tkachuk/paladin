@@ -12,46 +12,34 @@ import (
 )
 
 const getAuditEntry = `-- name: GetAuditEntry :one
-SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
-       action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message, capability_id
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail
 FROM audit_log
 WHERE id = $1
 `
 
 type GetAuditEntryRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	At            pgtype.Timestamptz `json:"at"`
-	ActorSubject  string             `json:"actor_subject"`
-	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
-	ActorAudience string             `json:"actor_audience"`
-	Action        string             `json:"action"`
-	ResourceName  string             `json:"resource_name"`
-	RequestID     string             `json:"request_id"`
-	SourceIp      *string            `json:"source_ip"`
-	BeforeJson    []byte             `json:"before_json"`
-	AfterJson     []byte             `json:"after_json"`
-	ErrorMessage  *string            `json:"error_message"`
-	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	AuditLog AuditLog `json:"audit_log"`
 }
 
 func (q *Queries) GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error) {
 	row := q.db.QueryRow(ctx, getAuditEntry, id)
 	var i GetAuditEntryRow
 	err := row.Scan(
-		&i.ID,
-		&i.At,
-		&i.ActorSubject,
-		&i.ActorTenantID,
-		&i.ActorAudience,
-		&i.Action,
-		&i.ResourceName,
-		&i.RequestID,
-		&i.SourceIp,
-		&i.BeforeJson,
-		&i.AfterJson,
-		&i.ErrorMessage,
-		&i.CapabilityID,
+		&i.AuditLog.ID,
+		&i.AuditLog.At,
+		&i.AuditLog.ActorSubject,
+		&i.AuditLog.ActorTenantID,
+		&i.AuditLog.ActorAudience,
+		&i.AuditLog.Action,
+		&i.AuditLog.ResourceName,
+		&i.AuditLog.RequestID,
+		&i.AuditLog.SourceIp,
+		&i.AuditLog.CapabilityID,
+		&i.AuditLog.Outcome,
+		&i.AuditLog.ErrorMessage,
+		&i.AuditLog.BeforeJson,
+		&i.AuditLog.AfterJson,
+		&i.AuditLog.Detail,
 	)
 	return i, err
 }
@@ -84,9 +72,7 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtyp
 }
 
 const listAuditEntries = `-- name: ListAuditEntries :many
-SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
-       action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message, capability_id
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail
 FROM audit_log
 WHERE ($1::text IS NULL
        OR actor_subject = $1::text)
@@ -108,19 +94,7 @@ LIMIT $9
 `
 
 type ListAuditEntriesRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	At            pgtype.Timestamptz `json:"at"`
-	ActorSubject  string             `json:"actor_subject"`
-	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
-	ActorAudience string             `json:"actor_audience"`
-	Action        string             `json:"action"`
-	ResourceName  string             `json:"resource_name"`
-	RequestID     string             `json:"request_id"`
-	SourceIp      *string            `json:"source_ip"`
-	BeforeJson    []byte             `json:"before_json"`
-	AfterJson     []byte             `json:"after_json"`
-	ErrorMessage  *string            `json:"error_message"`
-	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	AuditLog AuditLog `json:"audit_log"`
 }
 
 // Cursor: (at, id) tuple. Optional predicates use the canonical
@@ -153,19 +127,21 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 	for rows.Next() {
 		var i ListAuditEntriesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.At,
-			&i.ActorSubject,
-			&i.ActorTenantID,
-			&i.ActorAudience,
-			&i.Action,
-			&i.ResourceName,
-			&i.RequestID,
-			&i.SourceIp,
-			&i.BeforeJson,
-			&i.AfterJson,
-			&i.ErrorMessage,
-			&i.CapabilityID,
+			&i.AuditLog.ID,
+			&i.AuditLog.At,
+			&i.AuditLog.ActorSubject,
+			&i.AuditLog.ActorTenantID,
+			&i.AuditLog.ActorAudience,
+			&i.AuditLog.Action,
+			&i.AuditLog.ResourceName,
+			&i.AuditLog.RequestID,
+			&i.AuditLog.SourceIp,
+			&i.AuditLog.CapabilityID,
+			&i.AuditLog.Outcome,
+			&i.AuditLog.ErrorMessage,
+			&i.AuditLog.BeforeJson,
+			&i.AuditLog.AfterJson,
+			&i.AuditLog.Detail,
 		); err != nil {
 			return nil, err
 		}

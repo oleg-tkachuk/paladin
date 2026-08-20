@@ -211,10 +211,11 @@ message StorageMigrationStatus {
   string state = 2;
   int64 objects_total = 3;
   int64 objects_copied = 4;
-  string source_backend_id = 5;
-  string source_bucket_id = 6;
-  string target_backend_id = 7;
-  string target_bucket_id = 8;
+  // Bucket references as resource names, consistent with
+  // TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+  string source_bucket = 5;
+  string target_bucket = 6;
+  reserved 7, 8;
   // error — non-empty only in the `failed` state.
   string error = 9;
 }

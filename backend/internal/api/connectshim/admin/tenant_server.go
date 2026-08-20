@@ -94,13 +94,13 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.Ge
 
 func storageMigrationToProto(m *tenant.StorageMigration) *pb.StorageMigrationStatus {
 	return &pb.StorageMigrationStatus{
-		Tenant:         "tenants/" + m.TenantID.String(),
-		State:          m.State,
-		ObjectsTotal:   m.ObjectsTotal,
-		ObjectsCopied:  m.ObjectsCopied,
-		SourceBucketId: m.SourceBucketID,
-		TargetBucketId: m.TargetBucketID,
-		Error:          m.Error,
+		Tenant:        "tenants/" + m.TenantID.String(),
+		State:         m.State,
+		ObjectsTotal:  m.ObjectsTotal,
+		ObjectsCopied: m.ObjectsCopied,
+		SourceBucket:  "storageBackends/" + m.SourceBackendName + "/buckets/" + m.SourceBucketName,
+		TargetBucket:  "storageBackends/" + m.TargetBackendName + "/buckets/" + m.TargetBucketName,
+		Error:         m.Error,
 	}
 }
 

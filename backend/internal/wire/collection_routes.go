@@ -62,7 +62,7 @@ func (l collectionRouteLister) ListCollectionRoutes(ctx context.Context, tenantI
 	// bare aliases (not an error).
 	var dbBackend, dbBucket string
 	if db, err := l.tenants.GetDefaultBinding(ctx, tenantID); err == nil {
-		dbBackend, dbBucket = db.BackendID, db.BucketName
+		dbBackend, dbBucket = db.BackendName, db.BucketName
 	} else if !errors.Is(err, tenant.ErrNotFound) {
 		return nil, "", err
 	}

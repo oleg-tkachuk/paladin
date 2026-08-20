@@ -56,7 +56,7 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 			}
 			return nil, err
 		}
-		backend, bucket = db.BackendID, db.BucketName
+		backend, bucket = db.BackendName, db.BucketName
 	}
 	args := objectkey.CreateCollectionArgs{
 		TenantID:    tenantID,

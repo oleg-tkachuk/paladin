@@ -106,11 +106,15 @@ type UpdateTenantArgs struct {
 // DefaultBinding is a tenant's default (backend, bucket) route for the bare
 // collection name shape (ADR-0010 Phase 3 / migration 034).
 type DefaultBinding struct {
-	TenantID   uuid.UUID
-	BackendID  string
-	BucketName string
-	SetAt      time.Time
-	SetBy      string
+	TenantID uuid.UUID
+	// BucketID is the stored reference; BackendName and BucketName are carried
+	// alongside it because the resource name the API returns is built from
+	// names, and a name made of uuids resolves to nothing a client can use.
+	BucketID    uuid.UUID
+	BackendName string
+	BucketName  string
+	SetAt       time.Time
+	SetBy       string
 }
 
 type Repository interface {
@@ -121,7 +125,7 @@ type Repository interface {
 	// SetDefaultBinding upserts the tenant's default route and returns it.
 	// ErrDefaultBindingBucketMissing when (backend, bucket) is not a real
 	// bucket (the FK rejects it).
-	SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, backendID, bucketName, setBy string) (DefaultBinding, error)
+	SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (DefaultBinding, error)
 	// ClearDefaultBinding removes the tenant's default route. Idempotent —
 	// clearing an absent binding is a no-op success.
 	ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) error
@@ -184,11 +188,11 @@ type Repository interface {
 
 // StartStorageMigrationArgs is the input for Repository.StartStorageMigration.
 type StartStorageMigrationArgs struct {
-	TenantID         uuid.UUID
-	SourceBackendID  string
-	SourceBucketName string
-	TargetBackendID  string
-	TargetBucketName string
+	TenantID          uuid.UUID
+	SourceBackendName string
+	SourceBucketName  string
+	TargetBackendName string
+	TargetBucketName  string
 	// CleanupRetentionSeconds is how long the old (shared) copies are kept
 	// after the migration completes before the cleanup phase deletes them.
 	CleanupRetentionSeconds int64
@@ -197,15 +201,15 @@ type StartStorageMigrationArgs struct {
 // StorageMigration is a tenant's shared->dedicated copy-job status
 // (tenant_storage_migrations row).
 type StorageMigration struct {
-	TenantID         uuid.UUID
-	SourceBackendID  string
-	SourceBucketName string
-	TargetBackendID  string
-	TargetBucketName string
-	State            string
-	ObjectsTotal     int64
-	ObjectsCopied    int64
-	Error            string
+	TenantID          uuid.UUID
+	SourceBackendName string
+	SourceBucketName  string
+	TargetBackendName string
+	TargetBucketName  string
+	State             string
+	ObjectsTotal      int64
+	ObjectsCopied     int64
+	Error             string
 }
 
 // ErrStorageMigrationExists is returned by StartStorageMigration when a
@@ -328,7 +332,7 @@ func (h *Handler) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (*D
 
 // SetDefaultBinding upserts the tenant's default route. Gated on manage access;
 // set_by is the calling principal's subject.
-func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, backendID, bucketName string) (*DefaultBinding, error) {
+func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket string) (*DefaultBinding, error) {
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return nil, err
 	}
@@ -336,7 +340,7 @@ func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bac
 	if p, err := auth.PrincipalFromContext(ctx); err == nil {
 		setBy = p.Subject
 	}
-	b, err := h.repo.SetDefaultBinding(ctx, tenantID, backendID, bucketName, setBy)
+	b, err := h.repo.SetDefaultBinding(ctx, tenantID, bucket, setBy)
 	if err != nil {
 		return nil, err
 	}
@@ -606,9 +610,9 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	}
 	args := StartStorageMigrationArgs{
 		TenantID:                tenantID,
-		SourceBackendID:         srcBackend,
+		SourceBackendName:       srcBackend,
 		SourceBucketName:        srcBucket,
-		TargetBackendID:         targetBackend,
+		TargetBackendName:       targetBackend,
 		TargetBucketName:        "paladin-" + tenantID.String(),
 		CleanupRetentionSeconds: retention,
 	}

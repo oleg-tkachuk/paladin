@@ -6,9 +6,7 @@ INSERT INTO audit_log (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: GetAuditEntry :one
-SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
-       action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message, capability_id
+SELECT sqlc.embed(audit_log)
 FROM audit_log
 WHERE id = $1;
 
@@ -41,9 +39,7 @@ WHERE ctid IN (
 -- full CEL program ALWAYS still runs in-memory after this fetch, so
 -- pushdown only narrows the candidate set; correctness lives in the
 -- handler, not in this WHERE clause.
-SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
-       action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message, capability_id
+SELECT sqlc.embed(audit_log)
 FROM audit_log
 WHERE (sqlc.narg('actor_subject')::text IS NULL
        OR actor_subject = sqlc.narg('actor_subject')::text)
