@@ -2,14 +2,16 @@
 
 -- name: UpsertStorageBackendV2 :exec
 -- Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
+-- Keyed on name, not id: the caller knows the config key ("primary"), and the
+-- uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.
 INSERT INTO storage_backends (
-    id, kind, endpoint, region, events_enabled, events_target,
+    name, kind, endpoint, region, events_enabled, events_target,
     display_name, public_endpoint, force_path_style,
     credentials_secret_ref, sse_type, sse_key_id,
     events_queue_url, events_poll_interval_ms, cedar_policy, provider
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-ON CONFLICT (id) DO UPDATE SET
+ON CONFLICT (name) DO UPDATE SET
     kind                    = EXCLUDED.kind,
     endpoint                = EXCLUDED.endpoint,
     region                  = EXCLUDED.region,
@@ -28,7 +30,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at              = now();
 
 -- name: GetStorageBackendV2 :one
-SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_target,
+SELECT storage_backends.id, storage_backends.name, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
@@ -40,7 +42,7 @@ SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_targe
        resource_version, created_at, updated_at
 FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
-WHERE storage_backends.id = $1;
+WHERE storage_backends.name = $1;
 
 -- name: ListStorageBackends :many
 -- Cursor pagination. The IS-NULL guard is mandatory: callers may pass
@@ -48,7 +50,7 @@ WHERE storage_backends.id = $1;
 -- evaluates to NULL → zero rows (the same trap that bit
 -- ListUsersByTenant). Keep the `sqlc.narg(after_id) IS NULL OR …`
 -- shape on every cursor query in this package.
-SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_target,
+SELECT storage_backends.id, storage_backends.name, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
@@ -80,7 +82,7 @@ SET display_name            = COALESCE(sqlc.narg('display_name'), display_name),
     events_queue_url        = COALESCE(sqlc.narg('events_queue_url'), events_queue_url),
     events_poll_interval_ms = COALESCE(sqlc.narg('events_poll_interval_ms'), events_poll_interval_ms),
     cedar_policy            = COALESCE(sqlc.narg('cedar_policy'), cedar_policy)
-WHERE storage_backends.id = sqlc.arg('id')
+WHERE storage_backends.name = sqlc.arg('name')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -91,7 +93,7 @@ WHERE storage_backends.id = sqlc.arg('id')
 -- config-mirror must never touch this operator-managed column.
 UPDATE storage_backends
 SET enabled = sqlc.arg('enabled')
-WHERE storage_backends.id = sqlc.arg('id')
+WHERE storage_backends.name = sqlc.arg('name')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -100,7 +102,7 @@ WHERE storage_backends.id = sqlc.arg('id')
 -- SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 UPDATE storage_backends
 SET read_only = sqlc.arg('read_only')
-WHERE storage_backends.id = sqlc.arg('id')
+WHERE storage_backends.name = sqlc.arg('name')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -109,17 +111,19 @@ WHERE storage_backends.id = sqlc.arg('id')
 -- operator-managed contract as the enable/read-only setters; advisory only.
 UPDATE storage_backends
 SET maintenance = sqlc.arg('maintenance')
-WHERE storage_backends.id = sqlc.arg('id')
+WHERE storage_backends.name = sqlc.arg('name')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: UpsertStorageBackendHealth :exec
+-- Keyed by backend NAME: callers are health probes that know the config key.
 -- Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
 -- state in its own 1:1 table — writing it does NOT touch storage_backends, so
 -- it never fires the bump_rv trigger (no resource_version / updated_at churn)
 -- and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
 INSERT INTO storage_backend_health (backend_id, status, message, checked_at)
-VALUES (sqlc.arg('backend_id'), sqlc.arg('status'), sqlc.arg('message'), sqlc.arg('checked_at'))
+SELECT sb.id, sqlc.arg('status'), sqlc.arg('message'), sqlc.arg('checked_at')
+FROM storage_backends sb WHERE sb.name = sqlc.arg('backend_name')
 ON CONFLICT (backend_id) DO UPDATE
 SET status     = EXCLUDED.status,
     message    = EXCLUDED.message,
@@ -136,15 +140,16 @@ SET previous_credentials_secret_ref  = credentials_secret_ref,
         ELSE NULL
     END,
     credentials_secret_ref           = $2
-WHERE storage_backends.id = $1;
+WHERE storage_backends.name = $1;
 
 -- name: DeleteStorageBackend :execrows
 DELETE FROM storage_backends
-WHERE storage_backends.id = sqlc.arg('id')
+WHERE storage_backends.name = sqlc.arg('name')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: CountBucketsForBackend :one
 SELECT count(*)::bigint AS count
-FROM buckets
-WHERE backend_id = $1;
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1;

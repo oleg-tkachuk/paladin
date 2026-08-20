@@ -229,7 +229,7 @@ func (r *TenantRepo) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) 
 
 // SetDefaultBinding upserts + reads back (the query is :exec). A bad bucket
 // trips the composite FK → ErrDefaultBindingBucketMissing (InvalidArgument).
-func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, backendID, bucketName, setBy string) (tenant.DefaultBinding, error) {
+func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (tenant.DefaultBinding, error) {
 	if err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendID, bucketName, setBy); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {

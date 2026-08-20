@@ -43,7 +43,7 @@ func (r *BackendRepoV2) RunInTx(ctx context.Context, fn func(ctx context.Context
 // RotateCredentials). graceSeconds=0 clears the previous-credential window.
 func (r *BackendRepoV2) RotateCredentialsTx(ctx context.Context, tx pgx.Tx, backendID, secretRef string, graceSeconds int64) error {
 	ref := secretRef
-	rows, err := r.q.WithTx(tx).RotateStorageBackendCredentials(ctx, backendID, &ref, graceSeconds)
+	rows, err := r.q.WithTx(tx).RotateStorageBackendCredentials(ctx, backendID, ref, graceSeconds)
 	if err != nil {
 		return fmt.Errorf("rotate credentials: %w", err)
 	}
@@ -70,14 +70,14 @@ func (r *BackendRepoV2) Upsert(ctx context.Context, b admindomain.StorageBackend
 	return r.q.UpsertStorageBackendV2(ctx,
 		b.BackendID,
 		b.Kind,
-		strPtr(b.Endpoint),
-		strPtr(b.Region),
+		b.Endpoint,
+		b.Region,
 		b.Events.Enabled,
-		strPtr(b.Events.Target),
-		strPtr(b.DisplayName),
-		strPtr(b.PublicEndpoint),
+		b.Events.Target,
+		b.DisplayName,
+		b.PublicEndpoint,
 		b.ForcePathStyle,
-		strPtr(b.CredentialsSecretRef),
+		b.CredentialsSecretRef,
 		b.SSE.Type,
 		b.SSE.KeyID,
 		b.Events.QueueURL,
@@ -102,22 +102,22 @@ func (r *BackendRepoV2) Get(ctx context.Context, backendID string) (admindomain.
 // by Get and GetTx so the two never drift.
 func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBackend {
 	return admindomain.StorageBackend{
-		BackendID:            row.ID,
-		DisplayName:          derefStr(row.DisplayName),
+		BackendID:            row.Name,
+		DisplayName:          row.DisplayName,
 		Kind:                 row.Kind,
 		Provider:             row.Provider,
-		Endpoint:             derefStr(row.Endpoint),
-		PublicEndpoint:       derefStr(row.PublicEndpoint),
-		Region:               derefStr(row.Region),
+		Endpoint:             row.Endpoint,
+		PublicEndpoint:       row.PublicEndpoint,
+		Region:               row.Region,
 		ForcePathStyle:       row.ForcePathStyle,
-		CredentialsSecretRef: derefStr(row.CredentialsSecretRef),
+		CredentialsSecretRef: row.CredentialsSecretRef,
 		SSE: admindomain.ServerSideEncryption{
 			Type:  row.SseType,
 			KeyID: row.SseKeyID,
 		},
 		Events: admindomain.EventSourceConfig{
 			Enabled:      row.EventsEnabled,
-			Target:       derefStr(row.EventsTarget),
+			Target:       row.EventsTarget,
 			QueueURL:     row.EventsQueueUrl,
 			PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
 		},
@@ -125,10 +125,10 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 		Enabled:                       row.Enabled,
 		ReadOnly:                      row.ReadOnly,
 		Maintenance:                   row.Maintenance,
-		HealthStatus:                  row.HealthStatus,
+		HealthStatus:                  string(row.HealthStatus),
 		HealthMessage:                 row.HealthMessage,
 		HealthCheckedAt:               timeFrom(row.HealthCheckedAt),
-		PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
+		PreviousCredentialsSecretRef:  row.PreviousCredentialsSecretRef,
 		PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
 		ResourceVersion:               row.ResourceVersion,
 		CreatedAt:                     timeFrom(row.CreatedAt),
@@ -157,26 +157,26 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 	out := make([]admindomain.StorageBackend, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, admindomain.StorageBackend{
-			BackendID:            row.ID,
-			DisplayName:          derefStr(row.DisplayName),
+			BackendID:            row.Name,
+			DisplayName:          row.DisplayName,
 			Kind:                 row.Kind,
 			Provider:             row.Provider,
-			Endpoint:             derefStr(row.Endpoint),
-			PublicEndpoint:       derefStr(row.PublicEndpoint),
-			Region:               derefStr(row.Region),
+			Endpoint:             row.Endpoint,
+			PublicEndpoint:       row.PublicEndpoint,
+			Region:               row.Region,
 			ForcePathStyle:       row.ForcePathStyle,
-			CredentialsSecretRef: derefStr(row.CredentialsSecretRef),
+			CredentialsSecretRef: row.CredentialsSecretRef,
 			SSE:                  admindomain.ServerSideEncryption{Type: row.SseType, KeyID: row.SseKeyID},
 			Events: admindomain.EventSourceConfig{
 				Enabled:      row.EventsEnabled,
-				Target:       derefStr(row.EventsTarget),
+				Target:       row.EventsTarget,
 				QueueURL:     row.EventsQueueUrl,
 				PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
 			},
 			CedarPolicy:                   row.CedarPolicy,
 			Enabled:                       row.Enabled,
 			ReadOnly:                      row.ReadOnly,
-			PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
+			PreviousCredentialsSecretRef:  row.PreviousCredentialsSecretRef,
 			PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
 			ResourceVersion:               row.ResourceVersion,
 			CreatedAt:                     timeFrom(row.CreatedAt),
@@ -315,15 +315,16 @@ func (r *BackendRepoV2) SetMaintenance(ctx context.Context, backendID string, ma
 // table. The FK is ON DELETE CASCADE, so a probe racing a backend delete
 // simply no-ops (or the row is cleaned up); a missing backend surfaces as an
 // FK violation, which the caller (TestBackend, best-effort) swallows.
-func (r *BackendRepoV2) SetHealth(ctx context.Context, backendID, status, message string, checkedAt time.Time) error {
-	if err := r.q.UpsertStorageBackendHealth(ctx, backendID, status, message, pgTS(checkedAt)); err != nil {
+func (r *BackendRepoV2) SetHealth(ctx context.Context, backendName, status, message string, checkedAt time.Time) error {
+	if err := r.q.UpsertStorageBackendHealth(ctx,
+		sqlc.BackendHealthStatus(status), &message, pgTS(checkedAt), backendName); err != nil {
 		return fmt.Errorf("set backend health: %w", err)
 	}
 	return nil
 }
 
 func (r *BackendRepoV2) RotateCredentials(ctx context.Context, backendID, secretRef string, graceSeconds int64) error {
-	rows, err := r.q.RotateStorageBackendCredentials(ctx, backendID, &secretRef, graceSeconds)
+	rows, err := r.q.RotateStorageBackendCredentials(ctx, backendID, secretRef, graceSeconds)
 	if err != nil {
 		return err
 	}

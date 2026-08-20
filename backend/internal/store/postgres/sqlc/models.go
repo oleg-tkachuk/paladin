@@ -663,19 +663,19 @@ type StorageBackend struct {
 	Name                          string             `json:"name"`
 	Kind                          string             `json:"kind"`
 	Provider                      string             `json:"provider"`
-	DisplayName                   *string            `json:"display_name"`
-	Endpoint                      *string            `json:"endpoint"`
-	PublicEndpoint                *string            `json:"public_endpoint"`
-	Region                        *string            `json:"region"`
+	DisplayName                   string             `json:"display_name"`
+	Endpoint                      string             `json:"endpoint"`
+	PublicEndpoint                string             `json:"public_endpoint"`
+	Region                        string             `json:"region"`
 	ForcePathStyle                bool               `json:"force_path_style"`
-	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
-	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
+	CredentialsSecretRef          string             `json:"credentials_secret_ref"`
+	PreviousCredentialsSecretRef  string             `json:"previous_credentials_secret_ref"`
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	SseType                       string             `json:"sse_type"`
-	SseKeyID                      *string            `json:"sse_key_id"`
+	SseKeyID                      string             `json:"sse_key_id"`
 	EventsEnabled                 bool               `json:"events_enabled"`
-	EventsTarget                  *string            `json:"events_target"`
-	EventsQueueUrl                *string            `json:"events_queue_url"`
+	EventsTarget                  string             `json:"events_target"`
+	EventsQueueUrl                string             `json:"events_queue_url"`
 	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
 	CedarPolicy                   string             `json:"cedar_policy"`
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`

@@ -51,7 +51,7 @@ type Querier interface {
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
 	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	CountBucketsForBackend(ctx context.Context, backendID pgtype.UUID) (int64, error)
+	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountCollectionsReferencingBucket(ctx context.Context, bucketID pgtype.UUID) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState) (int64, error)
 	CountPendingPurges(ctx context.Context) (int64, error)
@@ -78,7 +78,7 @@ type Querier interface {
 	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
-	CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
+	CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string) error
 	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
 	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBucketID pgtype.UUID, targetBucketID pgtype.UUID, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
@@ -97,7 +97,7 @@ type Querier interface {
 	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64, error)
-	DeleteStorageBackend(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	DeleteStorageBackend(ctx context.Context, name string, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error *string) (int64, error)
@@ -146,7 +146,7 @@ type Querier interface {
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	GetReplicationWatermark(ctx context.Context, bucketID pgtype.UUID) (pgtype.Timestamptz, error)
 	GetStorageBackend(ctx context.Context, id pgtype.UUID) (GetStorageBackendRow, error)
-	GetStorageBackendV2(ctx context.Context, id pgtype.UUID) (GetStorageBackendV2Row, error)
+	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
 	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error)
 	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
@@ -462,7 +462,7 @@ type Querier interface {
 	// Dual-write rotation: stash the current ref as the previous one with a
 	// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
 	// window in seconds; 0 clears the previous window (instant rotation).
-	RotateStorageBackendCredentials(ctx context.Context, iD pgtype.UUID, credentialsSecretRef *string, column3 int64) (int64, error)
+	RotateStorageBackendCredentials(ctx context.Context, name string, credentialsSecretRef string, column3 int64) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
 	SetBucketConstraints(ctx context.Context, backendID pgtype.UUID, name string, constraints []byte, expectedVersion int64) (int64, error)
@@ -476,13 +476,13 @@ type Querier interface {
 	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
 	// config-mirror must never touch this operator-managed column.
-	SetStorageBackendEnabled(ctx context.Context, enabled bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	SetStorageBackendEnabled(ctx context.Context, enabled bool, name string, expectedVersion int64) (int64, error)
 	// Flip the operator-set maintenance flag (migration 049). Same OCC +
 	// operator-managed contract as the enable/read-only setters; advisory only.
-	SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	SetStorageBackendMaintenance(ctx context.Context, maintenance bool, name string, expectedVersion int64) (int64, error)
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
 	// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
-	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, name string, expectedVersion int64) (int64, error)
 	SetStorageMigrationState(ctx context.Context, tenantID pgtype.UUID, state string) (int64, error)
 	// Records the object count and moves provisioning -> copying.
 	SetStorageMigrationTotal(ctx context.Context, tenantID pgtype.UUID, objectsTotal int64) (int64, error)
@@ -533,7 +533,7 @@ type Querier interface {
 	// update with 0 rows affected and the handler returns CodeAborted.
 	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
 	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
-	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, name string, expectedVersion int64) (int64, error)
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
@@ -546,14 +546,17 @@ type Querier interface {
 	// replicas may try to advance with stale values; the GREATEST() guard
 	// preserves the highest seen committed_at.
 	UpsertReplicationWatermark(ctx context.Context, bucketID pgtype.UUID, watermark pgtype.Timestamptz) error
+	// Keyed by backend NAME: callers are health probes that know the config key.
 	// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
 	// state in its own 1:1 table — writing it does NOT touch storage_backends, so
 	// it never fires the bump_rv trigger (no resource_version / updated_at churn)
 	// and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
-	UpsertStorageBackendHealth(ctx context.Context, backendID pgtype.UUID, status BackendHealthStatus, message *string, checkedAt pgtype.Timestamptz) error
+	UpsertStorageBackendHealth(ctx context.Context, status BackendHealthStatus, message *string, checkedAt pgtype.Timestamptz, backendName string) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
 	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
-	UpsertStorageBackendV2(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID *string, eventsQueueUrl *string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
+	// Keyed on name, not id: the caller knows the config key ("primary"), and the
+	// uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.
+	UpsertStorageBackendV2(ctx context.Context, name string, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string, displayName string, publicEndpoint string, forcePathStyle bool, credentialsSecretRef string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
 	UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error
 	// Insert-or-update with a single round trip. Returns the post-write row so
 	// the handler can echo the bumped resource_version back to the caller.

@@ -22,7 +22,7 @@ SET kind = EXCLUDED.kind,
     events_target = EXCLUDED.events_target
 `
 
-func (q *Queries) CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error {
+func (q *Queries) CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string) error {
 	_, err := q.db.Exec(ctx, createStorageBackend,
 		iD,
 		kind,
@@ -82,10 +82,10 @@ WHERE id = $1
 type GetStorageBackendRow struct {
 	ID            pgtype.UUID        `json:"id"`
 	Kind          string             `json:"kind"`
-	Endpoint      *string            `json:"endpoint"`
-	Region        *string            `json:"region"`
+	Endpoint      string             `json:"endpoint"`
+	Region        string             `json:"region"`
 	EventsEnabled bool               `json:"events_enabled"`
-	EventsTarget  *string            `json:"events_target"`
+	EventsTarget  string             `json:"events_target"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 

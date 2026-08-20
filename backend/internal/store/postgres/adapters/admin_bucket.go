@@ -127,8 +127,8 @@ func (r *BucketRepoV2) ListPendingProvisions(ctx context.Context, maxAttempts, l
 	out := make([]admindomain.BucketProvisionRow, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, admindomain.BucketProvisionRow{
-			BackendID:         row.BackendID,
-			BucketId:        row.BucketName,
+			BackendID:         row.BackendName,
+			BucketName:        row.BucketName,
 			Region:            derefStr(row.Region),
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
@@ -201,8 +201,8 @@ func (r *BucketRepoV2) ListPendingDeletions(ctx context.Context, maxAttempts, li
 	out := make([]admindomain.BucketProvisionRow, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, admindomain.BucketProvisionRow{
-			BackendID:         row.BackendID,
-			BucketId:        row.BucketName,
+			BackendID:         row.BackendName,
+			BucketName:        row.BucketName,
 			Region:            derefStr(row.Region),
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
@@ -426,7 +426,7 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 
 func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 	return decodeBucketRow(
-		row.BackendID, row.BucketName, row.DisplayName, row.Region, row.Labels,
+		row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
 		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
@@ -438,7 +438,7 @@ func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 
 func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 	return decodeBucketRow(
-		row.BackendID, row.BucketName, row.DisplayName, row.Region, row.Labels,
+		row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
 		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
@@ -450,7 +450,7 @@ func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 
 func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bucket {
 	return decodeBucketRow(
-		row.BackendID, row.BucketName, row.DisplayName, row.Region, row.Labels,
+		row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
 		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
@@ -481,7 +481,7 @@ func decodeBucketRow(
 	_ = json.Unmarshal(lifecycleRules, &rules)
 	return admindomain.Bucket{
 		BackendID:      backendID,
-		BucketId:     bucketName,
+		BucketName:     bucketName,
 		DisplayName:    derefStr(displayName),
 		Region:         derefStr(region),
 		Labels:         decodeMap(labels),
