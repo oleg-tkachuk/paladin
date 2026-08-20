@@ -336,11 +336,15 @@ func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, buc
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return nil, err
 	}
-	setBy := ""
-	if p, err := auth.PrincipalFromContext(ctx); err == nil {
-		setBy = p.Subject
+	// authorize() above already resolved the principal, so a failure here is
+	// an internal inconsistency, not a caller error. Recording "" would hide
+	// it and leave a binding nobody can be held to.
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal,
+			errors.New("set default binding: authorized request carries no principal"))
 	}
-	b, err := h.repo.SetDefaultBinding(ctx, tenantID, bucket, setBy)
+	b, err := h.repo.SetDefaultBinding(ctx, tenantID, bucket, p.Subject)
 	if err != nil {
 		return nil, err
 	}

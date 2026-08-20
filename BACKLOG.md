@@ -93,6 +93,27 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+### Capability records attribute to the issuer, not to the initiating principal
+
+- **Status:** Open — correct-but-weak attribution, deliberately not papered over.
+- **Reason:** `capability_records.created_by` is NOT NULL (ADR-0013: attribution
+  is mandatory, and `NOT NULL DEFAULT ''` is nullability wearing a disguise).
+  The insert in `internal/capability/postgres/store.go` fills it with
+  `c.Issuer`, which is true but coarse: it names the service that minted the
+  capability, not the principal who asked for it.
+  The initiating principal cannot be read at that layer, and that is by
+  design — the `capability` module depends on neither a database nor a request
+  pipeline (ADR-0013 keeps that property, CI enforces it). Reading an auth
+  context there would break the thing the module exists to demonstrate.
+- **Definition of Done:** carry the initiator on `capability.Record` — a
+  subject plus kind, the same pair `multipart_uploads` now stores — set by the
+  issuing handler, which does have the principal. Then `created_by` names a
+  principal rather than a service, and the module still imports nothing new.
+- **Blockers:** none technical; it is a change to the module's public contract,
+  so it wants doing deliberately rather than folded into a rename.
+
+---
+
 ## MCP bridge
 
 ### Tool-coverage gaps vs the Paladin RPC surface

@@ -71,7 +71,7 @@ type Querier interface {
 	// bucket_id anchors the upload to the physical location resolved at initiate
 	// time, so the rest of the lifecycle targets it regardless of a later
 	// collection rebind. Resolved from the (backend, bucket) name pair here.
-	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string) error
+	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string) error
 	// Object queries.
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
 	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).

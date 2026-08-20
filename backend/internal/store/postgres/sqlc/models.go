@@ -492,17 +492,17 @@ type MultipartPart struct {
 }
 
 type MultipartUpload struct {
-	ID              pgtype.UUID        `json:"id"`
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	ObjectID        pgtype.UUID        `json:"object_id"`
-	BucketID        pgtype.UUID        `json:"bucket_id"`
-	StorageUploadID string             `json:"storage_upload_id"`
-	PartSizeBytes   int64              `json:"part_size_bytes"`
-	TotalParts      int32              `json:"total_parts"`
-	ClientID        string             `json:"client_id"`
-	UserID          pgtype.UUID        `json:"user_id"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ObjectID           pgtype.UUID        `json:"object_id"`
+	BucketID           pgtype.UUID        `json:"bucket_id"`
+	StorageUploadID    string             `json:"storage_upload_id"`
+	PartSizeBytes      int64              `json:"part_size_bytes"`
+	TotalParts         int32              `json:"total_parts"`
+	InitiatedBySubject string             `json:"initiated_by_subject"`
+	InitiatedByKind    string             `json:"initiated_by_kind"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OauthAuthorizationCode struct {

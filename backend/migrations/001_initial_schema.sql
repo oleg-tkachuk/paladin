@@ -147,7 +147,7 @@ CREATE TABLE api_tokens (
     expires_at     timestamptz NOT NULL,
     revoked_at     timestamptz,
     last_used_at   timestamptz,
-    created_by     text NOT NULL DEFAULT '',
+    created_by     text NOT NULL,
     created_at     timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT api_tokens_rate_limit_rpm_check CHECK (rate_limit_rpm >= 0)
 );
@@ -312,7 +312,7 @@ CREATE TABLE tenant_default_bindings (
     tenant_id uuid NOT NULL UNIQUE REFERENCES tenants(id) ON DELETE CASCADE,
     bucket_id uuid NOT NULL REFERENCES buckets(id) ON DELETE RESTRICT,
     set_at    timestamptz NOT NULL DEFAULT now(),
-    set_by    text NOT NULL DEFAULT ''
+    set_by    text NOT NULL
 );
 
 CREATE TABLE tenant_storage_migrations (
@@ -461,11 +461,16 @@ CREATE TABLE multipart_uploads (
     storage_upload_id text NOT NULL,
     part_size_bytes   bigint NOT NULL,
     total_parts       integer NOT NULL,
-    -- Attribution of who initiated the upload. Optional: the initiate path
-    -- does not always carry a principal, and an upload without one is still
-    -- a valid upload.
-    client_id         text NOT NULL DEFAULT '',
-    user_id           uuid,
+    -- Who initiated the upload. Mandatory, and no DEFAULT: an upload whose
+    -- owner is unknown cannot be attributed, quota'd or audited, and '' is
+    -- not an answer to "whose is this".
+    --
+    -- Subject + kind rather than user_id, because the initiator is not always
+    -- a user: a service account or a capability holder starts uploads too, and
+    -- neither has a uuid in `users`. Subject is Principal.Subject, stable
+    -- within the tenant; kind distinguishes what that subject is.
+    initiated_by_subject text NOT NULL,
+    initiated_by_kind    text NOT NULL,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
@@ -544,7 +549,7 @@ CREATE TABLE capability_records (
     audience          text[] NOT NULL,
     caveats           jsonb NOT NULL,
     generation        bigint NOT NULL DEFAULT 1,
-    created_by        text NOT NULL DEFAULT '',
+    created_by        text NOT NULL,
     issued_at         timestamptz NOT NULL DEFAULT now(),
     not_before        timestamptz,
     expires_at        timestamptz NOT NULL
@@ -589,7 +594,7 @@ CREATE TABLE charges (
     amount        numeric(14,6) NOT NULL,
     unit_code     text NOT NULL,
     op            text NOT NULL DEFAULT '',
-    actor_subject text NOT NULL DEFAULT ''
+    actor_subject text NOT NULL
 );
 CREATE INDEX charges_tenant_time_idx ON charges (tenant_id, occurred_at DESC);
 CREATE INDEX charges_capability_idx ON charges (capability_id);

@@ -15,18 +15,19 @@ const createMultipartUpload = `-- name: CreateMultipartUpload :exec
 
 INSERT INTO multipart_uploads (
     id, tenant_id, object_id, storage_upload_id, part_size_bytes, total_parts,
-    bucket_id
+    bucket_id, initiated_by_subject, initiated_by_kind
 ) VALUES ($1, $2, $3, $4, $5, $6,
           (SELECT b.id FROM buckets b
              JOIN storage_backends sb ON sb.id = b.backend_id
-            WHERE sb.name = $7 AND b.name = $8))
+            WHERE sb.name = $7 AND b.name = $8),
+          $9, $10)
 `
 
 // Multipart upload queries.
 // bucket_id anchors the upload to the physical location resolved at initiate
 // time, so the rest of the lifecycle targets it regardless of a later
 // collection rebind. Resolved from the (backend, bucket) name pair here.
-func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string) error {
+func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string) error {
 	_, err := q.db.Exec(ctx, createMultipartUpload,
 		iD,
 		tenantID,
@@ -36,6 +37,8 @@ func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, ten
 		totalParts,
 		name,
 		name_2,
+		initiatedBySubject,
+		initiatedByKind,
 	)
 	return err
 }
@@ -51,7 +54,7 @@ func (q *Queries) DeleteMultipartUpload(ctx context.Context, id pgtype.UUID) err
 }
 
 const getMultipartUpload = `-- name: GetMultipartUpload :one
-SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.bucket_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.client_id, multipart_uploads.user_id, multipart_uploads.created_at, multipart_uploads.updated_at
+SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.bucket_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.initiated_by_subject, multipart_uploads.initiated_by_kind, multipart_uploads.created_at, multipart_uploads.updated_at
 FROM multipart_uploads
 WHERE id = $1
 `
@@ -71,8 +74,8 @@ func (q *Queries) GetMultipartUpload(ctx context.Context, id pgtype.UUID) (GetMu
 		&i.MultipartUpload.StorageUploadID,
 		&i.MultipartUpload.PartSizeBytes,
 		&i.MultipartUpload.TotalParts,
-		&i.MultipartUpload.ClientID,
-		&i.MultipartUpload.UserID,
+		&i.MultipartUpload.InitiatedBySubject,
+		&i.MultipartUpload.InitiatedByKind,
 		&i.MultipartUpload.CreatedAt,
 		&i.MultipartUpload.UpdatedAt,
 	)

@@ -73,6 +73,8 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		args.TotalParts,
 		backendID,
 		bucket,
+		args.InitiatedBySubject,
+		args.InitiatedByKind,
 	); err != nil {
 		return multipart.Session{}, fmt.Errorf("create multipart upload row: %w", err)
 	}

@@ -59,6 +59,10 @@ type Session struct {
 
 type InitiateArgs struct {
 	TenantID      uuid.UUID
+	// InitiatedBy* attribute the upload to the principal that started it.
+	// Filled from the request context, never by the caller — see Initiate.
+	InitiatedBySubject string
+	InitiatedByKind    string
 	Collection    string
 	Key           string
 	ContentType   string
@@ -153,6 +157,10 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, err
 	}
 	args.TenantID = tenantID
+	// Attribution comes from the caller's principal, never from the request:
+	// a client must not be able to name someone else as the initiator.
+	args.InitiatedBySubject = p.Subject
+	args.InitiatedByKind = p.Kind.String()
 	if args.SizeHint <= 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("size_bytes is required for multipart uploads"))

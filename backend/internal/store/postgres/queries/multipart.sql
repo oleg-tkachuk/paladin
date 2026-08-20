@@ -6,11 +6,12 @@
 -- collection rebind. Resolved from the (backend, bucket) name pair here.
 INSERT INTO multipart_uploads (
     id, tenant_id, object_id, storage_upload_id, part_size_bytes, total_parts,
-    bucket_id
+    bucket_id, initiated_by_subject, initiated_by_kind
 ) VALUES ($1, $2, $3, $4, $5, $6,
           (SELECT b.id FROM buckets b
              JOIN storage_backends sb ON sb.id = b.backend_id
-            WHERE sb.name = $7 AND b.name = $8));
+            WHERE sb.name = $7 AND b.name = $8),
+          $9, $10);
 
 -- name: GetMultipartUpload :one
 SELECT sqlc.embed(multipart_uploads)

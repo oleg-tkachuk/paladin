@@ -124,7 +124,14 @@ INSERT INTO capability_records (
 		c.IssuedAt,
 		nbf,
 		c.ExpiresAt,
-		"", // created_by populated by callers that have a richer principal context
+		// The issuer is the accountable party this layer can actually name.
+		// The capability module has no auth context by design (it depends on
+		// neither a database nor a request pipeline), so the initiating
+		// principal cannot be read here — it would have to travel on Record.
+		// Recording the issuer is weaker attribution than a subject, but it is
+		// true, and "" was not: an empty created_by reads as "nobody made
+		// this", which is never the case. See BACKLOG.
+		c.Issuer,
 	); err != nil {
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}
