@@ -82,8 +82,13 @@ func startPostgres(t testing.TB) *pgxpool.Pool {
 // subscription, so any object event for the tenant fans out exactly one
 // outbox row. Returns the tenant id and the collection the objects hang off.
 type fixture struct {
-	tenantID   uuid.UUID
-	collection string
+	tenantID uuid.UUID
+	// collection is the name; collectionID is what objects reference. Tests
+	// that exercise RLS need the id: resolving the name by tenant would make a
+	// cross-tenant INSERT match zero rows instead of tripping the policy, and
+	// the test would pass for the wrong reason.
+	collection   string
+	collectionID uuid.UUID
 }
 
 func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture {
@@ -103,11 +108,14 @@ func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture 
 	// 009 / 033). Mirror 009's `t-<hex>` backfill shape for the slug.
 	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		f.tenantID, "t-"+hex, "tn-"+hex)
-	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, bucket_id)
+	if err := pool.QueryRow(ctx, `INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, b.id FROM buckets b
 		   JOIN storage_backends sb ON sb.id = b.backend_id
-		  WHERE sb.name = $3 AND b.name = $4`,
-		f.tenantID, f.collection, backendID, bucketName)
+		  WHERE sb.name = $3 AND b.name = $4
+		 RETURNING id`,
+		f.tenantID, f.collection, backendID, bucketName).Scan(&f.collectionID); err != nil {
+		t.Fatalf("seed collection: %v", err)
+	}
 	mustExec(t, ctx, pool, `INSERT INTO event_subscriptions (id, tenant_id, cel_filter, sink_kind, sink_config) VALUES ($1, $2, '', 'http', '{}'::jsonb)`, uuid.New(), f.tenantID)
 	return f
 }

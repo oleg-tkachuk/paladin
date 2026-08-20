@@ -136,6 +136,15 @@ CREATE POLICY tenant_write_isolation ON audit_log FOR INSERT
     WITH CHECK (actor_tenant_id = paladin_session_tenant_id()
                 OR actor_tenant_id IS NULL);
 
+-- Reads are deliberately unrestricted. The audit trail is a
+-- platform-operator surface: an investigation that could only see one
+-- tenant's entries cannot answer "who touched this", which is the question
+-- the log exists for. Tenant-facing exposure is the admin plane's job, not
+-- the policy's. Without this, FORCE RLS plus an INSERT-only policy makes
+-- every SELECT return zero rows — silently, since RLS filters rather than
+-- errors.
+CREATE POLICY audit_log_read_all ON audit_log FOR SELECT USING (true);
+
 ALTER TABLE operations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE operations FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_write_isolation ON operations FOR ALL
