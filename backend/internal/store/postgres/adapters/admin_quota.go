@@ -58,10 +58,10 @@ func upsertTenantQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 	return qq.UpsertTenantQuota(ctx,
 		pgUUID(q.QuotaID),
 		pgUUID(q.TenantID),
-		q.MaxTotalBytes,
-		q.MaxObjectCount,
-		q.MaxBytesPerDay,
-		q.MaxObjectsPerDay,
+		nilIfZero(q.MaxTotalBytes),
+		nilIfZero(q.MaxObjectCount),
+		nilIfZero(q.MaxBytesPerDay),
+		nilIfZero(q.MaxObjectsPerDay),
 	)
 }
 
@@ -82,10 +82,10 @@ func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 		pgUUID(q.QuotaID),
 		strPtr(q.BackendID),
 		strPtr(q.BucketName),
-		q.MaxTotalBytes,
-		q.MaxObjectCount,
-		q.MaxBytesPerDay,
-		q.MaxObjectsPerDay,
+		nilIfZero(q.MaxTotalBytes),
+		nilIfZero(q.MaxObjectCount),
+		nilIfZero(q.MaxBytesPerDay),
+		nilIfZero(q.MaxObjectsPerDay),
 	)
 }
 
@@ -149,11 +149,11 @@ func quotaFromSQLC(q sqlc.Quota) admindomain.Quota {
 		QuotaID:           uuidFrom(q.QuotaID),
 		TenantID:          uuidFrom(q.TenantID),
 		BackendID:         derefStr(q.BackendID),
-		BucketId:        derefStr(q.BucketName),
-		MaxTotalBytes:     q.MaxTotalBytes,
-		MaxObjectCount:    q.MaxObjectCount,
-		MaxBytesPerDay:    q.MaxBytesPerDay,
-		MaxObjectsPerDay:  q.MaxObjectsPerDay,
+		BucketId:          derefStr(q.BucketName),
+		MaxTotalBytes:     nilIfZero(q.MaxTotalBytes),
+		MaxObjectCount:    nilIfZero(q.MaxObjectCount),
+		MaxBytesPerDay:    nilIfZero(q.MaxBytesPerDay),
+		MaxObjectsPerDay:  nilIfZero(q.MaxObjectsPerDay),
 		UsageTotalBytes:   q.UsageTotalBytes,
 		UsageObjectCount:  q.UsageObjectCount,
 		UsageBytesToday:   q.UsageBytesToday,
@@ -162,4 +162,14 @@ func quotaFromSQLC(q sqlc.Quota) admindomain.Quota {
 		ResourceVersion:   q.ResourceVersion,
 		UpdatedAt:         timeFrom(q.UpdatedAt),
 	}
+}
+
+// A quota limit is NULL when unset — "no limit" — while the domain spells that
+// as zero. Keeping NULL out of the domain would make "unlimited" and "zero
+// bytes allowed" the same value.
+func nilIfZero(v int64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	return &v
 }

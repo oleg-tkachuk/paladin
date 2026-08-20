@@ -14,20 +14,26 @@ ON CONFLICT (backend_id, name) DO NOTHING;
 -- name: GetBucket :one
 SELECT sqlc.embed(buckets)
 FROM buckets
-WHERE backend_id = $1 AND name = $2;
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2);
 
 -- name: UpdateBucket :execrows
 -- expected_version=0 disables the OCC guard (force update).
 UPDATE buckets
 SET display_name = COALESCE(sqlc.narg('display_name'), display_name),
     labels       = COALESCE(sqlc.narg('labels'),       labels)
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: DeleteBucket :execrows
 DELETE FROM buckets
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 

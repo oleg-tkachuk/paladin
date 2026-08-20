@@ -16,13 +16,14 @@ INSERT INTO buckets (
     backend_id, name, display_name, region, labels,
     owner_tenant_id, cedar_policy, constraints,
     provision_state
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+) VALUES ((SELECT sb.id FROM storage_backends sb WHERE sb.name = $1),
+        $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
-func (q *Queries) CreateBucketV2(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error {
+func (q *Queries) CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error {
 	_, err := q.db.Exec(ctx, createBucketV2,
-		backendID,
 		name,
+		name_2,
 		displayName,
 		region,
 		labels,
@@ -36,7 +37,9 @@ func (q *Queries) CreateBucketV2(ctx context.Context, backendID pgtype.UUID, nam
 
 const deleteBucketV2 = `-- name: DeleteBucketV2 :execrows
 DELETE FROM buckets
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
@@ -45,8 +48,8 @@ WHERE backend_id = $1 AND name = $2
 // s3.DeleteBucket confirms. The handler does NOT call this directly —
 // it flips state to 'deleting' via MarkBucketDeleting and lets the
 // worker drive the physical delete.
-func (q *Queries) DeleteBucketV2(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteBucketV2, backendID, name, expectedVersion)
+func (q *Queries) DeleteBucketV2(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteBucketV2, name, name_2, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -55,7 +58,8 @@ func (q *Queries) DeleteBucketV2(ctx context.Context, backendID pgtype.UUID, nam
 
 const getBucketV2 = `-- name: GetBucketV2 :one
 
-SELECT backend_id, name, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -64,14 +68,16 @@ SELECT backend_id, name, display_name, region, labels,
        provision_state,
        resource_version, created_at, updated_at
 FROM buckets
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b.id FROM buckets b
+              JOIN storage_backends sb ON sb.id = b.backend_id
+             WHERE sb.name = $1 AND b.name = $2)
 `
 
 type GetBucketV2Row struct {
-	BackendID                         pgtype.UUID        `json:"backend_id"`
+	BackendName                       string             `json:"backend_name"`
 	Name                              string             `json:"name"`
-	DisplayName                       *string            `json:"display_name"`
-	Region                            *string            `json:"region"`
+	DisplayName                       string             `json:"display_name"`
+	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
 	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
 	CedarPolicy                       string             `json:"cedar_policy"`
@@ -93,11 +99,11 @@ type GetBucketV2Row struct {
 }
 
 // v2 bucket queries — full surface for admin/v1.BucketService.
-func (q *Queries) GetBucketV2(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketV2Row, error) {
-	row := q.db.QueryRow(ctx, getBucketV2, backendID, name)
+func (q *Queries) GetBucketV2(ctx context.Context, name string, name_2 string) (GetBucketV2Row, error) {
+	row := q.db.QueryRow(ctx, getBucketV2, name, name_2)
 	var i GetBucketV2Row
 	err := row.Scan(
-		&i.BackendID,
+		&i.BackendName,
 		&i.Name,
 		&i.DisplayName,
 		&i.Region,
@@ -124,7 +130,8 @@ func (q *Queries) GetBucketV2(ctx context.Context, backendID pgtype.UUID, name s
 }
 
 const listAccessibleBuckets = `-- name: ListAccessibleBuckets :many
-SELECT backend_id, name, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -140,10 +147,10 @@ LIMIT $4
 `
 
 type ListAccessibleBucketsRow struct {
-	BackendID                         pgtype.UUID        `json:"backend_id"`
+	BackendName                       string             `json:"backend_name"`
 	Name                              string             `json:"name"`
-	DisplayName                       *string            `json:"display_name"`
-	Region                            *string            `json:"region"`
+	DisplayName                       string             `json:"display_name"`
+	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
 	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
 	CedarPolicy                       string             `json:"cedar_policy"`
@@ -180,7 +187,7 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 	for rows.Next() {
 		var i ListAccessibleBucketsRow
 		if err := rows.Scan(
-			&i.BackendID,
+			&i.BackendName,
 			&i.Name,
 			&i.DisplayName,
 			&i.Region,
@@ -214,7 +221,8 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 }
 
 const listBucketsV2 = `-- name: ListBucketsV2 :many
-SELECT backend_id, name, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -223,7 +231,8 @@ SELECT backend_id, name, display_name, region, labels,
        provision_state,
        resource_version, created_at, updated_at
 FROM buckets
-WHERE ($1::text IS NULL OR backend_id = $1::text)
+WHERE ($1::text IS NULL
+       OR backend_id = (SELECT id FROM storage_backends WHERE name = $1::text))
   AND ($2::uuid IS NULL OR owner_tenant_id = $2::uuid)
   AND (backend_id, name) > ($3::text, $4::text)
 ORDER BY backend_id, name
@@ -231,10 +240,10 @@ LIMIT $5
 `
 
 type ListBucketsV2Row struct {
-	BackendID                         pgtype.UUID        `json:"backend_id"`
+	BackendName                       string             `json:"backend_name"`
 	Name                              string             `json:"name"`
-	DisplayName                       *string            `json:"display_name"`
-	Region                            *string            `json:"region"`
+	DisplayName                       string             `json:"display_name"`
+	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
 	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
 	CedarPolicy                       string             `json:"cedar_policy"`
@@ -259,9 +268,9 @@ type ListBucketsV2Row struct {
 // Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 // (migration 006) makes the per-tenant filter cheap; the WHERE clause
 // below is plain equality so the planner uses the partial index.
-func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
+func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,
-		backendID,
+		backendName,
 		ownerTenantID,
 		afterBackendID,
 		afterName,
@@ -275,7 +284,7 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, ownerTen
 	for rows.Next() {
 		var i ListBucketsV2Row
 		if err := rows.Scan(
-			&i.BackendID,
+			&i.BackendName,
 			&i.Name,
 			&i.DisplayName,
 			&i.Region,
@@ -309,20 +318,21 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, ownerTen
 }
 
 const listPendingBucketDeletions = `-- name: ListPendingBucketDeletions :many
-SELECT backend_id, name, region, provision_state,
-       provision_attempts, last_provision_at
-FROM buckets
-WHERE provision_state = 'deleting'
-   OR (provision_state = 'deletion_failed'
-       AND provision_attempts < $1::int)
-ORDER BY last_provision_at NULLS FIRST, backend_id, name
+SELECT sb.name AS backend_name, b.name AS bucket_name, b.region, b.provision_state,
+       b.provision_attempts, b.last_provision_at
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE b.provision_state = 'deleting'
+   OR (b.provision_state = 'deletion_failed'
+       AND b.provision_attempts < $1::int)
+ORDER BY b.last_provision_at NULLS FIRST, sb.name, b.name
 LIMIT $2::int
 `
 
 type ListPendingBucketDeletionsRow struct {
-	BackendID         pgtype.UUID        `json:"backend_id"`
-	Name              string             `json:"name"`
-	Region            *string            `json:"region"`
+	BackendName       string             `json:"backend_name"`
+	BucketName        string             `json:"bucket_name"`
+	Region            string             `json:"region"`
 	ProvisionState    string             `json:"provision_state"`
 	ProvisionAttempts int32              `json:"provision_attempts"`
 	LastProvisionAt   pgtype.Timestamptz `json:"last_provision_at"`
@@ -340,8 +350,8 @@ func (q *Queries) ListPendingBucketDeletions(ctx context.Context, maxAttempts in
 	for rows.Next() {
 		var i ListPendingBucketDeletionsRow
 		if err := rows.Scan(
-			&i.BackendID,
-			&i.Name,
+			&i.BackendName,
+			&i.BucketName,
 			&i.Region,
 			&i.ProvisionState,
 			&i.ProvisionAttempts,
@@ -358,19 +368,20 @@ func (q *Queries) ListPendingBucketDeletions(ctx context.Context, maxAttempts in
 }
 
 const listPendingBucketProvisions = `-- name: ListPendingBucketProvisions :many
-SELECT backend_id, name, region, provision_state,
-       provision_attempts, last_provision_at, owner_tenant_id
-FROM buckets
-WHERE provision_state = 'pending'
-   OR (provision_state = 'failed' AND provision_attempts < $1::int)
-ORDER BY last_provision_at NULLS FIRST, backend_id, name
+SELECT sb.name AS backend_name, b.name AS bucket_name, b.region, b.provision_state,
+       b.provision_attempts, b.last_provision_at, b.owner_tenant_id
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE b.provision_state = 'pending'
+   OR (b.provision_state = 'failed' AND b.provision_attempts < $1::int)
+ORDER BY b.last_provision_at NULLS FIRST, sb.name, b.name
 LIMIT $2::int
 `
 
 type ListPendingBucketProvisionsRow struct {
-	BackendID         pgtype.UUID        `json:"backend_id"`
-	Name              string             `json:"name"`
-	Region            *string            `json:"region"`
+	BackendName       string             `json:"backend_name"`
+	BucketName        string             `json:"bucket_name"`
+	Region            string             `json:"region"`
 	ProvisionState    string             `json:"provision_state"`
 	ProvisionAttempts int32              `json:"provision_attempts"`
 	LastProvisionAt   pgtype.Timestamptz `json:"last_provision_at"`
@@ -391,8 +402,8 @@ func (q *Queries) ListPendingBucketProvisions(ctx context.Context, maxAttempts i
 	for rows.Next() {
 		var i ListPendingBucketProvisionsRow
 		if err := rows.Scan(
-			&i.BackendID,
-			&i.Name,
+			&i.BackendName,
+			&i.BucketName,
 			&i.Region,
 			&i.ProvisionState,
 			&i.ProvisionAttempts,
@@ -415,7 +426,9 @@ SET provision_state    = 'deleting',
     provision_error    = '',
     provision_attempts = 0,
     last_provision_at  = NULL
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
@@ -424,8 +437,8 @@ WHERE backend_id = $1 AND name = $2
 // operation gets a fresh retry budget; clears any old error message.
 // The actual DELETE happens later, from the worker, after backend
 // confirmation.
-func (q *Queries) MarkBucketDeleting(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, markBucketDeleting, backendID, name, expectedVersion)
+func (q *Queries) MarkBucketDeleting(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, markBucketDeleting, name, name_2, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -438,16 +451,18 @@ SET provision_state    = CASE WHEN $3::bool THEN 'deletion_failed' ELSE 'deletin
     provision_error    = $4::text,
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b.id FROM buckets b
+              JOIN storage_backends sb ON sb.id = b.backend_id
+             WHERE sb.name = $1 AND b.name = $2)
 `
 
 // Mirror of MarkBucketProvisionFailed for the delete side. terminal=true
 // parks the row in 'deletion_failed' (operator triage); terminal=false
 // keeps the row 'deleting' so the next tick retries.
-func (q *Queries) MarkBucketDeletionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error) {
+func (q *Queries) MarkBucketDeletionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error) {
 	result, err := q.db.Exec(ctx, markBucketDeletionFailed,
-		backendID,
 		name,
+		name_2,
 		terminal,
 		errMsg,
 	)
@@ -463,17 +478,19 @@ SET provision_state    = CASE WHEN $3::bool THEN 'failed' ELSE 'pending' END,
     provision_error    = $4::text,
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b.id FROM buckets b
+              JOIN storage_backends sb ON sb.id = b.backend_id
+             WHERE sb.name = $1 AND b.name = $2)
 `
 
 // terminal=true → the worker hit a non-retryable error (auth denied,
 // region mismatch, …) and the row should stop receiving attempts.
 // terminal=false → transient error; row stays 'pending' and gets
 // retried on the next tick after the configured backoff.
-func (q *Queries) MarkBucketProvisionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error) {
+func (q *Queries) MarkBucketProvisionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error) {
 	result, err := q.db.Exec(ctx, markBucketProvisionFailed,
-		backendID,
 		name,
+		name_2,
 		terminal,
 		errMsg,
 	)
@@ -489,11 +506,13 @@ SET provision_state    = 'ready',
     provision_error    = '',
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b.id FROM buckets b
+              JOIN storage_backends sb ON sb.id = b.backend_id
+             WHERE sb.name = $1 AND b.name = $2)
 `
 
-func (q *Queries) MarkBucketProvisionReady(ctx context.Context, backendID pgtype.UUID, name string) (int64, error) {
-	result, err := q.db.Exec(ctx, markBucketProvisionReady, backendID, name)
+func (q *Queries) MarkBucketProvisionReady(ctx context.Context, name string, name_2 string) (int64, error) {
+	result, err := q.db.Exec(ctx, markBucketProvisionReady, name, name_2)
 	if err != nil {
 		return 0, err
 	}
@@ -503,15 +522,17 @@ func (q *Queries) MarkBucketProvisionReady(ctx context.Context, backendID pgtype
 const setBucketConstraints = `-- name: SetBucketConstraints :execrows
 UPDATE buckets
 SET constraints = $3
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($4::bigint = 0
        OR resource_version = $4::bigint)
 `
 
-func (q *Queries) SetBucketConstraints(ctx context.Context, backendID pgtype.UUID, name string, constraints []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketConstraints(ctx context.Context, name string, name_2 string, constraints []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketConstraints,
-		backendID,
 		name,
+		name_2,
 		constraints,
 		expectedVersion,
 	)
@@ -524,15 +545,17 @@ func (q *Queries) SetBucketConstraints(ctx context.Context, backendID pgtype.UUI
 const setBucketLifecycle = `-- name: SetBucketLifecycle :execrows
 UPDATE buckets
 SET lifecycle_rules = $3
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($4::bigint = 0
        OR resource_version = $4::bigint)
 `
 
-func (q *Queries) SetBucketLifecycle(ctx context.Context, backendID pgtype.UUID, name string, lifecycleRules []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketLifecycle(ctx context.Context, name string, name_2 string, lifecycleRules []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketLifecycle,
-		backendID,
 		name,
+		name_2,
 		lifecycleRules,
 		expectedVersion,
 	)
@@ -547,15 +570,17 @@ UPDATE buckets
 SET object_lock_enabled                   = $3,
     object_lock_default_mode              = $4,
     object_lock_default_retention_seconds = $5
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) SetBucketObjectLock(ctx context.Context, backendID pgtype.UUID, name string, objectLockEnabled bool, objectLockDefaultMode NullObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketObjectLock(ctx context.Context, name string, name_2 string, objectLockEnabled bool, objectLockDefaultMode NullObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketObjectLock,
-		backendID,
 		name,
+		name_2,
 		objectLockEnabled,
 		objectLockDefaultMode,
 		objectLockDefaultRetentionSeconds,
@@ -571,15 +596,17 @@ const setBucketPolicy = `-- name: SetBucketPolicy :execrows
 UPDATE buckets
 SET cedar_policy      = $3,
     cedar_policy_hash = NULL
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($4::bigint = 0
        OR resource_version = $4::bigint)
 `
 
-func (q *Queries) SetBucketPolicy(ctx context.Context, backendID pgtype.UUID, name string, cedarPolicy string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketPolicy(ctx context.Context, name string, name_2 string, cedarPolicy string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketPolicy,
-		backendID,
 		name,
+		name_2,
 		cedarPolicy,
 		expectedVersion,
 	)
@@ -594,15 +621,17 @@ UPDATE buckets
 SET replication_enabled     = $3,
     replication_destination = $4,
     replication_filter      = $5
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) SetBucketReplication(ctx context.Context, backendID pgtype.UUID, name string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketReplication(ctx context.Context, name string, name_2 string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketReplication,
-		backendID,
 		name,
+		name_2,
 		replicationEnabled,
 		replicationDestination,
 		replicationFilter,
@@ -618,15 +647,17 @@ const setBucketVersioning = `-- name: SetBucketVersioning :execrows
 UPDATE buckets
 SET versioning_enabled                = $3,
     versioning_keep_deletes_forever   = $4
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($5::bigint = 0
        OR resource_version = $5::bigint)
 `
 
-func (q *Queries) SetBucketVersioning(ctx context.Context, backendID pgtype.UUID, name string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketVersioning(ctx context.Context, name string, name_2 string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketVersioning,
-		backendID,
 		name,
+		name_2,
 		versioningEnabled,
 		versioningKeepDeletesForever,
 		expectedVersion,
@@ -642,15 +673,17 @@ UPDATE buckets
 SET display_name = COALESCE($3, display_name),
     labels       = COALESCE($4, labels),
     owner_tenant_id = COALESCE($5, owner_tenant_id)
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) UpdateBucketBasic(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateBucketBasic(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateBucketBasic,
-		backendID,
 		name,
+		name_2,
 		displayName,
 		labels,
 		ownerTenantID,

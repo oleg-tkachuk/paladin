@@ -38,7 +38,7 @@ ON CONFLICT (backend_id, name) DO NOTHING
 // handler can return the existing row instead of erroring. The S3-side
 // CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 // so the API surface stays consistently retry-safe.
-func (q *Queries) CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte) error {
+func (q *Queries) CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName string, region string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createBucket,
 		backendID,
 		name,
@@ -51,13 +51,15 @@ func (q *Queries) CreateBucket(ctx context.Context, backendID pgtype.UUID, name 
 
 const deleteBucket = `-- name: DeleteBucket :execrows
 DELETE FROM buckets
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
 
-func (q *Queries) DeleteBucket(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteBucket, backendID, name, expectedVersion)
+func (q *Queries) DeleteBucket(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteBucket, name, name_2, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -67,15 +69,17 @@ func (q *Queries) DeleteBucket(ctx context.Context, backendID pgtype.UUID, name 
 const getBucket = `-- name: GetBucket :one
 SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at
 FROM buckets
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
 `
 
 type GetBucketRow struct {
 	Bucket Bucket `json:"bucket"`
 }
 
-func (q *Queries) GetBucket(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketRow, error) {
-	row := q.db.QueryRow(ctx, getBucket, backendID, name)
+func (q *Queries) GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error) {
+	row := q.db.QueryRow(ctx, getBucket, name, name_2)
 	var i GetBucketRow
 	err := row.Scan(
 		&i.Bucket.ID,
@@ -178,16 +182,18 @@ const updateBucket = `-- name: UpdateBucket :execrows
 UPDATE buckets
 SET display_name = COALESCE($3, display_name),
     labels       = COALESCE($4,       labels)
-WHERE backend_id = $1 AND name = $2
+WHERE id = (SELECT b2.id FROM buckets b2
+              JOIN storage_backends sb2 ON sb2.id = b2.backend_id
+             WHERE sb2.name = $1 AND b2.name = $2)
   AND ($5::bigint = 0
        OR resource_version = $5::bigint)
 `
 
 // expected_version=0 disables the OCC guard (force update).
-func (q *Queries) UpdateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateBucket(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateBucket,
-		backendID,
 		name,
+		name_2,
 		displayName,
 		labels,
 		expectedVersion,

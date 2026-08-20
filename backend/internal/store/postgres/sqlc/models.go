@@ -335,9 +335,9 @@ type Bucket struct {
 	ID                                pgtype.UUID        `json:"id"`
 	BackendID                         pgtype.UUID        `json:"backend_id"`
 	Name                              string             `json:"name"`
-	DisplayName                       *string            `json:"display_name"`
+	DisplayName                       string             `json:"display_name"`
 	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
-	Region                            *string            `json:"region"`
+	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`

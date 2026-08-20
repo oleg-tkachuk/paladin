@@ -62,8 +62,8 @@ type Querier interface {
 	// handler can return the existing row instead of erroring. The S3-side
 	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 	// so the API surface stays consistently retry-safe.
-	CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte) error
-	CreateBucketV2(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
+	CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName string, region string, labels []byte) error
+	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
 	// Collection queries.
 	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, bucketID pgtype.UUID, cedarPolicy string, lifecycleRules []byte) error
 	CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error
@@ -84,12 +84,12 @@ type Querier interface {
 	// Tenant queries.
 	CreateTenant(ctx context.Context, iD pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout TenantStorageLayout) error
 	CreateUser(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
-	DeleteBucket(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error)
+	DeleteBucket(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error)
 	// Physical row delete. Called by the bucket-reconciler worker AFTER
 	// s3.DeleteBucket confirms. The handler does NOT call this directly —
 	// it flips state to 'deleting' via MarkBucketDeleting and lets the
 	// worker drive the physical delete.
-	DeleteBucketV2(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error)
+	DeleteBucketV2(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error)
 	DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (int64, error)
 	DeleteCollection(ctx context.Context, tenantID pgtype.UUID, name string, expectedVersion int64) (int64, error)
 	DeleteEventSubscription(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
@@ -105,10 +105,10 @@ type Querier interface {
 	// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
-	GetBucket(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketRow, error)
+	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
 	GetBucketQuota(ctx context.Context, bucketID pgtype.UUID) (GetBucketQuotaRow, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
-	GetBucketV2(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketV2Row, error)
+	GetBucketV2(ctx context.Context, name string, name_2 string) (GetBucketV2Row, error)
 	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
 	// Returns the backend and bucket by NAME alongside the row: callers build
 	// resource names from this, and a resource name made of uuids would not
@@ -218,7 +218,7 @@ type Querier interface {
 	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 	// (migration 006) makes the per-tenant filter cheap; the WHERE clause
 	// below is plain equality so the planner uses the partial index.
-	ListBucketsV2(ctx context.Context, backendID *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
+	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.
@@ -356,17 +356,17 @@ type Querier interface {
 	// operation gets a fresh retry budget; clears any old error message.
 	// The actual DELETE happens later, from the worker, after backend
 	// confirmation.
-	MarkBucketDeleting(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error)
+	MarkBucketDeleting(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error)
 	// Mirror of MarkBucketProvisionFailed for the delete side. terminal=true
 	// parks the row in 'deletion_failed' (operator triage); terminal=false
 	// keeps the row 'deleting' so the next tick retries.
-	MarkBucketDeletionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error)
+	MarkBucketDeletionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error)
 	// terminal=true → the worker hit a non-retryable error (auth denied,
 	// region mismatch, …) and the row should stop receiving attempts.
 	// terminal=false → transient error; row stays 'pending' and gets
 	// retried on the next tick after the configured backoff.
-	MarkBucketProvisionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error)
-	MarkBucketProvisionReady(ctx context.Context, backendID pgtype.UUID, name string) (int64, error)
+	MarkBucketProvisionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error)
+	MarkBucketProvisionReady(ctx context.Context, name string, name_2 string) (int64, error)
 	MarkObjectFailed(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
@@ -465,12 +465,12 @@ type Querier interface {
 	RotateStorageBackendCredentials(ctx context.Context, name string, credentialsSecretRef string, column3 int64) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
-	SetBucketConstraints(ctx context.Context, backendID pgtype.UUID, name string, constraints []byte, expectedVersion int64) (int64, error)
-	SetBucketLifecycle(ctx context.Context, backendID pgtype.UUID, name string, lifecycleRules []byte, expectedVersion int64) (int64, error)
-	SetBucketObjectLock(ctx context.Context, backendID pgtype.UUID, name string, objectLockEnabled bool, objectLockDefaultMode NullObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error)
-	SetBucketPolicy(ctx context.Context, backendID pgtype.UUID, name string, cedarPolicy string, expectedVersion int64) (int64, error)
-	SetBucketReplication(ctx context.Context, backendID pgtype.UUID, name string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
-	SetBucketVersioning(ctx context.Context, backendID pgtype.UUID, name string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
+	SetBucketConstraints(ctx context.Context, name string, name_2 string, constraints []byte, expectedVersion int64) (int64, error)
+	SetBucketLifecycle(ctx context.Context, name string, name_2 string, lifecycleRules []byte, expectedVersion int64) (int64, error)
+	SetBucketObjectLock(ctx context.Context, name string, name_2 string, objectLockEnabled bool, objectLockDefaultMode NullObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error)
+	SetBucketPolicy(ctx context.Context, name string, name_2 string, cedarPolicy string, expectedVersion int64) (int64, error)
+	SetBucketReplication(ctx context.Context, name string, name_2 string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
+	SetBucketVersioning(ctx context.Context, name string, name_2 string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, iD pgtype.UUID, currentVersionID pgtype.UUID) error
 	// Flip the enable/disable state. OCC via resource_version (the
 	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
@@ -522,8 +522,8 @@ type Querier interface {
 	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]pgtype.UUID, error)
 	TouchUserLogin(ctx context.Context, iD pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).
-	UpdateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
-	UpdateBucketBasic(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error)
+	UpdateBucket(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
+	UpdateBucketBasic(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	// expected_version=0 disables the OCC guard (force update).
 	UpdateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
 	UpdateEventSubscription(ctx context.Context, celFilter *string, sinkKind NullEventSinkKind, sinkConfig []byte, disabled *bool, iD pgtype.UUID, expectedVersion int64) (int64, error)

@@ -31,7 +31,7 @@ func (r *EventSubscriptionRepoV2) Create(ctx context.Context, s *admindomain.Eve
 		pgUUID(s.SubscriptionID),
 		pgUUID(s.TenantID),
 		s.CELFilter,
-		s.SinkKind,
+		sqlc.EventSinkKind(s.SinkKind),
 		s.SinkConfig,
 		s.Disabled,
 	)
@@ -101,7 +101,7 @@ func (r *EventSubscriptionRepoV2) Update(ctx context.Context, s admindomain.Even
 		disabled = &v
 	}
 	rows, err := r.q.UpdateEventSubscription(ctx,
-		celFilter, sinkKind, sinkConfig, disabled,
+		celFilter, sinkKindToSQL(sinkKind), sinkConfig, disabled,
 		pgUUID(s.SubscriptionID), expectedVersion,
 	)
 	if err != nil {
@@ -126,14 +126,22 @@ func (r *EventSubscriptionRepoV2) Delete(ctx context.Context, id uuid.UUID, expe
 
 func eventSubFromSQLC(row sqlc.EventSubscription) admindomain.EventSubscription {
 	return admindomain.EventSubscription{
-		SubscriptionID:  uuidFrom(row.SubscriptionID),
+		SubscriptionID:  uuidFrom(row.ID),
 		TenantID:        uuidFrom(row.TenantID),
 		CELFilter:       row.CelFilter,
-		SinkKind:        row.SinkKind,
+		SinkKind:        string(row.SinkKind),
 		SinkConfig:      row.SinkConfig,
 		Disabled:        row.Disabled,
 		ResourceVersion: row.ResourceVersion,
 		CreatedAt:       timeFrom(row.CreatedAt),
 		UpdatedAt:       timeFrom(row.UpdatedAt),
 	}
+}
+
+// sink_kind is a Postgres enum now; a nil pointer means "leave unchanged".
+func sinkKindToSQL(k *string) sqlc.NullEventSinkKind {
+	if k == nil || *k == "" {
+		return sqlc.NullEventSinkKind{}
+	}
+	return sqlc.NullEventSinkKind{EventSinkKind: sqlc.EventSinkKind(*k), Valid: true}
 }

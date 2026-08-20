@@ -83,8 +83,8 @@ func (r *BucketRepoV2) createWith(ctx context.Context, q *sqlc.Queries, b admind
 	if err := q.CreateBucketV2(ctx,
 		b.BackendID,
 		b.BucketName,
-		strPtr(b.DisplayName),
-		strPtr(b.Region),
+		b.DisplayName,
+		b.Region,
 		encodeMap(b.Labels),
 		pgUUIDOptional(b.OwnerTenantID),
 		b.CedarPolicy,
@@ -129,7 +129,7 @@ func (r *BucketRepoV2) ListPendingProvisions(ctx context.Context, maxAttempts, l
 		out = append(out, admindomain.BucketProvisionRow{
 			BackendID:         row.BackendName,
 			BucketName:        row.BucketName,
-			Region:            derefStr(row.Region),
+			Region:            row.Region,
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
 			LastProvisionAt:   timeFrom(row.LastProvisionAt),
@@ -203,7 +203,7 @@ func (r *BucketRepoV2) ListPendingDeletions(ctx context.Context, maxAttempts, li
 		out = append(out, admindomain.BucketProvisionRow{
 			BackendID:         row.BackendName,
 			BucketName:        row.BucketName,
-			Region:            derefStr(row.Region),
+			Region:            row.Region,
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
 			LastProvisionAt:   timeFrom(row.LastProvisionAt),
@@ -358,7 +358,7 @@ func (r *BucketRepoV2) SetLifecycle(ctx context.Context, backendID, bucketName s
 
 func (r *BucketRepoV2) SetObjectLock(ctx context.Context, backendID, bucketName string, lock admindomain.ObjectLockConfig, expectedVersion int64) error {
 	retentionSeconds := int64(lock.DefaultRetention.Seconds())
-	rows, err := r.q.SetBucketObjectLock(ctx, backendID, bucketName, lock.Enabled, lock.DefaultMode, retentionSeconds, expectedVersion)
+	rows, err := r.q.SetBucketObjectLock(ctx, backendID, bucketName, lock.Enabled, lockModeToSQL(lock.DefaultMode), retentionSeconds, expectedVersion)
 	if err != nil {
 		return err
 	}
@@ -426,9 +426,9 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 
 func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 	return decodeBucketRow(
-		row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
+		row.BackendName, row.Name, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
+		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 		row.ProvisionState,
@@ -438,9 +438,9 @@ func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 
 func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 	return decodeBucketRow(
-		row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
+		row.BackendName, row.Name, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
+		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 		row.ProvisionState,
@@ -450,9 +450,9 @@ func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 
 func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bucket {
 	return decodeBucketRow(
-		row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
+		row.BackendName, row.Name, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
+		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 		row.ProvisionState,
@@ -462,7 +462,7 @@ func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bu
 
 func decodeBucketRow(
 	backendID, bucketName string,
-	displayName, region *string,
+	displayName, region string,
 	labels []byte,
 	ownerTenantID pgtype.UUID,
 	cedarPolicy string,
@@ -482,8 +482,8 @@ func decodeBucketRow(
 	return admindomain.Bucket{
 		BackendID:      backendID,
 		BucketName:     bucketName,
-		DisplayName:    derefStr(displayName),
-		Region:         derefStr(region),
+		DisplayName:    displayName,
+		Region:         region,
 		Labels:         decodeMap(labels),
 		OwnerTenantID:  uuidFrom(ownerTenantID),
 		CedarPolicy:    cedarPolicy,
@@ -520,3 +520,19 @@ func pgUUIDOptional(u uuid.UUID) pgtype.UUID {
 
 // silence unused imports across go versions
 var _ = fmt.Errorf
+
+// object_lock_mode is a Postgres enum now (ADR-0013), and "no default mode" is
+// NULL rather than the empty string the domain uses.
+func lockModeToSQL(m string) sqlc.NullObjectLockMode {
+	if m == "" {
+		return sqlc.NullObjectLockMode{}
+	}
+	return sqlc.NullObjectLockMode{ObjectLockMode: sqlc.ObjectLockMode(m), Valid: true}
+}
+
+func lockModeFromSQL(m sqlc.NullObjectLockMode) string {
+	if !m.Valid {
+		return ""
+	}
+	return string(m.ObjectLockMode)
+}

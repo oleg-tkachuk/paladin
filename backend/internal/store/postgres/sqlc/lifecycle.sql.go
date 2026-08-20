@@ -88,8 +88,8 @@ ORDER BY name
 
 type ListBucketsWithLifecycleRow struct {
 	ID                                pgtype.UUID        `json:"id"`
-	DisplayName                       *string            `json:"display_name"`
-	Region                            *string            `json:"region"`
+	DisplayName                       string             `json:"display_name"`
+	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
 	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
 	CedarPolicy                       string             `json:"cedar_policy"`
@@ -176,8 +176,8 @@ ORDER BY name
 
 type ListBucketsWithReplicationRow struct {
 	ID                                pgtype.UUID        `json:"id"`
-	DisplayName                       *string            `json:"display_name"`
-	Region                            *string            `json:"region"`
+	DisplayName                       string             `json:"display_name"`
+	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
 	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
 	CedarPolicy                       string             `json:"cedar_policy"`
