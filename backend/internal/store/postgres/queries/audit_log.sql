@@ -1,16 +1,16 @@
 -- name: InsertAuditEntry :exec
 INSERT INTO audit_log (
-    entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+    id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
     before_json, after_json, error_message, capability_id
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: GetAuditEntry :one
-SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
        before_json, after_json, error_message, capability_id
 FROM audit_log
-WHERE entry_id = $1;
+WHERE id = $1;
 
 -- name: PurgeAuditOlderThan :execrows
 -- Deletes audit_log rows older than the cutoff in batches of 10k. The
@@ -31,7 +31,7 @@ WHERE ctid IN (
 );
 
 -- name: ListAuditEntries :many
--- Cursor: (at, entry_id) tuple. Optional predicates use the canonical
+-- Cursor: (at, id) tuple. Optional predicates use the canonical
 -- sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
 -- constant-folds the disabled branches at plan time.
 --
@@ -41,7 +41,7 @@ WHERE ctid IN (
 -- full CEL program ALWAYS still runs in-memory after this fetch, so
 -- pushdown only narrows the candidate set; correctness lives in the
 -- handler, not in this WHERE clause.
-SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
        before_json, after_json, error_message, capability_id
 FROM audit_log
@@ -59,6 +59,6 @@ WHERE (sqlc.narg('actor_subject')::text IS NULL
        OR at <= sqlc.narg('at_lte')::timestamptz)
   AND (sqlc.narg('after_at')::timestamptz IS NULL
        OR at < sqlc.narg('after_at')::timestamptz
-       OR (at = sqlc.narg('after_at')::timestamptz AND entry_id < sqlc.arg('after_id')::uuid))
-ORDER BY at DESC, entry_id DESC
+       OR (at = sqlc.narg('after_at')::timestamptz AND id < sqlc.arg('after_id')::uuid))
+ORDER BY at DESC, id DESC
 LIMIT sqlc.arg('page_size');

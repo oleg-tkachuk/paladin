@@ -1,7 +1,7 @@
 -- v2 bucket queries — full surface for admin/v1.BucketService.
 
 -- name: GetBucketV2 :one
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT backend_id, name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -10,11 +10,11 @@ SELECT backend_id, bucket_name, display_name, region, labels,
        provision_state,
        resource_version, created_at, updated_at
 FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE backend_id = $1 AND name = $2;
 
 -- name: CreateBucketV2 :exec
 INSERT INTO buckets (
-    backend_id, bucket_name, display_name, region, labels,
+    backend_id, name, display_name, region, labels,
     owner_tenant_id, cedar_policy, constraints,
     provision_state
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
@@ -24,12 +24,12 @@ INSERT INTO buckets (
 -- CreateBucket call. ORDER BY last_provision_at NULLS FIRST so brand-new
 -- rows are picked up before failed-and-waiting-for-retry rows. Caller is
 -- expected to apply its own backoff before recalling on failed rows.
-SELECT backend_id, bucket_name, region, provision_state,
+SELECT backend_id, name, region, provision_state,
        provision_attempts, last_provision_at, owner_tenant_id
 FROM buckets
 WHERE provision_state = 'pending'
    OR (provision_state = 'failed' AND provision_attempts < sqlc.arg('max_attempts')::int)
-ORDER BY last_provision_at NULLS FIRST, backend_id, bucket_name
+ORDER BY last_provision_at NULLS FIRST, backend_id, name
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MarkBucketProvisionReady :execrows
@@ -38,7 +38,7 @@ SET provision_state    = 'ready',
     provision_error    = '',
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE backend_id = $1 AND name = $2;
 
 -- name: MarkBucketProvisionFailed :execrows
 -- terminal=true → the worker hit a non-retryable error (auth denied,
@@ -50,14 +50,14 @@ SET provision_state    = CASE WHEN sqlc.arg('terminal')::bool THEN 'failed' ELSE
     provision_error    = sqlc.arg('err_msg')::text,
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE backend_id = $1 AND name = $2;
 
 -- name: ListBucketsV2 :many
 -- owner_tenant_id is an optional filter (nullable arg → skipped).
 -- Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 -- (migration 006) makes the per-tenant filter cheap; the WHERE clause
 -- below is plain equality so the planner uses the partial index.
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT backend_id, name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -68,13 +68,13 @@ SELECT backend_id, bucket_name, display_name, region, labels,
 FROM buckets
 WHERE (sqlc.narg('backend_id')::text IS NULL OR backend_id = sqlc.narg('backend_id')::text)
   AND (sqlc.narg('owner_tenant_id')::uuid IS NULL OR owner_tenant_id = sqlc.narg('owner_tenant_id')::uuid)
-  AND (backend_id, bucket_name) > (sqlc.arg('after_backend_id')::text, sqlc.arg('after_name')::text)
-ORDER BY backend_id, bucket_name
+  AND (backend_id, name) > (sqlc.arg('after_backend_id')::text, sqlc.arg('after_name')::text)
+ORDER BY backend_id, name
 LIMIT sqlc.arg('page_size');
 
 -- name: ListAccessibleBuckets :many
 -- Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT backend_id, name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -84,22 +84,22 @@ SELECT backend_id, bucket_name, display_name, region, labels,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE (owner_tenant_id IS NULL OR owner_tenant_id = $1)
-  AND (backend_id, bucket_name) > ($2::text, $3::text)
-ORDER BY backend_id, bucket_name
+  AND (backend_id, name) > ($2::text, $3::text)
+ORDER BY backend_id, name
 LIMIT $4;
 
 -- name: SetBucketPolicy :execrows
 UPDATE buckets
 SET cedar_policy      = $3,
     cedar_policy_hash = NULL
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: SetBucketLifecycle :execrows
 UPDATE buckets
 SET lifecycle_rules = $3
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -108,7 +108,7 @@ UPDATE buckets
 SET object_lock_enabled                   = $3,
     object_lock_default_mode              = $4,
     object_lock_default_retention_seconds = $5
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -116,7 +116,7 @@ WHERE backend_id = $1 AND bucket_name = $2
 UPDATE buckets
 SET versioning_enabled                = $3,
     versioning_keep_deletes_forever   = $4
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -125,14 +125,14 @@ UPDATE buckets
 SET replication_enabled     = $3,
     replication_destination = $4,
     replication_filter      = $5
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: SetBucketConstraints :execrows
 UPDATE buckets
 SET constraints = $3
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -141,7 +141,7 @@ UPDATE buckets
 SET display_name = COALESCE(sqlc.narg('display_name'), display_name),
     labels       = COALESCE(sqlc.narg('labels'), labels),
     owner_tenant_id = COALESCE(sqlc.narg('owner_tenant_id'), owner_tenant_id)
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -151,7 +151,7 @@ WHERE backend_id = $1 AND bucket_name = $2
 -- it flips state to 'deleting' via MarkBucketDeleting and lets the
 -- worker drive the physical delete.
 DELETE FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -165,20 +165,20 @@ SET provision_state    = 'deleting',
     provision_error    = '',
     provision_attempts = 0,
     last_provision_at  = NULL
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: ListPendingBucketDeletions :many
 -- Worker query for the delete path. Picks 'deleting' rows plus
 -- 'deletion_failed' rows whose retry budget hasn't run out.
-SELECT backend_id, bucket_name, region, provision_state,
+SELECT backend_id, name, region, provision_state,
        provision_attempts, last_provision_at
 FROM buckets
 WHERE provision_state = 'deleting'
    OR (provision_state = 'deletion_failed'
        AND provision_attempts < sqlc.arg('max_attempts')::int)
-ORDER BY last_provision_at NULLS FIRST, backend_id, bucket_name
+ORDER BY last_provision_at NULLS FIRST, backend_id, name
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MarkBucketDeletionFailed :execrows
@@ -190,4 +190,4 @@ SET provision_state    = CASE WHEN sqlc.arg('terminal')::bool THEN 'deletion_fai
     provision_error    = sqlc.arg('err_msg')::text,
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE backend_id = $1 AND name = $2;

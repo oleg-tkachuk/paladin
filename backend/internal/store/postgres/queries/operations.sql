@@ -1,13 +1,13 @@
 -- Long-running operation queries.
 
 -- name: CreateOperation :exec
-INSERT INTO operations (operation_id, tenant_id, type, state, metadata)
+INSERT INTO operations (id, tenant_id, type, state, metadata)
 VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetOperation :one
 SELECT sqlc.embed(operations)
 FROM operations
-WHERE operation_id = $1 AND tenant_id = $2;
+WHERE id = $1 AND tenant_id = $2;
 
 -- name: UpdateOperationState :execrows
 UPDATE operations
@@ -19,15 +19,15 @@ SET state         = sqlc.arg('state'),
     done_at       = CASE WHEN sqlc.arg('state') IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
-WHERE operation_id = $1;
+WHERE id = $1;
 
 -- name: ListOperations :many
 SELECT sqlc.embed(operations)
 FROM operations
 WHERE tenant_id = $1
   AND (sqlc.narg('state')::operation_state IS NULL OR state = sqlc.narg('state')::operation_state)
-  AND (sqlc.narg('after_id')::uuid IS NULL OR operation_id > sqlc.narg('after_id')::uuid)
-ORDER BY operation_id
+  AND (sqlc.narg('after_id')::uuid IS NULL OR id > sqlc.narg('after_id')::uuid)
+ORDER BY id
 LIMIT sqlc.arg('page_size');
 
 -- name: PurgeTerminalOperations :execrows
@@ -49,5 +49,5 @@ UPDATE operations
 SET state   = 'CANCELLED',
     done_at = now(),
     updated_at = now()
-WHERE operation_id = $1 AND tenant_id = $2
+WHERE id = $1 AND tenant_id = $2
   AND state IN ('PENDING', 'RUNNING');

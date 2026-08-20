@@ -3,24 +3,24 @@
 
 -- name: InsertObjectVersion :exec
 INSERT INTO object_versions (
-    version_id, object_id, is_delete_marker, storage_path,
+    id, object_id, is_delete_marker, storage_path,
     size_bytes, etag, checksum_algorithm, checksum,
     content_type, metadata, tags,
     lock_mode, lock_retain_until, legal_hold
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: GetObjectVersion :one
-SELECT version_id, object_id, is_delete_marker, storage_path,
+SELECT id, object_id, is_delete_marker, storage_path,
        size_bytes, etag, checksum_algorithm, checksum,
        content_type, metadata, tags,
        lock_mode, lock_retain_until, legal_hold,
        created_at
 FROM object_versions
-WHERE version_id = $1;
+WHERE id = $1;
 
 -- name: ListObjectVersions :many
--- Newest first. Cursor: (created_at, version_id).
-SELECT version_id, object_id, is_delete_marker, storage_path,
+-- Newest first. Cursor: (created_at, id).
+SELECT id, object_id, is_delete_marker, storage_path,
        size_bytes, etag, checksum_algorithm, checksum,
        content_type, metadata, tags,
        lock_mode, lock_retain_until, legal_hold,
@@ -30,8 +30,8 @@ WHERE object_id = $1
   AND (sqlc.narg('after_created_at')::timestamptz IS NULL
        OR created_at < sqlc.narg('after_created_at')::timestamptz
        OR (created_at = sqlc.narg('after_created_at')::timestamptz
-           AND version_id < sqlc.arg('after_id')::uuid))
-ORDER BY created_at DESC, version_id DESC
+           AND id < sqlc.arg('after_id')::uuid))
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg('page_size');
 
 -- name: GetCurrentVersionID :one

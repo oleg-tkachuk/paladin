@@ -2,7 +2,7 @@
 
 -- name: CreateObject :exec
 INSERT INTO objects (
-    object_id, tenant_id, collection, key, state,
+    id, tenant_id, collection, key, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -14,7 +14,7 @@ INSERT INTO objects (
 -- name: GetObject :one
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND object_id = $2;
+WHERE tenant_id = $1 AND id = $2;
 
 -- name: GetObjectsByIDs :many
 -- Batch lookup for batch-operation executors: one round-trip for the
@@ -22,21 +22,21 @@ WHERE tenant_id = $1 AND object_id = $2;
 -- used to issue 1000 sequential SELECTs before any state mutation).
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND object_id = ANY($2::uuid[]);
+WHERE tenant_id = $1 AND id = ANY($2::uuid[]);
 
 -- name: LookupObjectByID :one
 -- Reads an object by id alone. Used by background workers (reconciler,
 -- replicator) that don't carry a tenant context. Joins collections to
 -- materialize the bucket binding so the caller can call S3 in one trip.
-SELECT o.object_id, o.tenant_id, o.collection, o.key, o.state,
+SELECT o.id, o.tenant_id, o.collection, o.key, o.state,
        b.backend_id, b.bucket_name
 FROM objects o
 JOIN collections b
   ON b.tenant_id = o.tenant_id AND b.collection = o.collection
-WHERE o.object_id = $1;
+WHERE o.id = $1;
 
 -- name: LookupObjectByKey :one
--- Used by resource-name resolution: collections/{b}/objects-by-key/{key} → object_id.
+-- Used by resource-name resolution: collections/{b}/objects-by-key/{key} → id.
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND collection = $2 AND key = $3 AND state <> 'DELETED';
@@ -53,7 +53,7 @@ SET state      = 'AVAILABLE',
     checksum   = sqlc.narg('checksum'),
     sequencer  = sqlc.narg('sequencer'),
     committed_at = COALESCE(committed_at, now())
-WHERE object_id = $1
+WHERE id = $1
   AND state IN ('PENDING', 'AVAILABLE')
   AND (sqlc.narg('sequencer')::text IS NULL
        OR sequencer IS NULL
@@ -63,7 +63,7 @@ WHERE object_id = $1
 UPDATE objects
 SET state         = 'FAILED',
     terminated_at = now()
-WHERE object_id = $1
+WHERE id = $1
   AND state = 'PENDING';
 
 -- name: SoftDeleteObject :execrows
@@ -71,7 +71,7 @@ WHERE object_id = $1
 UPDATE objects
 SET state         = 'DELETED',
     terminated_at = now()
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND state IN ('AVAILABLE', 'PENDING')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
@@ -83,7 +83,7 @@ WHERE tenant_id = $1 AND object_id = $2
 UPDATE objects
 SET state         = 'AVAILABLE',
     terminated_at = NULL
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND state = 'DELETED';
 
 -- name: GetObjectLockState :one
@@ -92,7 +92,7 @@ WHERE tenant_id = $1 AND object_id = $2
 -- on HardDeleteObject zeroes the rowcount.
 SELECT lock_mode, lock_retain_until, legal_hold
 FROM objects
-WHERE tenant_id = $1 AND object_id = $2;
+WHERE tenant_id = $1 AND id = $2;
 
 -- name: HardDeleteObject :execrows
 -- Removes the row outright. Caller is responsible for first deleting the
@@ -107,7 +107,7 @@ WHERE tenant_id = $1 AND object_id = $2;
 -- path does not). A locked row matches 0 rows here, so the caller must
 -- pre-check to distinguish "locked" from "version mismatch".
 DELETE FROM objects
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint)
   AND NOT legal_hold
@@ -124,7 +124,7 @@ WHERE tenant_id = $1 AND object_id = $2
 -- in one round-trip per row without a second lookup.
 -- Bounded at the caller's batch_size; the worker loops on the
 -- ticker to drain a backlog without holding a single statement open.
-SELECT o.object_id, o.tenant_id, o.collection, o.key, o.resource_version,
+SELECT o.id, o.tenant_id, o.collection, o.key, o.resource_version,
        k.backend_id, k.bucket_name
 FROM objects o
 JOIN collections k
@@ -152,7 +152,7 @@ LIMIT sqlc.arg('batch_size');
 -- no-op. Worker callers pass the version they read from
 -- ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
 DELETE FROM objects
-WHERE object_id = $1
+WHERE id = $1
   AND state = 'DELETED'
   AND resource_version = sqlc.arg('expected_version')::bigint
   -- Same lock guard as ListHardDeletable: a lock applied after the row
@@ -182,7 +182,7 @@ SELECT EXISTS(
 -- whole namespace and filtering in Go. The post-load CEL pass stays
 -- authoritative, so over-fetching (a hint that's absent) only costs
 -- throughput, never correctness. `substr` is escaped for LIKE by the
--- adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
+-- adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1
@@ -190,8 +190,8 @@ WHERE tenant_id = $1
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
   AND (sqlc.narg('prefix')::text IS NULL OR key LIKE sqlc.narg('prefix')::text || '%')
   AND (sqlc.narg('substr')::text IS NULL OR key LIKE '%' || sqlc.narg('substr')::text || '%')
-  AND (sqlc.narg('after_id')::uuid IS NULL OR object_id > sqlc.narg('after_id')::uuid)
-ORDER BY object_id
+  AND (sqlc.narg('after_id')::uuid IS NULL OR id > sqlc.narg('after_id')::uuid)
+ORDER BY id
 LIMIT sqlc.arg('page_size');
 
 -- name: CountObjects :one
@@ -214,6 +214,6 @@ UPDATE objects
 SET metadata     = COALESCE(sqlc.narg('metadata'), metadata),
     tags         = COALESCE(sqlc.narg('tags'),     tags),
     external_ref = COALESCE(sqlc.narg('external_ref'), external_ref)
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND state = 'AVAILABLE'
   AND resource_version = sqlc.arg('expected_version');

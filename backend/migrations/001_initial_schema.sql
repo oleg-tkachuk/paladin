@@ -258,6 +258,14 @@ CREATE TABLE buckets (
     versioning_enabled     boolean NOT NULL DEFAULT false,
     versioning_keep_deletes_forever boolean NOT NULL DEFAULT false,
     replication_enabled    boolean NOT NULL DEFAULT false,
+    replication_destination text NOT NULL DEFAULT '',
+    replication_filter     text NOT NULL DEFAULT '',
+    -- Physical provisioning is asynchronous: the row exists before the bucket
+    -- does when provision_on_backend is set.
+    provision_state        text NOT NULL DEFAULT 'ready',
+    provision_error        text NOT NULL DEFAULT '',
+    provision_attempts     integer NOT NULL DEFAULT 0,
+    last_provision_at      timestamptz,
     resource_version       bigint NOT NULL DEFAULT 1,
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
@@ -319,6 +327,10 @@ CREATE TABLE tenant_storage_migrations (
     cursor_path        text,
     error              text,
     attempts           integer NOT NULL DEFAULT 0,
+    -- Source bytes are retained after a migration completes, then swept.
+    cleanup_retention_seconds bigint NOT NULL DEFAULT 86400,
+    cleanup_after      timestamptz,
+    cleaned_at         timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
     completed_at       timestamptz
@@ -523,6 +535,7 @@ CREATE TABLE capability_records (
     audience          text[] NOT NULL,
     caveats           jsonb NOT NULL,
     generation        bigint NOT NULL DEFAULT 1,
+    created_by        text NOT NULL DEFAULT '',
     issued_at         timestamptz NOT NULL DEFAULT now(),
     not_before        timestamptz,
     expires_at        timestamptz NOT NULL
@@ -662,8 +675,14 @@ CREATE TABLE audit_log (
     action          text NOT NULL,
     resource_name   text NOT NULL,
     request_id      text NOT NULL DEFAULT '',
+    source_ip       text,
     capability_id   uuid,
     outcome         text NOT NULL DEFAULT '',
+    error_message   text,
+    -- Pre/post images of the mutated resource, stored as raw bytes because the
+    -- audit path must not depend on the resource's current proto shape.
+    before_json     bytea,
+    after_json      bytea,
     detail          jsonb NOT NULL DEFAULT '{}'::jsonb,
     PRIMARY KEY (id, at)
 ) PARTITION BY RANGE (at);
@@ -680,6 +699,7 @@ CREATE TABLE idempotency_keys (
     response     bytea NOT NULL,
     response_sha bytea NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
+    expires_at   timestamptz NOT NULL,
     PRIMARY KEY (id, created_at),
     UNIQUE (tenant_id, method, key, created_at)
 ) PARTITION BY RANGE (created_at);

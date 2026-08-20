@@ -1,16 +1,16 @@
 -- name: InsertRefreshToken :exec
-INSERT INTO refresh_tokens (jti, user_id, tenant_id, family_id, issued_at, expires_at)
+INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetRefreshToken :one
-SELECT jti, user_id, tenant_id, family_id, issued_at, expires_at, revoked
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked
 FROM refresh_tokens
-WHERE jti = $1;
+WHERE id = $1;
 
 -- name: RevokeRefreshToken :exec
 UPDATE refresh_tokens
 SET revoked = TRUE
-WHERE jti = $1;
+WHERE id = $1;
 
 -- name: RevokeRefreshTokensForUser :execrows
 UPDATE refresh_tokens
@@ -19,10 +19,10 @@ WHERE user_id = $1 AND revoked = FALSE;
 
 -- name: RevokeRefreshTokenFamily :execrows
 -- Reuse-detection (ADR-0009): revoke every still-live token in the family of
--- the given jti — the compromised chain only, not all the user's sessions.
+-- the given id — the compromised chain only, not all the user's sessions.
 UPDATE refresh_tokens
 SET revoked = TRUE
-WHERE family_id = (SELECT rt.family_id FROM refresh_tokens AS rt WHERE rt.jti = $1)
+WHERE family_id = (SELECT rt.family_id FROM refresh_tokens AS rt WHERE rt.id = $1)
   AND revoked = FALSE;
 
 -- name: PurgeExpiredRefreshTokens :execrows

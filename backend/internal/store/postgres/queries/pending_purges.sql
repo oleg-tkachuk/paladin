@@ -3,17 +3,17 @@
 
 -- name: InsertPendingPurge :exec
 INSERT INTO pending_purges (
-    purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key
+    id, tenant_id, object_id, backend_id, bucket_name, collection, key
 ) VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: DeletePendingPurge :execrows
-DELETE FROM pending_purges WHERE purge_id = $1;
+DELETE FROM pending_purges WHERE id = $1;
 
 -- ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 -- concurrent worker replicas divide the backlog instead of colliding on it —
 -- the same claim discipline the event-delivery outbox uses.
 -- name: ListDuePurges :many
-SELECT purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key, attempts
+SELECT id, tenant_id, object_id, backend_id, bucket_name, collection, key, attempts
   FROM pending_purges
  WHERE next_attempt_at <= now()
  ORDER BY next_attempt_at
@@ -29,7 +29,7 @@ UPDATE pending_purges
    SET attempts        = attempts + 1,
        last_error      = $2,
        next_attempt_at = now() + $3::interval
- WHERE purge_id = $1;
+ WHERE id = $1;
 
 -- name: CountPendingPurges :one
 SELECT count(*) FROM pending_purges;

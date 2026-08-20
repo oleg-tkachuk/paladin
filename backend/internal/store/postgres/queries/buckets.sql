@@ -1,33 +1,33 @@
 -- Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 -- Created lazily via BucketService.CreateBucket; Collection rows FK to the
--- (backend_id, bucket_name) composite key.
+-- (backend_id, name) composite key.
 
 -- name: CreateBucket :exec
--- Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+-- Idempotent: a duplicate (backend_id, name) is a no-op so that the
 -- handler can return the existing row instead of erroring. The S3-side
 -- CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 -- so the API surface stays consistently retry-safe.
-INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
+INSERT INTO buckets (backend_id, name, display_name, region, labels)
 VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (backend_id, bucket_name) DO NOTHING;
+ON CONFLICT (backend_id, name) DO NOTHING;
 
 -- name: GetBucket :one
 SELECT sqlc.embed(buckets)
 FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE backend_id = $1 AND name = $2;
 
 -- name: UpdateBucket :execrows
 -- expected_version=0 disables the OCC guard (force update).
 UPDATE buckets
 SET display_name = COALESCE(sqlc.narg('display_name'), display_name),
     labels       = COALESCE(sqlc.narg('labels'),       labels)
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: DeleteBucket :execrows
 DELETE FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -36,11 +36,11 @@ SELECT sqlc.embed(buckets)
 FROM buckets
 WHERE (sqlc.narg('backend_id')::text IS NULL OR backend_id = sqlc.narg('backend_id')::text)
   AND (sqlc.narg('after_name')::text IS NULL
-       OR (backend_id, bucket_name) > (sqlc.narg('after_backend_id')::text, sqlc.narg('after_name')::text))
-ORDER BY backend_id, bucket_name
+       OR (backend_id, name) > (sqlc.narg('after_backend_id')::text, sqlc.narg('after_name')::text))
+ORDER BY backend_id, name
 LIMIT sqlc.arg('page_size');
 
 -- name: CountCollectionsReferencingBucket :one
 SELECT count(*)::bigint AS count
 FROM collections
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE backend_id = $1 AND name = $2;
