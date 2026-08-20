@@ -87,7 +87,7 @@ func TestListBuckets_CedarDenied(t *testing.T) {
 }
 
 func TestListBuckets_ForwardsArgsAndReturns(t *testing.T) {
-	want := []admindomain.Bucket{{BackendID: "primary", BucketId: "a"}, {BackendID: "primary", BucketId: "b"}}
+	want := []admindomain.Bucket{{BackendID: "primary", BucketName: "a"}, {BackendID: "primary", BucketName: "b"}}
 	repo := &fakeRepo{listResult: want, listToken: "next-page"}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	args := admindomain.ListBucketsArgs{BackendID: "primary", PageSize: 7, AfterName: "a"}
@@ -127,7 +127,7 @@ func TestListAccessibleBuckets_CrossTenantForbidden(t *testing.T) {
 func TestListAccessibleBuckets_PlatformAdminCrossTenantForwards(t *testing.T) {
 	caller := uuid.New()
 	target := uuid.New()
-	want := []admindomain.Bucket{{BackendID: "primary", BucketId: "shared"}}
+	want := []admindomain.Bucket{{BackendID: "primary", BucketName: "shared"}}
 	repo := &fakeRepo{listAccResult: want, listAccToken: "tok"}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	got, token, err := h.ListAccessibleBuckets(ctxTenant(caller, apiutil.RolePlatformAdmin), target, 5, "primary", "shared")
@@ -148,7 +148,7 @@ func TestListAccessibleBuckets_PlatformAdminCrossTenantForwards(t *testing.T) {
 
 func TestListAccessibleBuckets_SameTenantAllowed(t *testing.T) {
 	caller := uuid.New()
-	repo := &fakeRepo{listAccResult: []admindomain.Bucket{{BucketId: "own"}}}
+	repo := &fakeRepo{listAccResult: []admindomain.Bucket{{BucketName: "own"}}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	got, _, err := h.ListAccessibleBuckets(ctxTenant(caller, apiutil.RoleTenantAdmin), caller, 3, "", "")
 	if err != nil {
@@ -189,7 +189,7 @@ func TestUpdateBucket_CedarDenied(t *testing.T) {
 
 func TestUpdateBucket_ForwardsArgsAndReturnsReadBack(t *testing.T) {
 	in := validBucket()
-	readBack := admindomain.Bucket{BackendID: "primary", BucketId: "acme-logs", ResourceVersion: 9}
+	readBack := admindomain.Bucket{BackendID: "primary", BucketName: "acme-logs", ResourceVersion: 9}
 	repo := &fakeRepo{getTxBucket: readBack}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	got, err := h.UpdateBucket(ctxAs(apiutil.RoleBucketAdmin), UpdateBucketInput{
@@ -237,7 +237,7 @@ func TestSetPolicy_CedarDenied(t *testing.T) {
 }
 
 func TestSetPolicy_ForwardsArgs(t *testing.T) {
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketId: "acme"}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	got, err := h.SetPolicy(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", "permit(principal,action,resource);", 3)
 	if err != nil {
@@ -296,7 +296,7 @@ func TestSetLifecycleRules_InvalidCELRejected(t *testing.T) {
 }
 
 func TestSetLifecycleRules_ValidRulesForwarded(t *testing.T) {
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketId: "acme"}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	// Empty Match is the "match everything" sentinel — valid.
 	rules := []admindomain.LifecycleRule{{ID: "expire-30d", Match: ""}, {ID: "expire-90d", Match: ""}}
@@ -332,7 +332,7 @@ func TestSetObjectLock_RoleGate(t *testing.T) {
 }
 
 func TestSetObjectLock_ForwardsArgs(t *testing.T) {
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketId: "acme"}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	lock := admindomain.ObjectLockConfig{Enabled: true, DefaultMode: "COMPLIANCE"}
 	if _, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", lock, 1); err != nil {
@@ -363,7 +363,7 @@ func TestSetVersioning_RoleGate(t *testing.T) {
 }
 
 func TestSetVersioning_ForwardsArgs(t *testing.T) {
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketId: "acme"}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	v := admindomain.BucketVersioning{Enabled: true, KeepDeletesForever: true}
 	if _, err := h.SetVersioning(ctxAs(apiutil.RolePlatformAdmin), "primary", "acme", v, 1); err != nil {
@@ -394,7 +394,7 @@ func TestSetReplication_RoleGate(t *testing.T) {
 }
 
 func TestSetReplication_ForwardsArgs(t *testing.T) {
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketId: "acme"}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	r := admindomain.BucketReplication{Enabled: true, DestinationBucket: "dr-bucket"}
 	if _, err := h.SetReplication(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", r, 1); err != nil {
@@ -419,7 +419,7 @@ func TestSetReplication_VersionMismatchAborts(t *testing.T) {
 func TestDeleteBucket_RoleGate(t *testing.T) {
 	h := NewHandler(&fakeRepo{}, nil, allowAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleTenantAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme"})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme"})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
@@ -428,7 +428,7 @@ func TestDeleteBucket_RoleGate(t *testing.T) {
 func TestDeleteBucket_CedarDenied(t *testing.T) {
 	h := NewHandler(&fakeRepo{}, nil, denyAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme"})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme"})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied (cedar)", code(err))
 	}
@@ -436,11 +436,11 @@ func TestDeleteBucket_CedarDenied(t *testing.T) {
 
 func TestDeleteBucket_ImmediateSucceeds(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{
-		BackendID: "primary", BucketId: "acme", OwnerTenantID: uuid.New(),
+		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(),
 	}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", DeleteOnBackend: false})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: false})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -452,12 +452,12 @@ func TestDeleteBucket_ImmediateSucceeds(t *testing.T) {
 
 func TestDeleteBucket_OutboxMarksDeleting(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{
-		BackendID: "primary", BucketId: "acme", OwnerTenantID: uuid.New(),
+		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(),
 	}}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
 	// DeleteOnBackend=true + provisioner wired → outbox path (MarkDeletingTx).
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", DeleteOnBackend: true})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -469,12 +469,12 @@ func TestDeleteBucket_OutboxMarksDeleting(t *testing.T) {
 
 func TestDeleteBucket_OutboxVersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{
-		getBucket:         admindomain.Bucket{BackendID: "primary", BucketId: "acme"},
+		getBucket:         admindomain.Bucket{BackendID: "primary", BucketName: "acme"},
 		markDeletingTxErr: admindomain.ErrVersionMismatch,
 	}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", DeleteOnBackend: true, ExpectedVersion: 1})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: true, ExpectedVersion: 1})
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
 	}
@@ -484,7 +484,7 @@ func TestDeleteBucket_OutboxVersionMismatchAborts(t *testing.T) {
 
 func TestCreateBucket_DispatchesCreatedEvent(t *testing.T) {
 	owner := uuid.New()
-	readBack := admindomain.Bucket{BackendID: "primary", BucketId: "acme-logs", OwnerTenantID: owner, Region: "us-east-1"}
+	readBack := admindomain.Bucket{BackendID: "primary", BucketName: "acme-logs", OwnerTenantID: owner, Region: "us-east-1"}
 	repo := &fakeRepo{backendEnabled: true, getTxBucket: readBack}
 	ev := &fakeEvents{}
 	h := NewHandler(repo, nil, allowAuthorizer{})
@@ -530,13 +530,13 @@ func TestCreateBucket_DispatchErrorRollsBack(t *testing.T) {
 
 func TestDeleteBucket_ImmediateDispatchesDeletedEvent(t *testing.T) {
 	owner := uuid.New()
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketId: "acme", OwnerTenantID: owner}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketName: "acme", OwnerTenantID: owner}}
 	ev := &fakeEvents{}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	h.SetEventProducer(ev)
 
 	if err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", DeleteOnBackend: false}); err != nil {
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: false}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if ev.lastEvent.Type != "paladin.bucket.deleted" {
@@ -549,13 +549,13 @@ func TestDeleteBucket_ImmediateDispatchesDeletedEvent(t *testing.T) {
 
 func TestDeleteBucket_OutboxDispatchesDeletingEvent(t *testing.T) {
 	owner := uuid.New()
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketId: "acme", OwnerTenantID: owner}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketName: "acme", OwnerTenantID: owner}}
 	ev := &fakeEvents{}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
 	h.SetEventProducer(ev)
 
 	if err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", DeleteOnBackend: true}); err != nil {
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: true}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if ev.lastEvent.Type != "paladin.bucket.deleting" {

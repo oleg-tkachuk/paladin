@@ -78,7 +78,7 @@ func TestUploadObjectAuthzResourceCarriesBucket(t *testing.T) {
 
 	authz := &recordingAuthorizer{}
 	h := &Handler{
-		repo:    &uploadRepo{fakeObjectRepo: fakeObjectRepo{meta: BucketMeta{BackendID: "backend-7", BucketId: "bucket-7"}}},
+		repo:    &uploadRepo{fakeObjectRepo: fakeObjectRepo{meta: BucketMeta{BackendID: "backend-7", BucketName: "bucket-7"}}},
 		storage: noopStorage{},
 		policy:  authz,
 		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},

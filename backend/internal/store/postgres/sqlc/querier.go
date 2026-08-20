@@ -81,7 +81,7 @@ type Querier interface {
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string) error
 	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
-	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBucketID pgtype.UUID, targetBucketID pgtype.UUID, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
+	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, name_4 string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
 	CreateTenant(ctx context.Context, iD pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout TenantStorageLayout) error
 	CreateUser(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
@@ -378,7 +378,7 @@ type Querier interface {
 	// Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 	// worker restart resumes mid-prefix instead of rescanning from the top.
 	// size_bytes feeds the physical (HEAD size) verify after copy.
-	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterKey string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
+	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.
 	// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
@@ -523,7 +523,7 @@ type Querier interface {
 	// Distinct buckets the tenant's collections currently bind to. The migration
 	// copies FROM this — a shared tenant's collections normally share one bucket;
 	// more than one row means the tenant spans buckets (not supported in slice 1).
-	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]pgtype.UUID, error)
+	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error)
 	TouchUserLogin(ctx context.Context, iD pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).
 	UpdateBucket(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, expectedVersion int64) (int64, error)

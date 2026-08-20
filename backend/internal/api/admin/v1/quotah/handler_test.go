@@ -148,7 +148,7 @@ func TestGetBucketQuota_RoleGate(t *testing.T) {
 }
 
 func TestGetBucketQuota_Allowed(t *testing.T) {
-	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{BackendID: "be", BucketId: "bk"}}
+	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{BackendID: "be", BucketName: "bk"}}
 	h := NewHandler(repo, allowAuthorizer{})
 	got, err := h.GetBucketQuota(ctxAs(uuid.New(), apiutil.RoleBucketAdmin), "be", "bk")
 	if err != nil {
@@ -176,7 +176,7 @@ func TestSetQuota_ScopeValidation(t *testing.T) {
 
 	// Both scopes set → invalid.
 	_, err := h.SetQuota(ctx, admindomain.Quota{
-		TenantID: uuid.New(), BackendID: "be", BucketId: "bk",
+		TenantID: uuid.New(), BackendID: "be", BucketName: "bk",
 	}, nil)
 	if codeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("both-scopes: code = %v, want InvalidArgument", codeOf(err))
@@ -210,10 +210,10 @@ func TestSetQuota_TenantScopeUpsertsInTx(t *testing.T) {
 }
 
 func TestSetQuota_BucketScopeUpsertsInTx(t *testing.T) {
-	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{BackendID: "be", BucketId: "bk"}}
+	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{BackendID: "be", BucketName: "bk"}}
 	h := NewHandler(repo, allowAuthorizer{})
 	_, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RoleBucketAdmin),
-		admindomain.Quota{BackendID: "be", BucketId: "bk"}, nil)
+		admindomain.Quota{BackendID: "be", BucketName: "bk"}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

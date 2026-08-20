@@ -3,6 +3,7 @@ package tenant
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func (f *fakeAuthz) IsAuthorized(_ context.Context, _ *cedar.Principal, action s
 type fakeRepo struct {
 	createFn         func(context.Context, CreateTenantArgs) (Tenant, error)
 	getDefBindingFn  func(context.Context, uuid.UUID) (DefaultBinding, error)
-	setDefBindingFn  func(ctx context.Context, tenantID uuid.UUID, backendID, bucketName, setBy string) (DefaultBinding, error)
+	setDefBindingFn  func(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (DefaultBinding, error)
 	clearDefBindFn   func(context.Context, uuid.UUID) error
 	getFn            func(context.Context, uuid.UUID) (Tenant, error)
 	getBySlugFn      func(context.Context, string) (Tenant, error)
@@ -67,8 +68,9 @@ type fakeRepo struct {
 	lastCreateTx   CreateTenantArgs
 	lastUpdateTx   UpdateTenantArgs
 	lastSetBinding struct {
-		tenantID                     uuid.UUID
-		backendID, bucketName, setBy string
+		tenantID uuid.UUID
+		bucket   string
+		setBy    string
 	}
 	lastListArgs   ListTenantsArgs
 	lastRename     RenameTenantSlugArgs
@@ -98,13 +100,12 @@ func (f *fakeRepo) GetDefaultBinding(ctx context.Context, id uuid.UUID) (Default
 	return DefaultBinding{}, nil
 }
 
-func (f *fakeRepo) SetDefaultBinding(ctx context.Context, id uuid.UUID, backendID, bucketName, setBy string) (DefaultBinding, error) {
+func (f *fakeRepo) SetDefaultBinding(ctx context.Context, id uuid.UUID, bucket, setBy string) (DefaultBinding, error) {
 	f.lastSetBinding.tenantID = id
-	f.lastSetBinding.backendID = backendID
-	f.lastSetBinding.bucketName = bucketName
+	f.lastSetBinding.bucket = bucket
 	f.lastSetBinding.setBy = setBy
 	if f.setDefBindingFn != nil {
-		return f.setDefBindingFn(ctx, id, backendID, bucketName, setBy)
+		return f.setDefBindingFn(ctx, id, bucket, setBy)
 	}
 	return DefaultBinding{}, nil
 }
@@ -309,13 +310,13 @@ func TestGetDefaultBinding(t *testing.T) {
 		var gotID uuid.UUID
 		h := NewHandler(&fakeRepo{getDefBindingFn: func(_ context.Context, id uuid.UUID) (DefaultBinding, error) {
 			gotID = id
-			return DefaultBinding{TenantID: id, BackendID: "b1", BucketId: "bk1"}, nil
+			return DefaultBinding{TenantID: id, BackendName: "b1", BucketName: "bk1"}, nil
 		}}, allow())
 		got, err := h.GetDefaultBinding(principalCtx(tid), tid)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if gotID != tid || got.BackendID != "b1" || got.BucketName != "bk1" {
+		if gotID != tid || got.BackendName != "b1" || got.BucketName != "bk1" {
 			t.Fatalf("got %+v (forwarded id %v)", got, gotID)
 		}
 	})
@@ -328,14 +329,14 @@ func TestSetDefaultBinding(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allow())
-		_, err := h.SetDefaultBinding(context.Background(), tid, "b", "bk")
+		_, err := h.SetDefaultBinding(context.Background(), tid, "storageBackends/b/buckets/bk")
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		az := deny()
 		h := NewHandler(&fakeRepo{}, az)
-		_, err := h.SetDefaultBinding(principalCtx(tid), tid, "b", "bk")
+		_, err := h.SetDefaultBinding(principalCtx(tid), tid, "storageBackends/b/buckets/bk")
 		wantCode(t, err, connect.CodePermissionDenied)
 		if az.lastAction != cedar.ActionManageTenant {
 			t.Errorf("gated on %q, want ManageTenant", az.lastAction)
@@ -343,14 +344,18 @@ func TestSetDefaultBinding(t *testing.T) {
 	})
 
 	t.Run("ok forwards args + stamps setBy from subject", func(t *testing.T) {
-		fr := &fakeRepo{setDefBindingFn: func(_ context.Context, id uuid.UUID, backendID, bucketName, setBy string) (DefaultBinding, error) {
-			return DefaultBinding{TenantID: id, BackendID: backendID, BucketId: bucketName, SetBy: setBy}, nil
+		fr := &fakeRepo{setDefBindingFn: func(_ context.Context, id uuid.UUID, bucket, setBy string) (DefaultBinding, error) {
+			// The handler now passes one reference; the fake echoes its parts.
+			backend, bucketName, _ := strings.Cut(strings.TrimPrefix(bucket, "storageBackends/"), "/buckets/")
+			return DefaultBinding{TenantID: id, BackendName: backend, BucketName: bucketName, SetBy: setBy}, nil
 		}}
-		got, err := NewHandler(fr, allow()).SetDefaultBinding(principalCtx(tid), tid, "backend-9", "bucket-9")
+		got, err := NewHandler(fr, allow()).SetDefaultBinding(principalCtx(tid), tid,
+			"storageBackends/backend-9/buckets/bucket-9")
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastSetBinding.tenantID != tid || fr.lastSetBinding.backendID != "backend-9" || fr.lastSetBinding.bucketName != "bucket-9" {
+		if fr.lastSetBinding.tenantID != tid ||
+			fr.lastSetBinding.bucket != "storageBackends/backend-9/buckets/bucket-9" {
 			t.Fatalf("forwarded %+v", fr.lastSetBinding)
 		}
 		if fr.lastSetBinding.setBy != "u1" {
@@ -951,11 +956,11 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		a := fr.lastStartArgs
-		if a.SourceBackendID != "src-backend" || a.SourceBucketName != "src-bucket" {
+		if a.SourceBackendName != "src-backend" || a.SourceBucketName != "src-bucket" {
 			t.Errorf("source not forwarded: %+v", a)
 		}
-		if a.TargetBackendID != "src-backend" {
-			t.Errorf("target backend should default to source, got %q", a.TargetBackendID)
+		if a.TargetBackendName != "src-backend" {
+			t.Errorf("target backend should default to source, got %q", a.TargetBackendName)
 		}
 		if a.TargetBucketName != "paladin-"+tid.String() {
 			t.Errorf("target bucket derived wrong: %q", a.TargetBucketName)
@@ -980,8 +985,8 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastStartArgs.TargetBackendID != "dst-backend" {
-			t.Errorf("explicit target backend not used: %q", fr.lastStartArgs.TargetBackendID)
+		if fr.lastStartArgs.TargetBackendName != "dst-backend" {
+			t.Errorf("explicit target backend not used: %q", fr.lastStartArgs.TargetBackendName)
 		}
 		if fr.lastStartArgs.CleanupRetentionSeconds != 3600 {
 			t.Errorf("explicit retention not used: %d", fr.lastStartArgs.CleanupRetentionSeconds)

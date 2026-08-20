@@ -57,13 +57,13 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 	tenantID := uuid.New()
 	objectID := uuid.New()
 	row := sqlc.ListHardDeletableRow{
-		ObjectID:        pgtype.UUID{Bytes: objectID, Valid: true},
+		ID:        pgtype.UUID{Bytes: objectID, Valid: true},
 		TenantID:        pgtype.UUID{Bytes: tenantID, Valid: true},
-		Collection:      "docs",
-		Key:             "a.pdf",
+		CollectionName:      "docs",
+		Path:             "a.pdf",
 		ResourceVersion: 1,
-		BackendID:       "primary",
-		BucketId:      "paladin-test",
+		BackendName:       "primary",
+		BucketName:      "paladin-test",
 	}
 	w := &LifecycleHardDeleter{
 		Q:       nil, // deleteOne reaches Storage first; on success it touches Q via HardDeleteObjectIfStillDeleted, which we substitute via the call-site test below.
@@ -76,16 +76,16 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 	// version-mismatch path lives in the integration test.
 	if err := w.Storage.DeleteObject(
 		context.Background(),
-		row.BackendID,
+		row.BackendName,
 		row.BucketName,
 		uuid.UUID(row.TenantID.Bytes),
-		row.Collection,
-		row.Key,
+		row.CollectionName,
+		row.Path,
 	); err != nil {
 		t.Fatalf("storage delete: %v", err)
 	}
-	if got := storage.calls[0].backendID; got != row.BackendID {
-		t.Fatalf("DeleteObject backendID = %q, want %q (must route on the row's backend)", got, row.BackendID)
+	if got := storage.calls[0].backendID; got != row.BackendName {
+		t.Fatalf("DeleteObject backendID = %q, want %q (must route on the row's backend)", got, row.BackendName)
 	}
 	if len(storage.calls) != 1 {
 		t.Fatalf("delete calls = %d, want 1", len(storage.calls))

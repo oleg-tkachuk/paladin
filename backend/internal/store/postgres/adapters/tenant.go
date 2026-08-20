@@ -87,7 +87,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		args.DisplayName,
 		labels,
 		args.InheritedCedarPolicy,
-		storageLayout,
+		sqlc.TenantStorageLayout(storageLayout),
 	); err != nil {
 		// Map UNIQUE violations to typed sentinels so the handler can
 		// surface ALREADY_EXISTS with the offending field. Constraint
@@ -117,7 +117,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		actor := actorFromContext(ctx)
 		if err := qtx.CreateBucketV2(ctx,
 			args.DedicatedBackend, bucketName,
-			nil, nil, []byte("{}"), // display_name, region, labels
+			"", "", []byte("{}"), // display_name, region, labels
 			pgUUID(args.TenantID), // owner_tenant_id
 			"", []byte("{}"),      // cedar_policy, constraints
 			"pending", // provision_state
@@ -179,7 +179,7 @@ func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid
 		return tenant.Tenant{}, err
 	}
 	t := tenantFromSQLC(row.Tenant)
-	t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+	t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
 	return t, nil
 }
 
@@ -196,7 +196,7 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 		return tenant.Tenant{}, err
 	}
 	t := tenantFromSQLC(row.Tenant)
-	t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+	t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
 	return t, nil
 }
 
@@ -212,7 +212,7 @@ func (r *TenantRepo) TenantDefaultBinding(ctx context.Context, tenantID uuid.UUI
 		}
 		return "", "", false, err
 	}
-	return row.BackendID, row.BucketName, true, nil
+	return row.BackendName, row.BucketName, true, nil
 }
 
 // GetDefaultBinding — the richer domain read used by GetTenantDefaultBinding.
@@ -224,13 +224,20 @@ func (r *TenantRepo) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) 
 		}
 		return tenant.DefaultBinding{}, err
 	}
-	return defaultBindingFromSQLC(row), nil
+	return defaultBindingFromSQLC(row.TenantDefaultBinding, row.BackendName, row.BucketName), nil
 }
 
 // SetDefaultBinding upserts + reads back (the query is :exec). A bad bucket
 // trips the composite FK → ErrDefaultBindingBucketMissing (InvalidArgument).
 func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (tenant.DefaultBinding, error) {
-	if err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendID, bucketName, setBy); err != nil {
+	// bucket arrives as "storageBackends/{backend}/buckets/{bucket}" — one
+	// reference, per AIP-122. Split here rather than making every caller pass
+	// the halves separately.
+	backendName, bucketName, err := splitBucketResourceName(bucket)
+	if err != nil {
+		return tenant.DefaultBinding{}, err
+	}
+	if err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
 			return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
@@ -241,7 +248,7 @@ func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, 
 	if err != nil {
 		return tenant.DefaultBinding{}, err
 	}
-	return defaultBindingFromSQLC(row), nil
+	return defaultBindingFromSQLC(row.TenantDefaultBinding, row.BackendName, row.BucketName), nil
 }
 
 // ClearDefaultBinding is idempotent — 0 rows affected is a no-op success.
@@ -250,13 +257,16 @@ func (r *TenantRepo) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID
 	return err
 }
 
-func defaultBindingFromSQLC(row sqlc.TenantDefaultBinding) tenant.DefaultBinding {
+func defaultBindingFromSQLC(row sqlc.TenantDefaultBinding,
+	backendName, bucketName string,
+) tenant.DefaultBinding {
 	return tenant.DefaultBinding{
-		TenantID:   uuid.UUID(row.TenantID.Bytes),
-		BackendID:  row.BackendID,
-		BucketId: row.BucketName,
-		SetAt:      row.SetAt.Time,
-		SetBy:      row.SetBy,
+		TenantID:    uuid.UUID(row.TenantID.Bytes),
+		BucketID:    uuid.UUID(row.BucketID.Bytes),
+		BackendName: backendName,
+		BucketName:  bucketName,
+		SetAt:       row.SetAt.Time,
+		SetBy:       row.SetBy,
 	}
 }
 
@@ -432,7 +442,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 	out := make([]tenant.Tenant, 0, len(rows))
 	for _, row := range rows {
 		t := tenantFromSQLC(row.Tenant)
-		t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+		t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
 		out = append(out, t)
 	}
 	var next string
@@ -503,7 +513,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 			return tenant.Tenant{}, err
 		}
 		t := tenantFromSQLC(row.Tenant)
-		t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+		t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
 		return t, nil
 	}
 
@@ -661,16 +671,18 @@ func rewriteTenantSlugRefs(policy, oldSlug, newSlug string) string {
 // defaultBucketName composes the tenant's default-binding resource name from
 // the LEFT-JOINed tenant_default_bindings columns. Both are NULL (→ nil) when
 // the tenant has no binding, yielding "" (no default).
-func defaultBucketName(backendID, bucketName *string) string {
-	if backendID == nil || bucketName == nil || *backendID == "" || *bucketName == "" {
+// The LEFT JOIN COALESCEs both names to ”, so an unbound tenant yields the
+// empty resource name rather than "storageBackends//buckets/".
+func defaultBucketName(backendName, bucketName string) string {
+	if backendName == "" || bucketName == "" {
 		return ""
 	}
-	return fmt.Sprintf("storageBackends/%s/buckets/%s", *backendID, *bucketName)
+	return fmt.Sprintf("storageBackends/%s/buckets/%s", backendName, bucketName)
 }
 
 func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
 	return tenant.Tenant{
-		TenantID:             uuidFrom(t.TenantID),
+		TenantID:             uuidFrom(t.ID),
 		Slug:                 t.Slug,
 		DisplayName:          t.DisplayName,
 		Labels:               t.Labels,
@@ -680,6 +692,18 @@ func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
 		CreatedAt:            timeFrom(t.CreatedAt),
 		UpdatedAt:            timeFrom(t.UpdatedAt),
 		DeletedAt:            timeFrom(t.DeletedAt),
-		StorageLayout:        t.StorageLayout,
+		StorageLayout:        string(t.StorageLayout),
 	}
+}
+
+// splitBucketResourceName parses "storageBackends/{backend}/buckets/{bucket}".
+// Anything else is a caller error, not a lookup miss, so it returns
+// ErrDefaultBindingBucketMissing rather than silently binding nothing.
+func splitBucketResourceName(name string) (backend, bucket string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "storageBackends" || parts[2] != "buckets" ||
+		parts[1] == "" || parts[3] == "" {
+		return "", "", tenant.ErrDefaultBindingBucketMissing
+	}
+	return parts[1], parts[3], nil
 }

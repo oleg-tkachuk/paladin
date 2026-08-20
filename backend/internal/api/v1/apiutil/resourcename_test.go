@@ -18,7 +18,7 @@ func TestParseCollectionName(t *testing.T) {
 		{"valid", "collections/assets-prod", "assets-prod", false},
 		{"valid-with-slash-in-key", "collections/a/b/c", "a/b/c", false},
 		{"missing-prefix", "assets-prod", "", true},
-		{"wrong-prefix", "collections/x", "", true},
+		{"wrong-prefix", "buckets/x", "", true},
 		{"prefix-only", "collections/", "", true},
 		{"empty", "", "", true},
 	}

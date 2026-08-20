@@ -51,9 +51,9 @@ func TestScopeMatch(t *testing.T) {
 		{"wildcard admits anything", wildcard, ResourceClaim{TenantID: "anyone"}, true},
 		{"tenant scope hits", tenantOnly, ResourceClaim{TenantID: "t1"}, true},
 		{"tenant scope misses", tenantOnly, ResourceClaim{TenantID: "t2"}, false},
-		{"bucket scope hits", bucketOnly, ResourceClaim{BucketId: "paladin-archive"}, true},
-		{"bucket scope misses on wrong bucket", bucketOnly, ResourceClaim{BucketId: "paladin-uploads"}, false},
-		{"collection scope requires both bucket and key", collection, ResourceClaim{BucketId: "paladin-archive", Collection: "photos"}, true},
+		{"bucket scope hits", bucketOnly, ResourceClaim{BucketName: "paladin-archive"}, true},
+		{"bucket scope misses on wrong bucket", bucketOnly, ResourceClaim{BucketName: "paladin-uploads"}, false},
+		{"collection scope requires both bucket and key", collection, ResourceClaim{BucketName: "paladin-archive", Collection: "photos"}, true},
 		{"collection scope misses without bucket", collection, ResourceClaim{Collection: "photos"}, false},
 		{"empty scopes deny", nil, ResourceClaim{TenantID: "t1"}, false},
 	}

@@ -13,17 +13,21 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-func storageMigrationToDomain(m sqlc.TenantStorageMigration) tenant.StorageMigration {
+// Names are supplied by the caller, which has them from the join or from the
+// arguments it just used to create the row.
+func storageMigrationToDomain(m sqlc.TenantStorageMigration,
+	srcBackend, srcBucket, tgtBackend, tgtBucket string,
+) tenant.StorageMigration {
 	return tenant.StorageMigration{
-		TenantID:         uuidFrom(m.TenantID),
-		SourceBackendID:  m.SourceBackendID,
-		SourceBucketName: m.SourceBucketName,
-		TargetBackendID:  m.TargetBackendID,
-		TargetBucketName: m.TargetBucketName,
-		State:            m.State,
-		ObjectsTotal:     m.ObjectsTotal,
-		ObjectsCopied:    m.ObjectsCopied,
-		Error:            m.Error,
+		TenantID:          uuidFrom(m.TenantID),
+		SourceBackendName: srcBackend,
+		SourceBucketName:  srcBucket,
+		TargetBackendName: tgtBackend,
+		TargetBucketName:  tgtBucket,
+		State:             m.State,
+		ObjectsTotal:      m.ObjectsTotal,
+		ObjectsCopied:     m.ObjectsCopied,
+		Error:             derefStr(m.Error),
 	}
 }
 
@@ -40,8 +44,8 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 	qtx := r.q.WithTx(tx)
 
 	if err := qtx.CreateBucketV2(ctx,
-		args.TargetBackendID, args.TargetBucketName,
-		nil, nil, []byte("{}"), // display_name, region, labels
+		args.TargetBackendName, args.TargetBucketName,
+		"", "", []byte("{}"), // display_name, region, labels
 		pgUUID(args.TenantID), // owner_tenant_id
 		"", []byte("{}"),      // cedar_policy, constraints
 		"pending",
@@ -50,7 +54,7 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 	}
 
 	m, err := qtx.CreateStorageMigration(ctx, pgUUID(args.TenantID),
-		args.SourceBackendID, args.SourceBucketName, args.TargetBackendID, args.TargetBucketName,
+		args.SourceBackendName, args.SourceBucketName, args.TargetBackendName, args.TargetBucketName,
 		args.CleanupRetentionSeconds)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -61,7 +65,8 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 	if err := tx.Commit(ctx); err != nil {
 		return tenant.StorageMigration{}, err
 	}
-	return storageMigrationToDomain(m), nil
+	return storageMigrationToDomain(m, args.SourceBackendName, args.SourceBucketName,
+		args.TargetBackendName, args.TargetBucketName), nil
 }
 
 // TenantSourceBucket returns the single (backend, bucket) the tenant's
@@ -77,7 +82,7 @@ func (r *TenantRepo) TenantSourceBucket(ctx context.Context, tenantID uuid.UUID)
 	case 0:
 		return "", "", tenant.ErrNotFound
 	case 1:
-		return rows[0].BackendID, rows[0].BucketName, nil
+		return rows[0].BackendName, rows[0].BucketName, nil
 	default:
 		return "", "", tenant.ErrSourceBucketAmbiguous
 	}
@@ -91,7 +96,7 @@ func (r *TenantRepo) GetStorageMigration(ctx context.Context, tenantID uuid.UUID
 		}
 		return tenant.StorageMigration{}, err
 	}
-	return storageMigrationToDomain(m), nil
+	return storageMigrationToDomain(m.TenantStorageMigration, m.SourceBackendName, m.SourceBucketName, m.TargetBackendName, m.TargetBucketName), nil
 }
 
 func isUniqueViolation(err error) bool {

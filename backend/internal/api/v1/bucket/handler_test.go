@@ -41,14 +41,14 @@ type fakeRepo struct {
 func (f *fakeRepo) Create(ctx context.Context, args CreateArgs) (Bucket, error) {
 	f.lastCreate = args
 	if f.createFn == nil {
-		return Bucket{BackendID: args.BackendID, BucketId: args.BucketName}, nil
+		return Bucket{BackendID: args.BackendID, BucketName: args.BucketName}, nil
 	}
 	return f.createFn(ctx, args)
 }
 
 func (f *fakeRepo) Get(ctx context.Context, backendID, bucketName string) (Bucket, error) {
 	if f.getFn == nil {
-		return Bucket{BackendID: backendID, BucketId: bucketName}, nil
+		return Bucket{BackendID: backendID, BucketName: bucketName}, nil
 	}
 	return f.getFn(ctx, backendID, bucketName)
 }
@@ -56,7 +56,7 @@ func (f *fakeRepo) Get(ctx context.Context, backendID, bucketName string) (Bucke
 func (f *fakeRepo) Update(ctx context.Context, args UpdateArgs) (Bucket, error) {
 	f.lastUpdate = args
 	if f.updateFn == nil {
-		return Bucket{BackendID: args.BackendID, BucketId: args.BucketName}, nil
+		return Bucket{BackendID: args.BackendID, BucketName: args.BucketName}, nil
 	}
 	return f.updateFn(ctx, args)
 }
@@ -137,13 +137,13 @@ func wantCode(t *testing.T, err error, want connect.Code) {
 func TestCreateBucket(t *testing.T) {
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, err := NewHandler(&fakeRepo{}, &fakeProvisioner{}).
-			CreateBucket(context.Background(), CreateArgs{BackendID: "b1", BucketId: "bk"})
+			CreateBucket(context.Background(), CreateArgs{BackendID: "b1", BucketName: "bk"})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("empty backend_id → invalid argument", func(t *testing.T) {
 		_, err := NewHandler(&fakeRepo{}, &fakeProvisioner{}).
-			CreateBucket(authedCtx(), CreateArgs{BucketId: "bk"})
+			CreateBucket(authedCtx(), CreateArgs{BucketName: "bk"})
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
@@ -155,7 +155,7 @@ func TestCreateBucket(t *testing.T) {
 		fp := &fakeProvisioner{createFn: func(context.Context, string, string, string) error {
 			return errors.New("aws down")
 		}}
-		_, err := NewHandler(fr, fp).CreateBucket(authedCtx(), CreateArgs{BackendID: "b1", BucketId: "bk"})
+		_, err := NewHandler(fr, fp).CreateBucket(authedCtx(), CreateArgs{BackendID: "b1", BucketName: "bk"})
 		wantCode(t, err, connect.CodeInternal)
 	})
 
@@ -164,14 +164,14 @@ func TestCreateBucket(t *testing.T) {
 			return Bucket{}, errors.New("insert failed")
 		}}
 		_, err := NewHandler(fr, &fakeProvisioner{}).
-			CreateBucket(authedCtx(), CreateArgs{BackendID: "b1", BucketId: "bk"})
+			CreateBucket(authedCtx(), CreateArgs{BackendID: "b1", BucketName: "bk"})
 		wantCode(t, err, connect.CodeInternal)
 	})
 
 	t.Run("ok forwards args to provisioner then repo", func(t *testing.T) {
 		fr := &fakeRepo{}
 		fp := &fakeProvisioner{}
-		args := CreateArgs{BackendID: "b1", BucketId: "bk", DisplayName: "My Bucket", Region: "us-east-1"}
+		args := CreateArgs{BackendID: "b1", BucketName: "bk", DisplayName: "My Bucket", Region: "us-east-1"}
 		got, err := NewHandler(fr, fp).CreateBucket(authedCtx(), args)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -194,7 +194,7 @@ func TestCreateBucket(t *testing.T) {
 	t.Run("nil provisioner skips remote provision, still records", func(t *testing.T) {
 		fr := &fakeRepo{}
 		got, err := NewHandler(fr, nil).
-			CreateBucket(authedCtx(), CreateArgs{BackendID: "b1", BucketId: "bk"})
+			CreateBucket(authedCtx(), CreateArgs{BackendID: "b1", BucketName: "bk"})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -223,7 +223,7 @@ func TestGetBucket(t *testing.T) {
 		var gotBackend, gotName string
 		fr := &fakeRepo{getFn: func(_ context.Context, backendID, bucketName string) (Bucket, error) {
 			gotBackend, gotName = backendID, bucketName
-			return Bucket{BackendID: backendID, BucketId: bucketName}, nil
+			return Bucket{BackendID: backendID, BucketName: bucketName}, nil
 		}}
 		got, err := NewHandler(fr, &fakeProvisioner{}).GetBucket(authedCtx(), "b1", "bk")
 		if err != nil {
@@ -241,7 +241,7 @@ func TestGetBucket(t *testing.T) {
 func TestUpdateBucket(t *testing.T) {
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, err := NewHandler(&fakeRepo{}, &fakeProvisioner{}).
-			UpdateBucket(context.Background(), UpdateArgs{BackendID: "b1", BucketId: "bk"})
+			UpdateBucket(context.Background(), UpdateArgs{BackendID: "b1", BucketName: "bk"})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
@@ -250,7 +250,7 @@ func TestUpdateBucket(t *testing.T) {
 			return Bucket{}, ErrVersionMismatch
 		}}
 		_, err := NewHandler(fr, &fakeProvisioner{}).
-			UpdateBucket(authedCtx(), UpdateArgs{BackendID: "b1", BucketId: "bk", ExpectedVersion: 3})
+			UpdateBucket(authedCtx(), UpdateArgs{BackendID: "b1", BucketName: "bk", ExpectedVersion: 3})
 		wantCode(t, err, connect.CodeAborted)
 	})
 
@@ -259,13 +259,13 @@ func TestUpdateBucket(t *testing.T) {
 			return Bucket{}, errors.New("boom")
 		}}
 		_, err := NewHandler(fr, &fakeProvisioner{}).
-			UpdateBucket(authedCtx(), UpdateArgs{BackendID: "b1", BucketId: "bk"})
+			UpdateBucket(authedCtx(), UpdateArgs{BackendID: "b1", BucketName: "bk"})
 		wantCode(t, err, connect.CodeInternal)
 	})
 
 	t.Run("ok forwards args", func(t *testing.T) {
 		fr := &fakeRepo{}
-		args := UpdateArgs{BackendID: "b1", BucketId: "bk", ExpectedVersion: 9}
+		args := UpdateArgs{BackendID: "b1", BucketName: "bk", ExpectedVersion: 9}
 		got, err := NewHandler(fr, &fakeProvisioner{}).UpdateBucket(authedCtx(), args)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -363,7 +363,7 @@ func TestListBuckets(t *testing.T) {
 	t.Run("ok passes through result, next token and forwards args", func(t *testing.T) {
 		backend := "b1"
 		fr := &fakeRepo{listFn: func(_ context.Context, args ListArgs) ([]Bucket, string, error) {
-			return []Bucket{{BackendID: "b1", BucketId: "bk"}}, "next", nil
+			return []Bucket{{BackendID: "b1", BucketName: "bk"}}, "next", nil
 		}}
 		args := ListArgs{BackendID: &backend, PageSize: 25, PageToken: "cursor"}
 		buckets, next, err := NewHandler(fr, &fakeProvisioner{}).ListBuckets(authedCtx(), args)

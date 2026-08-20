@@ -316,7 +316,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	healthH.Register(iamMux)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
-	iamMux.Handle(paladiniamv1connect.NewSystemServiceHandler(
+	iamMux.Handle(paladiniamv1connect.NewHealthServiceHandler(
 		connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH),
 		iamOpts,
 	))

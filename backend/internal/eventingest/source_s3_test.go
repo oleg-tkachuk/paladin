@@ -127,7 +127,7 @@ func TestS3Source_PercentEncodedBytesAndLiteralPlus(t *testing.T) {
 }
 
 func TestS3Source_BucketFilter(t *testing.T) {
-	src := &S3EventSource{BucketId: "paladin-primary", URI: "s3://primary"}
+	src := &S3EventSource{BucketName: "paladin-primary", URI: "s3://primary"}
 	// Wrong bucket → ignored.
 	if _, err := src.Parse(awsEvent("s3:ObjectCreated:Put", "other", "t/ok/k", ""), ""); !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("wrong bucket: err = %v, want ErrIgnoredEvent", err)

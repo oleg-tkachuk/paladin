@@ -7,15 +7,23 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- name: GetTenant :one
 -- LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 -- so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
-SELECT sqlc.embed(tenants), tdb.bucket_id
+SELECT sqlc.embed(tenants),
+       COALESCE(sb.name, '') AS backend_name,
+       COALESCE(b.name, '')  AS bucket_name
 FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+LEFT JOIN buckets b           ON b.id = tdb.bucket_id
+LEFT JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE tenants.id = $1;
 
 -- name: GetTenantBySlug :one
-SELECT sqlc.embed(tenants), tdb.bucket_id
+SELECT sqlc.embed(tenants),
+       COALESCE(sb.name, '') AS backend_name,
+       COALESCE(b.name, '')  AS bucket_name
 FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+LEFT JOIN buckets b           ON b.id = tdb.bucket_id
+LEFT JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE tenants.slug = $1;
 
 -- name: UpdateTenant :execrows
@@ -35,9 +43,13 @@ WHERE id = $1
 -- The boolean gating is inline-CASE so sqlc emits a single prepared
 -- statement; planner uses the partial idx_tenants_active index on
 -- the common path.
-SELECT sqlc.embed(tenants), tdb.bucket_id
+SELECT sqlc.embed(tenants),
+       COALESCE(sb.name, '') AS backend_name,
+       COALESCE(b.name, '')  AS bucket_name
 FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+LEFT JOIN buckets b           ON b.id = tdb.bucket_id
+LEFT JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')::uuid)
   AND (
     CASE

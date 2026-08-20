@@ -36,7 +36,7 @@ func authzCollection(t *testing.T, policy string, canonical bool, r *Resource) D
 // switch is behaviourally invisible to real policies.
 func TestCanonicalEUID_AttributePolicyUnaffected(t *testing.T) {
 	tid := uuid.New()
-	r := &Resource{TenantID: tid, Collection: "invoices", BackendID: "primary", BucketId: "b1"}
+	r := &Resource{TenantID: tid, Collection: "invoices", BackendID: "primary", BucketName: "b1"}
 	const policy = `permit(principal, action, resource) when { resource.collection == "invoices" };`
 
 	if got := authzCollection(t, policy, false, r); got != DecisionAllow {
@@ -64,7 +64,7 @@ func TestCanonicalEUID_AttributePolicyUnaffected(t *testing.T) {
 // shape switch.)
 func TestCanonicalEUID_LiteralShapeFlips(t *testing.T) {
 	tid := uuid.New()
-	r := &Resource{TenantID: tid, Collection: "invoices", BackendID: "primary", BucketId: "b1"}
+	r := &Resource{TenantID: tid, Collection: "invoices", BackendID: "primary", BucketName: "b1"}
 
 	legacyEUID := tid.String() + "/invoices"
 	canonicalEUID := "storageBackends/primary/buckets/b1/tenants/" + tid.String() + "/collections/invoices"

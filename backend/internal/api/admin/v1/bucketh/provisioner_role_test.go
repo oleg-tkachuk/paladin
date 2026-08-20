@@ -48,7 +48,7 @@ func TestBucketMutations_StayBucketAdminOnly(t *testing.T) {
 	t.Run("DeleteBucket", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, okProvisioner{}, allowAuthorizer{})
 		err := h.DeleteBucket(ctx, DeleteBucketInput{
-			BackendID: b.BackendID, BucketId: b.BucketName, ExpectedVersion: 1,
+			BackendID: b.BackendID, BucketName: b.BucketName, ExpectedVersion: 1,
 		})
 		if code(err) != connect.CodePermissionDenied {
 			t.Fatalf("code = %v, want PermissionDenied", code(err))

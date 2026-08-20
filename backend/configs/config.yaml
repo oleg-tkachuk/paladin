@@ -352,7 +352,7 @@ cedar:
   # (verified — the default template is attribute/parent-based), so the UID
   # string is never matched and the switch is behaviourally inert. Turn OFF
   # only if an operator authors a policy that hardcodes an ObjectKey EUID.
-  canonical_object_key_euid: true
+  canonical_collection_euid: true
 
 # ─── MCP (Model Context Protocol) bridges ───────────────────────────────────
 # LLM-facing entry points. Each transport flips off independently. The

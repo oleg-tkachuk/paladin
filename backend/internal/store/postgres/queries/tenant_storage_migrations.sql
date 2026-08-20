@@ -4,7 +4,13 @@
 INSERT INTO tenant_storage_migrations
     (tenant_id, source_bucket_id, target_bucket_id,
      cleanup_retention_seconds, state)
-VALUES ($1, $2, $3, $4, 'provisioning')
+SELECT $1, sb.id, tb.id, $6, 'provisioning'
+FROM buckets sb
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+CROSS JOIN buckets tb
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE ssb.name = $2 AND sb.name = $3
+  AND tsb.name = $4 AND tb.name = $5
 RETURNING *;
 
 -- name: GetStorageMigration :one
@@ -77,12 +83,14 @@ WHERE tenant_id = $1;
 -- Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 -- worker restart resumes mid-prefix instead of rescanning from the top.
 -- size_bytes feeds the physical (HEAD size) verify after copy.
-SELECT collection_id, path, COALESCE(size_bytes, 0)::bigint AS size_bytes
-FROM objects
-WHERE tenant_id = $1
-  AND state = 'AVAILABLE'
-  AND ROW(collection, key) > ROW(sqlc.arg('after_collection')::text, sqlc.arg('after_key')::text)
-ORDER BY collection_id, path
+SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND o.state = 'AVAILABLE'
+  AND ROW(c.name, o.path) > ROW(sqlc.arg('after_collection')::text,
+                                sqlc.arg('after_path')::text)
+ORDER BY c.name, o.path
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MigrationCountTenantObjects :one
@@ -103,4 +111,8 @@ SELECT name FROM collections WHERE tenant_id = $1 ORDER BY name;
 -- Distinct buckets the tenant's collections currently bind to. The migration
 -- copies FROM this — a shared tenant's collections normally share one bucket;
 -- more than one row means the tenant spans buckets (not supported in slice 1).
-SELECT DISTINCT bucket_id FROM collections WHERE tenant_id = $1;
+SELECT DISTINCT sb.name AS backend_name, b.name AS bucket_name
+FROM collections c
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE c.tenant_id = $1;

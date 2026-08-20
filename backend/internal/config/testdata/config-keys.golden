@@ -124,7 +124,7 @@ capability.signing_key_path
 capability.trusted_issuers
 capability.verifier_leeway
 cedar
-cedar.canonical_object_key_euid
+cedar.canonical_collection_euid
 cedar.policy_cache_ttl
 datastores
 datastores.postgres

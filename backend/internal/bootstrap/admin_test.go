@@ -41,7 +41,7 @@ func (f *fakeTenants) CreateTenant(
 	displayName string,
 	_ []byte,
 	_ string,
-	_ string,
+	_ sqlc.TenantStorageLayout,
 ) error {
 	if f.bySlug == nil {
 		f.bySlug = map[string]sqlc.Tenant{}
@@ -50,7 +50,7 @@ func (f *fakeTenants) CreateTenant(
 		return errors.New("duplicate slug")
 	}
 	f.bySlug[slug] = sqlc.Tenant{
-		TenantID:    tenantID,
+		ID:          tenantID,
 		Slug:        slug,
 		DisplayName: displayName,
 	}
@@ -281,8 +281,8 @@ func TestEnsureAdmin_ReusesExistingTenant(t *testing.T) {
 	existingID := uuid.New()
 	tenants.bySlug = map[string]sqlc.Tenant{
 		"platform": {
-			TenantID: pgtype.UUID{Bytes: existingID, Valid: true},
-			Slug:     "platform",
+			ID:   pgtype.UUID{Bytes: existingID, Valid: true},
+			Slug: "platform",
 		},
 	}
 	cfg := defaultCfg()

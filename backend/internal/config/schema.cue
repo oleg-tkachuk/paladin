@@ -413,7 +413,7 @@ cedar: {
   // ADR-0010 Phase 1: canonical A-shape ObjectKey entity UID. Default false so
   // an env that omits it keeps the legacy UID; the shipped configs set true
   // (behaviourally inert — no policy matches the UID literal).
-  canonical_object_key_euid: bool | *false
+  canonical_collection_euid: bool | *false
 }
 
 mcp: {

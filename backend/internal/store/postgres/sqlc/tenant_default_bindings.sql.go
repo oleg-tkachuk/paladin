@@ -25,26 +25,32 @@ func (q *Queries) ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype
 }
 
 const getTenantDefaultBinding = `-- name: GetTenantDefaultBinding :one
-SELECT tenant_id, bucket_id, set_at, set_by
-FROM tenant_default_bindings
-WHERE tenant_id = $1
+SELECT tdb.id, tdb.tenant_id, tdb.bucket_id, tdb.set_at, tdb.set_by,
+       sb.name AS backend_name,
+       b.name  AS bucket_name
+FROM tenant_default_bindings tdb
+JOIN buckets b           ON b.id = tdb.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE tdb.tenant_id = $1
 `
 
 type GetTenantDefaultBindingRow struct {
-	TenantID pgtype.UUID        `json:"tenant_id"`
-	BucketID pgtype.UUID        `json:"bucket_id"`
-	SetAt    pgtype.Timestamptz `json:"set_at"`
-	SetBy    string             `json:"set_by"`
+	TenantDefaultBinding TenantDefaultBinding `json:"tenant_default_binding"`
+	BackendName          string               `json:"backend_name"`
+	BucketName           string               `json:"bucket_name"`
 }
 
 func (q *Queries) GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error) {
 	row := q.db.QueryRow(ctx, getTenantDefaultBinding, tenantID)
 	var i GetTenantDefaultBindingRow
 	err := row.Scan(
-		&i.TenantID,
-		&i.BucketID,
-		&i.SetAt,
-		&i.SetBy,
+		&i.TenantDefaultBinding.ID,
+		&i.TenantDefaultBinding.TenantID,
+		&i.TenantDefaultBinding.BucketID,
+		&i.TenantDefaultBinding.SetAt,
+		&i.TenantDefaultBinding.SetBy,
+		&i.BackendName,
+		&i.BucketName,
 	)
 	return i, err
 }

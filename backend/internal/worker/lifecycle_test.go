@@ -149,7 +149,7 @@ func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
 	bucket := admindomain.Bucket{
 		BackendID:  "primary",
-		BucketId: "paladin-archive",
+		BucketName: "paladin-archive",
 		LifecycleRules: []admindomain.LifecycleRule{{
 			ID:         "expire-old",
 			Enabled:    true,

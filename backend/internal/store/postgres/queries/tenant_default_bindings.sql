@@ -17,9 +17,13 @@ ON CONFLICT (tenant_id) DO UPDATE
        set_by      = EXCLUDED.set_by;
 
 -- name: GetTenantDefaultBinding :one
-SELECT tenant_id, bucket_id, set_at, set_by
-FROM tenant_default_bindings
-WHERE tenant_id = $1;
+SELECT sqlc.embed(tdb),
+       sb.name AS backend_name,
+       b.name  AS bucket_name
+FROM tenant_default_bindings tdb
+JOIN buckets b           ON b.id = tdb.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE tdb.tenant_id = $1;
 
 -- name: ClearTenantDefaultBinding :execrows
 DELETE FROM tenant_default_bindings

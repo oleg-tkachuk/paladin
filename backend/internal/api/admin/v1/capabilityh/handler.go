@@ -134,7 +134,15 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	}
 
 	cap, token, err := h.issuer.Issue(ctx, capability.IssueRequest{
-		Subject:   subj,
+		Subject: subj,
+		// Who ASKED for this capability, as opposed to who it authorises.
+		// Taken from the authorized caller so it cannot be spoofed by the
+		// request body.
+		IssuedBy: capability.Principal{
+			TenantID: caller.TenantID,
+			Subject:  caller.Subject,
+			Type:     capability.PrincipalUser,
+		},
 		Audience:  req.Msg.GetAudience(),
 		Caveats:   caveats,
 		TTL:       ttl,

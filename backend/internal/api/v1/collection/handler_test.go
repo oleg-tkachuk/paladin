@@ -219,7 +219,7 @@ func fullKey(tid uuid.UUID, key string) Collection {
 		TenantID:   tid,
 		Collection: key,
 		BackendID:  "aws-eu",
-		BucketId: "paladin-prod",
+		BucketName: "paladin-prod",
 	}
 }
 
@@ -494,7 +494,7 @@ func TestListCollections(t *testing.T) {
 	t.Run("cross-tenant bucket list without platform.admin → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAll())
 		_, _, err := h.ListCollections(authedCtx(tid), ListCollectionsArgs{
-			BackendID: "aws-eu", BucketId: "paladin-prod", // TenantID Nil + full filter
+			BackendID: "aws-eu", BucketName: "paladin-prod", // TenantID Nil + full filter
 		})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
@@ -533,7 +533,7 @@ func TestListCollections(t *testing.T) {
 			return nil, "", nil
 		}}
 		h := NewHandler(fr, allowAll())
-		_, _, err := h.ListCollections(adminCtx(tid), ListCollectionsArgs{BackendID: "aws-eu", BucketId: "paladin-prod"})
+		_, _, err := h.ListCollections(adminCtx(tid), ListCollectionsArgs{BackendID: "aws-eu", BucketName: "paladin-prod"})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

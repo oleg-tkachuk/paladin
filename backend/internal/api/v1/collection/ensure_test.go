@@ -20,7 +20,7 @@ func TestEnsureCollection_ExistingIsNoOp(t *testing.T) {
 	}
 	h := NewHandler(fr, allowAll())
 	created, err := h.EnsureCollection(authedCtx(tid), CreateCollectionArgs{
-		Collection: "docs", BackendID: "b", BucketId: "cab",
+		Collection: "docs", BackendID: "b", BucketName: "cab",
 	})
 	if err != nil {
 		t.Fatalf("EnsureCollection: %v", err)
@@ -49,7 +49,7 @@ func TestEnsureCollection_CreatesUnderCallerTenant(t *testing.T) {
 	h := NewHandler(fr, allowAll())
 	created, err := h.EnsureCollection(authedCtx(caller), CreateCollectionArgs{
 		TenantID:   other, // must be overridden with the caller's tenant
-		Collection: "docs", BackendID: "b", BucketId: "cab",
+		Collection: "docs", BackendID: "b", BucketName: "cab",
 	})
 	if err != nil {
 		t.Fatalf("EnsureCollection: %v", err)

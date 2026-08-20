@@ -17,7 +17,7 @@ import (
 // are indistinguishable to a subscriber filtering on resource_name.
 
 func bindingRow(backend, bucket string) sqlc.GetCollectionRow {
-	return sqlc.GetCollectionRow{Collection: sqlc.Collection{BackendID: backend, BucketId: bucket}}
+	return sqlc.GetCollectionRow{BackendName: backend, BucketName: bucket}
 }
 
 func TestIngestObjectResourceName(t *testing.T) {

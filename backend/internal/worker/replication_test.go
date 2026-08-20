@@ -73,7 +73,7 @@ func TestReplicationWorkerCopiesAvailableNewerThanCutoff(t *testing.T) {
 	src := &fakeReplSource{
 		buckets: []admindomain.Bucket{{
 			BackendID:  "primary",
-			BucketId: "paladin-archive",
+			BucketName: "paladin-archive",
 			Replication: admindomain.BucketReplication{
 				Enabled:           true,
 				DestinationBucket: "storageBackends/secondary/buckets/paladin-archive-dr",
@@ -115,7 +115,7 @@ func TestReplicationWorkerSkipsDisabledBuckets(t *testing.T) {
 	src := &fakeReplSource{
 		buckets: []admindomain.Bucket{{
 			BackendID:  "primary",
-			BucketId: "paladin-archive",
+			BucketName: "paladin-archive",
 			Replication: admindomain.BucketReplication{
 				Enabled: false, // disabled
 			},
@@ -138,7 +138,7 @@ func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
 	src := &fakeReplSource{
 		buckets: []admindomain.Bucket{{
 			BackendID:  "primary",
-			BucketId: "paladin-archive",
+			BucketName: "paladin-archive",
 			Replication: admindomain.BucketReplication{
 				Enabled:           true,
 				DestinationBucket: "storageBackends/secondary/buckets/paladin-archive-dr",

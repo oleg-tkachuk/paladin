@@ -47,7 +47,7 @@ type TenantStore interface {
 		displayName string,
 		labels []byte,
 		inheritedCedarPolicy string,
-		storageLayout string,
+		storageLayout sqlc.TenantStorageLayout,
 	) error
 }
 

@@ -195,7 +195,7 @@ func principalInjector(tenantID uuid.UUID) connect.Interceptor {
 	})
 }
 
-func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig) (paladiniamv1connect.SystemServiceClient, *stubSystem, func()) {
+func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig) (paladiniamv1connect.HealthServiceClient, *stubSystem, func()) {
 	t.Helper()
 	tenant := uuid.New()
 	svc := &stubSystem{}
@@ -204,7 +204,7 @@ func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig
 	// interceptor so tenantID is in ctx when Get/Put are called.
 	// Connect's WithInterceptors applies in order — first listed
 	// is outermost.
-	path, handler := paladiniamv1connect.NewSystemServiceHandler(svc,
+	path, handler := paladiniamv1connect.NewHealthServiceHandler(svc,
 		connect.WithInterceptors(
 			principalInjector(tenant),
 			NewIdempotencyInterceptor(store, cfg),
@@ -212,7 +212,7 @@ func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig
 	)
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
-	client := paladiniamv1connect.NewSystemServiceClient(srv.Client(), srv.URL)
+	client := paladiniamv1connect.NewHealthServiceClient(srv.Client(), srv.URL)
 	return client, svc, srv.Close
 }
 

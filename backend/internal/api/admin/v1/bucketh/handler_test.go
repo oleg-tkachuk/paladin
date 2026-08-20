@@ -193,7 +193,7 @@ func ctxAs(roles ...string) context.Context {
 func code(err error) connect.Code { return connect.CodeOf(err) }
 
 func validBucket() admindomain.Bucket {
-	return admindomain.Bucket{BackendID: "primary", BucketId: "acme-logs", OwnerTenantID: uuid.New()}
+	return admindomain.Bucket{BackendID: "primary", BucketName: "acme-logs", OwnerTenantID: uuid.New()}
 }
 
 // ─── CreateBucket ────────────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ func TestCreateBucket_RoleGate(t *testing.T) {
 func TestCreateBucket_RequiresBackendAndName(t *testing.T) {
 	h := NewHandler(&fakeRepo{}, okProvisioner{}, allowAuthorizer{})
 	_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin),
-		CreateBucketInput{Bucket: admindomain.Bucket{BucketId: "x"}}) // no backend
+		CreateBucketInput{Bucket: admindomain.Bucket{BucketName: "x"}}) // no backend
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}
@@ -306,7 +306,7 @@ func TestGetBucket_NotFound(t *testing.T) {
 
 func TestGetBucket_TenantAdminRedacted(t *testing.T) {
 	full := admindomain.Bucket{
-		BackendID: "primary", BucketId: "acme", OwnerTenantID: uuid.New(),
+		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(),
 		CedarPolicy: "permit(...);",
 		Replication: admindomain.BucketReplication{DestinationBucket: "dr-bucket"},
 	}
@@ -326,7 +326,7 @@ func TestGetBucket_TenantAdminRedacted(t *testing.T) {
 
 func TestGetBucket_BucketAdminSeesFull(t *testing.T) {
 	full := admindomain.Bucket{
-		BackendID: "primary", BucketId: "acme", OwnerTenantID: uuid.New(),
+		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(),
 		CedarPolicy: "permit(...);",
 		Replication: admindomain.BucketReplication{DestinationBucket: "dr-bucket"},
 	}
@@ -346,7 +346,7 @@ func TestGetBucket_BucketAdminSeesFull(t *testing.T) {
 func TestDeleteBucket_DeleteOnBackendWithoutProvisioner(t *testing.T) {
 	h := NewHandler(&fakeRepo{}, nil, allowAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", DeleteOnBackend: true})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: true})
 	if code(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v, want Unavailable", code(err))
 	}
@@ -357,7 +357,7 @@ func TestDeleteBucket_VersionMismatchAborts(t *testing.T) {
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	// DeleteOnBackend=false → physical row delete path (DeleteTx) under OCC.
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
-		DeleteBucketInput{BackendID: "primary", BucketId: "acme", ExpectedVersion: 1})
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme", ExpectedVersion: 1})
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
 	}

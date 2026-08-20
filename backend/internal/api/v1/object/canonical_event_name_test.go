@@ -17,7 +17,7 @@ func TestCanonicalObjectPrefix(t *testing.T) {
 	tid := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 	t.Run("resolves canonical prefix from binding", func(t *testing.T) {
-		h := &Handler{repo: &fakeObjectRepo{meta: BucketMeta{BackendID: "primary", BucketId: "paladin"}}}
+		h := &Handler{repo: &fakeObjectRepo{meta: BucketMeta{BackendID: "primary", BucketName: "paladin"}}}
 		got := h.canonicalObjectPrefix(context.Background(), tid, "invoices")
 		want := "storageBackends/primary/buckets/paladin/tenants/" + tid.String() + "/collections/invoices"
 		if got != want {
