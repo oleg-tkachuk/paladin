@@ -128,7 +128,7 @@ func (r *BucketRepoV2) ListPendingProvisions(ctx context.Context, maxAttempts, l
 	for _, row := range rows {
 		out = append(out, admindomain.BucketProvisionRow{
 			BackendID:         row.BackendID,
-			BucketName:        row.BucketName,
+			BucketId:        row.BucketName,
 			Region:            derefStr(row.Region),
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
@@ -202,7 +202,7 @@ func (r *BucketRepoV2) ListPendingDeletions(ctx context.Context, maxAttempts, li
 	for _, row := range rows {
 		out = append(out, admindomain.BucketProvisionRow{
 			BackendID:         row.BackendID,
-			BucketName:        row.BucketName,
+			BucketId:        row.BucketName,
 			Region:            derefStr(row.Region),
 			ProvisionState:    row.ProvisionState,
 			ProvisionAttempts: row.ProvisionAttempts,
@@ -481,7 +481,7 @@ func decodeBucketRow(
 	_ = json.Unmarshal(lifecycleRules, &rules)
 	return admindomain.Bucket{
 		BackendID:      backendID,
-		BucketName:     bucketName,
+		BucketId:     bucketName,
 		DisplayName:    derefStr(displayName),
 		Region:         derefStr(region),
 		Labels:         decodeMap(labels),

@@ -76,7 +76,7 @@ func TestSeaweedFSSource_Parse_NonPaladinPath(t *testing.T) {
 }
 
 func TestSeaweedFSSource_Parse_BucketPrefixStripped(t *testing.T) {
-	src := &SeaweedFSSource{BucketName: "paladin-primary", URI: "seaweedfs://primary"}
+	src := &SeaweedFSSource{BucketId: "paladin-primary", URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/paladin-primary/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/ok/k","event_type":"create","timestamp_ns":1}`)
 	ev, err := src.Parse(body, "application/json")
 	if err != nil {
@@ -105,7 +105,7 @@ func TestSeaweedFSSource_Parse_BucketsNamespacePrefix(t *testing.T) {
 	// The S3 gateway materialises bucket-rooted paths under
 	// `/buckets/<bucket>/...` in the filer namespace. The adapter strips the
 	// `buckets/` prefix before the bucket-name check so both publishers parse.
-	src := &SeaweedFSSource{BucketName: "paladin-primary", URI: "seaweedfs://primary"}
+	src := &SeaweedFSSource{BucketId: "paladin-primary", URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/buckets/paladin-primary/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/ok/deep/k","event_type":"create","timestamp_ns":1}`)
 	ev, err := src.Parse(body, "application/json")
 	if err != nil {

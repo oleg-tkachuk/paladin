@@ -29,7 +29,7 @@ func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb
 	src := m.GetBucket()
 	b := admindomain.Bucket{
 		BackendID:   backend,
-		BucketName:  m.GetBucketName(),
+		BucketName:  m.GetBucketId(),
 		DisplayName: src.GetDisplayName(),
 		Region:      src.GetRegion(),
 		Labels:      src.GetLabels(),

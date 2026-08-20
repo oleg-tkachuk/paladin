@@ -56,7 +56,7 @@ func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindo
 		e.ActorAudience,
 		e.Action,
 		e.ResourceName,
-		strPtr(e.RequestID),
+		e.RequestID,
 		strPtr(e.SourceIP),
 		e.BeforeJSON,
 		e.AfterJSON,
@@ -205,7 +205,7 @@ func (r *AuditRepoV2) PurgeOlderThan(ctx context.Context, cutoff time.Time) (int
 
 func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 	return admindomain.AuditEntry{
-		EntryID:       uuidFrom(row.EntryID),
+		EntryID:       uuidFrom(row.ID),
 		At:            timeFrom(row.At),
 		ActorSubject:  row.ActorSubject,
 		ActorTenantID: uuidFrom(row.ActorTenantID),

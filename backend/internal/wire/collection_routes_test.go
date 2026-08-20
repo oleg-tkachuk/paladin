@@ -43,7 +43,7 @@ func (f fakeBindingReader) GetDefaultBinding(context.Context, uuid.UUID) (tenant
 }
 
 func ok(tid uuid.UUID, backend, bucket, key string) objectkey.Collection {
-	return objectkey.Collection{TenantID: tid, BackendID: backend, BucketName: bucket, Collection: key}
+	return objectkey.Collection{TenantID: tid, BackendID: backend, BucketId: bucket, Collection: key}
 }
 
 func TestListCollectionRoutes_ShapesAndBareAlias(t *testing.T) {
@@ -54,7 +54,7 @@ func TestListCollectionRoutes_ShapesAndBareAlias(t *testing.T) {
 			tokens: []string{""},
 		},
 		// Default route is primary/paladin — only that OK gets a bare alias.
-		tenants: fakeBindingReader{db: tenant.DefaultBinding{BackendID: "primary", BucketName: "paladin"}},
+		tenants: fakeBindingReader{db: tenant.DefaultBinding{BackendID: "primary", BucketId: "paladin"}},
 	}
 
 	routes, _, err := lister.ListCollectionRoutes(context.Background(), tid, "")

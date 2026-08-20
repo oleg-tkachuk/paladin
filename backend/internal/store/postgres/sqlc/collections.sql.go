@@ -72,15 +72,24 @@ func (q *Queries) DeleteCollection(ctx context.Context, tenantID pgtype.UUID, na
 }
 
 const getCollection = `-- name: GetCollection :one
-SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at
+SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at,
+       sb.name AS backend_name,
+       b.name  AS bucket_name
 FROM collections
-WHERE tenant_id = $1 AND name = $2
+JOIN buckets b           ON b.id = collections.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE collections.tenant_id = $1 AND collections.name = $2
 `
 
 type GetCollectionRow struct {
-	Collection Collection `json:"collection"`
+	Collection  Collection `json:"collection"`
+	BackendName string     `json:"backend_name"`
+	BucketName  string     `json:"bucket_name"`
 }
 
+// Returns the backend and bucket by NAME alongside the row: callers build
+// resource names from this, and a resource name made of uuids would not
+// resolve back to anything a client can use.
 func (q *Queries) GetCollection(ctx context.Context, tenantID pgtype.UUID, name string) (GetCollectionRow, error) {
 	row := q.db.QueryRow(ctx, getCollection, tenantID, name)
 	var i GetCollectionRow
@@ -97,6 +106,8 @@ func (q *Queries) GetCollection(ctx context.Context, tenantID pgtype.UUID, name 
 		&i.Collection.ResourceVersion,
 		&i.Collection.CreatedAt,
 		&i.Collection.UpdatedAt,
+		&i.BackendName,
+		&i.BucketName,
 	)
 	return i, err
 }

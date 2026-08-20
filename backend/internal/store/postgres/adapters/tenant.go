@@ -254,7 +254,7 @@ func defaultBindingFromSQLC(row sqlc.TenantDefaultBinding) tenant.DefaultBinding
 	return tenant.DefaultBinding{
 		TenantID:   uuid.UUID(row.TenantID.Bytes),
 		BackendID:  row.BackendID,
-		BucketName: row.BucketName,
+		BucketId: row.BucketName,
 		SetAt:      row.SetAt.Time,
 		SetBy:      row.SetBy,
 	}

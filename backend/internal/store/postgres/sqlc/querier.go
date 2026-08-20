@@ -110,6 +110,9 @@ type Querier interface {
 	// v2 bucket queries — full surface for admin/v1.BucketService.
 	GetBucketV2(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketV2Row, error)
 	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
+	// Returns the backend and bucket by NAME alongside the row: callers build
+	// resource names from this, and a resource name made of uuids would not
+	// resolve back to anything a client can use.
 	GetCollection(ctx context.Context, tenantID pgtype.UUID, name string) (GetCollectionRow, error)
 	// Reads the pointer the `objects` row carries.
 	GetCurrentVersionID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)

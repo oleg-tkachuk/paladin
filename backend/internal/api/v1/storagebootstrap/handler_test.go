@@ -60,7 +60,7 @@ func (b *fakeBuckets) EnsureBucket(_ context.Context, in bucketh.CreateBucketInp
 	if b.err != nil {
 		return nil, false, b.err
 	}
-	return &admindomain.Bucket{BackendID: in.Bucket.BackendID, BucketName: in.Bucket.BucketName}, b.created, nil
+	return &admindomain.Bucket{BackendID: in.Bucket.BackendID, BucketId: in.Bucket.BucketName}, b.created, nil
 }
 
 // fakeCollections reports "created" for keys in the created set, "existing"

@@ -36,7 +36,7 @@ func scopeDecision(t *testing.T, scopes []string, r *Resource) Decision {
 // objRes is a fully-populated Object resource (Key set → the request resource is
 // the Object entity, which carries scope_keys).
 func objRes(tenant uuid.UUID, backend, bucket, collection, key string) *Resource {
-	return &Resource{TenantID: tenant, BackendID: backend, BucketName: bucket, Collection: collection, Key: key}
+	return &Resource{TenantID: tenant, BackendID: backend, BucketId: bucket, Collection: collection, Key: key}
 }
 
 // TestResourceScopeKeys_WireFormat pins the Go-side scope wire format that the
@@ -179,7 +179,7 @@ func TestScopeEnforcement_CollectionResourceEntity(t *testing.T) {
 	tid := uuid.New()
 	scope := []string{"collection:b/medical"}
 	okRes := func(bucket, ok string) *Resource {
-		return &Resource{TenantID: tid, BackendID: "be", BucketName: bucket, Collection: ok}
+		return &Resource{TenantID: tid, BackendID: "be", BucketId: bucket, Collection: ok}
 	}
 	if got := scopeDecision(t, scope, okRes("b", "medical")); got != DecisionAllow {
 		t.Errorf("Collection entity {b,medical} = %v, want Allow", got)

@@ -204,7 +204,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 	return &pb.Bucket{
 		Name:            fmt.Sprintf("storageBackends/%s/buckets/%s", b.BackendID, b.BucketName),
 		BackendId:       b.BackendID,
-		BucketName:      b.BucketName,
+		BucketId:      b.BucketName,
 		DisplayName:     b.DisplayName,
 		Region:          b.Region,
 		OwnerTenantId:   uuidStrEmpty(b.OwnerTenantID.String()),

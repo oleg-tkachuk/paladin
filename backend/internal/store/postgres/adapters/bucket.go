@@ -115,7 +115,7 @@ func (r *BucketRepo) CountCollections(ctx context.Context, backendID, bucketName
 func BucketFromSQLC(b sqlc.Bucket) bucket.Bucket {
 	return bucket.Bucket{
 		BackendID:       b.BackendID,
-		BucketName:      b.BucketName,
+		BucketId:      b.BucketName,
 		DisplayName:     derefStr(b.DisplayName),
 		Region:          derefStr(b.Region),
 		Labels:          b.Labels,

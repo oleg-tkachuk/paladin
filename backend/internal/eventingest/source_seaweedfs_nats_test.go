@@ -58,7 +58,7 @@ func encodeEntryField(num protowire.Number, name string) []byte {
 
 func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
 	src := &SeaweedFSNATSSource{
-		BucketName: "paladin-primary",
+		BucketId: "paladin-primary",
 		URI:        "seaweedfs-nats://primary",
 	}
 	tenant := "00000000-0000-0000-0000-000000000abc"
@@ -97,7 +97,7 @@ func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
 }
 
 func TestSeaweedFSNATSSource_Parse_Update(t *testing.T) {
-	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	src := &SeaweedFSNATSSource{BucketId: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, true, true) // update: both entries
 	raw := natsEnvelope(t,
 		map[string]string{"key": "/paladin-primary/t/k/o.txt"},
@@ -118,7 +118,7 @@ func TestSeaweedFSNATSSource_Parse_Update(t *testing.T) {
 }
 
 func TestSeaweedFSNATSSource_Parse_Delete(t *testing.T) {
-	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	src := &SeaweedFSNATSSource{BucketId: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, true, false) // delete: only old_entry
 	raw := natsEnvelope(t,
 		map[string]string{"key": "/paladin-primary/t/k/gone.txt"},
@@ -134,7 +134,7 @@ func TestSeaweedFSNATSSource_Parse_Delete(t *testing.T) {
 }
 
 func TestSeaweedFSNATSSource_Parse_BothEntriesAbsent_Ignored(t *testing.T) {
-	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	src := &SeaweedFSNATSSource{BucketId: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, false, false) // neither old nor new
 	raw := natsEnvelope(t,
 		map[string]string{"key": "/paladin-primary/t/k/whatever.txt"},
@@ -147,7 +147,7 @@ func TestSeaweedFSNATSSource_Parse_BothEntriesAbsent_Ignored(t *testing.T) {
 }
 
 func TestSeaweedFSNATSSource_Parse_PathOutsideBucket_Ignored(t *testing.T) {
-	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	src := &SeaweedFSNATSSource{BucketId: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, false, true)
 	raw := natsEnvelope(t,
 		// Path doesn't start with the configured bucket — common when
@@ -163,7 +163,7 @@ func TestSeaweedFSNATSSource_Parse_PathOutsideBucket_Ignored(t *testing.T) {
 }
 
 func TestSeaweedFSNATSSource_Parse_MissingKey_Unrecognised(t *testing.T) {
-	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	src := &SeaweedFSNATSSource{BucketId: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, false, true)
 	raw := natsEnvelope(t,
 		// Empty metadata: SF's gocdk_pub_sub always stamps `key`, so
@@ -179,7 +179,7 @@ func TestSeaweedFSNATSSource_Parse_MissingKey_Unrecognised(t *testing.T) {
 }
 
 func TestSeaweedFSNATSSource_Parse_MalformedGob_Unrecognised(t *testing.T) {
-	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	src := &SeaweedFSNATSSource{BucketId: "paladin-primary", URI: "x"}
 	_, err := src.Parse([]byte("not a gob stream"), "")
 	if !errors.Is(err, ErrUnrecognisedEvent) {
 		t.Errorf("err = %v, want ErrUnrecognisedEvent", err)

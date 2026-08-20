@@ -230,7 +230,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// list-RPC query strings). Same trust posture as PolicyService.Validate:
 	// admin-audience JWT only, no DB, no audit, no Cedar gate.
 	mux.Handle(paladinadminv1connect.NewCELServiceHandler(celh.NewHandler(), adminOpts))
-	mux.Handle(paladinadminv1connect.NewOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
+	mux.Handle(paladinadminv1connect.NewPlatformOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
 	{
 		var usageStore capability.UsageStore[pgx.Tx]

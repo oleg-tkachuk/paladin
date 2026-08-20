@@ -149,7 +149,7 @@ func quotaFromSQLC(q sqlc.Quota) admindomain.Quota {
 		QuotaID:           uuidFrom(q.QuotaID),
 		TenantID:          uuidFrom(q.TenantID),
 		BackendID:         derefStr(q.BackendID),
-		BucketName:        derefStr(q.BucketName),
+		BucketId:        derefStr(q.BucketName),
 		MaxTotalBytes:     q.MaxTotalBytes,
 		MaxObjectCount:    q.MaxObjectCount,
 		MaxBytesPerDay:    q.MaxBytesPerDay,

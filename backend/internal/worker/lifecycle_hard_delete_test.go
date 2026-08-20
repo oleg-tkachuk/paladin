@@ -63,7 +63,7 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 		Key:             "a.pdf",
 		ResourceVersion: 1,
 		BackendID:       "primary",
-		BucketName:      "paladin-test",
+		BucketId:      "paladin-test",
 	}
 	w := &LifecycleHardDeleter{
 		Q:       nil, // deleteOne reaches Storage first; on success it touches Q via HardDeleteObjectIfStillDeleted, which we substitute via the call-site test below.

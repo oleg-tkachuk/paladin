@@ -284,7 +284,7 @@ func bucketFromSQLC(b sqlc.Collection) objectkey.Collection {
 		Collection:      b.Collection,
 		DisplayName:     derefStr(b.DisplayName),
 		BackendID:       b.BackendID,
-		BucketName:      b.BucketName,
+		BucketId:      b.BucketName,
 		CedarPolicy:     b.CedarPolicy,
 		LifecycleRules:  b.LifecycleRules,
 		ResourceVersion: b.ResourceVersion,

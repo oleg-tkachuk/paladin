@@ -141,7 +141,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return fmt.Errorf("lookup object: %w", err)
 	}
 
-	objectID := uuid.UUID(row.Object.ObjectID.Bytes)
+	objectID := uuid.UUID(row.Object.ID.Bytes)
 
 	switch ev.Type {
 	case EventTypeUploaded:
@@ -244,11 +244,11 @@ func (h *PromoteHandler) objectResourceName(ctx context.Context, tenantID, colle
 		return cShape
 	}
 	row, err := h.Lookup.GetCollection(ctx, pgtype.UUID{Bytes: tid, Valid: true}, collection)
-	if err != nil || row.Collection.BackendID == "" || row.Collection.BucketName == "" {
+	if err != nil || row.BackendName == "" || row.BucketName == "" {
 		return cShape
 	}
 	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
-		row.Collection.BackendID, row.Collection.BucketName, tenantID, collection, key)
+		row.BackendName, row.BucketName, tenantID, collection, key)
 }
 
 func (h *PromoteHandler) log() *zap.Logger {

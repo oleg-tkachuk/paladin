@@ -309,7 +309,7 @@ func TestGetDefaultBinding(t *testing.T) {
 		var gotID uuid.UUID
 		h := NewHandler(&fakeRepo{getDefBindingFn: func(_ context.Context, id uuid.UUID) (DefaultBinding, error) {
 			gotID = id
-			return DefaultBinding{TenantID: id, BackendID: "b1", BucketName: "bk1"}, nil
+			return DefaultBinding{TenantID: id, BackendID: "b1", BucketId: "bk1"}, nil
 		}}, allow())
 		got, err := h.GetDefaultBinding(principalCtx(tid), tid)
 		if err != nil {
@@ -344,7 +344,7 @@ func TestSetDefaultBinding(t *testing.T) {
 
 	t.Run("ok forwards args + stamps setBy from subject", func(t *testing.T) {
 		fr := &fakeRepo{setDefBindingFn: func(_ context.Context, id uuid.UUID, backendID, bucketName, setBy string) (DefaultBinding, error) {
-			return DefaultBinding{TenantID: id, BackendID: backendID, BucketName: bucketName, SetBy: setBy}, nil
+			return DefaultBinding{TenantID: id, BackendID: backendID, BucketId: bucketName, SetBy: setBy}, nil
 		}}
 		got, err := NewHandler(fr, allow()).SetDefaultBinding(principalCtx(tid), tid, "backend-9", "bucket-9")
 		if err != nil {

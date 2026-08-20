@@ -15,7 +15,7 @@ import (
 )
 
 type OperationServer struct {
-	paladinadminv1connect.UnimplementedOperationServiceHandler
+	paladinadminv1connect.UnimplementedPlatformOperationServiceHandler
 	H *operation.Handler
 }
 
@@ -61,7 +61,7 @@ func (s *OperationServer) CancelOperation(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(operationToProto(op)), nil
 }
 
-var _ paladinadminv1connect.OperationServiceHandler = (*OperationServer)(nil)
+var _ paladinadminv1connect.PlatformOperationServiceHandler = (*OperationServer)(nil)
 
 func operationID(name string) (uuid.UUID, error) {
 	const prefix = "operations/"

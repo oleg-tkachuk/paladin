@@ -7,9 +7,16 @@ INSERT INTO collections (
 ) VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetCollection :one
-SELECT sqlc.embed(collections)
+-- Returns the backend and bucket by NAME alongside the row: callers build
+-- resource names from this, and a resource name made of uuids would not
+-- resolve back to anything a client can use.
+SELECT sqlc.embed(collections),
+       sb.name AS backend_name,
+       b.name  AS bucket_name
 FROM collections
-WHERE tenant_id = $1 AND name = $2;
+JOIN buckets b           ON b.id = collections.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE collections.tenant_id = $1 AND collections.name = $2;
 
 -- name: ResolveCollectionPrefix :one
 -- Longest registered collection name that is a prefix of the candidate (the

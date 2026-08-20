@@ -94,15 +94,13 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.Ge
 
 func storageMigrationToProto(m *tenant.StorageMigration) *pb.StorageMigrationStatus {
 	return &pb.StorageMigrationStatus{
-		Tenant:           "tenants/" + m.TenantID.String(),
-		State:            m.State,
-		ObjectsTotal:     m.ObjectsTotal,
-		ObjectsCopied:    m.ObjectsCopied,
-		SourceBackendId:  m.SourceBackendID,
-		SourceBucketName: m.SourceBucketName,
-		TargetBackendId:  m.TargetBackendID,
-		TargetBucketName: m.TargetBucketName,
-		Error:            m.Error,
+		Tenant:         "tenants/" + m.TenantID.String(),
+		State:          m.State,
+		ObjectsTotal:   m.ObjectsTotal,
+		ObjectsCopied:  m.ObjectsCopied,
+		SourceBucketId: m.SourceBucketID,
+		TargetBucketId: m.TargetBucketID,
+		Error:          m.Error,
 	}
 }
 
@@ -405,7 +403,7 @@ func (s *TenantServer) SetTenantDefaultBinding(ctx context.Context, req *connect
 	if err != nil {
 		return nil, err
 	}
-	b, err := s.H.SetDefaultBinding(ctx, tid, req.Msg.GetBackendId(), req.Msg.GetBucketName())
+	b, err := s.H.SetDefaultBinding(ctx, tid, req.Msg.GetBucket())
 	if err != nil {
 		return nil, err
 	}
@@ -425,10 +423,10 @@ func (s *TenantServer) ClearTenantDefaultBinding(ctx context.Context, req *conne
 
 func defaultBindingToProto(b *tenant.DefaultBinding) *pb.TenantDefaultBinding {
 	return &pb.TenantDefaultBinding{
-		Name:       "tenants/" + b.TenantID.String() + "/defaultBinding",
-		BackendId:  b.BackendID,
-		BucketName: b.BucketName,
-		SetAt:      timestamppb.New(b.SetAt),
-		SetBy:      b.SetBy,
+		Name: "tenants/" + b.TenantID.String() + "/defaultBinding",
+		// One reference, one field: "storageBackends/{backend}/buckets/{bucket}".
+		Bucket: "storageBackends/" + b.BackendName + "/buckets/" + b.BucketName,
+		SetAt:  timestamppb.New(b.SetAt),
+		SetBy:  b.SetBy,
 	}
 }
