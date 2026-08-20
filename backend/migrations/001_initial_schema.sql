@@ -440,7 +440,7 @@ CREATE TABLE object_tags (
     tenant_id        uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     slug             text NOT NULL,
     display_name     text,
-    description      text,
+    description      text NOT NULL DEFAULT '',
     labels           jsonb NOT NULL DEFAULT '{}'::jsonb,
     resource_version bigint NOT NULL DEFAULT 1,
     created_at       timestamptz NOT NULL DEFAULT now(),

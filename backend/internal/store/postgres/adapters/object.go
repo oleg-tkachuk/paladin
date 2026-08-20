@@ -73,7 +73,7 @@ func (r *ObjectRepo) ObjectLock(ctx context.Context, tenantID, objectID uuid.UUI
 		return object.ObjectLock{}, fmt.Errorf("get object lock state: %w", err)
 	}
 	return object.ObjectLock{
-		Mode:        row.LockMode,
+		Mode:        lockModeFromSQL(row.LockMode),
 		RetainUntil: timePtr(row.LockRetainUntil),
 		LegalHold:   row.LegalHold,
 	}, nil
@@ -93,7 +93,7 @@ func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uu
 	}
 	out := make([]object.Object, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, objectFromSQLC(row.Object))
+		out = append(out, objectFromSQLC(row.Object, row.CollectionName))
 	}
 	return out, nil
 }
@@ -103,7 +103,7 @@ func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, collect
 	if err != nil {
 		return object.Object{}, err
 	}
-	return objectFromSQLC(row.Object), nil
+	return objectFromSQLC(row.Object, row.CollectionName), nil
 }
 
 func (r *ObjectRepo) UpdateMetadata(ctx context.Context, args object.UpdateMetadataArgs) (object.Object, error) {
@@ -204,7 +204,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	}
 	out := make([]object.Object, 0, len(rows))
 	for _, row := range rows {
-		o := objectFromSQLC(row.Object)
+		o := objectFromSQLC(row.Object, row.CollectionName)
 		if args.CompiledCEL != nil {
 			ok, evalErr := cel.Match(args.CompiledCEL, celVars(o))
 			if evalErr != nil {
@@ -224,7 +224,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	// means more may exist; a short page means the keyset is exhausted.
 	var next string
 	if int32(len(rows)) == pageSize && len(rows) > 0 {
-		next = uuid.UUID(rows[len(rows)-1].Object.ObjectID.Bytes).String()
+		next = uuid.UUID(rows[len(rows)-1].Object.ID.Bytes).String()
 	}
 	return out, next, nil
 }
@@ -269,7 +269,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 			return matched, true, nil
 		}
 		for _, row := range rows {
-			o := objectFromSQLC(row.Object)
+			o := objectFromSQLC(row.Object, row.CollectionName)
 			ok, evalErr := cel.Match(args.CompiledCEL, celVars(o))
 			if evalErr != nil {
 				return 0, false, fmt.Errorf("cel eval: %w", evalErr)
@@ -556,19 +556,19 @@ func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID,
 	if err != nil {
 		return object.Object{}, err
 	}
-	return objectFromSQLC(row.Object), nil
+	return objectFromSQLC(row.Object, row.CollectionName), nil
 }
 
-func objectFromSQLC(o sqlc.Object) object.Object {
+func objectFromSQLC(o sqlc.Object, collectionName string) object.Object {
 	var size int64
 	if o.SizeBytes != nil {
 		size = *o.SizeBytes
 	}
 	return object.Object{
-		ObjectID:         uuidFrom(o.ObjectID),
+		ObjectID:         uuidFrom(o.ID),
 		TenantID:         uuidFrom(o.TenantID),
-		Collection:       o.Collection,
-		Key:              o.Key,
+		Collection:       collectionName,
+		Key:              o.Path,
 		State:            statemachine.State(string(o.State)),
 		ContentType:      o.ContentType,
 		SizeBytes:        size,

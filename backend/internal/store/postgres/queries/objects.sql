@@ -1,31 +1,34 @@
 -- Object queries.
 
 -- name: CreateObject :exec
+-- collection_id is resolved by the caller via ResolveCollectionID.
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
-    $1, $2,
-    -- Callers know the collection by name; the id never leaves the schema.
-    (SELECT c.id FROM collections c WHERE c.tenant_id = $2 AND c.name = $3),
-    $4, $5,
+    $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
     $10, $11, $12, $13
 );
 
+-- name: ResolveCollectionID :one
+SELECT id FROM collections WHERE tenant_id = $1 AND name = $2;
+
 -- name: GetObject :one
-SELECT sqlc.embed(objects)
+SELECT sqlc.embed(objects), c.name AS collection_name
 FROM objects
-WHERE tenant_id = $1 AND id = $2;
+JOIN collections c ON c.id = objects.collection_id
+WHERE objects.tenant_id = $1 AND objects.id = $2;
 
 -- name: GetObjectsByIDs :many
 -- Batch lookup for batch-operation executors: one round-trip for the
 -- whole id list instead of one GetObject per id (a 1000-object batch
 -- used to issue 1000 sequential SELECTs before any state mutation).
-SELECT sqlc.embed(objects)
+SELECT sqlc.embed(objects), c.name AS collection_name
 FROM objects
-WHERE tenant_id = $1 AND id = ANY($2::uuid[]);
+JOIN collections c ON c.id = objects.collection_id
+WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[]);
 
 -- name: LookupObjectByID :one
 -- Reads an object by id alone. Used by background workers (reconciler,
@@ -40,9 +43,13 @@ WHERE o.id = $1;
 
 -- name: LookupObjectByKey :one
 -- Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
-SELECT sqlc.embed(objects)
-FROM objects
-WHERE tenant_id = $1 AND collection_id = $2 AND path = $3 AND state <> 'DELETED';
+SELECT sqlc.embed(objects), c.name AS collection_name
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND o.path = $3 AND o.state <> 'DELETED';
 
 -- name: PromoteObject :execrows
 -- Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
@@ -181,11 +188,12 @@ WHERE id = $1
 -- True when a non-DELETED row already exists at (tenant, collection_id, path).
 -- Used by RestoreObject to refuse restoring into a slot that's been reused.
 SELECT EXISTS(
-    SELECT 1 FROM objects
-    WHERE tenant_id = $1
-      AND collection_id = $2
-      AND path = $3
-      AND state <> 'DELETED'
+    SELECT 1 FROM objects o
+    WHERE o.tenant_id = $1
+      AND o.collection_id = (SELECT c.id FROM collections c
+                              WHERE c.tenant_id = $1 AND c.name = $2)
+      AND o.path = $3
+      AND o.state <> 'DELETED'
 )::boolean AS exists;
 
 -- name: ListObjects :many
@@ -197,10 +205,12 @@ SELECT EXISTS(
 -- authoritative, so over-fetching (a hint that's absent) only costs
 -- throughput, never correctness. `substr` is escaped for LIKE by the
 -- adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
-SELECT sqlc.embed(objects)
-FROM objects
-WHERE tenant_id = $1
-  AND collection_id = $2
+SELECT sqlc.embed(objects), c.name AS collection_name
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
   AND (sqlc.narg('prefix')::text IS NULL OR path LIKE sqlc.narg('prefix')::text || '%')
   AND (sqlc.narg('substr')::text IS NULL OR path LIKE '%' || sqlc.narg('substr')::text || '%')
@@ -210,14 +220,18 @@ LIMIT sqlc.arg('page_size');
 
 -- name: CountObjects :one
 SELECT COUNT(*) AS n
-FROM objects
-WHERE tenant_id = $1 AND collection_id = $2
-  AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state);
+FROM objects o
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND (sqlc.narg('state')::object_state IS NULL
+       OR o.state = sqlc.narg('state')::object_state);
 
 -- name: ScanPendingExpired :many
 -- Reconciler picks up PENDING rows whose presign has expired.
-SELECT sqlc.embed(objects)
+SELECT sqlc.embed(objects), c.name AS collection_name
 FROM objects
+JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
 ORDER BY presign_expires_at

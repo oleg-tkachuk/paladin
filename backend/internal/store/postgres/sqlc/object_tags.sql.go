@@ -18,7 +18,7 @@ VALUES ($1, $2, $3, $4, $5)
 `
 
 // Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
-func (q *Queries) CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte) error {
+func (q *Queries) CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createObjectTag,
 		tenantID,
 		slug,

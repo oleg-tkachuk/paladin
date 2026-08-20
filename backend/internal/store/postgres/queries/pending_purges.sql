@@ -5,7 +5,11 @@
 -- name: InsertPendingPurge :exec
 INSERT INTO pending_purges (
     id, tenant_id, object_id, bucket_id, collection_name, path
-) VALUES ($1, $2, $3, $4, $5, $6);
+) VALUES ($1, $2, $3,
+          (SELECT b.id FROM buckets b
+             JOIN storage_backends sb ON sb.id = b.backend_id
+            WHERE sb.name = $4 AND b.name = $5),
+          $6, $7);
 
 -- name: DeletePendingPurge :execrows
 DELETE FROM pending_purges WHERE id = $1;

@@ -40,7 +40,7 @@ type Querier interface {
 	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string) (pgtype.Numeric, error)
 	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
-	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (bool, error)
+	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, name string, path string) (bool, error)
 	// Idempotency / dedup for the ingest plane. Every CloudEvent the worker
 	// claims passes through ClaimIngestedEvent — INSERT ... ON CONFLICT
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
@@ -53,7 +53,7 @@ type Querier interface {
 	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error)
-	CountObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState) (int64, error)
+	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState) (int64, error)
 	CountPendingPurges(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; Collection rows FK to the
@@ -75,7 +75,7 @@ type Querier interface {
 	// Object queries.
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
 	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
-	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte) error
+	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string) error
@@ -193,7 +193,7 @@ type Querier interface {
 	// Purge debt: the retry handle for bytes whose DB row is already gone.
 	// See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
 	// denormalised here because the object row is gone before the purge runs.
-	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, collectionName string, path string) error
+	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error
 	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
@@ -286,7 +286,7 @@ type Querier interface {
 	// authoritative, so over-fetching (a hint that's absent) only costs
 	// throughput, never correctness. `substr` is escaped for LIKE by the
 	// adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
-	ListObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
@@ -353,7 +353,7 @@ type Querier interface {
 	// materialize the bucket binding so the caller can call S3 in one trip.
 	LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
-	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (LookupObjectByKeyRow, error)
+	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error)
 	// Soft-flip into the deletion outbox. Resets attempts so the new
 	// operation gets a fresh retry budget; clears any old error message.
 	// The actual DELETE happens later, from the worker, after backend

@@ -13,18 +13,19 @@ import (
 
 const checkLiveCollision = `-- name: CheckLiveCollision :one
 SELECT EXISTS(
-    SELECT 1 FROM objects
-    WHERE tenant_id = $1
-      AND collection_id = $2
-      AND path = $3
-      AND state <> 'DELETED'
+    SELECT 1 FROM objects o
+    WHERE o.tenant_id = $1
+      AND o.collection_id = (SELECT c.id FROM collections c
+                              WHERE c.tenant_id = $1 AND c.name = $2)
+      AND o.path = $3
+      AND o.state <> 'DELETED'
 )::boolean AS exists
 `
 
 // True when a non-DELETED row already exists at (tenant, collection_id, path).
 // Used by RestoreObject to refuse restoring into a slot that's been reused.
-func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (bool, error) {
-	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, collectionID, path)
+func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, name string, path string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, name, path)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -32,13 +33,16 @@ func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, 
 
 const countObjects = `-- name: CountObjects :one
 SELECT COUNT(*) AS n
-FROM objects
-WHERE tenant_id = $1 AND collection_id = $2
-  AND ($3::object_state IS NULL OR state = $3::object_state)
+FROM objects o
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND ($3::object_state IS NULL
+       OR o.state = $3::object_state)
 `
 
-func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState) (int64, error) {
-	row := q.db.QueryRow(ctx, countObjects, tenantID, collectionID, state)
+func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjects, tenantID, name, state)
 	var n int64
 	err := row.Scan(&n)
 	return n, err
@@ -334,10 +338,11 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
-FROM objects
-WHERE tenant_id = $1
-  AND collection_id = $2
+SELECT 
+FROM objects o
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
   AND ($3::object_state IS NULL OR state = $3::object_state)
   AND ($4::text IS NULL OR path LIKE $4::text || '%')
   AND ($5::text IS NULL OR path LIKE '%' || $5::text || '%')
@@ -358,10 +363,10 @@ type ListObjectsRow struct {
 // authoritative, so over-fetching (a hint that's absent) only costs
 // throughput, never correctness. `substr` is escaped for LIKE by the
 // adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		collectionID,
+		name,
 		state,
 		prefix,
 		substr,
@@ -444,9 +449,12 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
-FROM objects
-WHERE tenant_id = $1 AND collection_id = $2 AND path = $3 AND state <> 'DELETED'
+SELECT 
+FROM objects o
+WHERE o.tenant_id = $1
+  AND o.collection_id = (SELECT c.id FROM collections c
+                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND o.path = $3 AND o.state <> 'DELETED'
 `
 
 type LookupObjectByKeyRow struct {
@@ -454,8 +462,8 @@ type LookupObjectByKeyRow struct {
 }
 
 // Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
-func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (LookupObjectByKeyRow, error) {
-	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, collectionID, path)
+func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, name, path)
 	var i LookupObjectByKeyRow
 	err := row.Scan(
 		&i.Object.ID,

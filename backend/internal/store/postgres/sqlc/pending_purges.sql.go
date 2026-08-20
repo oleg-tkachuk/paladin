@@ -38,18 +38,23 @@ const insertPendingPurge = `-- name: InsertPendingPurge :exec
 
 INSERT INTO pending_purges (
     id, tenant_id, object_id, bucket_id, collection_name, path
-) VALUES ($1, $2, $3, $4, $5, $6)
+) VALUES ($1, $2, $3,
+          (SELECT b.id FROM buckets b
+             JOIN storage_backends sb ON sb.id = b.backend_id
+            WHERE sb.name = $4 AND b.name = $5),
+          $6, $7)
 `
 
 // Purge debt: the retry handle for bytes whose DB row is already gone.
 // See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
 // denormalised here because the object row is gone before the purge runs.
-func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, collectionName string, path string) error {
+func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error {
 	_, err := q.db.Exec(ctx, insertPendingPurge,
 		iD,
 		tenantID,
 		objectID,
-		bucketID,
+		name,
+		name_2,
 		collectionName,
 		path,
 	)
