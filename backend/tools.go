@@ -1,6 +1,10 @@
 //go:build tools
 
-//go:generate go run github.com/vektra/mockery/v3 --all --config .mockery.yaml
+// `--all` was a mockery v2 flag; in v3 the equivalent is `all: true` per
+// package in .mockery.yaml, and the config path needs `=`. The stale form
+// failed with "unknown command", hidden by the `tools` build tag keeping this
+// file out of `go generate ./...`.
+//go:generate go run github.com/vektra/mockery/v3 --config=.mockery.yaml
 
 package tools
 

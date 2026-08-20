@@ -26,8 +26,8 @@ func (r *BucketRepo) Create(ctx context.Context, args bucket.CreateArgs) (bucket
 	if err := r.q.CreateBucket(ctx,
 		args.BackendID,
 		args.BucketName,
-		strPtr(args.DisplayName),
-		strPtr(args.Region),
+		args.DisplayName,
+		args.Region,
 		labels,
 	); err != nil {
 		return bucket.Bucket{}, fmt.Errorf("create bucket: %w", err)

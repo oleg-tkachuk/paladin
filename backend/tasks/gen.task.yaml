@@ -12,7 +12,7 @@ tasks:
     cmds:
       - task: ":core:banner"
         vars: { MESSAGE: "regenerating code (mocks → proto → go generate → sqlc)" }
-      - go run github.com/vektra/mockery/v3 --config .mockery.yaml
+      - go run github.com/vektra/mockery/v3 --config=.mockery.yaml
       - task: proto
       - go generate ./...
       - sqlc generate

@@ -69,7 +69,7 @@ type MockChargeEventEmitter_EmitChargedTx_Call struct {
 //   - actor string
 //   - amount float64
 //   - unitCode string
-func (_e *MockChargeEventEmitter_Expecter) EmitChargedTx(ctx interface{}, tx interface{}, tenantID interface{}, capabilityID interface{}, op interface{}, actor interface{}, amount interface{}, unitCode interface{}) *MockChargeEventEmitter_EmitChargedTx_Call {
+func (_e *MockChargeEventEmitter_Expecter) EmitChargedTx(ctx any, tx any, tenantID any, capabilityID any, op any, actor any, amount any, unitCode any) *MockChargeEventEmitter_EmitChargedTx_Call {
 	return &MockChargeEventEmitter_EmitChargedTx_Call{Call: _e.mock.On("EmitChargedTx", ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)}
 }
 

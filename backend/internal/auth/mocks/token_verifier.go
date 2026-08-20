@@ -74,7 +74,7 @@ type MockTokenVerifier_Verify_Call struct {
 // Verify is a helper method to define mock.On call
 //   - ctx context.Context
 //   - token string
-func (_e *MockTokenVerifier_Expecter) Verify(ctx interface{}, token interface{}) *MockTokenVerifier_Verify_Call {
+func (_e *MockTokenVerifier_Expecter) Verify(ctx any, token any) *MockTokenVerifier_Verify_Call {
 	return &MockTokenVerifier_Verify_Call{Call: _e.mock.On("Verify", ctx, token)}
 }
 

@@ -59,7 +59,7 @@ type MockHeaderGetter_Get_Call struct {
 
 // Get is a helper method to define mock.On call
 //   - key string
-func (_e *MockHeaderGetter_Expecter) Get(key interface{}) *MockHeaderGetter_Get_Call {
+func (_e *MockHeaderGetter_Expecter) Get(key any) *MockHeaderGetter_Get_Call {
 	return &MockHeaderGetter_Get_Call{Call: _e.mock.On("Get", key)}
 }
 

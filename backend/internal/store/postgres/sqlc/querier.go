@@ -57,12 +57,12 @@ type Querier interface {
 	CountPendingPurges(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; Collection rows FK to the
-	// (backend_id, name) composite key.
+	// bucket_id foreign key.
 	// Idempotent: a duplicate (backend_id, name) is a no-op so that the
 	// handler can return the existing row instead of erroring. The S3-side
 	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 	// so the API surface stays consistently retry-safe.
-	CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName string, region string, labels []byte) error
+	CreateBucket(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte) error
 	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
 	// Collection queries.
 	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, bucketID pgtype.UUID, cedarPolicy string, lifecycleRules []byte) error
@@ -106,7 +106,8 @@ type Querier interface {
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
-	GetBucketQuota(ctx context.Context, bucketID pgtype.UUID) (GetBucketQuotaRow, error)
+	// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
+	GetBucketQuota(ctx context.Context, name string, name_2 string) (GetBucketQuotaRow, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
 	GetBucketV2(ctx context.Context, name string, name_2 string) (GetBucketV2Row, error)
 	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
@@ -154,6 +155,7 @@ type Querier interface {
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error)
+	// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (GetTenantQuotaRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
@@ -537,7 +539,7 @@ type Querier interface {
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
-	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, bucketID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error
+	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error
 	// Object Lock is its own row (ADR-0013). Retention is set after the version
 	// exists, and the DELETE trigger on object_locks is what refuses to release it
 	// early — so this is the only write path that can put a version under lock.

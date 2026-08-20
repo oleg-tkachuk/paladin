@@ -75,7 +75,7 @@ type MockPgxPool_Begin_Call struct {
 
 // Begin is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPgxPool_Expecter) Begin(ctx interface{}) *MockPgxPool_Begin_Call {
+func (_e *MockPgxPool_Expecter) Begin(ctx any) *MockPgxPool_Begin_Call {
 	return &MockPgxPool_Begin_Call{Call: _e.mock.On("Begin", ctx)}
 }
 
@@ -222,9 +222,9 @@ type MockPgxPool_Exec_Call struct {
 //   - ctx context.Context
 //   - sql string
 //   - arguments ...interface{}
-func (_e *MockPgxPool_Expecter) Exec(ctx interface{}, sql interface{}, arguments ...interface{}) *MockPgxPool_Exec_Call {
+func (_e *MockPgxPool_Expecter) Exec(ctx any, sql any, arguments ...any) *MockPgxPool_Exec_Call {
 	return &MockPgxPool_Exec_Call{Call: _e.mock.On("Exec",
-		append([]interface{}{ctx, sql}, arguments...)...)}
+		append([]any{ctx, sql}, arguments...)...)}
 }
 
 func (_c *MockPgxPool_Exec_Call) Run(run func(ctx context.Context, sql string, arguments ...interface{})) *MockPgxPool_Exec_Call {
@@ -286,7 +286,7 @@ type MockPgxPool_Ping_Call struct {
 
 // Ping is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPgxPool_Expecter) Ping(ctx interface{}) *MockPgxPool_Ping_Call {
+func (_e *MockPgxPool_Expecter) Ping(ctx any) *MockPgxPool_Ping_Call {
 	return &MockPgxPool_Ping_Call{Call: _e.mock.On("Ping", ctx)}
 }
 
@@ -356,9 +356,9 @@ type MockPgxPool_Query_Call struct {
 //   - ctx context.Context
 //   - sql string
 //   - args ...interface{}
-func (_e *MockPgxPool_Expecter) Query(ctx interface{}, sql interface{}, args ...interface{}) *MockPgxPool_Query_Call {
+func (_e *MockPgxPool_Expecter) Query(ctx any, sql any, args ...any) *MockPgxPool_Query_Call {
 	return &MockPgxPool_Query_Call{Call: _e.mock.On("Query",
-		append([]interface{}{ctx, sql}, args...)...)}
+		append([]any{ctx, sql}, args...)...)}
 }
 
 func (_c *MockPgxPool_Query_Call) Run(run func(ctx context.Context, sql string, args ...interface{})) *MockPgxPool_Query_Call {
@@ -430,9 +430,9 @@ type MockPgxPool_QueryRow_Call struct {
 //   - ctx context.Context
 //   - sql string
 //   - args ...interface{}
-func (_e *MockPgxPool_Expecter) QueryRow(ctx interface{}, sql interface{}, args ...interface{}) *MockPgxPool_QueryRow_Call {
+func (_e *MockPgxPool_Expecter) QueryRow(ctx any, sql any, args ...any) *MockPgxPool_QueryRow_Call {
 	return &MockPgxPool_QueryRow_Call{Call: _e.mock.On("QueryRow",
-		append([]interface{}{ctx, sql}, args...)...)}
+		append([]any{ctx, sql}, args...)...)}
 }
 
 func (_c *MockPgxPool_QueryRow_Call) Run(run func(ctx context.Context, sql string, args ...interface{})) *MockPgxPool_QueryRow_Call {
@@ -497,7 +497,7 @@ type MockPgxPool_SendBatch_Call struct {
 // SendBatch is a helper method to define mock.On call
 //   - ctx context.Context
 //   - b *pgx.Batch
-func (_e *MockPgxPool_Expecter) SendBatch(ctx interface{}, b interface{}) *MockPgxPool_SendBatch_Call {
+func (_e *MockPgxPool_Expecter) SendBatch(ctx any, b any) *MockPgxPool_SendBatch_Call {
 	return &MockPgxPool_SendBatch_Call{Call: _e.mock.On("SendBatch", ctx, b)}
 }
 

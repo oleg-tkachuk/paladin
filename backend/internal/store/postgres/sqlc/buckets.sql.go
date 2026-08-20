@@ -27,21 +27,22 @@ func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, bucketI
 const createBucket = `-- name: CreateBucket :exec
 
 INSERT INTO buckets (backend_id, name, display_name, region, labels)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ((SELECT sb.id FROM storage_backends sb WHERE sb.name = $1),
+        $2, $3, $4, $5)
 ON CONFLICT (backend_id, name) DO NOTHING
 `
 
 // Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 // Created lazily via BucketService.CreateBucket; Collection rows FK to the
-// (backend_id, name) composite key.
+// bucket_id foreign key.
 // Idempotent: a duplicate (backend_id, name) is a no-op so that the
 // handler can return the existing row instead of erroring. The S3-side
 // CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 // so the API surface stays consistently retry-safe.
-func (q *Queries) CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName string, region string, labels []byte) error {
+func (q *Queries) CreateBucket(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createBucket,
-		backendID,
 		name,
+		name_2,
 		displayName,
 		region,
 		labels,

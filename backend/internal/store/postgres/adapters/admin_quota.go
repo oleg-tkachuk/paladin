@@ -80,8 +80,8 @@ func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 	}
 	return qq.UpsertBucketQuota(ctx,
 		pgUUID(q.QuotaID),
-		strPtr(q.BackendID),
-		strPtr(q.BucketName),
+		q.BackendID,
+		q.BucketName,
 		nilIfZero(q.MaxTotalBytes),
 		nilIfZero(q.MaxObjectCount),
 		nilIfZero(q.MaxBytesPerDay),
@@ -97,7 +97,7 @@ func (r *QuotaRepoV2) GetTenant(ctx context.Context, tenantID uuid.UUID) (admind
 		}
 		return admindomain.Quota{}, err
 	}
-	return quotaFromSQLC(row), nil
+	return quotaFromSQLC(row.Quota, row.BackendName, row.BucketName), nil
 }
 
 func (r *QuotaRepoV2) GetBucket(ctx context.Context, backendID, bucketName string) (admindomain.Quota, error) {
@@ -111,14 +111,14 @@ func (r *QuotaRepoV2) GetBucketTx(ctx context.Context, tx pgx.Tx, backendID, buc
 }
 
 func getBucketQuota(ctx context.Context, qq *sqlc.Queries, backendID, bucketName string) (admindomain.Quota, error) {
-	row, err := qq.GetBucketQuota(ctx, &backendID, &bucketName)
+	row, err := qq.GetBucketQuota(ctx, backendID, bucketName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return admindomain.Quota{}, admindomain.ErrNotFound
 		}
 		return admindomain.Quota{}, err
 	}
-	return quotaFromSQLC(row), nil
+	return quotaFromSQLC(row.Quota, row.BackendName, row.BucketName), nil
 }
 
 func (r *QuotaRepoV2) IncrementUsage(ctx context.Context, quotaID uuid.UUID, deltaBytes, deltaCount int64) error {
@@ -144,16 +144,16 @@ func (r *QuotaRepoV2) OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, 
 	return r.IncrementUsage(ctx, q.QuotaID, sizeBytes, 1)
 }
 
-func quotaFromSQLC(q sqlc.Quota) admindomain.Quota {
+func quotaFromSQLC(q sqlc.Quota, backendName, bucketName string) admindomain.Quota {
 	return admindomain.Quota{
-		QuotaID:           uuidFrom(q.QuotaID),
+		QuotaID:           uuidFrom(q.ID),
 		TenantID:          uuidFrom(q.TenantID),
-		BackendID:         derefStr(q.BackendID),
-		BucketId:          derefStr(q.BucketName),
-		MaxTotalBytes:     nilIfZero(q.MaxTotalBytes),
-		MaxObjectCount:    nilIfZero(q.MaxObjectCount),
-		MaxBytesPerDay:    nilIfZero(q.MaxBytesPerDay),
-		MaxObjectsPerDay:  nilIfZero(q.MaxObjectsPerDay),
+		BackendID:         backendName,
+		BucketName:        bucketName,
+		MaxTotalBytes:     zeroIfNil(q.MaxTotalBytes),
+		MaxObjectCount:    zeroIfNil(q.MaxObjectCount),
+		MaxBytesPerDay:    zeroIfNil(q.MaxBytesPerDay),
+		MaxObjectsPerDay:  zeroIfNil(q.MaxObjectsPerDay),
 		UsageTotalBytes:   q.UsageTotalBytes,
 		UsageObjectCount:  q.UsageObjectCount,
 		UsageBytesToday:   q.UsageBytesToday,
@@ -172,4 +172,13 @@ func nilIfZero(v int64) *int64 {
 		return nil
 	}
 	return &v
+}
+
+// Mirror of nilIfZero on the way out: NULL means "no limit", which the domain
+// spells as zero.
+func zeroIfNil(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
