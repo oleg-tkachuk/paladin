@@ -212,15 +212,21 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 
 const hardDeleteObject = `-- name: HardDeleteObject :execrows
 DELETE FROM objects
-WHERE tenant_id = $1 AND id = $2
+WHERE objects.tenant_id = $1 AND objects.id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
-  AND NOT legal_hold
-  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now())
-  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now()
-           AND NOT COALESCE(current_setting('paladin.governance_bypass', true)::boolean, false))
+  -- The lock lives on the object's current version now (ADR-0013). NOT EXISTS
+  -- rather than a join: an object with no lock row is the common case and must
+  -- remain deletable.
+  AND NOT EXISTS (
+      SELECT 1 FROM object_locks l
+       WHERE l.version_id = objects.current_version_id
+         AND (l.legal_hold
+              OR (l.mode = 'COMPLIANCE' AND l.retain_until > now())
+              OR (l.mode = 'GOVERNANCE' AND l.retain_until > now()
+                  AND NOT COALESCE(
+                      current_setting('paladin.governance_bypass', true)::boolean,
+                      false))))
 `
 
 // Removes the row outright. Caller is responsible for first deleting the
@@ -244,16 +250,16 @@ func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD
 
 const hardDeleteObjectIfStillDeleted = `-- name: HardDeleteObjectIfStillDeleted :execrows
 DELETE FROM objects
-WHERE id = $1
-  AND state = 'DELETED'
-  AND resource_version = $2::bigint
+WHERE objects.id = $1
+  AND objects.state = 'DELETED'
+  AND objects.resource_version = $2::bigint
   -- Same lock guard as ListHardDeletable: a lock applied after the row
   -- was listed but before the worker deletes still blocks the purge.
-  AND NOT legal_hold
-  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now())
-  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now())
+  -- The worker has no governance bypass, so both modes block equally here.
+  AND NOT EXISTS (
+      SELECT 1 FROM object_locks l
+       WHERE l.version_id = objects.current_version_id
+         AND (l.legal_hold OR l.retain_until > now()))
 `
 
 // Defence-in-depth variant of HardDeleteObject for the worker path.

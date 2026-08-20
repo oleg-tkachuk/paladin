@@ -126,15 +126,21 @@ WHERE o.tenant_id = $1 AND o.id = $2;
 -- path does not). A locked row matches 0 rows here, so the caller must
 -- pre-check to distinguish "locked" from "version mismatch".
 DELETE FROM objects
-WHERE tenant_id = $1 AND id = $2
+WHERE objects.tenant_id = $1 AND objects.id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint)
-  AND NOT legal_hold
-  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now())
-  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now()
-           AND NOT COALESCE(current_setting('paladin.governance_bypass', true)::boolean, false));
+  -- The lock lives on the object's current version now (ADR-0013). NOT EXISTS
+  -- rather than a join: an object with no lock row is the common case and must
+  -- remain deletable.
+  AND NOT EXISTS (
+      SELECT 1 FROM object_locks l
+       WHERE l.version_id = objects.current_version_id
+         AND (l.legal_hold
+              OR (l.mode = 'COMPLIANCE' AND l.retain_until > now())
+              OR (l.mode = 'GOVERNANCE' AND l.retain_until > now()
+                  AND NOT COALESCE(
+                      current_setting('paladin.governance_bypass', true)::boolean,
+                      false))));
 
 -- name: ListHardDeletable :many
 -- Picks DELETED objects past the cooling-off window for the
@@ -176,16 +182,16 @@ LIMIT sqlc.arg('batch_size');
 -- no-op. Worker callers pass the version they read from
 -- ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
 DELETE FROM objects
-WHERE id = $1
-  AND state = 'DELETED'
-  AND resource_version = sqlc.arg('expected_version')::bigint
+WHERE objects.id = $1
+  AND objects.state = 'DELETED'
+  AND objects.resource_version = sqlc.arg('expected_version')::bigint
   -- Same lock guard as ListHardDeletable: a lock applied after the row
   -- was listed but before the worker deletes still blocks the purge.
-  AND NOT legal_hold
-  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now())
-  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
-           AND lock_retain_until > now());
+  -- The worker has no governance bypass, so both modes block equally here.
+  AND NOT EXISTS (
+      SELECT 1 FROM object_locks l
+       WHERE l.version_id = objects.current_version_id
+         AND (l.legal_hold OR l.retain_until > now()));
 
 -- name: CheckLiveCollision :one
 -- True when a non-DELETED row already exists at (tenant, collection_id, path).

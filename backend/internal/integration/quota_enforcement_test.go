@@ -113,7 +113,11 @@ func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 
 	var backendID, bucketName string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		`SELECT sb.name, b.name
+		   FROM collections c
+		   JOIN buckets b           ON b.id = c.bucket_id
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE c.tenant_id = $1 AND c.name = $2`,
 		f.tenantID, f.collection).Scan(&backendID, &bucketName); err != nil {
 		t.Fatalf("lookup binding: %v", err)
 	}

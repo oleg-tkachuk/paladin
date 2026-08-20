@@ -25,7 +25,11 @@ func TestLookupBucketReturnsBackendID(t *testing.T) {
 	// Ground truth straight from the row the fixture bound.
 	var wantBackend, wantBucket string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		`SELECT sb.name, b.name
+		   FROM collections c
+		   JOIN buckets b           ON b.id = c.bucket_id
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE c.tenant_id = $1 AND c.name = $2`,
 		f.tenantID, f.collection,
 	).Scan(&wantBackend, &wantBucket); err != nil {
 		t.Fatalf("read fixture collection binding: %v", err)

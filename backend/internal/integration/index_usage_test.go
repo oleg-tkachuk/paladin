@@ -70,7 +70,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 
 	plan := explain(t, ctx, pool, `
 		SELECT id FROM objects
-		 WHERE tenant_id = $1 AND collection = $2 AND id > $3
+		 WHERE tenant_id = $1 AND collection_id = $2 AND id > $3
 		 ORDER BY id
 		 LIMIT 50`, f.tenantID, keys[0], uuid.Nil)
 
@@ -85,7 +85,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 	empty := seedCollections(t, ctx, pool, f, 1)[0]
 	plan = explain(t, ctx, pool, `
 		SELECT id FROM objects
-		 WHERE tenant_id = $1 AND collection = $2 AND id > $3
+		 WHERE tenant_id = $1 AND collection_id = $2 AND id > $3
 		 ORDER BY id
 		 LIMIT 50`, f.tenantID, empty, uuid.Nil)
 

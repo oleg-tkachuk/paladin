@@ -80,7 +80,7 @@ type dbPool interface {
 }
 
 // PromoteToAvailable attempts the PENDING → AVAILABLE transition for
-// object_id. Safe under races: stale sequencers or state mismatches are
+// the object id. Safe under races: stale sequencers or state mismatches are
 // silently dropped (returned changed=false) rather than raising an error.
 //
 // etag/size/checksum come from the trusted source (event or HEAD probe).
@@ -169,7 +169,7 @@ func (t *Transitioner) promote(
                checksum = COALESCE(NULLIF($4, ''), checksum),
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
                committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END
-         WHERE object_id = $1
+         WHERE id = $1
            AND (
                 ($5 = '' AND state = 'PENDING')
                 OR ($5 <> '' AND state IN ('PENDING', 'AVAILABLE')
@@ -196,7 +196,7 @@ func (t *Transitioner) MarkFailed(ctx context.Context, objectID uuid.UUID, reaso
         UPDATE objects
            SET state = 'FAILED',
                terminated_at = now()
-         WHERE object_id = $1 AND state = 'PENDING'
+         WHERE id = $1 AND state = 'PENDING'
     `
 	_, err := t.pool.Exec(ctx, q, objectID)
 	if err != nil {
@@ -230,7 +230,7 @@ func (t *Transitioner) softDelete(ctx context.Context, exec dbExec, objectID uui
         UPDATE objects
            SET state = 'DELETED',
                terminated_at = now()
-         WHERE object_id = $1
+         WHERE id = $1
            AND state = 'AVAILABLE'
            AND ($2 = 0 OR resource_version = $2)
     `
@@ -263,7 +263,7 @@ func (t *Transitioner) restore(ctx context.Context, exec dbExec, objectID uuid.U
         UPDATE objects
            SET state = 'AVAILABLE',
                terminated_at = NULL
-         WHERE object_id = $1 AND state = 'DELETED'
+         WHERE id = $1 AND state = 'DELETED'
     `
 	tag, err := exec.Exec(ctx, q, objectID)
 	if err != nil {
@@ -308,7 +308,7 @@ func (t *Transitioner) ScanPendingExpired(
 	limit int,
 ) ([]uuid.UUID, error) {
 	const q = `
-        SELECT object_id
+        SELECT id
           FROM objects
          WHERE state = 'PENDING'
            AND presign_expires_at IS NOT NULL
