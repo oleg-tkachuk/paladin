@@ -118,8 +118,9 @@ func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f 
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool,
-		`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
-		 VALUES ($1, $2, $3, $4, 'PENDING', 'application/octet-stream', 0)`,
+		`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
+		 SELECT $1, $2, c.id, $4, 'PENDING', 'application/octet-stream', 0
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection, "key-"+uuid.NewString()[:8])
 	return id
 }
@@ -287,7 +288,8 @@ func TestOutboxCrashWindow(t *testing.T) {
 		be := "be2-" + uuid.NewString()[:8]
 		bn := "bkt2-" + uuid.NewString()[:8]
 		mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, be)
-		mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, bucket_name, owner_tenant_id) VALUES ($1, $2, $3)`, be, bn, f.tenantID)
+		mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, be, bn, f.tenantID)
 		return be, bn
 	}
 

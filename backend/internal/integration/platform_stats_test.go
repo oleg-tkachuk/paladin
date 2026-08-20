@@ -91,8 +91,9 @@ func TestCollectRLSObjects(t *testing.T) {
 	insert := func(tenantID uuid.UUID, collection, state string, size any) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm, size_bytes)
-			 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6)`,
+			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, size_bytes)
+		 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 			uuid.Must(uuid.NewV7()), tenantID, collection, "k-"+uuid.NewString()[:8], state, size)
 	}
 	insert(big.tenantID, big.collection, "AVAILABLE", 100)

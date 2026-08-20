@@ -173,7 +173,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 	quiet := seedTenants(t, ctx, pool, tenantCount-1)
 	// 300 operations per tenant, interleaved by the UUIDv7 ordering.
 	mustExec(t, ctx, pool, `
-		INSERT INTO operations (operation_id, tenant_id, type, state)
+		INSERT INTO operations (id, tenant_id, type, state)
 		SELECT gen_random_uuid(), t.id, 'BatchDelete', 'PENDING'
 		  FROM generate_series(1, 300) g, tenants t`)
 	analyze(t, ctx, pool, "operations")

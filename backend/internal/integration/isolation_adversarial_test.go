@@ -98,7 +98,9 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 
 	seedObj := func(tid uuid.UUID) {
 		ok := "ok-" + uuid.NewString()[:8]
-		mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
+		mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
+			  WHERE sb.name = $3 AND b.name = $4)`,
 			tid, ok, backendID, bucket)
 		mustExec(t, ctx, pool,
 			`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
@@ -173,7 +175,9 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 		t.Fatalf("create dedicated tenant: %v", err)
 	}
 	bucket := "paladin-" + tid.String()
-	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
+	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
+			  WHERE sb.name = $3 AND b.name = $4)`,
 		tid, "docs", backendID, bucket)
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)

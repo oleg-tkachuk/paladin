@@ -62,7 +62,8 @@ func TestBucketProvisioningGate(t *testing.T) {
 
 	// Reconciler marks the bucket ready → writes resolve.
 	mustExec(t, ctx, pool,
-		`UPDATE buckets SET provision_state = 'ready' WHERE backend_id = $1 AND bucket_name = $2`,
+		`UPDATE buckets SET provision_state = 'ready' WHERE id = (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
+			  WHERE sb.name = $1 AND b.name = $2)`,
 		backendID, bucket)
 	if _, _, err := repo.LookupBucket(ctx, tid, collection, true); err != nil {
 		t.Fatalf("write LookupBucket after ready: %v, want success", err)
