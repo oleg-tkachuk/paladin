@@ -16,12 +16,12 @@ UPDATE operations
 SET state   = 'CANCELLED',
     done_at = now(),
     updated_at = now()
-WHERE operation_id = $1 AND tenant_id = $2
+WHERE id = $1 AND tenant_id = $2
   AND state IN ('PENDING', 'RUNNING')
 `
 
-func (q *Queries) CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, cancelOperation, operationID, tenantID)
+func (q *Queries) CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelOperation, iD, tenantID)
 	if err != nil {
 		return 0, err
 	}
@@ -30,14 +30,14 @@ func (q *Queries) CancelOperation(ctx context.Context, operationID pgtype.UUID, 
 
 const createOperation = `-- name: CreateOperation :exec
 
-INSERT INTO operations (operation_id, tenant_id, type, state, metadata)
+INSERT INTO operations (id, tenant_id, type, state, metadata)
 VALUES ($1, $2, $3, $4, $5)
 `
 
 // Long-running operation queries.
-func (q *Queries) CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error {
+func (q *Queries) CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error {
 	_, err := q.db.Exec(ctx, createOperation,
-		operationID,
+		iD,
 		tenantID,
 		type_,
 		state,
@@ -47,20 +47,20 @@ func (q *Queries) CreateOperation(ctx context.Context, operationID pgtype.UUID, 
 }
 
 const getOperation = `-- name: GetOperation :one
-SELECT operations.operation_id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
 FROM operations
-WHERE operation_id = $1 AND tenant_id = $2
+WHERE id = $1 AND tenant_id = $2
 `
 
 type GetOperationRow struct {
 	Operation Operation `json:"operation"`
 }
 
-func (q *Queries) GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error) {
-	row := q.db.QueryRow(ctx, getOperation, operationID, tenantID)
+func (q *Queries) GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error) {
+	row := q.db.QueryRow(ctx, getOperation, iD, tenantID)
 	var i GetOperationRow
 	err := row.Scan(
-		&i.Operation.OperationID,
+		&i.Operation.ID,
 		&i.Operation.TenantID,
 		&i.Operation.Type,
 		&i.Operation.State,
@@ -76,12 +76,12 @@ func (q *Queries) GetOperation(ctx context.Context, operationID pgtype.UUID, ten
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT operations.operation_id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
-  AND ($3::uuid IS NULL OR operation_id > $3::uuid)
-ORDER BY operation_id
+  AND ($3::uuid IS NULL OR id > $3::uuid)
+ORDER BY id
 LIMIT $4
 `
 
@@ -104,7 +104,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 	for rows.Next() {
 		var i ListOperationsRow
 		if err := rows.Scan(
-			&i.Operation.OperationID,
+			&i.Operation.ID,
 			&i.Operation.TenantID,
 			&i.Operation.Type,
 			&i.Operation.State,
@@ -159,12 +159,12 @@ SET state         = $2,
     done_at       = CASE WHEN $2 IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
-WHERE operation_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) UpdateOperationState(ctx context.Context, operationID pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error) {
+func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error) {
 	result, err := q.db.Exec(ctx, updateOperationState,
-		operationID,
+		iD,
 		state,
 		metadata,
 		response,

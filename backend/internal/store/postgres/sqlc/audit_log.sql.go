@@ -12,18 +12,34 @@ import (
 )
 
 const getAuditEntry = `-- name: GetAuditEntry :one
-SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
        before_json, after_json, error_message, capability_id
 FROM audit_log
-WHERE entry_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) GetAuditEntry(ctx context.Context, entryID pgtype.UUID) (AuditLog, error) {
-	row := q.db.QueryRow(ctx, getAuditEntry, entryID)
-	var i AuditLog
+type GetAuditEntryRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	At            pgtype.Timestamptz `json:"at"`
+	ActorSubject  string             `json:"actor_subject"`
+	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
+	ActorAudience string             `json:"actor_audience"`
+	Action        string             `json:"action"`
+	ResourceName  string             `json:"resource_name"`
+	RequestID     string             `json:"request_id"`
+	SourceIp      *string            `json:"source_ip"`
+	BeforeJson    []byte             `json:"before_json"`
+	AfterJson     []byte             `json:"after_json"`
+	ErrorMessage  *string            `json:"error_message"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+}
+
+func (q *Queries) GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error) {
+	row := q.db.QueryRow(ctx, getAuditEntry, id)
+	var i GetAuditEntryRow
 	err := row.Scan(
-		&i.EntryID,
+		&i.ID,
 		&i.At,
 		&i.ActorSubject,
 		&i.ActorTenantID,
@@ -42,15 +58,15 @@ func (q *Queries) GetAuditEntry(ctx context.Context, entryID pgtype.UUID) (Audit
 
 const insertAuditEntry = `-- name: InsertAuditEntry :exec
 INSERT INTO audit_log (
-    entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+    id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
     before_json, after_json, error_message, capability_id
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
-func (q *Queries) InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error {
+func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, insertAuditEntry,
-		entryID,
+		iD,
 		at,
 		actorSubject,
 		actorTenantID,
@@ -68,7 +84,7 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at 
 }
 
 const listAuditEntries = `-- name: ListAuditEntries :many
-SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+SELECT id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
        before_json, after_json, error_message, capability_id
 FROM audit_log
@@ -86,12 +102,28 @@ WHERE ($1::text IS NULL
        OR at <= $6::timestamptz)
   AND ($7::timestamptz IS NULL
        OR at < $7::timestamptz
-       OR (at = $7::timestamptz AND entry_id < $8::uuid))
-ORDER BY at DESC, entry_id DESC
+       OR (at = $7::timestamptz AND id < $8::uuid))
+ORDER BY at DESC, id DESC
 LIMIT $9
 `
 
-// Cursor: (at, entry_id) tuple. Optional predicates use the canonical
+type ListAuditEntriesRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	At            pgtype.Timestamptz `json:"at"`
+	ActorSubject  string             `json:"actor_subject"`
+	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
+	ActorAudience string             `json:"actor_audience"`
+	Action        string             `json:"action"`
+	ResourceName  string             `json:"resource_name"`
+	RequestID     string             `json:"request_id"`
+	SourceIp      *string            `json:"source_ip"`
+	BeforeJson    []byte             `json:"before_json"`
+	AfterJson     []byte             `json:"after_json"`
+	ErrorMessage  *string            `json:"error_message"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+}
+
+// Cursor: (at, id) tuple. Optional predicates use the canonical
 // sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
 // constant-folds the disabled branches at plan time.
 //
@@ -101,7 +133,7 @@ LIMIT $9
 // full CEL program ALWAYS still runs in-memory after this fetch, so
 // pushdown only narrows the candidate set; correctness lives in the
 // handler, not in this WHERE clause.
-func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error) {
+func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listAuditEntries,
 		actorSubject,
 		actorTenantID,
@@ -117,11 +149,11 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AuditLog
+	var items []ListAuditEntriesRow
 	for rows.Next() {
-		var i AuditLog
+		var i ListAuditEntriesRow
 		if err := rows.Scan(
-			&i.EntryID,
+			&i.ID,
 			&i.At,
 			&i.ActorSubject,
 			&i.ActorTenantID,

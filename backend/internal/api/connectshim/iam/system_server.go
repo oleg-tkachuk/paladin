@@ -20,7 +20,7 @@ import (
 // checks the K8s probes run. Lives on the IAM plane so any authenticated
 // caller can read it — the response carries no tenant-sensitive data.
 type SystemServer struct {
-	paladiniamv1connect.UnimplementedSystemServiceHandler
+	paladiniamv1connect.UnimplementedHealthServiceHandler
 
 	// Build metadata. Empty/zero in local `go run` builds.
 	Version   string

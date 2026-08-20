@@ -13,22 +13,20 @@ import (
 
 const bindCollectionToBucket = `-- name: BindCollectionToBucket :execrows
 UPDATE collections
-SET backend_id  = $3,
-    bucket_name = $4
-WHERE tenant_id = $1 AND collection = $2
-  AND ($5::bigint = 0
-       OR resource_version = $5::bigint)
+SET bucket_id = $3
+WHERE tenant_id = $1 AND name = $2
+  AND ($4::bigint = 0
+       OR resource_version = $4::bigint)
 `
 
-// Atomically rebinds an collection to a different (backend_id, bucket_name).
-// The DB trigger enforce_collection_bucket_tenancy validates the tenancy
-// constraint (single-tenant buckets reject mismatched tenants).
-func (q *Queries) BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, collection string, backendID string, bucketName string, expectedVersion int64) (int64, error) {
+// Atomically rebinds a name to a different bucket. Tenancy is enforced
+// declaratively now: objects carry a composite FK to (tenant_id, id), so a
+// name cannot be moved under a bucket that would orphan them.
+func (q *Queries) BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, bucketID pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, bindCollectionToBucket,
 		tenantID,
-		collection,
-		backendID,
-		bucketName,
+		name,
+		bucketID,
 		expectedVersion,
 	)
 	if err != nil {
@@ -40,19 +38,18 @@ func (q *Queries) BindCollectionToBucket(ctx context.Context, tenantID pgtype.UU
 const createCollection = `-- name: CreateCollection :exec
 
 INSERT INTO collections (
-    tenant_id, collection, display_name, backend_id, bucket_name,
+    tenant_id, name, display_name, bucket_id,
     cedar_policy, lifecycle_rules
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 // Collection queries.
-func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, collection string, displayName *string, backendID string, bucketName string, cedarPolicy string, lifecycleRules []byte) error {
+func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, bucketID pgtype.UUID, cedarPolicy string, lifecycleRules []byte) error {
 	_, err := q.db.Exec(ctx, createCollection,
 		tenantID,
-		collection,
+		name,
 		displayName,
-		backendID,
-		bucketName,
+		bucketID,
 		cedarPolicy,
 		lifecycleRules,
 	)
@@ -61,17 +58,47 @@ func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, co
 
 const deleteCollection = `-- name: DeleteCollection :execrows
 DELETE FROM collections
-WHERE tenant_id = $1 AND collection = $2
+WHERE tenant_id = $1 AND name = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
 
-func (q *Queries) DeleteCollection(ctx context.Context, tenantID pgtype.UUID, collection string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteCollection, tenantID, collection, expectedVersion)
+func (q *Queries) DeleteCollection(ctx context.Context, tenantID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCollection, tenantID, name, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getCollection = `-- name: GetCollection :one
+SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at
+FROM collections
+WHERE tenant_id = $1 AND name = $2
+`
+
+type GetCollectionRow struct {
+	Collection Collection `json:"collection"`
+}
+
+func (q *Queries) GetCollection(ctx context.Context, tenantID pgtype.UUID, name string) (GetCollectionRow, error) {
+	row := q.db.QueryRow(ctx, getCollection, tenantID, name)
+	var i GetCollectionRow
+	err := row.Scan(
+		&i.Collection.ID,
+		&i.Collection.TenantID,
+		&i.Collection.Name,
+		&i.Collection.DisplayName,
+		&i.Collection.BucketID,
+		&i.Collection.Constraints,
+		&i.Collection.LifecycleRules,
+		&i.Collection.CedarPolicy,
+		&i.Collection.CedarPolicyHash,
+		&i.Collection.ResourceVersion,
+		&i.Collection.CreatedAt,
+		&i.Collection.UpdatedAt,
+	)
+	return i, err
 }
 
 const getEffectivePolicy = `-- name: GetEffectivePolicy :one
@@ -81,9 +108,9 @@ SELECT t.inherited_cedar_policy AS tenant_policy,
        b.cedar_policy_hash      AS bucket_hash
 FROM tenants t
 LEFT JOIN collections b
-  ON b.tenant_id = t.tenant_id
- AND b.collection = $2::text
-WHERE t.tenant_id = $1
+  ON b.tenant_id = t.id
+ AND b.name = $2::text
+WHERE t.id = $1
 `
 
 type GetEffectivePolicyRow struct {
@@ -93,11 +120,11 @@ type GetEffectivePolicyRow struct {
 	BucketHash   []byte  `json:"bucket_hash"`
 }
 
-// Returns tenant-inherited policy concatenated with the collection-specific policy.
-// Order is: tenant policies first, then collection — Cedar treats them as a single
+// Returns tenant-inherited policy concatenated with the collection's own.
+// Order is: tenant policies first, then name — Cedar treats them as a single
 // policy set; ordering only affects diagnostic output.
-func (q *Queries) GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, collection *string) (GetEffectivePolicyRow, error) {
-	row := q.db.QueryRow(ctx, getEffectivePolicy, tenantID, collection)
+func (q *Queries) GetEffectivePolicy(ctx context.Context, iD pgtype.UUID, collection *string) (GetEffectivePolicyRow, error) {
+	row := q.db.QueryRow(ctx, getEffectivePolicy, iD, collection)
 	var i GetEffectivePolicyRow
 	err := row.Scan(
 		&i.TenantPolicy,
@@ -108,43 +135,13 @@ func (q *Queries) GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, 
 	return i, err
 }
 
-const getCollection = `-- name: GetCollection :one
-SELECT collections.tenant_id, collections.collection, collections.display_name, collections.backend_id, collections.cedar_policy, collections.cedar_policy_hash, collections.lifecycle_rules, collections.resource_version, collections.created_at, collections.updated_at, collections.bucket_name, collections.constraints
-FROM collections
-WHERE tenant_id = $1 AND collection = $2
-`
-
-type GetCollectionRow struct {
-	Collection Collection `json:"collection"`
-}
-
-func (q *Queries) GetCollection(ctx context.Context, tenantID pgtype.UUID, collection string) (GetCollectionRow, error) {
-	row := q.db.QueryRow(ctx, getCollection, tenantID, collection)
-	var i GetCollectionRow
-	err := row.Scan(
-		&i.Collection.TenantID,
-		&i.Collection.Collection,
-		&i.Collection.DisplayName,
-		&i.Collection.BackendID,
-		&i.Collection.CedarPolicy,
-		&i.Collection.CedarPolicyHash,
-		&i.Collection.LifecycleRules,
-		&i.Collection.ResourceVersion,
-		&i.Collection.CreatedAt,
-		&i.Collection.UpdatedAt,
-		&i.Collection.BucketName,
-		&i.Collection.Constraints,
-	)
-	return i, err
-}
-
 const listCollectionNamesForTenant = `-- name: ListCollectionNamesForTenant :many
-SELECT collection
+SELECT name
 FROM collections
 WHERE tenant_id = $1
 `
 
-// Every registered collection name for the tenant. Backs the in-process
+// Every registered name name for the tenant. Backs the in-process
 // longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
 // not a per-event query on the ingest hot path. collections is small per tenant
 // (bounded by the tenant's namespace layout), so the unbounded read is cheap.
@@ -156,11 +153,11 @@ func (q *Queries) ListCollectionNamesForTenant(ctx context.Context, tenantID pgt
 	defer rows.Close()
 	var items []string
 	for rows.Next() {
-		var collection string
-		if err := rows.Scan(&collection); err != nil {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		items = append(items, collection)
+		items = append(items, name)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -169,11 +166,11 @@ func (q *Queries) ListCollectionNamesForTenant(ctx context.Context, tenantID pgt
 }
 
 const listCollections = `-- name: ListCollections :many
-SELECT collections.tenant_id, collections.collection, collections.display_name, collections.backend_id, collections.cedar_policy, collections.cedar_policy_hash, collections.lifecycle_rules, collections.resource_version, collections.created_at, collections.updated_at, collections.bucket_name, collections.constraints
+SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at
 FROM collections
 WHERE tenant_id = $1
-  AND ($2::text IS NULL OR collection > $2::text)
-ORDER BY collection
+  AND ($2::text IS NULL OR name > $2::text)
+ORDER BY name
 LIMIT $3
 `
 
@@ -191,18 +188,18 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, aft
 	for rows.Next() {
 		var i ListCollectionsRow
 		if err := rows.Scan(
+			&i.Collection.ID,
 			&i.Collection.TenantID,
-			&i.Collection.Collection,
+			&i.Collection.Name,
 			&i.Collection.DisplayName,
-			&i.Collection.BackendID,
+			&i.Collection.BucketID,
+			&i.Collection.Constraints,
+			&i.Collection.LifecycleRules,
 			&i.Collection.CedarPolicy,
 			&i.Collection.CedarPolicyHash,
-			&i.Collection.LifecycleRules,
 			&i.Collection.ResourceVersion,
 			&i.Collection.CreatedAt,
 			&i.Collection.UpdatedAt,
-			&i.Collection.BucketName,
-			&i.Collection.Constraints,
 		); err != nil {
 			return nil, err
 		}
@@ -215,27 +212,28 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, aft
 }
 
 const resolveCollectionPrefix = `-- name: ResolveCollectionPrefix :one
-SELECT collection
+SELECT name
 FROM collections
 WHERE tenant_id = $1
-  AND ($2 = collection OR $2 LIKE collection || '/%')
-ORDER BY length(collection) DESC
+  AND ($2::text = name
+       OR $2::text LIKE name || '/%')
+ORDER BY length(name) DESC
 LIMIT 1
 `
 
-// Longest registered collection that is a prefix of $2 (the recombined
-// "<collection>/<key>" tail of an ingest event) for the tenant. Multi-segment
+// Longest registered collection name that is a prefix of the candidate (the
+// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
 // collections (migration 030) make the naive "the OK is the first path
 // segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
-// OK `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1` + key
-// `report.pdf`. Longest-prefix gives deterministic precedence (the more
-// specific OK wins). collection is constrained to `[a-z0-9-]` path segments
+// collection `invoices` + path `2026/q1/report.pdf`, OR collection
+// `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
+// more specific one wins). name is constrained to `[a-z0-9-]` path segments
 // (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
-func (q *Queries) ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, collection string) (string, error) {
-	row := q.db.QueryRow(ctx, resolveCollectionPrefix, tenantID, collection)
-	var collection string
-	err := row.Scan(&collection)
-	return collection, err
+func (q *Queries) ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, candidate string) (string, error) {
+	row := q.db.QueryRow(ctx, resolveCollectionPrefix, tenantID, candidate)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const updateCollection = `-- name: UpdateCollection :execrows
@@ -246,16 +244,16 @@ SET display_name    = COALESCE($3,    display_name),
                              THEN cedar_policy_hash
                              ELSE $5 END,
     lifecycle_rules = COALESCE($6, lifecycle_rules)
-WHERE tenant_id = $1 AND collection = $2
+WHERE tenant_id = $1 AND name = $2
   AND ($7::bigint = 0
        OR resource_version = $7::bigint)
 `
 
 // expected_version=0 disables the OCC guard (force update).
-func (q *Queries) UpdateCollection(ctx context.Context, tenantID pgtype.UUID, collection string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateCollection,
 		tenantID,
-		collection,
+		name,
 		displayName,
 		policy,
 		policyHash,

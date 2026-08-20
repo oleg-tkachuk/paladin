@@ -17,7 +17,7 @@ FROM buckets
 WHERE backend_id = $1
 `
 
-func (q *Queries) CountBucketsForBackend(ctx context.Context, backendID string) (int64, error) {
+func (q *Queries) CountBucketsForBackend(ctx context.Context, backendID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countBucketsForBackend, backendID)
 	var count int64
 	err := row.Scan(&count)
@@ -26,12 +26,12 @@ func (q *Queries) CountBucketsForBackend(ctx context.Context, backendID string) 
 
 const deleteStorageBackend = `-- name: DeleteStorageBackend :execrows
 DELETE FROM storage_backends
-WHERE id = $1
+WHERE storage_backends.id = $1
   AND ($2::bigint = 0
        OR resource_version = $2::bigint)
 `
 
-func (q *Queries) DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error) {
+func (q *Queries) DeleteStorageBackend(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteStorageBackend, iD, expectedVersion)
 	if err != nil {
 		return 0, err
@@ -40,7 +40,7 @@ func (q *Queries) DeleteStorageBackend(ctx context.Context, iD string, expectedV
 }
 
 const getStorageBackendV2 = `-- name: GetStorageBackendV2 :one
-SELECT id, kind, endpoint, region, events_enabled, events_target,
+SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
@@ -52,41 +52,41 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        resource_version, created_at, updated_at
 FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
-WHERE id = $1
+WHERE storage_backends.id = $1
 `
 
 type GetStorageBackendV2Row struct {
-	ID                            string             `json:"id"`
-	Kind                          string             `json:"kind"`
-	Endpoint                      *string            `json:"endpoint"`
-	Region                        *string            `json:"region"`
-	EventsEnabled                 bool               `json:"events_enabled"`
-	EventsTarget                  *string            `json:"events_target"`
-	DisplayName                   *string            `json:"display_name"`
-	PublicEndpoint                *string            `json:"public_endpoint"`
-	ForcePathStyle                bool               `json:"force_path_style"`
-	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
-	SseType                       string             `json:"sse_type"`
-	SseKeyID                      string             `json:"sse_key_id"`
-	EventsQueueUrl                string             `json:"events_queue_url"`
-	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
-	CedarPolicy                   string             `json:"cedar_policy"`
-	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
-	Enabled                       bool               `json:"enabled"`
-	ReadOnly                      bool               `json:"read_only"`
-	Maintenance                   bool               `json:"maintenance"`
-	Provider                      string             `json:"provider"`
-	HealthStatus                  string             `json:"health_status"`
-	HealthMessage                 string             `json:"health_message"`
-	HealthCheckedAt               pgtype.Timestamptz `json:"health_checked_at"`
-	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
-	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
-	ResourceVersion               int64              `json:"resource_version"`
-	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	ID                            pgtype.UUID         `json:"id"`
+	Kind                          string              `json:"kind"`
+	Endpoint                      *string             `json:"endpoint"`
+	Region                        *string             `json:"region"`
+	EventsEnabled                 bool                `json:"events_enabled"`
+	EventsTarget                  *string             `json:"events_target"`
+	DisplayName                   *string             `json:"display_name"`
+	PublicEndpoint                *string             `json:"public_endpoint"`
+	ForcePathStyle                bool                `json:"force_path_style"`
+	CredentialsSecretRef          *string             `json:"credentials_secret_ref"`
+	SseType                       string              `json:"sse_type"`
+	SseKeyID                      *string             `json:"sse_key_id"`
+	EventsQueueUrl                *string             `json:"events_queue_url"`
+	EventsPollIntervalMs          int64               `json:"events_poll_interval_ms"`
+	CedarPolicy                   string              `json:"cedar_policy"`
+	CedarPolicyHash               []byte              `json:"cedar_policy_hash"`
+	Enabled                       bool                `json:"enabled"`
+	ReadOnly                      bool                `json:"read_only"`
+	Maintenance                   bool                `json:"maintenance"`
+	Provider                      string              `json:"provider"`
+	HealthStatus                  BackendHealthStatus `json:"health_status"`
+	HealthMessage                 string              `json:"health_message"`
+	HealthCheckedAt               pgtype.Timestamptz  `json:"health_checked_at"`
+	PreviousCredentialsSecretRef  *string             `json:"previous_credentials_secret_ref"`
+	PreviousCredentialsValidUntil pgtype.Timestamptz  `json:"previous_credentials_valid_until"`
+	ResourceVersion               int64               `json:"resource_version"`
+	CreatedAt                     pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz  `json:"updated_at"`
 }
 
-func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error) {
+func (q *Queries) GetStorageBackendV2(ctx context.Context, id pgtype.UUID) (GetStorageBackendV2Row, error) {
 	row := q.db.QueryRow(ctx, getStorageBackendV2, id)
 	var i GetStorageBackendV2Row
 	err := row.Scan(
@@ -123,7 +123,7 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorag
 }
 
 const listStorageBackends = `-- name: ListStorageBackends :many
-SELECT id, kind, endpoint, region, events_enabled, events_target,
+SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
@@ -137,39 +137,39 @@ FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE ($1::text IS NULL
        OR id > $1::text)
-ORDER BY id ASC
+ORDER BY storage_backends.id ASC
 LIMIT $2::int
 `
 
 type ListStorageBackendsRow struct {
-	ID                            string             `json:"id"`
-	Kind                          string             `json:"kind"`
-	Endpoint                      *string            `json:"endpoint"`
-	Region                        *string            `json:"region"`
-	EventsEnabled                 bool               `json:"events_enabled"`
-	EventsTarget                  *string            `json:"events_target"`
-	DisplayName                   *string            `json:"display_name"`
-	PublicEndpoint                *string            `json:"public_endpoint"`
-	ForcePathStyle                bool               `json:"force_path_style"`
-	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
-	SseType                       string             `json:"sse_type"`
-	SseKeyID                      string             `json:"sse_key_id"`
-	EventsQueueUrl                string             `json:"events_queue_url"`
-	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
-	CedarPolicy                   string             `json:"cedar_policy"`
-	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
-	Enabled                       bool               `json:"enabled"`
-	ReadOnly                      bool               `json:"read_only"`
-	Maintenance                   bool               `json:"maintenance"`
-	Provider                      string             `json:"provider"`
-	HealthStatus                  string             `json:"health_status"`
-	HealthMessage                 string             `json:"health_message"`
-	HealthCheckedAt               pgtype.Timestamptz `json:"health_checked_at"`
-	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
-	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
-	ResourceVersion               int64              `json:"resource_version"`
-	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	ID                            pgtype.UUID         `json:"id"`
+	Kind                          string              `json:"kind"`
+	Endpoint                      *string             `json:"endpoint"`
+	Region                        *string             `json:"region"`
+	EventsEnabled                 bool                `json:"events_enabled"`
+	EventsTarget                  *string             `json:"events_target"`
+	DisplayName                   *string             `json:"display_name"`
+	PublicEndpoint                *string             `json:"public_endpoint"`
+	ForcePathStyle                bool                `json:"force_path_style"`
+	CredentialsSecretRef          *string             `json:"credentials_secret_ref"`
+	SseType                       string              `json:"sse_type"`
+	SseKeyID                      *string             `json:"sse_key_id"`
+	EventsQueueUrl                *string             `json:"events_queue_url"`
+	EventsPollIntervalMs          int64               `json:"events_poll_interval_ms"`
+	CedarPolicy                   string              `json:"cedar_policy"`
+	CedarPolicyHash               []byte              `json:"cedar_policy_hash"`
+	Enabled                       bool                `json:"enabled"`
+	ReadOnly                      bool                `json:"read_only"`
+	Maintenance                   bool                `json:"maintenance"`
+	Provider                      string              `json:"provider"`
+	HealthStatus                  BackendHealthStatus `json:"health_status"`
+	HealthMessage                 string              `json:"health_message"`
+	HealthCheckedAt               pgtype.Timestamptz  `json:"health_checked_at"`
+	PreviousCredentialsSecretRef  *string             `json:"previous_credentials_secret_ref"`
+	PreviousCredentialsValidUntil pgtype.Timestamptz  `json:"previous_credentials_valid_until"`
+	ResourceVersion               int64               `json:"resource_version"`
+	CreatedAt                     pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz  `json:"updated_at"`
 }
 
 // Cursor pagination. The IS-NULL guard is mandatory: callers may pass
@@ -234,13 +234,13 @@ SET previous_credentials_secret_ref  = credentials_secret_ref,
         ELSE NULL
     END,
     credentials_secret_ref           = $2
-WHERE id = $1
+WHERE storage_backends.id = $1
 `
 
 // Dual-write rotation: stash the current ref as the previous one with a
 // validity horizon of now()+grace, then swap in the new ref. $3 is the grace
 // window in seconds; 0 clears the previous window (instant rotation).
-func (q *Queries) RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string, column3 int64) (int64, error) {
+func (q *Queries) RotateStorageBackendCredentials(ctx context.Context, iD pgtype.UUID, credentialsSecretRef *string, column3 int64) (int64, error) {
 	result, err := q.db.Exec(ctx, rotateStorageBackendCredentials, iD, credentialsSecretRef, column3)
 	if err != nil {
 		return 0, err
@@ -251,7 +251,7 @@ func (q *Queries) RotateStorageBackendCredentials(ctx context.Context, iD string
 const setStorageBackendEnabled = `-- name: SetStorageBackendEnabled :execrows
 UPDATE storage_backends
 SET enabled = $1
-WHERE id = $2
+WHERE storage_backends.id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
@@ -260,7 +260,7 @@ WHERE id = $2
 // trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
 // enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
 // config-mirror must never touch this operator-managed column.
-func (q *Queries) SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetStorageBackendEnabled(ctx context.Context, enabled bool, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageBackendEnabled, enabled, iD, expectedVersion)
 	if err != nil {
 		return 0, err
@@ -271,14 +271,14 @@ func (q *Queries) SetStorageBackendEnabled(ctx context.Context, enabled bool, iD
 const setStorageBackendMaintenance = `-- name: SetStorageBackendMaintenance :execrows
 UPDATE storage_backends
 SET maintenance = $1
-WHERE id = $2
+WHERE storage_backends.id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
 
 // Flip the operator-set maintenance flag (migration 049). Same OCC +
 // operator-managed contract as the enable/read-only setters; advisory only.
-func (q *Queries) SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageBackendMaintenance, maintenance, iD, expectedVersion)
 	if err != nil {
 		return 0, err
@@ -289,14 +289,14 @@ func (q *Queries) SetStorageBackendMaintenance(ctx context.Context, maintenance 
 const setStorageBackendReadOnly = `-- name: SetStorageBackendReadOnly :execrows
 UPDATE storage_backends
 SET read_only = $1
-WHERE id = $2
+WHERE storage_backends.id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
 
 // Flip the read-only (drain) state. Same OCC + operator-managed contract as
 // SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
-func (q *Queries) SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageBackendReadOnly, readOnly, iD, expectedVersion)
 	if err != nil {
 		return 0, err
@@ -319,12 +319,12 @@ SET display_name            = COALESCE($1, display_name),
     events_queue_url        = COALESCE($11, events_queue_url),
     events_poll_interval_ms = COALESCE($12, events_poll_interval_ms),
     cedar_policy            = COALESCE($13, cedar_policy)
-WHERE id = $14
+WHERE storage_backends.id = $14
   AND ($15::bigint = 0
        OR resource_version = $15::bigint)
 `
 
-func (q *Queries) UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, iD string, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateStorageBackend,
 		displayName,
 		endpoint,
@@ -361,7 +361,7 @@ SET status     = EXCLUDED.status,
 // state in its own 1:1 table — writing it does NOT touch storage_backends, so
 // it never fires the bump_rv trigger (no resource_version / updated_at churn)
 // and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
-func (q *Queries) UpsertStorageBackendHealth(ctx context.Context, backendID string, status string, message string, checkedAt pgtype.Timestamptz) error {
+func (q *Queries) UpsertStorageBackendHealth(ctx context.Context, backendID pgtype.UUID, status BackendHealthStatus, message *string, checkedAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, upsertStorageBackendHealth,
 		backendID,
 		status,
@@ -401,7 +401,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 // v2 storage_backends queries — full CRUD over the now-first-class entity.
 // Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
-func (q *Queries) UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error {
+func (q *Queries) UpsertStorageBackendV2(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID *string, eventsQueueUrl *string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error {
 	_, err := q.db.Exec(ctx, upsertStorageBackendV2,
 		iD,
 		kind,

@@ -43,4 +43,4 @@ LIMIT sqlc.arg('page_size');
 -- name: CountCollectionsReferencingBucket :one
 SELECT count(*)::bigint AS count
 FROM collections
-WHERE backend_id = $1 AND name = $2;
+WHERE bucket_id = $1;

@@ -15,16 +15,16 @@ const checkLiveCollision = `-- name: CheckLiveCollision :one
 SELECT EXISTS(
     SELECT 1 FROM objects
     WHERE tenant_id = $1
-      AND collection = $2
-      AND key = $3
+      AND collection_id = $2
+      AND path = $3
       AND state <> 'DELETED'
 )::boolean AS exists
 `
 
-// True when a non-DELETED row already exists at (tenant, collection, key).
+// True when a non-DELETED row already exists at (tenant, collection_id, path).
 // Used by RestoreObject to refuse restoring into a slot that's been reused.
-func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collection string, key string) (bool, error) {
-	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, collection, key)
+func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, collectionID, path)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -33,12 +33,12 @@ func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, 
 const countObjects = `-- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
-WHERE tenant_id = $1 AND collection = $2
+WHERE tenant_id = $1 AND collection_id = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
 `
 
-func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state NullObjectState) (int64, error) {
-	row := q.db.QueryRow(ctx, countObjects, tenantID, collection, state)
+func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjects, tenantID, collectionID, state)
 	var n int64
 	err := row.Scan(&n)
 	return n, err
@@ -47,7 +47,7 @@ func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, collec
 const createObject = `-- name: CreateObject :exec
 
 INSERT INTO objects (
-    object_id, tenant_id, collection, key, state,
+    id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -58,12 +58,12 @@ INSERT INTO objects (
 `
 
 // Object queries.
-func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, collection string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, createObject,
-		objectID,
+		iD,
 		tenantID,
-		collection,
-		key,
+		collectionID,
+		path,
 		state,
 		contentType,
 		sizeBytes,
@@ -78,23 +78,23 @@ func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenant
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
 `
 
 type GetObjectRow struct {
 	Object Object `json:"object"`
 }
 
-func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectRow, error) {
-	row := q.db.QueryRow(ctx, getObject, tenantID, objectID)
+func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error) {
+	row := q.db.QueryRow(ctx, getObject, tenantID, iD)
 	var i GetObjectRow
 	err := row.Scan(
-		&i.Object.ObjectID,
+		&i.Object.ID,
 		&i.Object.TenantID,
-		&i.Object.Collection,
-		&i.Object.Key,
+		&i.Object.CollectionID,
+		&i.Object.Path,
 		&i.Object.State,
 		&i.Object.ContentType,
 		&i.Object.SizeBytes,
@@ -105,46 +105,49 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 		&i.Object.Metadata,
 		&i.Object.Tags,
 		&i.Object.ExternalRef,
+		&i.Object.CurrentVersionID,
 		&i.Object.ResourceVersion,
 		&i.Object.CreatedAt,
 		&i.Object.UpdatedAt,
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
-		&i.Object.CurrentVersionID,
-		&i.Object.LockMode,
-		&i.Object.LockRetainUntil,
-		&i.Object.LegalHold,
 	)
 	return i, err
 }
 
 const getObjectLockState = `-- name: GetObjectLockState :one
-SELECT lock_mode, lock_retain_until, legal_hold
-FROM objects
-WHERE tenant_id = $1 AND object_id = $2
+SELECT l.mode AS lock_mode, l.retain_until AS lock_retain_until,
+       COALESCE(l.legal_hold, false) AS legal_hold
+FROM objects o
+LEFT JOIN object_locks l ON l.version_id = o.current_version_id
+WHERE o.tenant_id = $1 AND o.id = $2
 `
 
 type GetObjectLockStateRow struct {
-	LockMode        string             `json:"lock_mode"`
+	LockMode        NullObjectLockMode `json:"lock_mode"`
 	LockRetainUntil pgtype.Timestamptz `json:"lock_retain_until"`
 	LegalHold       bool               `json:"legal_hold"`
 }
 
-// Lock columns for one object, so the delete handler can return a clear
+// Lock state for one object, so the delete handler can return a clear
 // "locked" error instead of a bare version-mismatch when the SQL guard
 // on HardDeleteObject zeroes the rowcount.
-func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectLockStateRow, error) {
-	row := q.db.QueryRow(ctx, getObjectLockState, tenantID, objectID)
+//
+// The lock belongs to the VERSION now (ADR-0013), so this reads through the
+// object's current version. LEFT JOIN plus COALESCE: an object with no lock
+// row is the common case and must answer "not locked", not "no row".
+func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectLockStateRow, error) {
+	row := q.db.QueryRow(ctx, getObjectLockState, tenantID, iD)
 	var i GetObjectLockStateRow
 	err := row.Scan(&i.LockMode, &i.LockRetainUntil, &i.LegalHold)
 	return i, err
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
-WHERE tenant_id = $1 AND object_id = ANY($2::uuid[])
+WHERE tenant_id = $1 AND id = ANY($2::uuid[])
 `
 
 type GetObjectsByIDsRow struct {
@@ -164,10 +167,10 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 	for rows.Next() {
 		var i GetObjectsByIDsRow
 		if err := rows.Scan(
-			&i.Object.ObjectID,
+			&i.Object.ID,
 			&i.Object.TenantID,
-			&i.Object.Collection,
-			&i.Object.Key,
+			&i.Object.CollectionID,
+			&i.Object.Path,
 			&i.Object.State,
 			&i.Object.ContentType,
 			&i.Object.SizeBytes,
@@ -178,16 +181,13 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.Metadata,
 			&i.Object.Tags,
 			&i.Object.ExternalRef,
+			&i.Object.CurrentVersionID,
 			&i.Object.ResourceVersion,
 			&i.Object.CreatedAt,
 			&i.Object.UpdatedAt,
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
-			&i.Object.CurrentVersionID,
-			&i.Object.LockMode,
-			&i.Object.LockRetainUntil,
-			&i.Object.LegalHold,
 		); err != nil {
 			return nil, err
 		}
@@ -201,7 +201,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 
 const hardDeleteObject = `-- name: HardDeleteObject :execrows
 DELETE FROM objects
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
   AND NOT legal_hold
@@ -223,8 +223,8 @@ WHERE tenant_id = $1 AND object_id = $2
 // paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
 // path does not). A locked row matches 0 rows here, so the caller must
 // pre-check to distinguish "locked" from "version mismatch".
-func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, hardDeleteObject, tenantID, objectID, expectedVersion)
+func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteObject, tenantID, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -233,7 +233,7 @@ func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, ob
 
 const hardDeleteObjectIfStillDeleted = `-- name: HardDeleteObjectIfStillDeleted :execrows
 DELETE FROM objects
-WHERE object_id = $1
+WHERE id = $1
   AND state = 'DELETED'
   AND resource_version = $2::bigint
   -- Same lock guard as ListHardDeletable: a lock applied after the row
@@ -251,8 +251,8 @@ WHERE object_id = $1
 // resource_version via the trigger) makes the worker's DELETE a
 // no-op. Worker callers pass the version they read from
 // ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
-func (q *Queries) HardDeleteObjectIfStillDeleted(ctx context.Context, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, hardDeleteObjectIfStillDeleted, objectID, expectedVersion)
+func (q *Queries) HardDeleteObjectIfStillDeleted(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteObjectIfStillDeleted, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -260,11 +260,11 @@ func (q *Queries) HardDeleteObjectIfStillDeleted(ctx context.Context, objectID p
 }
 
 const listHardDeletable = `-- name: ListHardDeletable :many
-SELECT o.object_id, o.tenant_id, o.collection, o.key, o.resource_version,
-       k.backend_id, k.bucket_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.resource_version,
+       k.bucket_id
 FROM objects o
 JOIN collections k
-  ON k.tenant_id = o.tenant_id AND k.collection = o.collection
+  ON k.tenant_id = o.tenant_id AND k.collection_id = o.collection_id
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
@@ -282,13 +282,12 @@ LIMIT $2
 `
 
 type ListHardDeletableRow struct {
-	ObjectID        pgtype.UUID `json:"object_id"`
+	ID              pgtype.UUID `json:"id"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
-	Collection      string      `json:"collection"`
-	Key             string      `json:"key"`
+	CollectionID    pgtype.UUID `json:"collection_id"`
+	Path            string      `json:"path"`
 	ResourceVersion int64       `json:"resource_version"`
-	BackendID       string      `json:"backend_id"`
-	BucketName      string      `json:"bucket_name"`
+	BucketID        pgtype.UUID `json:"bucket_id"`
 }
 
 // Picks DELETED objects past the cooling-off window for the
@@ -307,13 +306,12 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 	for rows.Next() {
 		var i ListHardDeletableRow
 		if err := rows.Scan(
-			&i.ObjectID,
+			&i.ID,
 			&i.TenantID,
-			&i.Collection,
-			&i.Key,
+			&i.CollectionID,
+			&i.Path,
 			&i.ResourceVersion,
-			&i.BackendID,
-			&i.BucketName,
+			&i.BucketID,
 		); err != nil {
 			return nil, err
 		}
@@ -326,15 +324,15 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
 WHERE tenant_id = $1
-  AND collection = $2
+  AND collection_id = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
-  AND ($4::text IS NULL OR key LIKE $4::text || '%')
-  AND ($5::text IS NULL OR key LIKE '%' || $5::text || '%')
-  AND ($6::uuid IS NULL OR object_id > $6::uuid)
-ORDER BY object_id
+  AND ($4::text IS NULL OR path LIKE $4::text || '%')
+  AND ($5::text IS NULL OR path LIKE '%' || $5::text || '%')
+  AND ($6::uuid IS NULL OR id > $6::uuid)
+ORDER BY id
 LIMIT $7
 `
 
@@ -349,11 +347,11 @@ type ListObjectsRow struct {
 // whole namespace and filtering in Go. The post-load CEL pass stays
 // authoritative, so over-fetching (a hint that's absent) only costs
 // throughput, never correctness. `substr` is escaped for LIKE by the
-// adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+// adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		collection,
+		collectionID,
 		state,
 		prefix,
 		substr,
@@ -368,10 +366,10 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collect
 	for rows.Next() {
 		var i ListObjectsRow
 		if err := rows.Scan(
-			&i.Object.ObjectID,
+			&i.Object.ID,
 			&i.Object.TenantID,
-			&i.Object.Collection,
-			&i.Object.Key,
+			&i.Object.CollectionID,
+			&i.Object.Path,
 			&i.Object.State,
 			&i.Object.ContentType,
 			&i.Object.SizeBytes,
@@ -382,16 +380,13 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collect
 			&i.Object.Metadata,
 			&i.Object.Tags,
 			&i.Object.ExternalRef,
+			&i.Object.CurrentVersionID,
 			&i.Object.ResourceVersion,
 			&i.Object.CreatedAt,
 			&i.Object.UpdatedAt,
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
-			&i.Object.CurrentVersionID,
-			&i.Object.LockMode,
-			&i.Object.LockRetainUntil,
-			&i.Object.LegalHold,
 		); err != nil {
 			return nil, err
 		}
@@ -404,61 +399,59 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collect
 }
 
 const lookupObjectByID = `-- name: LookupObjectByID :one
-SELECT o.object_id, o.tenant_id, o.collection, o.key, o.state,
-       b.backend_id, b.bucket_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state,
+       b.bucket_id
 FROM objects o
 JOIN collections b
-  ON b.tenant_id = o.tenant_id AND b.collection = o.collection
-WHERE o.object_id = $1
+  ON b.id = o.collection_id
+WHERE o.id = $1
 `
 
 type LookupObjectByIDRow struct {
-	ObjectID   pgtype.UUID `json:"object_id"`
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	Collection string      `json:"collection"`
-	Key        string      `json:"key"`
-	State      ObjectState `json:"state"`
-	BackendID  string      `json:"backend_id"`
-	BucketName string      `json:"bucket_name"`
+	ID           pgtype.UUID `json:"id"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	CollectionID pgtype.UUID `json:"collection_id"`
+	Path         string      `json:"path"`
+	State        ObjectState `json:"state"`
+	BucketID     pgtype.UUID `json:"bucket_id"`
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
 // replicator) that don't carry a tenant context. Joins collections to
 // materialize the bucket binding so the caller can call S3 in one trip.
-func (q *Queries) LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (LookupObjectByIDRow, error) {
-	row := q.db.QueryRow(ctx, lookupObjectByID, objectID)
+func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByID, id)
 	var i LookupObjectByIDRow
 	err := row.Scan(
-		&i.ObjectID,
+		&i.ID,
 		&i.TenantID,
-		&i.Collection,
-		&i.Key,
+		&i.CollectionID,
+		&i.Path,
 		&i.State,
-		&i.BackendID,
-		&i.BucketName,
+		&i.BucketID,
 	)
 	return i, err
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
-WHERE tenant_id = $1 AND collection = $2 AND key = $3 AND state <> 'DELETED'
+WHERE tenant_id = $1 AND collection_id = $2 AND path = $3 AND state <> 'DELETED'
 `
 
 type LookupObjectByKeyRow struct {
 	Object Object `json:"object"`
 }
 
-// Used by resource-name resolution: collections/{b}/objects-by-key/{key} → object_id.
-func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collection string, key string) (LookupObjectByKeyRow, error) {
-	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, collection, key)
+// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
+func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (LookupObjectByKeyRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, collectionID, path)
 	var i LookupObjectByKeyRow
 	err := row.Scan(
-		&i.Object.ObjectID,
+		&i.Object.ID,
 		&i.Object.TenantID,
-		&i.Object.Collection,
-		&i.Object.Key,
+		&i.Object.CollectionID,
+		&i.Object.Path,
 		&i.Object.State,
 		&i.Object.ContentType,
 		&i.Object.SizeBytes,
@@ -469,16 +462,13 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, c
 		&i.Object.Metadata,
 		&i.Object.Tags,
 		&i.Object.ExternalRef,
+		&i.Object.CurrentVersionID,
 		&i.Object.ResourceVersion,
 		&i.Object.CreatedAt,
 		&i.Object.UpdatedAt,
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
-		&i.Object.CurrentVersionID,
-		&i.Object.LockMode,
-		&i.Object.LockRetainUntil,
-		&i.Object.LegalHold,
 	)
 	return i, err
 }
@@ -487,12 +477,12 @@ const markObjectFailed = `-- name: MarkObjectFailed :execrows
 UPDATE objects
 SET state         = 'FAILED',
     terminated_at = now()
-WHERE object_id = $1
+WHERE id = $1
   AND state = 'PENDING'
 `
 
-func (q *Queries) MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markObjectFailed, objectID)
+func (q *Queries) MarkObjectFailed(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markObjectFailed, id)
 	if err != nil {
 		return 0, err
 	}
@@ -507,7 +497,7 @@ SET state      = 'AVAILABLE',
     checksum   = $4,
     sequencer  = $5,
     committed_at = COALESCE(committed_at, now())
-WHERE object_id = $1
+WHERE id = $1
   AND state IN ('PENDING', 'AVAILABLE')
   AND ($5::text IS NULL
        OR sequencer IS NULL
@@ -518,9 +508,9 @@ WHERE object_id = $1
 // out-of-order S3 events + reconciler + RPC calls from regressing state.
 // If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
 // strictly greater than the stored sequencer (or either is NULL).
-func (q *Queries) PromoteObject(ctx context.Context, objectID pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error) {
+func (q *Queries) PromoteObject(ctx context.Context, iD pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error) {
 	result, err := q.db.Exec(ctx, promoteObject,
-		objectID,
+		iD,
 		sizeBytes,
 		etag,
 		checksum,
@@ -536,15 +526,15 @@ const restoreObject = `-- name: RestoreObject :execrows
 UPDATE objects
 SET state         = 'AVAILABLE',
     terminated_at = NULL
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND state = 'DELETED'
 `
 
 // Undeletes a soft-deleted object iff no live row exists with the same
-// (tenant, collection, key). Caller is expected to verify uniqueness first;
+// (tenant, collection_id, path). Caller is expected to verify uniqueness first;
 // a UNIQUE partial index still catches the race at commit time.
-func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, restoreObject, tenantID, objectID)
+func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreObject, tenantID, iD)
 	if err != nil {
 		return 0, err
 	}
@@ -552,7 +542,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objec
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
@@ -575,10 +565,10 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 	for rows.Next() {
 		var i ScanPendingExpiredRow
 		if err := rows.Scan(
-			&i.Object.ObjectID,
+			&i.Object.ID,
 			&i.Object.TenantID,
-			&i.Object.Collection,
-			&i.Object.Key,
+			&i.Object.CollectionID,
+			&i.Object.Path,
 			&i.Object.State,
 			&i.Object.ContentType,
 			&i.Object.SizeBytes,
@@ -589,16 +579,13 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.Metadata,
 			&i.Object.Tags,
 			&i.Object.ExternalRef,
+			&i.Object.CurrentVersionID,
 			&i.Object.ResourceVersion,
 			&i.Object.CreatedAt,
 			&i.Object.UpdatedAt,
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
-			&i.Object.CurrentVersionID,
-			&i.Object.LockMode,
-			&i.Object.LockRetainUntil,
-			&i.Object.LegalHold,
 		); err != nil {
 			return nil, err
 		}
@@ -614,15 +601,15 @@ const softDeleteObject = `-- name: SoftDeleteObject :execrows
 UPDATE objects
 SET state         = 'DELETED',
     terminated_at = now()
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND state IN ('AVAILABLE', 'PENDING')
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
 
 // expected_version=0 disables the OCC guard (force).
-func (q *Queries) SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteObject, tenantID, objectID, expectedVersion)
+func (q *Queries) SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteObject, tenantID, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -634,15 +621,15 @@ UPDATE objects
 SET metadata     = COALESCE($3, metadata),
     tags         = COALESCE($4,     tags),
     external_ref = COALESCE($5, external_ref)
-WHERE tenant_id = $1 AND object_id = $2
+WHERE tenant_id = $1 AND id = $2
   AND state = 'AVAILABLE'
   AND resource_version = $6
 `
 
-func (q *Queries) UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateObjectMetadata,
 		tenantID,
-		objectID,
+		iD,
 		metadata,
 		tags,
 		externalRef,

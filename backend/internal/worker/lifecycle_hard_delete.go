@@ -146,15 +146,15 @@ func (w *LifecycleHardDeleter) Sweep(ctx context.Context) {
 //     Log at debug; nothing to do.
 func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDeletableRow) {
 	tenantID := uuid.UUID(r.TenantID.Bytes)
-	objectID := uuid.UUID(r.ObjectID.Bytes)
+	objectID := uuid.UUID(r.ID.Bytes)
 	logger := w.log().With(
 		zap.String("object_id", objectID.String()),
 		zap.String("tenant_id", tenantID.String()),
-		zap.String("bucket", r.BucketName),
-		zap.String("key", r.Key),
+		zap.String("bucket", r.BucketID),
+		zap.String("key", r.Path),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.Collection, r.Key); err != nil {
+	if err := w.Storage.DeleteObject(ctx, r.BucketID, r.BucketID, tenantID, r.CollectionID, r.Path); err != nil {
 		// We don't fail the whole sweep — log and try the next row.
 		// Storage-side missing-key errors should be tolerated by
 		// the adapter (S3 DELETE on absent key is a 204; SeaweedFS
@@ -192,7 +192,7 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 // describes — announcing a purge there would be wrong.
 func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.ListHardDeletableRow, tenantID uuid.UUID) (int64, error) {
 	if w.Events == nil || w.Pool == nil {
-		return w.Q.HardDeleteObjectIfStillDeleted(ctx, r.ObjectID, r.ResourceVersion)
+		return w.Q.HardDeleteObjectIfStillDeleted(ctx, r.ID, r.ResourceVersion)
 	}
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
@@ -200,27 +200,27 @@ func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	n, err := w.Q.WithTx(tx).HardDeleteObjectIfStillDeleted(ctx, r.ObjectID, r.ResourceVersion)
+	n, err := w.Q.WithTx(tx).HardDeleteObjectIfStillDeleted(ctx, r.ID, r.ResourceVersion)
 	if err != nil {
 		return 0, err
 	}
 	if n == 0 {
 		return 0, tx.Commit(ctx)
 	}
-	objectID := uuid.UUID(r.ObjectID.Bytes)
+	objectID := uuid.UUID(r.ID.Bytes)
 	if _, err := w.Events.DispatchTx(ctx, tx, tenantID.String(), Event{
 		Type:     "paladin.object.purged",
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
 		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
-			r.BackendID, r.BucketName, tenantID, r.Collection, r.Key),
+			r.BucketID, r.BucketID, tenantID, r.CollectionID, r.Path),
 		Payload: map[string]any{
 			"tenant_id":  tenantID.String(),
-			"collection": r.Collection,
-			"key":        r.Key,
+			"collection": r.CollectionID,
+			"key":        r.Path,
 			"object_id":  objectID.String(),
-			"backend_id": r.BackendID,
-			"bucket":     r.BucketName,
+			"backend_id": r.BucketID,
+			"bucket":     r.BucketID,
 			"reclaimed":  true,
 			"source":     "lifecycle",
 		},

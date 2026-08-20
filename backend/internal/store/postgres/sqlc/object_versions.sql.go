@@ -14,32 +14,52 @@ import (
 const getCurrentVersionID = `-- name: GetCurrentVersionID :one
 SELECT current_version_id
 FROM objects
-WHERE object_id = $1
+WHERE id = $1
 `
 
 // Reads the pointer the `objects` row carries.
-func (q *Queries) GetCurrentVersionID(ctx context.Context, objectID pgtype.UUID) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getCurrentVersionID, objectID)
+func (q *Queries) GetCurrentVersionID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getCurrentVersionID, id)
 	var current_version_id pgtype.UUID
 	err := row.Scan(&current_version_id)
 	return current_version_id, err
 }
 
 const getObjectVersion = `-- name: GetObjectVersion :one
-SELECT version_id, object_id, is_delete_marker, storage_path,
-       size_bytes, etag, checksum_algorithm, checksum,
-       content_type, metadata, tags,
-       lock_mode, lock_retain_until, legal_hold,
-       created_at
-FROM object_versions
-WHERE version_id = $1
+SELECT v.id, v.object_id, v.is_delete_marker, v.storage_path,
+       v.size_bytes, v.etag, v.checksum_algorithm, v.checksum,
+       v.content_type, v.metadata, v.tags,
+       l.mode AS lock_mode, l.retain_until AS lock_retain_until,
+       COALESCE(l.legal_hold, false) AS legal_hold,
+       v.created_at
+FROM object_versions v
+LEFT JOIN object_locks l ON l.version_id = v.id
+WHERE v.id = $1
 `
 
-func (q *Queries) GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (ObjectVersion, error) {
-	row := q.db.QueryRow(ctx, getObjectVersion, versionID)
-	var i ObjectVersion
+type GetObjectVersionRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ObjectID          pgtype.UUID        `json:"object_id"`
+	IsDeleteMarker    bool               `json:"is_delete_marker"`
+	StoragePath       string             `json:"storage_path"`
+	SizeBytes         *int64             `json:"size_bytes"`
+	Etag              *string            `json:"etag"`
+	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
+	Checksum          *string            `json:"checksum"`
+	ContentType       *string            `json:"content_type"`
+	Metadata          []byte             `json:"metadata"`
+	Tags              []byte             `json:"tags"`
+	LockMode          NullObjectLockMode `json:"lock_mode"`
+	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold         bool               `json:"legal_hold"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetObjectVersion(ctx context.Context, id pgtype.UUID) (GetObjectVersionRow, error) {
+	row := q.db.QueryRow(ctx, getObjectVersion, id)
+	var i GetObjectVersionRow
 	err := row.Scan(
-		&i.VersionID,
+		&i.ID,
 		&i.ObjectID,
 		&i.IsDeleteMarker,
 		&i.StoragePath,
@@ -61,18 +81,17 @@ func (q *Queries) GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (
 const insertObjectVersion = `-- name: InsertObjectVersion :exec
 
 INSERT INTO object_versions (
-    version_id, object_id, is_delete_marker, storage_path,
+    id, object_id, is_delete_marker, storage_path,
     size_bytes, etag, checksum_algorithm, checksum,
-    content_type, metadata, tags,
-    lock_mode, lock_retain_until, legal_hold
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    content_type, metadata, tags
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 `
 
 // ObjectVersion queries — immutable history rows. Populated by the
 // promotion path when the parent bucket has versioning_enabled = true.
-func (q *Queries) InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error {
+func (q *Queries) InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte) error {
 	_, err := q.db.Exec(ctx, insertObjectVersion,
-		versionID,
+		iD,
 		objectID,
 		isDeleteMarker,
 		storagePath,
@@ -83,31 +102,48 @@ func (q *Queries) InsertObjectVersion(ctx context.Context, versionID pgtype.UUID
 		contentType,
 		metadata,
 		tags,
-		lockMode,
-		lockRetainUntil,
-		legalHold,
 	)
 	return err
 }
 
 const listObjectVersions = `-- name: ListObjectVersions :many
-SELECT version_id, object_id, is_delete_marker, storage_path,
-       size_bytes, etag, checksum_algorithm, checksum,
-       content_type, metadata, tags,
-       lock_mode, lock_retain_until, legal_hold,
-       created_at
-FROM object_versions
-WHERE object_id = $1
+SELECT v.id, v.object_id, v.is_delete_marker, v.storage_path,
+       v.size_bytes, v.etag, v.checksum_algorithm, v.checksum,
+       v.content_type, v.metadata, v.tags,
+       l.mode AS lock_mode, l.retain_until AS lock_retain_until,
+       COALESCE(l.legal_hold, false) AS legal_hold,
+       v.created_at
+FROM object_versions v
+LEFT JOIN object_locks l ON l.version_id = v.id
+WHERE v.object_id = $1
   AND ($2::timestamptz IS NULL
        OR created_at < $2::timestamptz
        OR (created_at = $2::timestamptz
-           AND version_id < $3::uuid))
-ORDER BY created_at DESC, version_id DESC
+           AND id < $3::uuid))
+ORDER BY v.created_at DESC, v.id DESC
 LIMIT $4
 `
 
-// Newest first. Cursor: (created_at, version_id).
-func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ObjectVersion, error) {
+type ListObjectVersionsRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ObjectID          pgtype.UUID        `json:"object_id"`
+	IsDeleteMarker    bool               `json:"is_delete_marker"`
+	StoragePath       string             `json:"storage_path"`
+	SizeBytes         *int64             `json:"size_bytes"`
+	Etag              *string            `json:"etag"`
+	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
+	Checksum          *string            `json:"checksum"`
+	ContentType       *string            `json:"content_type"`
+	Metadata          []byte             `json:"metadata"`
+	Tags              []byte             `json:"tags"`
+	LockMode          NullObjectLockMode `json:"lock_mode"`
+	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold         bool               `json:"legal_hold"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+// Newest first. Cursor: (created_at, id).
+func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error) {
 	rows, err := q.db.Query(ctx, listObjectVersions,
 		objectID,
 		afterCreatedAt,
@@ -118,11 +154,11 @@ func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, 
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ObjectVersion
+	var items []ListObjectVersionsRow
 	for rows.Next() {
-		var i ObjectVersion
+		var i ListObjectVersionsRow
 		if err := rows.Scan(
-			&i.VersionID,
+			&i.ID,
 			&i.ObjectID,
 			&i.IsDeleteMarker,
 			&i.StoragePath,
@@ -151,10 +187,34 @@ func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, 
 const setCurrentVersionID = `-- name: SetCurrentVersionID :exec
 UPDATE objects
 SET current_version_id = $2
-WHERE object_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) SetCurrentVersionID(ctx context.Context, objectID pgtype.UUID, currentVersionID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, setCurrentVersionID, objectID, currentVersionID)
+func (q *Queries) SetCurrentVersionID(ctx context.Context, iD pgtype.UUID, currentVersionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, setCurrentVersionID, iD, currentVersionID)
+	return err
+}
+
+const upsertObjectLock = `-- name: UpsertObjectLock :exec
+INSERT INTO object_locks (tenant_id, version_id, mode, retain_until, legal_hold)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (version_id) DO UPDATE SET
+    mode         = EXCLUDED.mode,
+    retain_until = EXCLUDED.retain_until,
+    legal_hold   = EXCLUDED.legal_hold,
+    updated_at   = now()
+`
+
+// Object Lock is its own row (ADR-0013). Retention is set after the version
+// exists, and the DELETE trigger on object_locks is what refuses to release it
+// early — so this is the only write path that can put a version under lock.
+func (q *Queries) UpsertObjectLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode NullObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) error {
+	_, err := q.db.Exec(ctx, upsertObjectLock,
+		tenantID,
+		versionID,
+		mode,
+		retainUntil,
+		legalHold,
+	)
 	return err
 }

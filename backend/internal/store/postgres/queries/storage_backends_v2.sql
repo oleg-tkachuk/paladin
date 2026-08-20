@@ -28,7 +28,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at              = now();
 
 -- name: GetStorageBackendV2 :one
-SELECT id, kind, endpoint, region, events_enabled, events_target,
+SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
@@ -40,7 +40,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        resource_version, created_at, updated_at
 FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
-WHERE id = $1;
+WHERE storage_backends.id = $1;
 
 -- name: ListStorageBackends :many
 -- Cursor pagination. The IS-NULL guard is mandatory: callers may pass
@@ -48,7 +48,7 @@ WHERE id = $1;
 -- evaluates to NULL → zero rows (the same trap that bit
 -- ListUsersByTenant). Keep the `sqlc.narg(after_id) IS NULL OR …`
 -- shape on every cursor query in this package.
-SELECT id, kind, endpoint, region, events_enabled, events_target,
+SELECT storage_backends.id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
@@ -62,7 +62,7 @@ FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE (sqlc.narg('after_id')::text IS NULL
        OR id > sqlc.narg('after_id')::text)
-ORDER BY id ASC
+ORDER BY storage_backends.id ASC
 LIMIT sqlc.arg('page_size')::int;
 
 -- name: UpdateStorageBackend :execrows
@@ -80,7 +80,7 @@ SET display_name            = COALESCE(sqlc.narg('display_name'), display_name),
     events_queue_url        = COALESCE(sqlc.narg('events_queue_url'), events_queue_url),
     events_poll_interval_ms = COALESCE(sqlc.narg('events_poll_interval_ms'), events_poll_interval_ms),
     cedar_policy            = COALESCE(sqlc.narg('cedar_policy'), cedar_policy)
-WHERE id = sqlc.arg('id')
+WHERE storage_backends.id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -91,7 +91,7 @@ WHERE id = sqlc.arg('id')
 -- config-mirror must never touch this operator-managed column.
 UPDATE storage_backends
 SET enabled = sqlc.arg('enabled')
-WHERE id = sqlc.arg('id')
+WHERE storage_backends.id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -100,7 +100,7 @@ WHERE id = sqlc.arg('id')
 -- SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 UPDATE storage_backends
 SET read_only = sqlc.arg('read_only')
-WHERE id = sqlc.arg('id')
+WHERE storage_backends.id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -109,7 +109,7 @@ WHERE id = sqlc.arg('id')
 -- operator-managed contract as the enable/read-only setters; advisory only.
 UPDATE storage_backends
 SET maintenance = sqlc.arg('maintenance')
-WHERE id = sqlc.arg('id')
+WHERE storage_backends.id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -136,11 +136,11 @@ SET previous_credentials_secret_ref  = credentials_secret_ref,
         ELSE NULL
     END,
     credentials_secret_ref           = $2
-WHERE id = $1;
+WHERE storage_backends.id = $1;
 
 -- name: DeleteStorageBackend :execrows
 DELETE FROM storage_backends
-WHERE id = sqlc.arg('id')
+WHERE storage_backends.id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 

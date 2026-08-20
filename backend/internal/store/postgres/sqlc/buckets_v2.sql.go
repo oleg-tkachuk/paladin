@@ -13,16 +13,16 @@ import (
 
 const createBucketV2 = `-- name: CreateBucketV2 :exec
 INSERT INTO buckets (
-    backend_id, bucket_name, display_name, region, labels,
+    backend_id, name, display_name, region, labels,
     owner_tenant_id, cedar_policy, constraints,
     provision_state
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
-func (q *Queries) CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error {
+func (q *Queries) CreateBucketV2(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error {
 	_, err := q.db.Exec(ctx, createBucketV2,
 		backendID,
-		bucketName,
+		name,
 		displayName,
 		region,
 		labels,
@@ -36,7 +36,7 @@ func (q *Queries) CreateBucketV2(ctx context.Context, backendID string, bucketNa
 
 const deleteBucketV2 = `-- name: DeleteBucketV2 :execrows
 DELETE FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
@@ -45,8 +45,8 @@ WHERE backend_id = $1 AND bucket_name = $2
 // s3.DeleteBucket confirms. The handler does NOT call this directly —
 // it flips state to 'deleting' via MarkBucketDeleting and lets the
 // worker drive the physical delete.
-func (q *Queries) DeleteBucketV2(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteBucketV2, backendID, bucketName, expectedVersion)
+func (q *Queries) DeleteBucketV2(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteBucketV2, backendID, name, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -55,7 +55,7 @@ func (q *Queries) DeleteBucketV2(ctx context.Context, backendID string, bucketNa
 
 const getBucketV2 = `-- name: GetBucketV2 :one
 
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT backend_id, name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -64,12 +64,12 @@ SELECT backend_id, bucket_name, display_name, region, labels,
        provision_state,
        resource_version, created_at, updated_at
 FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
 `
 
 type GetBucketV2Row struct {
-	BackendID                         string             `json:"backend_id"`
-	BucketName                        string             `json:"bucket_name"`
+	BackendID                         pgtype.UUID        `json:"backend_id"`
+	Name                              string             `json:"name"`
 	DisplayName                       *string            `json:"display_name"`
 	Region                            *string            `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -79,7 +79,7 @@ type GetBucketV2Row struct {
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`
 	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
-	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultMode             NullObjectLockMode `json:"object_lock_default_mode"`
 	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
 	VersioningEnabled                 bool               `json:"versioning_enabled"`
 	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
@@ -93,12 +93,12 @@ type GetBucketV2Row struct {
 }
 
 // v2 bucket queries — full surface for admin/v1.BucketService.
-func (q *Queries) GetBucketV2(ctx context.Context, backendID string, bucketName string) (GetBucketV2Row, error) {
-	row := q.db.QueryRow(ctx, getBucketV2, backendID, bucketName)
+func (q *Queries) GetBucketV2(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketV2Row, error) {
+	row := q.db.QueryRow(ctx, getBucketV2, backendID, name)
 	var i GetBucketV2Row
 	err := row.Scan(
 		&i.BackendID,
-		&i.BucketName,
+		&i.Name,
 		&i.DisplayName,
 		&i.Region,
 		&i.Labels,
@@ -124,7 +124,7 @@ func (q *Queries) GetBucketV2(ctx context.Context, backendID string, bucketName 
 }
 
 const listAccessibleBuckets = `-- name: ListAccessibleBuckets :many
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT backend_id, name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -134,14 +134,14 @@ SELECT backend_id, bucket_name, display_name, region, labels,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE (owner_tenant_id IS NULL OR owner_tenant_id = $1)
-  AND (backend_id, bucket_name) > ($2::text, $3::text)
-ORDER BY backend_id, bucket_name
+  AND (backend_id, name) > ($2::text, $3::text)
+ORDER BY backend_id, name
 LIMIT $4
 `
 
 type ListAccessibleBucketsRow struct {
-	BackendID                         string             `json:"backend_id"`
-	BucketName                        string             `json:"bucket_name"`
+	BackendID                         pgtype.UUID        `json:"backend_id"`
+	Name                              string             `json:"name"`
 	DisplayName                       *string            `json:"display_name"`
 	Region                            *string            `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -151,7 +151,7 @@ type ListAccessibleBucketsRow struct {
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`
 	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
-	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultMode             NullObjectLockMode `json:"object_lock_default_mode"`
 	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
 	VersioningEnabled                 bool               `json:"versioning_enabled"`
 	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
@@ -181,7 +181,7 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 		var i ListAccessibleBucketsRow
 		if err := rows.Scan(
 			&i.BackendID,
-			&i.BucketName,
+			&i.Name,
 			&i.DisplayName,
 			&i.Region,
 			&i.Labels,
@@ -214,7 +214,7 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 }
 
 const listBucketsV2 = `-- name: ListBucketsV2 :many
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT backend_id, name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -225,14 +225,14 @@ SELECT backend_id, bucket_name, display_name, region, labels,
 FROM buckets
 WHERE ($1::text IS NULL OR backend_id = $1::text)
   AND ($2::uuid IS NULL OR owner_tenant_id = $2::uuid)
-  AND (backend_id, bucket_name) > ($3::text, $4::text)
-ORDER BY backend_id, bucket_name
+  AND (backend_id, name) > ($3::text, $4::text)
+ORDER BY backend_id, name
 LIMIT $5
 `
 
 type ListBucketsV2Row struct {
-	BackendID                         string             `json:"backend_id"`
-	BucketName                        string             `json:"bucket_name"`
+	BackendID                         pgtype.UUID        `json:"backend_id"`
+	Name                              string             `json:"name"`
 	DisplayName                       *string            `json:"display_name"`
 	Region                            *string            `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -242,7 +242,7 @@ type ListBucketsV2Row struct {
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`
 	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
-	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultMode             NullObjectLockMode `json:"object_lock_default_mode"`
 	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
 	VersioningEnabled                 bool               `json:"versioning_enabled"`
 	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
@@ -276,7 +276,7 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, ownerTen
 		var i ListBucketsV2Row
 		if err := rows.Scan(
 			&i.BackendID,
-			&i.BucketName,
+			&i.Name,
 			&i.DisplayName,
 			&i.Region,
 			&i.Labels,
@@ -309,19 +309,19 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, ownerTen
 }
 
 const listPendingBucketDeletions = `-- name: ListPendingBucketDeletions :many
-SELECT backend_id, bucket_name, region, provision_state,
+SELECT backend_id, name, region, provision_state,
        provision_attempts, last_provision_at
 FROM buckets
 WHERE provision_state = 'deleting'
    OR (provision_state = 'deletion_failed'
        AND provision_attempts < $1::int)
-ORDER BY last_provision_at NULLS FIRST, backend_id, bucket_name
+ORDER BY last_provision_at NULLS FIRST, backend_id, name
 LIMIT $2::int
 `
 
 type ListPendingBucketDeletionsRow struct {
-	BackendID         string             `json:"backend_id"`
-	BucketName        string             `json:"bucket_name"`
+	BackendID         pgtype.UUID        `json:"backend_id"`
+	Name              string             `json:"name"`
 	Region            *string            `json:"region"`
 	ProvisionState    string             `json:"provision_state"`
 	ProvisionAttempts int32              `json:"provision_attempts"`
@@ -341,7 +341,7 @@ func (q *Queries) ListPendingBucketDeletions(ctx context.Context, maxAttempts in
 		var i ListPendingBucketDeletionsRow
 		if err := rows.Scan(
 			&i.BackendID,
-			&i.BucketName,
+			&i.Name,
 			&i.Region,
 			&i.ProvisionState,
 			&i.ProvisionAttempts,
@@ -358,18 +358,18 @@ func (q *Queries) ListPendingBucketDeletions(ctx context.Context, maxAttempts in
 }
 
 const listPendingBucketProvisions = `-- name: ListPendingBucketProvisions :many
-SELECT backend_id, bucket_name, region, provision_state,
+SELECT backend_id, name, region, provision_state,
        provision_attempts, last_provision_at, owner_tenant_id
 FROM buckets
 WHERE provision_state = 'pending'
    OR (provision_state = 'failed' AND provision_attempts < $1::int)
-ORDER BY last_provision_at NULLS FIRST, backend_id, bucket_name
+ORDER BY last_provision_at NULLS FIRST, backend_id, name
 LIMIT $2::int
 `
 
 type ListPendingBucketProvisionsRow struct {
-	BackendID         string             `json:"backend_id"`
-	BucketName        string             `json:"bucket_name"`
+	BackendID         pgtype.UUID        `json:"backend_id"`
+	Name              string             `json:"name"`
 	Region            *string            `json:"region"`
 	ProvisionState    string             `json:"provision_state"`
 	ProvisionAttempts int32              `json:"provision_attempts"`
@@ -392,7 +392,7 @@ func (q *Queries) ListPendingBucketProvisions(ctx context.Context, maxAttempts i
 		var i ListPendingBucketProvisionsRow
 		if err := rows.Scan(
 			&i.BackendID,
-			&i.BucketName,
+			&i.Name,
 			&i.Region,
 			&i.ProvisionState,
 			&i.ProvisionAttempts,
@@ -415,7 +415,7 @@ SET provision_state    = 'deleting',
     provision_error    = '',
     provision_attempts = 0,
     last_provision_at  = NULL
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
@@ -424,8 +424,8 @@ WHERE backend_id = $1 AND bucket_name = $2
 // operation gets a fresh retry budget; clears any old error message.
 // The actual DELETE happens later, from the worker, after backend
 // confirmation.
-func (q *Queries) MarkBucketDeleting(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, markBucketDeleting, backendID, bucketName, expectedVersion)
+func (q *Queries) MarkBucketDeleting(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, markBucketDeleting, backendID, name, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -438,16 +438,16 @@ SET provision_state    = CASE WHEN $3::bool THEN 'deletion_failed' ELSE 'deletin
     provision_error    = $4::text,
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
 `
 
 // Mirror of MarkBucketProvisionFailed for the delete side. terminal=true
 // parks the row in 'deletion_failed' (operator triage); terminal=false
 // keeps the row 'deleting' so the next tick retries.
-func (q *Queries) MarkBucketDeletionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error) {
+func (q *Queries) MarkBucketDeletionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error) {
 	result, err := q.db.Exec(ctx, markBucketDeletionFailed,
 		backendID,
-		bucketName,
+		name,
 		terminal,
 		errMsg,
 	)
@@ -463,17 +463,17 @@ SET provision_state    = CASE WHEN $3::bool THEN 'failed' ELSE 'pending' END,
     provision_error    = $4::text,
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
 `
 
 // terminal=true → the worker hit a non-retryable error (auth denied,
 // region mismatch, …) and the row should stop receiving attempts.
 // terminal=false → transient error; row stays 'pending' and gets
 // retried on the next tick after the configured backoff.
-func (q *Queries) MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error) {
+func (q *Queries) MarkBucketProvisionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error) {
 	result, err := q.db.Exec(ctx, markBucketProvisionFailed,
 		backendID,
-		bucketName,
+		name,
 		terminal,
 		errMsg,
 	)
@@ -489,11 +489,11 @@ SET provision_state    = 'ready',
     provision_error    = '',
     provision_attempts = provision_attempts + 1,
     last_provision_at  = now()
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
 `
 
-func (q *Queries) MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error) {
-	result, err := q.db.Exec(ctx, markBucketProvisionReady, backendID, bucketName)
+func (q *Queries) MarkBucketProvisionReady(ctx context.Context, backendID pgtype.UUID, name string) (int64, error) {
+	result, err := q.db.Exec(ctx, markBucketProvisionReady, backendID, name)
 	if err != nil {
 		return 0, err
 	}
@@ -503,15 +503,15 @@ func (q *Queries) MarkBucketProvisionReady(ctx context.Context, backendID string
 const setBucketConstraints = `-- name: SetBucketConstraints :execrows
 UPDATE buckets
 SET constraints = $3
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($4::bigint = 0
        OR resource_version = $4::bigint)
 `
 
-func (q *Queries) SetBucketConstraints(ctx context.Context, backendID string, bucketName string, constraints []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketConstraints(ctx context.Context, backendID pgtype.UUID, name string, constraints []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketConstraints,
 		backendID,
-		bucketName,
+		name,
 		constraints,
 		expectedVersion,
 	)
@@ -524,15 +524,15 @@ func (q *Queries) SetBucketConstraints(ctx context.Context, backendID string, bu
 const setBucketLifecycle = `-- name: SetBucketLifecycle :execrows
 UPDATE buckets
 SET lifecycle_rules = $3
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($4::bigint = 0
        OR resource_version = $4::bigint)
 `
 
-func (q *Queries) SetBucketLifecycle(ctx context.Context, backendID string, bucketName string, lifecycleRules []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketLifecycle(ctx context.Context, backendID pgtype.UUID, name string, lifecycleRules []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketLifecycle,
 		backendID,
-		bucketName,
+		name,
 		lifecycleRules,
 		expectedVersion,
 	)
@@ -547,15 +547,15 @@ UPDATE buckets
 SET object_lock_enabled                   = $3,
     object_lock_default_mode              = $4,
     object_lock_default_retention_seconds = $5
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) SetBucketObjectLock(ctx context.Context, backendID string, bucketName string, objectLockEnabled bool, objectLockDefaultMode string, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketObjectLock(ctx context.Context, backendID pgtype.UUID, name string, objectLockEnabled bool, objectLockDefaultMode NullObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketObjectLock,
 		backendID,
-		bucketName,
+		name,
 		objectLockEnabled,
 		objectLockDefaultMode,
 		objectLockDefaultRetentionSeconds,
@@ -571,15 +571,15 @@ const setBucketPolicy = `-- name: SetBucketPolicy :execrows
 UPDATE buckets
 SET cedar_policy      = $3,
     cedar_policy_hash = NULL
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($4::bigint = 0
        OR resource_version = $4::bigint)
 `
 
-func (q *Queries) SetBucketPolicy(ctx context.Context, backendID string, bucketName string, cedarPolicy string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketPolicy(ctx context.Context, backendID pgtype.UUID, name string, cedarPolicy string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketPolicy,
 		backendID,
-		bucketName,
+		name,
 		cedarPolicy,
 		expectedVersion,
 	)
@@ -594,15 +594,15 @@ UPDATE buckets
 SET replication_enabled     = $3,
     replication_destination = $4,
     replication_filter      = $5
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) SetBucketReplication(ctx context.Context, backendID string, bucketName string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketReplication(ctx context.Context, backendID pgtype.UUID, name string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketReplication,
 		backendID,
-		bucketName,
+		name,
 		replicationEnabled,
 		replicationDestination,
 		replicationFilter,
@@ -618,15 +618,15 @@ const setBucketVersioning = `-- name: SetBucketVersioning :execrows
 UPDATE buckets
 SET versioning_enabled                = $3,
     versioning_keep_deletes_forever   = $4
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($5::bigint = 0
        OR resource_version = $5::bigint)
 `
 
-func (q *Queries) SetBucketVersioning(ctx context.Context, backendID string, bucketName string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error) {
+func (q *Queries) SetBucketVersioning(ctx context.Context, backendID pgtype.UUID, name string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setBucketVersioning,
 		backendID,
-		bucketName,
+		name,
 		versioningEnabled,
 		versioningKeepDeletesForever,
 		expectedVersion,
@@ -642,15 +642,15 @@ UPDATE buckets
 SET display_name = COALESCE($3, display_name),
     labels       = COALESCE($4, labels),
     owner_tenant_id = COALESCE($5, owner_tenant_id)
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) UpdateBucketBasic(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateBucketBasic(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateBucketBasic,
 		backendID,
-		bucketName,
+		name,
 		displayName,
 		labels,
 		ownerTenantID,

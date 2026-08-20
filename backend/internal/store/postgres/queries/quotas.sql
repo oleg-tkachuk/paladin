@@ -10,7 +10,7 @@ ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
 
 -- name: UpsertBucketQuota :exec
 INSERT INTO quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,

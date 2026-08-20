@@ -31,11 +31,23 @@ FROM user_settings
 WHERE user_id = $1
 `
 
+type GetUserSettingsRow struct {
+	UserID          pgtype.UUID        `json:"user_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Timezone        string             `json:"timezone"`
+	Locale          string             `json:"locale"`
+	Theme           string             `json:"theme"`
+	Preferences     []byte             `json:"preferences"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 // User-settings queries. Lazy 1:1 with users — a missing row at read time
 // means "user has never customized; serve defaults".
-func (q *Queries) GetUserSettings(ctx context.Context, userID pgtype.UUID) (UserSetting, error) {
+func (q *Queries) GetUserSettings(ctx context.Context, userID pgtype.UUID) (GetUserSettingsRow, error) {
 	row := q.db.QueryRow(ctx, getUserSettings, userID)
-	var i UserSetting
+	var i GetUserSettingsRow
 	err := row.Scan(
 		&i.UserID,
 		&i.TenantID,
@@ -59,17 +71,29 @@ ORDER BY user_id
 LIMIT $2
 `
 
+type ListUserSettingsByTenantRow struct {
+	UserID          pgtype.UUID        `json:"user_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Timezone        string             `json:"timezone"`
+	Locale          string             `json:"locale"`
+	Theme           string             `json:"theme"`
+	Preferences     []byte             `json:"preferences"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 // Admin-side: surface configured settings across a tenant for support and
 // compliance flows ("which users opted into the dark theme?").
-func (q *Queries) ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]UserSetting, error) {
+func (q *Queries) ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]ListUserSettingsByTenantRow, error) {
 	rows, err := q.db.Query(ctx, listUserSettingsByTenant, tenantID, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []UserSetting
+	var items []ListUserSettingsByTenantRow
 	for rows.Next() {
-		var i UserSetting
+		var i ListUserSettingsByTenantRow
 		if err := rows.Scan(
 			&i.UserID,
 			&i.TenantID,
@@ -106,9 +130,21 @@ RETURNING user_id, tenant_id, timezone, locale, theme, preferences,
           resource_version, created_at, updated_at
 `
 
+type UpsertUserSettingsRow struct {
+	UserID          pgtype.UUID        `json:"user_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Timezone        string             `json:"timezone"`
+	Locale          string             `json:"locale"`
+	Theme           string             `json:"theme"`
+	Preferences     []byte             `json:"preferences"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 // Insert-or-update with a single round trip. Returns the post-write row so
 // the handler can echo the bumped resource_version back to the caller.
-func (q *Queries) UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSetting, error) {
+func (q *Queries) UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UpsertUserSettingsRow, error) {
 	row := q.db.QueryRow(ctx, upsertUserSettings,
 		userID,
 		tenantID,
@@ -117,7 +153,7 @@ func (q *Queries) UpsertUserSettings(ctx context.Context, userID pgtype.UUID, te
 		theme,
 		preferences,
 	)
-	var i UserSetting
+	var i UpsertUserSettingsRow
 	err := row.Scan(
 		&i.UserID,
 		&i.TenantID,

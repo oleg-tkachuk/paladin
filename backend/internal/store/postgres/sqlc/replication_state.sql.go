@@ -14,20 +14,20 @@ import (
 const getReplicationWatermark = `-- name: GetReplicationWatermark :one
 SELECT watermark
 FROM replication_state
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE bucket_id = $1
 `
 
-func (q *Queries) GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, getReplicationWatermark, backendID, bucketName)
+func (q *Queries) GetReplicationWatermark(ctx context.Context, bucketID pgtype.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getReplicationWatermark, bucketID)
 	var watermark pgtype.Timestamptz
 	err := row.Scan(&watermark)
 	return watermark, err
 }
 
 const upsertReplicationWatermark = `-- name: UpsertReplicationWatermark :exec
-INSERT INTO replication_state (backend_id, bucket_name, watermark)
-VALUES ($1, $2, $3)
-ON CONFLICT (backend_id, bucket_name) DO UPDATE
+INSERT INTO replication_state (bucket_id, watermark)
+VALUES ($1, $2)
+ON CONFLICT (bucket_id) DO UPDATE
 SET watermark  = GREATEST(replication_state.watermark, EXCLUDED.watermark),
     updated_at = now()
 `
@@ -35,7 +35,7 @@ SET watermark  = GREATEST(replication_state.watermark, EXCLUDED.watermark),
 // Monotonic upsert: never moves the watermark backwards. Concurrent
 // replicas may try to advance with stale values; the GREATEST() guard
 // preserves the highest seen committed_at.
-func (q *Queries) UpsertReplicationWatermark(ctx context.Context, backendID string, bucketName string, watermark pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, upsertReplicationWatermark, backendID, bucketName, watermark)
+func (q *Queries) UpsertReplicationWatermark(ctx context.Context, bucketID pgtype.UUID, watermark pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, upsertReplicationWatermark, bucketID, watermark)
 	return err
 }

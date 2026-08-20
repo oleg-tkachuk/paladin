@@ -25,18 +25,24 @@ func (q *Queries) ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype
 }
 
 const getTenantDefaultBinding = `-- name: GetTenantDefaultBinding :one
-SELECT tenant_id, backend_id, bucket_name, set_at, set_by
+SELECT tenant_id, bucket_id, set_at, set_by
 FROM tenant_default_bindings
 WHERE tenant_id = $1
 `
 
-func (q *Queries) GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (TenantDefaultBinding, error) {
+type GetTenantDefaultBindingRow struct {
+	TenantID pgtype.UUID        `json:"tenant_id"`
+	BucketID pgtype.UUID        `json:"bucket_id"`
+	SetAt    pgtype.Timestamptz `json:"set_at"`
+	SetBy    string             `json:"set_by"`
+}
+
+func (q *Queries) GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error) {
 	row := q.db.QueryRow(ctx, getTenantDefaultBinding, tenantID)
-	var i TenantDefaultBinding
+	var i GetTenantDefaultBindingRow
 	err := row.Scan(
 		&i.TenantID,
-		&i.BackendID,
-		&i.BucketName,
+		&i.BucketID,
 		&i.SetAt,
 		&i.SetBy,
 	)
@@ -45,11 +51,10 @@ func (q *Queries) GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.U
 
 const setTenantDefaultBinding = `-- name: SetTenantDefaultBinding :exec
 
-INSERT INTO tenant_default_bindings (tenant_id, backend_id, bucket_name, set_by)
-VALUES ($1, $2, $3, $4)
+INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
+VALUES ($1, $2, $3)
 ON CONFLICT (tenant_id) DO UPDATE
-   SET backend_id  = EXCLUDED.backend_id,
-       bucket_name = EXCLUDED.bucket_name,
+   SET bucket_id  = EXCLUDED.bucket_id = EXCLUDED.bucket_id,
        set_at      = now(),
        set_by      = EXCLUDED.set_by
 `
@@ -60,12 +65,7 @@ ON CONFLICT (tenant_id) DO UPDATE
 // SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
 // deleted; deletion of the underlying bucket is RESTRICTed so an
 // operator must rebind before tearing down the bucket.
-func (q *Queries) SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, backendID string, bucketName string, setBy string) error {
-	_, err := q.db.Exec(ctx, setTenantDefaultBinding,
-		tenantID,
-		backendID,
-		bucketName,
-		setBy,
-	)
+func (q *Queries) SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, bucketID pgtype.UUID, setBy string) error {
+	_, err := q.db.Exec(ctx, setTenantDefaultBinding, tenantID, bucketID, setBy)
 	return err
 }

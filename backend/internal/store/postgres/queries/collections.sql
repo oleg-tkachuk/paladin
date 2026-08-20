@@ -12,18 +12,19 @@ FROM collections
 WHERE tenant_id = $1 AND name = $2;
 
 -- name: ResolveCollectionPrefix :one
--- Longest registered name that is a prefix of $2 (the recombined
--- "<name>/<key>" tail of an ingest event) for the tenant. Multi-segment
+-- Longest registered collection name that is a prefix of the candidate (the
+-- recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
 -- collections (migration 030) make the naive "the OK is the first path
 -- segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
--- OK `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1` + key
--- `report.pdf`. Longest-prefix gives deterministic precedence (the more
--- specific OK wins). name is constrained to `[a-z0-9-]` path segments
+-- collection `invoices` + path `2026/q1/report.pdf`, OR collection
+-- `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
+-- more specific one wins). name is constrained to `[a-z0-9-]` path segments
 -- (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
 SELECT name
 FROM collections
 WHERE tenant_id = $1
-  AND ($2 = name OR $2 LIKE name || '/%')
+  AND (sqlc.arg('candidate')::text = name
+       OR sqlc.arg('candidate')::text LIKE name || '/%')
 ORDER BY length(name) DESC
 LIMIT 1;
 

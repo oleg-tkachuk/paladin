@@ -14,61 +14,65 @@ import (
 const createMultipartUpload = `-- name: CreateMultipartUpload :exec
 
 INSERT INTO multipart_uploads (
-    upload_id, object_id, storage_upload_id, part_size_bytes, total_parts,
-    backend_id, bucket_name
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    id, tenant_id, object_id, storage_upload_id, part_size_bytes, total_parts,
+    bucket_id, client_id, user_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 // Multipart upload queries.
 // backend_id / bucket_name anchor the upload to the physical location resolved
 // at initiate time, so the rest of the lifecycle targets it regardless of a
 // later collection rebind (see migration 053).
-func (q *Queries) CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, backendID string, bucketName string) error {
+func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, bucketID pgtype.UUID, clientID string, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, createMultipartUpload,
-		uploadID,
+		iD,
+		tenantID,
 		objectID,
 		storageUploadID,
 		partSizeBytes,
 		totalParts,
-		backendID,
-		bucketName,
+		bucketID,
+		clientID,
+		userID,
 	)
 	return err
 }
 
 const deleteMultipartUpload = `-- name: DeleteMultipartUpload :exec
 DELETE FROM multipart_uploads
-WHERE upload_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) DeleteMultipartUpload(ctx context.Context, uploadID string) error {
-	_, err := q.db.Exec(ctx, deleteMultipartUpload, uploadID)
+func (q *Queries) DeleteMultipartUpload(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMultipartUpload, id)
 	return err
 }
 
 const getMultipartUpload = `-- name: GetMultipartUpload :one
-SELECT multipart_uploads.upload_id, multipart_uploads.object_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.created_at, multipart_uploads.updated_at, multipart_uploads.backend_id, multipart_uploads.bucket_name
+SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.bucket_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.client_id, multipart_uploads.user_id, multipart_uploads.created_at, multipart_uploads.updated_at
 FROM multipart_uploads
-WHERE upload_id = $1
+WHERE id = $1
 `
 
 type GetMultipartUploadRow struct {
 	MultipartUpload MultipartUpload `json:"multipart_upload"`
 }
 
-func (q *Queries) GetMultipartUpload(ctx context.Context, uploadID string) (GetMultipartUploadRow, error) {
-	row := q.db.QueryRow(ctx, getMultipartUpload, uploadID)
+func (q *Queries) GetMultipartUpload(ctx context.Context, id pgtype.UUID) (GetMultipartUploadRow, error) {
+	row := q.db.QueryRow(ctx, getMultipartUpload, id)
 	var i GetMultipartUploadRow
 	err := row.Scan(
-		&i.MultipartUpload.UploadID,
+		&i.MultipartUpload.ID,
+		&i.MultipartUpload.TenantID,
 		&i.MultipartUpload.ObjectID,
+		&i.MultipartUpload.BucketID,
 		&i.MultipartUpload.StorageUploadID,
 		&i.MultipartUpload.PartSizeBytes,
 		&i.MultipartUpload.TotalParts,
+		&i.MultipartUpload.ClientID,
+		&i.MultipartUpload.UserID,
 		&i.MultipartUpload.CreatedAt,
 		&i.MultipartUpload.UpdatedAt,
-		&i.MultipartUpload.BackendID,
-		&i.MultipartUpload.BucketName,
 	)
 	return i, err
 }
@@ -76,19 +80,28 @@ func (q *Queries) GetMultipartUpload(ctx context.Context, uploadID string) (GetM
 const listMultipartParts = `-- name: ListMultipartParts :many
 SELECT upload_id, part_number, size_bytes, etag, checksum, uploaded_at
 FROM multipart_parts
-WHERE upload_id = $1
+WHERE id = $1
 ORDER BY part_number
 `
 
-func (q *Queries) ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error) {
-	rows, err := q.db.Query(ctx, listMultipartParts, uploadID)
+type ListMultipartPartsRow struct {
+	UploadID   pgtype.UUID        `json:"upload_id"`
+	PartNumber int32              `json:"part_number"`
+	SizeBytes  int64              `json:"size_bytes"`
+	Etag       string             `json:"etag"`
+	Checksum   *string            `json:"checksum"`
+	UploadedAt pgtype.Timestamptz `json:"uploaded_at"`
+}
+
+func (q *Queries) ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]ListMultipartPartsRow, error) {
+	rows, err := q.db.Query(ctx, listMultipartParts, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MultipartPart
+	var items []ListMultipartPartsRow
 	for rows.Next() {
-		var i MultipartPart
+		var i ListMultipartPartsRow
 		if err := rows.Scan(
 			&i.UploadID,
 			&i.PartNumber,
@@ -108,27 +121,23 @@ func (q *Queries) ListMultipartParts(ctx context.Context, uploadID string) ([]Mu
 }
 
 const listStaleMultipartUploads = `-- name: ListStaleMultipartUploads :many
-SELECT m.upload_id, m.storage_upload_id,
-       o.object_id, o.tenant_id, o.collection, o.key,
-       COALESCE(NULLIF(m.backend_id, ''), k.backend_id)   AS backend_id,
-       COALESCE(NULLIF(m.bucket_name, ''), k.bucket_name) AS bucket_name
+SELECT m.id, m.storage_upload_id, m.bucket_id,
+       o.id AS object_id, o.tenant_id, o.collection_id, o.path
 FROM multipart_uploads m
-JOIN objects o      ON o.object_id = m.object_id
-JOIN collections k  ON k.tenant_id = o.tenant_id AND k.collection = o.collection
+JOIN objects o ON o.id = m.object_id
 WHERE m.created_at < $1
 ORDER BY m.created_at
 LIMIT $2
 `
 
 type ListStaleMultipartUploadsRow struct {
-	UploadID        string      `json:"upload_id"`
+	ID              pgtype.UUID `json:"id"`
 	StorageUploadID string      `json:"storage_upload_id"`
+	BucketID        pgtype.UUID `json:"bucket_id"`
 	ObjectID        pgtype.UUID `json:"object_id"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
-	Collection      string      `json:"collection"`
-	Key             string      `json:"key"`
-	BackendID       string      `json:"backend_id"`
-	BucketName      string      `json:"bucket_name"`
+	CollectionID    pgtype.UUID `json:"collection_id"`
+	Path            string      `json:"path"`
 }
 
 // Sessions whose client never Completed/Aborted, past the cooling-off
@@ -137,8 +146,8 @@ type ListStaleMultipartUploadsRow struct {
 // the reaper aborts the S3-side session (which otherwise accrues part-storage
 // charges forever) on the backend the parts actually live on, in one
 // round-trip per row. Prefer the session-anchored location (migration 053);
-// fall back to the collection's current binding for legacy rows initiated
-// before the anchor columns existed. Bounded by batch_size.
+// bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
+// fallback to the collection's binding is gone with the rows that needed it.
 func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error) {
 	rows, err := q.db.Query(ctx, listStaleMultipartUploads, createdAt, batchSize)
 	if err != nil {
@@ -149,14 +158,13 @@ func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtyp
 	for rows.Next() {
 		var i ListStaleMultipartUploadsRow
 		if err := rows.Scan(
-			&i.UploadID,
+			&i.ID,
 			&i.StorageUploadID,
+			&i.BucketID,
 			&i.ObjectID,
 			&i.TenantID,
-			&i.Collection,
-			&i.Key,
-			&i.BackendID,
-			&i.BucketName,
+			&i.CollectionID,
+			&i.Path,
 		); err != nil {
 			return nil, err
 		}
@@ -178,7 +186,7 @@ SET size_bytes = EXCLUDED.size_bytes,
     uploaded_at = now()
 `
 
-func (q *Queries) RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error {
+func (q *Queries) RecordMultipartPart(ctx context.Context, uploadID pgtype.UUID, partNumber int32, sizeBytes int64, etag string, checksum *string) error {
 	_, err := q.db.Exec(ctx, recordMultipartPart,
 		uploadID,
 		partNumber,

@@ -12,11 +12,11 @@ import (
 
 type Querier interface {
 	// Records copy progress + the resume cursor after a batch.
-	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorKey string) (int64, error)
-	// Atomically rebinds an collection to a different (backend_id, bucket_name).
-	// The DB trigger enforce_collection_bucket_tenancy validates the tenancy
-	// constraint (single-tenant buckets reject mismatched tenants).
-	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, collection string, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection *string, cursorPath *string) (int64, error)
+	// Atomically rebinds a name to a different bucket. Tenancy is enforced
+	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
+	// name cannot be moved under a bucket that would orphan them.
+	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, bucketID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Per-capability runtime counters. Atomic UPSERT-and-check shape so
 	// the hot path is a single round-trip with concurrency-safe semantics.
 	//
@@ -27,7 +27,7 @@ type Querier interface {
 	// Increments request_count by 1 and rejects when over the supplied cap.
 	// max=0 means unlimited; we still write the row for spend tracking + UI.
 	BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests int64) (int64, error)
-	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
+	CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error)
 	// Adds amount to spent_usd and rejects when over the supplied cap.
 	// max_budget=0 means unlimited. unit_code is set on insert and
 	// preserved on conflict (an existing row owns its currency).
@@ -38,9 +38,9 @@ type Querier interface {
 	// 'USD' when empty). Returns the new spent_usd; pgx.ErrNoRows
 	// means "would exceed cap" — caller maps to ErrTenantBudgetExceeded.
 	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string) (pgtype.Numeric, error)
-	// True when a non-DELETED row already exists at (tenant, collection, key).
+	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
-	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collection string, key string) (bool, error)
+	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (bool, error)
 	// Idempotency / dedup for the ingest plane. Every CloudEvent the worker
 	// claims passes through ClaimIngestedEvent — INSERT ... ON CONFLICT
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
@@ -51,108 +51,112 @@ type Querier interface {
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
 	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
-	CountCollectionsReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
-	CountObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state NullObjectState) (int64, error)
+	CountBucketsForBackend(ctx context.Context, backendID pgtype.UUID) (int64, error)
+	CountCollectionsReferencingBucket(ctx context.Context, bucketID pgtype.UUID) (int64, error)
+	CountObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState) (int64, error)
 	CountPendingPurges(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; Collection rows FK to the
-	// (backend_id, bucket_name) composite key.
-	// Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+	// (backend_id, name) composite key.
+	// Idempotent: a duplicate (backend_id, name) is a no-op so that the
 	// handler can return the existing row instead of erroring. The S3-side
 	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 	// so the API surface stays consistently retry-safe.
-	CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error
-	CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
-	CreateEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind string, sinkConfig []byte, disabled bool) error
+	CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte) error
+	CreateBucketV2(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
+	// Collection queries.
+	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, bucketID pgtype.UUID, cedarPolicy string, lifecycleRules []byte) error
+	CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error
 	// Multipart upload queries.
 	// backend_id / bucket_name anchor the upload to the physical location resolved
 	// at initiate time, so the rest of the lifecycle targets it regardless of a
 	// later collection rebind (see migration 053).
-	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, backendID string, bucketName string) error
+	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, bucketID pgtype.UUID, clientID string, userID pgtype.UUID) error
 	// Object queries.
-	CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, collection string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
-	// Collection queries.
-	CreateCollection(ctx context.Context, tenantID pgtype.UUID, collection string, displayName *string, backendID string, bucketName string, cedarPolicy string, lifecycleRules []byte) error
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
 	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
-	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
+	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte) error
 	// Long-running operation queries.
-	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
-	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
+	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
+	CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
 	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
-	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
+	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBucketID pgtype.UUID, targetBucketID pgtype.UUID, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
-	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout string) error
-	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
-	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	CreateTenant(ctx context.Context, iD pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout TenantStorageLayout) error
+	CreateUser(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
+	DeleteBucket(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error)
 	// Physical row delete. Called by the bucket-reconciler worker AFTER
 	// s3.DeleteBucket confirms. The handler does NOT call this directly —
 	// it flips state to 'deleting' via MarkBucketDeleting and lets the
 	// worker drive the physical delete.
-	DeleteBucketV2(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	DeleteBucketV2(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error)
 	DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (int64, error)
-	DeleteEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, expectedVersion int64) (int64, error)
-	DeleteMultipartUpload(ctx context.Context, uploadID string) error
-	DeleteCollection(ctx context.Context, tenantID pgtype.UUID, collection string, expectedVersion int64) (int64, error)
+	DeleteCollection(ctx context.Context, tenantID pgtype.UUID, name string, expectedVersion int64) (int64, error)
+	DeleteEventSubscription(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	DeleteMultipartUpload(ctx context.Context, id pgtype.UUID) error
 	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
-	DeletePendingPurge(ctx context.Context, purgeID pgtype.UUID) (int64, error)
-	DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error)
-	DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
+	DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteStorageBackend(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
-	FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error string) (int64, error)
+	FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error *string) (int64, error)
 	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
 	// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
-	GetAuditEntry(ctx context.Context, entryID pgtype.UUID) (AuditLog, error)
-	GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error)
-	GetBucketQuota(ctx context.Context, backendID *string, bucketName *string) (Quota, error)
+	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
+	GetBucket(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketRow, error)
+	GetBucketQuota(ctx context.Context, bucketID pgtype.UUID) (GetBucketQuotaRow, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
-	GetBucketV2(ctx context.Context, backendID string, bucketName string) (GetBucketV2Row, error)
+	GetBucketV2(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketV2Row, error)
 	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
+	GetCollection(ctx context.Context, tenantID pgtype.UUID, name string) (GetCollectionRow, error)
 	// Reads the pointer the `objects` row carries.
-	GetCurrentVersionID(ctx context.Context, objectID pgtype.UUID) (pgtype.UUID, error)
-	// Returns tenant-inherited policy concatenated with the collection-specific policy.
-	// Order is: tenant policies first, then collection — Cedar treats them as a single
+	GetCurrentVersionID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
+	// Returns tenant-inherited policy concatenated with the collection's own.
+	// Order is: tenant policies first, then name — Cedar treats them as a single
 	// policy set; ordering only affects diagnostic output.
-	GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, collection *string) (GetEffectivePolicyRow, error)
-	GetEventSubscription(ctx context.Context, subscriptionID pgtype.UUID) (EventSubscription, error)
+	GetEffectivePolicy(ctx context.Context, iD pgtype.UUID, collection *string) (GetEffectivePolicyRow, error)
+	GetEventSubscription(ctx context.Context, id pgtype.UUID) (EventSubscription, error)
 	// Idempotency-key queries. Scoped per (tenant, rpc method, key).
 	// LIMIT 1 keeps this :one-safe even if two concurrent first-writers raced
 	// and each inserted a row (they differ only in expires_at — see Put). The
 	// freshest live row wins; the loser ages out with its partition.
-	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (IdempotencyKey, error)
-	GetMultipartUpload(ctx context.Context, uploadID string) (GetMultipartUploadRow, error)
-	GetObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectRow, error)
-	GetCollection(ctx context.Context, tenantID pgtype.UUID, collection string) (GetCollectionRow, error)
-	// Lock columns for one object, so the delete handler can return a clear
+	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (GetIdempotencyKeyRow, error)
+	GetMultipartUpload(ctx context.Context, id pgtype.UUID) (GetMultipartUploadRow, error)
+	GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error)
+	// Lock state for one object, so the delete handler can return a clear
 	// "locked" error instead of a bare version-mismatch when the SQL guard
 	// on HardDeleteObject zeroes the rowcount.
-	GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectLockStateRow, error)
+	//
+	// The lock belongs to the VERSION now (ADR-0013), so this reads through the
+	// object's current version. LEFT JOIN plus COALESCE: an object with no lock
+	// row is the common case and must answer "not locked", not "no row".
+	GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectLockStateRow, error)
 	GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string) (GetObjectTagRow, error)
-	GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (ObjectVersion, error)
+	GetObjectVersion(ctx context.Context, id pgtype.UUID) (GetObjectVersionRow, error)
 	// Batch lookup for batch-operation executors: one round-trip for the
 	// whole id list instead of one GetObject per id (a 1000-object batch
 	// used to issue 1000 sequential SELECTs before any state mutation).
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
-	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
-	GetRefreshToken(ctx context.Context, jti pgtype.UUID) (GetRefreshTokenRow, error)
-	GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error)
-	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
-	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
+	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
+	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
+	GetReplicationWatermark(ctx context.Context, bucketID pgtype.UUID) (pgtype.Timestamptz, error)
+	GetStorageBackend(ctx context.Context, id pgtype.UUID) (GetStorageBackendRow, error)
+	GetStorageBackendV2(ctx context.Context, id pgtype.UUID) (GetStorageBackendV2Row, error)
 	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error)
-	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
+	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
-	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
+	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
-	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (TenantDefaultBinding, error)
-	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
-	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
+	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error)
+	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (GetTenantQuotaRow, error)
+	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
 	// User-settings queries. Lazy 1:1 with users — a missing row at read time
 	// means "user has never customized; serve defaults".
-	GetUserSettings(ctx context.Context, userID pgtype.UUID) (UserSetting, error)
+	GetUserSettings(ctx context.Context, userID pgtype.UUID) (GetUserSettingsRow, error)
 	// Removes the row outright. Caller is responsible for first deleting the
 	// object from the storage backend (S3 DeleteObject). Allowed from any
 	// state. expected_version=0 skips the OCC guard.
@@ -164,37 +168,38 @@ type Querier interface {
 	// paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
 	// path does not). A locked row matches 0 rows here, so the caller must
 	// pre-check to distinguish "locked" from "version mismatch".
-	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Defence-in-depth variant of HardDeleteObject for the worker path.
 	// Re-asserts state='DELETED' AND resource_version=$2 in the WHERE
 	// clause so a concurrent Restore (DELETED → AVAILABLE bumps
 	// resource_version via the trigger) makes the worker's DELETE a
 	// no-op. Worker callers pass the version they read from
 	// ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
-	HardDeleteObjectIfStillDeleted(ctx context.Context, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	HardDeleteObjectIfStillDeleted(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Unconditional physical delete. Used by Delete(force=true) and Purge.
 	// expected_version=0 → no OCC guard; non-zero → strict match.
-	HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
+	HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
-	IncrementQuotaUsage(ctx context.Context, quotaID pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
-	InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
+	IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
+	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
-	InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error
+	InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte) error
 	// Purge debt: the retry handle for bytes whose DB row is already gone.
-	// See migrations/069_pending_purges.sql for why this table exists.
-	InsertPendingPurge(ctx context.Context, purgeID pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, backendID string, bucketName string, collection string, key string) error
-	InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
+	// See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
+	// denormalised here because the object row is gone before the purge runs.
+	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, storagePath string) error
+	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
-	// newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
+	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
-	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collection string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
+	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 	// still active — the worker must run retention-gated cleanup on it.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error)
-	// Cursor: (at, entry_id) tuple. Optional predicates use the canonical
+	// Cursor: (at, id) tuple. Optional predicates use the canonical
 	// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
 	// constant-folds the disabled branches at plan time.
 	//
@@ -204,7 +209,7 @@ type Querier interface {
 	// full CEL program ALWAYS still runs in-memory after this fetch, so
 	// pushdown only narrows the candidate set; correctness lives in the
 	// handler, not in this WHERE clause.
-	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
+	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
 	// owner_tenant_id is an optional filter (nullable arg → skipped).
 	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
@@ -228,6 +233,15 @@ type Querier interface {
 	// replicating into or out of any of those is at best wasted work and at
 	// worst ships objects into a bucket that's about to be torn down.
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
+	// Lists every (tenant_id, collection name) bound to a given bucket. Used by
+	// lifecycle + replication workers to scope their object scans.
+	ListCollectionBindingsForBucket(ctx context.Context, bucketID pgtype.UUID) ([]ListCollectionBindingsForBucketRow, error)
+	// Every registered name name for the tenant. Backs the in-process
+	// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
+	// not a per-event query on the ingest hot path. collections is small per tenant
+	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
+	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
+	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListCollectionsRow, error)
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.
@@ -235,7 +249,7 @@ type Querier interface {
 	// Cursor pagination with optional tenant filter. The after_id branch
 	// MUST be wrapped in `IS NULL OR …` — first-page callers pass
 	// uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
-	// `subscription_id > NULL` yields zero rows. Keep this shape on every
+	// `id > NULL` yields zero rows. Keep this shape on every
 	// cursor query in the package.
 	ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error)
 	// Picks DELETED objects past the cooling-off window for the
@@ -245,19 +259,10 @@ type Querier interface {
 	// Bounded at the caller's batch_size; the worker loops on the
 	// ticker to drain a backlog without holding a single statement open.
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
-	ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error)
-	// Lists every (tenant_id, collection) bound to a given bucket. Used by
-	// lifecycle + replication workers to scope their object scans.
-	ListCollectionBindingsForBucket(ctx context.Context, backendID string, bucketName string) ([]ListCollectionBindingsForBucketRow, error)
-	// Every registered collection name for the tenant. Backs the in-process
-	// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
-	// not a per-event query on the ingest hot path. collections is small per tenant
-	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
-	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListCollectionsRow, error)
+	ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]ListMultipartPartsRow, error)
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
-	// Newest first. Cursor: (created_at, version_id).
-	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ObjectVersion, error)
+	// Newest first. Cursor: (created_at, id).
+	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
 	// The full CEL filter is still applied by the caller post-load; the
 	// `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
 	// extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
@@ -265,8 +270,8 @@ type Querier interface {
 	// whole namespace and filtering in Go. The post-load CEL pass stays
 	// authoritative, so over-fetching (a hint that's absent) only costs
 	// throughput, never correctness. `substr` is escaped for LIKE by the
-	// adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
-	ListObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	// adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
+	ListObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
@@ -282,8 +287,8 @@ type Querier interface {
 	// the reaper aborts the S3-side session (which otherwise accrues part-storage
 	// charges forever) on the backend the parts actually live on, in one
 	// round-trip per row. Prefer the session-anchored location (migration 053);
-	// fall back to the collection's current binding for legacy rows initiated
-	// before the anchor columns existed. Bounded by batch_size.
+	// bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
+	// fallback to the collection's binding is gone with the rows that needed it.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
 	// an empty/NULL cursor on the first page, and a bare `id > NULL`
@@ -312,14 +317,14 @@ type Querier interface {
 	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
-	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]UserSetting, error)
+	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]ListUserSettingsByTenantRow, error)
 	// Cross-tenant listing for platform.admin. Same NULL-safe after_id
 	// pattern as ListUsersByTenant — without the IS-NULL guard the
 	// /users page renders empty even when there are rows, because the
 	// adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
 	ListUsersAll(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]User, error)
 	// after_id is NULL on first page (no page token). The IS-NULL guard
-	// prevents the NULL-propagation that would make a bare `user_id >
+	// prevents the NULL-propagation that would make a bare `id >
 	// NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
 	// Valid:false} → SQL NULL, so the guard is the contract callers
 	// rely on.
@@ -327,30 +332,30 @@ type Querier interface {
 	// Reads an object by id alone. Used by background workers (reconciler,
 	// replicator) that don't carry a tenant context. Joins collections to
 	// materialize the bucket binding so the caller can call S3 in one trip.
-	LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (LookupObjectByIDRow, error)
-	// Used by resource-name resolution: collections/{b}/objects-by-key/{key} → object_id.
-	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collection string, key string) (LookupObjectByKeyRow, error)
+	LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error)
+	// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
+	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, path string) (LookupObjectByKeyRow, error)
 	// Soft-flip into the deletion outbox. Resets attempts so the new
 	// operation gets a fresh retry budget; clears any old error message.
 	// The actual DELETE happens later, from the worker, after backend
 	// confirmation.
-	MarkBucketDeleting(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	MarkBucketDeleting(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error)
 	// Mirror of MarkBucketProvisionFailed for the delete side. terminal=true
 	// parks the row in 'deletion_failed' (operator triage); terminal=false
 	// keeps the row 'deleting' so the next tick retries.
-	MarkBucketDeletionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
+	MarkBucketDeletionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error)
 	// terminal=true → the worker hit a non-retryable error (auth denied,
 	// region mismatch, …) and the row should stop receiving attempts.
 	// terminal=false → transient error; row stays 'pending' and gets
 	// retried on the next tick after the configured backoff.
-	MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
-	MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error)
-	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
+	MarkBucketProvisionFailed(ctx context.Context, backendID pgtype.UUID, name string, terminal bool, errMsg string) (int64, error)
+	MarkBucketProvisionReady(ctx context.Context, backendID pgtype.UUID, name string) (int64, error)
+	MarkObjectFailed(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// All collections of a tenant, for the transactional rebind.
 	MigrationListTenantCollections(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	// Objects to copy, keyset-paginated by (collection, key) after the cursor so a
+	// Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 	// worker restart resumes mid-prefix instead of rescanning from the top.
 	// size_bytes feeds the physical (HEAD size) verify after copy.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterKey string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
@@ -358,7 +363,7 @@ type Querier interface {
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.
 	// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
 	// strictly greater than the stored sequencer (or either is NULL).
-	PromoteObject(ctx context.Context, objectID pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error)
+	PromoteObject(ctx context.Context, iD pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error)
 	// Deletes audit_log rows older than the cutoff in batches of 10k. The
 	// worker calls this in a loop until it returns 0 — keeps each statement
 	// bounded so a long-overdue first-run doesn't lock the table for minutes
@@ -403,7 +408,7 @@ type Querier interface {
 	// the daily DROP PARTITION reclaims it — so the old expired-overwrite
 	// DO UPDATE is no longer needed.
 	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
-	RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error
+	RecordMultipartPart(ctx context.Context, uploadID pgtype.UUID, partNumber int32, sizeBytes int64, etag string, checksum *string) error
 	// Symmetric refund on the per-capability counter. Same floor rule.
 	RefundCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric) error
 	// Subtracts amount; floors at 0 so a refund larger than current
@@ -414,53 +419,53 @@ type Querier interface {
 	// the caller-computed backoff. Attempts is bumped here rather than in the
 	// worker so a crash between the storage call and this update cannot lose the
 	// count.
-	ReschedulePendingPurge(ctx context.Context, purgeID pgtype.UUID, lastError string, column3 pgtype.Interval) error
-	ResetQuotaDaily(ctx context.Context, quotaID pgtype.UUID, lastResetAt pgtype.Timestamptz) error
-	// Longest registered collection that is a prefix of $2 (the recombined
-	// "<collection>/<key>" tail of an ingest event) for the tenant. Multi-segment
+	ReschedulePendingPurge(ctx context.Context, iD pgtype.UUID, lastError *string, column3 pgtype.Interval) error
+	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) error
+	// Longest registered collection name that is a prefix of the candidate (the
+	// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
 	// collections (migration 030) make the naive "the OK is the first path
 	// segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
-	// OK `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1` + key
-	// `report.pdf`. Longest-prefix gives deterministic precedence (the more
-	// specific OK wins). collection is constrained to `[a-z0-9-]` path segments
+	// collection `invoices` + path `2026/q1/report.pdf`, OR collection
+	// `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
+	// more specific one wins). name is constrained to `[a-z0-9-]` path segments
 	// (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
-	ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, collection string) (string, error)
+	ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, candidate string) (string, error)
 	// Undeletes a soft-deleted object iff no live row exists with the same
-	// (tenant, collection, key). Caller is expected to verify uniqueness first;
+	// (tenant, collection_id, path). Caller is expected to verify uniqueness first;
 	// a UNIQUE partial index still catches the race at commit time.
-	RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error)
+	RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (int64, error)
 	// Clears deleted_at on a trashed row. Bumps resource_version +
 	// updated_at.
-	RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error
+	RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, error)
+	RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error
 	// Reuse-detection (ADR-0009): revoke every still-live token in the family of
-	// the given jti — the compromised chain only, not all the user's sessions.
-	RevokeRefreshTokenFamily(ctx context.Context, jti pgtype.UUID) (int64, error)
+	// the given id — the compromised chain only, not all the user's sessions.
+	RevokeRefreshTokenFamily(ctx context.Context, id pgtype.UUID) (int64, error)
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Dual-write rotation: stash the current ref as the previous one with a
 	// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
 	// window in seconds; 0 clears the previous window (instant rotation).
-	RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string, column3 int64) (int64, error)
+	RotateStorageBackendCredentials(ctx context.Context, iD pgtype.UUID, credentialsSecretRef *string, column3 int64) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
-	SetBucketConstraints(ctx context.Context, backendID string, bucketName string, constraints []byte, expectedVersion int64) (int64, error)
-	SetBucketLifecycle(ctx context.Context, backendID string, bucketName string, lifecycleRules []byte, expectedVersion int64) (int64, error)
-	SetBucketObjectLock(ctx context.Context, backendID string, bucketName string, objectLockEnabled bool, objectLockDefaultMode string, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error)
-	SetBucketPolicy(ctx context.Context, backendID string, bucketName string, cedarPolicy string, expectedVersion int64) (int64, error)
-	SetBucketReplication(ctx context.Context, backendID string, bucketName string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
-	SetBucketVersioning(ctx context.Context, backendID string, bucketName string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
-	SetCurrentVersionID(ctx context.Context, objectID pgtype.UUID, currentVersionID pgtype.UUID) error
+	SetBucketConstraints(ctx context.Context, backendID pgtype.UUID, name string, constraints []byte, expectedVersion int64) (int64, error)
+	SetBucketLifecycle(ctx context.Context, backendID pgtype.UUID, name string, lifecycleRules []byte, expectedVersion int64) (int64, error)
+	SetBucketObjectLock(ctx context.Context, backendID pgtype.UUID, name string, objectLockEnabled bool, objectLockDefaultMode NullObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error)
+	SetBucketPolicy(ctx context.Context, backendID pgtype.UUID, name string, cedarPolicy string, expectedVersion int64) (int64, error)
+	SetBucketReplication(ctx context.Context, backendID pgtype.UUID, name string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
+	SetBucketVersioning(ctx context.Context, backendID pgtype.UUID, name string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
+	SetCurrentVersionID(ctx context.Context, iD pgtype.UUID, currentVersionID pgtype.UUID) error
 	// Flip the enable/disable state. OCC via resource_version (the
 	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
 	// config-mirror must never touch this operator-managed column.
-	SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error)
+	SetStorageBackendEnabled(ctx context.Context, enabled bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Flip the operator-set maintenance flag (migration 049). Same OCC +
 	// operator-managed contract as the enable/read-only setters; advisory only.
-	SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD string, expectedVersion int64) (int64, error)
+	SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
 	// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
-	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD string, expectedVersion int64) (int64, error)
+	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	SetStorageMigrationState(ctx context.Context, tenantID pgtype.UUID, state string) (int64, error)
 	// Records the object count and moves provisioning -> copying.
 	SetStorageMigrationTotal(ctx context.Context, tenantID pgtype.UUID, objectsTotal int64) (int64, error)
@@ -485,53 +490,57 @@ type Querier interface {
 	// SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
 	// deleted; deletion of the underlying bucket is RESTRICTed so an
 	// operator must rebind before tearing down the bucket.
-	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, backendID string, bucketName string, setBy string) error
-	SetTenantStorageLayout(ctx context.Context, tenantID pgtype.UUID, storageLayout string) (int64, error)
+	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, bucketID pgtype.UUID, setBy string) error
+	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
 	// expected_version=0 disables the OCC guard (force).
-	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Sets deleted_at on an active row. expected_version=0 means
 	// "no OCC guard" (legacy / scripted path); a non-zero value enforces
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
-	SoftDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
-	// Distinct (backend, bucket) the tenant's collections currently bind to. The
-	// migration copies FROM this — a shared tenant's keys normally share one bucket;
+	SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	// Distinct buckets the tenant's collections currently bind to. The migration
+	// copies FROM this — a shared tenant's collections normally share one bucket;
 	// more than one row means the tenant spans buckets (not supported in slice 1).
-	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error)
-	TouchUserLogin(ctx context.Context, userID pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
+	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]pgtype.UUID, error)
+	TouchUserLogin(ctx context.Context, iD pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).
-	UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
-	UpdateBucketBasic(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error)
-	UpdateEventSubscription(ctx context.Context, celFilter *string, sinkKind *string, sinkConfig []byte, disabled *bool, subscriptionID pgtype.UUID, expectedVersion int64) (int64, error)
+	UpdateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
+	UpdateBucketBasic(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	// expected_version=0 disables the OCC guard (force update).
-	UpdateCollection(ctx context.Context, tenantID pgtype.UUID, collection string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
-	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
+	UpdateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
+	UpdateEventSubscription(ctx context.Context, celFilter *string, sinkKind NullEventSinkKind, sinkConfig []byte, disabled *bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
 	// expected_version=0 disables the OCC guard (force update). Non-zero
 	// enforces optimistic concurrency: a stale resource_version aborts the
 	// update with 0 rows affected and the handler returns CodeAborted.
 	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
-	UpdateOperationState(ctx context.Context, operationID pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
-	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, iD string, expectedVersion int64) (int64, error)
-	UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
-	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
-	UpdateUserPasswordHash(ctx context.Context, userID pgtype.UUID, passwordHash []byte) error
-	UpsertBucketQuota(ctx context.Context, quotaID pgtype.UUID, backendID *string, bucketName *string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
+	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
+	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
+	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
+	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
+	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, bucketID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error
+	// Object Lock is its own row (ADR-0013). Retention is set after the version
+	// exists, and the DELETE trigger on object_locks is what refuses to release it
+	// early — so this is the only write path that can put a version under lock.
+	UpsertObjectLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode NullObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) error
 	// Monotonic upsert: never moves the watermark backwards. Concurrent
 	// replicas may try to advance with stale values; the GREATEST() guard
 	// preserves the highest seen committed_at.
-	UpsertReplicationWatermark(ctx context.Context, backendID string, bucketName string, watermark pgtype.Timestamptz) error
+	UpsertReplicationWatermark(ctx context.Context, bucketID pgtype.UUID, watermark pgtype.Timestamptz) error
 	// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
 	// state in its own 1:1 table — writing it does NOT touch storage_backends, so
 	// it never fires the bump_rv trigger (no resource_version / updated_at churn)
 	// and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
-	UpsertStorageBackendHealth(ctx context.Context, backendID string, status string, message string, checkedAt pgtype.Timestamptz) error
+	UpsertStorageBackendHealth(ctx context.Context, backendID pgtype.UUID, status BackendHealthStatus, message *string, checkedAt pgtype.Timestamptz) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
 	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
-	UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
-	UpsertTenantQuota(ctx context.Context, quotaID pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
+	UpsertStorageBackendV2(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID *string, eventsQueueUrl *string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
+	UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error
 	// Insert-or-update with a single round trip. Returns the post-write row so
 	// the handler can echo the bumped resource_version back to the caller.
-	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSetting, error)
+	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UpsertUserSettingsRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

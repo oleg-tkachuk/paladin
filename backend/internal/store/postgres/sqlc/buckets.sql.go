@@ -7,16 +7,18 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countCollectionsReferencingBucket = `-- name: CountCollectionsReferencingBucket :one
 SELECT count(*)::bigint AS count
 FROM collections
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE bucket_id = $1
 `
 
-func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error) {
-	row := q.db.QueryRow(ctx, countCollectionsReferencingBucket, backendID, bucketName)
+func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, bucketID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCollectionsReferencingBucket, bucketID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -24,22 +26,22 @@ func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, backend
 
 const createBucket = `-- name: CreateBucket :exec
 
-INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
+INSERT INTO buckets (backend_id, name, display_name, region, labels)
 VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (backend_id, bucket_name) DO NOTHING
+ON CONFLICT (backend_id, name) DO NOTHING
 `
 
 // Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 // Created lazily via BucketService.CreateBucket; Collection rows FK to the
-// (backend_id, bucket_name) composite key.
-// Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+// (backend_id, name) composite key.
+// Idempotent: a duplicate (backend_id, name) is a no-op so that the
 // handler can return the existing row instead of erroring. The S3-side
 // CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 // so the API surface stays consistently retry-safe.
-func (q *Queries) CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error {
+func (q *Queries) CreateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, region *string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createBucket,
 		backendID,
-		bucketName,
+		name,
 		displayName,
 		region,
 		labels,
@@ -49,13 +51,13 @@ func (q *Queries) CreateBucket(ctx context.Context, backendID string, bucketName
 
 const deleteBucket = `-- name: DeleteBucket :execrows
 DELETE FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
 `
 
-func (q *Queries) DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteBucket, backendID, bucketName, expectedVersion)
+func (q *Queries) DeleteBucket(ctx context.Context, backendID pgtype.UUID, name string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteBucket, backendID, name, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -63,32 +65,30 @@ func (q *Queries) DeleteBucket(ctx context.Context, backendID string, bucketName
 }
 
 const getBucket = `-- name: GetBucket :one
-SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at
+SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at
 FROM buckets
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
 `
 
 type GetBucketRow struct {
 	Bucket Bucket `json:"bucket"`
 }
 
-func (q *Queries) GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error) {
-	row := q.db.QueryRow(ctx, getBucket, backendID, bucketName)
+func (q *Queries) GetBucket(ctx context.Context, backendID pgtype.UUID, name string) (GetBucketRow, error) {
+	row := q.db.QueryRow(ctx, getBucket, backendID, name)
 	var i GetBucketRow
 	err := row.Scan(
+		&i.Bucket.ID,
 		&i.Bucket.BackendID,
-		&i.Bucket.BucketName,
+		&i.Bucket.Name,
 		&i.Bucket.DisplayName,
+		&i.Bucket.OwnerTenantID,
 		&i.Bucket.Region,
 		&i.Bucket.Labels,
-		&i.Bucket.ResourceVersion,
-		&i.Bucket.CreatedAt,
-		&i.Bucket.UpdatedAt,
-		&i.Bucket.OwnerTenantID,
-		&i.Bucket.CedarPolicy,
-		&i.Bucket.CedarPolicyHash,
 		&i.Bucket.Constraints,
 		&i.Bucket.LifecycleRules,
+		&i.Bucket.CedarPolicy,
+		&i.Bucket.CedarPolicyHash,
 		&i.Bucket.ObjectLockEnabled,
 		&i.Bucket.ObjectLockDefaultMode,
 		&i.Bucket.ObjectLockDefaultRetentionSeconds,
@@ -101,17 +101,20 @@ func (q *Queries) GetBucket(ctx context.Context, backendID string, bucketName st
 		&i.Bucket.ProvisionError,
 		&i.Bucket.ProvisionAttempts,
 		&i.Bucket.LastProvisionAt,
+		&i.Bucket.ResourceVersion,
+		&i.Bucket.CreatedAt,
+		&i.Bucket.UpdatedAt,
 	)
 	return i, err
 }
 
 const listBuckets = `-- name: ListBuckets :many
-SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at
+SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at
 FROM buckets
 WHERE ($1::text IS NULL OR backend_id = $1::text)
   AND ($2::text IS NULL
-       OR (backend_id, bucket_name) > ($3::text, $2::text))
-ORDER BY backend_id, bucket_name
+       OR (backend_id, name) > ($3::text, $2::text))
+ORDER BY backend_id, name
 LIMIT $4
 `
 
@@ -134,19 +137,17 @@ func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName 
 	for rows.Next() {
 		var i ListBucketsRow
 		if err := rows.Scan(
+			&i.Bucket.ID,
 			&i.Bucket.BackendID,
-			&i.Bucket.BucketName,
+			&i.Bucket.Name,
 			&i.Bucket.DisplayName,
+			&i.Bucket.OwnerTenantID,
 			&i.Bucket.Region,
 			&i.Bucket.Labels,
-			&i.Bucket.ResourceVersion,
-			&i.Bucket.CreatedAt,
-			&i.Bucket.UpdatedAt,
-			&i.Bucket.OwnerTenantID,
-			&i.Bucket.CedarPolicy,
-			&i.Bucket.CedarPolicyHash,
 			&i.Bucket.Constraints,
 			&i.Bucket.LifecycleRules,
+			&i.Bucket.CedarPolicy,
+			&i.Bucket.CedarPolicyHash,
 			&i.Bucket.ObjectLockEnabled,
 			&i.Bucket.ObjectLockDefaultMode,
 			&i.Bucket.ObjectLockDefaultRetentionSeconds,
@@ -159,6 +160,9 @@ func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName 
 			&i.Bucket.ProvisionError,
 			&i.Bucket.ProvisionAttempts,
 			&i.Bucket.LastProvisionAt,
+			&i.Bucket.ResourceVersion,
+			&i.Bucket.CreatedAt,
+			&i.Bucket.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -174,16 +178,16 @@ const updateBucket = `-- name: UpdateBucket :execrows
 UPDATE buckets
 SET display_name = COALESCE($3, display_name),
     labels       = COALESCE($4,       labels)
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE backend_id = $1 AND name = $2
   AND ($5::bigint = 0
        OR resource_version = $5::bigint)
 `
 
 // expected_version=0 disables the OCC guard (force update).
-func (q *Queries) UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateBucket(ctx context.Context, backendID pgtype.UUID, name string, displayName *string, labels []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateBucket,
 		backendID,
-		bucketName,
+		name,
 		displayName,
 		labels,
 		expectedVersion,

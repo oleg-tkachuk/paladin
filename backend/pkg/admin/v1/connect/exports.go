@@ -12,7 +12,7 @@ type (
 	TenantServiceHandler            = internal.TenantServiceHandler
 	CollectionServiceHandler        = internal.CollectionServiceHandler
 	PolicyServiceHandler            = internal.PolicyServiceHandler
-	OperationServiceHandler         = internal.OperationServiceHandler
+	OperationServiceHandler         = internal.PlatformOperationServiceHandler
 	AuditLogServiceHandler          = internal.AuditLogServiceHandler
 	QuotaServiceHandler             = internal.QuotaServiceHandler
 	EventSubscriptionServiceHandler = internal.EventSubscriptionServiceHandler
@@ -25,7 +25,7 @@ var (
 	NewTenantServiceClient            = internal.NewTenantServiceClient
 	NewCollectionServiceClient        = internal.NewCollectionServiceClient
 	NewPolicyServiceClient            = internal.NewPolicyServiceClient
-	NewOperationServiceClient         = internal.NewOperationServiceClient
+	NewOperationServiceClient         = internal.NewPlatformOperationServiceClient
 	NewAuditLogServiceClient          = internal.NewAuditLogServiceClient
 	NewQuotaServiceClient             = internal.NewQuotaServiceClient
 	NewEventSubscriptionServiceClient = internal.NewEventSubscriptionServiceClient

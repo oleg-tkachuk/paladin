@@ -215,7 +215,7 @@ func ensureTenant(
 	switch {
 	case err == nil:
 		// Already there. Convert pgtype.UUID → uuid.UUID.
-		return uuidFromPg(row.Tenant.TenantID), false, nil
+		return uuidFromPg(row.Tenant.ID), false, nil
 
 	case errors.Is(err, pgx.ErrNoRows):
 		// Continue to create below.

@@ -87,12 +87,18 @@ WHERE tenant_id = $1 AND id = $2
   AND state = 'DELETED';
 
 -- name: GetObjectLockState :one
--- Lock columns for one object, so the delete handler can return a clear
+-- Lock state for one object, so the delete handler can return a clear
 -- "locked" error instead of a bare version-mismatch when the SQL guard
 -- on HardDeleteObject zeroes the rowcount.
-SELECT lock_mode, lock_retain_until, legal_hold
-FROM objects
-WHERE tenant_id = $1 AND id = $2;
+--
+-- The lock belongs to the VERSION now (ADR-0013), so this reads through the
+-- object's current version. LEFT JOIN plus COALESCE: an object with no lock
+-- row is the common case and must answer "not locked", not "no row".
+SELECT l.mode AS lock_mode, l.retain_until AS lock_retain_until,
+       COALESCE(l.legal_hold, false) AS legal_hold
+FROM objects o
+LEFT JOIN object_locks l ON l.version_id = o.current_version_id
+WHERE o.tenant_id = $1 AND o.id = $2;
 
 -- name: HardDeleteObject :execrows
 -- Removes the row outright. Caller is responsible for first deleting the
@@ -125,7 +131,7 @@ WHERE tenant_id = $1 AND id = $2
 -- Bounded at the caller's batch_size; the worker loops on the
 -- ticker to drain a backlog without holding a single statement open.
 SELECT o.id, o.tenant_id, o.collection_id, o.path, o.resource_version,
-       k.backend_id, k.bucket_name
+       k.bucket_id
 FROM objects o
 JOIN collections k
   ON k.tenant_id = o.tenant_id AND k.collection_id = o.collection_id

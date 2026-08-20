@@ -22,7 +22,7 @@ SET kind = EXCLUDED.kind,
     events_target = EXCLUDED.events_target
 `
 
-func (q *Queries) CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error {
+func (q *Queries) CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error {
 	_, err := q.db.Exec(ctx, createStorageBackend,
 		iD,
 		kind,
@@ -44,13 +44,23 @@ ORDER BY expires_at DESC
 LIMIT 1
 `
 
+type GetIdempotencyKeyRow struct {
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Method      string             `json:"method"`
+	Key         string             `json:"key"`
+	Response    []byte             `json:"response"`
+	ResponseSha []byte             `json:"response_sha"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
 // Idempotency-key queries. Scoped per (tenant, rpc method, key).
 // LIMIT 1 keeps this :one-safe even if two concurrent first-writers raced
 // and each inserted a row (they differ only in expires_at — see Put). The
 // freshest live row wins; the loser ages out with its partition.
-func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (IdempotencyKey, error) {
+func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (GetIdempotencyKeyRow, error) {
 	row := q.db.QueryRow(ctx, getIdempotencyKey, tenantID, method, key)
-	var i IdempotencyKey
+	var i GetIdempotencyKeyRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.Method,
@@ -70,7 +80,7 @@ WHERE id = $1
 `
 
 type GetStorageBackendRow struct {
-	ID            string             `json:"id"`
+	ID            pgtype.UUID        `json:"id"`
 	Kind          string             `json:"kind"`
 	Endpoint      *string            `json:"endpoint"`
 	Region        *string            `json:"region"`
@@ -79,7 +89,7 @@ type GetStorageBackendRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
-func (q *Queries) GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error) {
+func (q *Queries) GetStorageBackend(ctx context.Context, id pgtype.UUID) (GetStorageBackendRow, error) {
 	row := q.db.QueryRow(ctx, getStorageBackend, id)
 	var i GetStorageBackendRow
 	err := row.Scan(

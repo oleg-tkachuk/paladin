@@ -13,13 +13,13 @@ import (
 
 const createEventSubscription = `-- name: CreateEventSubscription :exec
 INSERT INTO event_subscriptions (
-    subscription_id, tenant_id, cel_filter, sink_kind, sink_config, disabled
+    id, tenant_id, cel_filter, sink_kind, sink_config, disabled
 ) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
-func (q *Queries) CreateEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind string, sinkConfig []byte, disabled bool) error {
+func (q *Queries) CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error {
 	_, err := q.db.Exec(ctx, createEventSubscription,
-		subscriptionID,
+		iD,
 		tenantID,
 		celFilter,
 		sinkKind,
@@ -31,13 +31,13 @@ func (q *Queries) CreateEventSubscription(ctx context.Context, subscriptionID pg
 
 const deleteEventSubscription = `-- name: DeleteEventSubscription :execrows
 DELETE FROM event_subscriptions
-WHERE subscription_id = $1
+WHERE id = $1
   AND ($2::bigint = 0
        OR resource_version = $2::bigint)
 `
 
-func (q *Queries) DeleteEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteEventSubscription, subscriptionID, expectedVersion)
+func (q *Queries) DeleteEventSubscription(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEventSubscription, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -45,17 +45,17 @@ func (q *Queries) DeleteEventSubscription(ctx context.Context, subscriptionID pg
 }
 
 const getEventSubscription = `-- name: GetEventSubscription :one
-SELECT subscription_id, tenant_id, cel_filter, sink_kind, sink_config,
+SELECT id, tenant_id, cel_filter, sink_kind, sink_config,
        disabled, resource_version, created_at, updated_at
 FROM event_subscriptions
-WHERE subscription_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) GetEventSubscription(ctx context.Context, subscriptionID pgtype.UUID) (EventSubscription, error) {
-	row := q.db.QueryRow(ctx, getEventSubscription, subscriptionID)
+func (q *Queries) GetEventSubscription(ctx context.Context, id pgtype.UUID) (EventSubscription, error) {
+	row := q.db.QueryRow(ctx, getEventSubscription, id)
 	var i EventSubscription
 	err := row.Scan(
-		&i.SubscriptionID,
+		&i.ID,
 		&i.TenantID,
 		&i.CelFilter,
 		&i.SinkKind,
@@ -69,20 +69,20 @@ func (q *Queries) GetEventSubscription(ctx context.Context, subscriptionID pgtyp
 }
 
 const listEventSubscriptions = `-- name: ListEventSubscriptions :many
-SELECT subscription_id, tenant_id, cel_filter, sink_kind, sink_config,
+SELECT id, tenant_id, cel_filter, sink_kind, sink_config,
        disabled, resource_version, created_at, updated_at
 FROM event_subscriptions
 WHERE ($1::uuid IS NULL OR tenant_id = $1::uuid)
   AND ($2::uuid IS NULL
-       OR subscription_id > $2::uuid)
-ORDER BY subscription_id ASC
+       OR id > $2::uuid)
+ORDER BY id ASC
 LIMIT $3::int
 `
 
 // Cursor pagination with optional tenant filter. The after_id branch
 // MUST be wrapped in `IS NULL OR …` — first-page callers pass
 // uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
-// `subscription_id > NULL` yields zero rows. Keep this shape on every
+// `id > NULL` yields zero rows. Keep this shape on every
 // cursor query in the package.
 func (q *Queries) ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error) {
 	rows, err := q.db.Query(ctx, listEventSubscriptions, tenantID, afterID, pageSize)
@@ -94,7 +94,7 @@ func (q *Queries) ListEventSubscriptions(ctx context.Context, tenantID pgtype.UU
 	for rows.Next() {
 		var i EventSubscription
 		if err := rows.Scan(
-			&i.SubscriptionID,
+			&i.ID,
 			&i.TenantID,
 			&i.CelFilter,
 			&i.SinkKind,
@@ -120,18 +120,18 @@ SET cel_filter  = COALESCE($1, cel_filter),
     sink_kind   = COALESCE($2, sink_kind),
     sink_config = COALESCE($3, sink_config),
     disabled    = COALESCE($4, disabled)
-WHERE subscription_id = $5
+WHERE id = $5
   AND ($6::bigint = 0
        OR resource_version = $6::bigint)
 `
 
-func (q *Queries) UpdateEventSubscription(ctx context.Context, celFilter *string, sinkKind *string, sinkConfig []byte, disabled *bool, subscriptionID pgtype.UUID, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateEventSubscription(ctx context.Context, celFilter *string, sinkKind NullEventSinkKind, sinkConfig []byte, disabled *bool, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateEventSubscription,
 		celFilter,
 		sinkKind,
 		sinkConfig,
 		disabled,
-		subscriptionID,
+		iD,
 		expectedVersion,
 	)
 	if err != nil {

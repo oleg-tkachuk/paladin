@@ -11,6 +11,135 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BackendHealthStatus string
+
+const (
+	BackendHealthStatusUnknown BackendHealthStatus = "unknown"
+	BackendHealthStatusOk      BackendHealthStatus = "ok"
+	BackendHealthStatusError   BackendHealthStatus = "error"
+)
+
+func (e *BackendHealthStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BackendHealthStatus(s)
+	case string:
+		*e = BackendHealthStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BackendHealthStatus: %T", src)
+	}
+	return nil
+}
+
+type NullBackendHealthStatus struct {
+	BackendHealthStatus BackendHealthStatus `json:"backend_health_status"`
+	Valid               bool                `json:"valid"` // Valid is true if BackendHealthStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBackendHealthStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.BackendHealthStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BackendHealthStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBackendHealthStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BackendHealthStatus), nil
+}
+
+type EventSinkKind string
+
+const (
+	EventSinkKindHttp  EventSinkKind = "http"
+	EventSinkKindNats  EventSinkKind = "nats"
+	EventSinkKindKafka EventSinkKind = "kafka"
+	EventSinkKindSqs   EventSinkKind = "sqs"
+)
+
+func (e *EventSinkKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = EventSinkKind(s)
+	case string:
+		*e = EventSinkKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for EventSinkKind: %T", src)
+	}
+	return nil
+}
+
+type NullEventSinkKind struct {
+	EventSinkKind EventSinkKind `json:"event_sink_kind"`
+	Valid         bool          `json:"valid"` // Valid is true if EventSinkKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullEventSinkKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.EventSinkKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.EventSinkKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullEventSinkKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.EventSinkKind), nil
+}
+
+type ObjectLockMode string
+
+const (
+	ObjectLockModeGOVERNANCE ObjectLockMode = "GOVERNANCE"
+	ObjectLockModeCOMPLIANCE ObjectLockMode = "COMPLIANCE"
+)
+
+func (e *ObjectLockMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ObjectLockMode(s)
+	case string:
+		*e = ObjectLockMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ObjectLockMode: %T", src)
+	}
+	return nil
+}
+
+type NullObjectLockMode struct {
+	ObjectLockMode ObjectLockMode `json:"object_lock_mode"`
+	Valid          bool           `json:"valid"` // Valid is true if ObjectLockMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullObjectLockMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.ObjectLockMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ObjectLockMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullObjectLockMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ObjectLockMode), nil
+}
+
 type ObjectState string
 
 const (
@@ -100,77 +229,122 @@ func (ns NullOperationState) Value() (driver.Value, error) {
 	return string(ns.OperationState), nil
 }
 
+type TenantStorageLayout string
+
+const (
+	TenantStorageLayoutShared    TenantStorageLayout = "shared"
+	TenantStorageLayoutDedicated TenantStorageLayout = "dedicated"
+)
+
+func (e *TenantStorageLayout) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TenantStorageLayout(s)
+	case string:
+		*e = TenantStorageLayout(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TenantStorageLayout: %T", src)
+	}
+	return nil
+}
+
+type NullTenantStorageLayout struct {
+	TenantStorageLayout TenantStorageLayout `json:"tenant_storage_layout"`
+	Valid               bool                `json:"valid"` // Valid is true if TenantStorageLayout is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTenantStorageLayout) Scan(value interface{}) error {
+	if value == nil {
+		ns.TenantStorageLayout, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TenantStorageLayout.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTenantStorageLayout) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TenantStorageLayout), nil
+}
+
 type ApiToken struct {
 	ID           pgtype.UUID        `json:"id"`
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	Name         string             `json:"name"`
 	Prefix       string             `json:"prefix"`
+	TokenHmac    []byte             `json:"token_hmac"`
 	Scopes       []string           `json:"scopes"`
+	Roles        []string           `json:"roles"`
 	Audience     []string           `json:"audience"`
+	RateLimitRpm int32              `json:"rate_limit_rpm"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt    pgtype.Timestamptz `json:"revoked_at"`
 	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
 	CreatedBy    string             `json:"created_by"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	RateLimitRpm int32              `json:"rate_limit_rpm"`
-	TokenHmac    []byte             `json:"token_hmac"`
-	Roles        []string           `json:"roles"`
 }
 
 type ApiTokenRateBucket struct {
+	ID          pgtype.UUID        `json:"id"`
 	TokenID     pgtype.UUID        `json:"token_id"`
 	BucketStart pgtype.Timestamptz `json:"bucket_start"`
 	Count       int64              `json:"count"`
 }
 
 type AuditLog struct {
-	EntryID       pgtype.UUID        `json:"entry_id"`
+	ID            pgtype.UUID        `json:"id"`
 	At            pgtype.Timestamptz `json:"at"`
 	ActorSubject  string             `json:"actor_subject"`
 	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
 	ActorAudience string             `json:"actor_audience"`
 	Action        string             `json:"action"`
 	ResourceName  string             `json:"resource_name"`
-	RequestID     *string            `json:"request_id"`
+	RequestID     string             `json:"request_id"`
 	SourceIp      *string            `json:"source_ip"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	Outcome       string             `json:"outcome"`
+	ErrorMessage  *string            `json:"error_message"`
 	BeforeJson    []byte             `json:"before_json"`
 	AfterJson     []byte             `json:"after_json"`
-	ErrorMessage  *string            `json:"error_message"`
-	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	Detail        []byte             `json:"detail"`
 }
 
 type AuditLogDefault struct {
-	EntryID       pgtype.UUID        `json:"entry_id"`
+	ID            pgtype.UUID        `json:"id"`
 	At            pgtype.Timestamptz `json:"at"`
 	ActorSubject  string             `json:"actor_subject"`
 	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
 	ActorAudience string             `json:"actor_audience"`
 	Action        string             `json:"action"`
 	ResourceName  string             `json:"resource_name"`
-	RequestID     *string            `json:"request_id"`
+	RequestID     string             `json:"request_id"`
 	SourceIp      *string            `json:"source_ip"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	Outcome       string             `json:"outcome"`
+	ErrorMessage  *string            `json:"error_message"`
 	BeforeJson    []byte             `json:"before_json"`
 	AfterJson     []byte             `json:"after_json"`
-	ErrorMessage  *string            `json:"error_message"`
-	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	Detail        []byte             `json:"detail"`
 }
 
 type Bucket struct {
-	BackendID                         string             `json:"backend_id"`
-	BucketName                        string             `json:"bucket_name"`
+	ID                                pgtype.UUID        `json:"id"`
+	BackendID                         pgtype.UUID        `json:"backend_id"`
+	Name                              string             `json:"name"`
 	DisplayName                       *string            `json:"display_name"`
+	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
 	Region                            *string            `json:"region"`
 	Labels                            []byte             `json:"labels"`
-	ResourceVersion                   int64              `json:"resource_version"`
-	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
-	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
-	CedarPolicy                       string             `json:"cedar_policy"`
-	CedarPolicyHash                   []byte             `json:"cedar_policy_hash"`
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`
+	CedarPolicy                       string             `json:"cedar_policy"`
+	CedarPolicyHash                   []byte             `json:"cedar_policy_hash"`
 	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
-	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultMode             NullObjectLockMode `json:"object_lock_default_mode"`
 	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
 	VersioningEnabled                 bool               `json:"versioning_enabled"`
 	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
@@ -181,23 +355,26 @@ type Bucket struct {
 	ProvisionError                    string             `json:"provision_error"`
 	ProvisionAttempts                 int32              `json:"provision_attempts"`
 	LastProvisionAt                   pgtype.Timestamptz `json:"last_provision_at"`
+	ResourceVersion                   int64              `json:"resource_version"`
+	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type CapabilityRecord struct {
 	ID               pgtype.UUID        `json:"id"`
 	TenantID         pgtype.UUID        `json:"tenant_id"`
+	ParentID         pgtype.UUID        `json:"parent_id"`
 	Issuer           string             `json:"issuer"`
 	PrincipalKind    string             `json:"principal_kind"`
 	PrincipalSubject string             `json:"principal_subject"`
 	PrincipalPayload []byte             `json:"principal_payload"`
 	Audience         []string           `json:"audience"`
 	Caveats          []byte             `json:"caveats"`
-	ParentID         pgtype.UUID        `json:"parent_id"`
 	Generation       int64              `json:"generation"`
+	CreatedBy        string             `json:"created_by"`
 	IssuedAt         pgtype.Timestamptz `json:"issued_at"`
 	NotBefore        pgtype.Timestamptz `json:"not_before"`
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        string             `json:"created_by"`
 }
 
 type CapabilityRevocation struct {
@@ -209,24 +386,39 @@ type CapabilityRevocation struct {
 }
 
 type CapabilityUsage struct {
-	CapabilityID pgtype.UUID `json:"capability_id"`
-	RequestCount int64       `json:"request_count"`
-	// Accumulated spend amount. Despite the _usd suffix (kept for sqlc/query stability), the currency is determined by unit_code. Pre-migration rows are USD by default.
-	SpentUsd  pgtype.Numeric     `json:"spent_usd"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	// ISO 4217 currency code (USD/EUR/UAH/GBP) or the abstract sentinel UNIT for non-currency metering. Validated at the application layer.
-	UnitCode string `json:"unit_code"`
+	ID           pgtype.UUID        `json:"id"`
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	RequestCount int64              `json:"request_count"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	UnitCode     string             `json:"unit_code"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Charge struct {
 	ID           pgtype.UUID        `json:"id"`
 	TenantID     pgtype.UUID        `json:"tenant_id"`
+	TenantSlug   string             `json:"tenant_slug"`
 	CapabilityID pgtype.UUID        `json:"capability_id"`
 	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
 	Amount       pgtype.Numeric     `json:"amount"`
 	UnitCode     string             `json:"unit_code"`
 	Op           string             `json:"op"`
 	ActorSubject string             `json:"actor_subject"`
+}
+
+type Collection struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Name            string             `json:"name"`
+	DisplayName     *string            `json:"display_name"`
+	BucketID        pgtype.UUID        `json:"bucket_id"`
+	Constraints     []byte             `json:"constraints"`
+	LifecycleRules  []byte             `json:"lifecycle_rules"`
+	CedarPolicy     string             `json:"cedar_policy"`
+	CedarPolicyHash []byte             `json:"cedar_policy_hash"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type EventDelivery struct {
@@ -238,8 +430,8 @@ type EventDelivery struct {
 	EventPayload   []byte             `json:"event_payload"`
 	Status         string             `json:"status"`
 	Attempts       int32              `json:"attempts"`
-	LastError      string             `json:"last_error"`
-	LastStatusCode int32              `json:"last_status_code"`
+	LastError      *string            `json:"last_error"`
+	LastStatusCode *int32             `json:"last_status_code"`
 	LastAttemptAt  pgtype.Timestamptz `json:"last_attempt_at"`
 	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
 	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
@@ -247,10 +439,10 @@ type EventDelivery struct {
 }
 
 type EventSubscription struct {
-	SubscriptionID  pgtype.UUID        `json:"subscription_id"`
+	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	CelFilter       string             `json:"cel_filter"`
-	SinkKind        string             `json:"sink_kind"`
+	SinkKind        EventSinkKind      `json:"sink_kind"`
 	SinkConfig      []byte             `json:"sink_config"`
 	Disabled        bool               `json:"disabled"`
 	ResourceVersion int64              `json:"resource_version"`
@@ -259,6 +451,7 @@ type EventSubscription struct {
 }
 
 type IdempotencyKey struct {
+	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
 	Method      string             `json:"method"`
 	Key         string             `json:"key"`
@@ -269,6 +462,7 @@ type IdempotencyKey struct {
 }
 
 type IdempotencyKeysDefault struct {
+	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
 	Method      string             `json:"method"`
 	Key         string             `json:"key"`
@@ -279,6 +473,7 @@ type IdempotencyKeysDefault struct {
 }
 
 type IngestedEvent struct {
+	ID         pgtype.UUID        `json:"id"`
 	EventID    string             `json:"event_id"`
 	Source     string             `json:"source"`
 	Type       string             `json:"type"`
@@ -287,7 +482,8 @@ type IngestedEvent struct {
 }
 
 type MultipartPart struct {
-	UploadID   string             `json:"upload_id"`
+	ID         pgtype.UUID        `json:"id"`
+	UploadID   pgtype.UUID        `json:"upload_id"`
 	PartNumber int32              `json:"part_number"`
 	SizeBytes  int64              `json:"size_bytes"`
 	Etag       string             `json:"etag"`
@@ -296,20 +492,23 @@ type MultipartPart struct {
 }
 
 type MultipartUpload struct {
-	UploadID        string             `json:"upload_id"`
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
 	ObjectID        pgtype.UUID        `json:"object_id"`
+	BucketID        pgtype.UUID        `json:"bucket_id"`
 	StorageUploadID string             `json:"storage_upload_id"`
 	PartSizeBytes   int64              `json:"part_size_bytes"`
 	TotalParts      int32              `json:"total_parts"`
+	ClientID        string             `json:"client_id"`
+	UserID          pgtype.UUID        `json:"user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	BackendID       string             `json:"backend_id"`
-	BucketName      string             `json:"bucket_name"`
 }
 
 type OauthAuthorizationCode struct {
+	ID                  pgtype.UUID        `json:"id"`
 	CodeHash            []byte             `json:"code_hash"`
-	ClientID            string             `json:"client_id"`
+	OauthClientID       pgtype.UUID        `json:"oauth_client_id"`
 	UserID              pgtype.UUID        `json:"user_id"`
 	TenantID            pgtype.UUID        `json:"tenant_id"`
 	RedirectUri         string             `json:"redirect_uri"`
@@ -323,6 +522,7 @@ type OauthAuthorizationCode struct {
 }
 
 type OauthClient struct {
+	ID               pgtype.UUID        `json:"id"`
 	ClientID         string             `json:"client_id"`
 	ClientName       string             `json:"client_name"`
 	RedirectUris     []string           `json:"redirect_uris"`
@@ -334,10 +534,10 @@ type OauthClient struct {
 }
 
 type Object struct {
-	ObjectID          pgtype.UUID        `json:"object_id"`
+	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
-	Collection        string             `json:"collection"`
-	Key               string             `json:"key"`
+	CollectionID      pgtype.UUID        `json:"collection_id"`
+	Path              string             `json:"path"`
 	State             ObjectState        `json:"state"`
 	ContentType       string             `json:"content_type"`
 	SizeBytes         *int64             `json:"size_bytes"`
@@ -348,38 +548,32 @@ type Object struct {
 	Metadata          []byte             `json:"metadata"`
 	Tags              []byte             `json:"tags"`
 	ExternalRef       *string            `json:"external_ref"`
+	CurrentVersionID  pgtype.UUID        `json:"current_version_id"`
 	ResourceVersion   int64              `json:"resource_version"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
 	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
 	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
-	CurrentVersionID  pgtype.UUID        `json:"current_version_id"`
-	LockMode          string             `json:"lock_mode"`
-	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
-	LegalHold         bool               `json:"legal_hold"`
 }
 
-type Collection struct {
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	Collection      string             `json:"collection"`
-	DisplayName     *string            `json:"display_name"`
-	BackendID       string             `json:"backend_id"`
-	CedarPolicy     string             `json:"cedar_policy"`
-	CedarPolicyHash []byte             `json:"cedar_policy_hash"`
-	LifecycleRules  []byte             `json:"lifecycle_rules"`
-	ResourceVersion int64              `json:"resource_version"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	BucketName      string             `json:"bucket_name"`
-	Constraints     []byte             `json:"constraints"`
+type ObjectLock struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	VersionID   pgtype.UUID        `json:"version_id"`
+	Mode        NullObjectLockMode `json:"mode"`
+	RetainUntil pgtype.Timestamptz `json:"retain_until"`
+	LegalHold   bool               `json:"legal_hold"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ObjectTag struct {
+	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	Slug            string             `json:"slug"`
 	DisplayName     *string            `json:"display_name"`
-	Description     string             `json:"description"`
+	Description     *string            `json:"description"`
 	Labels          []byte             `json:"labels"`
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -387,7 +581,8 @@ type ObjectTag struct {
 }
 
 type ObjectVersion struct {
-	VersionID         pgtype.UUID        `json:"version_id"`
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
 	ObjectID          pgtype.UUID        `json:"object_id"`
 	IsDeleteMarker    bool               `json:"is_delete_marker"`
 	StoragePath       string             `json:"storage_path"`
@@ -398,14 +593,11 @@ type ObjectVersion struct {
 	ContentType       *string            `json:"content_type"`
 	Metadata          []byte             `json:"metadata"`
 	Tags              []byte             `json:"tags"`
-	LockMode          string             `json:"lock_mode"`
-	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
-	LegalHold         bool               `json:"legal_hold"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type Operation struct {
-	OperationID  pgtype.UUID        `json:"operation_id"`
+	ID           pgtype.UUID        `json:"id"`
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	Type         string             `json:"type"`
 	State        OperationState     `json:"state"`
@@ -419,126 +611,124 @@ type Operation struct {
 }
 
 type PendingPurge struct {
-	PurgeID       pgtype.UUID        `json:"purge_id"`
+	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
 	ObjectID      pgtype.UUID        `json:"object_id"`
-	BackendID     string             `json:"backend_id"`
-	BucketName    string             `json:"bucket_name"`
-	Collection    string             `json:"collection"`
-	Key           string             `json:"key"`
+	BucketID      pgtype.UUID        `json:"bucket_id"`
+	StoragePath   string             `json:"storage_path"`
 	Attempts      int32              `json:"attempts"`
 	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	LastError     string             `json:"last_error"`
+	LastError     *string            `json:"last_error"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type Quota struct {
-	QuotaID           pgtype.UUID        `json:"quota_id"`
+	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
-	BackendID         *string            `json:"backend_id"`
-	BucketName        *string            `json:"bucket_name"`
-	MaxTotalBytes     int64              `json:"max_total_bytes"`
-	MaxObjectCount    int64              `json:"max_object_count"`
-	MaxBytesPerDay    int64              `json:"max_bytes_per_day"`
-	MaxObjectsPerDay  int64              `json:"max_objects_per_day"`
+	BucketID          pgtype.UUID        `json:"bucket_id"`
+	MaxTotalBytes     *int64             `json:"max_total_bytes"`
+	MaxObjectCount    *int64             `json:"max_object_count"`
+	MaxBytesPerDay    *int64             `json:"max_bytes_per_day"`
+	MaxObjectsPerDay  *int64             `json:"max_objects_per_day"`
 	UsageTotalBytes   int64              `json:"usage_total_bytes"`
 	UsageObjectCount  int64              `json:"usage_object_count"`
 	UsageBytesToday   int64              `json:"usage_bytes_today"`
 	UsageObjectsToday int64              `json:"usage_objects_today"`
 	LastResetAt       pgtype.Timestamptz `json:"last_reset_at"`
 	ResourceVersion   int64              `json:"resource_version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type RefreshToken struct {
-	Jti       pgtype.UUID        `json:"jti"`
+	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
+	FamilyID  pgtype.UUID        `json:"family_id"`
 	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	Revoked   bool               `json:"revoked"`
-	FamilyID  pgtype.UUID        `json:"family_id"`
 }
 
 type ReplicationState struct {
-	BackendID  string             `json:"backend_id"`
-	BucketName string             `json:"bucket_name"`
-	Watermark  pgtype.Timestamptz `json:"watermark"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
+	BucketID  pgtype.UUID        `json:"bucket_id"`
+	Watermark pgtype.Timestamptz `json:"watermark"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type StorageBackend struct {
-	ID                            string             `json:"id"`
+	ID                            pgtype.UUID        `json:"id"`
+	Name                          string             `json:"name"`
 	Kind                          string             `json:"kind"`
-	Endpoint                      *string            `json:"endpoint"`
-	Region                        *string            `json:"region"`
-	EventsEnabled                 bool               `json:"events_enabled"`
-	EventsTarget                  *string            `json:"events_target"`
-	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	Provider                      string             `json:"provider"`
 	DisplayName                   *string            `json:"display_name"`
+	Endpoint                      *string            `json:"endpoint"`
 	PublicEndpoint                *string            `json:"public_endpoint"`
+	Region                        *string            `json:"region"`
 	ForcePathStyle                bool               `json:"force_path_style"`
 	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
+	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
+	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	SseType                       string             `json:"sse_type"`
-	SseKeyID                      string             `json:"sse_key_id"`
-	EventsQueueUrl                string             `json:"events_queue_url"`
+	SseKeyID                      *string            `json:"sse_key_id"`
+	EventsEnabled                 bool               `json:"events_enabled"`
+	EventsTarget                  *string            `json:"events_target"`
+	EventsQueueUrl                *string            `json:"events_queue_url"`
 	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
 	CedarPolicy                   string             `json:"cedar_policy"`
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
-	ResourceVersion               int64              `json:"resource_version"`
-	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 	Enabled                       bool               `json:"enabled"`
-	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
-	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	ReadOnly                      bool               `json:"read_only"`
 	Maintenance                   bool               `json:"maintenance"`
-	Provider                      string             `json:"provider"`
+	ResourceVersion               int64              `json:"resource_version"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type StorageBackendHealth struct {
-	BackendID string             `json:"backend_id"`
-	Status    string             `json:"status"`
-	Message   string             `json:"message"`
-	CheckedAt pgtype.Timestamptz `json:"checked_at"`
+	ID        pgtype.UUID         `json:"id"`
+	BackendID pgtype.UUID         `json:"backend_id"`
+	Status    BackendHealthStatus `json:"status"`
+	Message   *string             `json:"message"`
+	CheckedAt pgtype.Timestamptz  `json:"checked_at"`
 }
 
 type Tenant struct {
-	TenantID             pgtype.UUID        `json:"tenant_id"`
-	DisplayName          string             `json:"display_name"`
-	Labels               []byte             `json:"labels"`
-	InheritedCedarPolicy string             `json:"inherited_cedar_policy"`
-	InheritedPolicyHash  []byte             `json:"inherited_policy_hash"`
-	ResourceVersion      int64              `json:"resource_version"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	Slug                 string             `json:"slug"`
-	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
-	StorageLayout        string             `json:"storage_layout"`
+	ID                   pgtype.UUID         `json:"id"`
+	Slug                 string              `json:"slug"`
+	DisplayName          string              `json:"display_name"`
+	Labels               []byte              `json:"labels"`
+	InheritedCedarPolicy string              `json:"inherited_cedar_policy"`
+	InheritedPolicyHash  []byte              `json:"inherited_policy_hash"`
+	StorageLayout        TenantStorageLayout `json:"storage_layout"`
+	ResourceVersion      int64               `json:"resource_version"`
+	CreatedAt            pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz  `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz  `json:"deleted_at"`
 }
 
 type TenantBudget struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	// Aggregate spend cap. Despite the _usd suffix (kept for sqlc/query stability), the currency is determined by unit_code.
-	MaxBudgetUsd pgtype.Numeric `json:"max_budget_usd"`
-	// Accumulated tenant spend. Despite the _usd suffix, the currency is determined by unit_code.
-	SpentUsd    pgtype.Numeric     `json:"spent_usd"`
-	PeriodStart pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	// ISO 4217 currency code (USD/EUR/UAH/GBP) or the abstract sentinel UNIT for non-currency metering. Validated at the application layer.
-	UnitCode string `json:"unit_code"`
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	UnitCode     string             `json:"unit_code"`
+	PeriodStart  pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TenantDefaultBinding struct {
-	TenantID   pgtype.UUID        `json:"tenant_id"`
-	BackendID  string             `json:"backend_id"`
-	BucketName string             `json:"bucket_name"`
-	SetAt      pgtype.Timestamptz `json:"set_at"`
-	SetBy      string             `json:"set_by"`
+	ID       pgtype.UUID        `json:"id"`
+	TenantID pgtype.UUID        `json:"tenant_id"`
+	BucketID pgtype.UUID        `json:"bucket_id"`
+	SetAt    pgtype.Timestamptz `json:"set_at"`
+	SetBy    string             `json:"set_by"`
 }
 
 type TenantSlugHistory struct {
-	EntryID   int64              `json:"entry_id"`
+	ID        int64              `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
 	OldSlug   string             `json:"old_slug"`
 	NewSlug   string             `json:"new_slug"`
@@ -546,28 +736,27 @@ type TenantSlugHistory struct {
 }
 
 type TenantStorageMigration struct {
+	ID                      pgtype.UUID        `json:"id"`
 	TenantID                pgtype.UUID        `json:"tenant_id"`
-	SourceBackendID         string             `json:"source_backend_id"`
-	SourceBucketName        string             `json:"source_bucket_name"`
-	TargetBackendID         string             `json:"target_backend_id"`
-	TargetBucketName        string             `json:"target_bucket_name"`
+	SourceBucketID          pgtype.UUID        `json:"source_bucket_id"`
+	TargetBucketID          pgtype.UUID        `json:"target_bucket_id"`
 	State                   string             `json:"state"`
 	ObjectsTotal            int64              `json:"objects_total"`
 	ObjectsCopied           int64              `json:"objects_copied"`
-	CursorCollection        string             `json:"cursor_collection"`
-	CursorKey               string             `json:"cursor_key"`
-	Error                   string             `json:"error"`
+	CursorCollection        *string            `json:"cursor_collection"`
+	CursorPath              *string            `json:"cursor_path"`
+	Error                   *string            `json:"error"`
 	Attempts                int32              `json:"attempts"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt             pgtype.Timestamptz `json:"completed_at"`
 	CleanupRetentionSeconds int64              `json:"cleanup_retention_seconds"`
 	CleanupAfter            pgtype.Timestamptz `json:"cleanup_after"`
 	CleanedAt               pgtype.Timestamptz `json:"cleaned_at"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt             pgtype.Timestamptz `json:"completed_at"`
 }
 
 type User struct {
-	UserID          pgtype.UUID        `json:"user_id"`
+	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	Subject         string             `json:"subject"`
 	DisplayName     *string            `json:"display_name"`
@@ -582,6 +771,7 @@ type User struct {
 }
 
 type UserSetting struct {
+	ID              pgtype.UUID        `json:"id"`
 	UserID          pgtype.UUID        `json:"user_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	Timezone        string             `json:"timezone"`
@@ -594,11 +784,12 @@ type UserSetting struct {
 }
 
 type WorkerLease struct {
+	ID         pgtype.UUID        `json:"id"`
 	Name       string             `json:"name"`
 	HolderID   pgtype.UUID        `json:"holder_id"`
 	HolderMeta []byte             `json:"holder_meta"`
+	Generation int64              `json:"generation"`
 	AcquiredAt pgtype.Timestamptz `json:"acquired_at"`
 	RenewedAt  pgtype.Timestamptz `json:"renewed_at"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	Generation int64              `json:"generation"`
 }

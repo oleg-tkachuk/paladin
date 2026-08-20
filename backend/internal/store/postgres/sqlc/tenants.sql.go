@@ -13,14 +13,14 @@ import (
 
 const createTenant = `-- name: CreateTenant :exec
 
-INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
+INSERT INTO tenants (id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
 VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 // Tenant queries.
-func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout string) error {
+func (q *Queries) CreateTenant(ctx context.Context, iD pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout TenantStorageLayout) error {
 	_, err := q.db.Exec(ctx, createTenant,
-		tenantID,
+		iD,
 		slug,
 		displayName,
 		labels,
@@ -31,86 +31,82 @@ func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug s
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tenants.storage_layout, tdb.backend_id, tdb.bucket_name
+SELECT tenants.id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.storage_layout, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.deleted_at, tdb.bucket_id
 FROM tenants
-LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
-WHERE tenants.tenant_id = $1
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+WHERE tenants.id = $1
 `
 
 type GetTenantRow struct {
-	Tenant     Tenant  `json:"tenant"`
-	BackendID  *string `json:"backend_id"`
-	BucketName *string `json:"bucket_name"`
+	Tenant   Tenant      `json:"tenant"`
+	BucketID pgtype.UUID `json:"bucket_id"`
 }
 
-// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
+// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 // so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
-func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error) {
-	row := q.db.QueryRow(ctx, getTenant, tenantID)
+func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error) {
+	row := q.db.QueryRow(ctx, getTenant, id)
 	var i GetTenantRow
 	err := row.Scan(
-		&i.Tenant.TenantID,
+		&i.Tenant.ID,
+		&i.Tenant.Slug,
 		&i.Tenant.DisplayName,
 		&i.Tenant.Labels,
 		&i.Tenant.InheritedCedarPolicy,
 		&i.Tenant.InheritedPolicyHash,
+		&i.Tenant.StorageLayout,
 		&i.Tenant.ResourceVersion,
 		&i.Tenant.CreatedAt,
 		&i.Tenant.UpdatedAt,
-		&i.Tenant.Slug,
 		&i.Tenant.DeletedAt,
-		&i.Tenant.StorageLayout,
-		&i.BackendID,
-		&i.BucketName,
+		&i.BucketID,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tenants.storage_layout, tdb.backend_id, tdb.bucket_name
+SELECT tenants.id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.storage_layout, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.deleted_at, tdb.bucket_id
 FROM tenants
-LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
 WHERE tenants.slug = $1
 `
 
 type GetTenantBySlugRow struct {
-	Tenant     Tenant  `json:"tenant"`
-	BackendID  *string `json:"backend_id"`
-	BucketName *string `json:"bucket_name"`
+	Tenant   Tenant      `json:"tenant"`
+	BucketID pgtype.UUID `json:"bucket_id"`
 }
 
 func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getTenantBySlug, slug)
 	var i GetTenantBySlugRow
 	err := row.Scan(
-		&i.Tenant.TenantID,
+		&i.Tenant.ID,
+		&i.Tenant.Slug,
 		&i.Tenant.DisplayName,
 		&i.Tenant.Labels,
 		&i.Tenant.InheritedCedarPolicy,
 		&i.Tenant.InheritedPolicyHash,
+		&i.Tenant.StorageLayout,
 		&i.Tenant.ResourceVersion,
 		&i.Tenant.CreatedAt,
 		&i.Tenant.UpdatedAt,
-		&i.Tenant.Slug,
 		&i.Tenant.DeletedAt,
-		&i.Tenant.StorageLayout,
-		&i.BackendID,
-		&i.BucketName,
+		&i.BucketID,
 	)
 	return i, err
 }
 
 const hardDeleteTenant = `-- name: HardDeleteTenant :execrows
 DELETE FROM tenants
-WHERE tenant_id = $1
+WHERE id = $1
   AND ($2::bigint = 0
        OR resource_version = $2::bigint)
 `
 
 // Unconditional physical delete. Used by Delete(force=true) and Purge.
 // expected_version=0 → no OCC guard; non-zero → strict match.
-func (q *Queries) HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, hardDeleteTenant, tenantID, expectedVersion)
+func (q *Queries) HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteTenant, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -118,10 +114,10 @@ func (q *Queries) HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, ex
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tenants.storage_layout, tdb.backend_id, tdb.bucket_name
+SELECT tenants.id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.storage_layout, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.deleted_at, tdb.bucket_id
 FROM tenants
-LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
-WHERE ($1::uuid IS NULL OR tenants.tenant_id > $1::uuid)
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+WHERE ($1::uuid IS NULL OR tenants.id > $1::uuid)
   AND (
     CASE
       WHEN $2::bool      THEN tenants.deleted_at IS NOT NULL
@@ -129,14 +125,13 @@ WHERE ($1::uuid IS NULL OR tenants.tenant_id > $1::uuid)
       ELSE                                          tenants.deleted_at IS NULL
     END
   )
-ORDER BY tenants.tenant_id
+ORDER BY tenants.id
 LIMIT $4
 `
 
 type ListTenantsRow struct {
-	Tenant     Tenant  `json:"tenant"`
-	BackendID  *string `json:"backend_id"`
-	BucketName *string `json:"bucket_name"`
+	Tenant   Tenant      `json:"tenant"`
+	BucketID pgtype.UUID `json:"bucket_id"`
 }
 
 // include_trashed = false → active rows only; true → both;
@@ -159,19 +154,18 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTras
 	for rows.Next() {
 		var i ListTenantsRow
 		if err := rows.Scan(
-			&i.Tenant.TenantID,
+			&i.Tenant.ID,
+			&i.Tenant.Slug,
 			&i.Tenant.DisplayName,
 			&i.Tenant.Labels,
 			&i.Tenant.InheritedCedarPolicy,
 			&i.Tenant.InheritedPolicyHash,
+			&i.Tenant.StorageLayout,
 			&i.Tenant.ResourceVersion,
 			&i.Tenant.CreatedAt,
 			&i.Tenant.UpdatedAt,
-			&i.Tenant.Slug,
 			&i.Tenant.DeletedAt,
-			&i.Tenant.StorageLayout,
-			&i.BackendID,
-			&i.BucketName,
+			&i.BucketID,
 		); err != nil {
 			return nil, err
 		}
@@ -188,14 +182,14 @@ UPDATE tenants
    SET deleted_at = NULL,
        updated_at = now(),
        resource_version = resource_version + 1
- WHERE tenant_id = $1
+ WHERE id = $1
    AND deleted_at IS NOT NULL
 `
 
 // Clears deleted_at on a trashed row. Bumps resource_version +
 // updated_at.
-func (q *Queries) RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, restoreTenant, tenantID)
+func (q *Queries) RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreTenant, id)
 	if err != nil {
 		return 0, err
 	}
@@ -207,7 +201,7 @@ UPDATE tenants
    SET deleted_at = now(),
        updated_at = now(),
        resource_version = resource_version + 1
- WHERE tenant_id = $1
+ WHERE id = $1
    AND deleted_at IS NULL
    AND ($2::bigint = 0
         OR resource_version = $2::bigint)
@@ -217,8 +211,8 @@ UPDATE tenants
 // "no OCC guard" (legacy / scripted path); a non-zero value enforces
 // the match. Updates resource_version + updated_at so audit reflects
 // the soft-delete time independently of any subsequent restore.
-func (q *Queries) SoftDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteTenant, tenantID, expectedVersion)
+func (q *Queries) SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteTenant, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -233,13 +227,13 @@ SET display_name           = COALESCE($2, display_name),
     inherited_policy_hash  = CASE WHEN $4 IS NULL
                                   THEN inherited_policy_hash
                                   ELSE $5 END
-WHERE tenant_id = $1
+WHERE id = $1
   AND resource_version = $6
 `
 
-func (q *Queries) UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateTenant,
-		tenantID,
+		iD,
 		displayName,
 		labels,
 		policy,

@@ -1,10 +1,11 @@
 -- Purge debt: the retry handle for bytes whose DB row is already gone.
--- See migrations/069_pending_purges.sql for why this table exists.
+-- See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
+-- denormalised here because the object row is gone before the purge runs.
 
 -- name: InsertPendingPurge :exec
 INSERT INTO pending_purges (
-    id, tenant_id, object_id, bucket_id, collection, key
-) VALUES ($1, $2, $3, $4, $5, $6, $7);
+    id, tenant_id, object_id, bucket_id, storage_path
+) VALUES ($1, $2, $3, $4, $5);
 
 -- name: DeletePendingPurge :execrows
 DELETE FROM pending_purges WHERE id = $1;
@@ -13,7 +14,7 @@ DELETE FROM pending_purges WHERE id = $1;
 -- concurrent worker replicas divide the backlog instead of colliding on it —
 -- the same claim discipline the event-delivery outbox uses.
 -- name: ListDuePurges :many
-SELECT id, tenant_id, object_id, bucket_id, collection, key, attempts
+SELECT id, tenant_id, object_id, bucket_id, storage_path, attempts
   FROM pending_purges
  WHERE next_attempt_at <= now()
  ORDER BY next_attempt_at

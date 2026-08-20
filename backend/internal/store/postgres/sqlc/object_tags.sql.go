@@ -18,7 +18,7 @@ VALUES ($1, $2, $3, $4, $5)
 `
 
 // Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
-func (q *Queries) CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error {
+func (q *Queries) CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createObjectTag,
 		tenantID,
 		slug,
@@ -46,7 +46,7 @@ func (q *Queries) DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slu
 }
 
 const getObjectTag = `-- name: GetObjectTag :one
-SELECT object_tags.tenant_id, object_tags.slug, object_tags.display_name, object_tags.description, object_tags.labels, object_tags.resource_version, object_tags.created_at, object_tags.updated_at
+SELECT object_tags.id, object_tags.tenant_id, object_tags.slug, object_tags.display_name, object_tags.description, object_tags.labels, object_tags.resource_version, object_tags.created_at, object_tags.updated_at
 FROM object_tags
 WHERE tenant_id = $1 AND slug = $2
 `
@@ -59,6 +59,7 @@ func (q *Queries) GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug s
 	row := q.db.QueryRow(ctx, getObjectTag, tenantID, slug)
 	var i GetObjectTagRow
 	err := row.Scan(
+		&i.ObjectTag.ID,
 		&i.ObjectTag.TenantID,
 		&i.ObjectTag.Slug,
 		&i.ObjectTag.DisplayName,
@@ -72,7 +73,7 @@ func (q *Queries) GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug s
 }
 
 const listObjectTags = `-- name: ListObjectTags :many
-SELECT object_tags.tenant_id, object_tags.slug, object_tags.display_name, object_tags.description, object_tags.labels, object_tags.resource_version, object_tags.created_at, object_tags.updated_at
+SELECT object_tags.id, object_tags.tenant_id, object_tags.slug, object_tags.display_name, object_tags.description, object_tags.labels, object_tags.resource_version, object_tags.created_at, object_tags.updated_at
 FROM object_tags
 WHERE tenant_id = $1
   AND ($2::text IS NULL OR slug > $2::text)
@@ -94,6 +95,7 @@ func (q *Queries) ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afte
 	for rows.Next() {
 		var i ListObjectTagsRow
 		if err := rows.Scan(
+			&i.ObjectTag.ID,
 			&i.ObjectTag.TenantID,
 			&i.ObjectTag.Slug,
 			&i.ObjectTag.DisplayName,

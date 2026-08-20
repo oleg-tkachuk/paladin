@@ -12,22 +12,38 @@ import (
 )
 
 const getBucketQuota = `-- name: GetBucketQuota :one
-SELECT quota_id, tenant_id, backend_id, bucket_name,
+SELECT id, tenant_id, bucket_id,
        max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day,
        usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today,
        last_reset_at, resource_version, updated_at
 FROM quotas
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE bucket_id = $1
 `
 
-func (q *Queries) GetBucketQuota(ctx context.Context, backendID *string, bucketName *string) (Quota, error) {
-	row := q.db.QueryRow(ctx, getBucketQuota, backendID, bucketName)
-	var i Quota
+type GetBucketQuotaRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	BucketID          pgtype.UUID        `json:"bucket_id"`
+	MaxTotalBytes     *int64             `json:"max_total_bytes"`
+	MaxObjectCount    *int64             `json:"max_object_count"`
+	MaxBytesPerDay    *int64             `json:"max_bytes_per_day"`
+	MaxObjectsPerDay  *int64             `json:"max_objects_per_day"`
+	UsageTotalBytes   int64              `json:"usage_total_bytes"`
+	UsageObjectCount  int64              `json:"usage_object_count"`
+	UsageBytesToday   int64              `json:"usage_bytes_today"`
+	UsageObjectsToday int64              `json:"usage_objects_today"`
+	LastResetAt       pgtype.Timestamptz `json:"last_reset_at"`
+	ResourceVersion   int64              `json:"resource_version"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetBucketQuota(ctx context.Context, bucketID pgtype.UUID) (GetBucketQuotaRow, error) {
+	row := q.db.QueryRow(ctx, getBucketQuota, bucketID)
+	var i GetBucketQuotaRow
 	err := row.Scan(
-		&i.QuotaID,
+		&i.ID,
 		&i.TenantID,
-		&i.BackendID,
-		&i.BucketName,
+		&i.BucketID,
 		&i.MaxTotalBytes,
 		&i.MaxObjectCount,
 		&i.MaxBytesPerDay,
@@ -44,7 +60,7 @@ func (q *Queries) GetBucketQuota(ctx context.Context, backendID *string, bucketN
 }
 
 const getTenantQuota = `-- name: GetTenantQuota :one
-SELECT quota_id, tenant_id, backend_id, bucket_name,
+SELECT id, tenant_id, bucket_id,
        max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day,
        usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today,
        last_reset_at, resource_version, updated_at
@@ -52,14 +68,30 @@ FROM quotas
 WHERE tenant_id = $1
 `
 
-func (q *Queries) GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error) {
+type GetTenantQuotaRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	BucketID          pgtype.UUID        `json:"bucket_id"`
+	MaxTotalBytes     *int64             `json:"max_total_bytes"`
+	MaxObjectCount    *int64             `json:"max_object_count"`
+	MaxBytesPerDay    *int64             `json:"max_bytes_per_day"`
+	MaxObjectsPerDay  *int64             `json:"max_objects_per_day"`
+	UsageTotalBytes   int64              `json:"usage_total_bytes"`
+	UsageObjectCount  int64              `json:"usage_object_count"`
+	UsageBytesToday   int64              `json:"usage_bytes_today"`
+	UsageObjectsToday int64              `json:"usage_objects_today"`
+	LastResetAt       pgtype.Timestamptz `json:"last_reset_at"`
+	ResourceVersion   int64              `json:"resource_version"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (GetTenantQuotaRow, error) {
 	row := q.db.QueryRow(ctx, getTenantQuota, tenantID)
-	var i Quota
+	var i GetTenantQuotaRow
 	err := row.Scan(
-		&i.QuotaID,
+		&i.ID,
 		&i.TenantID,
-		&i.BackendID,
-		&i.BucketName,
+		&i.BucketID,
 		&i.MaxTotalBytes,
 		&i.MaxObjectCount,
 		&i.MaxBytesPerDay,
@@ -81,12 +113,12 @@ SET usage_total_bytes   = usage_total_bytes + $2,
     usage_object_count  = usage_object_count + $3,
     usage_bytes_today   = usage_bytes_today + $2,
     usage_objects_today = usage_objects_today + $3
-WHERE quota_id = $1
+WHERE id = $1
 `
 
 // Atomic add. tenant_id-scoped quota when bucket fields are NULL.
-func (q *Queries) IncrementQuotaUsage(ctx context.Context, quotaID pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error {
-	_, err := q.db.Exec(ctx, incrementQuotaUsage, quotaID, usageTotalBytes, usageObjectCount)
+func (q *Queries) IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error {
+	_, err := q.db.Exec(ctx, incrementQuotaUsage, iD, usageTotalBytes, usageObjectCount)
 	return err
 }
 
@@ -95,18 +127,18 @@ UPDATE quotas
 SET usage_bytes_today = 0,
     usage_objects_today = 0,
     last_reset_at = $2
-WHERE quota_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) ResetQuotaDaily(ctx context.Context, quotaID pgtype.UUID, lastResetAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, resetQuotaDaily, quotaID, lastResetAt)
+func (q *Queries) ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, resetQuotaDaily, iD, lastResetAt)
 	return err
 }
 
 const upsertBucketQuota = `-- name: UpsertBucketQuota :exec
-INSERT INTO quotas (quota_id, backend_id, bucket_name, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (backend_id, bucket_name) WHERE backend_id IS NOT NULL DO UPDATE SET
+INSERT INTO quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
@@ -114,11 +146,10 @@ ON CONFLICT (backend_id, bucket_name) WHERE backend_id IS NOT NULL DO UPDATE SET
     updated_at          = now()
 `
 
-func (q *Queries) UpsertBucketQuota(ctx context.Context, quotaID pgtype.UUID, backendID *string, bucketName *string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error {
+func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, bucketID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error {
 	_, err := q.db.Exec(ctx, upsertBucketQuota,
-		quotaID,
-		backendID,
-		bucketName,
+		iD,
+		bucketID,
 		maxTotalBytes,
 		maxObjectCount,
 		maxBytesPerDay,
@@ -128,9 +159,9 @@ func (q *Queries) UpsertBucketQuota(ctx context.Context, quotaID pgtype.UUID, ba
 }
 
 const upsertTenantQuota = `-- name: UpsertTenantQuota :exec
-INSERT INTO quotas (quota_id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
+INSERT INTO quotas (id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tenant_id) WHERE tenant_id IS NOT NULL DO UPDATE SET
+ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
@@ -138,9 +169,9 @@ ON CONFLICT (tenant_id) WHERE tenant_id IS NOT NULL DO UPDATE SET
     updated_at          = now()
 `
 
-func (q *Queries) UpsertTenantQuota(ctx context.Context, quotaID pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error {
+func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error {
 	_, err := q.db.Exec(ctx, upsertTenantQuota,
-		quotaID,
+		iD,
 		tenantID,
 		maxTotalBytes,
 		maxObjectCount,

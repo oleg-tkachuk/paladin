@@ -7,7 +7,7 @@
 
 -- name: SetTenantDefaultBinding :exec
 INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
-VALUES ($1, $2, $3, $4)
+VALUES ($1, $2, $3)
 ON CONFLICT (tenant_id) DO UPDATE
    SET bucket_id  = EXCLUDED.bucket_id = EXCLUDED.bucket_id,
        set_at      = now(),

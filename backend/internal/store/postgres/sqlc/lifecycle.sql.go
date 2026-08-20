@@ -12,19 +12,19 @@ import (
 )
 
 const iterateObjectsForLifecycle = `-- name: IterateObjectsForLifecycle :many
-SELECT object_id, state, content_type, size_bytes,
+SELECT id, state, content_type, size_bytes,
        metadata, tags, created_at, committed_at
 FROM objects
 WHERE tenant_id = $1
-  AND collection = $2
+  AND collection_id = $2
   AND state = 'AVAILABLE'
-  AND ($3::uuid IS NULL OR object_id < $3::uuid)
-ORDER BY object_id DESC
+  AND ($3::uuid IS NULL OR id < $3::uuid)
+ORDER BY id DESC
 LIMIT $4
 `
 
 type IterateObjectsForLifecycleRow struct {
-	ObjectID    pgtype.UUID        `json:"object_id"`
+	ID          pgtype.UUID        `json:"id"`
 	State       ObjectState        `json:"state"`
 	ContentType string             `json:"content_type"`
 	SizeBytes   *int64             `json:"size_bytes"`
@@ -35,12 +35,12 @@ type IterateObjectsForLifecycleRow struct {
 }
 
 // Streams a window of AVAILABLE-only objects under (tenant, collection)
-// newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
+// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 // Lifecycle worker walks via repeated calls until empty page.
-func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collection string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
+func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
 	rows, err := q.db.Query(ctx, iterateObjectsForLifecycle,
 		tenantID,
-		collection,
+		collectionID,
 		column3,
 		limit,
 	)
@@ -52,7 +52,7 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 	for rows.Next() {
 		var i IterateObjectsForLifecycleRow
 		if err := rows.Scan(
-			&i.ObjectID,
+			&i.ID,
 			&i.State,
 			&i.ContentType,
 			&i.SizeBytes,
@@ -72,7 +72,7 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 }
 
 const listBucketsWithLifecycle = `-- name: ListBucketsWithLifecycle :many
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT id, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -83,12 +83,11 @@ SELECT backend_id, bucket_name, display_name, region, labels,
 FROM buckets
 WHERE jsonb_array_length(lifecycle_rules) > 0
   AND provision_state = 'ready'
-ORDER BY backend_id, bucket_name
+ORDER BY name
 `
 
 type ListBucketsWithLifecycleRow struct {
-	BackendID                         string             `json:"backend_id"`
-	BucketName                        string             `json:"bucket_name"`
+	ID                                pgtype.UUID        `json:"id"`
 	DisplayName                       *string            `json:"display_name"`
 	Region                            *string            `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -98,7 +97,7 @@ type ListBucketsWithLifecycleRow struct {
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`
 	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
-	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultMode             NullObjectLockMode `json:"object_lock_default_mode"`
 	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
 	VersioningEnabled                 bool               `json:"versioning_enabled"`
 	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
@@ -126,8 +125,7 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 	for rows.Next() {
 		var i ListBucketsWithLifecycleRow
 		if err := rows.Scan(
-			&i.BackendID,
-			&i.BucketName,
+			&i.ID,
 			&i.DisplayName,
 			&i.Region,
 			&i.Labels,
@@ -161,7 +159,7 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 
 const listBucketsWithReplication = `-- name: ListBucketsWithReplication :many
 
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT id, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -173,12 +171,11 @@ FROM buckets
 WHERE replication_enabled = TRUE
   AND replication_destination <> ''
   AND provision_state = 'ready'
-ORDER BY backend_id, bucket_name
+ORDER BY name
 `
 
 type ListBucketsWithReplicationRow struct {
-	BackendID                         string             `json:"backend_id"`
-	BucketName                        string             `json:"bucket_name"`
+	ID                                pgtype.UUID        `json:"id"`
 	DisplayName                       *string            `json:"display_name"`
 	Region                            *string            `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -188,7 +185,7 @@ type ListBucketsWithReplicationRow struct {
 	Constraints                       []byte             `json:"constraints"`
 	LifecycleRules                    []byte             `json:"lifecycle_rules"`
 	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
-	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultMode             NullObjectLockMode `json:"object_lock_default_mode"`
 	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
 	VersioningEnabled                 bool               `json:"versioning_enabled"`
 	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
@@ -221,8 +218,7 @@ func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBuckets
 	for rows.Next() {
 		var i ListBucketsWithReplicationRow
 		if err := rows.Scan(
-			&i.BackendID,
-			&i.BucketName,
+			&i.ID,
 			&i.DisplayName,
 			&i.Region,
 			&i.Labels,
@@ -255,21 +251,21 @@ func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBuckets
 }
 
 const listCollectionBindingsForBucket = `-- name: ListCollectionBindingsForBucket :many
-SELECT tenant_id, collection
+SELECT tenant_id, name
 FROM collections
-WHERE backend_id = $1 AND bucket_name = $2
-ORDER BY tenant_id, collection
+WHERE bucket_id = $1
+ORDER BY tenant_id, name
 `
 
 type ListCollectionBindingsForBucketRow struct {
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	Collection string      `json:"collection"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	Name     string      `json:"name"`
 }
 
-// Lists every (tenant_id, collection) bound to a given bucket. Used by
+// Lists every (tenant_id, collection name) bound to a given bucket. Used by
 // lifecycle + replication workers to scope their object scans.
-func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, backendID string, bucketName string) ([]ListCollectionBindingsForBucketRow, error) {
-	rows, err := q.db.Query(ctx, listCollectionBindingsForBucket, backendID, bucketName)
+func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, bucketID pgtype.UUID) ([]ListCollectionBindingsForBucketRow, error) {
+	rows, err := q.db.Query(ctx, listCollectionBindingsForBucket, bucketID)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +273,7 @@ func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, backendID
 	var items []ListCollectionBindingsForBucketRow
 	for rows.Next() {
 		var i ListCollectionBindingsForBucketRow
-		if err := rows.Scan(&i.TenantID, &i.Collection); err != nil {
+		if err := rows.Scan(&i.TenantID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

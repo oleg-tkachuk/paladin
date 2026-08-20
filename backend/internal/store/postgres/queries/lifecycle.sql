@@ -10,7 +10,7 @@
 -- their way out, and 'failed' / 'deletion_failed' need operator triage —
 -- replicating into or out of any of those is at best wasted work and at
 -- worst ships objects into a bucket that's about to be torn down.
-SELECT bucket_id, display_name, region, labels,
+SELECT id, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -22,7 +22,7 @@ FROM buckets
 WHERE replication_enabled = TRUE
   AND replication_destination <> ''
   AND provision_state = 'ready'
-ORDER BY bucket_id;
+ORDER BY name;
 
 -- name: ListBucketsWithLifecycle :many
 -- Returns only buckets with a non-empty lifecycle_rules array. The worker
@@ -30,7 +30,7 @@ ORDER BY bucket_id;
 -- wasteful when most carry no rules.
 --
 -- See ListBucketsWithReplication for why we restrict to provision_state='ready'.
-SELECT bucket_id, display_name, region, labels,
+SELECT id, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -41,26 +41,26 @@ SELECT bucket_id, display_name, region, labels,
 FROM buckets
 WHERE jsonb_array_length(lifecycle_rules) > 0
   AND provision_state = 'ready'
-ORDER BY bucket_id;
+ORDER BY name;
 
 -- name: ListCollectionBindingsForBucket :many
--- Lists every (tenant_id, collection) bound to a given bucket. Used by
+-- Lists every (tenant_id, collection name) bound to a given bucket. Used by
 -- lifecycle + replication workers to scope their object scans.
-SELECT tenant_id, collection
+SELECT tenant_id, name
 FROM collections
 WHERE bucket_id = $1
-ORDER BY tenant_id, collection;
+ORDER BY tenant_id, name;
 
 -- name: IterateObjectsForLifecycle :many
 -- Streams a window of AVAILABLE-only objects under (tenant, collection)
--- newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
+-- newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 -- Lifecycle worker walks via repeated calls until empty page.
-SELECT object_id, state, content_type, size_bytes,
+SELECT id, state, content_type, size_bytes,
        metadata, tags, created_at, committed_at
 FROM objects
 WHERE tenant_id = $1
-  AND collection = $2
+  AND collection_id = $2
   AND state = 'AVAILABLE'
-  AND ($3::uuid IS NULL OR object_id < $3::uuid)
-ORDER BY object_id DESC
+  AND ($3::uuid IS NULL OR id < $3::uuid)
+ORDER BY id DESC
 LIMIT $4;

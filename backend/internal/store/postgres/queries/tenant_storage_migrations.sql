@@ -4,7 +4,7 @@
 INSERT INTO tenant_storage_migrations
     (tenant_id, source_bucket_id, target_bucket_id,
      cleanup_retention_seconds, state)
-VALUES ($1, $2, $3, $4, $5, $6, 'provisioning')
+VALUES ($1, $2, $3, $4, 'provisioning')
 RETURNING *;
 
 -- name: GetStorageMigration :one
@@ -59,15 +59,15 @@ SET state = 'failed', error = $2, attempts = attempts + 1, updated_at = now()
 WHERE tenant_id = $1;
 
 -- name: MigrationListTenantObjects :many
--- Objects to copy, keyset-paginated by (collection, key) after the cursor so a
+-- Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 -- worker restart resumes mid-prefix instead of rescanning from the top.
 -- size_bytes feeds the physical (HEAD size) verify after copy.
-SELECT collection, key, COALESCE(size_bytes, 0)::bigint AS size_bytes
+SELECT collection_id, path, COALESCE(size_bytes, 0)::bigint AS size_bytes
 FROM objects
 WHERE tenant_id = $1
   AND state = 'AVAILABLE'
   AND ROW(collection, key) > ROW(sqlc.arg('after_collection')::text, sqlc.arg('after_key')::text)
-ORDER BY collection, key
+ORDER BY collection_id, path
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MigrationCountTenantObjects :one
@@ -78,14 +78,14 @@ UPDATE tenants
 SET storage_layout   = $2,
     resource_version = resource_version + 1,
     updated_at       = now()
-WHERE tenant_id = $1;
+WHERE id = $1;
 
 -- name: MigrationListTenantCollections :many
 -- All collections of a tenant, for the transactional rebind.
-SELECT collection FROM collections WHERE tenant_id = $1 ORDER BY collection;
+SELECT name FROM collections WHERE tenant_id = $1 ORDER BY name;
 
 -- name: TenantCollectionBuckets :many
--- Distinct (backend, bucket) the tenant's collections currently bind to. The
--- migration copies FROM this — a shared tenant's keys normally share one bucket;
+-- Distinct buckets the tenant's collections currently bind to. The migration
+-- copies FROM this — a shared tenant's collections normally share one bucket;
 -- more than one row means the tenant spans buckets (not supported in slice 1).
-SELECT DISTINCT backend_id, bucket_name FROM collections WHERE tenant_id = $1;
+SELECT DISTINCT bucket_id FROM collections WHERE tenant_id = $1;

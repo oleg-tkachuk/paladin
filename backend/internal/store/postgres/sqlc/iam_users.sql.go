@@ -13,14 +13,14 @@ import (
 
 const createUser = `-- name: CreateUser :exec
 INSERT INTO users (
-    user_id, tenant_id, subject, display_name, password_hash,
+    id, tenant_id, subject, display_name, password_hash,
     roles, scopes, disabled
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
-func (q *Queries) CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error {
+func (q *Queries) CreateUser(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error {
 	_, err := q.db.Exec(ctx, createUser,
-		userID,
+		iD,
 		tenantID,
 		subject,
 		displayName,
@@ -34,12 +34,12 @@ func (q *Queries) CreateUser(ctx context.Context, userID pgtype.UUID, tenantID p
 
 const deleteUser = `-- name: DeleteUser :execrows
 DELETE FROM users
-WHERE user_id = $1
+WHERE id = $1
   AND ($2 = 0 OR resource_version = $2)
 `
 
-func (q *Queries) DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteUser, userID, expectedVersion)
+func (q *Queries) DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUser, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -47,7 +47,7 @@ func (q *Queries) DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVe
 }
 
 const findUsersBySubjectGlobal = `-- name: FindUsersBySubjectGlobal :many
-SELECT user_id, tenant_id, subject, display_name, password_hash,
+SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
@@ -67,7 +67,7 @@ func (q *Queries) FindUsersBySubjectGlobal(ctx context.Context, subject string) 
 	for rows.Next() {
 		var i User
 		if err := rows.Scan(
-			&i.UserID,
+			&i.ID,
 			&i.TenantID,
 			&i.Subject,
 			&i.DisplayName,
@@ -91,18 +91,18 @@ func (q *Queries) FindUsersBySubjectGlobal(ctx context.Context, subject string) 
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT user_id, tenant_id, subject, display_name, password_hash,
+SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
-WHERE user_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByID, userID)
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
 	var i User
 	err := row.Scan(
-		&i.UserID,
+		&i.ID,
 		&i.TenantID,
 		&i.Subject,
 		&i.DisplayName,
@@ -119,7 +119,7 @@ func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (User, er
 }
 
 const getUserBySubject = `-- name: GetUserBySubject :one
-SELECT user_id, tenant_id, subject, display_name, password_hash,
+SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
@@ -130,7 +130,7 @@ func (q *Queries) GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, su
 	row := q.db.QueryRow(ctx, getUserBySubject, tenantID, subject)
 	var i User
 	err := row.Scan(
-		&i.UserID,
+		&i.ID,
 		&i.TenantID,
 		&i.Subject,
 		&i.DisplayName,
@@ -147,13 +147,13 @@ func (q *Queries) GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, su
 }
 
 const listUsersAll = `-- name: ListUsersAll :many
-SELECT user_id, tenant_id, subject, display_name, password_hash,
+SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
 WHERE ($1::uuid IS NULL
-       OR user_id > $1::uuid)
-ORDER BY user_id ASC
+       OR id > $1::uuid)
+ORDER BY id ASC
 LIMIT $2::int
 `
 
@@ -171,7 +171,7 @@ func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, pageSiz
 	for rows.Next() {
 		var i User
 		if err := rows.Scan(
-			&i.UserID,
+			&i.ID,
 			&i.TenantID,
 			&i.Subject,
 			&i.DisplayName,
@@ -195,19 +195,19 @@ func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, pageSiz
 }
 
 const listUsersByTenant = `-- name: ListUsersByTenant :many
-SELECT user_id, tenant_id, subject, display_name, password_hash,
+SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
 WHERE tenant_id = $1
   AND ($2::uuid IS NULL
-       OR user_id > $2::uuid)
-ORDER BY user_id ASC
+       OR id > $2::uuid)
+ORDER BY id ASC
 LIMIT $3::int
 `
 
 // after_id is NULL on first page (no page token). The IS-NULL guard
-// prevents the NULL-propagation that would make a bare `user_id >
+// prevents the NULL-propagation that would make a bare `id >
 // NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
 // Valid:false} → SQL NULL, so the guard is the contract callers
 // rely on.
@@ -221,7 +221,7 @@ func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, a
 	for rows.Next() {
 		var i User
 		if err := rows.Scan(
-			&i.UserID,
+			&i.ID,
 			&i.TenantID,
 			&i.Subject,
 			&i.DisplayName,
@@ -247,11 +247,11 @@ func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, a
 const touchUserLogin = `-- name: TouchUserLogin :exec
 UPDATE users
 SET last_login_at = $2
-WHERE user_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) TouchUserLogin(ctx context.Context, userID pgtype.UUID, lastLoginAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, touchUserLogin, userID, lastLoginAt)
+func (q *Queries) TouchUserLogin(ctx context.Context, iD pgtype.UUID, lastLoginAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, touchUserLogin, iD, lastLoginAt)
 	return err
 }
 
@@ -262,17 +262,17 @@ SET display_name = COALESCE($1, display_name),
     roles        = COALESCE($3, roles),
     scopes       = COALESCE($4, scopes),
     updated_at   = now()
-WHERE user_id = $5
+WHERE id = $5
   AND ($6 = 0 OR resource_version = $6)
 `
 
-func (q *Queries) UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, userID pgtype.UUID, expectedVersion interface{}) (int64, error) {
+func (q *Queries) UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error) {
 	result, err := q.db.Exec(ctx, updateUser,
 		displayName,
 		disabled,
 		roles,
 		scopes,
-		userID,
+		iD,
 		expectedVersion,
 	)
 	if err != nil {
@@ -285,10 +285,10 @@ const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
 UPDATE users
 SET password_hash = $2,
     updated_at    = now()
-WHERE user_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) UpdateUserPasswordHash(ctx context.Context, userID pgtype.UUID, passwordHash []byte) error {
-	_, err := q.db.Exec(ctx, updateUserPasswordHash, userID, passwordHash)
+func (q *Queries) UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error {
+	_, err := q.db.Exec(ctx, updateUserPasswordHash, iD, passwordHash)
 	return err
 }

@@ -15,18 +15,18 @@ const advanceStorageMigrationCopy = `-- name: AdvanceStorageMigrationCopy :execr
 UPDATE tenant_storage_migrations
 SET objects_copied    = $2,
     cursor_collection = $3,
-    cursor_key        = $4,
+    cursor_path        = $4,
     updated_at        = now()
 WHERE tenant_id = $1
 `
 
 // Records copy progress + the resume cursor after a batch.
-func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorKey string) (int64, error) {
+func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection *string, cursorPath *string) (int64, error) {
 	result, err := q.db.Exec(ctx, advanceStorageMigrationCopy,
 		tenantID,
 		objectsCopied,
 		cursorCollection,
-		cursorKey,
+		cursorPath,
 	)
 	if err != nil {
 		return 0, err
@@ -56,42 +56,39 @@ func (q *Queries) CompleteStorageMigration(ctx context.Context, tenantID pgtype.
 const createStorageMigration = `-- name: CreateStorageMigration :one
 
 INSERT INTO tenant_storage_migrations
-    (tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name,
+    (tenant_id, source_bucket_id, target_bucket_id,
      cleanup_retention_seconds, state)
-VALUES ($1, $2, $3, $4, $5, $6, 'provisioning')
-RETURNING tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_collection, cursor_key, error, attempts, created_at, updated_at, completed_at, cleanup_retention_seconds, cleanup_after, cleaned_at
+VALUES ($1, $2, $3, $4, 'provisioning')
+RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at
 `
 
 // ADR-0011 Phase 3: shared->dedicated storage migration copy job.
-func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBackendID string, sourceBucketName string, targetBackendID string, targetBucketName string, cleanupRetentionSeconds int64) (TenantStorageMigration, error) {
+func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, sourceBucketID pgtype.UUID, targetBucketID pgtype.UUID, cleanupRetentionSeconds int64) (TenantStorageMigration, error) {
 	row := q.db.QueryRow(ctx, createStorageMigration,
 		tenantID,
-		sourceBackendID,
-		sourceBucketName,
-		targetBackendID,
-		targetBucketName,
+		sourceBucketID,
+		targetBucketID,
 		cleanupRetentionSeconds,
 	)
 	var i TenantStorageMigration
 	err := row.Scan(
+		&i.ID,
 		&i.TenantID,
-		&i.SourceBackendID,
-		&i.SourceBucketName,
-		&i.TargetBackendID,
-		&i.TargetBucketName,
+		&i.SourceBucketID,
+		&i.TargetBucketID,
 		&i.State,
 		&i.ObjectsTotal,
 		&i.ObjectsCopied,
 		&i.CursorCollection,
-		&i.CursorKey,
+		&i.CursorPath,
 		&i.Error,
 		&i.Attempts,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.CompletedAt,
 		&i.CleanupRetentionSeconds,
 		&i.CleanupAfter,
 		&i.CleanedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -102,7 +99,7 @@ SET state = 'failed', error = $2, attempts = attempts + 1, updated_at = now()
 WHERE tenant_id = $1
 `
 
-func (q *Queries) FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error string) (int64, error) {
+func (q *Queries) FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error *string) (int64, error) {
 	result, err := q.db.Exec(ctx, failStorageMigration, tenantID, error)
 	if err != nil {
 		return 0, err
@@ -111,37 +108,36 @@ func (q *Queries) FailStorageMigration(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_collection, cursor_key, error, attempts, created_at, updated_at, completed_at, cleanup_retention_seconds, cleanup_after, cleaned_at FROM tenant_storage_migrations WHERE tenant_id = $1
+SELECT id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at FROM tenant_storage_migrations WHERE tenant_id = $1
 `
 
 func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error) {
 	row := q.db.QueryRow(ctx, getStorageMigration, tenantID)
 	var i TenantStorageMigration
 	err := row.Scan(
+		&i.ID,
 		&i.TenantID,
-		&i.SourceBackendID,
-		&i.SourceBucketName,
-		&i.TargetBackendID,
-		&i.TargetBucketName,
+		&i.SourceBucketID,
+		&i.TargetBucketID,
 		&i.State,
 		&i.ObjectsTotal,
 		&i.ObjectsCopied,
 		&i.CursorCollection,
-		&i.CursorKey,
+		&i.CursorPath,
 		&i.Error,
 		&i.Attempts,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.CompletedAt,
 		&i.CleanupRetentionSeconds,
 		&i.CleanupAfter,
 		&i.CleanedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name, state, objects_total, objects_copied, cursor_collection, cursor_key, error, attempts, created_at, updated_at, completed_at, cleanup_retention_seconds, cleanup_after, cleaned_at FROM tenant_storage_migrations
+SELECT id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at FROM tenant_storage_migrations
 WHERE state NOT IN ('cleaned', 'failed')
 ORDER BY updated_at
 LIMIT $1::int
@@ -159,24 +155,23 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 	for rows.Next() {
 		var i TenantStorageMigration
 		if err := rows.Scan(
+			&i.ID,
 			&i.TenantID,
-			&i.SourceBackendID,
-			&i.SourceBucketName,
-			&i.TargetBackendID,
-			&i.TargetBucketName,
+			&i.SourceBucketID,
+			&i.TargetBucketID,
 			&i.State,
 			&i.ObjectsTotal,
 			&i.ObjectsCopied,
 			&i.CursorCollection,
-			&i.CursorKey,
+			&i.CursorPath,
 			&i.Error,
 			&i.Attempts,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.CompletedAt,
 			&i.CleanupRetentionSeconds,
 			&i.CleanupAfter,
 			&i.CleanedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -214,7 +209,7 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 }
 
 const migrationListTenantCollections = `-- name: MigrationListTenantCollections :many
-SELECT collection FROM collections WHERE tenant_id = $1 ORDER BY collection
+SELECT name FROM collections WHERE tenant_id = $1 ORDER BY name
 `
 
 // All collections of a tenant, for the transactional rebind.
@@ -226,11 +221,11 @@ func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID p
 	defer rows.Close()
 	var items []string
 	for rows.Next() {
-		var collection string
-		if err := rows.Scan(&collection); err != nil {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		items = append(items, collection)
+		items = append(items, name)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -239,22 +234,22 @@ func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID p
 }
 
 const migrationListTenantObjects = `-- name: MigrationListTenantObjects :many
-SELECT collection, key, COALESCE(size_bytes, 0)::bigint AS size_bytes
+SELECT collection_id, path, COALESCE(size_bytes, 0)::bigint AS size_bytes
 FROM objects
 WHERE tenant_id = $1
   AND state = 'AVAILABLE'
   AND ROW(collection, key) > ROW($2::text, $3::text)
-ORDER BY collection, key
+ORDER BY collection_id, path
 LIMIT $4::int
 `
 
 type MigrationListTenantObjectsRow struct {
-	Collection string `json:"collection"`
-	Key        string `json:"key"`
-	SizeBytes  int64  `json:"size_bytes"`
+	CollectionID pgtype.UUID `json:"collection_id"`
+	Path         string      `json:"path"`
+	SizeBytes    int64       `json:"size_bytes"`
 }
 
-// Objects to copy, keyset-paginated by (collection, key) after the cursor so a
+// Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 // worker restart resumes mid-prefix instead of rescanning from the top.
 // size_bytes feeds the physical (HEAD size) verify after copy.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterKey string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
@@ -271,7 +266,7 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 	var items []MigrationListTenantObjectsRow
 	for rows.Next() {
 		var i MigrationListTenantObjectsRow
-		if err := rows.Scan(&i.Collection, &i.Key, &i.SizeBytes); err != nil {
+		if err := rows.Scan(&i.CollectionID, &i.Path, &i.SizeBytes); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -316,11 +311,11 @@ UPDATE tenants
 SET storage_layout   = $2,
     resource_version = resource_version + 1,
     updated_at       = now()
-WHERE tenant_id = $1
+WHERE id = $1
 `
 
-func (q *Queries) SetTenantStorageLayout(ctx context.Context, tenantID pgtype.UUID, storageLayout string) (int64, error) {
-	result, err := q.db.Exec(ctx, setTenantStorageLayout, tenantID, storageLayout)
+func (q *Queries) SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error) {
+	result, err := q.db.Exec(ctx, setTenantStorageLayout, iD, storageLayout)
 	if err != nil {
 		return 0, err
 	}
@@ -328,30 +323,25 @@ func (q *Queries) SetTenantStorageLayout(ctx context.Context, tenantID pgtype.UU
 }
 
 const tenantCollectionBuckets = `-- name: TenantCollectionBuckets :many
-SELECT DISTINCT backend_id, bucket_name FROM collections WHERE tenant_id = $1
+SELECT DISTINCT bucket_id FROM collections WHERE tenant_id = $1
 `
 
-type TenantCollectionBucketsRow struct {
-	BackendID  string `json:"backend_id"`
-	BucketName string `json:"bucket_name"`
-}
-
-// Distinct (backend, bucket) the tenant's collections currently bind to. The
-// migration copies FROM this — a shared tenant's keys normally share one bucket;
+// Distinct buckets the tenant's collections currently bind to. The migration
+// copies FROM this — a shared tenant's collections normally share one bucket;
 // more than one row means the tenant spans buckets (not supported in slice 1).
-func (q *Queries) TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error) {
+func (q *Queries) TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, tenantCollectionBuckets, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TenantCollectionBucketsRow
+	var items []pgtype.UUID
 	for rows.Next() {
-		var i TenantCollectionBucketsRow
-		if err := rows.Scan(&i.BackendID, &i.BucketName); err != nil {
+		var bucket_id pgtype.UUID
+		if err := rows.Scan(&bucket_id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, bucket_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

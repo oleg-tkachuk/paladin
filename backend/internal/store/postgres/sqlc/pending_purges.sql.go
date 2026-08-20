@@ -23,11 +23,11 @@ func (q *Queries) CountPendingPurges(ctx context.Context) (int64, error) {
 }
 
 const deletePendingPurge = `-- name: DeletePendingPurge :execrows
-DELETE FROM pending_purges WHERE purge_id = $1
+DELETE FROM pending_purges WHERE id = $1
 `
 
-func (q *Queries) DeletePendingPurge(ctx context.Context, purgeID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deletePendingPurge, purgeID)
+func (q *Queries) DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePendingPurge, id)
 	if err != nil {
 		return 0, err
 	}
@@ -37,27 +37,26 @@ func (q *Queries) DeletePendingPurge(ctx context.Context, purgeID pgtype.UUID) (
 const insertPendingPurge = `-- name: InsertPendingPurge :exec
 
 INSERT INTO pending_purges (
-    purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    id, tenant_id, object_id, bucket_id, storage_path
+) VALUES ($1, $2, $3, $4, $5)
 `
 
 // Purge debt: the retry handle for bytes whose DB row is already gone.
-// See migrations/069_pending_purges.sql for why this table exists.
-func (q *Queries) InsertPendingPurge(ctx context.Context, purgeID pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, backendID string, bucketName string, collection string, key string) error {
+// See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
+// denormalised here because the object row is gone before the purge runs.
+func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, storagePath string) error {
 	_, err := q.db.Exec(ctx, insertPendingPurge,
-		purgeID,
+		iD,
 		tenantID,
 		objectID,
-		backendID,
-		bucketName,
-		collection,
-		key,
+		bucketID,
+		storagePath,
 	)
 	return err
 }
 
 const listDuePurges = `-- name: ListDuePurges :many
-SELECT purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key, attempts
+SELECT id, tenant_id, object_id, bucket_id, storage_path, attempts
   FROM pending_purges
  WHERE next_attempt_at <= now()
  ORDER BY next_attempt_at
@@ -66,14 +65,12 @@ SELECT purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key,
 `
 
 type ListDuePurgesRow struct {
-	PurgeID    pgtype.UUID `json:"purge_id"`
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	ObjectID   pgtype.UUID `json:"object_id"`
-	BackendID  string      `json:"backend_id"`
-	BucketName string      `json:"bucket_name"`
-	Collection string      `json:"collection"`
-	Key        string      `json:"key"`
-	Attempts   int32       `json:"attempts"`
+	ID          pgtype.UUID `json:"id"`
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	ObjectID    pgtype.UUID `json:"object_id"`
+	BucketID    pgtype.UUID `json:"bucket_id"`
+	StoragePath string      `json:"storage_path"`
+	Attempts    int32       `json:"attempts"`
 }
 
 // ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
@@ -89,13 +86,11 @@ func (q *Queries) ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurg
 	for rows.Next() {
 		var i ListDuePurgesRow
 		if err := rows.Scan(
-			&i.PurgeID,
+			&i.ID,
 			&i.TenantID,
 			&i.ObjectID,
-			&i.BackendID,
-			&i.BucketName,
-			&i.Collection,
-			&i.Key,
+			&i.BucketID,
+			&i.StoragePath,
 			&i.Attempts,
 		); err != nil {
 			return nil, err
@@ -113,14 +108,14 @@ UPDATE pending_purges
    SET attempts        = attempts + 1,
        last_error      = $2,
        next_attempt_at = now() + $3::interval
- WHERE purge_id = $1
+ WHERE id = $1
 `
 
 // ReschedulePendingPurge records a failed attempt and pushes the row out by
 // the caller-computed backoff. Attempts is bumped here rather than in the
 // worker so a crash between the storage call and this update cannot lose the
 // count.
-func (q *Queries) ReschedulePendingPurge(ctx context.Context, purgeID pgtype.UUID, lastError string, column3 pgtype.Interval) error {
-	_, err := q.db.Exec(ctx, reschedulePendingPurge, purgeID, lastError, column3)
+func (q *Queries) ReschedulePendingPurge(ctx context.Context, iD pgtype.UUID, lastError *string, column3 pgtype.Interval) error {
+	_, err := q.db.Exec(ctx, reschedulePendingPurge, iD, lastError, column3)
 	return err
 }
