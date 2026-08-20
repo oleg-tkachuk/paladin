@@ -1,5 +1,14 @@
 # Migration conventions (forward-only, lock-aware)
 
+> **Baseline consolidation, 2026-08-20 (ADR-0013).** The 65 migrations that
+> built the schema up to this point were replaced by `001`–`003`. That is a
+> deliberate, one-time exception to the immutability rule below, and it is only
+> defensible because every deployment reprovisions rather than upgrades
+> (pre-1.0, Constitution IV) — a database that had applied the old history
+> would refuse the new checksums, which is the correct outcome: it should be
+> rebuilt, not migrated. The old files remain in git history. **The rule below
+> applies again from `004` onward.**
+
 Goose migrations in this directory are **append-only and immutable once
 merged**: goose records a checksum per file, so editing an applied migration
 makes every existing database refuse to start. Fixes go in a *new*
