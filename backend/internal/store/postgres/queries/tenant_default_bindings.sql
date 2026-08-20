@@ -6,16 +6,15 @@
 -- operator must rebind before tearing down the bucket.
 
 -- name: SetTenantDefaultBinding :exec
-INSERT INTO tenant_default_bindings (tenant_id, backend_id, bucket_name, set_by)
+INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (tenant_id) DO UPDATE
-   SET backend_id  = EXCLUDED.backend_id,
-       bucket_name = EXCLUDED.bucket_name,
+   SET bucket_id  = EXCLUDED.bucket_id = EXCLUDED.bucket_id,
        set_at      = now(),
        set_by      = EXCLUDED.set_by;
 
 -- name: GetTenantDefaultBinding :one
-SELECT tenant_id, backend_id, bucket_name, set_at, set_by
+SELECT tenant_id, bucket_id, set_at, set_by
 FROM tenant_default_bindings
 WHERE tenant_id = $1;
 

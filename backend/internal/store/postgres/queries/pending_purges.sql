@@ -3,7 +3,7 @@
 
 -- name: InsertPendingPurge :exec
 INSERT INTO pending_purges (
-    id, tenant_id, object_id, backend_id, bucket_name, collection, key
+    id, tenant_id, object_id, bucket_id, collection, key
 ) VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: DeletePendingPurge :execrows
@@ -13,7 +13,7 @@ DELETE FROM pending_purges WHERE id = $1;
 -- concurrent worker replicas divide the backlog instead of colliding on it —
 -- the same claim discipline the event-delivery outbox uses.
 -- name: ListDuePurges :many
-SELECT id, tenant_id, object_id, backend_id, bucket_name, collection, key, attempts
+SELECT id, tenant_id, object_id, bucket_id, collection, key, attempts
   FROM pending_purges
  WHERE next_attempt_at <= now()
  ORDER BY next_attempt_at

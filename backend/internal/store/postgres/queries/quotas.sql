@@ -1,7 +1,7 @@
 -- name: UpsertTenantQuota :exec
 INSERT INTO quotas (id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tenant_id) WHERE tenant_id IS NOT NULL DO UPDATE SET
+ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
@@ -9,9 +9,9 @@ ON CONFLICT (tenant_id) WHERE tenant_id IS NOT NULL DO UPDATE SET
     updated_at          = now();
 
 -- name: UpsertBucketQuota :exec
-INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
+INSERT INTO quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (backend_id, bucket_name) WHERE backend_id IS NOT NULL DO UPDATE SET
+ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
@@ -19,7 +19,7 @@ ON CONFLICT (backend_id, bucket_name) WHERE backend_id IS NOT NULL DO UPDATE SET
     updated_at          = now();
 
 -- name: GetTenantQuota :one
-SELECT id, tenant_id, backend_id, bucket_name,
+SELECT id, tenant_id, bucket_id,
        max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day,
        usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today,
        last_reset_at, resource_version, updated_at
@@ -27,12 +27,12 @@ FROM quotas
 WHERE tenant_id = $1;
 
 -- name: GetBucketQuota :one
-SELECT id, tenant_id, backend_id, bucket_name,
+SELECT id, tenant_id, bucket_id,
        max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day,
        usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today,
        last_reset_at, resource_version, updated_at
 FROM quotas
-WHERE backend_id = $1 AND bucket_name = $2;
+WHERE bucket_id = $1;
 
 -- name: IncrementQuotaUsage :exec
 -- Atomic add. tenant_id-scoped quota when bucket fields are NULL.

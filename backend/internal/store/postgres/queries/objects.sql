@@ -2,7 +2,7 @@
 
 -- name: CreateObject :exec
 INSERT INTO objects (
-    id, tenant_id, collection, key, state,
+    id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -28,18 +28,18 @@ WHERE tenant_id = $1 AND id = ANY($2::uuid[]);
 -- Reads an object by id alone. Used by background workers (reconciler,
 -- replicator) that don't carry a tenant context. Joins collections to
 -- materialize the bucket binding so the caller can call S3 in one trip.
-SELECT o.id, o.tenant_id, o.collection, o.key, o.state,
-       b.backend_id, b.bucket_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state,
+       b.bucket_id
 FROM objects o
 JOIN collections b
-  ON b.tenant_id = o.tenant_id AND b.collection = o.collection
+  ON b.id = o.collection_id
 WHERE o.id = $1;
 
 -- name: LookupObjectByKey :one
--- Used by resource-name resolution: collections/{b}/objects-by-key/{key} → id.
+-- Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND collection = $2 AND key = $3 AND state <> 'DELETED';
+WHERE tenant_id = $1 AND collection_id = $2 AND path = $3 AND state <> 'DELETED';
 
 -- name: PromoteObject :execrows
 -- Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
@@ -78,7 +78,7 @@ WHERE tenant_id = $1 AND id = $2
 
 -- name: RestoreObject :execrows
 -- Undeletes a soft-deleted object iff no live row exists with the same
--- (tenant, collection, key). Caller is expected to verify uniqueness first;
+-- (tenant, collection_id, path). Caller is expected to verify uniqueness first;
 -- a UNIQUE partial index still catches the race at commit time.
 UPDATE objects
 SET state         = 'AVAILABLE',
@@ -124,11 +124,11 @@ WHERE tenant_id = $1 AND id = $2
 -- in one round-trip per row without a second lookup.
 -- Bounded at the caller's batch_size; the worker loops on the
 -- ticker to drain a backlog without holding a single statement open.
-SELECT o.id, o.tenant_id, o.collection, o.key, o.resource_version,
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.resource_version,
        k.backend_id, k.bucket_name
 FROM objects o
 JOIN collections k
-  ON k.tenant_id = o.tenant_id AND k.collection = o.collection
+  ON k.tenant_id = o.tenant_id AND k.collection_id = o.collection_id
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
@@ -164,13 +164,13 @@ WHERE id = $1
            AND lock_retain_until > now());
 
 -- name: CheckLiveCollision :one
--- True when a non-DELETED row already exists at (tenant, collection, key).
+-- True when a non-DELETED row already exists at (tenant, collection_id, path).
 -- Used by RestoreObject to refuse restoring into a slot that's been reused.
 SELECT EXISTS(
     SELECT 1 FROM objects
     WHERE tenant_id = $1
-      AND collection = $2
-      AND key = $3
+      AND collection_id = $2
+      AND path = $3
       AND state <> 'DELETED'
 )::boolean AS exists;
 
@@ -186,10 +186,10 @@ SELECT EXISTS(
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1
-  AND collection = $2
+  AND collection_id = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
-  AND (sqlc.narg('prefix')::text IS NULL OR key LIKE sqlc.narg('prefix')::text || '%')
-  AND (sqlc.narg('substr')::text IS NULL OR key LIKE '%' || sqlc.narg('substr')::text || '%')
+  AND (sqlc.narg('prefix')::text IS NULL OR path LIKE sqlc.narg('prefix')::text || '%')
+  AND (sqlc.narg('substr')::text IS NULL OR path LIKE '%' || sqlc.narg('substr')::text || '%')
   AND (sqlc.narg('after_id')::uuid IS NULL OR id > sqlc.narg('after_id')::uuid)
 ORDER BY id
 LIMIT sqlc.arg('page_size');
@@ -197,7 +197,7 @@ LIMIT sqlc.arg('page_size');
 -- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
-WHERE tenant_id = $1 AND collection = $2
+WHERE tenant_id = $1 AND collection_id = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state);
 
 -- name: ScanPendingExpired :many

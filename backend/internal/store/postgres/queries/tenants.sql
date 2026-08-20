@@ -1,21 +1,21 @@
 -- Tenant queries.
 
 -- name: CreateTenant :exec
-INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
+INSERT INTO tenants (id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
 VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetTenant :one
--- LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
+-- LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 -- so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
-SELECT sqlc.embed(tenants), tdb.backend_id, tdb.bucket_name
+SELECT sqlc.embed(tenants), tdb.bucket_id
 FROM tenants
-LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
-WHERE tenants.tenant_id = $1;
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+WHERE tenants.id = $1;
 
 -- name: GetTenantBySlug :one
-SELECT sqlc.embed(tenants), tdb.backend_id, tdb.bucket_name
+SELECT sqlc.embed(tenants), tdb.bucket_id
 FROM tenants
-LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
 WHERE tenants.slug = $1;
 
 -- name: UpdateTenant :execrows
@@ -26,7 +26,7 @@ SET display_name           = COALESCE(sqlc.narg('display_name'), display_name),
     inherited_policy_hash  = CASE WHEN sqlc.narg('policy') IS NULL
                                   THEN inherited_policy_hash
                                   ELSE sqlc.narg('policy_hash') END
-WHERE tenant_id = $1
+WHERE id = $1
   AND resource_version = sqlc.arg('expected_version');
 
 -- name: ListTenants :many
@@ -35,10 +35,10 @@ WHERE tenant_id = $1
 -- The boolean gating is inline-CASE so sqlc emits a single prepared
 -- statement; planner uses the partial idx_tenants_active index on
 -- the common path.
-SELECT sqlc.embed(tenants), tdb.backend_id, tdb.bucket_name
+SELECT sqlc.embed(tenants), tdb.bucket_id
 FROM tenants
-LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
-WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.tenant_id > sqlc.narg('after_id')::uuid)
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
+WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')::uuid)
   AND (
     CASE
       WHEN sqlc.arg('only_trashed')::bool      THEN tenants.deleted_at IS NOT NULL
@@ -46,7 +46,7 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.tenant_id > sqlc.narg('aft
       ELSE                                          tenants.deleted_at IS NULL
     END
   )
-ORDER BY tenants.tenant_id
+ORDER BY tenants.id
 LIMIT sqlc.arg('page_size');
 
 -- name: SoftDeleteTenant :execrows
@@ -58,7 +58,7 @@ UPDATE tenants
    SET deleted_at = now(),
        updated_at = now(),
        resource_version = resource_version + 1
- WHERE tenant_id = $1
+ WHERE id = $1
    AND deleted_at IS NULL
    AND (sqlc.arg('expected_version')::bigint = 0
         OR resource_version = sqlc.arg('expected_version')::bigint);
@@ -67,7 +67,7 @@ UPDATE tenants
 -- Unconditional physical delete. Used by Delete(force=true) and Purge.
 -- expected_version=0 → no OCC guard; non-zero → strict match.
 DELETE FROM tenants
-WHERE tenant_id = $1
+WHERE id = $1
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
@@ -78,5 +78,5 @@ UPDATE tenants
    SET deleted_at = NULL,
        updated_at = now(),
        resource_version = resource_version + 1
- WHERE tenant_id = $1
+ WHERE id = $1
    AND deleted_at IS NOT NULL;

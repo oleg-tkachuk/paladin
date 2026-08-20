@@ -10,7 +10,7 @@
 -- their way out, and 'failed' / 'deletion_failed' need operator triage —
 -- replicating into or out of any of those is at best wasted work and at
 -- worst ships objects into a bucket that's about to be torn down.
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT bucket_id, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -22,7 +22,7 @@ FROM buckets
 WHERE replication_enabled = TRUE
   AND replication_destination <> ''
   AND provision_state = 'ready'
-ORDER BY backend_id, bucket_name;
+ORDER BY bucket_id;
 
 -- name: ListBucketsWithLifecycle :many
 -- Returns only buckets with a non-empty lifecycle_rules array. The worker
@@ -30,7 +30,7 @@ ORDER BY backend_id, bucket_name;
 -- wasteful when most carry no rules.
 --
 -- See ListBucketsWithReplication for why we restrict to provision_state='ready'.
-SELECT backend_id, bucket_name, display_name, region, labels,
+SELECT bucket_id, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -41,14 +41,14 @@ SELECT backend_id, bucket_name, display_name, region, labels,
 FROM buckets
 WHERE jsonb_array_length(lifecycle_rules) > 0
   AND provision_state = 'ready'
-ORDER BY backend_id, bucket_name;
+ORDER BY bucket_id;
 
 -- name: ListCollectionBindingsForBucket :many
 -- Lists every (tenant_id, collection) bound to a given bucket. Used by
 -- lifecycle + replication workers to scope their object scans.
 SELECT tenant_id, collection
 FROM collections
-WHERE backend_id = $1 AND bucket_name = $2
+WHERE bucket_id = $1
 ORDER BY tenant_id, collection;
 
 -- name: IterateObjectsForLifecycle :many

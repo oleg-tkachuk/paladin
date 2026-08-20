@@ -518,9 +518,12 @@ CREATE TABLE quotas (
     CONSTRAINT quotas_has_scope
         CHECK (tenant_id IS NOT NULL OR bucket_id IS NOT NULL)
 );
-CREATE UNIQUE INDEX quotas_tenant_bucket_key
-    ON quotas (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid),
-               COALESCE(bucket_id, '00000000-0000-0000-0000-000000000000'::uuid));
+-- Two partial uniques rather than one COALESCE expression: a quota is scoped
+-- to a tenant OR to a bucket, and these are the indexes ON CONFLICT can name.
+CREATE UNIQUE INDEX quotas_tenant_key
+    ON quotas (tenant_id) WHERE bucket_id IS NULL;
+CREATE UNIQUE INDEX quotas_bucket_key
+    ON quotas (bucket_id) WHERE tenant_id IS NULL;
 
 -- ─── Capabilities and spend ─────────────────────────────────────────────────
 

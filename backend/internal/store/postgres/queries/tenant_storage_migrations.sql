@@ -2,7 +2,7 @@
 
 -- name: CreateStorageMigration :one
 INSERT INTO tenant_storage_migrations
-    (tenant_id, source_backend_id, source_bucket_name, target_backend_id, target_bucket_name,
+    (tenant_id, source_bucket_id, target_bucket_id,
      cleanup_retention_seconds, state)
 VALUES ($1, $2, $3, $4, $5, $6, 'provisioning')
 RETURNING *;
@@ -34,7 +34,7 @@ WHERE tenant_id = $1;
 UPDATE tenant_storage_migrations
 SET objects_copied    = $2,
     cursor_collection = $3,
-    cursor_key        = $4,
+    cursor_path        = $4,
     updated_at        = now()
 WHERE tenant_id = $1;
 
