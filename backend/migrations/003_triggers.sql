@@ -6,7 +6,7 @@
 -- Two of the triggers this schema used to carry are gone, replaced by
 -- declarative constraints in 001:
 --
---   enforce_object_key_bucket_tenancy → composite FK objects(tenant_id,
+--   enforce_collection_bucket_tenancy → composite FK objects(tenant_id,
 --       collection_id) → collections(tenant_id, id)
 --   enforce_user_settings_tenant      → composite FK user_settings(tenant_id,
 --       user_id) → users(tenant_id, id)

@@ -397,8 +397,8 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"operations\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\x9f\x02\n" +
-	"\x10OperationService\x12P\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xa7\x02\n" +
+	"\x18PlatformOperationService\x12P\n" +
 	"\fGetOperation\x12$.paladin.admin.v1.GetOperationRequest\x1a\x1a.paladin.admin.v1.Operation\x12a\n" +
 	"\x0eListOperations\x12&.paladin.admin.v1.ListOperationsRequest\x1a'.paladin.admin.v1.ListOperationsResponse\x12V\n" +
 	"\x0fCancelOperation\x12'.paladin.admin.v1.CancelOperationRequest\x1a\x1a.paladin.admin.v1.OperationBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
@@ -437,12 +437,12 @@ var file_paladin_admin_v1_operation_service_proto_depIdxs = []int32{
 	8,  // 5: paladin.admin.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
 	0,  // 6: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
 	9,  // 7: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
-	1,  // 8: paladin.admin.v1.OperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
-	2,  // 9: paladin.admin.v1.OperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
-	4,  // 10: paladin.admin.v1.OperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
-	0,  // 11: paladin.admin.v1.OperationService.GetOperation:output_type -> paladin.admin.v1.Operation
-	3,  // 12: paladin.admin.v1.OperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
-	0,  // 13: paladin.admin.v1.OperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
+	1,  // 8: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
+	2,  // 9: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
+	4,  // 10: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
+	0,  // 11: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
+	3,  // 12: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
+	0,  // 13: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
 	11, // [11:14] is the sub-list for method output_type
 	8,  // [8:11] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name

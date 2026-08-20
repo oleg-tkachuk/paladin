@@ -5,7 +5,7 @@ import "testing"
 // TestPolicyReadsPerObjectResourceAttr locks down the compile-time analyzer that
 // decides whether ListObjects must Cedar-check every returned object (a policy
 // reads a per-object resource attribute) or may rely on the single
-// objectKey-scoped check (every policy is constant across the objectKey). It
+// collection-scoped check (every policy is constant across the collection). It
 // also pins the cedar-go JSON shape the analyzer walks — if that shape changes
 // under a dependency bump, the true-cases below fail loudly.
 func TestPolicyReadsPerObjectResourceAttr(t *testing.T) {
@@ -20,7 +20,7 @@ func TestPolicyReadsPerObjectResourceAttr(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "objectKey-scoped permit, no conditions",
+			name: "collection-scoped permit, no conditions",
 			text: `permit (principal, action == Action::"GetObject", resource);`,
 			want: false,
 		},
@@ -31,9 +31,9 @@ func TestPolicyReadsPerObjectResourceAttr(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "constant resource attr (object_key) does not trigger",
+			name: "constant resource attr (collection) does not trigger",
 			text: `permit (principal, action, resource)
-			       when { resource.object_key == "docs" };`,
+			       when { resource.collection == "docs" };`,
 			want: false,
 		},
 		{

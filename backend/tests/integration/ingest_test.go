@@ -31,7 +31,7 @@ import (
 )
 
 // TestIngest_SeaweedFSWebhookPromotesPending — the canonical flow:
-//  1. seed a tenant, object_key, PENDING object
+//  1. seed a tenant, collection, PENDING object
 //  2. parse a SeaweedFS-shape webhook payload through the source
 //     adapter
 //  3. dispatch through Worker (dedup row + handler call)
@@ -44,7 +44,7 @@ func TestIngest_SeaweedFSWebhookPromotesPending(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ingest-tenant")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	objectID := mustInsertPendingObject(t, h.PoolMigrate, tenantID, "docs", "report.pdf")
 
 	q := sqlc.New(h.PoolMigrate)
@@ -99,18 +99,18 @@ func TestIngest_SeaweedFSWebhookPromotesPending(t *testing.T) {
 
 // ─── helpers (object lifecycle) ─────────────────────────────────────
 
-func mustInsertPendingObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, objectKey, key string) uuid.UUID {
+func mustInsertPendingObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, collection, key string) uuid.UUID {
 	t.Helper()
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            object_id, tenant_id, object_key, key, state,
+            object_id, tenant_id, collection, key, state,
             content_type, checksum_algorithm, presign_expires_at
         ) VALUES (
             $1, $2, $3, $4, 'PENDING',
             'application/octet-stream', 1, now() + interval '15 minutes'
         )
-    `, objID, tenantID, objectKey, key)
+    `, objID, tenantID, collection, key)
 	if err != nil {
 		t.Fatalf("insert pending object: %v", err)
 	}

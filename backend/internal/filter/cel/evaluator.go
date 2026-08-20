@@ -1,5 +1,5 @@
 // Package cel compiles and evaluates AIP-160-style CEL filter expressions
-// used by ListObjects, ListObjectKeys, ListTenants, ListOperations.
+// used by ListObjects, ListCollections, ListTenants, ListOperations.
 //
 // Separation from Cedar (policy): CEL answers "does this row match?" for
 // database queries; Cedar answers "may the caller perform this action?"
@@ -46,11 +46,11 @@ var ObjectSchema = &Schema{
 	},
 }
 
-// BucketSchema is exposed to filters against ObjectKey rows.
+// BucketSchema is exposed to filters against Collection rows.
 var BucketSchema = &Schema{
-	Name: "ObjectKey",
+	Name: "Collection",
 	vars: map[string]*cel.Type{
-		"objectKey":       cel.StringType,
+		"collection":      cel.StringType,
 		"storage_backend": cel.StringType,
 		"display_name":    cel.StringType,
 		"created_at":      cel.TimestampType,
@@ -66,7 +66,7 @@ var BucketSchema = &Schema{
 // datacontenttype / subject when the publisher emits a CE 1.0 envelope
 // (see internal/eventingest/source_cloudevents.go).
 //
-// The derived attributes (kind, severity, severity_level, object_key,
+// The derived attributes (kind, severity, severity_level, collection,
 // bucket_name, etag, size_bytes) are projected from the event's type / resource
 // name / Payload by worker.eventCELVars. Absent values default to zero, so a
 // filter referencing a field an event doesn't carry evaluates to false/0 rather
@@ -96,7 +96,7 @@ var EventEnvelopeSchema = &Schema{
 		"kind":           cel.StringType,
 		"severity":       cel.StringType,
 		"severity_level": cel.IntType,
-		"object_key":     cel.StringType,
+		"collection":     cel.StringType,
 		"bucket_name":    cel.StringType,
 		"etag":           cel.StringType,
 		"size_bytes":     cel.IntType,
@@ -124,7 +124,7 @@ var AuditLogSchema = &Schema{
 
 // SchemaByName resolves a registered schema by its public name. Used by
 // the admin CEL validation RPC to pick the right schema for the caller's
-// context (Object | ObjectKey | AuditLogEntry | EventEnvelope). Returns
+// context (Object | Collection | AuditLogEntry | EventEnvelope). Returns
 // nil for unknown names so callers can map to InvalidArgument.
 func SchemaByName(name string) *Schema {
 	switch name {

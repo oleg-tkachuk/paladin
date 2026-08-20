@@ -77,11 +77,11 @@ func (s *SystemServer) GetPlatformStats(ctx context.Context, _ *connect.Request[
 		return nil, err
 	}
 	out := &pb.GetPlatformStatsResponse{
-		Tenants:    &pb.TenantStats{},
-		Backends:   &pb.BackendStats{},
-		Buckets:    &pb.BucketStats{},
-		ObjectKeys: &pb.ObjectKeyStats{},
-		Users:      &pb.UserStats{},
+		Tenants:     &pb.TenantStats{},
+		Backends:    &pb.BackendStats{},
+		Buckets:     &pb.BucketStats{},
+		Collections: &pb.CollectionStats{},
+		Users:       &pb.UserStats{},
 		Rls: &pb.RLSStats{
 			Available:     res.RLSAvailable,
 			Objects:       &pb.ObjectStats{},
@@ -119,10 +119,10 @@ func (s *SystemServer) GetPlatformStats(ctx context.Context, _ *connect.Request[
 			ObjectLockEnabled:  cp.Buckets.ObjectLockEnabled,
 			ReplicationEnabled: cp.Buckets.ReplicationOn,
 		}
-		out.ObjectKeys = &pb.ObjectKeyStats{
-			Total:     cp.ObjectKeys.Total,
-			ByBackend: cp.ObjectKeys.ByBackend,
-			Unbound:   cp.ObjectKeys.Unbound,
+		out.Collections = &pb.CollectionStats{
+			Total:     cp.Collections.Total,
+			ByBackend: cp.Collections.ByBackend,
+			Unbound:   cp.Collections.Unbound,
 		}
 		out.Users = &pb.UserStats{Total: cp.Users.Total, Disabled: cp.Users.Disabled}
 	}

@@ -67,7 +67,7 @@ forbid (
 			cedar: `permit (
   principal in Role::"agent",
   action in [Action::"GetObject", Action::"PresignDownload", Action::"ListObjects"],
-  resource in ObjectKey::"tenants/{tenant_id}/objectKeys/{object_key}"
+  resource in Collection::"tenants/{tenant_id}/collections/{collection}"
 );`,
 		},
 		{

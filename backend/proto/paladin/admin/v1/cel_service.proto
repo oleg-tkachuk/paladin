@@ -22,7 +22,7 @@ service CELService {
 
 message ValidateCELRequest {
   // Schema the expression is validated against. One of:
-  //   "Object" | "ObjectKey" | "AuditLogEntry" | "EventEnvelope"
+  //   "Object" | "Collection" | "AuditLogEntry" | "EventEnvelope"
   // Unknown names return InvalidArgument.
   string schema = 1 [(buf.validate.field).string.min_len = 1];
 

@@ -57,8 +57,8 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
-	if args.TenantID == uuid.Nil || args.ObjectKey == "" || len(args.ObjectIDs) == 0 {
-		return nil, errors.New("invalid metadata: tenant_id, object_key, object_ids required")
+	if args.TenantID == uuid.Nil || args.Collection == "" || len(args.ObjectIDs) == 0 {
+		return nil, errors.New("invalid metadata: tenant_id, collection, object_ids required")
 	}
 	if args.TenantID != op.TenantID {
 		return nil, fmt.Errorf("metadata tenant_id %s != operation tenant_id %s",

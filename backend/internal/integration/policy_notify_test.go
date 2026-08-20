@@ -11,7 +11,7 @@ import (
 )
 
 // TestPolicyChangedNotify proves migration 051: writes to the two Cedar
-// policy columns (tenants.inherited_cedar_policy, object_keys.cedar_policy)
+// policy columns (tenants.inherited_cedar_policy, collections.cedar_policy)
 // fire NOTIFY "policy_changed" in exactly the payload shape
 // cedar.PostgresStore.Watch parses, and non-policy writes stay silent — so
 // the engine's compiled-policy cache invalidates on the event path, not
@@ -49,20 +49,20 @@ func TestPolicyChangedNotify(t *testing.T) {
 		}
 	}
 
-	// Tenant-level policy UPDATE → bare-uuid payload (ObjectKey empty).
+	// Tenant-level policy UPDATE → bare-uuid payload (Collection empty).
 	mustExec(t, ctx, pool,
 		`UPDATE tenants SET inherited_cedar_policy = 'permit(principal, action, resource);' WHERE tenant_id = $1`,
 		f.tenantID)
-	if ev := next("tenant policy update"); ev.TenantID != f.tenantID || ev.ObjectKey != "" {
+	if ev := next("tenant policy update"); ev.TenantID != f.tenantID || ev.Collection != "" {
 		t.Fatalf("tenant policy update event = %+v, want {%s \"\"}", ev, f.tenantID)
 	}
 
-	// objectKey policy UPDATE → "uuid:objectKey" payload.
+	// collection policy UPDATE → "uuid:collection" payload.
 	mustExec(t, ctx, pool,
-		`UPDATE object_keys SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey)
-	if ev := next("object_key policy update"); ev.TenantID != f.tenantID || ev.ObjectKey != f.objectKey {
-		t.Fatalf("object_key policy update event = %+v, want {%s %q}", ev, f.tenantID, f.objectKey)
+		`UPDATE collections SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection)
+	if ev := next("collection policy update"); ev.TenantID != f.tenantID || ev.Collection != f.collection {
+		t.Fatalf("collection policy update event = %+v, want {%s %q}", ev, f.tenantID, f.collection)
 	}
 
 	// Same-value policy write (IS DISTINCT FROM guard) and a non-policy
@@ -79,22 +79,22 @@ func TestPolicyChangedNotify(t *testing.T) {
 	// reason in reverse.
 	var backendID, bucketName string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey,
+		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection,
 	).Scan(&backendID, &bucketName); err != nil {
-		t.Fatalf("read fixture object_key binding: %v", err)
+		t.Fatalf("read fixture collection binding: %v", err)
 	}
-	newKey := f.objectKey + "-b"
+	newKey := f.collection + "-b"
 	mustExec(t, ctx, pool,
-		`INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name, cedar_policy)
+		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name, cedar_policy)
 		 VALUES ($1, $2, $3, $4, 'permit(principal, action, resource);')`,
 		f.tenantID, newKey, backendID, bucketName)
-	if ev := next("object_key insert with policy"); ev.TenantID != f.tenantID || ev.ObjectKey != newKey {
+	if ev := next("collection insert with policy"); ev.TenantID != f.tenantID || ev.Collection != newKey {
 		t.Fatalf("insert event = %+v, want {%s %q}", ev, f.tenantID, newKey)
 	}
 	mustExec(t, ctx, pool,
-		`DELETE FROM object_keys WHERE tenant_id = $1 AND object_key = $2`, f.tenantID, newKey)
-	if ev := next("object_key delete with policy"); ev.TenantID != f.tenantID || ev.ObjectKey != newKey {
+		`DELETE FROM collections WHERE tenant_id = $1 AND collection = $2`, f.tenantID, newKey)
+	if ev := next("collection delete with policy"); ev.TenantID != f.tenantID || ev.Collection != newKey {
 		t.Fatalf("delete event = %+v, want {%s %q}", ev, f.tenantID, newKey)
 	}
 }

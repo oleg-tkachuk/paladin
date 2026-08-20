@@ -1,6 +1,6 @@
 // Package admin wires generated paladin.admin.v1 Connect server stubs onto the
 // internal/api/admin/v1/<service>h handler packages and the existing
-// tenant/object_key/policy/operation handlers from internal/api/v1/*.
+// tenant/collection/policy/operation handlers from internal/api/v1/*.
 package admin
 
 import (

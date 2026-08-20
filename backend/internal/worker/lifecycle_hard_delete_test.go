@@ -22,14 +22,14 @@ type fakeStorage struct {
 }
 
 type deleteCall struct {
-	backendID, bucket, objectKey, key string
-	tenantID                          uuid.UUID
+	backendID, bucket, collection, key string
+	tenantID                           uuid.UUID
 }
 
-func (f *fakeStorage) DeleteObject(_ context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) error {
+func (f *fakeStorage) DeleteObject(_ context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, deleteCall{backendID: backendID, bucket: bucket, objectKey: objectKey, key: key, tenantID: tenantID})
+	f.calls = append(f.calls, deleteCall{backendID: backendID, bucket: bucket, collection: collection, key: key, tenantID: tenantID})
 	if err, ok := f.failOn[bucket+"/"+key]; ok {
 		return err
 	}
@@ -59,7 +59,7 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 	row := sqlc.ListHardDeletableRow{
 		ObjectID:        pgtype.UUID{Bytes: objectID, Valid: true},
 		TenantID:        pgtype.UUID{Bytes: tenantID, Valid: true},
-		ObjectKey:       "docs",
+		Collection:      "docs",
 		Key:             "a.pdf",
 		ResourceVersion: 1,
 		BackendID:       "primary",
@@ -79,7 +79,7 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 		row.BackendID,
 		row.BucketName,
 		uuid.UUID(row.TenantID.Bytes),
-		row.ObjectKey,
+		row.Collection,
 		row.Key,
 	); err != nil {
 		t.Fatalf("storage delete: %v", err)
@@ -91,7 +91,7 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 		t.Fatalf("delete calls = %d, want 1", len(storage.calls))
 	}
 	c := storage.calls[0]
-	if c.bucket != "paladin-test" || c.objectKey != "docs" || c.key != "a.pdf" {
+	if c.bucket != "paladin-test" || c.collection != "docs" || c.key != "a.pdf" {
 		t.Errorf("delete call = %+v", c)
 	}
 }

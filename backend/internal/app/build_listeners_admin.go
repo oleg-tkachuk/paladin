@@ -41,7 +41,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 
 	// ─── Admin handlers ──────────────────────────────────────────────────
 	tenantH := wire.ProvideTenantHandler(repos, polEngine, cfg)
-	objectKeyH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
+	collectionH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
 	opH := wire.ProvideOperationHandler(repos, polEngine)
 	policyH := wire.ProvidePolicyHandler(polEngine, deps.PolStore)
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine, cfg)
@@ -88,7 +88,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// event_deliveries on commit. Without this attach the outbox
 	// stays empty in production traffic and only TestSubscription's
 	// DeliverOne path lights up NATS / HTTP. Scope today: tenant
-	// lifecycle (created / updated / deleted). Bucket / object_key /
+	// lifecycle (created / updated / deleted). Bucket / collection /
 	// quota lifecycle and data-plane object events follow the same
 	// pattern; tracked under the BACKLOG entry "Event dispatcher:
 	// producer wiring".
@@ -96,8 +96,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	tenantH.SetLogger(l.Named("tenant-events"))
 	bucketV2H.SetEventProducer(dispatcher)
 	bucketV2H.SetLogger(l.Named("bucket-events"))
-	objectKeyH.SetEventProducer(dispatcher)
-	objectKeyH.SetLogger(l.Named("object-key-events"))
+	collectionH.SetEventProducer(dispatcher)
+	collectionH.SetLogger(l.Named("object-key-events"))
 	quotaH.SetEventProducer(dispatcher)
 	quotaH.SetLogger(l.Named("quota-events"))
 	backendH.SetEventProducer(dispatcher)
@@ -223,7 +223,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H), adminOpts))
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewObjectKeyServiceHandler(admin.NewObjectKeyServer(objectKeyH, repos.Tenant), adminOpts))
+	mux.Handle(paladinadminv1connect.NewCollectionServiceHandler(admin.NewCollectionServer(collectionH, repos.Tenant), adminOpts))
 	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
 	// CELService — stateless validator for CEL filter / match expressions
 	// the admin UI surfaces inline (lifecycle.match, eventsub.filter,

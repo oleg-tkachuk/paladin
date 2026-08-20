@@ -10,11 +10,11 @@ import (
 type ScopeType string
 
 const (
-	ScopeWildcard  ScopeType = "*"
-	ScopeTenant    ScopeType = "tenant"
-	ScopeBackend   ScopeType = "backend"
-	ScopeBucket    ScopeType = "bucket"
-	ScopeObjectKey ScopeType = "object_key"
+	ScopeWildcard   ScopeType = "*"
+	ScopeTenant     ScopeType = "tenant"
+	ScopeBackend    ScopeType = "backend"
+	ScopeBucket     ScopeType = "bucket"
+	ScopeCollection ScopeType = "collection"
 )
 
 // Scope is one entry on a Principal.Scopes list. JWT-wire form is "type:value"
@@ -48,7 +48,7 @@ func ParseScope(raw string) (Scope, error) {
 	}
 	t := ScopeType(raw[:idx])
 	switch t {
-	case ScopeTenant, ScopeBackend, ScopeBucket, ScopeObjectKey:
+	case ScopeTenant, ScopeBackend, ScopeBucket, ScopeCollection:
 		// ok
 	default:
 		return Scope{}, fmt.Errorf("auth: unknown scope type %q", t)
@@ -77,7 +77,7 @@ type ResourceClaim struct {
 	TenantID   string
 	BackendID  string
 	BucketName string
-	ObjectKey  string // ObjectKey name within bucket
+	Collection string // Collection name within bucket
 }
 
 // MatchScope reports whether at least one Scope on the principal admits the
@@ -105,9 +105,9 @@ func MatchScope(scopes []Scope, r ResourceClaim) bool {
 			if r.BucketName != "" && s.Value == r.BucketName {
 				return true
 			}
-		case ScopeObjectKey:
-			if r.ObjectKey != "" && r.BucketName != "" {
-				want := r.BucketName + "/" + r.ObjectKey
+		case ScopeCollection:
+			if r.Collection != "" && r.BucketName != "" {
+				want := r.BucketName + "/" + r.Collection
 				if s.Value == want {
 					return true
 				}

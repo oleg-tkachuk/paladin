@@ -230,8 +230,8 @@ type PostgresTimeouts struct {
 }
 
 // Storage is the registry of physical object-storage backends. Each logical
-// objectKey references one by name via `object_keys.backend_id`, and every
-// write path (bucket / objectKey / dedicated-tenant creation) MUST name a
+// collection references one by name via `collections.backend_id`, and every
+// write path (bucket / collection / dedicated-tenant creation) MUST name a
 // backend explicitly — there is no implicit default. Silently defaulting where
 // a tenant's bytes land is a footgun in a multi-backend world, so an omitted
 // backend is an error, not a fallback.
@@ -710,9 +710,9 @@ type StorageBackend struct {
 	// so Provider records which one for UI display. Mirrored into
 	// storage_backends.provider by the bootstrap reconciler.
 	Provider string `yaml:"provider" json:"provider"`
-	// Bucket is the physical S3 bucket name. Paladin "ObjectKey" entries
+	// Bucket is the physical S3 bucket name. Paladin "Collection" entries
 	// become a tenant-scoped prefix within this bucket; the full S3 key
-	// for any object is "<tenant_id>/<object_key>/<key>".
+	// for any object is "<tenant_id>/<collection>/<key>".
 	Bucket         string               `yaml:"bucket" json:"bucket"`
 	Region         string               `yaml:"region" json:"region"`
 	Endpoint       string               `yaml:"endpoint" json:"endpoint"`
@@ -816,13 +816,13 @@ type Reconciler struct {
 
 type Cedar struct {
 	PolicyCacheTTL time.Duration `yaml:"policy_cache_ttl" json:"policy_cache_ttl"`
-	// CanonicalObjectKeyEUID switches the Cedar ObjectKey entity UID from the
-	// legacy `{tenant_uuid}/{object_key}` form to the canonical A-shape name
+	// CanonicalCollectionEUID switches the Cedar Collection entity UID from the
+	// legacy `{tenant_uuid}/{collection}` form to the canonical A-shape name
 	// (ADR-0010, Phase 1). Default false. Only applies where (backend, bucket)
 	// are in scope on the authz request; attribute/parent-based policies are
 	// unaffected by the UID string. Flip per-environment only after confirming
-	// no policy hardcodes a `resource == ObjectKey::"…"` literal.
-	CanonicalObjectKeyEUID bool `yaml:"canonical_object_key_euid" json:"canonical_object_key_euid"`
+	// no policy hardcodes a `resource == Collection::"…"` literal.
+	CanonicalCollectionEUID bool `yaml:"canonical_collection_euid" json:"canonical_collection_euid"`
 }
 
 // MCP gates the Model Context Protocol bridges (the LLM-facing entry points).

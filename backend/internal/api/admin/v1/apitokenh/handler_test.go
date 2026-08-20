@@ -121,9 +121,9 @@ func TestCreate_SuccessReturnsPlaintextOnce(t *testing.T) {
 	tid := uuid.New()
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
-	// Valid resource scopes (tenant:/backend:/bucket:/object_key:/*). These must
+	// Valid resource scopes (tenant:/backend:/bucket:/collection:/*). These must
 	// pass the mint-time auth.ParseScope validation and reach the issuer verbatim.
-	scopes := []string{"bucket:ci-bucket", "object_key:ci-bucket/artifacts"}
+	scopes := []string{"bucket:ci-bucket", "collection:ci-bucket/artifacts"}
 	resp, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
 		TenantId: tid.String(), Name: "ci-runner", Scopes: scopes,
 	}))

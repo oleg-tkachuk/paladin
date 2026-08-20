@@ -49,20 +49,20 @@ func assertPlanAvoidsSeqScan(t *testing.T, plan, table, what string) {
 }
 
 // TestIndexUsage_ObjectsKeysetPagination covers migration 064. ListObjects is
-// the console's object browser: equality on (tenant_id, object_key), a keyset
+// the console's object browser: equality on (tenant_id, collection), a keyset
 // cursor on object_id, ordered by object_id.
 //
-// Seeded across MANY ObjectKeys on purpose. With a single ObjectKey the
+// Seeded across MANY Collections on purpose. With a single Collection the
 // primary key is an adequate fallback — every row matches the filter, so a
 // PK scan short-circuits on the LIMIT immediately — and the test would pass
-// without proving anything. Spread the same rows over 20 ObjectKeys and the
+// without proving anything. Spread the same rows over 20 Collections and the
 // PK scan has to skip ~19 rows for every one it keeps, which is the shape a
 // real tenant has.
 func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
-	keys := seedObjectKeys(t, ctx, pool, f, 20)
+	keys := seedCollections(t, ctx, pool, f, 20)
 	for _, k := range keys {
 		seedObjectsUnder(t, ctx, pool, f, k, 500, "AVAILABLE")
 	}
@@ -70,7 +70,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 
 	plan := explain(t, ctx, pool, `
 		SELECT object_id FROM objects
-		 WHERE tenant_id = $1 AND object_key = $2 AND object_id > $3
+		 WHERE tenant_id = $1 AND collection = $2 AND object_id > $3
 		 ORDER BY object_id
 		 LIMIT 50`, f.tenantID, keys[0], uuid.Nil)
 
@@ -80,17 +80,17 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 		t.Errorf("ListObjects still sorts — the index should supply the ordering.\n\nPlan:\n%s", plan)
 	}
 
-	// An empty ObjectKey is the size-independent case: there is nothing for a
+	// An empty Collection is the size-independent case: there is nothing for a
 	// PK scan's LIMIT to stop on, so it reads to the end of the table.
-	empty := seedObjectKeys(t, ctx, pool, f, 1)[0]
+	empty := seedCollections(t, ctx, pool, f, 1)[0]
 	plan = explain(t, ctx, pool, `
 		SELECT object_id FROM objects
-		 WHERE tenant_id = $1 AND object_key = $2 AND object_id > $3
+		 WHERE tenant_id = $1 AND collection = $2 AND object_id > $3
 		 ORDER BY object_id
 		 LIMIT 50`, f.tenantID, empty, uuid.Nil)
 
-	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects on an empty ObjectKey")
-	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects on an empty ObjectKey")
+	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects on an empty Collection")
+	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects on an empty Collection")
 }
 
 // TestIndexUsage_ObjectsHardDeletable covers migration 065. The hard-deleter
@@ -253,16 +253,16 @@ var uuidMax = uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-// seedObjects bulk-inserts n objects under the fixture's ObjectKey and returns
+// seedObjects bulk-inserts n objects under the fixture's Collection and returns
 // their ids. generate_series keeps the seed a single round-trip — at these row
 // counts a per-row insert loop dominates the test's runtime.
 func seedObjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, n int, state string) []uuid.UUID {
 	t.Helper()
-	seedObjectsUnder(t, ctx, pool, f, f.objectKey, n, state)
+	seedObjectsUnder(t, ctx, pool, f, f.collection, n, state)
 
 	rows, err := pool.Query(ctx,
-		`SELECT object_id FROM objects WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey)
+		`SELECT object_id FROM objects WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection)
 	if err != nil {
 		t.Fatalf("read seeded ids: %v", err)
 	}
@@ -278,35 +278,35 @@ func seedObjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixtur
 	return out
 }
 
-// seedObjectsUnder bulk-inserts n objects under an explicit ObjectKey.
+// seedObjectsUnder bulk-inserts n objects under an explicit Collection.
 // generate_series keeps the seed a single round-trip — at these row counts a
 // per-row insert loop dominates the test's runtime.
-func seedObjectsUnder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, objectKey string, n int, state string) {
+func seedObjectsUnder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, collection string, n int, state string) {
 	t.Helper()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, object_key, key, state,
+		INSERT INTO objects (object_id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, size_bytes)
 		SELECT gen_random_uuid(), $1, $2, 'k-' || g, $3::object_state,
 		       'application/octet-stream', 0, 100
 		  FROM generate_series(1, $4) AS g`,
-		f.tenantID, objectKey, state, n)
+		f.tenantID, collection, state, n)
 }
 
-// seedObjectKeys creates n additional ObjectKeys bound to the fixture's
+// seedCollections creates n additional Collections bound to the fixture's
 // bucket and returns their names.
-func seedObjectKeys(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, n int) []string {
+func seedCollections(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, n int) []string {
 	t.Helper()
 	var backendID, bucketName string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey).Scan(&backendID, &bucketName); err != nil {
+		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection).Scan(&backendID, &bucketName); err != nil {
 		t.Fatalf("lookup fixture binding: %v", err)
 	}
 	out := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		name := "ok-" + uuid.NewString()[:8]
 		mustExec(t, ctx, pool,
-			`INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name)
+			`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
 			 VALUES ($1, $2, $3, $4)`, f.tenantID, name, backendID, bucketName)
 		out = append(out, name)
 	}

@@ -2,7 +2,7 @@
 
 -- name: CreateObject :exec
 INSERT INTO objects (
-    object_id, tenant_id, object_key, key, state,
+    object_id, tenant_id, collection, key, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -26,20 +26,20 @@ WHERE tenant_id = $1 AND object_id = ANY($2::uuid[]);
 
 -- name: LookupObjectByID :one
 -- Reads an object by id alone. Used by background workers (reconciler,
--- replicator) that don't carry a tenant context. Joins object_keys to
+-- replicator) that don't carry a tenant context. Joins collections to
 -- materialize the bucket binding so the caller can call S3 in one trip.
-SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.state,
+SELECT o.object_id, o.tenant_id, o.collection, o.key, o.state,
        b.backend_id, b.bucket_name
 FROM objects o
-JOIN object_keys b
-  ON b.tenant_id = o.tenant_id AND b.object_key = o.object_key
+JOIN collections b
+  ON b.tenant_id = o.tenant_id AND b.collection = o.collection
 WHERE o.object_id = $1;
 
 -- name: LookupObjectByKey :one
--- Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
+-- Used by resource-name resolution: collections/{b}/objects-by-key/{key} → object_id.
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND object_key = $2 AND key = $3 AND state <> 'DELETED';
+WHERE tenant_id = $1 AND collection = $2 AND key = $3 AND state <> 'DELETED';
 
 -- name: PromoteObject :execrows
 -- Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
@@ -78,7 +78,7 @@ WHERE tenant_id = $1 AND object_id = $2
 
 -- name: RestoreObject :execrows
 -- Undeletes a soft-deleted object iff no live row exists with the same
--- (tenant, object_key, key). Caller is expected to verify uniqueness first;
+-- (tenant, collection, key). Caller is expected to verify uniqueness first;
 -- a UNIQUE partial index still catches the race at commit time.
 UPDATE objects
 SET state         = 'AVAILABLE',
@@ -119,16 +119,16 @@ WHERE tenant_id = $1 AND object_id = $2
 
 -- name: ListHardDeletable :many
 -- Picks DELETED objects past the cooling-off window for the
--- LifecycleHardDeleter worker. Joins object_keys to materialise
+-- LifecycleHardDeleter worker. Joins collections to materialise
 -- (backend_id, bucket_name) so the worker issues the storage DELETE
 -- in one round-trip per row without a second lookup.
 -- Bounded at the caller's batch_size; the worker loops on the
 -- ticker to drain a backlog without holding a single statement open.
-SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.resource_version,
+SELECT o.object_id, o.tenant_id, o.collection, o.key, o.resource_version,
        k.backend_id, k.bucket_name
 FROM objects o
-JOIN object_keys k
-  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
+JOIN collections k
+  ON k.tenant_id = o.tenant_id AND k.collection = o.collection
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
@@ -164,12 +164,12 @@ WHERE object_id = $1
            AND lock_retain_until > now());
 
 -- name: CheckLiveCollision :one
--- True when a non-DELETED row already exists at (tenant, object_key, key).
+-- True when a non-DELETED row already exists at (tenant, collection, key).
 -- Used by RestoreObject to refuse restoring into a slot that's been reused.
 SELECT EXISTS(
     SELECT 1 FROM objects
     WHERE tenant_id = $1
-      AND object_key = $2
+      AND collection = $2
       AND key = $3
       AND state <> 'DELETED'
 )::boolean AS exists;
@@ -186,7 +186,7 @@ SELECT EXISTS(
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1
-  AND object_key = $2
+  AND collection = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
   AND (sqlc.narg('prefix')::text IS NULL OR key LIKE sqlc.narg('prefix')::text || '%')
   AND (sqlc.narg('substr')::text IS NULL OR key LIKE '%' || sqlc.narg('substr')::text || '%')
@@ -197,7 +197,7 @@ LIMIT sqlc.arg('page_size');
 -- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
-WHERE tenant_id = $1 AND object_key = $2
+WHERE tenant_id = $1 AND collection = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state);
 
 -- name: ScanPendingExpired :many

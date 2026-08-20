@@ -27,7 +27,7 @@ const (
 
 type InitiateMultipartUploadRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Parent            string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // ObjectKey
+	Parent            string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // Collection
 	Key               string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	ContentType       string                 `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	SizeBytes         int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`

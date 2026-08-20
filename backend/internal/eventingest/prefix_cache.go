@@ -13,8 +13,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// DefaultPrefixCacheTTL bounds how stale the per-tenant object_key set backing
-// ResolveObjectKeyPrefix may be. See CachingLookup for the staleness contract.
+// DefaultPrefixCacheTTL bounds how stale the per-tenant collection set backing
+// ResolveCollectionPrefix may be. See CachingLookup for the staleness contract.
 const DefaultPrefixCacheTTL = 30 * time.Second
 
 // maxPrefixCacheTenants bounds the number of per-tenant entries the cache
@@ -26,29 +26,29 @@ const DefaultPrefixCacheTTL = 30 * time.Second
 const maxPrefixCacheTenants = 2048
 
 // prefixBackend is the store surface CachingLookup needs: the two object
-// lookups it passes straight through, plus the full per-tenant object_key name
+// lookups it passes straight through, plus the full per-tenant collection name
 // list it caches for longest-prefix resolution. *sqlc.Queries satisfies it.
 type prefixBackend interface {
-	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey, key string) (sqlc.LookupObjectByKeyRow, error)
-	GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (sqlc.GetObjectKeyRow, error)
-	ListObjectKeyNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
+	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collection, key string) (sqlc.LookupObjectByKeyRow, error)
+	GetCollection(ctx context.Context, tenantID pgtype.UUID, collection string) (sqlc.GetCollectionRow, error)
+	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
 }
 
-// CachingLookup is an ObjectLookup that resolves the longest-prefix object_key
+// CachingLookup is an ObjectLookup that resolves the longest-prefix collection
 // (multi-segment disambiguation, migration 030) from an in-process per-tenant
-// cache instead of a per-event SQL query. LookupObjectByKey / GetObjectKey pass
-// straight through — only ResolveObjectKeyPrefix is cached.
+// cache instead of a per-event SQL query. LookupObjectByKey / GetCollection pass
+// straight through — only ResolveCollectionPrefix is cached.
 //
-// Staleness contract: the cached object_key set for a tenant is at most `ttl`
-// old. object_key create/delete happens in the admin pod while this cache lives
+// Staleness contract: the cached collection set for a tenant is at most `ttl`
+// old. collection create/delete happens in the admin pod while this cache lives
 // in the ingest/dispatcher pod, so there is no cross-pod invalidation — TTL is
 // the only freshness bound. Two consequences, both benign:
 //
-//   - A brand-new object_key that is NOT nested under an already-cached key is
+//   - A brand-new collection that is NOT nested under an already-cached key is
 //     picked up immediately: a resolve miss forces one refresh before giving up
-//     (see ResolveObjectKeyPrefix), so the first storage event to a new
+//     (see ResolveCollectionPrefix), so the first storage event to a new
 //     top-level OK resolves without waiting out the TTL.
-//   - A brand-new object_key nested UNDER an already-cached key (e.g. adding
+//   - A brand-new collection nested UNDER an already-cached key (e.g. adding
 //     `invoices/2026/q1` while `invoices` is cached) can, within the TTL window,
 //     resolve to the shorter cached parent. The subsequent LookupObjectByKey
 //     then finds no row and the event is skipped — the data-plane Reconciler
@@ -96,21 +96,21 @@ func NewCachingLookup(src prefixBackend, ttl time.Duration, log *zap.Logger) *Ca
 }
 
 // LookupObjectByKey passes through untouched — object resolution stays a direct
-// query keyed by the (tenant, object_key, key) unique index.
-func (c *CachingLookup) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey, key string) (sqlc.LookupObjectByKeyRow, error) {
-	return c.src.LookupObjectByKey(ctx, tenantID, objectKey, key)
+// query keyed by the (tenant, collection, key) unique index.
+func (c *CachingLookup) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collection, key string) (sqlc.LookupObjectByKeyRow, error) {
+	return c.src.LookupObjectByKey(ctx, tenantID, collection, key)
 }
 
-// GetObjectKey passes through untouched.
-func (c *CachingLookup) GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (sqlc.GetObjectKeyRow, error) {
-	return c.src.GetObjectKey(ctx, tenantID, objectKey)
+// GetCollection passes through untouched.
+func (c *CachingLookup) GetCollection(ctx context.Context, tenantID pgtype.UUID, collection string) (sqlc.GetCollectionRow, error) {
+	return c.src.GetCollection(ctx, tenantID, collection)
 }
 
-// ResolveObjectKeyPrefix returns the longest registered object_key that is a
+// ResolveCollectionPrefix returns the longest registered collection that is a
 // "/"-delimited prefix of `tail`, resolved from the cached per-tenant key set.
 // pgx.ErrNoRows when none match — the same contract the SQL query has, so the
 // handler's switch is unchanged.
-func (c *CachingLookup) ResolveObjectKeyPrefix(ctx context.Context, tenantID pgtype.UUID, tail string) (string, error) {
+func (c *CachingLookup) ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, tail string) (string, error) {
 	keys, fresh, err := c.keysFor(ctx, tenantID, false)
 	if err != nil {
 		return "", err
@@ -118,7 +118,7 @@ func (c *CachingLookup) ResolveObjectKeyPrefix(ctx context.Context, tenantID pgt
 	if m := longestPrefixMatch(keys, tail); m != "" {
 		return m, nil
 	}
-	// Miss on a possibly-stale cache: a newly-registered top-level object_key
+	// Miss on a possibly-stale cache: a newly-registered top-level collection
 	// wouldn't be here yet. Unless we just loaded fresh, force one refresh and
 	// retry so a new OK's first event resolves without waiting out the TTL.
 	if !fresh {
@@ -133,7 +133,7 @@ func (c *CachingLookup) ResolveObjectKeyPrefix(ctx context.Context, tenantID pgt
 	return "", pgx.ErrNoRows
 }
 
-// keysFor returns the tenant's object_key set, loading from the backend when the
+// keysFor returns the tenant's collection set, loading from the backend when the
 // cache is cold, expired, or force is set. `fresh` reports whether this call hit
 // the backend (vs served the cache) so the caller can avoid a redundant refresh.
 func (c *CachingLookup) keysFor(ctx context.Context, tenantID pgtype.UUID, force bool) (keys []string, fresh bool, err error) {
@@ -152,7 +152,7 @@ func (c *CachingLookup) keysFor(ctx context.Context, tenantID pgtype.UUID, force
 	// Load outside the lock — the SQL round-trip must not block other tenants'
 	// resolves. A concurrent duplicate load for the same tenant is acceptable
 	// (idempotent, rare) and simpler than single-flight bookkeeping.
-	loaded, err := c.src.ListObjectKeyNamesForTenant(ctx, tenantID)
+	loaded, err := c.src.ListCollectionNamesForTenant(ctx, tenantID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -181,8 +181,8 @@ func (c *CachingLookup) clock() time.Time {
 }
 
 // longestPrefixMatch returns the longest key in `keys` that equals `tail` or is
-// a "/"-delimited prefix of it — the same precedence the ResolveObjectKeyPrefix
-// SQL gives (ORDER BY length(object_key) DESC). object_key is ASCII, so byte
+// a "/"-delimited prefix of it — the same precedence the ResolveCollectionPrefix
+// SQL gives (ORDER BY length(collection) DESC). collection is ASCII, so byte
 // length equals character length. "" when none match.
 func longestPrefixMatch(keys []string, tail string) string {
 	best := ""

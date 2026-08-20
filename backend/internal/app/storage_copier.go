@@ -20,22 +20,22 @@ func (c storageCopier) CopyObject(ctx context.Context, src, dst worker.CopyLocat
 // DeleteObject removes one physical object — used by the migration cleanup
 // phase to delete the old (shared) copies after the retention window.
 func (c storageCopier) DeleteObject(ctx context.Context, loc worker.CopyLocation) error {
-	return c.s.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.ObjectKey, loc.Key)
+	return c.s.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key)
 }
 
 // HeadObject returns the physical size of one object — used by the verify phase
 // to confirm each copy landed in the target bucket.
 func (c storageCopier) HeadObject(ctx context.Context, loc worker.CopyLocation) (int64, error) {
-	_, size, _, _, err := c.s.Head(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.ObjectKey, loc.Key)
+	_, size, _, _, err := c.s.Head(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key)
 	return size, err
 }
 
 func objLoc(l worker.CopyLocation) object.Location {
 	return object.Location{
-		BackendID: l.BackendID,
-		TenantID:  l.TenantID,
-		Bucket:    l.Bucket,
-		ObjectKey: l.ObjectKey,
-		Key:       l.Key,
+		BackendID:  l.BackendID,
+		TenantID:   l.TenantID,
+		Bucket:     l.Bucket,
+		Collection: l.Collection,
+		Key:        l.Key,
 	}
 }

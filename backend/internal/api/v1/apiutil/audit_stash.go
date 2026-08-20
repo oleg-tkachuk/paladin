@@ -34,7 +34,7 @@ func WithResourceSlot(ctx context.Context) context.Context {
 }
 
 // StashResource records a handler-computed canonical resource name
-// (storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}).
+// (storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}).
 // No-op when the ctx has no slot attached (e.g. test paths that
 // bypass the audit middleware) or when `canonical` is empty.
 func StashResource(ctx context.Context, canonical string) {

@@ -14,7 +14,7 @@ import (
 
 // StorageMigrationRepo adapts the sqlc queries to worker.MigrationRepo — the
 // persistence seam for the ADR-0011 Phase 3 copy job. The raw pool is needed
-// for the transactional rebind (all object_keys + storage_layout flipped
+// for the transactional rebind (all collections + storage_layout flipped
 // atomically under the DEFERRABLE FK).
 type StorageMigrationRepo struct {
 	q    *sqlc.Queries
@@ -37,7 +37,7 @@ func migFromSQLC(m sqlc.TenantStorageMigration) worker.StorageMigration {
 		State:            m.State,
 		ObjectsTotal:     m.ObjectsTotal,
 		ObjectsCopied:    m.ObjectsCopied,
-		CursorObjectKey:  m.CursorObjectKey,
+		CursorCollection: m.CursorCollection,
 		CursorKey:        m.CursorKey,
 		CleanupAfter:     m.CleanupAfter.Time, // zero when NULL (CleanupAfter.Valid == false)
 	}
@@ -64,7 +64,7 @@ func (r *StorageMigrationRepo) BucketProvisionState(ctx context.Context, backend
 }
 
 // withTenantTx runs fn inside a transaction whose `paladin.tenant_id` GUC is set to
-// tenantID, so RLS-gated reads (objects, object_keys) see that tenant's rows.
+// tenantID, so RLS-gated reads (objects, collections) see that tenant's rows.
 // The worker pool wipes the GUC on every acquisition (no auth context), so the
 // migration worker MUST set it explicitly — otherwise RLS returns nothing and
 // the copy silently no-ops while the rebind orphans the data.
@@ -99,24 +99,24 @@ func (r *StorageMigrationRepo) SetCopying(ctx context.Context, tenantID uuid.UUI
 	return err
 }
 
-func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UUID, afterObjectKey, afterKey string, limit int) ([]worker.ObjectRef, error) {
+func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]worker.ObjectRef, error) {
 	var out []worker.ObjectRef
 	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
-		rows, e := q.MigrationListTenantObjects(ctx, pgUUID(tenantID), afterObjectKey, afterKey, int32(limit))
+		rows, e := q.MigrationListTenantObjects(ctx, pgUUID(tenantID), afterCollection, afterKey, int32(limit))
 		if e != nil {
 			return e
 		}
 		out = make([]worker.ObjectRef, 0, len(rows))
 		for _, o := range rows {
-			out = append(out, worker.ObjectRef{ObjectKey: o.ObjectKey, Key: o.Key, SizeBytes: o.SizeBytes})
+			out = append(out, worker.ObjectRef{Collection: o.Collection, Key: o.Key, SizeBytes: o.SizeBytes})
 		}
 		return nil
 	})
 	return out, err
 }
 
-func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, tenantID uuid.UUID, copied int64, cursorObjectKey, cursorKey string) error {
-	_, err := r.q.AdvanceStorageMigrationCopy(ctx, pgUUID(tenantID), copied, cursorObjectKey, cursorKey)
+func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, tenantID uuid.UUID, copied int64, cursorCollection, cursorKey string) error {
+	_, err := r.q.AdvanceStorageMigrationCopy(ctx, pgUUID(tenantID), copied, cursorCollection, cursorKey)
 	return err
 }
 
@@ -125,8 +125,8 @@ func (r *StorageMigrationRepo) SetState(ctx context.Context, tenantID uuid.UUID,
 	return err
 }
 
-// RebindTenant repoints every object_key at the dedicated bucket and flips the
-// tenant's storage_layout to 'dedicated' in ONE transaction. The object_keys→
+// RebindTenant repoints every collection at the dedicated bucket and flips the
+// tenant's storage_layout to 'dedicated' in ONE transaction. The collections→
 // buckets FK is DEFERRABLE INITIALLY DEFERRED, and the target bucket already
 // exists (provision_state='ready'), so the tenancy trigger and FK both pass.
 func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error {
@@ -135,20 +135,20 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Scope RLS to this tenant so the object_keys list isn't silently empty.
+	// Scope RLS to this tenant so the collections list isn't silently empty.
 	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantID.String()); err != nil {
 		return err
 	}
 	qtx := r.q.WithTx(tx)
 
-	keys, err := qtx.MigrationListTenantObjectKeys(ctx, pgUUID(tenantID))
+	keys, err := qtx.MigrationListTenantCollections(ctx, pgUUID(tenantID))
 	if err != nil {
-		return fmt.Errorf("list object_keys: %w", err)
+		return fmt.Errorf("list collections: %w", err)
 	}
 	for _, ok := range keys {
 		// expected_version 0 = skip optimistic-lock check; the migration owns
 		// the whole tenant's binding during rebind.
-		if _, err := qtx.BindObjectKeyToBucket(ctx, pgUUID(tenantID), ok, targetBackendID, targetBucketName, 0); err != nil {
+		if _, err := qtx.BindCollectionToBucket(ctx, pgUUID(tenantID), ok, targetBackendID, targetBucketName, 0); err != nil {
 			return fmt.Errorf("rebind %q: %w", ok, err)
 		}
 	}
@@ -156,7 +156,7 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 		return fmt.Errorf("set storage_layout: %w", err)
 	}
 	// Point the default binding at the dedicated bucket too, so bare-name
-	// object_keys created after the migration land there rather than failing.
+	// collections created after the migration land there rather than failing.
 	if err := qtx.SetTenantDefaultBinding(ctx, pgUUID(tenantID), targetBackendID, targetBucketName, "storage-migration"); err != nil {
 		return fmt.Errorf("set default binding: %w", err)
 	}

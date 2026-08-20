@@ -18,31 +18,31 @@ import (
 )
 
 // ObjectLookup is the slice of *sqlc.Queries the handler uses to
-// resolve (tenant, object_key, key) → object_id. Decoupled into an
+// resolve (tenant, collection, key) → object_id. Decoupled into an
 // interface so the handler is testable without a live DB.
 type ObjectLookup interface {
 	LookupObjectByKey(
 		ctx context.Context,
 		tenantID pgtype.UUID,
-		objectKey, key string,
+		collection, key string,
 	) (sqlc.LookupObjectByKeyRow, error)
-	// ResolveObjectKeyPrefix returns the longest registered object_key that
-	// prefixes `tail` (the recombined "<object_key>/<key>" path) for the
+	// ResolveCollectionPrefix returns the longest registered collection that
+	// prefixes `tail` (the recombined "<collection>/<key>" path) for the
 	// tenant — disambiguates multi-segment object keys. pgx.ErrNoRows when no
-	// object_key is a prefix.
-	ResolveObjectKeyPrefix(
+	// collection is a prefix.
+	ResolveCollectionPrefix(
 		ctx context.Context,
 		tenantID pgtype.UUID,
 		tail string,
 	) (string, error)
-	// GetObjectKey resolves an object_key row (for its backend_id +
+	// GetCollection resolves an collection row (for its backend_id +
 	// bucket_name binding) so the emitted event carries the canonical
 	// resource name (ADR-0010 Phase 1).
-	GetObjectKey(
+	GetCollection(
 		ctx context.Context,
 		tenantID pgtype.UUID,
-		objectKey string,
-	) (sqlc.GetObjectKeyRow, error)
+		collection string,
+	) (sqlc.GetCollectionRow, error)
 }
 
 // PromoteHandler is the canonical event handler: it resolves the
@@ -85,7 +85,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 	// adapter that produced an event without them has a bug; we
 	// log + skip rather than retry forever.
 	if ev.SubjectFields.TenantID == "" ||
-		ev.SubjectFields.ObjectKey == "" ||
+		ev.SubjectFields.Collection == "" ||
 		ev.SubjectFields.Key == "" {
 		logger.Warn("event subject is incomplete; skipping",
 			zap.String("subject", ev.Subject),
@@ -105,16 +105,16 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 	tenantPg := pgtype.UUID{Bytes: tenantUUID, Valid: true}
 
 	// Disambiguate multi-segment object keys. The source adapters split the
-	// "<object_key>/<key>" tail at the first path segment, which is wrong when
-	// the object_key itself is multi-segment (migration 030). Recombine the
+	// "<collection>/<key>" tail at the first path segment, which is wrong when
+	// the collection itself is multi-segment (migration 030). Recombine the
 	// tail and re-derive the real OK by longest-prefix-match so a nested OK
 	// (`invoices/2026/q1`) wins over a shorter sibling (`invoices`).
-	objectKey, key := ev.SubjectFields.ObjectKey, ev.SubjectFields.Key
-	fullTail := objectKey + "/" + key
-	realOK, perr := h.Lookup.ResolveObjectKeyPrefix(ctx, tenantPg, fullTail)
+	collection, key := ev.SubjectFields.Collection, ev.SubjectFields.Key
+	fullTail := collection + "/" + key
+	realOK, perr := h.Lookup.ResolveCollectionPrefix(ctx, tenantPg, fullTail)
 	switch {
 	case perr == nil && realOK != "" && realOK != fullTail:
-		objectKey = realOK
+		collection = realOK
 		key = strings.TrimPrefix(fullTail, realOK+"/")
 	case perr == nil, errors.Is(perr, pgx.ErrNoRows):
 		// No registered OK prefixes the tail (or it equals the whole tail with
@@ -125,7 +125,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return fmt.Errorf("resolve object key prefix: %w", perr)
 	}
 
-	row, err := h.Lookup.LookupObjectByKey(ctx, tenantPg, objectKey, key)
+	row, err := h.Lookup.LookupObjectByKey(ctx, tenantPg, collection, key)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Race window: event arrived before the data-plane PUT
@@ -133,7 +133,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			// any orphans and a re-delivery would still find no row.
 			logger.Debug("no matching object for event; skipping",
 				zap.String("tenant_id", ev.SubjectFields.TenantID),
-				zap.String("object_key", ev.SubjectFields.ObjectKey),
+				zap.String("collection", ev.SubjectFields.Collection),
 				zap.String("key", ev.SubjectFields.Key),
 			)
 			return nil
@@ -157,7 +157,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		// Resolve the canonical resource name BEFORE the promote tx — the
 		// (backend, bucket) binding read must not run on the pool inside the
 		// open tx.
-		resourceName := h.objectResourceName(ctx, ev.SubjectFields.TenantID, objectKey, key)
+		resourceName := h.objectResourceName(ctx, ev.SubjectFields.TenantID, collection, key)
 		changed, err := h.Transitioner.PromoteToAvailableInTx(
 			ctx,
 			objectID,
@@ -167,7 +167,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			ev.SubjectFields.Sequencer,
 			statemachine.SourceEvent,
 			func(ctx context.Context, tx pgx.Tx) error {
-				return h.emitUploaded(ctx, tx, ev, resourceName, objectKey, key, objectID)
+				return h.emitUploaded(ctx, tx, ev, resourceName, collection, key, objectID)
 			},
 		)
 		if err != nil {
@@ -202,11 +202,11 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 // tx. nil-safe: no producer wired → no-op. Mirrors the data-plane
 // CompleteObject payload so subscribers can't tell which producer promoted
 // the object; the `source: storage_event` discriminator is the only tell.
-func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEvent, resourceName, objectKey, key string, objectID uuid.UUID) error {
+func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEvent, resourceName, collection, key string, objectID uuid.UUID) error {
 	if h.Events == nil {
 		return nil
 	}
-	// objectKey/key are the RESOLVED values (post longest-prefix-match), not
+	// collection/key are the RESOLVED values (post longest-prefix-match), not
 	// the source's naive split; resourceName is those same values canonicalized
 	// to A-shape by the caller — so the emitted event references the real OK in
 	// the same form the data-plane handler uses.
@@ -217,7 +217,7 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 		ResourceName: resourceName,
 		Payload: map[string]any{
 			"tenant_id":    ev.SubjectFields.TenantID,
-			"object_key":   objectKey,
+			"collection":   collection,
 			"key":          key,
 			"object_id":    objectID.String(),
 			"size_bytes":   ev.SubjectFields.SizeBytes,
@@ -230,25 +230,25 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 }
 
 // objectResourceName builds the canonical (A-shape) object resource name
-// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}/objects-by-key/{key}`
+// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}/objects-by-key/{key}`
 // for the emitted event (ADR-0010 Phase 1), matching what the data-plane
 // object handler emits so a subscriber can't tell which producer promoted the
-// object. Resolving the objectKey's (backend, bucket) binding needs a lookup;
+// object. Resolving the collection's (backend, bucket) binding needs a lookup;
 // on any miss it falls back to the C-shape name so a resolve blip never blocks
 // the event. tenantID is the string from the subject; on a parse failure the
 // C-shape (which uses the same string) is returned.
-func (h *PromoteHandler) objectResourceName(ctx context.Context, tenantID, objectKey, key string) string {
-	cShape := fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", tenantID, objectKey, key)
+func (h *PromoteHandler) objectResourceName(ctx context.Context, tenantID, collection, key string) string {
+	cShape := fmt.Sprintf("tenants/%s/collections/%s/objects-by-key/%s", tenantID, collection, key)
 	tid, err := uuid.Parse(tenantID)
 	if err != nil {
 		return cShape
 	}
-	row, err := h.Lookup.GetObjectKey(ctx, pgtype.UUID{Bytes: tid, Valid: true}, objectKey)
-	if err != nil || row.ObjectKey.BackendID == "" || row.ObjectKey.BucketName == "" {
+	row, err := h.Lookup.GetCollection(ctx, pgtype.UUID{Bytes: tid, Valid: true}, collection)
+	if err != nil || row.Collection.BackendID == "" || row.Collection.BucketName == "" {
 		return cShape
 	}
-	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/objectKeys/%s/objects-by-key/%s",
-		row.ObjectKey.BackendID, row.ObjectKey.BucketName, tenantID, objectKey, key)
+	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
+		row.Collection.BackendID, row.Collection.BucketName, tenantID, collection, key)
 }
 
 func (h *PromoteHandler) log() *zap.Logger {

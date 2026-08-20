@@ -23,30 +23,30 @@ import (
 )
 
 type BatchDeleteArgs struct {
-	TenantID  uuid.UUID
-	ObjectKey string
-	ObjectIDs []uuid.UUID
+	TenantID   uuid.UUID
+	Collection string
+	ObjectIDs  []uuid.UUID
 }
 
 type BatchCopyArgs struct {
-	TenantID     uuid.UUID
-	SrcObjectKey string
-	DstObjectKey string
-	ObjectIDs    []uuid.UUID
-	KeyPrefix    string // optional destination prefix
+	TenantID      uuid.UUID
+	SrcCollection string
+	DstCollection string
+	ObjectIDs     []uuid.UUID
+	KeyPrefix     string // optional destination prefix
 }
 
 type BatchUpdateTagsArgs struct {
-	TenantID  uuid.UUID
-	ObjectKey string
-	ObjectIDs []uuid.UUID
-	Tags      map[string]string
+	TenantID   uuid.UUID
+	Collection string
+	ObjectIDs  []uuid.UUID
+	Tags       map[string]string
 }
 
 type BatchRestoreObjectsArgs struct {
-	TenantID  uuid.UUID
-	ObjectKey string
-	ObjectIDs []uuid.UUID
+	TenantID   uuid.UUID
+	Collection string
+	ObjectIDs  []uuid.UUID
 }
 
 // Submitter records LROs. Provided by the operation package.
@@ -55,16 +55,16 @@ type Submitter interface {
 }
 
 // BucketResolver resolves an object-key to its physical (backend, bucket) so
-// the SUBMIT-time Cedar check can enforce bucket:/object_key: PAT scopes.
+// the SUBMIT-time Cedar check can enforce bucket:/collection: PAT scopes.
 //
 // This matters because the batch WORKER does NOT re-check Cedar per object
 // (see internal/worker/operations/batch_copy.go — "Per-object Cedar would be
 // defence-in-depth; not free in latency"): the submit-time object-key check is
 // the sole Cedar gate for a batch, so its Resource must carry the bucket or a
-// bucket:/object_key:-scoped PAT is fail-closed on its own object-keys. The
+// bucket:/collection:-scoped PAT is fail-closed on its own object-keys. The
 // object repository (object.Repository) satisfies this.
 type BucketResolver interface {
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 }
 
 type Handler struct {
@@ -94,16 +94,16 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
 	// Capability gate: BatchDelete spans many objects under one
-	// objectKey. We assert OpDelete with an empty URI (the prefix-
+	// collection. We assert OpDelete with an empty URI (the prefix-
 	// scope check happens per-row in the worker against
 	// cap.Caveats.ResourcePrefixes — this surface only enforces the
 	// op caveat). Per-row resource gating runs inside the worker.
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, ""); err != nil {
 		return uuid.Nil, err
 	}
-	// ObjectKey-level authorization. Per-object authorization happens inside
+	// Collection-level authorization. Per-object authorization happens inside
 	// the worker on each row (slower but safer).
-	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionDeleteObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, err := json.Marshal(args)
@@ -130,11 +130,11 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, ""); err != nil {
 		return uuid.Nil, err
 	}
-	// Require copy on source and put on destination — objectKey-level check.
-	if err := h.authorize(ctx, p, tenantID, args.SrcObjectKey, cedar.ActionCopyObject); err != nil {
+	// Require copy on source and put on destination — collection-level check.
+	if err := h.authorize(ctx, p, tenantID, args.SrcCollection, cedar.ActionCopyObject); err != nil {
 		return uuid.Nil, err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.DstObjectKey, cedar.ActionPutObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.DstCollection, cedar.ActionPutObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, err := json.Marshal(args)
@@ -157,7 +157,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
 		return uuid.Nil, err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionUpdateObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, err := json.Marshal(args)
@@ -186,7 +186,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, ""); err != nil {
 		return uuid.Nil, err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionRestoreObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
@@ -194,7 +194,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 }
 
 // authorize runs the submit-time Cedar check for ONE target object-key. It
-// resolves that object-key's bucket and injects it so bucket:/object_key: PAT
+// resolves that object-key's bucket and injects it so bucket:/collection: PAT
 // scopes enforce — a scoped principal is admitted on its own object-key(s) and
 // DENIED when a target is off-scope. Each Batch RPC calls this per object-key
 // (BatchCopy: src + dst); any denial short-circuits the whole submit.
@@ -204,15 +204,15 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 // scope-enforcement forbid never fires for them), scoped principals stay
 // fail-closed. write=false: the scope key is independent of the drain gate,
 // and this is a submit-time authz probe, not the mutation itself.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, action string) error {
 	var backendID, bucket string
 	if h.buckets != nil {
-		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, objectKey, false)
+		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, collection, false)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipalFor(p, tenantID),
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, BackendID: backendID, BucketName: bucket},
+		&cedar.Resource{TenantID: tenantID, Collection: collection, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {

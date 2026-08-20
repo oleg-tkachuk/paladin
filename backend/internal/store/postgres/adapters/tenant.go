@@ -109,7 +109,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 	// Dedicated layout: provision the tenant's own bucket in the same tx
 	// (ADR-0011). The row lands provision_state='pending' with the tenant as
 	// owner; the bucket reconciler (backend-routed) creates it physically.
-	// The default binding points at it so the tenant's object_keys land there.
+	// The default binding points at it so the tenant's collections land there.
 	// Bucket name is derived from the tenant id (globally unique per
 	// deployment; an org prefix for cross-account uniqueness is a follow-up).
 	if args.StorageLayout == "dedicated" {
@@ -202,7 +202,7 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 
 // TenantDefaultBinding returns the tenant's default (backend, bucket) route,
 // with found=false (nil error) when none is set. Implements
-// resolve.DefaultBindingLookup — completes the bare (B) object_key shape to
+// resolve.DefaultBindingLookup — completes the bare (B) collection shape to
 // canonical (ADR-0010 Phase 3 / migration 034).
 func (r *TenantRepo) TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (string, string, bool, error) {
 	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
@@ -351,7 +351,7 @@ func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {
 	rows, err := q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
-		// FK RESTRICT from object_keys/objects → the tenant still owns
+		// FK RESTRICT from collections/objects → the tenant still owns
 		// data. Map to a typed sentinel so the handler returns a clear
 		// FailedPrecondition instead of a generic Internal error.
 		var pgErr *pgconn.PgError
@@ -444,20 +444,20 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 
 // Rename atomically rotates the tenant slug AND rewrites every
 // `Tenant::"<old_slug>"` reference in the tenant's
-// inherited_cedar_policy plus every object_keys.cedar_policy for the
+// inherited_cedar_policy plus every collections.cedar_policy for the
 // tenant. Bumps resource_version on the tenant row (but NOT on the
-// object_keys rows — the rewrite is a derived consequence of the
+// collections rows — the rewrite is a derived consequence of the
 // tenant slug rotation, not an independent edit; bumping each
-// object_key's RV would invalidate every in-flight client that holds
-// an object_key resource_version mid-transaction). Operators that
-// need a per-objectKey audit row can list the affected rows from the
+// collection's RV would invalidate every in-flight client that holds
+// an collection resource_version mid-transaction). Operators that
+// need a per-collection audit row can list the affected rows from the
 // audit_log entry's after_json.
 //
 // Uniqueness on the new slug is enforced by the tenants_slug_unique
 // constraint (migration 009) — caught here as ErrSlugConflict.
 //
 // Implementation uses a single tx so a partial rewrite (tenant
-// updated, object_keys not) cannot leak.
+// updated, collections not) cannot leak.
 func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArgs) (tenant.Tenant, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -540,12 +540,12 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		return tenant.Tenant{}, tenant.ErrVersionMismatch
 	}
 
-	// Rewrite per-objectKey policies. The cedar_policy column is
-	// nullable in some object_keys rows; use COALESCE so empty
+	// Rewrite per-collection policies. The cedar_policy column is
+	// nullable in some collections rows; use COALESCE so empty
 	// policies don't produce phantom hashes.
 	rows, err := tx.Query(ctx,
-		`SELECT object_key, cedar_policy
-		   FROM object_keys
+		`SELECT collection, cedar_policy
+		   FROM collections
 		  WHERE tenant_id = $1
 		    AND cedar_policy IS NOT NULL
 		    AND cedar_policy <> ''
@@ -553,7 +553,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		pgUUID(args.TenantID),
 	)
 	if err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: list object_keys: %w", err)
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: list collections: %w", err)
 	}
 	type okRewrite struct {
 		key       string
@@ -565,7 +565,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		var key, pol string
 		if err := rows.Scan(&key, &pol); err != nil {
 			rows.Close()
-			return tenant.Tenant{}, fmt.Errorf("rename tenant: scan object_key: %w", err)
+			return tenant.Tenant{}, fmt.Errorf("rename tenant: scan collection: %w", err)
 		}
 		rewritten := rewriteTenantSlugRefs(pol, oldSlug, args.NewSlug)
 		if rewritten == pol {
@@ -576,20 +576,20 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: iterate object_keys: %w", err)
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: iterate collections: %w", err)
 	}
 	for _, w := range rewrites {
 		if _, err := tx.Exec(ctx,
-			`UPDATE object_keys
+			`UPDATE collections
 			    SET cedar_policy      = $3,
 			        cedar_policy_hash = $4,
 			        resource_version  = resource_version + 1,
 			        updated_at        = NOW()
 			  WHERE tenant_id  = $1
-			    AND object_key = $2`,
+			    AND collection = $2`,
 			pgUUID(args.TenantID), w.key, w.newPolicy, w.newHash,
 		); err != nil {
-			return tenant.Tenant{}, fmt.Errorf("rename tenant: update object_key %q: %w", w.key, err)
+			return tenant.Tenant{}, fmt.Errorf("rename tenant: update collection %q: %w", w.key, err)
 		}
 	}
 

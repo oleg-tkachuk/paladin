@@ -51,11 +51,11 @@ type tokenMinter interface {
 	MintRefresh(c issuer.RefreshClaims) (string, time.Time, error)
 }
 
-// ObjectKeyRoute is one addressable ObjectKey in all three ADR-0010 name
+// CollectionRoute is one addressable Collection in all three ADR-0010 name
 // shapes (A canonical, C tenant-path, B bare alias) plus its (backend,
 // bucket) binding. WhoAmI returns these so clients normalize to canonical
 // before sending rather than constructing it themselves (Phase 4).
-type ObjectKeyRoute struct {
+type CollectionRoute struct {
 	Canonical  string // A
 	TenantPath string // C
 	BareAlias  string // B — empty unless this OK sits in the default binding
@@ -63,17 +63,17 @@ type ObjectKeyRoute struct {
 	Bucket     string
 }
 
-// ObjectKeyRouteLister returns the caller's ObjectKey route table for a
-// tenant — the ObjectKeys the caller can read, in all three name shapes.
-// Optional dependency (WithObjectKeyRoutes); when unset WhoAmI returns no
+// CollectionRouteLister returns the caller's Collection route table for a
+// tenant — the Collections the caller can read, in all three name shapes.
+// Optional dependency (WithCollectionRoutes); when unset WhoAmI returns no
 // routes. Lives behind an interface so the plane-agnostic auth handler stays
-// free of admin-plane (objectKey / tenant-binding) imports; the concrete
+// free of admin-plane (collection / tenant-binding) imports; the concrete
 // implementation is wired in the composition root.
-type ObjectKeyRouteLister interface {
+type CollectionRouteLister interface {
 	// Returns one page of the route table (starting after pageToken; empty =
-	// first page) plus nextPageToken — non-empty when more readable ObjectKeys
+	// first page) plus nextPageToken — non-empty when more readable Collections
 	// remain, so the caller pages until it comes back empty (ADR-0010 Phase 4).
-	ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID, pageToken string) (routes []ObjectKeyRoute, nextPageToken string, err error)
+	ListCollectionRoutes(ctx context.Context, tenantID uuid.UUID, pageToken string) (routes []CollectionRoute, nextPageToken string, err error)
 }
 
 type Handler struct {
@@ -85,19 +85,19 @@ type Handler struct {
 	tenantSlug     TenantSlugLookup
 	now            func() time.Time
 
-	// Optional: WhoAmI ObjectKey route table (ADR-0010 Phase 4). nil → no
+	// Optional: WhoAmI Collection route table (ADR-0010 Phase 4). nil → no
 	// routes in the response.
-	routes ObjectKeyRouteLister
+	routes CollectionRouteLister
 
 	// Optional: refresh-token reuse-detection observability.
 	audit reuseAuditor
 	log   *zap.Logger
 }
 
-// WithObjectKeyRoutes installs the source of the WhoAmI ObjectKey route table
+// WithCollectionRoutes installs the source of the WhoAmI Collection route table
 // (ADR-0010 Phase 4). Builder-style + optional so existing wire-up and tests
 // keep working; unset means WhoAmI returns identity with no routes.
-func (h *Handler) WithObjectKeyRoutes(l ObjectKeyRouteLister) *Handler {
+func (h *Handler) WithCollectionRoutes(l CollectionRouteLister) *Handler {
 	h.routes = l
 	return h
 }
@@ -382,11 +382,11 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 type WhoAmIOutput struct {
 	User     authstore.User
 	Audience string
-	// Routes is one page of the caller's ObjectKey route table (ADR-0010 Phase
+	// Routes is one page of the caller's Collection route table (ADR-0010 Phase
 	// 4). Empty when no route source is wired or the caller has no readable
-	// ObjectKeys.
-	Routes []ObjectKeyRoute
-	// RoutesTruncated is true when more readable ObjectKeys remain beyond this
+	// Collections.
+	Routes []CollectionRoute
+	// RoutesTruncated is true when more readable Collections remain beyond this
 	// page (equivalent to NextPageToken != ""). Kept for clients that don't page.
 	RoutesTruncated bool
 	// NextPageToken pages the route table: pass it back in the next WhoAmI to
@@ -412,9 +412,9 @@ func (h *Handler) WhoAmI(ctx context.Context, routePageToken string) (*WhoAmIOut
 	out := &WhoAmIOutput{User: u, Audience: p.Audience}
 	// Route table is best-effort: WhoAmI's primary job is identity, so a
 	// route-source failure (incl. a Cedar denial for a caller who can't list
-	// ObjectKeys) degrades to an empty table rather than failing the call.
+	// Collections) degrades to an empty table rather than failing the call.
 	if h.routes != nil && u.TenantID != uuid.Nil {
-		routes, nextToken, rErr := h.routes.ListObjectKeyRoutes(ctx, u.TenantID, routePageToken)
+		routes, nextToken, rErr := h.routes.ListCollectionRoutes(ctx, u.TenantID, routePageToken)
 		if rErr != nil {
 			if h.log != nil {
 				h.log.Warn("whoami: object-key route lookup failed; returning identity without routes",

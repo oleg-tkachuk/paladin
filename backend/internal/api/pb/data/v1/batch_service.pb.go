@@ -215,7 +215,7 @@ func (x *ObjectSelector) GetFilter() string {
 
 type BatchDeleteObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
 	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Selector      *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	Permanent     bool            `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
@@ -276,11 +276,11 @@ func (x *BatchDeleteObjectsRequest) GetPermanent() bool {
 
 type BatchCopyObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Source parent ObjectKey.
+	// Source parent Collection.
 	SourceParent string          `protobuf:"bytes,1,opt,name=source_parent,json=sourceParent,proto3" json:"source_parent,omitempty"`
 	Selector     *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
-	// Destination ObjectKey resource name.
-	DestinationObjectKey string `protobuf:"bytes,3,opt,name=destination_object_key,json=destinationObjectKey,proto3" json:"destination_object_key,omitempty"`
+	// Destination Collection resource name.
+	DestinationCollection string `protobuf:"bytes,3,opt,name=destination_collection,json=destinationCollection,proto3" json:"destination_collection,omitempty"`
 	// CEL expression evaluated against each source Object to compute dest key.
 	DestinationKeyTemplate string `protobuf:"bytes,4,opt,name=destination_key_template,json=destinationKeyTemplate,proto3" json:"destination_key_template,omitempty"`
 	unknownFields          protoimpl.UnknownFields
@@ -331,9 +331,9 @@ func (x *BatchCopyObjectsRequest) GetSelector() *ObjectSelector {
 	return nil
 }
 
-func (x *BatchCopyObjectsRequest) GetDestinationObjectKey() string {
+func (x *BatchCopyObjectsRequest) GetDestinationCollection() string {
 	if x != nil {
-		return x.DestinationObjectKey
+		return x.DestinationCollection
 	}
 	return ""
 }
@@ -489,11 +489,11 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\x19BatchDeleteObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12B\n" +
 	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12\x1c\n" +
-	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\x8d\x02\n" +
+	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\x8e\x02\n" +
 	"\x17BatchCopyObjectsRequest\x12,\n" +
 	"\rsource_parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceParent\x12B\n" +
-	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12=\n" +
-	"\x16destination_object_key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x14destinationObjectKey\x12A\n" +
+	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12>\n" +
+	"\x16destination_collection\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x12A\n" +
 	"\x18destination_key_template\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x16destinationKeyTemplate\"\x81\x01\n" +
 	"\x1aBatchRestoreObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12B\n" +

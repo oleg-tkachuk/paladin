@@ -306,7 +306,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
-				// Routed: BatchCopy resolves (backend, bucket) per object_key
+				// Routed: BatchCopy resolves (backend, bucket) per collection
 				// and builds Locations carrying BackendID, so the router
 				// dispatches each copy to the right backend.
 				Storage:           s3adapter.NewObjectRouter(deps.Registry),

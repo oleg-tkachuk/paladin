@@ -78,12 +78,12 @@ func (PresignTransport) EnumDescriptor() ([]byte, []int) {
 
 type ObjectVersion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+	// Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	VersionId      string                 `protobuf:"bytes,2,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
 	ObjectId       string                 `protobuf:"bytes,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	IsDeleteMarker bool                   `protobuf:"varint,4,opt,name=is_delete_marker,json=isDeleteMarker,proto3" json:"is_delete_marker,omitempty"`
-	S3Key          string                 `protobuf:"bytes,5,opt,name=s3_key,json=s3Key,proto3" json:"s3_key,omitempty"`
+	StoragePath    string                 `protobuf:"bytes,5,opt,name=storage_path,json=storagePath,proto3" json:"storage_path,omitempty"`
 	SizeBytes      int64                  `protobuf:"varint,6,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	Etag           string                 `protobuf:"bytes,7,opt,name=etag,proto3" json:"etag,omitempty"`
 	Checksum       *ChecksumDigest        `protobuf:"bytes,8,opt,name=checksum,proto3" json:"checksum,omitempty"`
@@ -155,9 +155,9 @@ func (x *ObjectVersion) GetIsDeleteMarker() bool {
 	return false
 }
 
-func (x *ObjectVersion) GetS3Key() string {
+func (x *ObjectVersion) GetStoragePath() string {
 	if x != nil {
-		return x.S3Key
+		return x.StoragePath
 	}
 	return ""
 }
@@ -332,7 +332,7 @@ func (x *ListObjectVersionsResponse) GetPage() *v1.PageResponse {
 
 type GetObjectVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+	// Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
 	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -429,7 +429,7 @@ func (x *RestoreObjectVersionRequest) GetResourceVersion() string {
 
 type UploadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
 	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"` // empty → server uses object_id as key
 	ContentType   string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
@@ -769,7 +769,7 @@ func (x *GetObjectRequest) GetName() string {
 
 type LookupObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey — required to disambiguate `key` lookups.
+	// Parent Collection — required to disambiguate `key` lookups.
 	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1146,13 +1146,13 @@ func (x *RestoreObjectRequest) GetResourceVersion() string {
 type CopyObjectRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	SourceName string                 `protobuf:"bytes,1,opt,name=source_name,json=sourceName,proto3" json:"source_name,omitempty"`
-	// Destination ObjectKey resource name.
-	DestinationObjectKey string            `protobuf:"bytes,2,opt,name=destination_object_key,json=destinationObjectKey,proto3" json:"destination_object_key,omitempty"`
-	DestinationKey       string            `protobuf:"bytes,3,opt,name=destination_key,json=destinationKey,proto3" json:"destination_key,omitempty"`
-	MetadataOverride     *MetadataOverride `protobuf:"bytes,4,opt,name=metadata_override,json=metadataOverride,proto3,oneof" json:"metadata_override,omitempty"`
-	TagsOverride         *TagsOverride     `protobuf:"bytes,5,opt,name=tags_override,json=tagsOverride,proto3,oneof" json:"tags_override,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Destination Collection resource name.
+	DestinationCollection string            `protobuf:"bytes,2,opt,name=destination_collection,json=destinationCollection,proto3" json:"destination_collection,omitempty"`
+	DestinationKey        string            `protobuf:"bytes,3,opt,name=destination_key,json=destinationKey,proto3" json:"destination_key,omitempty"`
+	MetadataOverride      *MetadataOverride `protobuf:"bytes,4,opt,name=metadata_override,json=metadataOverride,proto3,oneof" json:"metadata_override,omitempty"`
+	TagsOverride          *TagsOverride     `protobuf:"bytes,5,opt,name=tags_override,json=tagsOverride,proto3,oneof" json:"tags_override,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *CopyObjectRequest) Reset() {
@@ -1192,9 +1192,9 @@ func (x *CopyObjectRequest) GetSourceName() string {
 	return ""
 }
 
-func (x *CopyObjectRequest) GetDestinationObjectKey() string {
+func (x *CopyObjectRequest) GetDestinationCollection() string {
 	if x != nil {
-		return x.DestinationObjectKey
+		return x.DestinationCollection
 	}
 	return ""
 }
@@ -1310,7 +1310,7 @@ func (x *TagsOverride) GetTags() map[string]string {
 
 type ListObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
 	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Page          *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	Filter        string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
@@ -1545,14 +1545,14 @@ var File_paladin_data_v1_object_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/data/v1/object_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1flegate/common/v1/resource.proto\x1a\x1alegate/data/v1/types.proto\"\xbd\x05\n" +
+	"#paladin/data/v1/object_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1flegate/common/v1/resource.proto\x1a\x1alegate/data/v1/types.proto\"\xc9\x05\n" +
 	"\rObjectVersion\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
 	"version_id\x18\x02 \x01(\tR\tversionId\x12\x1b\n" +
 	"\tobject_id\x18\x03 \x01(\tR\bobjectId\x12(\n" +
-	"\x10is_delete_marker\x18\x04 \x01(\bR\x0eisDeleteMarker\x12\x15\n" +
-	"\x06s3_key\x18\x05 \x01(\tR\x05s3Key\x12\x1d\n" +
+	"\x10is_delete_marker\x18\x04 \x01(\bR\x0eisDeleteMarker\x12!\n" +
+	"\fstorage_path\x18\x05 \x01(\tR\vstoragePath\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x06 \x01(\x03R\tsizeBytes\x12\x12\n" +
 	"\x04etag\x18\a \x01(\tR\x04etag\x12:\n" +
@@ -1646,11 +1646,11 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x06object\x18\x01 \x01(\v2\x16.paladin.data.v1.ObjectR\x06object\"^\n" +
 	"\x14RestoreObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\xf2\x02\n" +
+	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\xf3\x02\n" +
 	"\x11CopyObjectRequest\x12(\n" +
 	"\vsource_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"sourceName\x12=\n" +
-	"\x16destination_object_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x14destinationObjectKey\x120\n" +
+	"sourceName\x12>\n" +
+	"\x16destination_collection\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x120\n" +
 	"\x0fdestination_key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0edestinationKey\x12R\n" +
 	"\x11metadata_override\x18\x04 \x01(\v2 .paladin.data.v1.MetadataOverrideH\x00R\x10metadataOverride\x88\x01\x01\x12F\n" +
 	"\rtags_override\x18\x05 \x01(\v2\x1c.paladin.data.v1.TagsOverrideH\x01R\ftagsOverride\x88\x01\x01B\x14\n" +

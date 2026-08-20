@@ -259,8 +259,8 @@ func capabilityID(ctx context.Context) uuid.UUID {
 // every proto package; falls back to the message type name.
 // preferCanonical returns the handler-stashed canonical resource
 // name when present, else the C-shape `name`/`parent` from the
-// request message. Audit rows for ObjectKey-rooted mutations end up
-// carrying the (backend, bucket, tenant, objectKey) tuple as long as
+// request message. Audit rows for Collection-rooted mutations end up
+// carrying the (backend, bucket, tenant, collection) tuple as long as
 // the handler called StashResource before returning.
 func preferCanonical(ctx context.Context, msg any) string {
 	if s := apiutil.ResourceFromContext(ctx); s != "" {

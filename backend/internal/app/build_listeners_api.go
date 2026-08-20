@@ -89,16 +89,16 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// its own bucket + object-keys with its data-plane PAT (aud=data), no
 	// admin credential. Reuses the admin bucket-create path (bucketh) and the
 	// object-key create path (objectkey), each wired to the api dispatcher so
-	// a self-provision emits the same paladin.bucket.created / paladin.object_key.created
+	// a self-provision emits the same paladin.bucket.created / paladin.collection.created
 	// lifecycle events an admin create would. repos.BucketV2 doubles as the
 	// backend-existence checker (a tenant may not create backends).
 	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine)
 	bucketBootstrapH.SetEventProducer(apiDispatcher)
 	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
-	objectKeyBootstrapH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
-	objectKeyBootstrapH.SetEventProducer(apiDispatcher)
-	objectKeyBootstrapH.SetLogger(l.Named("object-key-events"))
-	storageBootstrapH := storagebootstrap.NewHandler(bucketBootstrapH, objectKeyBootstrapH, repos.BucketV2, polEngine)
+	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
+	collectionBootstrapH.SetEventProducer(apiDispatcher)
+	collectionBootstrapH.SetLogger(l.Named("object-key-events"))
+	storageBootstrapH := storagebootstrap.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
 
 	// ─── IAM-plane handlers ──────────────────────────────────────────────
 	iss, err := wire.ProvideIssuer(cfg)
@@ -108,7 +108,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	dec := wire.ProvideRefreshDecoder(cfg)
 	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).
 		WithReuseAudit(repos.Audit, l).
-		WithObjectKeyRoutes(wire.ProvideObjectKeyRouteLister(repos, polEngine, cfg))
+		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
 	userSettingsH := usersettingsh.NewHandler(
 		adapters.NewUserSettingsRepo(deps.DB.Queries),
@@ -227,11 +227,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		capData,
 		auth.RequireAudience(auth.AudienceData),
 		// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
-		// resolves the upload's ObjectKey to its (backend, bucket) so a
+		// resolves the upload's Collection to its (backend, bucket) so a
 		// bucket quota row can be found. Without WithBucketScope those rows
 		// are maintained by the reconciler and shown on /stats but reject
 		// nothing. Both scopes cost a point lookup on the upload path —
-		// object_keys by PK, then quotas by its unique index.
+		// collections by PK, then quotas by its unique index.
 		middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,
@@ -388,7 +388,7 @@ func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multipart.Ve
 	return a.v.OnPromote(ctx, object.Object{
 		ObjectID:     vo.ObjectID,
 		TenantID:     vo.TenantID,
-		ObjectKey:    vo.ObjectKey,
+		Collection:   vo.Collection,
 		Key:          vo.Key,
 		ContentType:  vo.ContentType,
 		SizeBytes:    vo.SizeBytes,

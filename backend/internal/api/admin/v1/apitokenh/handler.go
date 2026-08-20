@@ -119,7 +119,7 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	// malformed scope on the data plane fails the request fail-closed (see
 	// principalFromAPIToken), so an operator would otherwise mint a token that
 	// is dead on arrival. This also pins the scope vocabulary to the resource-
-	// scoping set (tenant:/backend:/bucket:/object_key:/*).
+	// scoping set (tenant:/backend:/bucket:/collection:/*).
 	for _, s := range req.Msg.GetScopes() {
 		if _, perr := auth.ParseScope(s); perr != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scope: %w", perr))

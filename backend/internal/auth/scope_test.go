@@ -12,7 +12,7 @@ func TestParseScope(t *testing.T) {
 		{"tenant:abc", Scope{Type: ScopeTenant, Value: "abc"}, false},
 		{"backend:primary", Scope{Type: ScopeBackend, Value: "primary"}, false},
 		{"bucket:paladin-archive", Scope{Type: ScopeBucket, Value: "paladin-archive"}, false},
-		{"object_key:b/k", Scope{Type: ScopeObjectKey, Value: "b/k"}, false},
+		{"collection:b/k", Scope{Type: ScopeCollection, Value: "b/k"}, false},
 		{"", Scope{}, true},
 		{"unknown:value", Scope{}, true},
 		{"bucket:", Scope{}, true},
@@ -40,7 +40,7 @@ func TestScopeMatch(t *testing.T) {
 	wildcard := []Scope{{Type: ScopeWildcard}}
 	tenantOnly := []Scope{{Type: ScopeTenant, Value: "t1"}}
 	bucketOnly := []Scope{{Type: ScopeBucket, Value: "paladin-archive"}}
-	objectKey := []Scope{{Type: ScopeObjectKey, Value: "paladin-archive/photos"}}
+	collection := []Scope{{Type: ScopeCollection, Value: "paladin-archive/photos"}}
 
 	cases := []struct {
 		name   string
@@ -53,8 +53,8 @@ func TestScopeMatch(t *testing.T) {
 		{"tenant scope misses", tenantOnly, ResourceClaim{TenantID: "t2"}, false},
 		{"bucket scope hits", bucketOnly, ResourceClaim{BucketName: "paladin-archive"}, true},
 		{"bucket scope misses on wrong bucket", bucketOnly, ResourceClaim{BucketName: "paladin-uploads"}, false},
-		{"object_key scope requires both bucket and key", objectKey, ResourceClaim{BucketName: "paladin-archive", ObjectKey: "photos"}, true},
-		{"object_key scope misses without bucket", objectKey, ResourceClaim{ObjectKey: "photos"}, false},
+		{"collection scope requires both bucket and key", collection, ResourceClaim{BucketName: "paladin-archive", Collection: "photos"}, true},
+		{"collection scope misses without bucket", collection, ResourceClaim{Collection: "photos"}, false},
 		{"empty scopes deny", nil, ResourceClaim{TenantID: "t1"}, false},
 	}
 	for _, tc := range cases {
@@ -72,7 +72,7 @@ func TestScopeRoundTrip(t *testing.T) {
 		{Type: ScopeWildcard},
 		{Type: ScopeTenant, Value: "t1"},
 		{Type: ScopeBucket, Value: "b"},
-		{Type: ScopeObjectKey, Value: "b/k"},
+		{Type: ScopeCollection, Value: "b/k"},
 	}
 	wire := make([]string, 0, len(in))
 	for _, s := range in {

@@ -9,57 +9,57 @@ import "google/protobuf/field_mask.proto";
 import "paladin/admin/v1/types.proto";
 import "paladin/common/v1/pagination.proto";
 
-// ObjectKeyService manages tenant-scoped logical namespaces and their
-// binding to physical buckets. Tenant admins manage their own object_keys;
+// CollectionService manages tenant-scoped logical namespaces and their
+// binding to physical buckets. Tenant admins manage their own collections;
 // platform admins can manage cross-tenant.
-service ObjectKeyService {
-  rpc CreateObjectKey(CreateObjectKeyRequest) returns (ObjectKey);
-  rpc GetObjectKey(GetObjectKeyRequest) returns (ObjectKey);
-  rpc UpdateObjectKey(UpdateObjectKeyRequest) returns (ObjectKey);
-  rpc DeleteObjectKey(DeleteObjectKeyRequest) returns (DeleteObjectKeyResponse);
-  rpc ListObjectKeys(ListObjectKeysRequest) returns (ListObjectKeysResponse);
+service CollectionService {
+  rpc CreateCollection(CreateCollectionRequest) returns (Collection);
+  rpc GetCollection(GetCollectionRequest) returns (Collection);
+  rpc UpdateCollection(UpdateCollectionRequest) returns (Collection);
+  rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
 
-  rpc SetObjectKeyPolicy(SetObjectKeyPolicyRequest) returns (ObjectKey);
+  rpc SetCollectionPolicy(SetCollectionPolicyRequest) returns (Collection);
 
-  // BindObjectKeyToBucket / RebindObjectKey is intentionally distinct from
-  // UpdateObjectKey — re-binding has data-locality implications worth a
+  // BindCollectionToBucket / RebindCollection is intentionally distinct from
+  // UpdateCollection — re-binding has data-locality implications worth a
   // separate audit entry.
-  rpc BindObjectKeyToBucket(BindObjectKeyToBucketRequest) returns (ObjectKey);
+  rpc BindCollectionToBucket(BindCollectionToBucketRequest) returns (Collection);
 }
 
-message CreateObjectKeyRequest {
+message CreateCollectionRequest {
   // Parent: "tenants/{tenant_id_or_slug}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
-  string object_key = 2 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
-  ObjectKey object_key_resource = 3 [(buf.validate.field).required = true];
+  string collection = 2 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
+  Collection collection_resource = 3 [(buf.validate.field).required = true];
 }
 
-message GetObjectKeyRequest {
+message GetCollectionRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-message UpdateObjectKeyRequest {
+message UpdateCollectionRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
-  ObjectKey object_key_resource = 4;
+  Collection collection_resource = 4;
 }
 
-message DeleteObjectKeyRequest {
+message DeleteCollectionRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
   bool force = 3; // refuse when non-DELETED objects exist unless force=true
 }
 
-message DeleteObjectKeyResponse {}
+message DeleteCollectionResponse {}
 
-message ListObjectKeysRequest {
+message ListCollectionsRequest {
   string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;
-  // bucket — optional server-side narrow to ObjectKeys bound to a
+  // bucket — optional server-side narrow to Collections bound to a
   // specific (backend, bucket) pair. Resource-name form
-  // "storageBackends/{backend_id}/buckets/{bucket_name}". When set
+  // "storageBackends/{backend_id}/buckets/{bucket_id}". When set
   // with an empty parent, the request becomes a cross-tenant scan
   // over that bucket — gated to platform.admin server-side. Used by
   // the storage-first UI browser to avoid pulling every OK
@@ -67,18 +67,18 @@ message ListObjectKeysRequest {
   string bucket = 4;
 }
 
-message ListObjectKeysResponse {
-  repeated ObjectKey object_keys = 1;
+message ListCollectionsResponse {
+  repeated Collection collections = 1;
   paladin.common.v1.PageResponse page = 2;
 }
 
-message SetObjectKeyPolicyRequest {
+message SetCollectionPolicyRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
   string cedar_policy = 3;
 }
 
-message BindObjectKeyToBucketRequest {
+message BindCollectionToBucketRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
   // Target bucket resource name.

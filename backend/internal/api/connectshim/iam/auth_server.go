@@ -103,21 +103,21 @@ func (s *AuthServer) WhoAmI(ctx context.Context, req *connect.Request[pb.WhoAmIR
 		User:            userToProto(&out.User),
 		Audience:        out.Audience,
 		TenantSlug:      tenantSlug,
-		Routes:          objectKeyRoutesToProto(out.Routes),
+		Routes:          collectionRoutesToProto(out.Routes),
 		RoutesTruncated: out.RoutesTruncated,
 		NextPageToken:   out.NextPageToken,
 	}), nil
 }
 
-// objectKeyRoutesToProto maps the handler's route table (ADR-0010 Phase 4)
+// collectionRoutesToProto maps the handler's route table (ADR-0010 Phase 4)
 // onto the wire message. nil/empty in → nil out (omitted field).
-func objectKeyRoutesToProto(routes []authh.ObjectKeyRoute) []*pb.ObjectKeyRoute {
+func collectionRoutesToProto(routes []authh.CollectionRoute) []*pb.CollectionRoute {
 	if len(routes) == 0 {
 		return nil
 	}
-	out := make([]*pb.ObjectKeyRoute, len(routes))
+	out := make([]*pb.CollectionRoute, len(routes))
 	for i, r := range routes {
-		out[i] = &pb.ObjectKeyRoute{
+		out[i] = &pb.CollectionRoute{
 			Canonical:  r.Canonical,
 			TenantPath: r.TenantPath,
 			BareAlias:  r.BareAlias,

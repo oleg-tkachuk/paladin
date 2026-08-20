@@ -1,7 +1,7 @@
 // Package tenant implements the TenantService business logic.
 //
 // Tenant creation is an admin-only operation. The AdminBucket action (with an
-// empty objectKey) is reused as the "administrative" guard for tenant writes —
+// empty collection) is reused as the "administrative" guard for tenant writes —
 // production deployments can swap this for a dedicated platform-admin role
 // check if Cedar gets a separate Tenant action.
 package tenant
@@ -104,7 +104,7 @@ type UpdateTenantArgs struct {
 }
 
 // DefaultBinding is a tenant's default (backend, bucket) route for the bare
-// object_key name shape (ADR-0010 Phase 3 / migration 034).
+// collection name shape (ADR-0010 Phase 3 / migration 034).
 type DefaultBinding struct {
 	TenantID   uuid.UUID
 	BackendID  string
@@ -144,7 +144,7 @@ type Repository interface {
 	List(ctx context.Context, args ListTenantsArgs) ([]Tenant, string, error)
 	// Rename atomically updates tenants.slug AND rewrites every
 	// `Tenant::"<old>"` reference in the tenant's
-	// inherited_cedar_policy + every object_keys row's cedar_policy
+	// inherited_cedar_policy + every collections row's cedar_policy
 	// for that tenant. Returns the renamed Tenant (with the new
 	// resource_version). ErrVersionMismatch on OCC failure.
 	Rename(ctx context.Context, args RenameTenantSlugArgs) (Tenant, error)
@@ -175,10 +175,10 @@ type Repository interface {
 	// when none was ever started.
 	GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
 	// TenantSourceBucket returns the (backend, bucket) the tenant's objects
-	// physically live in today — the DISTINCT binding across its object_keys.
+	// physically live in today — the DISTINCT binding across its collections.
 	// A shared tenant's keys normally share one bucket; ErrSourceBucketAmbiguous
 	// when they span more than one (unsupported in slice 1), ErrNotFound when
-	// the tenant has no object_keys.
+	// the tenant has no collections.
 	TenantSourceBucket(ctx context.Context, tenantID uuid.UUID) (backendID, bucketName string, err error)
 }
 
@@ -213,9 +213,9 @@ type StorageMigration struct {
 var ErrStorageMigrationExists = errors.New("storage migration already exists for tenant")
 
 // ErrSourceBucketAmbiguous is returned by TenantSourceBucket when the tenant's
-// object_keys span more than one (backend, bucket) — slice 1 migrates from a
+// collections span more than one (backend, bucket) — slice 1 migrates from a
 // single source bucket.
-var ErrSourceBucketAmbiguous = errors.New("tenant object_keys span multiple buckets; single-source migration only")
+var ErrSourceBucketAmbiguous = errors.New("tenant collections span multiple buckets; single-source migration only")
 
 // RenameTenantSlugArgs is the input shape for Repository.Rename and
 // Handler.RenameTenantSlug.
@@ -586,7 +586,7 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	}
 
 	// Source is where the tenant's objects physically live today — the
-	// (backend, bucket) its object_keys bind to. (Not the default binding,
+	// (backend, bucket) its collections bind to. (Not the default binding,
 	// which is only for the bare-name shape and is often unset on shared
 	// tenants whose keys carry explicit bindings.)
 	srcBackend, srcBucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
@@ -856,7 +856,7 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 
 // RenameTenantSlug rewrites the tenant's slug AND rewrites every
 // `Tenant::"<old_slug>"` reference in the tenant's inherited
-// cedar_policy plus every object_key's cedar_policy for the tenant.
+// cedar_policy plus every collection's cedar_policy for the tenant.
 // Single transaction in the repository; OCC-guarded against
 // args.ExpectedVersion. Platform-admin only.
 //
@@ -965,7 +965,7 @@ var ErrDefaultBindingBucketMissing = errors.New(
 	"default binding bucket does not exist on the chosen backend")
 
 // ErrTenantHasChildren — Repository.HardDelete returns this when the
-// tenant still owns object_keys / objects (the FK is ON DELETE RESTRICT).
+// tenant still owns collections / objects (the FK is ON DELETE RESTRICT).
 // Surfaced as FAILED_PRECONDITION with actionable text rather than a raw
 // Postgres FK-violation string mapped to Internal.
 var ErrTenantHasChildren = errors.New(

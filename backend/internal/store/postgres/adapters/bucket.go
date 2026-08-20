@@ -104,8 +104,8 @@ func (r *BucketRepo) List(ctx context.Context, args bucket.ListArgs) ([]bucket.B
 	return out, next, nil
 }
 
-func (r *BucketRepo) CountObjectKeys(ctx context.Context, backendID, bucketName string) (int64, error) {
-	n, err := r.q.CountObjectKeysReferencingBucket(ctx, backendID, bucketName)
+func (r *BucketRepo) CountCollections(ctx context.Context, backendID, bucketName string) (int64, error) {
+	n, err := r.q.CountCollectionsReferencingBucket(ctx, backendID, bucketName)
 	if err != nil {
 		return 0, err
 	}

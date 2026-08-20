@@ -92,7 +92,7 @@ message GetPlatformStatsRequest {}
 
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
 // data source: the inventory fields come from the admin pod's own pool
-// (tenants / storage_backends / buckets / object_keys / users are
+// (tenants / storage_backends / buckets / collections / users are
 // deliberately NOT RLS'd — migration 023 — precisely so platform-admin
 // reads span tenants). Everything under `rls` covers tables that ARE
 // row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
@@ -101,7 +101,7 @@ message GetPlatformStatsResponse {
   TenantStats tenants = 1;
   BackendStats backends = 2;
   BucketStats buckets = 3;
-  ObjectKeyStats object_keys = 4;
+  CollectionStats collections = 4;
   UserStats users = 5;
   // Server clock at collection time — the console renders it as
   // "as of …" rather than trusting the browser's tab age.
@@ -143,7 +143,7 @@ message QuotaStats {
   int64 total = 1;
   // Scope split; the CHECK on `quotas` makes these exclusive and
   // exhaustive (tenant-scoped rows carry tenant_id, bucket-scoped rows
-  // carry backend_id + bucket_name).
+  // carry backend_id + bucket_id).
   int64 tenant_scoped = 2;
   int64 bucket_scoped = 3;
   // Rows with at least one non-zero cap. All-zero caps = usage tracking
@@ -214,7 +214,7 @@ message TenantStats {
   int64 shared_layout = 4;
   int64 dedicated_layout = 5;
   // Active tenants with no row in tenant_default_bindings — they can't
-  // accept an ObjectKey bind without an explicit backend/bucket.
+  // accept an Collection bind without an explicit backend/bucket.
   int64 without_default_binding = 6;
 }
 
@@ -246,11 +246,11 @@ message BucketStats {
   int64 replication_enabled = 8;
 }
 
-message ObjectKeyStats {
+message CollectionStats {
   int64 total = 1;
   // backend_id → count.
   map<string, int64> by_backend = 2;
-  // ObjectKeys whose bucket_name is NULL — bound to a backend but not
+  // Collections whose bucket_id is NULL — bound to a backend but not
   // yet to a physical bucket.
   int64 unbound = 3;
 }

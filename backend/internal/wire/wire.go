@@ -38,9 +38,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
 	objecttag "github.com/oleg-tkachuk/paladin/internal/api/v1/object_tag"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
@@ -110,14 +110,14 @@ func ProvideStateMachine(pool *pgxpool.Pool) *statemachine.Transitioner {
 // Repos bundles all repository interfaces. The caller constructs this from
 // its Postgres adapters (see cmd/server).
 type Repos struct {
-	Object    object.Repository
-	ObjectKey objectkey.Repository
-	Bucket    bucket.Repository
-	Tenant    tenant.Repository
-	ObjectTag objecttag.Repository
-	Presign   presign.Repository
-	Multipart multipart.Repository
-	Operation operation.Repository
+	Object     object.Repository
+	Collection objectkey.Repository
+	Bucket     bucket.Repository
+	Tenant     tenant.Repository
+	ObjectTag  objecttag.Repository
+	Presign    presign.Repository
+	Multipart  multipart.Repository
+	Operation  operation.Repository
 
 	// v2 admin/iam stores.
 	BackendV2     admindomain.BackendRepository
@@ -162,8 +162,8 @@ func ProvideObjectHandler(
 	})
 }
 
-func ProvideObjectKeyHandler(repos Repos, pe *policy.Engine, _ config.Config) *objectkey.Handler {
-	return objectkey.NewHandler(repos.ObjectKey, pe)
+func ProvideCollectionHandler(repos Repos, pe *policy.Engine, _ config.Config) *objectkey.Handler {
+	return objectkey.NewHandler(repos.Collection, pe)
 }
 
 func ProvideBucketHandler(repos Repos, storage Storage, _ config.Config) *bucket.Handler {
@@ -184,7 +184,7 @@ func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operation.Handler 
 
 func ProvideBatchHandler(repos Repos, opH *operation.Handler, pe *policy.Engine) *batch.Handler {
 	// repos.Object satisfies batch.BucketResolver — the submit-time Cedar check
-	// resolves each target object-key's bucket so bucket:/object_key: PAT
+	// resolves each target object-key's bucket so bucket:/collection: PAT
 	// scopes enforce (the batch worker does not re-check Cedar per object).
 	return batch.NewHandler(opH, pe, repos.Object)
 }

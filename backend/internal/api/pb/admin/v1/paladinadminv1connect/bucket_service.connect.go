@@ -84,7 +84,7 @@ type BucketServiceClient interface {
 	SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error)
 	SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error)
 	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-	// the caller's principal/scopes are allowed to bind ObjectKeys to.
+	// the caller's principal/scopes are allowed to bind Collections to.
 	ListAccessibleBuckets(context.Context, *connect.Request[v1.ListAccessibleBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
 }
 
@@ -254,7 +254,7 @@ type BucketServiceHandler interface {
 	SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error)
 	SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error)
 	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-	// the caller's principal/scopes are allowed to bind ObjectKeys to.
+	// the caller's principal/scopes are allowed to bind Collections to.
 	ListAccessibleBuckets(context.Context, *connect.Request[v1.ListAccessibleBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
 }
 

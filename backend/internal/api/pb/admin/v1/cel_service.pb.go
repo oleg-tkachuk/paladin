@@ -27,7 +27,7 @@ type ValidateCELRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Schema the expression is validated against. One of:
 	//
-	//	"Object" | "ObjectKey" | "AuditLogEntry" | "EventEnvelope"
+	//	"Object" | "Collection" | "AuditLogEntry" | "EventEnvelope"
 	//
 	// Unknown names return InvalidArgument.
 	Schema string `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`

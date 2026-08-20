@@ -1,5 +1,5 @@
 -- Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
--- Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
+-- Created lazily via BucketService.CreateBucket; Collection rows FK to the
 -- (backend_id, bucket_name) composite key.
 
 -- name: CreateBucket :exec
@@ -40,7 +40,7 @@ WHERE (sqlc.narg('backend_id')::text IS NULL OR backend_id = sqlc.narg('backend_
 ORDER BY backend_id, bucket_name
 LIMIT sqlc.arg('page_size');
 
--- name: CountObjectKeysReferencingBucket :one
+-- name: CountCollectionsReferencingBucket :one
 SELECT count(*)::bigint AS count
-FROM object_keys
+FROM collections
 WHERE backend_id = $1 AND bucket_name = $2;

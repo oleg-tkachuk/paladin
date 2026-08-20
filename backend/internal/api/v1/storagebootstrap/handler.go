@@ -24,7 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -37,11 +37,11 @@ type BucketEnsurer interface {
 	EnsureBucket(ctx context.Context, in bucketh.CreateBucketInput) (*admindomain.Bucket, bool, error)
 }
 
-// ObjectKeyEnsurer idempotently binds an object-key to (backend, bucket) under
-// the caller's tenant. *object_key.Handler satisfies it; it self-scopes to the
+// CollectionEnsurer idempotently binds an object-key to (backend, bucket) under
+// the caller's tenant. *collection.Handler satisfies it; it self-scopes to the
 // caller's tenant and is pre-authorized by this package's Cedar gate.
-type ObjectKeyEnsurer interface {
-	EnsureObjectKey(ctx context.Context, args objectkey.CreateObjectKeyArgs) (bool, error)
+type CollectionEnsurer interface {
+	EnsureCollection(ctx context.Context, args objectkey.CreateCollectionArgs) (bool, error)
 }
 
 // BackendChecker reports whether a storage backend exists (and is enabled).
@@ -54,31 +54,31 @@ type BackendChecker interface {
 
 // Result is the report EnsureTenantStorage returns.
 type Result struct {
-	BucketCreated      bool
-	ObjectKeysCreated  []string
-	ObjectKeysExisting []string
+	BucketCreated       bool
+	CollectionsCreated  []string
+	CollectionsExisting []string
 }
 
 type Handler struct {
-	buckets    BucketEnsurer
-	objectKeys ObjectKeyEnsurer
-	backends   BackendChecker
-	policy     cedar.Authorizer
+	buckets     BucketEnsurer
+	collections CollectionEnsurer
+	backends    BackendChecker
+	policy      cedar.Authorizer
 }
 
 // NewHandler wires the self-provisioning handler. policy is required — a nil
 // authorizer would leave the operation ungated.
-func NewHandler(buckets BucketEnsurer, objectKeys ObjectKeyEnsurer, backends BackendChecker, policy cedar.Authorizer) *Handler {
+func NewHandler(buckets BucketEnsurer, collections CollectionEnsurer, backends BackendChecker, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("storagebootstrap: policy authorizer is required")
 	}
-	return &Handler{buckets: buckets, objectKeys: objectKeys, backends: backends, policy: policy}
+	return &Handler{buckets: buckets, collections: collections, backends: backends, policy: policy}
 }
 
 // EnsureTenantStorage idempotently ensures the shared bucket + the requested
 // object-keys exist under the CALLER's tenant. Safe to call on every startup:
 // an already-provisioned tenant/bucket/keys yields an all-no-op success.
-func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket string, objectKeys []string) (*Result, error) {
+func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket string, collections []string) (*Result, error) {
 	// Tenant comes from the principal, NEVER the request — the operation is
 	// always scoped to the caller's own tenant.
 	tenantID, err := auth.TenantFromContext(ctx)
@@ -130,24 +130,24 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 
 	res := &Result{BucketCreated: bucketCreated}
 	// Ensure each object-key, self-scoped to the caller's tenant.
-	for _, key := range objectKeys {
+	for _, key := range collections {
 		if key == "" {
 			continue
 		}
-		created, err := h.objectKeys.EnsureObjectKey(ctx, objectkey.CreateObjectKeyArgs{
-			ObjectKey:  key,
+		created, err := h.collections.EnsureCollection(ctx, objectkey.CreateCollectionArgs{
+			Collection: key,
 			BackendID:  backendID,
 			BucketName: bucket,
-			// TenantID intentionally left zero — EnsureObjectKey forces the
+			// TenantID intentionally left zero — EnsureCollection forces the
 			// caller's tenant.
 		})
 		if err != nil {
 			return nil, err
 		}
 		if created {
-			res.ObjectKeysCreated = append(res.ObjectKeysCreated, key)
+			res.CollectionsCreated = append(res.CollectionsCreated, key)
 		} else {
-			res.ObjectKeysExisting = append(res.ObjectKeysExisting, key)
+			res.CollectionsExisting = append(res.CollectionsExisting, key)
 		}
 	}
 	return res, nil

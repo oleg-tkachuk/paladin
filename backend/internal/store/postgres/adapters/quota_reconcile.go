@@ -72,18 +72,18 @@ WITH live AS (
     UNION ALL
 
     -- Bucket-scoped quota: objects reach a bucket only through their
-    -- ObjectKey's (backend_id, bucket_name) binding, so the rollup has to
-    -- hop through object_keys.
+    -- Collection's (backend_id, bucket_name) binding, so the rollup has to
+    -- hop through collections.
     SELECT q.quota_id,
            COALESCE(sum(o.size_bytes), 0)::bigint AS bytes,
            count(o.object_id)::bigint             AS cnt
       FROM quotas q
-      LEFT JOIN object_keys ok
+      LEFT JOIN collections ok
              ON ok.backend_id  = q.backend_id
             AND ok.bucket_name = q.bucket_name
       LEFT JOIN objects o
              ON o.tenant_id  = ok.tenant_id
-            AND o.object_key = ok.object_key
+            AND o.collection = ok.collection
             AND o.state = 'AVAILABLE'
      WHERE q.backend_id IS NOT NULL
      GROUP BY q.quota_id

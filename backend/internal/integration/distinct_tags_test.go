@@ -15,7 +15,7 @@ import (
 
 // TestListDistinctTags proves the ObjectRepo.ListDistinctTags scan that backs
 // the tag-facet filter: it aggregates distinct tag key→values across an
-// ObjectKey's live objects, sorts each value list, and excludes DELETED rows.
+// Collection's live objects, sorts each value list, and excludes DELETED rows.
 func TestListDistinctTags(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
@@ -24,9 +24,9 @@ func TestListDistinctTags(t *testing.T) {
 	insert := func(state, tags string) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (object_id, tenant_id, object_key, key, state, content_type, checksum_algorithm, tags)
+			`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm, tags)
 			 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6::jsonb)`,
-			uuid.Must(uuid.NewV7()), f.tenantID, f.objectKey,
+			uuid.Must(uuid.NewV7()), f.tenantID, f.collection,
 			"k-"+uuid.NewString()[:8], state, tags)
 	}
 	insert("AVAILABLE", `{"env":"prod","team":"data"}`)
@@ -35,7 +35,7 @@ func TestListDistinctTags(t *testing.T) {
 	insert("DELETED", `{"env":"ghost"}`) // must be excluded (state DELETED)
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
-	got, err := repo.ListDistinctTags(ctx, f.tenantID, f.objectKey)
+	got, err := repo.ListDistinctTags(ctx, f.tenantID, f.collection)
 	if err != nil {
 		t.Fatalf("ListDistinctTags: %v", err)
 	}

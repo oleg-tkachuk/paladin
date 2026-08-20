@@ -62,9 +62,9 @@ func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
 		URI:        "seaweedfs-nats://primary",
 	}
 	tenant := "00000000-0000-0000-0000-000000000abc"
-	objectKey := "folder1"
+	collection := "folder1"
 	key := "obj.txt"
-	path := "/paladin-primary/" + tenant + "/" + objectKey + "/" + key
+	path := "/paladin-primary/" + tenant + "/" + collection + "/" + key
 
 	body := fakeFilerEvent(t, false, true) // create: only new_entry
 	raw := natsEnvelope(t, map[string]string{"key": path}, body)
@@ -79,8 +79,8 @@ func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
 	if ev.SubjectFields.TenantID != tenant {
 		t.Errorf("TenantID = %q, want %q", ev.SubjectFields.TenantID, tenant)
 	}
-	if ev.SubjectFields.ObjectKey != objectKey {
-		t.Errorf("ObjectKey = %q, want %q", ev.SubjectFields.ObjectKey, objectKey)
+	if ev.SubjectFields.Collection != collection {
+		t.Errorf("Collection = %q, want %q", ev.SubjectFields.Collection, collection)
 	}
 	if ev.SubjectFields.Key != key {
 		t.Errorf("Key = %q, want %q", ev.SubjectFields.Key, key)

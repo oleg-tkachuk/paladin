@@ -78,45 +78,45 @@ func startPostgres(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
-// fixture seeds one tenant + backend + object_key + an active (match-all)
+// fixture seeds one tenant + backend + collection + an active (match-all)
 // subscription, so any object event for the tenant fans out exactly one
-// outbox row. Returns the tenant id and the object_key the objects hang off.
+// outbox row. Returns the tenant id and the collection the objects hang off.
 type fixture struct {
-	tenantID  uuid.UUID
-	objectKey string
+	tenantID   uuid.UUID
+	collection string
 }
 
 func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture {
 	t.Helper()
 	hex := uuid.NewString()[:8]
-	f := fixture{tenantID: uuid.New(), objectKey: "ok-" + hex}
+	f := fixture{tenantID: uuid.New(), collection: "ok-" + hex}
 	backendID := "be-" + hex
 	bucketName := "bkt-" + hex // satisfies buckets.bucket_name_format
 
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
-	// Shared bucket (owner_tenant_id NULL) so the object_keys tenancy trigger
-	// permits binding from the test tenant. object_keys FKs (backend_id,
+	// Shared bucket (owner_tenant_id NULL) so the collections tenancy trigger
+	// permits binding from the test tenant. collections FKs (backend_id,
 	// bucket_name) → buckets.
 	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)`, backendID, bucketName)
 	// slug + display_name are NOT NULL with format/unique CHECKs (migrations
 	// 009 / 033). Mirror 009's `t-<hex>` backfill shape for the slug.
 	mustExec(t, ctx, pool, `INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, $2, $3)`,
 		f.tenantID, "t-"+hex, "tn-"+hex)
-	mustExec(t, ctx, pool, `INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
-		f.tenantID, f.objectKey, backendID, bucketName)
+	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		f.tenantID, f.collection, backendID, bucketName)
 	mustExec(t, ctx, pool, `INSERT INTO event_subscriptions (subscription_id, tenant_id, cel_filter, sink_kind, sink_config) VALUES ($1, $2, '', 'http', '{}'::jsonb)`, uuid.New(), f.tenantID)
 	return f
 }
 
 // seedPendingObject inserts a fresh PENDING object under the fixture's
-// object_key and returns its id.
+// collection and returns its id.
 func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture) uuid.UUID {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool,
-		`INSERT INTO objects (object_id, tenant_id, object_key, key, state, content_type, checksum_algorithm)
+		`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 		 VALUES ($1, $2, $3, $4, 'PENDING', 'application/octet-stream', 0)`,
-		id, f.tenantID, f.objectKey, "key-"+uuid.NewString()[:8])
+		id, f.tenantID, f.collection, "key-"+uuid.NewString()[:8])
 	return id
 }
 

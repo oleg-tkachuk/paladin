@@ -143,16 +143,16 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	}
 
 	repos := wire.Repos{
-		Object:    adapters.NewObjectRepo(db.Queries, pool),
-		ObjectKey: adapters.NewObjectKeyRepo(db.Queries, pool),
-		Bucket:    adapters.NewBucketRepo(db.Queries),
-		Tenant:    adapters.NewTenantRepo(db.Queries, pool),
-		ObjectTag: adapters.NewObjectTagRepo(db.Queries),
-		Presign:   adapters.NewPresignRepo(db.Queries, pool),
-		Multipart: adapters.NewMultipartRepo(db.Queries, pool),
-		Operation: adapters.NewOperationRepo(db.Queries, pool),
-		BackendV2: adapters.NewBackendRepoV2(db.Queries, pool),
-		BucketV2:  adapters.NewBucketRepoV2(db.Queries, pool),
+		Object:     adapters.NewObjectRepo(db.Queries, pool),
+		Collection: adapters.NewCollectionRepo(db.Queries, pool),
+		Bucket:     adapters.NewBucketRepo(db.Queries),
+		Tenant:     adapters.NewTenantRepo(db.Queries, pool),
+		ObjectTag:  adapters.NewObjectTagRepo(db.Queries),
+		Presign:    adapters.NewPresignRepo(db.Queries, pool),
+		Multipart:  adapters.NewMultipartRepo(db.Queries, pool),
+		Operation:  adapters.NewOperationRepo(db.Queries, pool),
+		BackendV2:  adapters.NewBackendRepoV2(db.Queries, pool),
+		BucketV2:   adapters.NewBucketRepoV2(db.Queries, pool),
 		// pool wired so the audit interceptor's InsertWithOutbox can open a
 		// tx that commits the audit row + its mirror event atomically.
 		Audit:         adapters.NewAuditRepoV2(db.Queries, pool),
@@ -173,7 +173,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 
 	polStore := policy.NewPostgresStore(pool)
 	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL,
-		policy.WithCanonicalObjectKeyEUID(cfg.Cedar.CanonicalObjectKeyEUID),
+		policy.WithCanonicalCollectionEUID(cfg.Cedar.CanonicalCollectionEUID),
 		policy.WithLogger(l.Named("cedar")))
 	// The engine's LISTEN watcher is a process-lifetime goroutine that holds a
 	// pooled connection until its context is cancelled — so it runs on a

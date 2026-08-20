@@ -91,7 +91,7 @@ func decodeDeleteResp(t *testing.T, body []byte) BatchDeleteResponse {
 
 func TestBatchDeleteRequiresDependencies(t *testing.T) {
 	tenant := uuid.New()
-	op := mkOp(t, tenant, batch.BatchDeleteArgs{TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()}})
+	op := mkOp(t, tenant, batch.BatchDeleteArgs{TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()}})
 
 	for name, e := range map[string]*BatchDeleteExecutor{
 		"no repo":        {Transitions: newFakeTransitions()},
@@ -118,9 +118,9 @@ func TestBatchDeleteRejectsBadMetadata(t *testing.T) {
 	})
 
 	for name, args := range map[string]batch.BatchDeleteArgs{
-		"no tenant":     {ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()}},
+		"no tenant":     {Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()}},
 		"no object key": {TenantID: tenant, ObjectIDs: []uuid.UUID{uuid.New()}},
-		"no ids":        {TenantID: tenant, ObjectKey: "k"},
+		"no ids":        {TenantID: tenant, Collection: "k"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := e.Execute(context.Background(), mkOp(t, tenant, args)); err == nil {
@@ -139,7 +139,7 @@ func TestBatchDeleteRefusesTenantMismatch(t *testing.T) {
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	op := mkOp(t, opTenant, batch.BatchDeleteArgs{
-		TenantID: metaTenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()},
+		TenantID: metaTenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()},
 	})
 
 	_, err := e.Execute(context.Background(), op)
@@ -164,7 +164,7 @@ func TestBatchDeleteSucceeds(t *testing.T) {
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{id1, id2},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id1, id2},
 	}))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -194,7 +194,7 @@ func TestBatchDeleteReportsMissingObjects(t *testing.T) {
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{present, missing},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{present, missing},
 	}))
 	if err != nil {
 		t.Fatalf("a missing object must not fail the batch: %v", err)
@@ -224,7 +224,7 @@ func TestBatchDeleteReportsTransitionFailures(t *testing.T) {
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{ok, bad},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{ok, bad},
 	}))
 	if err != nil {
 		t.Fatalf("a per-object failure must not fail the batch: %v", err)
@@ -250,7 +250,7 @@ func TestBatchDeleteLookupErrorFailsTheBatch(t *testing.T) {
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	_, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()},
 	}))
 	if err == nil {
 		t.Fatal("want the lookup error")
@@ -269,7 +269,7 @@ func TestBatchDeleteHonoursContextCancellation(t *testing.T) {
 	cancel()
 
 	_, err := e.Execute(ctx, mkOp(t, tenant, batch.BatchDeleteArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{id},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id},
 	}))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want context.Canceled, got %v", err)
@@ -334,7 +334,7 @@ func TestBatchRestoreSucceeds(t *testing.T) {
 	e := &BatchRestoreExecutor{Objects: repo, Transitions: tr}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchRestoreObjectsArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{id1, id2},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id1, id2},
 	}))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -357,7 +357,7 @@ func TestBatchRestorePartialSuccess(t *testing.T) {
 	e := &BatchRestoreExecutor{Objects: repo, Transitions: tr}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchRestoreObjectsArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{ok, bad, missing},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{ok, bad, missing},
 	}))
 	if err != nil {
 		t.Fatalf("partial failures must not sink the batch: %v", err)
@@ -374,7 +374,7 @@ func TestBatchRestoreValidatesMetadata(t *testing.T) {
 
 	t.Run("tenant mismatch", func(t *testing.T) {
 		op := mkOp(t, tenant, batch.BatchRestoreObjectsArgs{
-			TenantID: uuid.New(), ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()},
+			TenantID: uuid.New(), Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()},
 		})
 		if _, err := e.Execute(context.Background(), op); err == nil {
 			t.Error("want a tenant-mismatch error")
@@ -383,7 +383,7 @@ func TestBatchRestoreValidatesMetadata(t *testing.T) {
 	t.Run("missing dependencies", func(t *testing.T) {
 		bare := &BatchRestoreExecutor{}
 		op := mkOp(t, tenant, batch.BatchRestoreObjectsArgs{
-			TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()},
+			TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()},
 		})
 		if _, err := bare.Execute(context.Background(), op); err == nil {
 			t.Error("want a wiring error")
@@ -433,7 +433,7 @@ func TestBatchUpdateTagsSucceeds(t *testing.T) {
 	e := &BatchUpdateTagsExecutor{Objects: repo}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchUpdateTagsArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{id},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id},
 		Tags: map[string]string{"env": "prod"},
 	}))
 	if err != nil {
@@ -471,7 +471,7 @@ func TestBatchUpdateTagsPartialSuccess(t *testing.T) {
 	e := &BatchUpdateTagsExecutor{Objects: repo}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchUpdateTagsArgs{
-		TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{ok, bad, missing},
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{ok, bad, missing},
 		Tags: map[string]string{"a": "1"},
 	}))
 	if err != nil {
@@ -492,7 +492,7 @@ func TestBatchUpdateTagsValidatesMetadata(t *testing.T) {
 
 	t.Run("tenant mismatch", func(t *testing.T) {
 		op := mkOp(t, tenant, batch.BatchUpdateTagsArgs{
-			TenantID: uuid.New(), ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()},
+			TenantID: uuid.New(), Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()},
 		})
 		if _, err := e.Execute(context.Background(), op); err == nil {
 			t.Error("want a tenant-mismatch error")
@@ -500,7 +500,7 @@ func TestBatchUpdateTagsValidatesMetadata(t *testing.T) {
 	})
 	t.Run("missing dependency", func(t *testing.T) {
 		op := mkOp(t, tenant, batch.BatchUpdateTagsArgs{
-			TenantID: tenant, ObjectKey: "k", ObjectIDs: []uuid.UUID{uuid.New()},
+			TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()},
 		})
 		if _, err := (&BatchUpdateTagsExecutor{}).Execute(context.Background(), op); err == nil {
 			t.Error("want a wiring error")

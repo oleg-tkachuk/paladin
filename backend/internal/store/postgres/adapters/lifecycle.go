@@ -41,16 +41,16 @@ func (s *LifecycleSource) ListBucketsWithLifecycle(ctx context.Context) ([]admin
 	return out, nil
 }
 
-func (s *LifecycleSource) ListObjectKeyBindings(ctx context.Context, backendID, bucketName string) ([]worker.ObjectKeyBinding, error) {
-	rows, err := s.q.ListObjectKeyBindingsForBucket(ctx, backendID, bucketName)
+func (s *LifecycleSource) ListCollectionBindings(ctx context.Context, backendID, bucketName string) ([]worker.CollectionBinding, error) {
+	rows, err := s.q.ListCollectionBindingsForBucket(ctx, backendID, bucketName)
 	if err != nil {
-		return nil, fmt.Errorf("list object_key bindings: %w", err)
+		return nil, fmt.Errorf("list collection bindings: %w", err)
 	}
-	out := make([]worker.ObjectKeyBinding, 0, len(rows))
+	out := make([]worker.CollectionBinding, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, worker.ObjectKeyBinding{
-			TenantID:  uuidFrom(row.TenantID),
-			ObjectKey: row.ObjectKey,
+		out = append(out, worker.CollectionBinding{
+			TenantID:   uuidFrom(row.TenantID),
+			Collection: row.Collection,
 		})
 	}
 	return out, nil
@@ -92,10 +92,10 @@ func NewLifecycleObjectIter(q *sqlc.Queries) *LifecycleObjectIter {
 
 var _ worker.LifecycleObjectIter = (*LifecycleObjectIter)(nil)
 
-func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid.UUID, objectKey string, cb func(worker.LifecycleObjectRow) error) error {
+func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid.UUID, collection string, cb func(worker.LifecycleObjectRow) error) error {
 	var afterID pgtype.UUID
 	for {
-		rows, err := it.q.IterateObjectsForLifecycle(ctx, pgUUID(tenantID), objectKey, afterID, it.pageSize)
+		rows, err := it.q.IterateObjectsForLifecycle(ctx, pgUUID(tenantID), collection, afterID, it.pageSize)
 		if err != nil {
 			return fmt.Errorf("iterate objects: %w", err)
 		}

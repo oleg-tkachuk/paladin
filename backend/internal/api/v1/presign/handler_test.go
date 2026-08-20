@@ -21,20 +21,20 @@ import (
 // a func field so a test can drive a specific branch; nil funcs return zero
 // values so tests only wire the methods they exercise.
 type fakeRepo struct {
-	lookupObjectFn    func(ctx context.Context, tenantID uuid.UUID, objectKey string, objectID uuid.UUID) (string, string, string, error)
+	lookupObjectFn    func(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (string, string, string, error)
 	lookupMultipartFn func(ctx context.Context, uploadID string) (string, string, string, error)
-	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error)
+	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
 
 	// captured args from the last LookupBucket call.
-	lastBucketWrite     bool
-	lastBucketObjectKey string
+	lastBucketWrite      bool
+	lastBucketCollection string
 }
 
-func (f *fakeRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID, objectKey string, objectID uuid.UUID) (string, string, string, error) {
+func (f *fakeRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (string, string, string, error) {
 	if f.lookupObjectFn == nil {
-		return objectKey, "phys-key", "AVAILABLE", nil
+		return collection, "phys-key", "AVAILABLE", nil
 	}
-	return f.lookupObjectFn(ctx, tenantID, objectKey, objectID)
+	return f.lookupObjectFn(ctx, tenantID, collection, objectID)
 }
 
 func (f *fakeRepo) LookupMultipartSession(ctx context.Context, uploadID string) (string, string, string, error) {
@@ -44,13 +44,13 @@ func (f *fakeRepo) LookupMultipartSession(ctx context.Context, uploadID string) 
 	return f.lookupMultipartFn(ctx, uploadID)
 }
 
-func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
+func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
 	f.lastBucketWrite = write
-	f.lastBucketObjectKey = objectKey
+	f.lastBucketCollection = collection
 	if f.lookupBucketFn == nil {
 		return "backend-1", "bucket-1", nil
 	}
-	return f.lookupBucketFn(ctx, tenantID, objectKey, write)
+	return f.lookupBucketFn(ctx, tenantID, collection, write)
 }
 
 // fakeStorage records the args the handler forwards so tests can assert the
@@ -165,7 +165,7 @@ func TestPresignGet(t *testing.T) {
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
-	t.Run("missing object_key → invalid argument", func(t *testing.T) {
+	t.Run("missing collection → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
 		_, _, _, err := h.PresignGet(authedCtx(tid), "", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeInvalidArgument)
@@ -271,7 +271,7 @@ func TestPresignGet(t *testing.T) {
 			t.Fatal("GET must resolve bucket with write=false")
 		}
 		// Read-scoped tokens need the bucket on the authz Resource too —
-		// resolved BEFORE the Cedar check — or a bucket:/object_key:-scoped
+		// resolved BEFORE the Cedar check — or a bucket:/collection:-scoped
 		// read PAT is fail-closed on presign-GET.
 		if pol.gotResource == nil || pol.gotResource.BucketName != "bucket-1" || pol.gotResource.BackendID != "backend-1" {
 			t.Fatalf("authz Resource missing physical binding: %+v", pol.gotResource)
@@ -369,7 +369,7 @@ func TestPresignPut(t *testing.T) {
 			t.Fatalf("cedar action: got %q want %q", pol.gotAction, cedar.ActionPresignPut)
 		}
 		// The bucket must be on the authz Resource — resolved BEFORE the Cedar
-		// check — or a bucket:/object_key:-scoped PAT is fail-closed on PUT.
+		// check — or a bucket:/collection:-scoped PAT is fail-closed on PUT.
 		if pol.gotResource == nil || pol.gotResource.BucketName != "bucket-1" || pol.gotResource.BackendID != "backend-1" {
 			t.Fatalf("authz Resource missing physical binding: %+v", pol.gotResource)
 		}

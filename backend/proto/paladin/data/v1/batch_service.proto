@@ -42,18 +42,18 @@ message ObjectSelector {
 }
 
 message BatchDeleteObjectsRequest {
-  // Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+  // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   ObjectSelector selector = 2 [(buf.validate.field).required = true];
   bool permanent = 3;
 }
 
 message BatchCopyObjectsRequest {
-  // Source parent ObjectKey.
+  // Source parent Collection.
   string source_parent = 1 [(buf.validate.field).string.min_len = 1];
   ObjectSelector selector = 2 [(buf.validate.field).required = true];
-  // Destination ObjectKey resource name.
-  string destination_object_key = 3 [(buf.validate.field).string.min_len = 1];
+  // Destination Collection resource name.
+  string destination_collection = 3 [(buf.validate.field).string.min_len = 1];
   // CEL expression evaluated against each source Object to compute dest key.
   string destination_key_template = 4 [(buf.validate.field).string.min_len = 1];
 }

@@ -3,14 +3,14 @@
 
 -- name: InsertObjectVersion :exec
 INSERT INTO object_versions (
-    version_id, object_id, is_delete_marker, s3_key,
+    version_id, object_id, is_delete_marker, storage_path,
     size_bytes, etag, checksum_algorithm, checksum,
     content_type, metadata, tags,
     lock_mode, lock_retain_until, legal_hold
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: GetObjectVersion :one
-SELECT version_id, object_id, is_delete_marker, s3_key,
+SELECT version_id, object_id, is_delete_marker, storage_path,
        size_bytes, etag, checksum_algorithm, checksum,
        content_type, metadata, tags,
        lock_mode, lock_retain_until, legal_hold,
@@ -20,7 +20,7 @@ WHERE version_id = $1;
 
 -- name: ListObjectVersions :many
 -- Newest first. Cursor: (created_at, version_id).
-SELECT version_id, object_id, is_delete_marker, s3_key,
+SELECT version_id, object_id, is_delete_marker, storage_path,
        size_bytes, etag, checksum_algorithm, checksum,
        content_type, metadata, tags,
        lock_mode, lock_retain_until, legal_hold,

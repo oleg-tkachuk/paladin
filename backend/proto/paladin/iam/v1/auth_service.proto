@@ -88,7 +88,7 @@ message RevokeRequest {
 message RevokeResponse {}
 
 message WhoAmIRequest {
-  // route_page_token pages the ObjectKey route table (ADR-0010 Phase 4). Empty
+  // route_page_token pages the Collection route table (ADR-0010 Phase 4). Empty
   // = first page; pass back the previous response's `next_page_token` to fetch
   // the next page. Only the route table is paged — identity fields are always
   // returned in full.
@@ -105,17 +105,17 @@ message WhoAmIResponse {
   // slug-form URLs (`/tenants/<slug>/...`) without a follow-up
   // GetTenant lookup.
   string tenant_slug = 3;
-  // routes is ONE PAGE of the caller's ObjectKey route table (ADR-0010 Phase
-  // 4): the ObjectKeys the caller can read, in all three name shapes, so
+  // routes is ONE PAGE of the caller's Collection route table (ADR-0010 Phase
+  // 4): the Collections the caller can read, in all three name shapes, so
   // clients and SDKs normalize to canonical (A) before sending rather than
   // constructing it themselves. Empty when the server has no route source wired
-  // or the caller has no readable ObjectKeys. Page through with
+  // or the caller has no readable Collections. Page through with
   // `next_page_token`.
-  repeated ObjectKeyRoute routes = 4;
-  // routes_truncated is true when more readable ObjectKeys remain beyond this
+  repeated CollectionRoute routes = 4;
+  // routes_truncated is true when more readable Collections remain beyond this
   // page (equivalent to next_page_token != ""). Kept for clients that don't
   // page: such a client must not treat the table as exhaustive — fall back to
-  // resolving any name it can't find via ListObjectKeys.
+  // resolving any name it can't find via ListCollections.
   bool routes_truncated = 5;
   // next_page_token pages the route table: pass it back as
   // WhoAmIRequest.route_page_token to fetch the next page. Empty on the last
@@ -123,16 +123,16 @@ message WhoAmIResponse {
   string next_page_token = 6;
 }
 
-// ObjectKeyRoute is one addressable ObjectKey expressed in all three
+// CollectionRoute is one addressable Collection expressed in all three
 // ADR-0010 name shapes plus its (backend, bucket) binding. A client that
 // holds this table can accept any shape from the end user and normalize to
 // canonical (A) on the wire.
-message ObjectKeyRoute {
-  // canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}.
+message CollectionRoute {
+  // canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}.
   string canonical = 1;
-  // tenant_path (C): tenants/{tid}/objectKeys/{ok}.
+  // tenant_path (C): tenants/{tid}/collections/{ok}.
   string tenant_path = 2;
-  // bare_alias (B): the bare object_key. Populated ONLY when this ObjectKey
+  // bare_alias (B): the bare collection. Populated ONLY when this Collection
   // sits in the tenant's default binding — a bare name resolves through that
   // binding, so it round-trips to canonical only for the default route.
   // Empty otherwise.

@@ -251,7 +251,7 @@ func TestQuotaSoftCheck_RegenerateDoesNotConsumeObjectSlots(t *testing.T) {
 	}
 
 	err := q.CheckUpload(ctx, regenerateUploadURLProc,
-		&fakeRegenerateRequest{name: "tenants/" + uuid.NewString() + "/objectKeys/ok/objects/abc"})
+		&fakeRegenerateRequest{name: "tenants/" + uuid.NewString() + "/collections/ok/objects/abc"})
 	if err != nil {
 		t.Errorf("regenerate must not consume an object slot, got %v", err)
 	}
@@ -309,9 +309,9 @@ type fakeBindings struct {
 	askedKey  string
 }
 
-func (f *fakeBindings) LookupBucket(_ context.Context, _ uuid.UUID, objectKey string, _ bool) (string, string, error) {
+func (f *fakeBindings) LookupBucket(_ context.Context, _ uuid.UUID, collection string, _ bool) (string, string, error) {
 	f.calls++
-	f.askedKey = objectKey
+	f.askedKey = collection
 	return f.backendID, f.bucket, f.err
 }
 
@@ -334,7 +334,7 @@ func TestQuotaSoftCheck_BucketCapRejects(t *testing.T) {
 	q.WithBucketScope(bindings)
 
 	err := q.CheckUpload(ctx, uploadProc,
-		&fakeUploadWithParent{parent: "tenants/" + uuid.NewString() + "/objectKeys/ok-1", sizeHint: 200})
+		&fakeUploadWithParent{parent: "tenants/" + uuid.NewString() + "/collections/ok-1", sizeHint: 200})
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("code = %v, want ResourceExhausted", connect.CodeOf(err))
 	}
@@ -344,7 +344,7 @@ func TestQuotaSoftCheck_BucketCapRejects(t *testing.T) {
 		t.Errorf("message %q should attribute the rejection to the bucket scope", err)
 	}
 	if bindings.askedKey != "ok-1" {
-		t.Errorf("resolved objectKey = %q, want ok-1", bindings.askedKey)
+		t.Errorf("resolved collection = %q, want ok-1", bindings.askedKey)
 	}
 	if reader.askedBEnd != "primary" || reader.askedBcket != "bkt-1" {
 		t.Errorf("read quota for (%q,%q), want (primary,bkt-1)",
@@ -380,7 +380,7 @@ func TestQuotaSoftCheck_CanonicalNameSkipsBindingLookup(t *testing.T) {
 	q := gated(reader)
 	q.WithBucketScope(bindings)
 
-	name := "storageBackends/be-2/buckets/bkt-2/tenants/" + uuid.NewString() + "/objectKeys/ok-9"
+	name := "storageBackends/be-2/buckets/bkt-2/tenants/" + uuid.NewString() + "/collections/ok-9"
 	if err := q.CheckUpload(ctx, uploadProc, &fakeUploadWithParent{parent: name, sizeHint: 1}); err == nil {
 		t.Fatal("want reject from the bucket object-count cap")
 	}
@@ -419,7 +419,7 @@ func TestQuotaSoftCheck_BucketResolutionFailuresFailOpen(t *testing.T) {
 		},
 		{
 			name:     "object key is unbound",
-			bindings: &fakeBindings{err: errors.New("objectKey not found")},
+			bindings: &fakeBindings{err: errors.New("collection not found")},
 			reader:   &scopedReader{tenantErr: errors.New("none"), bucket: overCap},
 			msg:      &fakeUploadWithParent{parent: "ok-1", sizeHint: 1},
 		},

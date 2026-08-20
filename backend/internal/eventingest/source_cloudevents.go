@@ -35,10 +35,10 @@ import (
 //
 // Subject parsing: relies on a `subject` field formatted as either:
 //
-//   tenants/<tenant_uuid>/objectKeys/<ok>/objects-by-key/<key>
+//   tenants/<tenant_uuid>/collections/<ok>/objects-by-key/<key>
 //
 // (the Paladin canonical form, what SeaweedFSSource / S3EventSource emit)
-// or as a plain `<tenant_uuid>/<object_key>/<key>` triple. The
+// or as a plain `<tenant_uuid>/<collection>/<key>` triple. The
 // parser tries the structured form first, falls back to the bare
 // triple. Empty `subject` → ErrIgnoredEvent.
 //
@@ -155,9 +155,9 @@ func (s *CloudEventsSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 // parseCloudEventsSubject accepts two forms:
 //
 //  1. Paladin canonical:
-//     tenants/<uuid>/objectKeys/<ok>/objects-by-key/<key...>
+//     tenants/<uuid>/collections/<ok>/objects-by-key/<key...>
 //  2. Bare triple:
-//     <uuid>/<object_key>/<key...>
+//     <uuid>/<collection>/<key...>
 //
 // Both yield the same SubjectFields. Anything else returns ok=false
 // and the caller treats the event as ignored.
@@ -165,28 +165,28 @@ func parseCloudEventsSubject(subject string) (SubjectFields, bool) {
 	if subject == "" {
 		return SubjectFields{}, false
 	}
-	// Form 1: tenants/<id>/objectKeys/<ok>/objects-by-key/<key>.
+	// Form 1: tenants/<id>/collections/<ok>/objects-by-key/<key>.
 	const pTenants = "tenants/"
-	const pObjectKeys = "/objectKeys/"
+	const pCollections = "/collections/"
 	const pObjsByKey = "/objects-by-key/"
 	if strings.HasPrefix(subject, pTenants) {
 		rest := subject[len(pTenants):]
-		idx := strings.Index(rest, pObjectKeys)
+		idx := strings.Index(rest, pCollections)
 		if idx < 0 {
 			return SubjectFields{}, false
 		}
 		tenantID := rest[:idx]
-		rest = rest[idx+len(pObjectKeys):]
+		rest = rest[idx+len(pCollections):]
 		idx = strings.Index(rest, pObjsByKey)
 		if idx < 0 {
 			return SubjectFields{}, false
 		}
-		objectKey := rest[:idx]
+		collection := rest[:idx]
 		key := rest[idx+len(pObjsByKey):]
-		if tenantID == "" || objectKey == "" || key == "" {
+		if tenantID == "" || collection == "" || key == "" {
 			return SubjectFields{}, false
 		}
-		return SubjectFields{TenantID: tenantID, ObjectKey: objectKey, Key: key}, true
+		return SubjectFields{TenantID: tenantID, Collection: collection, Key: key}, true
 	}
 
 	// Form 2: bare <uuid>/<ok>/<key...>
@@ -194,5 +194,5 @@ func parseCloudEventsSubject(subject string) (SubjectFields, bool) {
 	if len(parts) < 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return SubjectFields{}, false
 	}
-	return SubjectFields{TenantID: parts[0], ObjectKey: parts[1], Key: parts[2]}, true
+	return SubjectFields{TenantID: parts[0], Collection: parts[1], Key: parts[2]}, true
 }

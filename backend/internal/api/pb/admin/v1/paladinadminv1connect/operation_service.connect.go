@@ -22,8 +22,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// OperationServiceName is the fully-qualified name of the OperationService service.
-	OperationServiceName = "paladin.admin.v1.OperationService"
+	// PlatformOperationServiceName is the fully-qualified name of the PlatformOperationService service.
+	PlatformOperationServiceName = "paladin.admin.v1.PlatformOperationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -34,135 +34,137 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// OperationServiceGetOperationProcedure is the fully-qualified name of the OperationService's
-	// GetOperation RPC.
-	OperationServiceGetOperationProcedure = "/paladin.admin.v1.OperationService/GetOperation"
-	// OperationServiceListOperationsProcedure is the fully-qualified name of the OperationService's
-	// ListOperations RPC.
-	OperationServiceListOperationsProcedure = "/paladin.admin.v1.OperationService/ListOperations"
-	// OperationServiceCancelOperationProcedure is the fully-qualified name of the OperationService's
-	// CancelOperation RPC.
-	OperationServiceCancelOperationProcedure = "/paladin.admin.v1.OperationService/CancelOperation"
+	// PlatformOperationServiceGetOperationProcedure is the fully-qualified name of the
+	// PlatformOperationService's GetOperation RPC.
+	PlatformOperationServiceGetOperationProcedure = "/paladin.admin.v1.PlatformOperationService/GetOperation"
+	// PlatformOperationServiceListOperationsProcedure is the fully-qualified name of the
+	// PlatformOperationService's ListOperations RPC.
+	PlatformOperationServiceListOperationsProcedure = "/paladin.admin.v1.PlatformOperationService/ListOperations"
+	// PlatformOperationServiceCancelOperationProcedure is the fully-qualified name of the
+	// PlatformOperationService's CancelOperation RPC.
+	PlatformOperationServiceCancelOperationProcedure = "/paladin.admin.v1.PlatformOperationService/CancelOperation"
 )
 
-// OperationServiceClient is a client for the paladin.admin.v1.OperationService service.
-type OperationServiceClient interface {
+// PlatformOperationServiceClient is a client for the paladin.admin.v1.PlatformOperationService
+// service.
+type PlatformOperationServiceClient interface {
 	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
 	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 
-// NewOperationServiceClient constructs a client for the paladin.admin.v1.OperationService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
+// NewPlatformOperationServiceClient constructs a client for the
+// paladin.admin.v1.PlatformOperationService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewOperationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OperationServiceClient {
+func NewPlatformOperationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PlatformOperationServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	operationServiceMethods := v1.File_paladin_admin_v1_operation_service_proto.Services().ByName("OperationService").Methods()
-	return &operationServiceClient{
+	platformOperationServiceMethods := v1.File_paladin_admin_v1_operation_service_proto.Services().ByName("PlatformOperationService").Methods()
+	return &platformOperationServiceClient{
 		getOperation: connect.NewClient[v1.GetOperationRequest, v1.Operation](
 			httpClient,
-			baseURL+OperationServiceGetOperationProcedure,
-			connect.WithSchema(operationServiceMethods.ByName("GetOperation")),
+			baseURL+PlatformOperationServiceGetOperationProcedure,
+			connect.WithSchema(platformOperationServiceMethods.ByName("GetOperation")),
 			connect.WithClientOptions(opts...),
 		),
 		listOperations: connect.NewClient[v1.ListOperationsRequest, v1.ListOperationsResponse](
 			httpClient,
-			baseURL+OperationServiceListOperationsProcedure,
-			connect.WithSchema(operationServiceMethods.ByName("ListOperations")),
+			baseURL+PlatformOperationServiceListOperationsProcedure,
+			connect.WithSchema(platformOperationServiceMethods.ByName("ListOperations")),
 			connect.WithClientOptions(opts...),
 		),
 		cancelOperation: connect.NewClient[v1.CancelOperationRequest, v1.Operation](
 			httpClient,
-			baseURL+OperationServiceCancelOperationProcedure,
-			connect.WithSchema(operationServiceMethods.ByName("CancelOperation")),
+			baseURL+PlatformOperationServiceCancelOperationProcedure,
+			connect.WithSchema(platformOperationServiceMethods.ByName("CancelOperation")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// operationServiceClient implements OperationServiceClient.
-type operationServiceClient struct {
+// platformOperationServiceClient implements PlatformOperationServiceClient.
+type platformOperationServiceClient struct {
 	getOperation    *connect.Client[v1.GetOperationRequest, v1.Operation]
 	listOperations  *connect.Client[v1.ListOperationsRequest, v1.ListOperationsResponse]
 	cancelOperation *connect.Client[v1.CancelOperationRequest, v1.Operation]
 }
 
-// GetOperation calls paladin.admin.v1.OperationService.GetOperation.
-func (c *operationServiceClient) GetOperation(ctx context.Context, req *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error) {
+// GetOperation calls paladin.admin.v1.PlatformOperationService.GetOperation.
+func (c *platformOperationServiceClient) GetOperation(ctx context.Context, req *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error) {
 	return c.getOperation.CallUnary(ctx, req)
 }
 
-// ListOperations calls paladin.admin.v1.OperationService.ListOperations.
-func (c *operationServiceClient) ListOperations(ctx context.Context, req *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error) {
+// ListOperations calls paladin.admin.v1.PlatformOperationService.ListOperations.
+func (c *platformOperationServiceClient) ListOperations(ctx context.Context, req *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error) {
 	return c.listOperations.CallUnary(ctx, req)
 }
 
-// CancelOperation calls paladin.admin.v1.OperationService.CancelOperation.
-func (c *operationServiceClient) CancelOperation(ctx context.Context, req *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error) {
+// CancelOperation calls paladin.admin.v1.PlatformOperationService.CancelOperation.
+func (c *platformOperationServiceClient) CancelOperation(ctx context.Context, req *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error) {
 	return c.cancelOperation.CallUnary(ctx, req)
 }
 
-// OperationServiceHandler is an implementation of the paladin.admin.v1.OperationService service.
-type OperationServiceHandler interface {
+// PlatformOperationServiceHandler is an implementation of the
+// paladin.admin.v1.PlatformOperationService service.
+type PlatformOperationServiceHandler interface {
 	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
 	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 
-// NewOperationServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
+// NewPlatformOperationServiceHandler builds an HTTP handler from the service implementation. It
+// returns the path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewOperationServiceHandler(svc OperationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	operationServiceMethods := v1.File_paladin_admin_v1_operation_service_proto.Services().ByName("OperationService").Methods()
-	operationServiceGetOperationHandler := connect.NewUnaryHandler(
-		OperationServiceGetOperationProcedure,
+func NewPlatformOperationServiceHandler(svc PlatformOperationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	platformOperationServiceMethods := v1.File_paladin_admin_v1_operation_service_proto.Services().ByName("PlatformOperationService").Methods()
+	platformOperationServiceGetOperationHandler := connect.NewUnaryHandler(
+		PlatformOperationServiceGetOperationProcedure,
 		svc.GetOperation,
-		connect.WithSchema(operationServiceMethods.ByName("GetOperation")),
+		connect.WithSchema(platformOperationServiceMethods.ByName("GetOperation")),
 		connect.WithHandlerOptions(opts...),
 	)
-	operationServiceListOperationsHandler := connect.NewUnaryHandler(
-		OperationServiceListOperationsProcedure,
+	platformOperationServiceListOperationsHandler := connect.NewUnaryHandler(
+		PlatformOperationServiceListOperationsProcedure,
 		svc.ListOperations,
-		connect.WithSchema(operationServiceMethods.ByName("ListOperations")),
+		connect.WithSchema(platformOperationServiceMethods.ByName("ListOperations")),
 		connect.WithHandlerOptions(opts...),
 	)
-	operationServiceCancelOperationHandler := connect.NewUnaryHandler(
-		OperationServiceCancelOperationProcedure,
+	platformOperationServiceCancelOperationHandler := connect.NewUnaryHandler(
+		PlatformOperationServiceCancelOperationProcedure,
 		svc.CancelOperation,
-		connect.WithSchema(operationServiceMethods.ByName("CancelOperation")),
+		connect.WithSchema(platformOperationServiceMethods.ByName("CancelOperation")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/paladin.admin.v1.OperationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/paladin.admin.v1.PlatformOperationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case OperationServiceGetOperationProcedure:
-			operationServiceGetOperationHandler.ServeHTTP(w, r)
-		case OperationServiceListOperationsProcedure:
-			operationServiceListOperationsHandler.ServeHTTP(w, r)
-		case OperationServiceCancelOperationProcedure:
-			operationServiceCancelOperationHandler.ServeHTTP(w, r)
+		case PlatformOperationServiceGetOperationProcedure:
+			platformOperationServiceGetOperationHandler.ServeHTTP(w, r)
+		case PlatformOperationServiceListOperationsProcedure:
+			platformOperationServiceListOperationsHandler.ServeHTTP(w, r)
+		case PlatformOperationServiceCancelOperationProcedure:
+			platformOperationServiceCancelOperationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedOperationServiceHandler returns CodeUnimplemented from all methods.
-type UnimplementedOperationServiceHandler struct{}
+// UnimplementedPlatformOperationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPlatformOperationServiceHandler struct{}
 
-func (UnimplementedOperationServiceHandler) GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.OperationService.GetOperation is not implemented"))
+func (UnimplementedPlatformOperationServiceHandler) GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.PlatformOperationService.GetOperation is not implemented"))
 }
 
-func (UnimplementedOperationServiceHandler) ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.OperationService.ListOperations is not implemented"))
+func (UnimplementedPlatformOperationServiceHandler) ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.PlatformOperationService.ListOperations is not implemented"))
 }
 
-func (UnimplementedOperationServiceHandler) CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.OperationService.CancelOperation is not implemented"))
+func (UnimplementedPlatformOperationServiceHandler) CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.PlatformOperationService.CancelOperation is not implemented"))
 }

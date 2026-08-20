@@ -100,7 +100,7 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 			tool: "paladin_copy_object",
 			args: map[string]any{
 				"source_name":            "objects/o1",
-				"destination_object_key": "tenants/t1/objectKeys/ok1",
+				"destination_collection": "tenants/t1/collections/ok1",
 				"destination_key":        "copy/of/o1",
 			},
 			want: "/paladin.data.v1.ObjectService/CopyObject",
@@ -108,7 +108,7 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		{
 			tool: "paladin_batch_delete",
 			args: map[string]any{
-				"parent":    "tenants/t1/objectKeys/ok1",
+				"parent":    "tenants/t1/collections/ok1",
 				"names":     []string{"objects/o1", "objects/o2"},
 				"permanent": false,
 			},
@@ -117,9 +117,9 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		{
 			tool: "paladin_batch_copy",
 			args: map[string]any{
-				"source_parent":            "tenants/t1/objectKeys/ok1",
+				"source_parent":            "tenants/t1/collections/ok1",
 				"names":                    []string{"objects/o1"},
-				"destination_object_key":   "tenants/t1/objectKeys/ok2",
+				"destination_collection":   "tenants/t1/collections/ok2",
 				"destination_key_template": "object.key",
 			},
 			want: "/paladin.data.v1.BatchService/BatchCopyObjects",
@@ -127,7 +127,7 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		{
 			tool: "paladin_batch_restore",
 			args: map[string]any{
-				"parent": "tenants/t1/objectKeys/ok1",
+				"parent": "tenants/t1/collections/ok1",
 				"names":  []string{"objects/o1"},
 			},
 			want: "/paladin.data.v1.BatchService/BatchRestoreObjects",
@@ -135,7 +135,7 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		{
 			tool: "paladin_lookup_object",
 			args: map[string]any{
-				"parent": "tenants/t1/objectKeys/ok1",
+				"parent": "tenants/t1/collections/ok1",
 				"key":    "path/to/file.txt",
 			},
 			want: "/paladin.data.v1.ObjectService/LookupObject",
@@ -143,7 +143,7 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		{
 			tool: "paladin_count_objects",
 			args: map[string]any{
-				"parent": "tenants/t1/objectKeys/ok1",
+				"parent": "tenants/t1/collections/ok1",
 				"filter": "state == 'AVAILABLE'",
 			},
 			want: "/paladin.data.v1.ObjectService/CountObjects",
@@ -190,10 +190,10 @@ func TestCoverageToolsDispatch(t *testing.T) {
 	}{
 		{"paladin_update_object", "data", map[string]any{"name": "objects/o1", "update_mask": []string{"tags"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.ObjectService/UpdateObject"},
 		{"paladin_delete_object_tags", "data", map[string]any{"name": "objects/o1", "keys": []string{"k"}}, "/paladin.data.v1.ObjectTagService/DeleteObjectTags"},
-		{"paladin_list_distinct_tags", "data", map[string]any{"parent": "tenants/t1/objectKeys/ok1"}, "/paladin.data.v1.ObjectTagService/ListDistinctTags"},
-		{"paladin_batch_update_tags", "data", map[string]any{"parent": "tenants/t1/objectKeys/ok1", "names": []string{"objects/o1"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.BatchService/BatchUpdateTags"},
+		{"paladin_list_distinct_tags", "data", map[string]any{"parent": "tenants/t1/collections/ok1"}, "/paladin.data.v1.ObjectTagService/ListDistinctTags"},
+		{"paladin_batch_update_tags", "data", map[string]any{"parent": "tenants/t1/collections/ok1", "names": []string{"objects/o1"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.BatchService/BatchUpdateTags"},
 		{"paladin_regenerate_upload_url", "data", map[string]any{"name": "objects/o1"}, "/paladin.data.v1.PresignService/RegenerateUploadUrl"},
-		{"paladin_initiate_multipart_upload", "data", map[string]any{"parent": "tenants/t1/objectKeys/ok1", "content_type": "application/octet-stream"}, "/paladin.data.v1.MultipartUploadService/InitiateMultipartUpload"},
+		{"paladin_initiate_multipart_upload", "data", map[string]any{"parent": "tenants/t1/collections/ok1", "content_type": "application/octet-stream"}, "/paladin.data.v1.MultipartUploadService/InitiateMultipartUpload"},
 		{"paladin_presign_part", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1", "part_number": 1}, "/paladin.data.v1.MultipartUploadService/PresignPart"},
 		{"paladin_complete_multipart_upload", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1", "parts": []any{map[string]any{"part_number": 1, "etag": "e1"}}}, "/paladin.data.v1.MultipartUploadService/CompleteMultipartUpload"},
 		{"paladin_abort_multipart_upload", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1"}, "/paladin.data.v1.MultipartUploadService/AbortMultipartUpload"},

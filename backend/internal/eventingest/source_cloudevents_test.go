@@ -14,7 +14,7 @@ func TestCloudEventsSource_Parse_Canonical(t *testing.T) {
 		"id": "evt-42",
 		"time": "2026-01-01T00:00:00Z",
 		"datacontenttype": "application/json",
-		"subject": "tenants/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/objectKeys/contracts/objects-by-key/2026/q1.pdf",
+		"subject": "tenants/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/collections/contracts/objects-by-key/2026/q1.pdf",
 		"paladinetag": "abc123",
 		"paladinsize": 4096,
 		"paladinsequencer": "001",
@@ -36,8 +36,8 @@ func TestCloudEventsSource_Parse_Canonical(t *testing.T) {
 	if ev.SubjectFields.TenantID != "0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc" {
 		t.Errorf("tenant = %q", ev.SubjectFields.TenantID)
 	}
-	if ev.SubjectFields.ObjectKey != "contracts" {
-		t.Errorf("object_key = %q", ev.SubjectFields.ObjectKey)
+	if ev.SubjectFields.Collection != "contracts" {
+		t.Errorf("collection = %q", ev.SubjectFields.Collection)
 	}
 	if ev.SubjectFields.Key != "2026/q1.pdf" {
 		t.Errorf("key = %q", ev.SubjectFields.Key)
@@ -166,7 +166,7 @@ func TestParseCloudEventsSubject_Forms(t *testing.T) {
 	}{
 		{
 			name:       "canonical",
-			subject:    "tenants/abc/objectKeys/docs/objects-by-key/q1/r.pdf",
+			subject:    "tenants/abc/collections/docs/objects-by-key/q1/r.pdf",
 			wantOK:     true,
 			wantTenant: "abc",
 			wantOK_:    "docs",
@@ -192,7 +192,7 @@ func TestParseCloudEventsSubject_Forms(t *testing.T) {
 		},
 		{
 			name:    "canonical missing key",
-			subject: "tenants/abc/objectKeys/docs/objects-by-key/",
+			subject: "tenants/abc/collections/docs/objects-by-key/",
 			wantOK:  false,
 		},
 	}
@@ -205,7 +205,7 @@ func TestParseCloudEventsSubject_Forms(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if got.TenantID != c.wantTenant || got.ObjectKey != c.wantOK_ || got.Key != c.wantKey {
+		if got.TenantID != c.wantTenant || got.Collection != c.wantOK_ || got.Key != c.wantKey {
 			t.Errorf("%s: parsed = %+v", c.name, got)
 		}
 	}

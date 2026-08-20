@@ -24,14 +24,14 @@ func NewStorageBootstrapServer(h *storagebootstrap.Handler) *StorageBootstrapSer
 
 func (s *StorageBootstrapServer) EnsureTenantStorage(ctx context.Context, req *connect.Request[pb.EnsureTenantStorageRequest]) (*connect.Response[pb.EnsureTenantStorageResponse], error) {
 	m := req.Msg
-	res, err := s.H.EnsureTenantStorage(ctx, m.GetBackendId(), m.GetBucket(), m.GetObjectKeys())
+	res, err := s.H.EnsureTenantStorage(ctx, m.GetBackendId(), m.GetBucket(), m.GetCollections())
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.EnsureTenantStorageResponse{
-		BucketCreated:      res.BucketCreated,
-		ObjectKeysCreated:  res.ObjectKeysCreated,
-		ObjectKeysExisting: res.ObjectKeysExisting,
+		BucketCreated:       res.BucketCreated,
+		CollectionsCreated:  res.CollectionsCreated,
+		CollectionsExisting: res.CollectionsExisting,
 	}), nil
 }
 

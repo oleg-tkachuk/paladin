@@ -26,7 +26,7 @@ func (q *Queries) GetCurrentVersionID(ctx context.Context, objectID pgtype.UUID)
 }
 
 const getObjectVersion = `-- name: GetObjectVersion :one
-SELECT version_id, object_id, is_delete_marker, s3_key,
+SELECT version_id, object_id, is_delete_marker, storage_path,
        size_bytes, etag, checksum_algorithm, checksum,
        content_type, metadata, tags,
        lock_mode, lock_retain_until, legal_hold,
@@ -42,7 +42,7 @@ func (q *Queries) GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (
 		&i.VersionID,
 		&i.ObjectID,
 		&i.IsDeleteMarker,
-		&i.S3Key,
+		&i.StoragePath,
 		&i.SizeBytes,
 		&i.Etag,
 		&i.ChecksumAlgorithm,
@@ -61,7 +61,7 @@ func (q *Queries) GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (
 const insertObjectVersion = `-- name: InsertObjectVersion :exec
 
 INSERT INTO object_versions (
-    version_id, object_id, is_delete_marker, s3_key,
+    version_id, object_id, is_delete_marker, storage_path,
     size_bytes, etag, checksum_algorithm, checksum,
     content_type, metadata, tags,
     lock_mode, lock_retain_until, legal_hold
@@ -70,12 +70,12 @@ INSERT INTO object_versions (
 
 // ObjectVersion queries — immutable history rows. Populated by the
 // promotion path when the parent bucket has versioning_enabled = true.
-func (q *Queries) InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, s3Key string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error {
+func (q *Queries) InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error {
 	_, err := q.db.Exec(ctx, insertObjectVersion,
 		versionID,
 		objectID,
 		isDeleteMarker,
-		s3Key,
+		storagePath,
 		sizeBytes,
 		etag,
 		checksumAlgorithm,
@@ -91,7 +91,7 @@ func (q *Queries) InsertObjectVersion(ctx context.Context, versionID pgtype.UUID
 }
 
 const listObjectVersions = `-- name: ListObjectVersions :many
-SELECT version_id, object_id, is_delete_marker, s3_key,
+SELECT version_id, object_id, is_delete_marker, storage_path,
        size_bytes, etag, checksum_algorithm, checksum,
        content_type, metadata, tags,
        lock_mode, lock_retain_until, legal_hold,
@@ -125,7 +125,7 @@ func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, 
 			&i.VersionID,
 			&i.ObjectID,
 			&i.IsDeleteMarker,
-			&i.S3Key,
+			&i.StoragePath,
 			&i.SizeBytes,
 			&i.Etag,
 			&i.ChecksumAlgorithm,

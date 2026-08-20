@@ -81,7 +81,7 @@ func newTestConsumer(sqsc SQSClient, res Resolver, cfg Config) *Consumer {
 
 // directEnvelope builds a direct S3-to-SQS notification body.
 func directEnvelope(eventName, bucket, key, etag, sequencer string, size int64) string {
-	return fmt.Sprintf(`{"Records":[{"eventName":%q,"s3":{"objectKey":{"name":%q},
+	return fmt.Sprintf(`{"Records":[{"eventName":%q,"s3":{"collection":{"name":%q},
         "object":{"key":%q,"size":%d,"eTag":%q,"sequencer":%q}}}]}`,
 		eventName, bucket, key, size, etag, sequencer)
 }
@@ -134,7 +134,7 @@ func TestParseS3EventDirectEnvelope(t *testing.T) {
 	if got.ETag != "abc123" {
 		t.Errorf("ETag = %q, want the unquoted form", got.ETag)
 	}
-	if got.EventName != "ObjectCreated:Put" || got.ObjectKey != "bkt" || got.Key != "t/o/k" {
+	if got.EventName != "ObjectCreated:Put" || got.Collection != "bkt" || got.Key != "t/o/k" {
 		t.Errorf("flattened event = %+v", got)
 	}
 	if got.Size != 4096 || got.Sequencer != "0055AA" {
@@ -144,8 +144,8 @@ func TestParseS3EventDirectEnvelope(t *testing.T) {
 
 func TestParseS3EventMultipleRecords(t *testing.T) {
 	body := `{"Records":[
-        {"eventName":"ObjectCreated:Put","s3":{"objectKey":{"name":"b1"},"object":{"key":"k1","size":1,"eTag":"e1","sequencer":"s1"}}},
-        {"eventName":"ObjectRemoved:Delete","s3":{"objectKey":{"name":"b2"},"object":{"key":"k2","size":2,"eTag":"e2","sequencer":"s2"}}}]}`
+        {"eventName":"ObjectCreated:Put","s3":{"collection":{"name":"b1"},"object":{"key":"k1","size":1,"eTag":"e1","sequencer":"s1"}}},
+        {"eventName":"ObjectRemoved:Delete","s3":{"collection":{"name":"b2"},"object":{"key":"k2","size":2,"eTag":"e2","sequencer":"s2"}}}]}`
 
 	evs, err := parseS3Event(body)
 	if err != nil {
@@ -276,8 +276,8 @@ func TestHandleMessageKeepsMessageWhenOneRecordFails(t *testing.T) {
 	res := &fakeResolver{err: errors.New("boom")}
 	c := newTestConsumer(f, res, Config{QueueURL: "q"})
 	body := `{"Records":[
-        {"eventName":"ObjectRemoved:Delete","s3":{"objectKey":{"name":"b"},"object":{"key":"k1"}}},
-        {"eventName":"ObjectCreated:Put","s3":{"objectKey":{"name":"b"},"object":{"key":"k2"}}}]}`
+        {"eventName":"ObjectRemoved:Delete","s3":{"collection":{"name":"b"},"object":{"key":"k1"}}},
+        {"eventName":"ObjectCreated:Put","s3":{"collection":{"name":"b"},"object":{"key":"k2"}}}]}`
 
 	c.handleMessage(context.Background(), msg(body, "h5"))
 

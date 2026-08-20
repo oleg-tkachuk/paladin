@@ -1,8 +1,8 @@
-// Phase 1 of canonical-resource-names: ObjectKey-rooted resources gain
+// Phase 1 of canonical-resource-names: Collection-rooted resources gain
 // a canonical form that carries the full (backend, bucket, tenant_id,
-// object_key) tuple in the resource name. Audit log, event payloads,
+// collection) tuple in the resource name. Audit log, event payloads,
 // and Cedar resource literals start emitting this shape; the public
-// API contract (C-shape `tenants/{tid}/objectKeys/{ok}`) is unchanged
+// API contract (C-shape `tenants/{tid}/collections/{ok}`) is unchanged
 // — connectshim resolvers still accept it.
 //
 // See backend/docs/canonical-resource-names.md for the broader plan.
@@ -17,32 +17,32 @@ import (
 
 // Canonical resource-name shape A:
 //
-//	storageBackends/{backend_id}/buckets/{bucket_name}/tenants/{tenant_id}/objectKeys/{object_key}
+//	storageBackends/{backend_id}/buckets/{bucket_name}/tenants/{tenant_id}/collections/{collection}
 //
-// `{object_key}` may itself be slash-separated (migration 030: multi-
-// segment ObjectKey path) — parsers must NOT split on slash, they
-// anchor on the literal `/objectKeys/` separator.
+// `{collection}` may itself be slash-separated (migration 030: multi-
+// segment Collection path) — parsers must NOT split on slash, they
+// anchor on the literal `/collections/` separator.
 const (
 	canonicalBackendPrefix = "storageBackends/"
 	canonicalBucketSep     = "/buckets/"
 	canonicalTenantSep     = "/tenants/"
-	canonicalObjectKeySep  = "/objectKeys/"
+	canonicalCollectionSep = "/collections/"
 )
 
-// CanonicalName builds the canonical ObjectKey resource name from its
+// CanonicalName builds the canonical Collection resource name from its
 // four components. None of the components may be empty; the function
 // panics on misuse rather than emitting a malformed name (it's caller-
 // authored at handler level — every site has the components in scope).
-func CanonicalName(backendID, bucketName string, tenantID uuid.UUID, objectKey string) string {
-	if backendID == "" || bucketName == "" || tenantID == uuid.Nil || objectKey == "" {
+func CanonicalName(backendID, bucketName string, tenantID uuid.UUID, collection string) string {
+	if backendID == "" || bucketName == "" || tenantID == uuid.Nil || collection == "" {
 		panic(fmt.Sprintf(
-			"canonical objectKey: empty component (backend=%q bucket=%q tenant=%s object_key=%q)",
-			backendID, bucketName, tenantID, objectKey))
+			"canonical collection: empty component (backend=%q bucket=%q tenant=%s collection=%q)",
+			backendID, bucketName, tenantID, collection))
 	}
 	return canonicalBackendPrefix + backendID +
 		canonicalBucketSep + bucketName +
 		canonicalTenantSep + tenantID.String() +
-		canonicalObjectKeySep + objectKey
+		canonicalCollectionSep + collection
 }
 
 // CanonicalRef carries the parsed components.
@@ -50,28 +50,28 @@ type CanonicalRef struct {
 	BackendID  string
 	BucketName string
 	TenantID   uuid.UUID
-	ObjectKey  string
+	Collection string
 }
 
 // ParseCanonical decomposes a canonical-shape resource name. Returns
 // an error for any deviation from the exact A-shape — callers that
-// also need to accept C-shape ("tenants/{tid}/objectKeys/{ok}") should
+// also need to accept C-shape ("tenants/{tid}/collections/{ok}") should
 // dispatch on prefix BEFORE invoking this. Keeping the parser strict
 // makes the shape detector at the connectshim edge unambiguous.
 //
-// Multi-segment objectKey paths are preserved verbatim — we anchor on
-// `/objectKeys/` and treat everything after as the body.
+// Multi-segment collection paths are preserved verbatim — we anchor on
+// `/collections/` and treat everything after as the body.
 func ParseCanonical(name string) (CanonicalRef, error) {
 	var ref CanonicalRef
 	if !strings.HasPrefix(name, canonicalBackendPrefix) {
-		return ref, fmt.Errorf("canonical objectKey: missing %q prefix in %q",
+		return ref, fmt.Errorf("canonical collection: missing %q prefix in %q",
 			canonicalBackendPrefix, name)
 	}
 	rest := name[len(canonicalBackendPrefix):]
 
 	bucketIdx := strings.Index(rest, canonicalBucketSep)
 	if bucketIdx <= 0 {
-		return ref, fmt.Errorf("canonical objectKey: missing %q in %q",
+		return ref, fmt.Errorf("canonical collection: missing %q in %q",
 			canonicalBucketSep, name)
 	}
 	ref.BackendID = rest[:bucketIdx]
@@ -79,26 +79,26 @@ func ParseCanonical(name string) (CanonicalRef, error) {
 
 	tenantIdx := strings.Index(rest, canonicalTenantSep)
 	if tenantIdx <= 0 {
-		return ref, fmt.Errorf("canonical objectKey: missing %q in %q",
+		return ref, fmt.Errorf("canonical collection: missing %q in %q",
 			canonicalTenantSep, name)
 	}
 	ref.BucketName = rest[:tenantIdx]
 	rest = rest[tenantIdx+len(canonicalTenantSep):]
 
-	okIdx := strings.Index(rest, canonicalObjectKeySep)
+	okIdx := strings.Index(rest, canonicalCollectionSep)
 	if okIdx <= 0 {
-		return ref, fmt.Errorf("canonical objectKey: missing %q in %q",
-			canonicalObjectKeySep, name)
+		return ref, fmt.Errorf("canonical collection: missing %q in %q",
+			canonicalCollectionSep, name)
 	}
 	tenantStr := rest[:okIdx]
 	tid, err := uuid.Parse(tenantStr)
 	if err != nil {
-		return ref, fmt.Errorf("canonical objectKey: tenant_id %q: %w", tenantStr, err)
+		return ref, fmt.Errorf("canonical collection: tenant_id %q: %w", tenantStr, err)
 	}
 	ref.TenantID = tid
-	ref.ObjectKey = rest[okIdx+len(canonicalObjectKeySep):]
-	if ref.ObjectKey == "" {
-		return ref, fmt.Errorf("canonical objectKey: empty objectKey body in %q", name)
+	ref.Collection = rest[okIdx+len(canonicalCollectionSep):]
+	if ref.Collection == "" {
+		return ref, fmt.Errorf("canonical collection: empty collection body in %q", name)
 	}
 	return ref, nil
 }
@@ -111,13 +111,13 @@ func IsCanonical(name string) bool {
 	return strings.HasPrefix(name, canonicalBackendPrefix) &&
 		strings.Contains(name, canonicalBucketSep) &&
 		strings.Contains(name, canonicalTenantSep) &&
-		strings.Contains(name, canonicalObjectKeySep)
+		strings.Contains(name, canonicalCollectionSep)
 }
 
-// TenantPathName is the C-shape resource name `tenants/{tid}/objectKeys/{ok}`.
+// TenantPathName is the C-shape resource name `tenants/{tid}/collections/{ok}`.
 // Kept here (rather than as a free helper) so the canonical and
 // tenant-first forms ship from one place — easier to grep, easier to
 // audit when audit-log resource_name semantics shift.
-func TenantPathName(tenantID uuid.UUID, objectKey string) string {
-	return "tenants/" + tenantID.String() + "/objectKeys/" + objectKey
+func TenantPathName(tenantID uuid.UUID, collection string) string {
+	return "tenants/" + tenantID.String() + "/collections/" + collection
 }

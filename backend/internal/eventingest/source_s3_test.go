@@ -33,8 +33,8 @@ func TestS3Source_AWSShape_CreatedPut(t *testing.T) {
 	if ev.SubjectFields.TenantID != "11111111-1111-4111-8111-111111111111" {
 		t.Errorf("tenant = %q", ev.SubjectFields.TenantID)
 	}
-	if ev.SubjectFields.ObjectKey != "ok" {
-		t.Errorf("objectKey = %q", ev.SubjectFields.ObjectKey)
+	if ev.SubjectFields.Collection != "ok" {
+		t.Errorf("collection = %q", ev.SubjectFields.Collection)
 	}
 	if ev.SubjectFields.Key != "red flower.jpg" { // '+' decoded to space
 		t.Errorf("key = %q, want 'red flower.jpg'", ev.SubjectFields.Key)
@@ -55,7 +55,7 @@ func TestS3Source_MinIOShape_EncodedSlashes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if ev.SubjectFields.TenantID != "t" || ev.SubjectFields.ObjectKey != "ok" {
+	if ev.SubjectFields.TenantID != "t" || ev.SubjectFields.Collection != "ok" {
 		t.Errorf("segments = %+v", ev.SubjectFields)
 	}
 	// Trailing slashes stay part of the key (SplitN keeps the remainder whole).
@@ -144,7 +144,7 @@ func TestS3Source_NonPaladinLayoutIgnored(t *testing.T) {
 		"flat-key", // no slashes
 		"only/two", // 2 segments
 		"/ok/k",    // empty tenant
-		"t//k",     // empty object_key
+		"t//k",     // empty collection
 		"t/ok/",    // empty key
 	} {
 		if _, err := src.Parse(awsEvent("s3:ObjectCreated:Put", "b", key, ""), ""); !errors.Is(err, ErrIgnoredEvent) {
@@ -189,7 +189,7 @@ func TestS3Source_SubjectCanonicalForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	want := "tenants/tid/objectKeys/ok/objects-by-key/k"
+	want := "tenants/tid/collections/ok/objects-by-key/k"
 	if ev.Subject != want {
 		t.Errorf("subject = %q, want %q", ev.Subject, want)
 	}

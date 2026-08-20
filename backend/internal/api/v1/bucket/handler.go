@@ -1,5 +1,5 @@
 // Package bucket implements BucketService — provisioning physical S3 buckets
-// inside configured storage backends. Hierarchy: backend → bucket → object_key.
+// inside configured storage backends. Hierarchy: backend → bucket → collection.
 package bucket
 
 import (
@@ -64,7 +64,7 @@ type Repository interface {
 	Update(ctx context.Context, args UpdateArgs) (Bucket, error)
 	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
 	List(ctx context.Context, args ListArgs) ([]Bucket, string, error)
-	CountObjectKeys(ctx context.Context, backendID, bucketName string) (int64, error)
+	CountCollections(ctx context.Context, backendID, bucketName string) (int64, error)
 }
 
 type Handler struct {
@@ -124,14 +124,14 @@ func (h *Handler) DeleteBucket(ctx context.Context, backendID, bucketName string
 	if _, err := auth.PrincipalFromContext(ctx); err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
-	// Refuse if any ObjectKey still uses this bucket.
-	count, err := h.repo.CountObjectKeys(ctx, backendID, bucketName)
+	// Refuse if any Collection still uses this bucket.
+	count, err := h.repo.CountCollections(ctx, backendID, bucketName)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	if count > 0 {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("bucket has %d ObjectKey references; remove them first", count))
+			fmt.Errorf("bucket has %d Collection references; remove them first", count))
 	}
 	if err := h.repo.Delete(ctx, backendID, bucketName, expectedVersion); err != nil {
 		return apiutil.MapError(err)

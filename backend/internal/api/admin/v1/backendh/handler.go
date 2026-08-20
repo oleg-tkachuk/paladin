@@ -1,7 +1,7 @@
 // Package backendh implements the admin BackendService — CRUD over storage
 // backends. Mutations require role `platform.admin`. Reads are also allowed
 // for `tenant.admin` and `bucket.admin` (so they can pick a target backend
-// for new buckets / object_keys).
+// for new buckets / collections).
 package backendh
 
 import (

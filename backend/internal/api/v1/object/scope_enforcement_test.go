@@ -15,7 +15,7 @@ import (
 // This test pins the scope-enforcement contract: the data-plane write paths
 // MUST populate the physical (backend, bucket) on the cedar.Resource BEFORE
 // IsAuthorized, so the scope-enforcement built-in (engine.go) can admit a
-// bucket:/object_key:-scoped PAT. Without the binding a scoped principal is
+// bucket:/collection:-scoped PAT. Without the binding a scoped principal is
 // fail-closed (denied) on its own bucket — the bug this guards against.
 
 // recordingAuthorizer captures the last Resource/action handed to the engine.
@@ -40,10 +40,10 @@ type uploadRepo struct {
 
 func (r *uploadRepo) CreateObject(_ context.Context, args CreateObjectArgs) (Object, error) {
 	return Object{
-		ObjectID:  uuid.Must(uuid.NewV7()),
-		TenantID:  args.TenantID,
-		ObjectKey: args.ObjectKey,
-		Key:       args.Key,
+		ObjectID:   uuid.Must(uuid.NewV7()),
+		TenantID:   args.TenantID,
+		Collection: args.Collection,
+		Key:        args.Key,
 	}, nil
 }
 
@@ -69,7 +69,7 @@ func (noopStorage) DeleteObject(context.Context, string, string, uuid.UUID, stri
 }
 
 // UploadObject is the exemplar write path. Its cedar.Resource must carry the
-// bucket binding resolved from the object-key so bucket:/object_key: scopes
+// bucket binding resolved from the object-key so bucket:/collection: scopes
 // enforce here — resolved with ONE LookupBucketMeta, reused for completion
 // mode + presign routing.
 func TestUploadObjectAuthzResourceCarriesBucket(t *testing.T) {
@@ -84,18 +84,18 @@ func TestUploadObjectAuthzResourceCarriesBucket(t *testing.T) {
 		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
 	}
 
-	if _, err := h.UploadObject(ctx, UploadObjectInput{ObjectKey: "docs", Key: "a.txt", ContentType: "text/plain"}); err != nil {
+	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a.txt", ContentType: "text/plain"}); err != nil {
 		t.Fatalf("UploadObject: %v", err)
 	}
 	if authz.lastResource == nil {
 		t.Fatal("authorizer was never called")
 	}
 	if authz.lastResource.BackendID != "backend-7" || authz.lastResource.BucketName != "bucket-7" {
-		t.Fatalf("authz Resource missing physical binding: backend=%q bucket=%q — a bucket:/object_key:-scoped PAT would be fail-closed on upload",
+		t.Fatalf("authz Resource missing physical binding: backend=%q bucket=%q — a bucket:/collection:-scoped PAT would be fail-closed on upload",
 			authz.lastResource.BackendID, authz.lastResource.BucketName)
 	}
-	if authz.lastResource.ObjectKey != "docs" || authz.lastResource.Key != "a.txt" {
-		t.Fatalf("authz Resource identity wrong: object_key=%q key=%q", authz.lastResource.ObjectKey, authz.lastResource.Key)
+	if authz.lastResource.Collection != "docs" || authz.lastResource.Key != "a.txt" {
+		t.Fatalf("authz Resource identity wrong: collection=%q key=%q", authz.lastResource.Collection, authz.lastResource.Key)
 	}
 	if authz.lastAction != cedar.ActionPresignPut {
 		t.Fatalf("authz action = %q, want %q", authz.lastAction, cedar.ActionPresignPut)
@@ -110,8 +110,8 @@ type getRepo struct {
 	bucket string
 }
 
-func (r *getRepo) FindByName(_ context.Context, _ uuid.UUID, objectKey, _ string) (Object, error) {
-	return Object{ObjectID: uuid.Must(uuid.NewV7()), ObjectKey: objectKey, Key: "k"}, nil
+func (r *getRepo) FindByName(_ context.Context, _ uuid.UUID, collection, _ string) (Object, error) {
+	return Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: collection, Key: "k"}, nil
 }
 func (r *getRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
 	return "be", r.bucket, nil
@@ -126,14 +126,14 @@ func (permitStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, st
 }
 func (permitStore) Watch(context.Context) (<-chan cedar.ChangeEvent, error) { return nil, nil }
 
-// A read (GetObject) against the real engine: a bucket:/object_key:-scoped PAT
+// A read (GetObject) against the real engine: a bucket:/collection:-scoped PAT
 // may read within its scoped object-key and is DENIED off-scope. This proves
 // the resolved bucket reaches the Resource AND flips the engine's decision.
 func TestGetObjectScopeEnforcedByEngine(t *testing.T) {
 	tenantID := uuid.New()
 	engine := cedar.NewEngine(permitStore{}, time.Minute)
 	h := &Handler{repo: &getRepo{bucket: "bkt"}, policy: engine}
-	okScope := auth.Scope{Type: auth.ScopeObjectKey, Value: "bkt/docs"}
+	okScope := auth.Scope{Type: auth.ScopeCollection, Value: "bkt/docs"}
 
 	scopedCtx := func(scopes ...auth.Scope) context.Context {
 		return auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "svc", TenantID: tenantID, Scopes: scopes})

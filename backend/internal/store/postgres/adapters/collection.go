@@ -11,103 +11,103 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// ObjectKeyRepo satisfies objectkey.Repository. Stats require an aggregation that
+// CollectionRepo satisfies objectkey.Repository. Stats require an aggregation that
 // isn't expressed in the sqlc query set; we issue it directly through the
 // pool.
-type ObjectKeyRepo struct {
+type CollectionRepo struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool
 }
 
-func NewObjectKeyRepo(q *sqlc.Queries, pool *pgxpool.Pool) *ObjectKeyRepo {
-	return &ObjectKeyRepo{q: q, pool: pool}
+func NewCollectionRepo(q *sqlc.Queries, pool *pgxpool.Pool) *CollectionRepo {
+	return &CollectionRepo{q: q, pool: pool}
 }
 
-var _ objectkey.Repository = (*ObjectKeyRepo)(nil)
+var _ objectkey.Repository = (*CollectionRepo)(nil)
 
 // RunInTx runs fn in one transaction on the repo's pool — the ADR-0003 seam
-// the handler uses to write an object_key mutation and its outbox rows
+// the handler uses to write an collection mutation and its outbox rows
 // atomically. The *Tx mutation methods run on the same tx.
-func (r *ObjectKeyRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+func (r *CollectionRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("object_key: begin tx: %w", err)
+		return fmt.Errorf("collection: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err := fn(ctx, tx); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("object_key: commit tx: %w", err)
+		return fmt.Errorf("collection: commit tx: %w", err)
 	}
 	return nil
 }
 
-func (r *ObjectKeyRepo) Create(ctx context.Context, args objectkey.CreateObjectKeyArgs) (objectkey.ObjectKey, error) {
+func (r *CollectionRepo) Create(ctx context.Context, args objectkey.CreateCollectionArgs) (objectkey.Collection, error) {
 	return r.createWith(ctx, r.q, args)
 }
 
 // CreateTx runs Create on the caller's tx (ADR-0003).
-func (r *ObjectKeyRepo) CreateTx(ctx context.Context, tx pgx.Tx, args objectkey.CreateObjectKeyArgs) (objectkey.ObjectKey, error) {
+func (r *CollectionRepo) CreateTx(ctx context.Context, tx pgx.Tx, args objectkey.CreateCollectionArgs) (objectkey.Collection, error) {
 	return r.createWith(ctx, r.q.WithTx(tx), args)
 }
 
-func (r *ObjectKeyRepo) createWith(ctx context.Context, q *sqlc.Queries, args objectkey.CreateObjectKeyArgs) (objectkey.ObjectKey, error) {
-	// object_keys.lifecycle_rules is JSONB NOT NULL with default '[]'. The SQL
+func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args objectkey.CreateCollectionArgs) (objectkey.Collection, error) {
+	// collections.lifecycle_rules is JSONB NOT NULL with default '[]'. The SQL
 	// INSERT binds this column explicitly, so a nil []byte would surface as
 	// NULL and violate the constraint. Normalize to an empty JSON array.
 	rules := args.LifecycleRules
 	if len(rules) == 0 {
 		rules = []byte("[]")
 	}
-	if err := q.CreateObjectKey(ctx,
+	if err := q.CreateCollection(ctx,
 		pgUUID(args.TenantID),
-		args.ObjectKey,
+		args.Collection,
 		strPtr(args.DisplayName),
 		args.BackendID,
 		args.BucketName,
 		args.CedarPolicy,
 		rules,
 	); err != nil {
-		return objectkey.ObjectKey{}, fmt.Errorf("create objectKey: %w", err)
+		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
 	}
-	return r.getWith(ctx, q, args.TenantID, args.ObjectKey)
+	return r.getWith(ctx, q, args.TenantID, args.Collection)
 }
 
-func (r *ObjectKeyRepo) Get(ctx context.Context, tenantID uuid.UUID, objectKey string) (objectkey.ObjectKey, error) {
-	return r.getWith(ctx, r.q, tenantID, objectKey)
+func (r *CollectionRepo) Get(ctx context.Context, tenantID uuid.UUID, collection string) (objectkey.Collection, error) {
+	return r.getWith(ctx, r.q, tenantID, collection)
 }
 
-func (r *ObjectKeyRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, objectKey string) (objectkey.ObjectKey, error) {
-	row, err := q.GetObjectKey(ctx, pgUUID(tenantID), objectKey)
+func (r *CollectionRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, collection string) (objectkey.Collection, error) {
+	row, err := q.GetCollection(ctx, pgUUID(tenantID), collection)
 	if err != nil {
-		return objectkey.ObjectKey{}, err
+		return objectkey.Collection{}, err
 	}
-	return bucketFromSQLC(row.ObjectKey), nil
+	return bucketFromSQLC(row.Collection), nil
 }
 
-func (r *ObjectKeyRepo) Update(ctx context.Context, args objectkey.UpdateObjectKeyArgs) (objectkey.ObjectKey, error) {
+func (r *CollectionRepo) Update(ctx context.Context, args objectkey.UpdateCollectionArgs) (objectkey.Collection, error) {
 	return r.updateWith(ctx, r.q, args)
 }
 
 // UpdateTx runs Update on the caller's tx (ADR-0003).
-func (r *ObjectKeyRepo) UpdateTx(ctx context.Context, tx pgx.Tx, args objectkey.UpdateObjectKeyArgs) (objectkey.ObjectKey, error) {
+func (r *CollectionRepo) UpdateTx(ctx context.Context, tx pgx.Tx, args objectkey.UpdateCollectionArgs) (objectkey.Collection, error) {
 	return r.updateWith(ctx, r.q.WithTx(tx), args)
 }
 
-func (r *ObjectKeyRepo) updateWith(ctx context.Context, q *sqlc.Queries, args objectkey.UpdateObjectKeyArgs) (objectkey.ObjectKey, error) {
+func (r *CollectionRepo) updateWith(ctx context.Context, q *sqlc.Queries, args objectkey.UpdateCollectionArgs) (objectkey.Collection, error) {
 	var policyHash []byte
 	if args.CedarPolicy != nil {
 		sum := sha256.Sum256([]byte(*args.CedarPolicy))
 		policyHash = sum[:]
 	}
-	rows, err := q.UpdateObjectKey(ctx,
+	rows, err := q.UpdateCollection(ctx,
 		pgUUID(args.TenantID),
-		args.ObjectKey,
+		args.Collection,
 		args.DisplayName,
 		args.CedarPolicy,
 		policyHash,
@@ -115,27 +115,27 @@ func (r *ObjectKeyRepo) updateWith(ctx context.Context, q *sqlc.Queries, args ob
 		args.ExpectedVersion,
 	)
 	if err != nil {
-		return objectkey.ObjectKey{}, fmt.Errorf("update objectKey: %w", err)
+		return objectkey.Collection{}, fmt.Errorf("update collection: %w", err)
 	}
 	if rows == 0 {
-		return objectkey.ObjectKey{}, objectkey.ErrVersionMismatch
+		return objectkey.Collection{}, objectkey.ErrVersionMismatch
 	}
-	return r.getWith(ctx, q, args.TenantID, args.ObjectKey)
+	return r.getWith(ctx, q, args.TenantID, args.Collection)
 }
 
-func (r *ObjectKeyRepo) Delete(ctx context.Context, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
-	return r.deleteWith(ctx, r.q, tenantID, objectKey, expectedVersion)
+func (r *CollectionRepo) Delete(ctx context.Context, tenantID uuid.UUID, collection string, expectedVersion int64) error {
+	return r.deleteWith(ctx, r.q, tenantID, collection, expectedVersion)
 }
 
 // DeleteTx runs Delete on the caller's tx (ADR-0003).
-func (r *ObjectKeyRepo) DeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
-	return r.deleteWith(ctx, r.q.WithTx(tx), tenantID, objectKey, expectedVersion)
+func (r *CollectionRepo) DeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, collection string, expectedVersion int64) error {
+	return r.deleteWith(ctx, r.q.WithTx(tx), tenantID, collection, expectedVersion)
 }
 
-func (r *ObjectKeyRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
-	rows, err := q.DeleteObjectKey(ctx, pgUUID(tenantID), objectKey, expectedVersion)
+func (r *CollectionRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, collection string, expectedVersion int64) error {
+	rows, err := q.DeleteCollection(ctx, pgUUID(tenantID), collection, expectedVersion)
 	if err != nil {
-		// FK violation: objects.tenant_id_object_key_fkey still
+		// FK violation: objects.tenant_id_collection_fkey still
 		// references this row. The constraint is ON DELETE RESTRICT
 		// so we can't cascade — surface as a typed sentinel and let
 		// the handler return FAILED_PRECONDITION with a clear hint
@@ -144,10 +144,10 @@ func (r *ObjectKeyRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenantI
 		if errors.As(err, &pgErr) {
 			switch pgErr.Code {
 			case "23001", "23503":
-				return objectkey.ErrObjectKeyHasObjects
+				return objectkey.ErrCollectionHasObjects
 			}
 		}
-		return fmt.Errorf("delete objectKey: %w", err)
+		return fmt.Errorf("delete collection: %w", err)
 	}
 	if rows == 0 {
 		return objectkey.ErrVersionMismatch
@@ -155,10 +155,10 @@ func (r *ObjectKeyRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenantI
 	return nil
 }
 
-func (r *ObjectKeyRepo) Rebind(ctx context.Context, tenantID uuid.UUID, objectKey, backendID, bucketName string, expectedVersion int64) error {
-	rows, err := r.q.BindObjectKeyToBucket(ctx, pgUUID(tenantID), objectKey, backendID, bucketName, expectedVersion)
+func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error {
+	rows, err := r.q.BindCollectionToBucket(ctx, pgUUID(tenantID), collection, backendID, bucketName, expectedVersion)
 	if err != nil {
-		return fmt.Errorf("rebind objectKey: %w", err)
+		return fmt.Errorf("rebind collection: %w", err)
 	}
 	if rows == 0 {
 		return objectkey.ErrVersionMismatch
@@ -166,7 +166,7 @@ func (r *ObjectKeyRepo) Rebind(ctx context.Context, tenantID uuid.UUID, objectKe
 	return nil
 }
 
-func (r *ObjectKeyRepo) List(ctx context.Context, args objectkey.ListObjectKeysArgs) ([]objectkey.ObjectKey, string, error) {
+func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollectionsArgs) ([]objectkey.Collection, string, error) {
 	pageSize := args.PageSize
 	if pageSize <= 0 {
 		pageSize = 50
@@ -184,17 +184,17 @@ func (r *ObjectKeyRepo) List(ctx context.Context, args objectkey.ListObjectKeysA
 			tok := args.PageToken
 			after = &tok
 		}
-		rows, err := r.q.ListObjectKeys(ctx, pgUUID(args.TenantID), after, pageSize)
+		rows, err := r.q.ListCollections(ctx, pgUUID(args.TenantID), after, pageSize)
 		if err != nil {
-			return nil, "", fmt.Errorf("list object_keys: %w", err)
+			return nil, "", fmt.Errorf("list collections: %w", err)
 		}
-		out := make([]objectkey.ObjectKey, 0, len(rows))
+		out := make([]objectkey.Collection, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, bucketFromSQLC(row.ObjectKey))
+			out = append(out, bucketFromSQLC(row.Collection))
 		}
 		var next string
 		if int32(len(out)) == pageSize && len(out) > 0 {
-			next = out[len(out)-1].ObjectKey
+			next = out[len(out)-1].Collection
 		}
 		return out, next, nil
 	}
@@ -202,18 +202,18 @@ func (r *ObjectKeyRepo) List(ctx context.Context, args objectkey.ListObjectKeysA
 	// Filtered path: (backend, bucket) narrow. Tenant filter is
 	// optional here — the storage-first browser passes uuid.Nil to
 	// get cross-tenant results on a specific bucket. Cursor is on
-	// (tenant_id, object_key) so pagination stays deterministic
+	// (tenant_id, collection) so pagination stays deterministic
 	// across tenants.
 	const filteredQ = `
-		SELECT tenant_id, object_key, display_name, backend_id, bucket_name,
+		SELECT tenant_id, collection, display_name, backend_id, bucket_name,
 		       cedar_policy, lifecycle_rules, resource_version,
 		       created_at, updated_at
-		  FROM object_keys
+		  FROM collections
 		 WHERE backend_id  = $1
 		   AND bucket_name = $2
 		   AND ($3::uuid IS NULL OR tenant_id = $3)
-		   AND ($4::text IS NULL OR object_key > $4)
-		 ORDER BY tenant_id, object_key
+		   AND ($4::text IS NULL OR collection > $4)
+		 ORDER BY tenant_id, collection
 		 LIMIT $5
 	`
 	var tenantFilter any
@@ -227,35 +227,35 @@ func (r *ObjectKeyRepo) List(ctx context.Context, args objectkey.ListObjectKeysA
 	rows, err := r.pool.Query(ctx, filteredQ,
 		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize)
 	if err != nil {
-		return nil, "", fmt.Errorf("list object_keys (filtered): %w", err)
+		return nil, "", fmt.Errorf("list collections (filtered): %w", err)
 	}
 	defer rows.Close()
-	out := make([]objectkey.ObjectKey, 0)
+	out := make([]objectkey.Collection, 0)
 	for rows.Next() {
-		var row sqlc.ObjectKey
+		var row sqlc.Collection
 		if err := rows.Scan(
-			&row.TenantID, &row.ObjectKey, &row.DisplayName,
+			&row.TenantID, &row.Collection, &row.DisplayName,
 			&row.BackendID, &row.BucketName,
 			&row.CedarPolicy, &row.LifecycleRules,
 			&row.ResourceVersion, &row.CreatedAt, &row.UpdatedAt,
 		); err != nil {
-			return nil, "", fmt.Errorf("list object_keys: scan: %w", err)
+			return nil, "", fmt.Errorf("list collections: scan: %w", err)
 		}
 		out = append(out, bucketFromSQLC(row))
 	}
 	if err := rows.Err(); err != nil {
-		return nil, "", fmt.Errorf("list object_keys: rows err: %w", err)
+		return nil, "", fmt.Errorf("list collections: rows err: %w", err)
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {
-		next = out[len(out)-1].ObjectKey
+		next = out[len(out)-1].Collection
 	}
 	return out, next, nil
 }
 
 // Stats runs a single grouped aggregation. Returning (AVAILABLE, PENDING,
-// DELETED) counts keeps the row count O(1) regardless of objectKey size.
-func (r *ObjectKeyRepo) Stats(ctx context.Context, tenantID uuid.UUID, objectKey string) (objectkey.ObjectKeyStats, error) {
+// DELETED) counts keeps the row count O(1) regardless of collection size.
+func (r *CollectionRepo) Stats(ctx context.Context, tenantID uuid.UUID, collection string) (objectkey.CollectionStats, error) {
 	const q = `
 		SELECT
 			COALESCE(SUM(CASE WHEN state = 'AVAILABLE' THEN 1 ELSE 0 END), 0) AS available,
@@ -263,25 +263,25 @@ func (r *ObjectKeyRepo) Stats(ctx context.Context, tenantID uuid.UUID, objectKey
 			COALESCE(SUM(CASE WHEN state = 'DELETED'   THEN 1 ELSE 0 END), 0) AS deleted,
 			COALESCE(SUM(CASE WHEN state = 'AVAILABLE' THEN size_bytes ELSE 0 END), 0) AS size_bytes
 		FROM objects
-		WHERE tenant_id = $1 AND object_key = $2
+		WHERE tenant_id = $1 AND collection = $2
 	`
-	var s objectkey.ObjectKeyStats
-	err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
+	var s objectkey.CollectionStats
+	err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(
 		&s.ObjectCountAvailable,
 		&s.ObjectCountPending,
 		&s.ObjectCountDeleted,
 		&s.SizeBytesAvailable,
 	)
 	if err != nil {
-		return objectkey.ObjectKeyStats{}, fmt.Errorf("objectKey stats: %w", err)
+		return objectkey.CollectionStats{}, fmt.Errorf("collection stats: %w", err)
 	}
 	return s, nil
 }
 
-func bucketFromSQLC(b sqlc.ObjectKey) objectkey.ObjectKey {
-	return objectkey.ObjectKey{
+func bucketFromSQLC(b sqlc.Collection) objectkey.Collection {
+	return objectkey.Collection{
 		TenantID:        uuidFrom(b.TenantID),
-		ObjectKey:       b.ObjectKey,
+		Collection:      b.Collection,
 		DisplayName:     derefStr(b.DisplayName),
 		BackendID:       b.BackendID,
 		BucketName:      b.BucketName,

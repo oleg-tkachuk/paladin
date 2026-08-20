@@ -123,9 +123,9 @@ func TestCompletionMode(t *testing.T) {
 	if got := impl.CompletionMode("any-key"); got != object.CompletionModeImplicit {
 		t.Errorf("implicit client: got %v, want Implicit", got)
 	}
-	// objectKey is ignored — same mode regardless of argument.
+	// collection is ignored — same mode regardless of argument.
 	if got := impl.CompletionMode(""); got != object.CompletionModeImplicit {
-		t.Errorf("objectKey must be ignored: got %v, want Implicit", got)
+		t.Errorf("collection must be ignored: got %v, want Implicit", got)
 	}
 
 	expl := &Client{mode: object.CompletionModeExplicit}

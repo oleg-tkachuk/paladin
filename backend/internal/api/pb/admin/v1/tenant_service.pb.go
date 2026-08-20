@@ -40,7 +40,7 @@ type CreateTenantRequest struct {
 	Tenant *Tenant `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	// default_bucket — resource name of the (backend, bucket) where this
 	// tenant's objects will live by default. Format:
-	// "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+	// "storageBackends/{backend_id}/buckets/{bucket_id}". Optional —
 	// when empty the tenant has no default binding (legacy shape); when
 	// set, the server inserts a matching tenant_default_bindings row in
 	// the same tx as the tenant insert.
@@ -216,7 +216,7 @@ type DeleteTenantRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	// Refuse delete when object_keys/users/api_keys still reference the tenant.
+	// Refuse delete when collections/users/api_keys still reference the tenant.
 	Force         bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -908,13 +908,13 @@ type StorageMigrationStatus struct {
 	// tenant — "tenants/{tenant_id}".
 	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	// state — provisioning | copying | rebinding | verifying | completed | failed.
-	State            string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	ObjectsTotal     int64  `protobuf:"varint,3,opt,name=objects_total,json=objectsTotal,proto3" json:"objects_total,omitempty"`
-	ObjectsCopied    int64  `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
-	SourceBackendId  string `protobuf:"bytes,5,opt,name=source_backend_id,json=sourceBackendId,proto3" json:"source_backend_id,omitempty"`
-	SourceBucketName string `protobuf:"bytes,6,opt,name=source_bucket_name,json=sourceBucketName,proto3" json:"source_bucket_name,omitempty"`
-	TargetBackendId  string `protobuf:"bytes,7,opt,name=target_backend_id,json=targetBackendId,proto3" json:"target_backend_id,omitempty"`
-	TargetBucketName string `protobuf:"bytes,8,opt,name=target_bucket_name,json=targetBucketName,proto3" json:"target_bucket_name,omitempty"`
+	State           string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	ObjectsTotal    int64  `protobuf:"varint,3,opt,name=objects_total,json=objectsTotal,proto3" json:"objects_total,omitempty"`
+	ObjectsCopied   int64  `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
+	SourceBackendId string `protobuf:"bytes,5,opt,name=source_backend_id,json=sourceBackendId,proto3" json:"source_backend_id,omitempty"`
+	SourceBucketId  string `protobuf:"bytes,6,opt,name=source_bucket_id,json=sourceBucketId,proto3" json:"source_bucket_id,omitempty"`
+	TargetBackendId string `protobuf:"bytes,7,opt,name=target_backend_id,json=targetBackendId,proto3" json:"target_backend_id,omitempty"`
+	TargetBucketId  string `protobuf:"bytes,8,opt,name=target_bucket_id,json=targetBucketId,proto3" json:"target_bucket_id,omitempty"`
 	// error — non-empty only in the `failed` state.
 	Error         string `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -986,9 +986,9 @@ func (x *StorageMigrationStatus) GetSourceBackendId() string {
 	return ""
 }
 
-func (x *StorageMigrationStatus) GetSourceBucketName() string {
+func (x *StorageMigrationStatus) GetSourceBucketId() string {
 	if x != nil {
-		return x.SourceBucketName
+		return x.SourceBucketId
 	}
 	return ""
 }
@@ -1000,9 +1000,9 @@ func (x *StorageMigrationStatus) GetTargetBackendId() string {
 	return ""
 }
 
-func (x *StorageMigrationStatus) GetTargetBucketName() string {
+func (x *StorageMigrationStatus) GetTargetBucketId() string {
 	if x != nil {
-		return x.TargetBucketName
+		return x.TargetBucketId
 	}
 	return ""
 }
@@ -1015,13 +1015,15 @@ func (x *StorageMigrationStatus) GetError() string {
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the
-// bare object_key name shape (ADR-0010 Phase 3 / migration 034).
+// bare collection name shape (ADR-0010 Phase 3 / migration 034).
 type TenantDefaultBinding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name — "tenants/{tenant_id}/defaultBinding".
-	Name       string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	BackendId  string `protobuf:"bytes,2,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
-	BucketName string `protobuf:"bytes,3,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Reference to the bucket, as a resource name:
+	// "storageBackends/{backend_id}/buckets/{bucket_id}". One field, because a
+	// reference to another resource is its name (AIP-122), not its parts.
+	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	// set_at / set_by — audit of the last change.
 	SetAt         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
 	SetBy         string                 `protobuf:"bytes,5,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
@@ -1066,16 +1068,9 @@ func (x *TenantDefaultBinding) GetName() string {
 	return ""
 }
 
-func (x *TenantDefaultBinding) GetBackendId() string {
+func (x *TenantDefaultBinding) GetBucket() string {
 	if x != nil {
-		return x.BackendId
-	}
-	return ""
-}
-
-func (x *TenantDefaultBinding) GetBucketName() string {
-	if x != nil {
-		return x.BucketName
+		return x.Bucket
 	}
 	return ""
 }
@@ -1142,9 +1137,9 @@ func (x *GetTenantDefaultBindingRequest) GetName() string {
 type SetTenantDefaultBindingRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name — "tenants/{tenant_id_or_slug}".
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	BackendId     string `protobuf:"bytes,2,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
-	BucketName    string `protobuf:"bytes,3,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// "storageBackends/{backend_id}/buckets/{bucket_id}".
+	Bucket        string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1186,16 +1181,9 @@ func (x *SetTenantDefaultBindingRequest) GetName() string {
 	return ""
 }
 
-func (x *SetTenantDefaultBindingRequest) GetBackendId() string {
+func (x *SetTenantDefaultBindingRequest) GetBucket() string {
 	if x != nil {
-		return x.BackendId
-	}
-	return ""
-}
-
-func (x *SetTenantDefaultBindingRequest) GetBucketName() string {
-	if x != nil {
-		return x.BucketName
+		return x.Bucket
 	}
 	return ""
 }
@@ -1335,33 +1323,27 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x11target_backend_id\x18\x02 \x01(\tR\x0ftargetBackendId\x12:\n" +
 	"\x19cleanup_retention_seconds\x18\x03 \x01(\x03R\x17cleanupRetentionSeconds\"?\n" +
 	" GetTenantStorageMigrationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdc\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xd4\x02\n" +
 	"\x16StorageMigrationStatus\x12\x16\n" +
 	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12#\n" +
 	"\robjects_total\x18\x03 \x01(\x03R\fobjectsTotal\x12%\n" +
 	"\x0eobjects_copied\x18\x04 \x01(\x03R\robjectsCopied\x12*\n" +
-	"\x11source_backend_id\x18\x05 \x01(\tR\x0fsourceBackendId\x12,\n" +
-	"\x12source_bucket_name\x18\x06 \x01(\tR\x10sourceBucketName\x12*\n" +
-	"\x11target_backend_id\x18\a \x01(\tR\x0ftargetBackendId\x12,\n" +
-	"\x12target_bucket_name\x18\b \x01(\tR\x10targetBucketName\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05error\"\xb4\x01\n" +
+	"\x11source_backend_id\x18\x05 \x01(\tR\x0fsourceBackendId\x12(\n" +
+	"\x10source_bucket_id\x18\x06 \x01(\tR\x0esourceBucketId\x12*\n" +
+	"\x11target_backend_id\x18\a \x01(\tR\x0ftargetBackendId\x12(\n" +
+	"\x10target_bucket_id\x18\b \x01(\tR\x0etargetBucketId\x12\x14\n" +
+	"\x05error\x18\t \x01(\tR\x05error\"\x8c\x01\n" +
 	"\x14TenantDefaultBinding\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
-	"\n" +
-	"backend_id\x18\x02 \x01(\tR\tbackendId\x12\x1f\n" +
-	"\vbucket_name\x18\x03 \x01(\tR\n" +
-	"bucketName\x121\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x121\n" +
 	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt\x12\x15\n" +
 	"\x06set_by\x18\x05 \x01(\tR\x05setBy\"=\n" +
 	"\x1eGetTenantDefaultBindingRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x8f\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"^\n" +
 	"\x1eSetTenantDefaultBindingRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12&\n" +
-	"\n" +
-	"backend_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbackendId\x12(\n" +
-	"\vbucket_name\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"bucketName\"?\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x1f\n" +
+	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\"?\n" +
 	" ClearTenantDefaultBindingRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"#\n" +
 	"!ClearTenantDefaultBindingResponse2\xd8\v\n" +

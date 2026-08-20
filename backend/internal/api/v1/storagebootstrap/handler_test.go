@@ -10,7 +10,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -63,24 +63,24 @@ func (b *fakeBuckets) EnsureBucket(_ context.Context, in bucketh.CreateBucketInp
 	return &admindomain.Bucket{BackendID: in.Bucket.BackendID, BucketName: in.Bucket.BucketName}, b.created, nil
 }
 
-// fakeObjectKeys reports "created" for keys in the created set, "existing"
+// fakeCollections reports "created" for keys in the created set, "existing"
 // otherwise, and records the tenant each Create ran under.
-type fakeObjectKeys struct {
+type fakeCollections struct {
 	createdKeys map[string]bool
 	err         error
 	seenTenants []uuid.UUID
 	seenKeys    []string
 }
 
-func (o *fakeObjectKeys) EnsureObjectKey(ctx context.Context, args objectkey.CreateObjectKeyArgs) (bool, error) {
+func (o *fakeCollections) EnsureCollection(ctx context.Context, args objectkey.CreateCollectionArgs) (bool, error) {
 	if o.err != nil {
 		return false, o.err
 	}
 	// Mirror the real handler: tenant is the caller's, resolved from ctx.
 	tid, _ := auth.TenantFromContext(ctx)
 	o.seenTenants = append(o.seenTenants, tid)
-	o.seenKeys = append(o.seenKeys, args.ObjectKey)
-	return o.createdKeys[args.ObjectKey], nil
+	o.seenKeys = append(o.seenKeys, args.Collection)
+	return o.createdKeys[args.Collection], nil
 }
 
 // ctxWithPAT builds a request context carrying an ApiKey principal bound to
@@ -99,7 +99,7 @@ const (
 	bucket    = "acme-consumer"
 )
 
-func newHandler(authz cedar.Authorizer, backends BackendChecker, buckets BucketEnsurer, keys ObjectKeyEnsurer) *Handler {
+func newHandler(authz cedar.Authorizer, backends BackendChecker, buckets BucketEnsurer, keys CollectionEnsurer) *Handler {
 	return NewHandler(buckets, keys, backends, authz)
 }
 
@@ -112,7 +112,7 @@ func TestEnsureTenantStorage_TenantFromContextNotRequest(t *testing.T) {
 	authz := &recordingAuthorizer{allow: true}
 	backends := &fakeBackends{enabled: true}
 	buckets := &fakeBuckets{created: true}
-	keys := &fakeObjectKeys{createdKeys: map[string]bool{"docs": true}}
+	keys := &fakeCollections{createdKeys: map[string]bool{"docs": true}}
 	h := newHandler(authz, backends, buckets, keys)
 
 	res, err := h.EnsureTenantStorage(ctxWithPAT(caller), backendID, bucket, []string{"docs"})
@@ -147,8 +147,8 @@ func TestEnsureTenantStorage_TenantFromContextNotRequest(t *testing.T) {
 	if !res.BucketCreated {
 		t.Error("BucketCreated = false, want true")
 	}
-	if len(res.ObjectKeysCreated) != 1 || res.ObjectKeysCreated[0] != "docs" {
-		t.Errorf("ObjectKeysCreated = %v, want [docs]", res.ObjectKeysCreated)
+	if len(res.CollectionsCreated) != 1 || res.CollectionsCreated[0] != "docs" {
+		t.Errorf("CollectionsCreated = %v, want [docs]", res.CollectionsCreated)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestEnsureTenantStorage_TenantFromContextNotRequest(t *testing.T) {
 func TestEnsureTenantStorage_IdempotentNoOp(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a2")
 	buckets := &fakeBuckets{created: false} // already existed
-	keys := &fakeObjectKeys{createdKeys: map[string]bool{}}
+	keys := &fakeCollections{createdKeys: map[string]bool{}}
 	h := newHandler(&recordingAuthorizer{allow: true}, &fakeBackends{enabled: true}, buckets, keys)
 
 	res, err := h.EnsureTenantStorage(ctxWithPAT(caller), backendID, bucket, []string{"docs", "reports"})
@@ -166,11 +166,11 @@ func TestEnsureTenantStorage_IdempotentNoOp(t *testing.T) {
 	if res.BucketCreated {
 		t.Error("BucketCreated = true, want false (already existed)")
 	}
-	if len(res.ObjectKeysCreated) != 0 {
-		t.Errorf("ObjectKeysCreated = %v, want none", res.ObjectKeysCreated)
+	if len(res.CollectionsCreated) != 0 {
+		t.Errorf("CollectionsCreated = %v, want none", res.CollectionsCreated)
 	}
-	if len(res.ObjectKeysExisting) != 2 {
-		t.Errorf("ObjectKeysExisting = %v, want 2", res.ObjectKeysExisting)
+	if len(res.CollectionsExisting) != 2 {
+		t.Errorf("CollectionsExisting = %v, want 2", res.CollectionsExisting)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestEnsureTenantStorage_UnknownBackend(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a3")
 	backends := &fakeBackends{err: admindomain.ErrNotFound}
 	buckets := &fakeBuckets{}
-	h := newHandler(&recordingAuthorizer{allow: true}, backends, buckets, &fakeObjectKeys{})
+	h := newHandler(&recordingAuthorizer{allow: true}, backends, buckets, &fakeCollections{})
 
 	_, err := h.EnsureTenantStorage(ctxWithPAT(caller), "no-such-backend", bucket, []string{"docs"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -195,7 +195,7 @@ func TestEnsureTenantStorage_CedarDeny(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a4")
 	backends := &fakeBackends{enabled: true}
 	buckets := &fakeBuckets{}
-	h := newHandler(&recordingAuthorizer{allow: false}, backends, buckets, &fakeObjectKeys{})
+	h := newHandler(&recordingAuthorizer{allow: false}, backends, buckets, &fakeCollections{})
 
 	_, err := h.EnsureTenantStorage(ctxWithPAT(caller), backendID, bucket, []string{"docs"})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -208,7 +208,7 @@ func TestEnsureTenantStorage_CedarDeny(t *testing.T) {
 
 // No principal → Unauthenticated.
 func TestEnsureTenantStorage_NoPrincipal(t *testing.T) {
-	h := newHandler(&recordingAuthorizer{allow: true}, &fakeBackends{enabled: true}, &fakeBuckets{}, &fakeObjectKeys{})
+	h := newHandler(&recordingAuthorizer{allow: true}, &fakeBackends{enabled: true}, &fakeBuckets{}, &fakeCollections{})
 	_, err := h.EnsureTenantStorage(context.Background(), backendID, bucket, nil)
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("err code = %v, want Unauthenticated (err=%v)", connect.CodeOf(err), err)
@@ -219,7 +219,7 @@ func TestEnsureTenantStorage_NoPrincipal(t *testing.T) {
 func TestEnsureTenantStorage_BucketEnsureError(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a5")
 	buckets := &fakeBuckets{err: connect.NewError(connect.CodeUnavailable, errors.New("provisioning not wired"))}
-	keys := &fakeObjectKeys{createdKeys: map[string]bool{}}
+	keys := &fakeCollections{createdKeys: map[string]bool{}}
 	h := newHandler(&recordingAuthorizer{allow: true}, &fakeBackends{enabled: true}, buckets, keys)
 
 	_, err := h.EnsureTenantStorage(ctxWithPAT(caller), backendID, bucket, []string{"docs"})

@@ -31,7 +31,7 @@ permit (
 ) when {
     context.size_bytes <= 5368709120 &&
     // Guard resource.key: a PresignPut whose object key is server-generated has
-    // no key at authz time, making the resource an ObjectKey entity with no key
+    // no key at authz time, making the resource an Collection entity with no key
     // attribute. Reading resource.key then raises an evaluation error and Cedar
     // fails closed (denies a legitimate upload). "resource has key" skips the
     // filename blocklist for keyless resources; the block still applies when a
@@ -53,7 +53,7 @@ permit (
     ],
     resource
 ) when {
-    principal.roles.contains("objectKey:admin") ||
+    principal.roles.contains("collection:admin") ||
     principal.roles.contains("platform.admin")
 };
 

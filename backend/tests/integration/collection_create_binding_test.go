@@ -1,9 +1,9 @@
 //go:build integration
 
-// ADR-0010 Phase 3 wiring: CreateObjectKey without a bucket routes the NEW
-// objectKey to the tenant's default binding; with no binding it is a clear
+// ADR-0010 Phase 3 wiring: CreateCollection without a bucket routes the NEW
+// collection to the tenant's default binding; with no binding it is a clear
 // FAILED_PRECONDITION rather than a raw NOT-NULL / FK error. (Get/Update/Delete
-// of an EXISTING objectKey use the row's own binding — not covered here because
+// of an EXISTING collection use the row's own binding — not covered here because
 // that's exactly what they already did.)
 package integration
 
@@ -16,28 +16,28 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-func TestCreateObjectKey_UsesDefaultBinding(t *testing.T) {
+func TestCreateCollection_UsesDefaultBinding(t *testing.T) {
 	f := setupDispatcher(t)
 	tid := mustCreateTenant(t, f.h.PoolMigrate, "ok-default-binding")
 	seedOwnedBucket(t, f.h.PoolMigrate, tid, "primary", "paladin-test")
 
 	q := sqlc.New(f.h.PoolMigrate)
-	okRepo := adapters.NewObjectKeyRepo(q, f.h.PoolMigrate)
+	okRepo := adapters.NewCollectionRepo(q, f.h.PoolMigrate)
 	tenantRepo := adapters.NewTenantRepo(q, f.h.PoolMigrate)
 	handler := objectkey.NewHandler(okRepo, allowAll{})
-	server := admin.NewObjectKeyServer(handler, tenantRepo)
+	server := admin.NewCollectionServer(handler, tenantRepo)
 
 	ctx := ctxAdmin(t, tid)
-	createNoBucket := func(name string) (*connect.Response[pb.ObjectKey], error) {
-		return server.CreateObjectKey(ctx, connect.NewRequest(&pb.CreateObjectKeyRequest{
-			Parent:            "tenants/" + tid.String(),
-			ObjectKey:         name,
-			ObjectKeyResource: &pb.ObjectKey{}, // no bucket named
+	createNoBucket := func(name string) (*connect.Response[pb.Collection], error) {
+		return server.CreateCollection(ctx, connect.NewRequest(&pb.CreateCollectionRequest{
+			Parent:             "tenants/" + tid.String(),
+			Collection:         name,
+			CollectionResource: &pb.Collection{}, // no bucket named
 		}))
 	}
 

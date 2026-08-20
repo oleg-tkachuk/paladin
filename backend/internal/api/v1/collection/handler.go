@@ -1,8 +1,8 @@
-// Package objectKey implements the ObjectKeyService business logic.
+// Package collection implements the CollectionService business logic.
 //
 // Buckets are logical namespaces mapped onto a physical storage backend.
 // Create/Update/Delete operations go through Cedar authorization. Delete is
-// restricted if any non-DELETED objects still reference the objectKey (FK).
+// restricted if any non-DELETED objects still reference the collection (FK).
 package objectkey
 
 import (
@@ -29,13 +29,13 @@ import (
 type EventProducer interface {
 	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
 	// DispatchTx fans the event out on the caller's tx so the outbox rows
-	// commit atomically with the object_key mutation (ADR-0003).
+	// commit atomically with the collection mutation (ADR-0003).
 	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
 }
 
-type ObjectKey struct {
+type Collection struct {
 	TenantID        uuid.UUID
-	ObjectKey       string
+	Collection      string
 	DisplayName     string
 	BackendID       string
 	BucketName      string
@@ -46,16 +46,16 @@ type ObjectKey struct {
 	UpdatedAt       time.Time
 }
 
-type ObjectKeyStats struct {
+type CollectionStats struct {
 	ObjectCountAvailable int64
 	ObjectCountPending   int64
 	ObjectCountDeleted   int64
 	SizeBytesAvailable   int64
 }
 
-type CreateObjectKeyArgs struct {
+type CreateCollectionArgs struct {
 	TenantID       uuid.UUID
-	ObjectKey      string
+	Collection     string
 	DisplayName    string
 	BackendID      string
 	BucketName     string
@@ -63,21 +63,21 @@ type CreateObjectKeyArgs struct {
 	LifecycleRules []byte
 }
 
-type UpdateObjectKeyArgs struct {
+type UpdateCollectionArgs struct {
 	TenantID        uuid.UUID
-	ObjectKey       string
+	Collection      string
 	ExpectedVersion int64
 	DisplayName     *string
 	CedarPolicy     *string
 	LifecycleRules  []byte
 }
 
-type ListObjectKeysArgs struct {
+type ListCollectionsArgs struct {
 	TenantID  uuid.UUID
 	PageSize  int32
 	PageToken string
 	// BackendID + BucketName are optional server-side filters. When both
-	// are set, only ObjectKeys bound to that (backend, bucket) pair are
+	// are set, only Collections bound to that (backend, bucket) pair are
 	// returned. Used by the storage-first UI browser to avoid pulling
 	// every OK platform-wide just to client-filter a handful per bucket.
 	BackendID  string
@@ -85,23 +85,23 @@ type ListObjectKeysArgs struct {
 }
 
 type Repository interface {
-	Create(ctx context.Context, args CreateObjectKeyArgs) (ObjectKey, error)
-	Get(ctx context.Context, tenantID uuid.UUID, objectKey string) (ObjectKey, error)
-	Update(ctx context.Context, args UpdateObjectKeyArgs) (ObjectKey, error)
-	Delete(ctx context.Context, tenantID uuid.UUID, objectKey string, expectedVersion int64) error
-	List(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error)
-	Stats(ctx context.Context, tenantID uuid.UUID, objectKey string) (ObjectKeyStats, error)
+	Create(ctx context.Context, args CreateCollectionArgs) (Collection, error)
+	Get(ctx context.Context, tenantID uuid.UUID, collection string) (Collection, error)
+	Update(ctx context.Context, args UpdateCollectionArgs) (Collection, error)
+	Delete(ctx context.Context, tenantID uuid.UUID, collection string, expectedVersion int64) error
+	List(ctx context.Context, args ListCollectionsArgs) ([]Collection, string, error)
+	Stats(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionStats, error)
 	// Rebind atomically swaps the (backend_id, bucket_name) target. DB
 	// trigger enforces tenancy on single-tenant buckets.
-	Rebind(ctx context.Context, tenantID uuid.UUID, objectKey, backendID, bucketName string, expectedVersion int64) error
+	Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error
 
 	// RunInTx + the *Tx variants are the ADR-0003 seam: mutation + outbox
 	// fan-out on one tx so a crash can't leave a committed change without
 	// its event.
 	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
-	CreateTx(ctx context.Context, tx pgx.Tx, args CreateObjectKeyArgs) (ObjectKey, error)
-	UpdateTx(ctx context.Context, tx pgx.Tx, args UpdateObjectKeyArgs) (ObjectKey, error)
-	DeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, objectKey string, expectedVersion int64) error
+	CreateTx(ctx context.Context, tx pgx.Tx, args CreateCollectionArgs) (Collection, error)
+	UpdateTx(ctx context.Context, tx pgx.Tx, args UpdateCollectionArgs) (Collection, error)
+	DeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, collection string, expectedVersion int64) error
 }
 
 type Handler struct {
@@ -127,7 +127,7 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 }
 
 // dispatchEventTx fans the event out on the caller's tx so the outbox rows
-// commit atomically with the object_key mutation (ADR-0003). Returns the
+// commit atomically with the collection mutation (ADR-0003). Returns the
 // error (caller rolls back); nil-safe.
 func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
 	if h.events == nil {
@@ -148,16 +148,16 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	return err
 }
 
-// objectKeyResourceName — kept as the C-shape emitter for callers
+// collectionResourceName — kept as the C-shape emitter for callers
 // that don't have (backend, bucket) in scope. Phase 1 prefers
 // CanonicalName when the full tuple is available (event payloads
 // after Create / Update / Delete read the row's backend/bucket and
 // can canonicalize). Plain Delete with no row read still uses C.
-func objectKeyResourceName(tenantID uuid.UUID, key string) string {
+func collectionResourceName(tenantID uuid.UUID, key string) string {
 	return TenantPathName(tenantID, key)
 }
 
-func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs) (*ObjectKey, error) {
+func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArgs) (*Collection, error) {
 	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
@@ -179,7 +179,7 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 		if !principal.HasRole(apiutil.RolePlatformAdmin) &&
 			!principal.HasRole(apiutil.RoleTenantProvisioner) {
 			return nil, connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant CreateObjectKey requires platform.admin or platform.tenant-provisioner"))
+				errors.New("cross-tenant CreateCollection requires platform.admin or platform.tenant-provisioner"))
 		}
 	}
 	// A backend must be named explicitly — there is no default. The connectshim
@@ -189,37 +189,37 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("backend_id is required (name a bucket or set a tenant default binding; there is no default backend)"))
 	}
-	if err := h.authorizeFull(ctx, principal, args.TenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorizeFull(ctx, principal, args.TenantID, args.Collection, args.BackendID, args.BucketName, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
-	// Create + paladin.object_key.created in one tx (ADR-0003).
-	var b ObjectKey
+	// Create + paladin.collection.created in one tx (ADR-0003).
+	var b Collection
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var e error
 		b, e = h.repo.CreateTx(ctx, tx, args)
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.object_key.created",
-			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey),
+		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.collection.created",
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
 			map[string]any{
 				"tenant_id":    b.TenantID.String(),
-				"object_key":   b.ObjectKey,
+				"collection":   b.Collection,
 				"display_name": b.DisplayName,
 				"backend_id":   b.BackendID,
 				"bucket_name":  b.BucketName,
 			})
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create objectKey: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create collection: %w", err))
 	}
 	// writes into the slot the audit mw installed
-	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey))
+	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
 	return &b, nil
 }
 
-// EnsureObjectKey idempotently binds an object-key to (backend, bucket) under
+// EnsureCollection idempotently binds an object-key to (backend, bucket) under
 // the CALLER's tenant for a caller that a higher layer has ALREADY authorized.
-// Unlike CreateObjectKey there is NO Cedar ManageObjectKey check — the
+// Unlike CreateCollection there is NO Cedar ManageCollection check — the
 // DATA-plane StorageBootstrapService gates on the EnsureTenantStorage Cedar
 // action, and that action IS the authorization for the whole self-provision
 // bundle. Do NOT mount this behind a surface that has not already authorized
@@ -227,9 +227,9 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 //
 // It is ALWAYS self-scoped: the tenant is taken from the request principal and
 // any tenant on args is overwritten with the caller's own. Reuses
-// CreateObjectKey's create + outbox/event path. Returns created=false when the
+// CreateCollection's create + outbox/event path. Returns created=false when the
 // key already existed (a no-op), created=true when a new row was written.
-func (h *Handler) EnsureObjectKey(ctx context.Context, args CreateObjectKeyArgs) (bool, error) {
+func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArgs) (bool, error) {
 	callerTenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return false, err
@@ -237,16 +237,16 @@ func (h *Handler) EnsureObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	// Self-scope: the operation is ALWAYS the caller's own tenant. Never trust
 	// a tenant id from the request.
 	args.TenantID = callerTenantID
-	if args.ObjectKey == "" {
+	if args.Collection == "" {
 		return false, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("object_key is required"))
+			errors.New("collection is required"))
 	}
 	if args.BackendID == "" || args.BucketName == "" {
 		return false, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("backend_id and bucket_name are required"))
 	}
 	// Fast idempotent path: an existing key is a success no-op.
-	switch _, gerr := h.repo.Get(ctx, args.TenantID, args.ObjectKey); {
+	switch _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); {
 	case gerr == nil:
 		return false, nil
 	case errors.Is(gerr, pgx.ErrNoRows):
@@ -254,20 +254,20 @@ func (h *Handler) EnsureObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	default:
 		return false, connect.NewError(connect.CodeInternal, gerr)
 	}
-	// Create + paladin.object_key.created in one tx (ADR-0003), mirroring
-	// CreateObjectKey.
-	var b ObjectKey
+	// Create + paladin.collection.created in one tx (ADR-0003), mirroring
+	// CreateCollection.
+	var b Collection
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var e error
 		b, e = h.repo.CreateTx(ctx, tx, args)
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.object_key.created",
-			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey),
+		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.collection.created",
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
 			map[string]any{
 				"tenant_id":    b.TenantID.String(),
-				"object_key":   b.ObjectKey,
+				"collection":   b.Collection,
 				"display_name": b.DisplayName,
 				"backend_id":   b.BackendID,
 				"bucket_name":  b.BucketName,
@@ -276,22 +276,22 @@ func (h *Handler) EnsureObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 		// Lost a race to a concurrent create: the key now exists, so honour
 		// idempotency and report it existing rather than surfacing the
 		// unique-violation.
-		if _, gerr := h.repo.Get(ctx, args.TenantID, args.ObjectKey); gerr == nil {
+		if _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); gerr == nil {
 			return false, nil
 		}
-		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("ensure objectKey: %w", err))
+		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("ensure collection: %w", err))
 	}
 	return true, nil
 }
 
-// GetObjectKey reads one ObjectKey under tenantID. tenantID comes from the
-// resource name (resolve.ResolveObjectKeyName) so a platform-admin can open
-// any tenant's ObjectKey via /tenants/{t}/object-keys/{ok}; uuid.Nil (a bare
+// GetCollection reads one Collection under tenantID. tenantID comes from the
+// resource name (resolve.ResolveCollectionName) so a platform-admin can open
+// any tenant's Collection via /tenants/{t}/object-keys/{ok}; uuid.Nil (a bare
 // name) defaults to the caller's tenant. A target tenant other than the
-// caller's is platform.admin-only — the same cross-tenant gate ListObjectKeys
-// enforces, so a regular tenant can't read a sibling's ObjectKey by crafting
+// caller's is platform.admin-only — the same cross-tenant gate ListCollections
+// enforces, so a regular tenant can't read a sibling's Collection by crafting
 // the name. Cedar then authorizes against the (target) tenant.
-func (h *Handler) GetObjectKey(ctx context.Context, tenantID uuid.UUID, objectKey string) (*ObjectKey, error) {
+func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collection string) (*Collection, error) {
 	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
@@ -305,41 +305,41 @@ func (h *Handler) GetObjectKey(ctx context.Context, tenantID uuid.UUID, objectKe
 		!principal.HasRole(apiutil.RolePlatformAdmin) &&
 		!principal.HasRole(apiutil.RoleTenantProvisioner) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("cross-tenant GetObjectKey requires platform.admin or platform.tenant-provisioner"))
+			errors.New("cross-tenant GetCollection requires platform.admin or platform.tenant-provisioner"))
 	}
-	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
-	b, err := h.repo.Get(ctx, tenantID, objectKey)
+	b, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 	return &b, nil
 }
 
-func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs) (*ObjectKey, error) {
+func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArgs) (*Collection, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 	args.TenantID = tenantID
-	if err := h.authorize(ctx, principal, tenantID, args.ObjectKey, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, args.Collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
-	// Update + paladin.object_key.updated in one tx (ADR-0003). UpdateTx reads
+	// Update + paladin.collection.updated in one tx (ADR-0003). UpdateTx reads
 	// the post-update row back on the same tx (for resource_version).
-	var b ObjectKey
+	var b Collection
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var e error
 		b, e = h.repo.UpdateTx(ctx, tx, args)
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.object_key.updated",
-			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey),
+		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.collection.updated",
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
 			map[string]any{
 				"tenant_id":        b.TenantID.String(),
-				"object_key":       b.ObjectKey,
+				"collection":       b.Collection,
 				"backend_id":       b.BackendID,
 				"bucket_name":      b.BucketName,
 				"resource_version": b.ResourceVersion,
@@ -347,39 +347,39 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 	}); err != nil {
 		return nil, mapVersionErr(err)
 	}
-	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey))
+	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
 	return &b, nil
 }
 
-func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expectedVersion int64) error {
+func (h *Handler) DeleteCollection(ctx context.Context, collection string, expectedVersion int64) error {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return err
 	}
 	// Read the row before delete so the event payload can carry the
 	// canonical resource name (which needs backend + bucket). Best-
 	// effort: if Get fails we fall back to the C-shape resource name —
 	// the delete itself still runs through the OCC guard below.
-	pre, getErr := h.repo.Get(ctx, tenantID, objectKey)
-	resourceName := objectKeyResourceName(tenantID, objectKey)
+	pre, getErr := h.repo.Get(ctx, tenantID, collection)
+	resourceName := collectionResourceName(tenantID, collection)
 	if getErr == nil {
-		resourceName = CanonicalName(pre.BackendID, pre.BucketName, tenantID, objectKey)
+		resourceName = CanonicalName(pre.BackendID, pre.BucketName, tenantID, collection)
 	}
-	// Delete + paladin.object_key.deleted in one tx (ADR-0003). The resource
+	// Delete + paladin.collection.deleted in one tx (ADR-0003). The resource
 	// name comes from the pre-read above (best-effort; the OCC guard still
 	// runs inside the tx).
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if e := h.repo.DeleteTx(ctx, tx, tenantID, objectKey, expectedVersion); e != nil {
+		if e := h.repo.DeleteTx(ctx, tx, tenantID, collection, expectedVersion); e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object_key.deleted",
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.collection.deleted",
 			resourceName,
 			map[string]any{
 				"tenant_id":        tenantID.String(),
-				"object_key":       objectKey,
+				"collection":       collection,
 				"resource_version": expectedVersion,
 			})
 	}); err != nil {
@@ -389,7 +389,7 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 	return nil
 }
 
-func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error) {
+func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs) ([]Collection, string, error) {
 	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -405,46 +405,46 @@ func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) (
 			args.TenantID = callerTenantID
 		} else if !principal.HasRole(apiutil.RolePlatformAdmin) {
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant ListObjectKeys requires platform.admin"))
+				errors.New("cross-tenant ListCollections requires platform.admin"))
 		}
 	} else if args.TenantID != callerTenantID {
 		if !principal.HasRole(apiutil.RolePlatformAdmin) {
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant ListObjectKeys requires platform.admin"))
+				errors.New("cross-tenant ListCollections requires platform.admin"))
 		}
 	}
 	// One tenant-scoped Cedar check up front; per-row filtering would
-	// dominate pagination cost so we don't repeat it for every objectKey.
+	// dominate pagination cost so we don't repeat it for every collection.
 	// For cross-tenant listing we authorize against the caller's tenant
 	// (the principal-tenant invariant the Cedar engine encodes).
 	authzTenant := args.TenantID
 	if authzTenant == uuid.Nil {
 		authzTenant = callerTenantID
 	}
-	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageCollection); err != nil {
 		return nil, "", err
 	}
 	return h.repo.List(ctx, args)
 }
 
-func (h *Handler) GetObjectKeyStats(ctx context.Context, objectKey string) (*ObjectKeyStats, error) {
+func (h *Handler) GetCollectionStats(ctx context.Context, collection string) (*CollectionStats, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
-	s, err := h.repo.Stats(ctx, tenantID, objectKey)
+	s, err := h.repo.Stats(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &s, nil
 }
 
-// BindObjectKeyToBucket rebinds the namespace to a different bucket. Cedar
-// authorization uses ActionBindObjectKeyToBucket on the namespace.
-func (h *Handler) BindObjectKeyToBucket(ctx context.Context, objectKey, bucket string, expectedVersion int64) (*ObjectKey, error) {
+// BindCollectionToBucket rebinds the namespace to a different bucket. Cedar
+// authorization uses ActionBindCollectionToBucket on the namespace.
+func (h *Handler) BindCollectionToBucket(ctx context.Context, collection, bucket string, expectedVersion int64) (*Collection, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
@@ -453,17 +453,17 @@ func (h *Handler) BindObjectKeyToBucket(ctx context.Context, objectKey, bucket s
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err := h.authorizeFull(ctx, p, tenantID, objectKey, backendID, bucketName, cedar.ActionBindObjectKeyToBucket); err != nil {
+	if err := h.authorizeFull(ctx, p, tenantID, collection, backendID, bucketName, cedar.ActionBindCollectionToBucket); err != nil {
 		return nil, err
 	}
-	if err := h.repo.Rebind(ctx, tenantID, objectKey, backendID, bucketName, expectedVersion); err != nil {
+	if err := h.repo.Rebind(ctx, tenantID, collection, backendID, bucketName, expectedVersion); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err)
 		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("rebind: %w", err))
 	}
-	updated, err := h.repo.Get(ctx, tenantID, objectKey)
+	updated, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -481,34 +481,34 @@ func splitBucketResourceName(name string) (backend, bucket string, err error) {
 
 // authorize is the binding-less variant used by the read-before-authz
 // operations (Get / Update / Delete / Stats). These authorize BEFORE reading
-// the object_key row on purpose: reading first would let an unauthorized
+// the collection row on purpose: reading first would let an unauthorized
 // caller distinguish "exists" (→ PermissionDenied) from "not found" (→
 // NotFound), leaking existence. So the (backend, bucket) binding is not
-// available here, and under ADR-0010 the Cedar ObjectKey EUID intentionally
+// available here, and under ADR-0010 the Cedar Collection EUID intentionally
 // falls back to the legacy `{tid}/{ok}` form for these calls — canonicalizing
 // them would require the pre-authz row read we deliberately avoid. Create /
-// BindObjectKeyToBucket carry the binding in the request and use authorizeFull,
+// BindCollectionToBucket carry the binding in the request and use authorizeFull,
 // so they get the canonical EUID when the flag is on.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
-	return h.authorizeFull(ctx, p, tenantID, objectKey, "", "", action)
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, action string) error {
+	return h.authorizeFull(ctx, p, tenantID, collection, "", "", action)
 }
 
 // authorizeFull is the bucket-aware variant that passes the bucket binding
-// to Cedar so the engine emits the full ObjectKey←Bucket←StorageBackend
+// to Cedar so the engine emits the full Collection←Bucket←StorageBackend
 // hierarchy. Use whenever the caller has the binding in hand (Create,
-// BindObjectKeyToBucket, post-Get on Update).
+// BindCollectionToBucket, post-Get on Update).
 func (h *Handler) authorizeFull(
 	ctx context.Context,
 	p *auth.Principal,
 	tenantID uuid.UUID,
-	objectKey, backendID, bucketName, action string,
+	collection, backendID, bucketName, action string,
 ) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipalFor(p, tenantID),
 		action,
 		&cedar.Resource{
 			TenantID:   tenantID,
-			ObjectKey:  objectKey,
+			Collection: collection,
 			BackendID:  backendID,
 			BucketName: bucketName,
 		},
@@ -523,13 +523,13 @@ func (h *Handler) authorizeFull(
 	return nil
 }
 
-// ErrObjectKeyHasObjects is returned when a Delete is blocked because
-// the ObjectKey still has rows in `objects` referencing it. The FK
+// ErrCollectionHasObjects is returned when a Delete is blocked because
+// the Collection still has rows in `objects` referencing it. The FK
 // constraint is ON DELETE RESTRICT — operators must purge / move the
 // objects first. Handler maps this to FAILED_PRECONDITION so the UI
 // can surface a clear "remove the files first" prompt.
-var ErrObjectKeyHasObjects = errors.New(
-	"object_key has live objects; remove or move them before deleting")
+var ErrCollectionHasObjects = errors.New(
+	"collection has live objects; remove or move them before deleting")
 
 // ErrVersionMismatch is returned when optimistic-concurrency control fails.
 // Repositories should surface it so handlers can map to CodeAborted.
@@ -544,5 +544,5 @@ func mapVersionErr(err error) error {
 // registry — not a per-handler if/else — decides the code.
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrObjectKeyHasObjects, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition)
 }

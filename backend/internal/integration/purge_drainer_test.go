@@ -44,9 +44,9 @@ func seedPurgeDebt(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixt
 	id := uuid.New()
 	mustExec(t, ctx, pool, `
 		INSERT INTO pending_purges
-		  (purge_id, tenant_id, object_id, backend_id, bucket_name, object_key, key)
+		  (purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key)
 		VALUES ($1, $2, $3, 'primary', 'bkt-1', $4, 'k-orphan')`,
-		id, f.tenantID, uuid.New(), f.objectKey)
+		id, f.tenantID, uuid.New(), f.collection)
 	return id
 }
 

@@ -8,7 +8,7 @@
 //   - Storage (presign / HEAD / copy)
 //   - State machine (idempotent promotion / delete / restore)
 //
-// Other services (ObjectKey, Presign, Multipart, Batch, Tenant, Operation)
+// Other services (Collection, Presign, Multipart, Batch, Tenant, Operation)
 // follow the same shape.
 package object
 
@@ -64,10 +64,10 @@ type Storage interface {
 	PresignPut(ctx context.Context, args PresignPutArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
 	PresignPost(ctx context.Context, args PresignPostArgs) (action string, fields map[string]string, expiresAt time.Time, err error)
 	PresignGet(ctx context.Context, args PresignGetArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
-	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 	CopyObject(ctx context.Context, src, dst Location) error
 	// DeleteObject is optional — for permanent deletes only.
-	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) error
+	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
 }
 
 // BucketMeta is the minimal projection of bucket metadata the object
@@ -170,24 +170,24 @@ const (
 )
 
 // Location identifies an S3 object: the physical (backend, bucket) plus the
-// composed key (tenant_id/object_key/key). Bucket may be empty, in which case
+// composed key (tenant_id/collection/key). Bucket may be empty, in which case
 // the storage adapter falls back to its configured default; BackendID likewise
 // empty selects the default backend. Together (BackendID, Bucket) are the
 // physical-location key the multi-backend routing dispatches on — src and dst
 // may differ for a cross-backend copy (docs/backend-registry.md).
 type Location struct {
-	BackendID string // storage backend id; "" = default backend
-	TenantID  uuid.UUID
-	Bucket    string // physical S3 bucket
-	ObjectKey string // Paladin namespace within the bucket
-	Key       string // storage key inside the prefix
+	BackendID  string // storage backend id; "" = default backend
+	TenantID   uuid.UUID
+	Bucket     string // physical S3 bucket
+	Collection string // Paladin namespace within the bucket
+	Key        string // storage key inside the prefix
 }
 
 type PresignPutArgs struct {
 	BackendID       string // storage backend id; "" = default backend
 	TenantID        uuid.UUID
-	Bucket          string // physical S3 bucket; resolved from ObjectKey row
-	ObjectKey       string
+	Bucket          string // physical S3 bucket; resolved from Collection row
+	Collection      string
 	Key             string
 	ContentType     string
 	ChecksumAlgo    string
@@ -200,7 +200,7 @@ type PresignPostArgs struct {
 	BackendID    string // storage backend id; "" = default backend
 	TenantID     uuid.UUID
 	Bucket       string
-	ObjectKey    string
+	Collection   string
 	Key          string
 	ContentType  string
 	MaxSizeBytes int64
@@ -212,7 +212,7 @@ type PresignGetArgs struct {
 	BackendID          string // storage backend id; "" = default backend
 	TenantID           uuid.UUID
 	Bucket             string
-	ObjectKey          string
+	Collection         string
 	Key                string
 	TTL                time.Duration
 	ContentDisposition string
@@ -222,13 +222,13 @@ type PresignGetArgs struct {
 // (sqlc-backed). Keeping it local to this package keeps handler tests lean.
 type Repository interface {
 	CreateObject(ctx context.Context, args CreateObjectArgs) (Object, error)
-	FindByName(ctx context.Context, tenantID uuid.UUID, objectKey, objectID string) (Object, error)
+	FindByName(ctx context.Context, tenantID uuid.UUID, collection, objectID string) (Object, error)
 	// FindByIDs returns the rows for the given ids in a single query.
 	// Missing ids are simply absent from the result — callers diff
 	// against their input to report per-id not-found. Exists so batch
 	// executors don't issue one FindByName round-trip per id.
 	FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]Object, error)
-	FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (Object, error)
+	FindByPath(ctx context.Context, tenantID uuid.UUID, collection, key string) (Object, error)
 	UpdateMetadata(ctx context.Context, args UpdateMetadataArgs) (Object, error)
 	// UpdateMetadataTx runs UpdateMetadata on tx so the handler can write
 	// the paladin.object.updated outbox rows atomically with the row update
@@ -237,12 +237,12 @@ type Repository interface {
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
 	// ListDistinctTags returns the distinct tag key→values across the
-	// ObjectKey's live (non-DELETED) objects, each value list sorted. Backs
+	// Collection's live (non-DELETED) objects, each value list sorted. Backs
 	// the tag-facet filter dropdown.
-	ListDistinctTags(ctx context.Context, tenantID uuid.UUID, objectKey string) (map[string][]string, error)
+	ListDistinctTags(ctx context.Context, tenantID uuid.UUID, collection string) (map[string][]string, error)
 	// LookupBucket returns the storage backend id and the physical S3 bucket
-	// for a tenant's ObjectKey. Cheap lookup (covered by
-	// idx_object_keys_bucket_routing). An empty bucket means the row exists
+	// for a tenant's Collection. Cheap lookup (covered by
+	// idx_collections_bucket_routing). An empty bucket means the row exists
 	// but no bucket has been bound — the storage adapter falls back to its
 	// configured default in that case. backendID is the physical-location
 	// half the multi-backend routing keys on (docs/backend-registry.md);
@@ -251,12 +251,12 @@ type Repository interface {
 	// (migration 047): pass true for mutations (PUT/POST/multipart-init/
 	// copy-dest/delete/version-write), false for reads (GET/HEAD/list). A
 	// write against a read-only backend returns ErrBackendReadOnly.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 	// LookupBucketMeta returns the bucket binding plus the metadata needed for
 	// versioning / lock decisions on the hot path. Implementations should
 	// satisfy this with a single query — handlers call it on every promote.
 	// `write` gates the read-only drain state as in LookupBucket.
-	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (BucketMeta, error)
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (BucketMeta, error)
 	// ObjectLock returns the object row's lock state so the delete path
 	// can refuse (and report) a locked object before touching storage.
 	ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (ObjectLock, error)
@@ -292,9 +292,9 @@ type Repository interface {
 	// together or not at all.
 	SettlePurgeTx(ctx context.Context, tx pgx.Tx, purgeID uuid.UUID) error
 	// LiveCollision reports whether a non-DELETED row already occupies
-	// (tenant, object_key, key); used to refuse RestoreObject when the
+	// (tenant, collection, key); used to refuse RestoreObject when the
 	// slot has been reused by a fresh upload.
-	LiveCollision(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (bool, error)
+	LiveCollision(ctx context.Context, tenantID uuid.UUID, collection, key string) (bool, error)
 }
 
 // PurgeDebt is one permanent delete's byte-reclaim obligation: everything the
@@ -306,16 +306,16 @@ type PurgeDebt struct {
 	ObjectID   uuid.UUID
 	BackendID  string
 	BucketName string
-	ObjectKey  string
+	Collection string
 	Key        string
 }
 
 type Object struct {
 	ObjectID         uuid.UUID
 	TenantID         uuid.UUID
-	BackendID        string // FK column from object_keys; populated when JOINed
+	BackendID        string // FK column from collections; populated when JOINed
 	Bucket           string // physical S3 bucket; populated when JOINed
-	ObjectKey        string
+	Collection       string
 	Key              string
 	State            statemachine.State
 	ContentType      string
@@ -337,7 +337,7 @@ type Object struct {
 
 type CreateObjectArgs struct {
 	TenantID         uuid.UUID
-	ObjectKey        string
+	Collection       string
 	Key              string
 	ContentType      string
 	SizeHint         int64
@@ -361,7 +361,7 @@ type UpdateMetadataArgs struct {
 
 type ListObjectsArgs struct {
 	TenantID    uuid.UUID
-	ObjectKey   string
+	Collection  string
 	PageSize    int32
 	PageToken   string
 	CompiledCEL cel.Program // pre-compiled; nil = no filter
@@ -379,7 +379,7 @@ type ListObjectsArgs struct {
 // may return an approximate (capped) count.
 type CountObjectsArgs struct {
 	TenantID    uuid.UUID
-	ObjectKey   string
+	Collection  string
 	CompiledCEL cel.Program
 }
 
@@ -453,33 +453,33 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 // objectResourceName is the C-shape (tenant-first) object resource name. Kept
 // as the fallback the canonical builders degrade to when the (backend, bucket)
 // binding can't be resolved.
-func objectResourceName(tenantID uuid.UUID, objectKey, key string) string {
-	return fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", tenantID, objectKey, key)
+func objectResourceName(tenantID uuid.UUID, collection, key string) string {
+	return fmt.Sprintf("tenants/%s/collections/%s/objects-by-key/%s", tenantID, collection, key)
 }
 
-// canonicalObjectPrefix resolves the canonical (A-shape) objectKey prefix
-// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}` used to build
+// canonicalObjectPrefix resolves the canonical (A-shape) collection prefix
+// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}` used to build
 // object-level event resource names (ADR-0010 Phase 1). The (backend, bucket)
-// binding depends only on the objectKey, so callers resolve it ONCE before the
+// binding depends only on the collection, so callers resolve it ONCE before the
 // mutation tx and pass it into the dispatch — never a pool read inside an open
 // tx. On a lookup miss it returns "" and the caller falls back to the C-shape
 // name; a transient resolve blip must never block the event.
-func (h *Handler) canonicalObjectPrefix(ctx context.Context, tenantID uuid.UUID, objectKey string) string {
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, objectKey, false) // naming read
+func (h *Handler) canonicalObjectPrefix(ctx context.Context, tenantID uuid.UUID, collection string) string {
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // naming read
 	if err != nil || meta.BackendID == "" || meta.BucketName == "" {
 		return ""
 	}
-	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/objectKeys/%s",
-		meta.BackendID, meta.BucketName, tenantID, objectKey)
+	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s",
+		meta.BackendID, meta.BucketName, tenantID, collection)
 }
 
 // objectResourceNameFrom builds the object event resource name: canonical (A)
 // when the pre-resolved prefix is non-empty, else the C-shape fallback. The
 // `/objects-by-key/` anchor + user key are appended verbatim (the user key may
 // contain '/').
-func objectResourceNameFrom(canonicalPrefix string, tenantID uuid.UUID, objectKey, key string) string {
+func objectResourceNameFrom(canonicalPrefix string, tenantID uuid.UUID, collection, key string) string {
 	if canonicalPrefix == "" {
-		return objectResourceName(tenantID, objectKey, key)
+		return objectResourceName(tenantID, collection, key)
 	}
 	return canonicalPrefix + "/objects-by-key/" + key
 }
@@ -515,7 +515,7 @@ func NewHandler(
 // UploadObjectInput is the decoded request. In production wiring, this comes
 // from the generated Connect stub (paladinv1.UploadObjectRequest).
 type UploadObjectInput struct {
-	ObjectKey     string
+	Collection    string
 	Key           string
 	ContentType   string
 	SizeHint      int64
@@ -547,19 +547,19 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	objectURI := "object://" + tenantID.String() + "/" + in.ObjectKey + "/" + in.Key
+	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/" + in.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 
 	// 1. Resolve bucket binding + completion mode in ONE lookup, BEFORE the
 	//    Cedar check — the scope-enforcement built-in confines a bucket:/
-	//    object_key:-scoped PAT to resources whose physical bucket it carries,
+	//    collection:-scoped PAT to resources whose physical bucket it carries,
 	//    so the authz Resource must know its (backend, bucket) or a scoped
 	//    principal is fail-closed on this write path. The SAME meta is reused
 	//    below for completion mode + presign routing (one query on the hot
 	//    upload path), and the lookup keeps the disabled/read-only-backend
-	//    chokepoint. LookupBucketMeta joins the same object_keys ×
+	//    chokepoint. LookupBucketMeta joins the same collections ×
 	//    storage_backends rows the old BucketCompletionMode + LookupBucket
 	//    pair each queried separately. Empty BucketName means "row exists but
 	//    bucket_name is NULL" — the storage adapter falls back to its
@@ -567,7 +567,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	//    is impossible. It runs before authz: the lookup is tenant-RLS-scoped,
 	//    so it only reveals the caller's own tenant's object-key existence
 	//    (which MapResolveErr already surfaced pre-scoping).
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.ObjectKey, true) // upload (mutation)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -575,7 +575,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	// 2. Derive the object id + key BEFORE authz so the Cedar resource is an
 	//    Object entity carrying `key`. The default per-tenant policy reads
 	//    resource.key (the .exe/.dll extension blocklist); an ABSENT key makes
-	//    the resource an ObjectKey entity → "does not have the attribute key"
+	//    the resource an Collection entity → "does not have the attribute key"
 	//    eval error → fail-closed deny. A client-omitted key authorizes the
 	//    generated object id, which CreateObject persists below (same value).
 	objectID := uuid.Must(uuid.NewV7())
@@ -591,7 +591,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		cedar.ActionPresignPut,
 		&cedar.Resource{
 			TenantID:    tenantID,
-			ObjectKey:   in.ObjectKey,
+			Collection:  in.Collection,
 			Key:         key,
 			BackendID:   meta.BackendID,
 			BucketName:  meta.BucketName,
@@ -624,7 +624,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	presignExp := time.Now().Add(ttl)
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID:         tenantID,
-		ObjectKey:        in.ObjectKey,
+		Collection:       in.Collection,
 		Key:              key,
 		ContentType:      in.ContentType,
 		SizeHint:         in.SizeHint,
@@ -649,7 +649,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 			BackendID:    meta.BackendID,
 			TenantID:     tenantID,
 			Bucket:       bucket,
-			ObjectKey:    in.ObjectKey,
+			Collection:   in.Collection,
 			Key:          key,
 			ContentType:  in.ContentType,
 			MaxSizeBytes: resolveMaxSize(h.presign.DefaultMaxSize, in.SizeHint),
@@ -668,7 +668,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 			BackendID:       meta.BackendID,
 			TenantID:        tenantID,
 			Bucket:          bucket,
-			ObjectKey:       in.ObjectKey,
+			Collection:      in.Collection,
 			Key:             key,
 			ContentType:     in.ContentType,
 			ChecksumAlgo:    in.ChecksumAlgo,
@@ -697,10 +697,10 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 // ─── Exemplar RPC: CompleteObject ────────────────────────────────────────────
 
 type CompleteObjectInput struct {
-	ObjectKey string
-	ObjectID  string
-	ETag      string
-	Checksum  string
+	Collection string
+	ObjectID   string
+	ETag       string
+	Checksum   string
 }
 
 // CompleteObject is idempotent: if an event has already promoted the object,
@@ -712,21 +712,21 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	if in.ObjectKey == "" || in.ObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if in.Collection == "" || in.ObjectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 
-	obj, err := h.repo.FindByName(ctx, tenantID, in.ObjectKey, in.ObjectID)
+	obj, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 	principal, _ := auth.PrincipalFromContext(ctx)
 	// Populate the physical (backend, bucket) on the authz Resource so a
-	// bucket:/object_key:-scoped PAT enforces on complete. Best-effort +
+	// bucket:/collection:-scoped PAT enforces on complete. Best-effort +
 	// read-only: this RPC is also the idempotent already-AVAILABLE no-op,
 	// which historically resolved no bucket, so a resolution failure must NOT
 	// newly fail an unscoped completion — leave the bucket empty (scoped
@@ -734,9 +734,9 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// unaffected because the scope-enforcement forbid never fires for them).
 	// The PENDING promote path below still resolves with write=true, keeping
 	// the disabled/read-only-backend gate exactly where it was.
-	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false)
+	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: authBackendID, BucketName: authBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes,
 	}, cedar.ActionPutObject, obj.SizeBytes, obj.ContentType); err != nil {
@@ -753,11 +753,11 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	}
 
 	// Materialize authoritative values via HEAD against the object's bucket.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, true) // complete/promote (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, true) // complete/promote (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.ObjectKey, obj.Key)
+	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object not uploaded yet: %w", err))
@@ -777,14 +777,14 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// re-emits — consistent, never half-done. Payload is built from the
 	// pre-promote read + the authoritative inputs (which are exactly the
 	// post-promote etag/size), so no in-tx re-read is needed.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, obj.ObjectKey)
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, obj.Collection)
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
-				objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
 				map[string]any{
 					"tenant_id":    tenantID.String(),
-					"object_key":   obj.ObjectKey,
+					"collection":   obj.Collection,
 					"key":          obj.Key,
 					"object_id":    obj.ObjectID.String(),
 					"size_bytes":   size,
@@ -795,7 +795,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, in.ObjectKey, in.ObjectID)
+	fresh, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -816,18 +816,18 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 // ─── ListObjects ────────────────────────────────────────────────────────────
 
 type ListObjectsInput struct {
-	ObjectKey string
-	PageSize  int32
-	PageToken string
-	Filter    string
-	OrderBy   string
-	SortDesc  bool
+	Collection string
+	PageSize   int32
+	PageToken  string
+	Filter     string
+	OrderBy    string
+	SortDesc   bool
 }
 
-// ListObjects returns a page of objects in the objectKey, optionally filtered by
+// ListObjects returns a page of objects in the collection, optionally filtered by
 // a CEL expression against ObjectSchema. Per-row Cedar authorization is
 // skipped — listing is permitted for any authenticated tenant member to keep
-// pagination cheap (same contract as ListObjectKeys).
+// pagination cheap (same contract as ListCollections).
 func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -839,18 +839,18 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err
 	}
-	// Resolve the objectKey→bucket binding so a bucket:/object_key:-scoped PAT
+	// Resolve the collection→bucket binding so a bucket:/collection:-scoped PAT
 	// can list within its scope (and is denied off-scope). Best-effort +
-	// read-only: an unbound/unknown objectKey (bucket="" or a lookup error)
+	// read-only: an unbound/unknown collection (bucket="" or a lookup error)
 	// emits no bucket scope key — unscoped principals are unaffected (the
 	// scope-enforcement forbid never fires for them) and scoped principals
 	// stay fail-closed. Resolved ONCE here and reused by the per-row loop
-	// below (the objectKey→bucket binding is constant across the page).
-	listBackendID, listBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey, false) // list (read)
-	// One tenant+objectKey-scoped Cedar check up front; per-row Cedar would
+	// below (the collection→bucket binding is constant across the page).
+	listBackendID, listBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // list (read)
+	// One tenant+collection-scoped Cedar check up front; per-row Cedar would
 	// dominate pagination cost.
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: in.ObjectKey,
+		TenantID: tenantID, Collection: in.Collection,
 		BackendID: listBackendID, BucketName: listBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
@@ -861,7 +861,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	}
 	objs, next, err := h.repo.ListObjects(ctx, ListObjectsArgs{
 		TenantID:    tenantID,
-		ObjectKey:   in.ObjectKey,
+		Collection:  in.Collection,
 		PageSize:    in.PageSize,
 		PageToken:   in.PageToken,
 		CompiledCEL: prog,
@@ -873,18 +873,18 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
 
-	// Per-row Cedar. The up-front check above is objectKey-scoped, so it can't
+	// Per-row Cedar. The up-front check above is collection-scoped, so it can't
 	// enforce policies that decide on per-object attributes (tags, state,
 	// size, …). When the tenant's applicable policies read such an attribute
 	// (analysed once at compile time), re-evaluate each returned object and drop
 	// the ones the policy declines. Policies that are constant across the
-	// objectKey take the cheap path and skip this loop entirely.
+	// collection take the cheap path and skip this loop entirely.
 	//
 	// Pagination is unaffected: `next` keys on the last FETCHED row (repo), not
 	// the surviving rows — exactly like the CEL filter above — so dropping rows
 	// post-fetch keeps the cursor stable and never skips or repeats an object.
 	if pe, ok := h.policy.(cedar.PerObjectEvaluator); ok {
-		perRow, err := pe.NeedsPerObjectEval(ctx, tenantID, in.ObjectKey)
+		perRow, err := pe.NeedsPerObjectEval(ctx, tenantID, in.Collection)
 		if err != nil {
 			return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
 		}
@@ -893,7 +893,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 			for _, o := range objs {
 				authErr := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 					TenantID:    tenantID,
-					ObjectKey:   in.ObjectKey,
+					Collection:  in.Collection,
 					Key:         o.Key,
 					ObjectID:    o.ObjectID,
 					BackendID:   listBackendID,
@@ -921,8 +921,8 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 // ─── CountObjects ───────────────────────────────────────────────────────────
 
 type CountObjectsInput struct {
-	ObjectKey string
-	Filter    string
+	Collection string
+	Filter     string
 }
 
 type CountObjectsOutput struct {
@@ -930,7 +930,7 @@ type CountObjectsOutput struct {
 	Exact            bool
 }
 
-// CountObjects returns the number of objects in the objectKey matching an
+// CountObjects returns the number of objects in the collection matching an
 // optional CEL filter. With no filter the adapter uses a direct COUNT(*) and
 // returns exact=true; with a filter it iterates rows applying CEL and may
 // return an approximate result when the scan cap is hit.
@@ -942,11 +942,11 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, err
 	}
-	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on count; best-effort + read-only (see ListObjects).
-	countBackendID, countBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey, false) // count (read)
+	countBackendID, countBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // count (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: in.ObjectKey,
+		TenantID: tenantID, Collection: in.Collection,
 		BackendID: countBackendID, BucketName: countBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, err
@@ -958,7 +958,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	// Compile always returns an always-true program for empty expr; detect
 	// the "no filter" case at the caller boundary instead, so the adapter
 	// can pick the cheap COUNT(*) path.
-	args := CountObjectsArgs{TenantID: tenantID, ObjectKey: in.ObjectKey}
+	args := CountObjectsArgs{TenantID: tenantID, Collection: in.Collection}
 	if in.Filter != "" {
 		args.CompiledCEL = prog
 	}
@@ -971,11 +971,11 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 
 // ─── ListDistinctTags ─────────────────────────────────────────────────────────
 
-// ListDistinctTags returns the distinct tag key→values across the ObjectKey's
+// ListDistinctTags returns the distinct tag key→values across the Collection's
 // live objects, for populating a tag-facet filter. Same auth contract as
-// ListObjects: an OpList capability caveat plus a single tenant+objectKey Cedar
+// ListObjects: an OpList capability caveat plus a single tenant+collection Cedar
 // check (no per-row authz — the result is an aggregate, not object data).
-func (h *Handler) ListDistinctTags(ctx context.Context, objectKey string) (map[string][]string, error) {
+func (h *Handler) ListDistinctTags(ctx context.Context, collection string) (map[string][]string, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
@@ -983,16 +983,16 @@ func (h *Handler) ListDistinctTags(ctx context.Context, objectKey string) (map[s
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, err
 	}
-	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on the tag facet; best-effort + read-only (see ListObjects).
-	tagsBackendID, tagsBucket, _ := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // list distinct tags (read)
+	tagsBackendID, tagsBucket, _ := h.repo.LookupBucket(ctx, tenantID, collection, false) // list distinct tags (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: objectKey,
+		TenantID: tenantID, Collection: collection,
 		BackendID: tagsBackendID, BucketName: tagsBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, err
 	}
-	tags, err := h.repo.ListDistinctTags(ctx, tenantID, objectKey)
+	tags, err := h.repo.ListDistinctTags(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1001,7 +1001,7 @@ func (h *Handler) ListDistinctTags(ctx context.Context, objectKey string) (map[s
 
 // ─── Read RPCs ──────────────────────────────────────────────────────────────
 
-// GetObject returns metadata for an object addressed by (objectKey, objectID).
+// GetObject returns metadata for an object addressed by (collection, objectID).
 //
 // Auth chain on this RPC:
 //  1. Interceptor stack already verified the caller's JWT and (when
@@ -1017,28 +1017,28 @@ func (h *Handler) ListDistinctTags(ctx context.Context, objectKey string) (map[s
 // The double gate is intentional: capabilities narrow what an agent can
 // do; Cedar enforces tenant-admin policy. Both must agree before the
 // read happens.
-func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*Object, error) {
+func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*Object, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if objectKey == "" || objectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if collection == "" || objectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID)
+	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the objectKey→bucket binding (obj carries no bucket — the find
-	// query does not JOIN object_keys) so bucket:/object_key: PAT scopes
+	// Resolve the collection→bucket binding (obj carries no bucket — the find
+	// query does not JOIN collections) so bucket:/collection: PAT scopes
 	// enforce on read; best-effort + read-only (see ListObjects).
-	getBackendID, getBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false) // get (read)
+	getBackendID, getBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // get (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: getBackendID, BucketName: getBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
@@ -1047,30 +1047,30 @@ func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*O
 	return &obj, nil
 }
 
-// LookupObject resolves an object by (object_key, key) instead of object_id —
+// LookupObject resolves an object by (collection, key) instead of object_id —
 // useful when callers only have the path-style identifier (S3-style).
-func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Object, error) {
+func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Object, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if objectKey == "" || key == "" {
+	if collection == "" || key == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("object_key and key are both required"))
+			errors.New("collection and key are both required"))
 	}
-	obj, err := h.repo.FindByPath(ctx, tenantID, objectKey, key)
+	obj, err := h.repo.FindByPath(ctx, tenantID, collection, key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on lookup; best-effort + read-only (see ListObjects).
-	lkBackendID, lkBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false) // lookup (read)
+	lkBackendID, lkBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // lookup (read)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: lkBackendID, BucketName: lkBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
@@ -1091,19 +1091,19 @@ type DownloadObjectOutput struct {
 
 // DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
 // object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
-func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
+func (h *Handler) DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if objectKey == "" || objectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if collection == "" || objectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID)
+	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	// Download issues a presigned URL — capability needs OpPresign and
 	// OpGet (the underlying op the URL grants). Two assertions, one per
 	// caveat axis; either failure short-circuits.
@@ -1118,15 +1118,15 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 			fmt.Errorf("object state %s does not allow download", obj.State))
 	}
 	// Resolve the (backend, bucket) BEFORE the Cedar check so a bucket:/
-	// object_key:-scoped read PAT enforces on download; the same read-only
+	// collection:-scoped read PAT enforces on download; the same read-only
 	// resolution routes the presigned GET below (one lookup, unchanged for
 	// the allowed path — it already ran here immediately after authz).
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // download (read)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, false) // download (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
+		TenantID: tenantID, Collection: collection, Key: obj.Key,
 		BackendID: backendID, BucketName: bucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
@@ -1139,7 +1139,7 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 		BackendID:          backendID,
 		TenantID:           tenantID,
 		Bucket:             bucket,
-		ObjectKey:          objectKey,
+		Collection:         collection,
 		Key:                obj.Key,
 		TTL:                ttl,
 		ContentDisposition: disposition,
@@ -1159,7 +1159,7 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 // is the FieldMask: only the named fields are written. Unknown field names
 // are silently ignored (matches AIP-134).
 type UpdateObjectInput struct {
-	ObjectKey       string
+	Collection      string
 	ObjectID        string
 	ResourceVersion int64 // 0 = skip OCC
 	UpdatedFields   []string
@@ -1174,26 +1174,26 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err != nil {
 		return nil, err
 	}
-	if in.ObjectKey == "" || in.ObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if in.Collection == "" || in.ObjectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 	objectID, err := uuid.Parse(in.ObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + in.ObjectKey + "/"
+	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/"
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on metadata/tag writes (this backs PutObjectTags /
 	// DeleteObjectTags). Best-effort + read-only: UpdateObject is a DB-only
 	// mutation that historically resolved no bucket, so a resolution failure
 	// must NOT newly fail an unscoped update — leave the bucket empty (scoped
 	// principals stay fail-closed, unscoped are unaffected).
-	updBackendID, updBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey, false) // update (read-only; authz scope only)
+	updBackendID, updBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // update (read-only; authz scope only)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: in.ObjectKey,
+		TenantID: tenantID, Collection: in.Collection,
 		BackendID: updBackendID, BucketName: updBucket,
 	}, cedar.ActionUpdateObject, 0, ""); err != nil {
 		return nil, err
@@ -1201,7 +1201,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	// Update + paladin.object.updated fan-out in one tx (ADR-0003): a dispatch
 	// failure rolls back the metadata change, so the client's at-least-once
 	// retry re-applies both rather than silently dropping the event.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.ObjectKey)
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.Collection)
 	var obj Object
 	err = h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var uerr error
@@ -1219,10 +1219,10 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 			return uerr
 		}
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.updated",
-			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
 			map[string]any{
 				"tenant_id":      tenantID.String(),
-				"object_key":     obj.ObjectKey,
+				"collection":     obj.Collection,
 				"key":            obj.Key,
 				"object_id":      obj.ObjectID.String(),
 				"updated_fields": in.UpdatedFields,
@@ -1240,37 +1240,37 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 // the object from S3 first, then drops the row. bypassGovernance opt-in
 // honored only for callers holding `lock.governance.bypass` or
 // `platform.admin` — protects compliance-mode locks regardless.
-func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error {
+func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
-	if objectKey == "" || objectIDStr == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if collection == "" || objectIDStr == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
+	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + obj.Key
+	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
 		return err
 	}
 	// Populate the physical (backend, bucket) on the authz Resource so a
-	// bucket:/object_key:-scoped PAT enforces on delete (soft AND permanent).
+	// bucket:/collection:-scoped PAT enforces on delete (soft AND permanent).
 	// Best-effort + read-only: the soft-delete path historically resolved no
 	// bucket, so a resolution failure must NOT newly fail an unscoped
 	// soft-delete — leave the bucket empty (scoped principals stay
 	// fail-closed as before, unscoped principals are unaffected). The
 	// permanent path below still resolves with write=true, keeping the
 	// disabled/read-only-backend gate exactly where it was.
-	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, objectKey, false)
+	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
+		TenantID: tenantID, Collection: collection, Key: obj.Key,
 		BackendID: authBackendID, BucketName: authBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionDeleteObject, obj.SizeBytes, obj.ContentType); err != nil {
@@ -1281,16 +1281,16 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		return connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, objectKey)
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
 	if !permanent {
 		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
 		// the event is atomic with the AVAILABLE→DELETED flip.
 		err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
-				objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
 				map[string]any{
 					"tenant_id":  tenantID.String(),
-					"object_key": obj.ObjectKey,
+					"collection": obj.Collection,
 					"key":        obj.Key,
 					"object_id":  obj.ObjectID.String(),
 					"mode":       "soft",
@@ -1315,7 +1315,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // permanent delete (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, true) // permanent delete (mutation)
 	if err != nil {
 		return MapResolveErr(err)
 	}
@@ -1369,7 +1369,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		ObjectID:   obj.ObjectID,
 		BackendID:  backendID,
 		BucketName: bucket,
-		ObjectKey:  objectKey,
+		Collection: collection,
 		Key:        obj.Key,
 	}
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -1380,10 +1380,10 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			return perr
 		}
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
-			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
 			map[string]any{
 				"tenant_id":         tenantID.String(),
-				"object_key":        obj.ObjectKey,
+				"collection":        obj.Collection,
 				"key":               obj.Key,
 				"object_id":         obj.ObjectID.String(),
 				"mode":              "permanent",
@@ -1396,11 +1396,11 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// Fast path: reclaim the bytes now, so the common case stays synchronous
 	// and the debt table stays empty. A failure here is no longer terminal —
 	// the debt row survives and worker.PurgeDrainer retries it with backoff.
-	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, objectKey, obj.Key); err != nil {
+	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, obj.Key); err != nil {
 		if h.log != nil {
 			h.log.Warn("permanent delete: storage delete failed; queued for retry",
 				zap.String("tenant_id", tenantID.String()),
-				zap.String("object_key", objectKey),
+				zap.String("collection", collection),
 				zap.String("key", obj.Key),
 				zap.String("bucket", bucket),
 				zap.String("purge_id", debt.PurgeID.String()),
@@ -1426,10 +1426,10 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			return serr
 		}
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.purged",
-			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
 			map[string]any{
 				"tenant_id":  tenantID.String(),
-				"object_key": obj.ObjectKey,
+				"collection": obj.Collection,
 				"key":        obj.Key,
 				"object_id":  obj.ObjectID.String(),
 				"backend_id": backendID,
@@ -1457,35 +1457,35 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 // OCC against the row read here — empty skips the check.
 // Versioning-aware: when bucket has versioning_enabled, also drops the most
 // recent delete-marker before flipping state.
-func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, resourceVersion string) (*Object, error) {
+func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*Object, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if objectKey == "" || objectIDStr == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if collection == "" || objectIDStr == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
+	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	// Restore is conceptually a Put (re-creates the live object from a
 	// soft-deleted row). Capability gate on OpPut.
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the objectKey→bucket binding so bucket:/object_key: PAT scopes
+	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on restore; best-effort + read-only: restore is a DB-only state
 	// flip that historically resolved no bucket, so a resolution failure must
 	// NOT newly fail an unscoped restore (scoped principals stay fail-closed).
-	rsBackendID, rsBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, false) // restore (read-only; authz scope only)
+	rsBackendID, rsBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // restore (read-only; authz scope only)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: rsBackendID, BucketName: rsBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionRestoreObject, obj.SizeBytes, obj.ContentType); err != nil {
@@ -1510,13 +1510,13 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 				fmt.Errorf("resource_version mismatch: expected %d, current %d", expected, obj.ResourceVersion))
 		}
 	}
-	collision, err := h.repo.LiveCollision(ctx, tenantID, objectKey, obj.Key)
+	collision, err := h.repo.LiveCollision(ctx, tenantID, collection, obj.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if collision {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("a live object already occupies %s/%s", objectKey, obj.Key))
+			fmt.Errorf("a live object already occupies %s/%s", collection, obj.Key))
 	}
 	// Versioning-aware restore: if the parent bucket has versioning_enabled
 	// AND the most recent version is a delete-marker, drop that pointer back
@@ -1526,22 +1526,22 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("restore version pointer: %w", err))
 	}
 	// Restore + paladin.object.restored fan-out in one tx (ADR-0003). Resource
-	// identity (object_key/key/object_id) is unchanged by restore, so the
+	// identity (collection/key/object_id) is unchanged by restore, so the
 	// payload is built from the pre-restore `obj`.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, objectKey)
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
 	if err := h.sm.RestoreInTx(ctx, objectID, func(ctx context.Context, tx pgx.Tx) error {
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.restored",
-			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
 			map[string]any{
 				"tenant_id":  tenantID.String(),
-				"object_key": obj.ObjectKey,
+				"collection": obj.Collection,
 				"key":        obj.Key,
 				"object_id":  obj.ObjectID.String(),
 			})
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
+	fresh, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1551,15 +1551,15 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 // ─── CopyObject ─────────────────────────────────────────────────────────────
 
 // CopyObjectInput identifies a server-side copy. Source is addressed by
-// (objectKey, objectID); destination by (object_key, key). When DestKey is
+// (collection, objectID); destination by (collection, key). When DestKey is
 // empty the source's storage key is reused.
 type CopyObjectInput struct {
-	SourceObjectKey string
-	SourceObjectID  string
-	DestObjectKey   string
-	DestKey         string
-	Metadata        map[string]string
-	Tags            map[string]string
+	SourceCollection string
+	SourceObjectID   string
+	DestCollection   string
+	DestKey          string
+	Metadata         map[string]string
+	Tags             map[string]string
 }
 
 func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
@@ -1567,15 +1567,15 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if err != nil {
 		return nil, err
 	}
-	if in.SourceObjectKey == "" || in.SourceObjectID == "" {
+	if in.SourceCollection == "" || in.SourceObjectID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("source_object_key and source_object_id are required"))
+			errors.New("source_collection and source_object_id are required"))
 	}
-	if in.DestObjectKey == "" {
+	if in.DestCollection == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("dest_object_key is required"))
+			errors.New("dest_collection is required"))
 	}
-	src, err := h.repo.FindByName(ctx, tenantID, in.SourceObjectKey, in.SourceObjectID)
+	src, err := h.repo.FindByName(ctx, tenantID, in.SourceCollection, in.SourceObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -1592,37 +1592,37 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// to the caller; we don't separately gate OpGet on it because the
 	// underlying access model treats source-readable-and-dest-writable
 	// as the union of the same Cedar policy below.
-	destURI := "object://" + tenantID.String() + "/" + in.DestObjectKey + "/" + destKey
+	destURI := "object://" + tenantID.String() + "/" + in.DestCollection + "/" + destKey
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, destURI); err != nil {
 		return nil, err
 	}
 	// Resolve the DESTINATION (backend, bucket) BEFORE the Cedar check so a
-	// bucket:/object_key:-scoped write PAT enforces on the copy target — the
+	// bucket:/collection:-scoped write PAT enforces on the copy target — the
 	// authz Resource below is the destination (ActionCopyObject is checked
 	// against the dest). The same resolution is reused as the copy-dest
 	// Location; the source is resolved after authz as before.
-	dstBackendID, dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey, true) // copy dest (mutation)
+	dstBackendID, dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, ObjectKey: in.DestObjectKey, Key: destKey,
+		TenantID: tenantID, Collection: in.DestCollection, Key: destKey,
 		BackendID: dstBackendID, BucketName: dstBucket,
 		ContentType: src.ContentType, SizeBytes: src.SizeBytes, Tags: in.Tags,
 	}, cedar.ActionCopyObject, src.SizeBytes, src.ContentType); err != nil {
 		return nil, err
 	}
 
-	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey, false) // copy source (read)
+	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceCollection, false) // copy source (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
 
-	// Insert the destination row up-front so the FK to object_keys is
+	// Insert the destination row up-front so the FK to collections is
 	// validated before we issue the S3 copy.
 	dst, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID:         tenantID,
-		ObjectKey:        in.DestObjectKey,
+		Collection:       in.DestCollection,
 		Key:              destKey,
 		ContentType:      src.ContentType,
 		SizeHint:         src.SizeBytes,
@@ -1636,9 +1636,9 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, mapCreateErr(err)
 	}
 	if err := h.storage.CopyObject(ctx, Location{
-		BackendID: srcBackendID, TenantID: tenantID, Bucket: srcBucket, ObjectKey: in.SourceObjectKey, Key: src.Key,
+		BackendID: srcBackendID, TenantID: tenantID, Bucket: srcBucket, Collection: in.SourceCollection, Key: src.Key,
 	}, Location{
-		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, ObjectKey: in.DestObjectKey, Key: destKey,
+		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
 	}); err != nil {
 		// Compensate: the destination row was created PENDING. Without this
 		// transition the row would linger forever, since the reconciler only
@@ -1657,29 +1657,29 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// inputs (== the post-promote row) so the event can be enqueued inside
 	// the promote tx without a read. A dispatch error rolls the promote
 	// back; the client's at-least-once retry re-runs both.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.DestObjectKey)
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.DestCollection)
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
 		src.Checksum, "", statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
-				objectResourceNameFrom(okPrefix, tenantID, in.DestObjectKey, destKey),
+				objectResourceNameFrom(okPrefix, tenantID, in.DestCollection, destKey),
 				map[string]any{
 					"tenant_id":         tenantID.String(),
-					"object_key":        in.DestObjectKey,
+					"collection":        in.DestCollection,
 					"key":               destKey,
 					"object_id":         dst.ObjectID.String(),
 					"size_bytes":        src.SizeBytes,
 					"etag":              src.ETag,
 					"content_type":      src.ContentType,
 					"source":            "copy",
-					"source_object_key": in.SourceObjectKey,
+					"source_collection": in.SourceCollection,
 					"source_object_id":  in.SourceObjectID,
 				})
 		})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, in.DestObjectKey, dst.ObjectID.String())
+	fresh, err := h.repo.FindByName(ctx, tenantID, in.DestCollection, dst.ObjectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

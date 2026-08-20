@@ -62,7 +62,7 @@ func TestPageResponseProto(t *testing.T) {
 // round trip must be lossless for every defined type.
 func TestScopeTypeRoundTrip(t *testing.T) {
 	for _, st := range []auth.ScopeType{
-		auth.ScopeTenant, auth.ScopeBackend, auth.ScopeBucket, auth.ScopeObjectKey,
+		auth.ScopeTenant, auth.ScopeBackend, auth.ScopeBucket, auth.ScopeCollection,
 	} {
 		if got := scopeTypeFromProto(scopeTypeProto(st)); got != st {
 			t.Errorf("round trip of %q gave %q", st, got)
@@ -400,17 +400,17 @@ func TestSnapshotToProtoNoComponents(t *testing.T) {
 // ─── object-key routes ─────────────────────────────────────────────────────
 
 // nil/empty in → nil out so the field is omitted rather than sent as [].
-func TestObjectKeyRoutesToProtoEmpty(t *testing.T) {
-	if objectKeyRoutesToProto(nil) != nil {
+func TestCollectionRoutesToProtoEmpty(t *testing.T) {
+	if collectionRoutesToProto(nil) != nil {
 		t.Error("nil routes must project as nil")
 	}
-	if objectKeyRoutesToProto([]authh.ObjectKeyRoute{}) != nil {
+	if collectionRoutesToProto([]authh.CollectionRoute{}) != nil {
 		t.Error("empty routes must project as nil")
 	}
 }
 
-func TestObjectKeyRoutesToProto(t *testing.T) {
-	got := objectKeyRoutesToProto([]authh.ObjectKeyRoute{
+func TestCollectionRoutesToProto(t *testing.T) {
+	got := collectionRoutesToProto([]authh.CollectionRoute{
 		{Canonical: "c1", TenantPath: "t1", BareAlias: "b1", Backend: "primary", Bucket: "bkt"},
 		{Canonical: "c2"},
 	})

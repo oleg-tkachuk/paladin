@@ -311,7 +311,7 @@ func reconstructResponse(respType reflect.Type, body []byte) (connect.AnyRespons
 //
 // Recognised prefixes:
 //   - "Create" — the canonical AIP-style verb. CreateTenant,
-//     CreateBucket, CreateObjectKey, CreateUser, …
+//     CreateBucket, CreateCollection, CreateUser, …
 //   - "Issue"  — the token/credential variant. CapabilityService.
 //     Issue, etc. Logically these are creates with a different
 //     domain noun, and double-submit hazards are identical.

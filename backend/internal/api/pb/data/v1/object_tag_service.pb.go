@@ -25,9 +25,9 @@ const (
 
 type ListDistinctTagsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey scope: "tenants/{tenant_id}/objectKeys/{object_key}".
+	// Parent Collection scope: "tenants/{tenant_id}/collections/{collection}".
 	// The tenant is enforced from the auth context; this narrows the distinct
-	// scan to one ObjectKey's objects.
+	// scan to one Collection's objects.
 	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

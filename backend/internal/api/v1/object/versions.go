@@ -15,7 +15,7 @@ type ObjectVersion struct {
 	VersionID       uuid.UUID
 	ObjectID        uuid.UUID
 	IsDeleteMarker  bool
-	S3Key           string
+	StoragePath     string
 	SizeBytes       int64
 	ETag            string
 	ChecksumAlgo    string

@@ -330,7 +330,7 @@ func (*RevokeResponse) Descriptor() ([]byte, []int) {
 
 type WhoAmIRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// route_page_token pages the ObjectKey route table (ADR-0010 Phase 4). Empty
+	// route_page_token pages the Collection route table (ADR-0010 Phase 4). Empty
 	// = first page; pass back the previous response's `next_page_token` to fetch
 	// the next page. Only the route table is paged — identity fields are always
 	// returned in full.
@@ -387,17 +387,17 @@ type WhoAmIResponse struct {
 	// slug-form URLs (`/tenants/<slug>/...`) without a follow-up
 	// GetTenant lookup.
 	TenantSlug string `protobuf:"bytes,3,opt,name=tenant_slug,json=tenantSlug,proto3" json:"tenant_slug,omitempty"`
-	// routes is ONE PAGE of the caller's ObjectKey route table (ADR-0010 Phase
-	// 4): the ObjectKeys the caller can read, in all three name shapes, so
+	// routes is ONE PAGE of the caller's Collection route table (ADR-0010 Phase
+	// 4): the Collections the caller can read, in all three name shapes, so
 	// clients and SDKs normalize to canonical (A) before sending rather than
 	// constructing it themselves. Empty when the server has no route source wired
-	// or the caller has no readable ObjectKeys. Page through with
+	// or the caller has no readable Collections. Page through with
 	// `next_page_token`.
-	Routes []*ObjectKeyRoute `protobuf:"bytes,4,rep,name=routes,proto3" json:"routes,omitempty"`
-	// routes_truncated is true when more readable ObjectKeys remain beyond this
+	Routes []*CollectionRoute `protobuf:"bytes,4,rep,name=routes,proto3" json:"routes,omitempty"`
+	// routes_truncated is true when more readable Collections remain beyond this
 	// page (equivalent to next_page_token != ""). Kept for clients that don't
 	// page: such a client must not treat the table as exhaustive — fall back to
-	// resolving any name it can't find via ListObjectKeys.
+	// resolving any name it can't find via ListCollections.
 	RoutesTruncated bool `protobuf:"varint,5,opt,name=routes_truncated,json=routesTruncated,proto3" json:"routes_truncated,omitempty"`
 	// next_page_token pages the route table: pass it back as
 	// WhoAmIRequest.route_page_token to fetch the next page. Empty on the last
@@ -458,7 +458,7 @@ func (x *WhoAmIResponse) GetTenantSlug() string {
 	return ""
 }
 
-func (x *WhoAmIResponse) GetRoutes() []*ObjectKeyRoute {
+func (x *WhoAmIResponse) GetRoutes() []*CollectionRoute {
 	if x != nil {
 		return x.Routes
 	}
@@ -479,17 +479,17 @@ func (x *WhoAmIResponse) GetNextPageToken() string {
 	return ""
 }
 
-// ObjectKeyRoute is one addressable ObjectKey expressed in all three
+// CollectionRoute is one addressable Collection expressed in all three
 // ADR-0010 name shapes plus its (backend, bucket) binding. A client that
 // holds this table can accept any shape from the end user and normalize to
 // canonical (A) on the wire.
-type ObjectKeyRoute struct {
+type CollectionRoute struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}.
+	// canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}.
 	Canonical string `protobuf:"bytes,1,opt,name=canonical,proto3" json:"canonical,omitempty"`
-	// tenant_path (C): tenants/{tid}/objectKeys/{ok}.
+	// tenant_path (C): tenants/{tid}/collections/{ok}.
 	TenantPath string `protobuf:"bytes,2,opt,name=tenant_path,json=tenantPath,proto3" json:"tenant_path,omitempty"`
-	// bare_alias (B): the bare object_key. Populated ONLY when this ObjectKey
+	// bare_alias (B): the bare collection. Populated ONLY when this Collection
 	// sits in the tenant's default binding — a bare name resolves through that
 	// binding, so it round-trips to canonical only for the default route.
 	// Empty otherwise.
@@ -500,20 +500,20 @@ type ObjectKeyRoute struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ObjectKeyRoute) Reset() {
-	*x = ObjectKeyRoute{}
+func (x *CollectionRoute) Reset() {
+	*x = CollectionRoute{}
 	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ObjectKeyRoute) String() string {
+func (x *CollectionRoute) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ObjectKeyRoute) ProtoMessage() {}
+func (*CollectionRoute) ProtoMessage() {}
 
-func (x *ObjectKeyRoute) ProtoReflect() protoreflect.Message {
+func (x *CollectionRoute) ProtoReflect() protoreflect.Message {
 	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -525,40 +525,40 @@ func (x *ObjectKeyRoute) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ObjectKeyRoute.ProtoReflect.Descriptor instead.
-func (*ObjectKeyRoute) Descriptor() ([]byte, []int) {
+// Deprecated: Use CollectionRoute.ProtoReflect.Descriptor instead.
+func (*CollectionRoute) Descriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ObjectKeyRoute) GetCanonical() string {
+func (x *CollectionRoute) GetCanonical() string {
 	if x != nil {
 		return x.Canonical
 	}
 	return ""
 }
 
-func (x *ObjectKeyRoute) GetTenantPath() string {
+func (x *CollectionRoute) GetTenantPath() string {
 	if x != nil {
 		return x.TenantPath
 	}
 	return ""
 }
 
-func (x *ObjectKeyRoute) GetBareAlias() string {
+func (x *CollectionRoute) GetBareAlias() string {
 	if x != nil {
 		return x.BareAlias
 	}
 	return ""
 }
 
-func (x *ObjectKeyRoute) GetBackend() string {
+func (x *CollectionRoute) GetBackend() string {
 	if x != nil {
 		return x.Backend
 	}
 	return ""
 }
 
-func (x *ObjectKeyRoute) GetBucket() string {
+func (x *CollectionRoute) GetBucket() string {
 	if x != nil {
 		return x.Bucket
 	}
@@ -1060,16 +1060,16 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
 	"\x0eRevokeResponse\"9\n" +
 	"\rWhoAmIRequest\x12(\n" +
-	"\x10route_page_token\x18\x01 \x01(\tR\x0eroutePageToken\"\x80\x02\n" +
+	"\x10route_page_token\x18\x01 \x01(\tR\x0eroutePageToken\"\x81\x02\n" +
 	"\x0eWhoAmIResponse\x12'\n" +
 	"\x04user\x18\x01 \x01(\v2\x13.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1f\n" +
 	"\vtenant_slug\x18\x03 \x01(\tR\n" +
-	"tenantSlug\x125\n" +
-	"\x06routes\x18\x04 \x03(\v2\x1d.paladin.iam.v1.ObjectKeyRouteR\x06routes\x12)\n" +
+	"tenantSlug\x126\n" +
+	"\x06routes\x18\x04 \x03(\v2\x1e.paladin.iam.v1.CollectionRouteR\x06routes\x12)\n" +
 	"\x10routes_truncated\x18\x05 \x01(\bR\x0froutesTruncated\x12&\n" +
-	"\x0fnext_page_token\x18\x06 \x01(\tR\rnextPageToken\"\xa0\x01\n" +
-	"\x0eObjectKeyRoute\x12\x1c\n" +
+	"\x0fnext_page_token\x18\x06 \x01(\tR\rnextPageToken\"\xa1\x01\n" +
+	"\x0fCollectionRoute\x12\x1c\n" +
 	"\tcanonical\x18\x01 \x01(\tR\tcanonical\x12\x1f\n" +
 	"\vtenant_path\x18\x02 \x01(\tR\n" +
 	"tenantPath\x12\x1d\n" +
@@ -1138,7 +1138,7 @@ var file_paladin_iam_v1_auth_service_proto_goTypes = []any{
 	(*RevokeResponse)(nil),            // 5: paladin.iam.v1.RevokeResponse
 	(*WhoAmIRequest)(nil),             // 6: paladin.iam.v1.WhoAmIRequest
 	(*WhoAmIResponse)(nil),            // 7: paladin.iam.v1.WhoAmIResponse
-	(*ObjectKeyRoute)(nil),            // 8: paladin.iam.v1.ObjectKeyRoute
+	(*CollectionRoute)(nil),           // 8: paladin.iam.v1.CollectionRoute
 	(*ChangePasswordRequest)(nil),     // 9: paladin.iam.v1.ChangePasswordRequest
 	(*ChangePasswordResponse)(nil),    // 10: paladin.iam.v1.ChangePasswordResponse
 	(*ExchangeAudienceRequest)(nil),   // 11: paladin.iam.v1.ExchangeAudienceRequest
@@ -1156,7 +1156,7 @@ var file_paladin_iam_v1_auth_service_proto_depIdxs = []int32{
 	19, // 1: paladin.iam.v1.LoginResponse.user:type_name -> paladin.iam.v1.User
 	18, // 2: paladin.iam.v1.RefreshTokenResponse.tokens:type_name -> paladin.iam.v1.TokenPair
 	19, // 3: paladin.iam.v1.WhoAmIResponse.user:type_name -> paladin.iam.v1.User
-	8,  // 4: paladin.iam.v1.WhoAmIResponse.routes:type_name -> paladin.iam.v1.ObjectKeyRoute
+	8,  // 4: paladin.iam.v1.WhoAmIResponse.routes:type_name -> paladin.iam.v1.CollectionRoute
 	14, // 5: paladin.iam.v1.ListMyMembershipsResponse.memberships:type_name -> paladin.iam.v1.Membership
 	18, // 6: paladin.iam.v1.SwitchTenantResponse.tokens:type_name -> paladin.iam.v1.TokenPair
 	19, // 7: paladin.iam.v1.SwitchTenantResponse.user:type_name -> paladin.iam.v1.User

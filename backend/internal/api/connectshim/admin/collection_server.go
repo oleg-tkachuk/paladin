@@ -13,38 +13,38 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/resolve"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
 )
 
 // defaultBindingSource resolves a tenant's default (backend, bucket) route so
-// CreateObjectKey can route a NEW objectKey when the caller omits the bucket
+// CreateCollection can route a NEW collection when the caller omits the bucket
 // (ADR-0010 Phase 3). Satisfied by tenant.Repository.
 type defaultBindingSource interface {
 	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error)
 }
 
-type ObjectKeyServer struct {
-	paladinadminv1connect.UnimplementedObjectKeyServiceHandler
+type CollectionServer struct {
+	paladinadminv1connect.UnimplementedCollectionServiceHandler
 	H        *objectkey.Handler
 	bindings defaultBindingSource
 }
 
-func NewObjectKeyServer(h *objectkey.Handler, bindings defaultBindingSource) *ObjectKeyServer {
-	return &ObjectKeyServer{H: h, bindings: bindings}
+func NewCollectionServer(h *objectkey.Handler, bindings defaultBindingSource) *CollectionServer {
+	return &CollectionServer{H: h, bindings: bindings}
 }
 
-func (s *ObjectKeyServer) CreateObjectKey(ctx context.Context, req *connect.Request[pb.CreateObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
+func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Request[pb.CreateCollectionRequest]) (*connect.Response[pb.Collection], error) {
 	m := req.Msg
 	tenantID, err := resolve.ResolveTenantParent(m.GetParent())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	src := m.GetObjectKeyResource()
+	src := m.GetCollectionResource()
 	backend, bucket, _ := bucketRef(src.GetBucket())
 	// Bare-name ergonomics (ADR-0010 Phase 3): if the caller creates an
-	// objectKey without naming a bucket, route it to the tenant's default
-	// binding. This is the CREATION case only — an existing objectKey keeps its
+	// collection without naming a bucket, route it to the tenant's default
+	// binding. This is the CREATION case only — an existing collection keeps its
 	// own (backend, bucket), which the Get/Update/Delete paths resolve from the
 	// row, never from the tenant default.
 	if bucket == "" {
@@ -58,36 +58,36 @@ func (s *ObjectKeyServer) CreateObjectKey(ctx context.Context, req *connect.Requ
 		}
 		backend, bucket = db.BackendID, db.BucketName
 	}
-	args := objectkey.CreateObjectKeyArgs{
+	args := objectkey.CreateCollectionArgs{
 		TenantID:    tenantID,
-		ObjectKey:   m.GetObjectKey(),
+		Collection:  m.GetCollection(),
 		DisplayName: src.GetDisplayName(),
 		BackendID:   backend,
 		BucketName:  bucket,
 		CedarPolicy: src.GetCedarPolicy(),
 	}
-	out, err := s.H.CreateObjectKey(ctx, args)
+	out, err := s.H.CreateCollection(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(objectKeyDomainToProto(out)), nil
+	return connect.NewResponse(collectionDomainToProto(out)), nil
 }
 
-func (s *ObjectKeyServer) GetObjectKey(ctx context.Context, req *connect.Request[pb.GetObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
-	ref, err := resolve.ResolveObjectKeyName(ctx, req.Msg.GetName())
+func (s *CollectionServer) GetCollection(ctx context.Context, req *connect.Request[pb.GetCollectionRequest]) (*connect.Response[pb.Collection], error) {
+	ref, err := resolve.ResolveCollectionName(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.GetObjectKey(ctx, ref.TenantID, ref.ObjectKey)
+	out, err := s.H.GetCollection(ctx, ref.TenantID, ref.Collection)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(objectKeyDomainToProto(out)), nil
+	return connect.NewResponse(collectionDomainToProto(out)), nil
 }
 
-func (s *ObjectKeyServer) UpdateObjectKey(ctx context.Context, req *connect.Request[pb.UpdateObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
+func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Request[pb.UpdateCollectionRequest]) (*connect.Response[pb.Collection], error) {
 	m := req.Msg
-	ref, err := resolve.ResolveObjectKeyName(ctx, m.GetName())
+	ref, err := resolve.ResolveCollectionName(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -95,10 +95,10 @@ func (s *ObjectKeyServer) UpdateObjectKey(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	src := m.GetObjectKeyResource()
-	args := objectkey.UpdateObjectKeyArgs{
+	src := m.GetCollectionResource()
+	args := objectkey.UpdateCollectionArgs{
 		TenantID:        ref.TenantID,
-		ObjectKey:       ref.ObjectKey,
+		Collection:      ref.Collection,
 		ExpectedVersion: rv,
 	}
 	mask := m.GetUpdateMask().GetPaths()
@@ -110,28 +110,28 @@ func (s *ObjectKeyServer) UpdateObjectKey(ctx context.Context, req *connect.Requ
 		v := src.GetCedarPolicy()
 		args.CedarPolicy = &v
 	}
-	out, err := s.H.UpdateObjectKey(ctx, args)
+	out, err := s.H.UpdateCollection(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(objectKeyDomainToProto(out)), nil
+	return connect.NewResponse(collectionDomainToProto(out)), nil
 }
 
-func (s *ObjectKeyServer) DeleteObjectKey(ctx context.Context, req *connect.Request[pb.DeleteObjectKeyRequest]) (*connect.Response[pb.DeleteObjectKeyResponse], error) {
-	ref, err := resolve.ResolveObjectKeyName(ctx, req.Msg.GetName())
+func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Request[pb.DeleteCollectionRequest]) (*connect.Response[pb.DeleteCollectionResponse], error) {
+	ref, err := resolve.ResolveCollectionName(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	rv, _ := parseRV(req.Msg.GetResourceVersion())
-	if err := s.H.DeleteObjectKey(ctx, ref.ObjectKey, rv); err != nil {
+	if err := s.H.DeleteCollection(ctx, ref.Collection, rv); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteObjectKeyResponse{}), nil
+	return connect.NewResponse(&pb.DeleteCollectionResponse{}), nil
 }
 
-func (s *ObjectKeyServer) ListObjectKeys(ctx context.Context, req *connect.Request[pb.ListObjectKeysRequest]) (*connect.Response[pb.ListObjectKeysResponse], error) {
+func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Request[pb.ListCollectionsRequest]) (*connect.Response[pb.ListCollectionsResponse], error) {
 	m := req.Msg
-	args := objectkey.ListObjectKeysArgs{
+	args := objectkey.ListCollectionsArgs{
 		PageSize:  m.GetPage().GetPageSize(),
 		PageToken: m.GetPage().GetPageToken(),
 	}
@@ -149,51 +149,51 @@ func (s *ObjectKeyServer) ListObjectKeys(ctx context.Context, req *connect.Reque
 		args.BackendID = backend
 		args.BucketName = bucket
 	}
-	list, next, err := s.H.ListObjectKeys(ctx, args)
+	list, next, err := s.H.ListCollections(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListObjectKeysResponse{Page: pageResponseProto(next)}
+	out := &pb.ListCollectionsResponse{Page: pageResponseProto(next)}
 	for i := range list {
-		out.ObjectKeys = append(out.ObjectKeys, objectKeyDomainToProto(&list[i]))
+		out.Collections = append(out.Collections, collectionDomainToProto(&list[i]))
 	}
 	return connect.NewResponse(out), nil
 }
 
-func (s *ObjectKeyServer) SetObjectKeyPolicy(ctx context.Context, req *connect.Request[pb.SetObjectKeyPolicyRequest]) (*connect.Response[pb.ObjectKey], error) {
-	ref, err := resolve.ResolveObjectKeyName(ctx, req.Msg.GetName())
+func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *connect.Request[pb.SetCollectionPolicyRequest]) (*connect.Response[pb.Collection], error) {
+	ref, err := resolve.ResolveCollectionName(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	rv, _ := parseRV(req.Msg.GetResourceVersion())
 	policy := req.Msg.GetCedarPolicy()
-	out, err := s.H.UpdateObjectKey(ctx, objectkey.UpdateObjectKeyArgs{
+	out, err := s.H.UpdateCollection(ctx, objectkey.UpdateCollectionArgs{
 		TenantID:        ref.TenantID,
-		ObjectKey:       ref.ObjectKey,
+		Collection:      ref.Collection,
 		ExpectedVersion: rv,
 		CedarPolicy:     &policy,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(objectKeyDomainToProto(out)), nil
+	return connect.NewResponse(collectionDomainToProto(out)), nil
 }
 
-func (s *ObjectKeyServer) BindObjectKeyToBucket(ctx context.Context, req *connect.Request[pb.BindObjectKeyToBucketRequest]) (*connect.Response[pb.ObjectKey], error) {
+func (s *CollectionServer) BindCollectionToBucket(ctx context.Context, req *connect.Request[pb.BindCollectionToBucketRequest]) (*connect.Response[pb.Collection], error) {
 	m := req.Msg
-	ref, err := resolve.ResolveObjectKeyName(ctx, m.GetName())
+	ref, err := resolve.ResolveCollectionName(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	rv, _ := parseRV(m.GetResourceVersion())
-	out, err := s.H.BindObjectKeyToBucket(ctx, ref.ObjectKey, m.GetBucket(), rv)
+	out, err := s.H.BindCollectionToBucket(ctx, ref.Collection, m.GetBucket(), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(objectKeyDomainToProto(out)), nil
+	return connect.NewResponse(collectionDomainToProto(out)), nil
 }
 
-var _ paladinadminv1connect.ObjectKeyServiceHandler = (*ObjectKeyServer)(nil)
+var _ paladinadminv1connect.CollectionServiceHandler = (*CollectionServer)(nil)
 
 // bucketRef decodes "storageBackends/{backend}/buckets/{bucket}".
 func bucketRef(name string) (backend, bucket string, err error) {
@@ -203,14 +203,14 @@ func bucketRef(name string) (backend, bucket string, err error) {
 	return bucketNameParts(name)
 }
 
-func objectKeyDomainToProto(o *objectkey.ObjectKey) *pb.ObjectKey {
+func collectionDomainToProto(o *objectkey.Collection) *pb.Collection {
 	if o == nil {
 		return nil
 	}
-	return &pb.ObjectKey{
-		Name:            fmt.Sprintf("tenants/%s/objectKeys/%s", o.TenantID, o.ObjectKey),
+	return &pb.Collection{
+		Name:            fmt.Sprintf("tenants/%s/collections/%s", o.TenantID, o.Collection),
 		TenantId:        o.TenantID.String(),
-		ObjectKey:       o.ObjectKey,
+		Collection:      o.Collection,
 		DisplayName:     o.DisplayName,
 		Bucket:          fmt.Sprintf("storageBackends/%s/buckets/%s", o.BackendID, o.BucketName),
 		CedarPolicy:     o.CedarPolicy,

@@ -32,8 +32,8 @@ func mkTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, layout stri
 }
 
 // TestAdversarial_CrossTenantDedicatedBucketBindRejected proves the DB trigger
-// enforce_object_key_bucket_tenancy is a hard isolation boundary: tenant B
-// cannot bind an object_key to tenant A's OWNED (dedicated) bucket, even by a
+// enforce_collection_bucket_tenancy is a hard isolation boundary: tenant B
+// cannot bind an collection to tenant A's OWNED (dedicated) bucket, even by a
 // direct INSERT that bypasses the application layer. Without this, a bug or a
 // compromised app role could route B's writes into A's dedicated bucket.
 func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
@@ -55,13 +55,13 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	}
 	victimBucket := "paladin-" + victimA.String()
 
-	// Tenant B (attacker) exists and tries to bind an object_key to A's bucket.
+	// Tenant B (attacker) exists and tries to bind an collection to A's bucket.
 	attackerB, _ := mkTenant(t, ctx, pool, "shared")
 	_, err := pool.Exec(ctx,
-		`INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
 		attackerB, "steal", backendID, victimBucket)
 	if err == nil {
-		t.Fatal("SECURITY: tenant B bound an object_key to tenant A's dedicated bucket — tenancy trigger bypassed")
+		t.Fatal("SECURITY: tenant B bound an collection to tenant A's dedicated bucket — tenancy trigger bypassed")
 	}
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "23514" { // check_violation raised by the trigger
@@ -70,7 +70,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 
 	// Positive control: tenant A CAN bind to its own dedicated bucket.
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
 		victimA, "docs", backendID, victimBucket); err != nil {
 		t.Fatalf("owner could not bind to its own dedicated bucket: %v", err)
 	}
@@ -91,10 +91,10 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 
 	seedObj := func(tid uuid.UUID) {
 		ok := "ok-" + uuid.NewString()[:8]
-		mustExec(t, ctx, pool, `INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
+		mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
 			tid, ok, backendID, bucket)
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (object_id, tenant_id, object_key, key, state, content_type, checksum_algorithm)
+			`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 			 VALUES ($1,$2,$3,$4,'AVAILABLE','text/plain',0)`,
 			uuid.Must(uuid.NewV7()), tid, ok, "k-"+uuid.NewString()[:8])
 	}
@@ -166,7 +166,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 		t.Fatalf("create dedicated tenant: %v", err)
 	}
 	bucket := "paladin-" + tid.String()
-	mustExec(t, ctx, pool, `INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
+	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
 		tid, "docs", backendID, bucket)
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
@@ -205,7 +205,7 @@ func TestAdversarial_CedarAuthoritativeSlugIsolation(t *testing.T) {
 	bravo, _ := mkTenant(t, ctx, pool, "shared")
 
 	eng := cedar.NewEngine(cedar.NewPostgresStore(pool), time.Minute)
-	res := &cedar.Resource{TenantID: alpha, ObjectKey: "docs", Key: "f"}
+	res := &cedar.Resource{TenantID: alpha, Collection: "docs", Key: "f"}
 
 	// A's own member is allowed (authoritative slug "alpha" matches).
 	aMember := &cedar.Principal{Subject: "a@alpha", TenantID: alpha, TenantSlug: "alpha", Roles: []string{"tenant.user"}}

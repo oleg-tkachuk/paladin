@@ -35,14 +35,14 @@ func scopeDecision(t *testing.T, scopes []string, r *Resource) Decision {
 
 // objRes is a fully-populated Object resource (Key set → the request resource is
 // the Object entity, which carries scope_keys).
-func objRes(tenant uuid.UUID, backend, bucket, objectKey, key string) *Resource {
-	return &Resource{TenantID: tenant, BackendID: backend, BucketName: bucket, ObjectKey: objectKey, Key: key}
+func objRes(tenant uuid.UUID, backend, bucket, collection, key string) *Resource {
+	return &Resource{TenantID: tenant, BackendID: backend, BucketName: bucket, Collection: collection, Key: key}
 }
 
 // TestResourceScopeKeys_WireFormat pins the Go-side scope wire format that the
 // enforcement policy matches against. It MUST agree with auth.Scope.String() /
-// auth.MatchScope in internal/auth/scope.go — object_key is
-// "object_key:<bucket>/<object_key>", NOT "object_key:<object_key>". If this
+// auth.MatchScope in internal/auth/scope.go — collection is
+// "collection:<bucket>/<collection>", NOT "collection:<collection>". If this
 // drifts, a scoped principal silently fails-open/closed on the wrong resources.
 func TestResourceScopeKeys_WireFormat(t *testing.T) {
 	tid := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000aa")
@@ -51,7 +51,7 @@ func TestResourceScopeKeys_WireFormat(t *testing.T) {
 		"tenant:" + tid.String(),
 		"backend:be-1",
 		"bucket:medical",
-		"object_key:medical/patient-42",
+		"collection:medical/patient-42",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("scope keys = %v, want %v", got, want)
@@ -62,27 +62,27 @@ func TestResourceScopeKeys_WireFormat(t *testing.T) {
 		}
 	}
 
-	// object_key requires BOTH bucket and object_key to be resolved — mirroring
+	// collection requires BOTH bucket and collection to be resolved — mirroring
 	// MatchScope. With no bucket, only the tenant key is emitted.
-	if ks := resourceScopeKeys(&Resource{TenantID: tid, ObjectKey: "patient-42"}); len(ks) != 1 || ks[0] != "tenant:"+tid.String() {
+	if ks := resourceScopeKeys(&Resource{TenantID: tid, Collection: "patient-42"}); len(ks) != 1 || ks[0] != "tenant:"+tid.String() {
 		t.Errorf("no-bucket resource keys = %v, want [tenant:%s] only", ks, tid)
 	}
 }
 
-// TestScopeEnforcement_ObjectKey: a principal scoped to object_key:b/medical may
-// touch objects under (bucket b, objectKey medical) and nothing else.
-func TestScopeEnforcement_ObjectKey(t *testing.T) {
+// TestScopeEnforcement_Collection: a principal scoped to collection:b/medical may
+// touch objects under (bucket b, collection medical) and nothing else.
+func TestScopeEnforcement_Collection(t *testing.T) {
 	tid := uuid.New()
-	scope := []string{"object_key:b/medical"}
+	scope := []string{"collection:b/medical"}
 
 	if got := scopeDecision(t, scope, objRes(tid, "be", "b", "medical", "f")); got != DecisionAllow {
-		t.Errorf("object_key:b/medical on {b,medical} = %v, want Allow", got)
+		t.Errorf("collection:b/medical on {b,medical} = %v, want Allow", got)
 	}
 	if got := scopeDecision(t, scope, objRes(tid, "be", "b", "avatars", "f")); got != DecisionDeny {
-		t.Errorf("object_key:b/medical on {b,avatars} = %v, want Deny", got)
+		t.Errorf("collection:b/medical on {b,avatars} = %v, want Deny", got)
 	}
 	if got := scopeDecision(t, scope, objRes(tid, "be", "c", "medical", "f")); got != DecisionDeny {
-		t.Errorf("object_key:b/medical on {c,medical} (other bucket) = %v, want Deny", got)
+		t.Errorf("collection:b/medical on {c,medical} (other bucket) = %v, want Deny", got)
 	}
 }
 
@@ -172,19 +172,19 @@ func TestScopeEnforcement_RolesOnlyUnaffected(t *testing.T) {
 	}
 }
 
-// TestScopeEnforcement_ObjectKeyResourceEntity mirrors ObjectKey-level access
-// (no per-object Key → the request resource is the ObjectKey entity), confirming
+// TestScopeEnforcement_CollectionResourceEntity mirrors Collection-level access
+// (no per-object Key → the request resource is the Collection entity), confirming
 // scope_keys is stamped there too, not only on Object.
-func TestScopeEnforcement_ObjectKeyResourceEntity(t *testing.T) {
+func TestScopeEnforcement_CollectionResourceEntity(t *testing.T) {
 	tid := uuid.New()
-	scope := []string{"object_key:b/medical"}
+	scope := []string{"collection:b/medical"}
 	okRes := func(bucket, ok string) *Resource {
-		return &Resource{TenantID: tid, BackendID: "be", BucketName: bucket, ObjectKey: ok}
+		return &Resource{TenantID: tid, BackendID: "be", BucketName: bucket, Collection: ok}
 	}
 	if got := scopeDecision(t, scope, okRes("b", "medical")); got != DecisionAllow {
-		t.Errorf("ObjectKey entity {b,medical} = %v, want Allow", got)
+		t.Errorf("Collection entity {b,medical} = %v, want Allow", got)
 	}
 	if got := scopeDecision(t, scope, okRes("b", "avatars")); got != DecisionDeny {
-		t.Errorf("ObjectKey entity {b,avatars} = %v, want Deny", got)
+		t.Errorf("Collection entity {b,avatars} = %v, want Deny", got)
 	}
 }

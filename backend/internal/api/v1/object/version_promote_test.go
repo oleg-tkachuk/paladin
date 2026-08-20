@@ -144,7 +144,7 @@ func TestOnPromoteRecordsWhenVersioningOn(t *testing.T) {
 	objectID := uuid.Must(uuid.NewV7())
 	obj := Object{
 		ObjectID:    objectID,
-		ObjectKey:   "photos",
+		Collection:  "photos",
 		Key:         "k1",
 		ETag:        "abc",
 		SizeBytes:   42,
@@ -178,7 +178,7 @@ func TestOnSoftDeleteRecordsDeleteMarker(t *testing.T) {
 	h := NewVersionHandler(repo, vrepo)
 
 	objectID := uuid.Must(uuid.NewV7())
-	if err := h.OnSoftDelete(context.Background(), Object{ObjectID: objectID, ObjectKey: "k", Key: "x"}); err != nil {
+	if err := h.OnSoftDelete(context.Background(), Object{ObjectID: objectID, Collection: "k", Key: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(vrepo.inserted) != 1 || !vrepo.inserted[0].IsDeleteMarker {
@@ -231,7 +231,7 @@ func TestUnsetDeleteMarkerCurrentFlipsToPrev(t *testing.T) {
 	vrepo.current[objectID] = marker.VersionID
 
 	h := NewVersionHandler(repo, vrepo)
-	if err := h.UnsetDeleteMarkerCurrent(context.Background(), Object{ObjectID: objectID, ObjectKey: "k", TenantID: uuid.Must(uuid.NewV7())}); err != nil {
+	if err := h.UnsetDeleteMarkerCurrent(context.Background(), Object{ObjectID: objectID, Collection: "k", TenantID: uuid.Must(uuid.NewV7())}); err != nil {
 		t.Fatal(err)
 	}
 	if vrepo.current[objectID] != regular.VersionID {
@@ -247,7 +247,7 @@ func TestUnsetDeleteMarkerCurrentNoOpWhenVersioningOff(t *testing.T) {
 
 	h := NewVersionHandler(repo, vrepo)
 	prior := vrepo.current[objectID]
-	if err := h.UnsetDeleteMarkerCurrent(context.Background(), Object{ObjectID: objectID, ObjectKey: "k"}); err != nil {
+	if err := h.UnsetDeleteMarkerCurrent(context.Background(), Object{ObjectID: objectID, Collection: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	if vrepo.current[objectID] != prior {

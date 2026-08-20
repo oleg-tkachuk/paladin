@@ -106,14 +106,14 @@ type TenantServiceClient interface {
 	PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
-	// inherited_cedar_policy AND in every object_key's cedar_policy to
+	// inherited_cedar_policy AND in every collection's cedar_policy to
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
 	// (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
-	// the object_keys and flips the layout. Returns the initial migration status;
+	// the collections and flips the layout. Returns the initial migration status;
 	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
 	// tenant is not currently `shared` or a migration is already in flight.
 	MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
@@ -130,14 +130,14 @@ type TenantServiceClient interface {
 	// enumerate slug→tenant mappings.
 	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-	// route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+	// route used to complete the bare collection name shape (ADR-0010 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
 	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
 	// SetTenantDefaultBinding upserts the tenant's default route. The
 	// (backend, bucket) MUST reference an existing bucket.
 	SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
 	// ClearTenantDefaultBinding removes the tenant's default route; bare
-	// object_key names for that tenant then fail with FAILED_PRECONDITION.
+	// collection names for that tenant then fail with FAILED_PRECONDITION.
 	ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error)
 }
 
@@ -365,14 +365,14 @@ type TenantServiceHandler interface {
 	PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
-	// inherited_cedar_policy AND in every object_key's cedar_policy to
+	// inherited_cedar_policy AND in every collection's cedar_policy to
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
 	// (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
-	// the object_keys and flips the layout. Returns the initial migration status;
+	// the collections and flips the layout. Returns the initial migration status;
 	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
 	// tenant is not currently `shared` or a migration is already in flight.
 	MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
@@ -389,14 +389,14 @@ type TenantServiceHandler interface {
 	// enumerate slug→tenant mappings.
 	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-	// route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+	// route used to complete the bare collection name shape (ADR-0010 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
 	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
 	// SetTenantDefaultBinding upserts the tenant's default route. The
 	// (backend, bucket) MUST reference an existing bucket.
 	SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
 	// ClearTenantDefaultBinding removes the tenant's default route; bare
-	// object_key names for that tenant then fail with FAILED_PRECONDITION.
+	// collection names for that tenant then fail with FAILED_PRECONDITION.
 	ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error)
 }
 

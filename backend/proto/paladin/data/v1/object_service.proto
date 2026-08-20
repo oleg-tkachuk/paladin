@@ -22,7 +22,7 @@ service ObjectService {
 
   rpc GetObject(GetObjectRequest) returns (Object);
 
-  // LookupObject resolves an Object by (object_key, key) instead of object_id.
+  // LookupObject resolves an Object by (collection, key) instead of object_id.
   rpc LookupObject(LookupObjectRequest) returns (Object);
 
   rpc UpdateObject(UpdateObjectRequest) returns (Object);
@@ -57,12 +57,12 @@ service ObjectService {
 // ─── Versioning ─────────────────────────────────────────────────────────────
 
 message ObjectVersion {
-  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+  // Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
   string name = 1;
   string version_id = 2;
   string object_id = 3;
   bool is_delete_marker = 4;
-  string s3_key = 5;
+  string storage_path = 5;
   int64 size_bytes = 6;
   string etag = 7;
   ChecksumDigest checksum = 8;
@@ -86,7 +86,7 @@ message ListObjectVersionsResponse {
 }
 
 message GetObjectVersionRequest {
-  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+  // Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
@@ -98,7 +98,7 @@ message RestoreObjectVersionRequest {
 // ─── Upload ─────────────────────────────────────────────────────────────────
 
 message UploadObjectRequest {
-  // Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+  // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2; // empty → server uses object_id as key
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
@@ -151,7 +151,7 @@ message GetObjectRequest {
 }
 
 message LookupObjectRequest {
-  // Parent ObjectKey — required to disambiguate `key` lookups.
+  // Parent Collection — required to disambiguate `key` lookups.
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2 [(buf.validate.field).string.min_len = 1];
 }
@@ -205,8 +205,8 @@ message RestoreObjectRequest {
 
 message CopyObjectRequest {
   string source_name = 1 [(buf.validate.field).string.min_len = 1];
-  // Destination ObjectKey resource name.
-  string destination_object_key = 2 [(buf.validate.field).string.min_len = 1];
+  // Destination Collection resource name.
+  string destination_collection = 2 [(buf.validate.field).string.min_len = 1];
   string destination_key = 3 [(buf.validate.field).string.min_len = 1];
   optional MetadataOverride metadata_override = 4;
   optional TagsOverride tags_override = 5;
@@ -218,7 +218,7 @@ message TagsOverride     { map<string, string> tags = 1; }
 // ─── List / Count ───────────────────────────────────────────────────────────
 
 message ListObjectsRequest {
-  // Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+  // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;

@@ -16,7 +16,7 @@ import "google/protobuf/timestamp.proto";
 // Lives on the IAM plane so any authenticated user can call it; there is
 // no tenant-sensitive data in the response. If we ever expose redacted
 // configuration through here it gets gated separately by role.
-service SystemService {
+service HealthService {
   // GetVersion returns build metadata embedded in the binary at link time
   // (-ldflags). Cheap, no dependencies touched. Safe to poll.
   rpc GetVersion(GetVersionRequest) returns (VersionInfo);

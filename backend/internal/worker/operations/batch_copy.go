@@ -18,15 +18,15 @@ import (
 // BatchCopyExecutor implements the BatchCopy operation type.
 //
 // Reads JSON-encoded batch.BatchCopyArgs, iterates ObjectIDs, performs
-// a server-side copy of each from (SrcObjectKey, source key) to
-// (DstObjectKey, KeyPrefix + source key) via the storage adapter's
+// a server-side copy of each from (SrcCollection, source key) to
+// (DstCollection, KeyPrefix + source key) via the storage adapter's
 // CopyObject. Bookkeeping mirrors the data-plane's CopyObject handler:
 //
 //  1. Look up source row + source bucket.
 //  2. Compute destination key — KeyPrefix + src.Key (empty prefix
 //     = reuse src.Key under the destination namespace).
 //  3. CreateObject on the destination (state=PENDING). FK to
-//     object_keys validates before we issue the storage call.
+//     collections validates before we issue the storage call.
 //  4. storage.CopyObject. On error: MarkFailed on the destination
 //     row to compensate (otherwise PENDING leaks).
 //  5. PromoteToAvailable on the destination with the source's etag /
@@ -81,23 +81,23 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
 	if args.TenantID == uuid.Nil ||
-		args.SrcObjectKey == "" ||
-		args.DstObjectKey == "" ||
+		args.SrcCollection == "" ||
+		args.DstCollection == "" ||
 		len(args.ObjectIDs) == 0 {
-		return nil, errors.New("invalid metadata: tenant_id, src_object_key, dst_object_key, object_ids required")
+		return nil, errors.New("invalid metadata: tenant_id, src_collection, dst_collection, object_ids required")
 	}
 	if args.TenantID != op.TenantID {
 		return nil, fmt.Errorf("metadata tenant_id %s != operation tenant_id %s",
 			args.TenantID, op.TenantID)
 	}
 
-	// Bucket lookups are batch-invariant: same source / dest object_key
+	// Bucket lookups are batch-invariant: same source / dest collection
 	// across the whole batch ⇒ resolve once.
-	srcBackendID, srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcObjectKey, false) // copy source (read)
+	srcBackendID, srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcCollection, false) // copy source (read)
 	if err != nil {
 		return nil, fmt.Errorf("lookup src bucket: %w", err)
 	}
-	dstBackendID, dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstObjectKey, true) // copy dest (mutation)
+	dstBackendID, dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstCollection, true) // copy dest (mutation)
 	if err != nil {
 		return nil, fmt.Errorf("lookup dst bucket: %w", err)
 	}
@@ -167,7 +167,7 @@ func (e *BatchCopyExecutor) copyOne(
 	dstKey := args.KeyPrefix + src.Key
 	dst, err := e.Objects.CreateObject(ctx, object.CreateObjectArgs{
 		TenantID:         args.TenantID,
-		ObjectKey:        args.DstObjectKey,
+		Collection:       args.DstCollection,
 		Key:              dstKey,
 		ContentType:      src.ContentType,
 		SizeHint:         src.SizeBytes,
@@ -181,8 +181,8 @@ func (e *BatchCopyExecutor) copyOne(
 	}
 
 	if err := e.Storage.CopyObject(ctx,
-		object.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, ObjectKey: args.SrcObjectKey, Key: src.Key},
-		object.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, ObjectKey: args.DstObjectKey, Key: dstKey},
+		object.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, Collection: args.SrcCollection, Key: src.Key},
+		object.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
 	); err != nil {
 		// Compensate: dst row is PENDING. Without this it lingers
 		// until the reconciler hard-deletes it (`min_object_age`).

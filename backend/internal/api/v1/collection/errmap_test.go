@@ -18,7 +18,7 @@ func TestErrorRegistration(t *testing.T) {
 		want connect.Code
 	}{
 		{"ErrVersionMismatch", ErrVersionMismatch, connect.CodeAborted},
-		{"ErrObjectKeyHasObjects", ErrObjectKeyHasObjects, connect.CodeFailedPrecondition},
+		{"ErrCollectionHasObjects", ErrCollectionHasObjects, connect.CodeFailedPrecondition},
 	}
 	for _, tc := range cases {
 		if got := connect.CodeOf(apiutil.MapError(tc.err)); got != tc.want {

@@ -21,16 +21,16 @@ type QuotaReader interface {
 	GetBucket(ctx context.Context, backendID, bucketName string) (admindomain.Quota, error)
 }
 
-// BucketBindingLookup resolves an ObjectKey to the physical bucket it writes
+// BucketBindingLookup resolves an Collection to the physical bucket it writes
 // through, so a bucket-scoped quota can be found for an upload that names
-// only its ObjectKey. Satisfied by the object repository's LookupBucket.
+// only its Collection. Satisfied by the object repository's LookupBucket.
 //
 // Optional: leave it nil and the interceptor checks tenant-scoped quotas
 // only. That is the pre-bucket-enforcement behaviour, kept reachable
 // because turning bucket caps from decorative into load-bearing changes
 // what a deployment rejects.
 type BucketBindingLookup interface {
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 }
 
 // QuotaSoftCheck is a Connect interceptor that rejects upload requests when
@@ -44,7 +44,7 @@ type BucketBindingLookup interface {
 //	max_objects_per_day — objects admitted today
 //
 // Two scopes: the caller's tenant, and — when Bindings is wired — the
-// bucket the upload's ObjectKey resolves to. Tenant is checked first so its
+// bucket the upload's Collection resolves to. Tenant is checked first so its
 // message wins when both are exhausted; a tenant cap is the one an operator
 // is more likely to have set deliberately.
 //
@@ -95,7 +95,7 @@ func NewQuotaSoftCheck(reader QuotaReader) *QuotaSoftCheck {
 }
 
 // WithBucketScope enables bucket-scoped enforcement by giving the
-// interceptor a way to resolve an ObjectKey to its (backend, bucket).
+// interceptor a way to resolve an Collection to its (backend, bucket).
 // Without it, bucket quota rows are maintained and displayed but reject
 // nothing.
 func (q *QuotaSoftCheck) WithBucketScope(bindings BucketBindingLookup) *QuotaSoftCheck {
@@ -120,7 +120,7 @@ func (q *QuotaSoftCheck) WrapStreamingHandler(next connect.StreamingHandlerFunc)
 	return next
 }
 
-// regenerateUploadURLProc re-binds a presigned PUT to an ObjectKey's
+// regenerateUploadURLProc re-binds a presigned PUT to an Collection's
 // EXISTING pending row. It creates nothing, so it must not consume a slot
 // against either object-count cap — and it carries no size, so the byte
 // caps see 0 and pass. Singled out by name because the request message has
@@ -170,7 +170,7 @@ func (q *QuotaSoftCheck) CheckUpload(ctx context.Context, procedure string, msg 
 
 // bucketQuota resolves the upload's target bucket and reads its quota row.
 // Every failure along the way — no binding lookup wired, an unparseable
-// name, an unbound ObjectKey, no quota row for the bucket — returns
+// name, an unbound Collection, no quota row for the bucket — returns
 // ok=false and lets the request through. The handler behind this
 // interceptor re-resolves the same binding and produces the accurate error
 // for a genuinely broken route; turning a routing problem into
@@ -179,24 +179,24 @@ func (q *QuotaSoftCheck) bucketQuota(ctx context.Context, msg any) (admindomain.
 	if q.Bindings == nil {
 		return admindomain.Quota{}, false
 	}
-	name := extractObjectKeyName(msg)
+	name := extractCollectionName(msg)
 	if name == "" {
 		return admindomain.Quota{}, false
 	}
-	// ParseObjectKeyName, not ResolveObjectKeyName: the connectshim records
+	// ParseCollectionName, not ResolveCollectionName: the connectshim records
 	// one shape observation per request already, and recording a second
 	// here would double-count every upload in the shape distribution.
-	ref, err := resolve.ParseObjectKeyName(ctx, name)
+	ref, err := resolve.ParseCollectionName(ctx, name)
 	if err != nil {
 		return admindomain.Quota{}, false
 	}
 	backendID, bucketName := ref.BackendID, ref.BucketName
 	if backendID == "" || bucketName == "" {
 		// Non-canonical name shape: the (backend, bucket) has to come from
-		// the ObjectKey's binding. write=true matches what this request is
+		// the Collection's binding. write=true matches what this request is
 		// about to do, so a disabled or draining backend surfaces as an
 		// error here — which we swallow, leaving the handler to report it.
-		backendID, bucketName, err = q.Bindings.LookupBucket(ctx, ref.TenantID, ref.ObjectKey, true)
+		backendID, bucketName, err = q.Bindings.LookupBucket(ctx, ref.TenantID, ref.Collection, true)
 		if err != nil {
 			return admindomain.Quota{}, false
 		}
@@ -264,11 +264,11 @@ func extractSizeHint(msg any) int64 {
 	return 0
 }
 
-// extractObjectKeyName pulls the ObjectKey resource name out of a gated
+// extractCollectionName pulls the Collection resource name out of a gated
 // request. UploadObject and InitiateMultipartUpload carry it as `parent`;
 // RegenerateUploadUrl carries an OBJECT name in `name`, so the trailing
-// "/objects/{id}" is trimmed back to the ObjectKey it belongs to.
-func extractObjectKeyName(msg any) string {
+// "/objects/{id}" is trimmed back to the Collection it belongs to.
+func extractCollectionName(msg any) string {
 	if msg == nil {
 		return ""
 	}

@@ -13,18 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Store fetches compiled Cedar policy text for a given (tenant, objectKey) scope
+// Store fetches compiled Cedar policy text for a given (tenant, collection) scope
 // and notifies subscribers on change.
 //
 // Effective policy is the concatenation of the tenant's inherited_cedar_policy
-// and the objectKey's cedar_policy (objectKey-scoped rules override tenant-scoped).
+// and the collection's cedar_policy (collection-scoped rules override tenant-scoped).
 type Store interface {
 	// Fetch returns the effective policy text, a content hash, and the
 	// tenant's DB-authoritative slug. The slug is the trusted key for tenant
 	// membership in Cedar (ADR-0012) — never the JWT-supplied one. Empty when
 	// the tenant is unknown or has no slug (legacy); callers fall back to the
 	// tenant UUID for the entity UID.
-	Fetch(ctx context.Context, tenantID uuid.UUID, objectKey string) (text string, hash []byte, slug string, err error)
+	Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (text string, hash []byte, slug string, err error)
 
 	// Watch emits change events for invalidating compiled caches.
 	// The channel is closed when ctx is cancelled.
@@ -32,19 +32,19 @@ type Store interface {
 }
 
 type ChangeEvent struct {
-	TenantID  uuid.UUID
-	ObjectKey string // empty = tenant-level change (invalidate all object_keys)
+	TenantID   uuid.UUID
+	Collection string // empty = tenant-level change (invalidate all collections)
 	// ResyncAll is a control event, not a data change: the watcher lost and
 	// re-established its LISTEN connection, so an unknown set of notifications
 	// was missed in the gap. Consumers must drop their ENTIRE compiled cache
-	// (every tenant) and re-fetch on demand. TenantID/ObjectKey are unset.
+	// (every tenant) and re-fetch on demand. TenantID/Collection are unset.
 	ResyncAll bool
 }
 
-// PostgresStore reads policy text from tenants and object_keys and uses
+// PostgresStore reads policy text from tenants and collections and uses
 // LISTEN/NOTIFY on channel "policy_changed" to stream invalidations.
 // The NOTIFY side is emitted by AFTER INSERT/UPDATE/DELETE triggers on
-// tenants.inherited_cedar_policy and object_keys.cedar_policy (migration
+// tenants.inherited_cedar_policy and collections.cedar_policy (migration
 // 051_policy_changed_notify.sql), so every writer — admin plane, seed jobs,
 // manual psql — invalidates without remembering to notify.
 type PostgresStore struct {
@@ -74,19 +74,19 @@ const (
 	watchBackoffMax     = 5 * time.Second
 )
 
-func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, []byte, string, error) {
+func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (string, []byte, string, error) {
 	const q = `
         SELECT
             COALESCE(t.inherited_cedar_policy, '') AS tpolicy,
             COALESCE(b.cedar_policy, '')           AS bpolicy,
             COALESCE(t.slug, '')                   AS slug
         FROM tenants t
-        LEFT JOIN object_keys b
-               ON b.tenant_id = t.tenant_id AND b.object_key = $2
+        LEFT JOIN collections b
+               ON b.tenant_id = t.tenant_id AND b.collection = $2
         WHERE t.tenant_id = $1
     `
 	var tPol, bPol, slug string
-	if err := s.pool.QueryRow(ctx, q, tenantID, objectKey).Scan(&tPol, &bPol, &slug); err != nil {
+	if err := s.pool.QueryRow(ctx, q, tenantID, collection).Scan(&tPol, &bPol, &slug); err != nil {
 		// Unknown tenant → no policy. Cedar's deny-by-default semantics
 		// will then map the call to PermissionDenied at the engine layer
 		// instead of leaking a SQL error as a 500 to the client.
@@ -98,7 +98,7 @@ func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, objectKey
 	}
 	text := tPol
 	if bPol != "" {
-		text += "\n// --- objectKey-scoped ---\n" + bPol
+		text += "\n// --- collection-scoped ---\n" + bPol
 	}
 	sum := sha256.Sum256([]byte(text))
 	return text, sum[:], slug, nil
@@ -171,7 +171,7 @@ func consumeNotifications(ctx context.Context, conn *pgxpool.Conn, ch chan Chang
 		if err != nil {
 			return err
 		}
-		// Payload format: "<tenant_uuid>:<objectKey>" (objectKey optional).
+		// Payload format: "<tenant_uuid>:<collection>" (collection optional).
 		ev := parseNotifyPayload(n.Payload)
 		select {
 		case ch <- ev:
@@ -204,7 +204,7 @@ func parseNotifyPayload(p string) ChangeEvent {
 	for i := 0; i < len(p); i++ {
 		if p[i] == ':' {
 			id, _ := uuid.Parse(p[:i])
-			return ChangeEvent{TenantID: id, ObjectKey: p[i+1:]}
+			return ChangeEvent{TenantID: id, Collection: p[i+1:]}
 		}
 	}
 	id, _ := uuid.Parse(p)

@@ -13,7 +13,7 @@
 // producer, so real Paladin events silently never fanned out (only
 // TestSubscription's DeliverOne path lit up). This test guards
 // the wiring landed in the same change as itself, and gives
-// the next handler-class (bucket / objectKey / object lifecycle)
+// the next handler-class (bucket / collection / object lifecycle)
 // a copy-paste template.
 package integration
 

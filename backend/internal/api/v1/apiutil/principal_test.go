@@ -55,7 +55,7 @@ func TestCedarPrincipal(t *testing.T) {
 			Roles:      []string{"tenant.admin", "bucket.admin"},
 			Scopes: []auth.Scope{
 				{Type: auth.ScopeTenant, Value: "t1"},
-				{Type: auth.ScopeObjectKey, Value: "ok1"},
+				{Type: auth.ScopeCollection, Value: "ok1"},
 			},
 		}
 		cp := CedarPrincipal(p)
@@ -66,7 +66,7 @@ func TestCedarPrincipal(t *testing.T) {
 		if len(cp.Roles) != 2 || cp.Roles[0] != "tenant.admin" {
 			t.Errorf("roles mismatch: %v", cp.Roles)
 		}
-		wantScopes := []string{"tenant:t1", "object_key:ok1"}
+		wantScopes := []string{"tenant:t1", "collection:ok1"}
 		if len(cp.Scopes) != len(wantScopes) {
 			t.Fatalf("scopes len = %d, want %d (%v)", len(cp.Scopes), len(wantScopes), cp.Scopes)
 		}

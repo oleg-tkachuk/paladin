@@ -130,9 +130,9 @@ func TestRLSTenantIsolation(t *testing.T) {
 			// the RLS WITH CHECK (tenant_id must equal the GUC) can reject
 			// this — proving the policy, not a constraint, is the gate.
 			_, err := tx.Exec(ctx,
-				`INSERT INTO objects (object_id, tenant_id, object_key, key, state, content_type, checksum_algorithm)
+				`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 				 VALUES ($1, $2, $3, 'rls-probe', 'PENDING', 'application/octet-stream', 0)`,
-				uuid.Must(uuid.NewV7()), fB.tenantID, fB.objectKey)
+				uuid.Must(uuid.NewV7()), fB.tenantID, fB.collection)
 			if err == nil {
 				t.Fatal("cross-tenant INSERT succeeded — WITH CHECK not enforced")
 			}
@@ -146,9 +146,9 @@ func TestRLSTenantIsolation(t *testing.T) {
 	t.Run("WITH CHECK allows own-tenant INSERT", func(t *testing.T) {
 		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
-				`INSERT INTO objects (object_id, tenant_id, object_key, key, state, content_type, checksum_algorithm)
+				`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0)`,
-				uuid.Must(uuid.NewV7()), fA.tenantID, fA.objectKey)
+				uuid.Must(uuid.NewV7()), fA.tenantID, fA.collection)
 			if err != nil {
 				t.Fatalf("own-tenant INSERT rejected: %v", err)
 			}

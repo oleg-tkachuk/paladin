@@ -19,7 +19,7 @@ import (
 //
 //  1. Issues storage.DeleteObject against the S3 backend so the
 //     bytes actually go away (soft-delete leaves them in S3).
-//  2. Removes the Paladin row, freeing the (tenant, object_key, key)
+//  2. Removes the Paladin row, freeing the (tenant, collection, key)
 //     slot for a fresh PUT.
 //
 // Why the cooling-off matters:
@@ -30,7 +30,7 @@ import (
 //   - Race-with-PUT: the partial unique index `ux_objects_live_key`
 //     prevents two non-DELETED rows at the same key, so a fresh PUT
 //     post-delete creates a new row with a NEW object_id but the SAME
-//     storage key (tenant/object_key/key). The hard-delete path would
+//     storage key (tenant/collection/key). The hard-delete path would
 //     race the new PUT for that S3 path. Cooling-off makes that race
 //     vanishingly improbable in practice; the OCC guard in
 //     HardDeleteObjectIfStillDeleted catches the case where the row
@@ -70,7 +70,7 @@ type StorageDeleter interface {
 		ctx context.Context,
 		backendID, bucket string,
 		tenantID uuid.UUID,
-		objectKey, key string,
+		collection, key string,
 	) error
 }
 
@@ -154,7 +154,7 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		zap.String("key", r.Key),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.ObjectKey, r.Key); err != nil {
+	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.Collection, r.Key); err != nil {
 		// We don't fail the whole sweep — log and try the next row.
 		// Storage-side missing-key errors should be tolerated by
 		// the adapter (S3 DELETE on absent key is a 204; SeaweedFS
@@ -212,11 +212,11 @@ func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.
 		Type:     "paladin.object.purged",
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
-		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/objectKeys/%s/objects-by-key/%s",
-			r.BackendID, r.BucketName, tenantID, r.ObjectKey, r.Key),
+		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
+			r.BackendID, r.BucketName, tenantID, r.Collection, r.Key),
 		Payload: map[string]any{
 			"tenant_id":  tenantID.String(),
-			"object_key": r.ObjectKey,
+			"collection": r.Collection,
 			"key":        r.Key,
 			"object_id":  objectID.String(),
 			"backend_id": r.BackendID,

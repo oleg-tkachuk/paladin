@@ -617,14 +617,14 @@ func (x *EventSourceConfig) GetPollInterval() *durationpb.Duration {
 
 type Bucket struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "storageBackends/{backend_id}/buckets/{bucket_name}".
+	// Resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	BackendId   string `protobuf:"bytes,2,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
-	BucketName  string `protobuf:"bytes,3,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
+	BucketId    string `protobuf:"bytes,3,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
 	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Region      string `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
 	// Optional binding to a single tenant. Empty → shared bucket; tenants
-	// bind ObjectKeys to it via prefixes.
+	// bind Collections to it via prefixes.
 	OwnerTenantId string `protobuf:"bytes,6,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`
 	// Per-bucket Cedar policy layered on top of tenant policy.
 	CedarPolicy string `protobuf:"bytes,7,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
@@ -706,9 +706,9 @@ func (x *Bucket) GetBackendId() string {
 	return ""
 }
 
-func (x *Bucket) GetBucketName() string {
+func (x *Bucket) GetBucketId() string {
 	if x != nil {
-		return x.BucketName
+		return x.BucketId
 	}
 	return ""
 }
@@ -1301,7 +1301,7 @@ type Tenant struct {
 	TenantId    string            `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	DisplayName string            `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Labels      map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Cedar policy inherited by all object_keys/buckets bound to this tenant.
+	// Cedar policy inherited by all collections/buckets bound to this tenant.
 	InheritedCedarPolicy string                 `protobuf:"bytes,5,opt,name=inherited_cedar_policy,json=inheritedCedarPolicy,proto3" json:"inherited_cedar_policy,omitempty"`
 	ResourceVersion      string                 `protobuf:"bytes,6,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -1319,7 +1319,7 @@ type Tenant struct {
 	// removes the row physically.
 	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
 	// default_bucket — resource name of the (backend, bucket) this tenant is
-	// bound to by default: "storageBackends/{backend_id}/buckets/{bucket_name}".
+	// bound to by default: "storageBackends/{backend_id}/buckets/{bucket_id}".
 	// Sourced from the tenant_default_bindings row written at CreateTenant time;
 	// empty when the tenant has no default binding (legacy / never set).
 	// Read-only here — set the binding via CreateTenant.default_bucket.
@@ -1446,20 +1446,20 @@ func (x *Tenant) GetStorageLayout() string {
 	return ""
 }
 
-type ObjectKey struct {
+type Collection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}".
+	// Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	TenantId    string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	ObjectKey   string `protobuf:"bytes,3,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	Collection  string `protobuf:"bytes,3,opt,name=collection,proto3" json:"collection,omitempty"`
 	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	// Bucket the object_key is bound to (resource name).
-	Bucket string `protobuf:"bytes,5,opt,name=bucket,proto3" json:"bucket,omitempty"` // "storageBackends/{backend_id}/buckets/{bucket_name}"
+	// Bucket the collection is bound to (resource name).
+	Bucket string `protobuf:"bytes,5,opt,name=bucket,proto3" json:"bucket,omitempty"` // "storageBackends/{backend_id}/buckets/{bucket_id}"
 	// Effective completion mode (derived from bucket → backend events).
 	CompletionMode v1.CompletionMode `protobuf:"varint,6,opt,name=completion_mode,json=completionMode,proto3,enum=paladin.common.v1.CompletionMode" json:"completion_mode,omitempty"`
-	// Cedar policy at the object_key layer.
+	// Cedar policy at the collection layer.
 	CedarPolicy string `protobuf:"bytes,7,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
-	// Per-object_key constraints overlay on top of bucket constraints.
+	// Per-collection constraints overlay on top of bucket constraints.
 	Constraints     *BucketConstraints     `protobuf:"bytes,8,opt,name=constraints,proto3" json:"constraints,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,9,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -1468,20 +1468,20 @@ type ObjectKey struct {
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *ObjectKey) Reset() {
-	*x = ObjectKey{}
+func (x *Collection) Reset() {
+	*x = Collection{}
 	mi := &file_paladin_admin_v1_types_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ObjectKey) String() string {
+func (x *Collection) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ObjectKey) ProtoMessage() {}
+func (*Collection) ProtoMessage() {}
 
-func (x *ObjectKey) ProtoReflect() protoreflect.Message {
+func (x *Collection) ProtoReflect() protoreflect.Message {
 	mi := &file_paladin_admin_v1_types_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1493,82 +1493,82 @@ func (x *ObjectKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ObjectKey.ProtoReflect.Descriptor instead.
-func (*ObjectKey) Descriptor() ([]byte, []int) {
+// Deprecated: Use Collection.ProtoReflect.Descriptor instead.
+func (*Collection) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *ObjectKey) GetName() string {
+func (x *Collection) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetTenantId() string {
+func (x *Collection) GetTenantId() string {
 	if x != nil {
 		return x.TenantId
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetObjectKey() string {
+func (x *Collection) GetCollection() string {
 	if x != nil {
-		return x.ObjectKey
+		return x.Collection
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetDisplayName() string {
+func (x *Collection) GetDisplayName() string {
 	if x != nil {
 		return x.DisplayName
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetBucket() string {
+func (x *Collection) GetBucket() string {
 	if x != nil {
 		return x.Bucket
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetCompletionMode() v1.CompletionMode {
+func (x *Collection) GetCompletionMode() v1.CompletionMode {
 	if x != nil {
 		return x.CompletionMode
 	}
 	return v1.CompletionMode(0)
 }
 
-func (x *ObjectKey) GetCedarPolicy() string {
+func (x *Collection) GetCedarPolicy() string {
 	if x != nil {
 		return x.CedarPolicy
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetConstraints() *BucketConstraints {
+func (x *Collection) GetConstraints() *BucketConstraints {
 	if x != nil {
 		return x.Constraints
 	}
 	return nil
 }
 
-func (x *ObjectKey) GetResourceVersion() string {
+func (x *Collection) GetResourceVersion() string {
 	if x != nil {
 		return x.ResourceVersion
 	}
 	return ""
 }
 
-func (x *ObjectKey) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Collection) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *ObjectKey) GetUpdatedAt() *timestamppb.Timestamp {
+func (x *Collection) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
 	}
@@ -1579,7 +1579,7 @@ func (x *ObjectKey) GetUpdatedAt() *timestamppb.Timestamp {
 type Quota struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resource name: "tenants/{tenant_id_or_slug}/quota" or
-	// "storageBackends/{backend_id}/buckets/{bucket_name}/quota".
+	// "storageBackends/{backend_id}/buckets/{bucket_id}/quota".
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Hard caps. 0 → no cap.
 	MaxTotalBytes    int64 `protobuf:"varint,2,opt,name=max_total_bytes,json=maxTotalBytes,proto3" json:"max_total_bytes,omitempty"`
@@ -2659,13 +2659,12 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x124\n" +
 	"\x06target\x18\x02 \x01(\x0e2\x1c.paladin.admin.v1.EventTargetR\x06target\x12\x1b\n" +
 	"\tqueue_url\x18\x03 \x01(\tR\bqueueUrl\x12>\n" +
-	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\x80\a\n" +
+	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xfc\x06\n" +
 	"\x06Bucket\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
-	"backend_id\x18\x02 \x01(\tR\tbackendId\x12\x1f\n" +
-	"\vbucket_name\x18\x03 \x01(\tR\n" +
-	"bucketName\x12!\n" +
+	"backend_id\x18\x02 \x01(\tR\tbackendId\x12\x1b\n" +
+	"\tbucket_id\x18\x03 \x01(\tR\bbucketId\x12!\n" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x16\n" +
 	"\x06region\x18\x05 \x01(\tR\x06region\x12&\n" +
 	"\x0fowner_tenant_id\x18\x06 \x01(\tR\rownerTenantId\x12!\n" +
@@ -2744,12 +2743,14 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0estorage_layout\x18\f \x01(\tR\rstorageLayout\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xeb\x03\n" +
-	"\tObjectKey\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x1d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x03\n" +
 	"\n" +
-	"object_key\x18\x03 \x01(\tR\tobjectKey\x12!\n" +
+	"Collection\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x1e\n" +
+	"\n" +
+	"collection\x18\x03 \x01(\tR\n" +
+	"collection\x12!\n" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x16\n" +
 	"\x06bucket\x18\x05 \x01(\tR\x06bucket\x12I\n" +
 	"\x0fcompletion_mode\x18\x06 \x01(\x0e2 .paladin.common.v1.CompletionModeR\x0ecompletionMode\x12!\n" +
@@ -2900,7 +2901,7 @@ var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(*BucketVersioning)(nil),      // 13: paladin.admin.v1.BucketVersioning
 	(*BucketReplication)(nil),     // 14: paladin.admin.v1.BucketReplication
 	(*Tenant)(nil),                // 15: paladin.admin.v1.Tenant
-	(*ObjectKey)(nil),             // 16: paladin.admin.v1.ObjectKey
+	(*Collection)(nil),            // 16: paladin.admin.v1.Collection
 	(*Quota)(nil),                 // 17: paladin.admin.v1.Quota
 	(*QuotaUsage)(nil),            // 18: paladin.admin.v1.QuotaUsage
 	(*AuditLogEntry)(nil),         // 19: paladin.admin.v1.AuditLogEntry
@@ -2950,10 +2951,10 @@ var file_paladin_admin_v1_types_proto_depIdxs = []int32{
 	29, // 28: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
 	29, // 29: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
 	29, // 30: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
-	32, // 31: paladin.admin.v1.ObjectKey.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	8,  // 32: paladin.admin.v1.ObjectKey.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	29, // 33: paladin.admin.v1.ObjectKey.created_at:type_name -> google.protobuf.Timestamp
-	29, // 34: paladin.admin.v1.ObjectKey.updated_at:type_name -> google.protobuf.Timestamp
+	32, // 31: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	8,  // 32: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	29, // 33: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
+	29, // 34: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 35: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
 	29, // 36: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
 	29, // 37: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp

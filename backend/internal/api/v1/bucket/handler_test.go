@@ -79,7 +79,7 @@ func (f *fakeRepo) List(ctx context.Context, args ListArgs) ([]Bucket, string, e
 	return f.listFn(ctx, args)
 }
 
-func (f *fakeRepo) CountObjectKeys(ctx context.Context, backendID, bucketName string) (int64, error) {
+func (f *fakeRepo) CountCollections(ctx context.Context, backendID, bucketName string) (int64, error) {
 	f.lastCount.backendID = backendID
 	f.lastCount.bucketName = bucketName
 	if f.countFn == nil {
@@ -298,7 +298,7 @@ func TestDeleteBucket(t *testing.T) {
 		fr := &fakeRepo{
 			countFn: func(context.Context, string, string) (int64, error) { return 3, nil },
 			deleteFn: func(context.Context, string, string, int64) error {
-				t.Fatalf("Delete must not run while ObjectKeys reference the bucket")
+				t.Fatalf("Delete must not run while Collections reference the bucket")
 				return nil
 			},
 		}

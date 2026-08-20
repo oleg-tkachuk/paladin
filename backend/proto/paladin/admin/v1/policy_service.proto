@@ -19,7 +19,7 @@ service PolicyService {
   rpc SimulateAuthz(SimulateAuthzRequest) returns (SimulateAuthzResponse);
 
   // GetEffectivePolicy returns the merged policy stack for a target
-  // (tenant + bucket + object_key inheritance), useful for debugging.
+  // (tenant + bucket + collection inheritance), useful for debugging.
   rpc GetEffectivePolicy(GetEffectivePolicyRequest) returns (GetEffectivePolicyResponse);
 }
 
@@ -68,7 +68,7 @@ message GetEffectivePolicyRequest {
 }
 
 message GetEffectivePolicyResponse {
-  // Concatenated cedar text in evaluation order: tenant → bucket → object_key.
+  // Concatenated cedar text in evaluation order: tenant → bucket → collection.
   string merged_cedar_policy = 1;
   repeated PolicyLayer layers = 2;
 }

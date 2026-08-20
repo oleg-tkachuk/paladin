@@ -18,7 +18,7 @@ import (
 )
 
 // ObjectRepo satisfies object.Repository. BucketCompletionMode walks the
-// objectKey → storage_backend path, so the adapter needs the raw pool.
+// collection → storage_backend path, so the adapter needs the raw pool.
 type ObjectRepo struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool
@@ -40,7 +40,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 	if err := r.q.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
-		args.ObjectKey,
+		args.Collection,
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,
@@ -57,7 +57,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 	return r.getByID(ctx, args.TenantID, objectID)
 }
 
-func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, objectKey, objectID string) (object.Object, error) {
+func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, collection, objectID string) (object.Object, error) {
 	id, err := uuid.Parse(objectID)
 	if err != nil {
 		return object.Object{}, fmt.Errorf("parse object_id: %w", err)
@@ -98,8 +98,8 @@ func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uu
 	return out, nil
 }
 
-func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (object.Object, error) {
-	row, err := r.q.LookupObjectByKey(ctx, pgUUID(tenantID), objectKey, key)
+func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, collection, key string) (object.Object, error) {
+	row, err := r.q.LookupObjectByKey(ctx, pgUUID(tenantID), collection, key)
 	if err != nil {
 		return object.Object{}, err
 	}
@@ -192,7 +192,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 
 	rows, err := r.q.ListObjects(ctx,
 		pgUUID(args.TenantID),
-		args.ObjectKey,
+		args.Collection,
 		state,
 		prefix,
 		substr,
@@ -239,7 +239,7 @@ const countScanCap = 10000
 // in-process, capped at countScanCap.
 func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsArgs) (int64, bool, error) {
 	if args.CompiledCEL == nil {
-		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.ObjectKey, sqlc.NullObjectState{})
+		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, sqlc.NullObjectState{})
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects: %w", err)
 		}
@@ -255,7 +255,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 	for {
 		rows, err := r.q.ListObjects(ctx,
 			pgUUID(args.TenantID),
-			args.ObjectKey,
+			args.Collection,
 			sqlc.NullObjectState{},
 			nil, // prefix
 			nil, // substr (CountObjectsArgs carries no raw filter to push down)
@@ -289,20 +289,20 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 	}
 }
 
-// ListDistinctTags returns each tag key present on the ObjectKey's live objects
+// ListDistinctTags returns each tag key present on the Collection's live objects
 // with its distinct values, sorted in SQL. A single pass over the rows via
-// LATERAL jsonb_each_text; the per-ObjectKey scope bounds the scan, and
+// LATERAL jsonb_each_text; the per-Collection scope bounds the scan, and
 // idx_objects_tags_gin covers tag predicates on the same table.
-func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, objectKey string) (map[string][]string, error) {
+func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, collection string) (map[string][]string, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT t.key, array_agg(DISTINCT t.value ORDER BY t.value)
 		   FROM objects o, LATERAL jsonb_each_text(o.tags) AS t(key, value)
 		  WHERE o.tenant_id  = $1
-		    AND o.object_key = $2
+		    AND o.collection = $2
 		    AND o.state <> 'DELETED'
 		  GROUP BY t.key
 		  ORDER BY t.key`,
-		pgUUID(tenantID), objectKey,
+		pgUUID(tenantID), collection,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list distinct tags: %w", err)
@@ -324,10 +324,10 @@ func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, o
 }
 
 // LookupBucket returns the physical S3 bucket bound to a tenant's
-// ObjectKey. Hits idx_object_keys_bucket_routing. After migration 005
+// Collection. Hits idx_collections_bucket_routing. After migration 005
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
-func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
+func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
 	// JOIN storage_backends so a disabled backend is refused at the single
 	// resolution chokepoint (feature 002) — zero extra round trip. The
 	// read_only (drain) state is split by operation class here (migration
@@ -336,10 +336,10 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 	const q = `
 		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only,
 		       COALESCE(bk.provision_state, 'ready')
-		FROM object_keys ok
+		FROM collections ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
 		LEFT JOIN buckets bk ON bk.backend_id = ok.backend_id AND bk.bucket_name = ok.bucket_name
-		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
+		WHERE ok.tenant_id = $1 AND ok.collection = $2`
 	var (
 		backendID      string
 		bucket         string
@@ -347,9 +347,9 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 		readOnly       bool
 		provisionState string
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
 		if isNoRows(err) {
-			return "", "", fmt.Errorf("objectKey %q not found", objectKey)
+			return "", "", fmt.Errorf("collection %q not found", collection)
 		}
 		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}
@@ -367,10 +367,10 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 
 // LookupBucketMeta returns the bucket binding plus versioning + lock flags
 // in one trip. Hot-path call on every promote / delete; the JOIN hits
-// idx_object_keys_bucket and the buckets PK.
+// idx_collections_bucket and the buckets PK.
 //
-// Versioning + Object Lock can be OVERRIDDEN per object_key via the
-// `object_keys.constraints` JSONB field. Override semantics:
+// Versioning + Object Lock can be OVERRIDDEN per collection via the
+// `collections.constraints` JSONB field. Override semantics:
 //
 //   - `versioning_enabled` boolean — when set, takes precedence over the
 //     parent bucket flag. true → force-on (even on a non-versioned bucket
@@ -381,7 +381,7 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 //
 // This lets a tenant turn versioning on for one namespace within a
 // shared bucket without touching the bucket's global config.
-func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (object.BucketMeta, error) {
+func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (object.BucketMeta, error) {
 	// JOIN storage_backends so a disabled backend is refused here too —
 	// the resolution chokepoint covers every promote/delete/version path.
 	// `write` splits the read_only (drain) gate by operation class (047).
@@ -391,11 +391,11 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 		       COALESCE(bk.object_lock_enabled, false),
 		       b.constraints, sb.enabled, sb.read_only, sb.events_enabled,
 		       COALESCE(bk.provision_state, 'ready')
-		FROM object_keys b
+		FROM collections b
 		JOIN storage_backends sb ON sb.id = b.backend_id
 		LEFT JOIN buckets bk
 		  ON bk.backend_id = b.backend_id AND bk.bucket_name = b.bucket_name
-		WHERE b.tenant_id = $1 AND b.object_key = $2
+		WHERE b.tenant_id = $1 AND b.collection = $2
 	`
 	var (
 		meta            object.BucketMeta
@@ -404,12 +404,12 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 		readOnly        bool
 		provisionState  string
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
 		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState,
 	); err != nil {
 		if isNoRows(err) {
-			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
+			return object.BucketMeta{}, fmt.Errorf("collection %q not found", collection)
 		}
 		return object.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}
@@ -510,7 +510,7 @@ func (r *ObjectRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, obje
 func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p object.PurgeDebt) error {
 	if err := r.q.WithTx(tx).InsertPendingPurge(ctx,
 		pgUUID(p.PurgeID), pgUUID(p.TenantID), pgUUID(p.ObjectID),
-		p.BackendID, p.BucketName, p.ObjectKey, p.Key,
+		p.BackendID, p.BucketName, p.Collection, p.Key,
 	); err != nil {
 		return fmt.Errorf("enqueue purge: %w", err)
 	}
@@ -538,9 +538,9 @@ func hardDeleteObject(ctx context.Context, q *sqlc.Queries, tenantID, objectID u
 	return nil
 }
 
-// LiveCollision reports whether a non-DELETED row exists at (tenant, objectKey, key).
-func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (bool, error) {
-	exists, err := r.q.CheckLiveCollision(ctx, pgUUID(tenantID), objectKey, key)
+// LiveCollision reports whether a non-DELETED row exists at (tenant, collection, key).
+func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, collection, key string) (bool, error) {
+	exists, err := r.q.CheckLiveCollision(ctx, pgUUID(tenantID), collection, key)
 	if err != nil {
 		return false, fmt.Errorf("live collision check: %w", err)
 	}
@@ -567,7 +567,7 @@ func objectFromSQLC(o sqlc.Object) object.Object {
 	return object.Object{
 		ObjectID:         uuidFrom(o.ObjectID),
 		TenantID:         uuidFrom(o.TenantID),
-		ObjectKey:        o.ObjectKey,
+		Collection:       o.Collection,
 		Key:              o.Key,
 		State:            statemachine.State(string(o.State)),
 		ContentType:      o.ContentType,

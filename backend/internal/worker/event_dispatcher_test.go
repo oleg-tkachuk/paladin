@@ -172,7 +172,7 @@ func TestKindFromType(t *testing.T) {
 	}{
 		{"paladin.object.uploaded", "object"},
 		{"paladin.object.deleted", "object"},
-		{"paladin.object_key.created", "object_key"},
+		{"paladin.collection.created", "collection"},
 		{"paladin.bucket.created", "bucket"},
 		{"paladin.tenant.trashed", "tenant"},
 		{"paladin.capability.charged", "capability"},
@@ -205,7 +205,7 @@ func TestClassifyEvent(t *testing.T) {
 		{"object.uploaded", Event{Type: "paladin.object.uploaded"}, "info", 10},
 		{"object.updated", Event{Type: "paladin.object.updated"}, "info", 10},
 		{"object.restored", Event{Type: "paladin.object.restored"}, "info", 10},
-		{"object_key.created", Event{Type: "paladin.object_key.created"}, "info", 10},
+		{"collection.created", Event{Type: "paladin.collection.created"}, "info", 10},
 		{"bucket.created", Event{Type: "paladin.bucket.created"}, "info", 10},
 		{"tenant.created", Event{Type: "paladin.tenant.created"}, "info", 10},
 		{"tenant.restored", Event{Type: "paladin.tenant.restored"}, "info", 10},
@@ -216,7 +216,7 @@ func TestClassifyEvent(t *testing.T) {
 		// Recoverable-destructive / security → warning (verb heuristic + map).
 		{"object.deleted (no mode)", Event{Type: "paladin.object.deleted"}, "warning", 30},
 		{"object.deleted soft", Event{Type: "paladin.object.deleted", Payload: map[string]any{"mode": "soft"}}, "warning", 30},
-		{"object_key.deleted", Event{Type: "paladin.object_key.deleted"}, "warning", 30},
+		{"collection.deleted", Event{Type: "paladin.collection.deleted"}, "warning", 30},
 		{"bucket.deleting", Event{Type: "paladin.bucket.deleting"}, "warning", 30},
 		{"bucket.deleted", Event{Type: "paladin.bucket.deleted"}, "warning", 30},
 		{"tenant.trashed (soft)", Event{Type: "paladin.tenant.trashed"}, "warning", 30},
@@ -243,9 +243,9 @@ func TestBucketFromResourceName(t *testing.T) {
 		name string
 		want string
 	}{
-		{"storageBackends/primary/buckets/paladin-primary/tenants/t/objectKeys/inv/objects-by-key/k", "paladin-primary"},
+		{"storageBackends/primary/buckets/paladin-primary/tenants/t/collections/inv/objects-by-key/k", "paladin-primary"},
 		{"storageBackends/primary/buckets/paladin-primary", "paladin-primary"}, // bucket-lifecycle event
-		{"tenants/t/objectKeys/inv/objects-by-key/k", ""},                    // C-shape: no bucket
+		{"tenants/t/collections/inv/objects-by-key/k", ""},                   // C-shape: no bucket
 		{"tenants/019f26db-31d0-71ec-9b25-4b3f8636791a", ""},                 // tenant event
 		{"", ""},
 	}
@@ -405,7 +405,7 @@ func TestDispatchFilterMatch(t *testing.T) {
 		{"matching type queues", `type == "paladin.object.uploaded"`, Event{Type: "paladin.object.uploaded"}, 1},
 		{"empty filter matches all", "", Event{Type: "paladin.tenant.created"}, 1},
 		{"kind derived from type matches", `kind == "object"`, Event{Type: "paladin.object.uploaded"}, 1},
-		{"kind derived (object_key) matches", `kind == "object_key"`, Event{Type: "paladin.object_key.created"}, 1},
+		{"kind derived (collection) matches", `kind == "collection"`, Event{Type: "paladin.collection.created"}, 1},
 		{"kind mismatch drops", `kind == "bucket"`, Event{Type: "paladin.object.uploaded"}, 0},
 		{
 			"predicate over envelope field",
@@ -414,9 +414,9 @@ func TestDispatchFilterMatch(t *testing.T) {
 			1,
 		},
 		{
-			"payload-derived object_key matches",
-			`object_key == "invoices"`,
-			Event{Type: "paladin.object.uploaded", Payload: map[string]any{"object_key": "invoices"}},
+			"payload-derived collection matches",
+			`collection == "invoices"`,
+			Event{Type: "paladin.object.uploaded", Payload: map[string]any{"collection": "invoices"}},
 			1,
 		},
 		{
@@ -436,14 +436,14 @@ func TestDispatchFilterMatch(t *testing.T) {
 			`bucket_name == "paladin-primary"`,
 			Event{
 				Type:         "paladin.object.uploaded",
-				ResourceName: "storageBackends/primary/buckets/paladin-primary/tenants/t/objectKeys/inv/objects-by-key/k",
+				ResourceName: "storageBackends/primary/buckets/paladin-primary/tenants/t/collections/inv/objects-by-key/k",
 			},
 			1,
 		},
 		{
 			"C-shape resource_name → bucket_name empty → no match",
 			`bucket_name == "paladin-primary"`,
-			Event{Type: "paladin.object.uploaded", ResourceName: "tenants/t/objectKeys/inv/objects-by-key/k"},
+			Event{Type: "paladin.object.uploaded", ResourceName: "tenants/t/collections/inv/objects-by-key/k"},
 			0,
 		},
 		{"severity == critical matches a hard tenant delete", `severity == "critical"`, Event{Type: "paladin.tenant.purged"}, 1},

@@ -113,13 +113,13 @@ var skipFields = map[string]map[string]string{
 		"HealthCheckedAt":               "derived from TestBackend probe; not client-settable",
 		"Maintenance":                   "set via SetBackendMaintenance; not client-settable on create/update",
 	},
-	"CreateObjectKey": {
+	"CreateCollection": {
 		// completion_mode is derived from the bucket → backend
 		// events config (see proto comment on the field). Server
 		// computes it; clients can't override.
 		"CompletionMode": "derived from bucket→backend events; server-computed",
 	},
-	"UpdateObjectKey": {
+	"UpdateCollection": {
 		"CompletionMode": "derived from bucket→backend events; server-computed",
 	},
 }

@@ -18,7 +18,7 @@ func TestToolFilter_BuiltinProfiles(t *testing.T) {
 		{"read_only", "paladin_query_objects", true},
 		{"read_only", "paladin_audit_recent", true},
 		{"read_only", "paladin_simulate_authz", true},
-		{"read_only", "paladin_create_object_key", false},
+		{"read_only", "paladin_create_collection", false},
 		{"read_only", "paladin_set_quota", false},
 
 		// agent_safe adds presign + tag mutations.
@@ -27,11 +27,11 @@ func TestToolFilter_BuiltinProfiles(t *testing.T) {
 		{"agent_safe", "paladin_upload_object", true},
 		{"agent_safe", "paladin_complete_object", true},
 		{"agent_safe", "paladin_set_object_tags", true},
-		{"agent_safe", "paladin_create_object_key", false},
+		{"agent_safe", "paladin_create_collection", false},
 		{"agent_safe", "paladin_set_quota", false},
 
 		// admin allows everything except always_deny.
-		{"admin", "paladin_create_object_key", true},
+		{"admin", "paladin_create_collection", true},
 		{"admin", "paladin_set_quota", true},
 		{"admin", "paladin_set_lifecycle_rules", true},
 	}

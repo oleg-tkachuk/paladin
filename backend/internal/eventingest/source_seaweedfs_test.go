@@ -27,8 +27,8 @@ func TestSeaweedFSSource_Parse_Create(t *testing.T) {
 	if ev.SubjectFields.TenantID != "0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc" {
 		t.Errorf("tenant = %q", ev.SubjectFields.TenantID)
 	}
-	if ev.SubjectFields.ObjectKey != "contracts" {
-		t.Errorf("object_key = %q", ev.SubjectFields.ObjectKey)
+	if ev.SubjectFields.Collection != "contracts" {
+		t.Errorf("collection = %q", ev.SubjectFields.Collection)
 	}
 	if ev.SubjectFields.Key != "2026/q1.pdf" {
 		t.Errorf("key = %q", ev.SubjectFields.Key)
@@ -82,8 +82,8 @@ func TestSeaweedFSSource_Parse_BucketPrefixStripped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if ev.SubjectFields.ObjectKey != "ok" {
-		t.Errorf("object_key after bucket strip = %q", ev.SubjectFields.ObjectKey)
+	if ev.SubjectFields.Collection != "ok" {
+		t.Errorf("collection after bucket strip = %q", ev.SubjectFields.Collection)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestSeaweedFSSource_Parse_BucketsNamespacePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if ev.SubjectFields.TenantID != "0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc" || ev.SubjectFields.ObjectKey != "ok" || ev.SubjectFields.Key != "deep/k" {
+	if ev.SubjectFields.TenantID != "0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc" || ev.SubjectFields.Collection != "ok" || ev.SubjectFields.Key != "deep/k" {
 		t.Errorf("segments after buckets/ + bucket strip = %+v", ev.SubjectFields)
 	}
 }

@@ -30,7 +30,7 @@ import (
 func TestHardDelete_FullSweep(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "hd-tenant")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "deletable")
 
 	// Soft-delete with terminated_at well in the past so the worker
@@ -71,7 +71,7 @@ func TestHardDelete_FullSweep(t *testing.T) {
 func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "rls-reaper")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "leaky")
 	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
 
@@ -110,7 +110,7 @@ func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 func TestHardDelete_RestoreWinsRace(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "hd-restore")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "racy")
 	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
 
@@ -146,7 +146,7 @@ func TestHardDelete_RestoreWinsRace(t *testing.T) {
 // ─── helpers ────────────────────────────────────────────────────────
 
 type recordedDelete struct {
-	bucket, objectKey, key string
+	bucket, collection, key string
 }
 
 type recordingStorage struct {
@@ -154,10 +154,10 @@ type recordingStorage struct {
 	calls []recordedDelete
 }
 
-func (s *recordingStorage) DeleteObject(_ context.Context, _ string, bucket string, _ uuid.UUID, objectKey, key string) error {
+func (s *recordingStorage) DeleteObject(_ context.Context, _ string, bucket string, _ uuid.UUID, collection, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.calls = append(s.calls, recordedDelete{bucket: bucket, objectKey: objectKey, key: key})
+	s.calls = append(s.calls, recordedDelete{bucket: bucket, collection: collection, key: key})
 	return nil
 }
 

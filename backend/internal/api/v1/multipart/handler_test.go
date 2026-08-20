@@ -25,7 +25,7 @@ type fakeRepo struct {
 	initiateSessionFn func(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
 	deleteSessionFn   func(ctx context.Context, uploadID string) error
-	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error)
+	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
 	listPartsFn       func(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
 
 	lastInitiate struct {
@@ -36,9 +36,9 @@ type fakeRepo struct {
 		bucket          string
 	}
 	lastLookup struct {
-		tenantID  uuid.UUID
-		objectKey string
-		write     bool
+		tenantID   uuid.UUID
+		collection string
+		write      bool
 	}
 	lastList struct {
 		uploadID  string
@@ -63,7 +63,7 @@ func (f *fakeRepo) InitiateSession(ctx context.Context, args InitiateArgs, objec
 		TenantID:        args.TenantID,
 		BackendID:       backendID,
 		Bucket:          bucket,
-		ObjectKey:       args.ObjectKey,
+		Collection:      args.Collection,
 		Key:             args.Key,
 		StorageUploadID: storageUploadID,
 	}, nil
@@ -92,12 +92,12 @@ func (f *fakeRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUID) (s
 	return "", "", nil
 }
 
-func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
+func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
 	f.lastLookup.tenantID = tenantID
-	f.lastLookup.objectKey = objectKey
+	f.lastLookup.collection = collection
 	f.lastLookup.write = write
 	if f.lookupBucketFn != nil {
-		return f.lookupBucketFn(ctx, tenantID, objectKey, write)
+		return f.lookupBucketFn(ctx, tenantID, collection, write)
 	}
 	return "backend-x", "bucket-x", nil
 }
@@ -124,7 +124,7 @@ type fakeStorage struct {
 	lastInitiate struct {
 		backendID, bucket string
 		tenantID          uuid.UUID
-		objectKey, key    string
+		collection, key   string
 		contentType       string
 	}
 	lastComplete struct {
@@ -145,11 +145,11 @@ type fakeStorage struct {
 	abortCalled bool
 }
 
-func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (string, error) {
+func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (string, error) {
 	f.lastInitiate.backendID = backendID
 	f.lastInitiate.bucket = bucket
 	f.lastInitiate.tenantID = tenantID
-	f.lastInitiate.objectKey = objectKey
+	f.lastInitiate.collection = collection
 	f.lastInitiate.key = key
 	f.lastInitiate.contentType = contentType
 	if f.initiateFn != nil {
@@ -158,7 +158,7 @@ func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket s
 	return "storage-up-1", nil
 }
 
-func (f *fakeStorage) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []PartETag) (string, int64, error) {
+func (f *fakeStorage) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []PartETag) (string, int64, error) {
 	f.lastComplete.backendID = backendID
 	f.lastComplete.bucket = bucket
 	f.lastComplete.storageUploadID = storageUploadID
@@ -169,7 +169,7 @@ func (f *fakeStorage) CompleteMultipart(ctx context.Context, backendID, bucket s
 	return "etag-1", 123, nil
 }
 
-func (f *fakeStorage) AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error {
+func (f *fakeStorage) AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error {
 	f.abortCalled = true
 	f.lastAbort.backendID = backendID
 	f.lastAbort.bucket = bucket
@@ -180,7 +180,7 @@ func (f *fakeStorage) AbortMultipart(ctx context.Context, backendID, bucket stri
 	return nil
 }
 
-func (f *fakeStorage) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+func (f *fakeStorage) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	f.lastPresign.backendID = backendID
 	f.lastPresign.bucket = bucket
 	f.lastPresign.storageUploadID = storageUploadID
@@ -247,7 +247,7 @@ func sessionForTenant(tid uuid.UUID) Session {
 		TenantID:        tid,
 		BackendID:       "backend-sess",
 		Bucket:          "bucket-sess",
-		ObjectKey:       "photos",
+		Collection:      "photos",
 		Key:             "cat.jpg",
 		StorageUploadID: "storage-up-9",
 		TotalParts:      5,
@@ -258,7 +258,7 @@ func sessionForTenant(tid uuid.UUID) Session {
 
 func TestInitiateMultipartUpload(t *testing.T) {
 	tid := uuid.New()
-	base := InitiateArgs{ObjectKey: "photos", Key: "cat.jpg", ContentType: "image/jpeg", SizeHint: 1024}
+	base := InitiateArgs{Collection: "photos", Key: "cat.jpg", ContentType: "image/jpeg", SizeHint: 1024}
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
@@ -362,12 +362,12 @@ func TestInitiateMultipartUpload(t *testing.T) {
 			t.Fatal("bucket lookup should request write routing for a mutation")
 		}
 		// The bucket must be resolved BEFORE authz and stamped on the Resource,
-		// or a bucket:/object_key:-scoped PAT is fail-closed on multipart init.
+		// or a bucket:/collection:-scoped PAT is fail-closed on multipart init.
 		if authz.lastResource == nil || authz.lastResource.BucketName != "bucket-a" || authz.lastResource.BackendID != "backend-a" {
 			t.Fatalf("authz Resource missing physical binding: %+v", authz.lastResource)
 		}
-		if repo.lastLookup.objectKey != base.ObjectKey {
-			t.Fatalf("lookup object key: got %q want %q", repo.lastLookup.objectKey, base.ObjectKey)
+		if repo.lastLookup.collection != base.Collection {
+			t.Fatalf("lookup object key: got %q want %q", repo.lastLookup.collection, base.Collection)
 		}
 		if storage.lastInitiate.backendID != "backend-a" || storage.lastInitiate.bucket != "bucket-a" {
 			t.Fatalf("storage not routed to resolved backend/bucket: got %q/%q", storage.lastInitiate.backendID, storage.lastInitiate.bucket)
@@ -457,7 +457,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 			t.Fatalf("storage not routed to session bucket: %q", storage.lastComplete.bucket)
 		}
 		// The session-anchored (backend, bucket) must reach the authz Resource
-		// so a bucket:/object_key:-scoped PAT enforces on complete.
+		// so a bucket:/collection:-scoped PAT enforces on complete.
 		if authz.lastResource == nil || authz.lastResource.BucketName != "bucket-sess" || authz.lastResource.BackendID != "backend-sess" {
 			t.Fatalf("authz Resource missing session binding: %+v", authz.lastResource)
 		}

@@ -296,7 +296,7 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 }
 
 // RenameTenantSlug rotates the tenant's slug and rewrites every
-// `Tenant::"<old_slug>"` reference in inherited + per-objectKey
+// `Tenant::"<old_slug>"` reference in inherited + per-collection
 // policies. See proto comments and tenant.Handler.RenameTenantSlug.
 func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Request[pb.RenameTenantSlugRequest]) (*connect.Response[pb.Tenant], error) {
 	idStr, err := tenantIDFromName(req.Msg.GetName())

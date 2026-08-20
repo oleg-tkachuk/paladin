@@ -21,19 +21,19 @@ func TestParseVersionName(t *testing.T) {
 	}{
 		{
 			name:        "AIP-122 form",
-			input:       "tenants/" + tenantID.String() + "/objectKeys/photos/objects/" + objectID.String() + "/versions/" + versionID.String(),
+			input:       "tenants/" + tenantID.String() + "/collections/photos/objects/" + objectID.String() + "/versions/" + versionID.String(),
 			wantBucket:  "photos",
 			wantObject:  objectID,
 			wantVersion: versionID,
 		},
 		{
 			name:    "missing /versions/",
-			input:   "tenants/" + tenantID.String() + "/objectKeys/photos/objects/" + objectID.String(),
+			input:   "tenants/" + tenantID.String() + "/collections/photos/objects/" + objectID.String(),
 			wantErr: true,
 		},
 		{
 			name:    "bad version_id",
-			input:   "tenants/" + tenantID.String() + "/objectKeys/photos/objects/" + objectID.String() + "/versions/not-a-uuid",
+			input:   "tenants/" + tenantID.String() + "/collections/photos/objects/" + objectID.String() + "/versions/not-a-uuid",
 			wantErr: true,
 		},
 	}
@@ -49,8 +49,8 @@ func TestParseVersionName(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got.objectKey != tc.wantBucket {
-				t.Errorf("objectKey: got %q want %q", got.objectKey, tc.wantBucket)
+			if got.collection != tc.wantBucket {
+				t.Errorf("collection: got %q want %q", got.collection, tc.wantBucket)
 			}
 			if got.objectID != tc.wantObject {
 				t.Errorf("objectID: got %v want %v", got.objectID, tc.wantObject)

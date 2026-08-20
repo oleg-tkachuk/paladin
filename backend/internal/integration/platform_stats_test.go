@@ -75,7 +75,7 @@ func TestCollectControlPlane(t *testing.T) {
 	assertDelta(t, "buckets.failed", base.Buckets.ByProvisionState["failed"], got.Buckets.ByProvisionState["failed"], 1)
 	assertDelta(t, "buckets.ready", base.Buckets.ByProvisionState["ready"], got.Buckets.ByProvisionState["ready"], 1)
 
-	assertDelta(t, "object_keys.total", base.ObjectKeys.Total, got.ObjectKeys.Total, 1)
+	assertDelta(t, "collections.total", base.Collections.Total, got.Collections.Total, 1)
 }
 
 // TestCollectRLSObjects proves the per-tenant / per-state object census:
@@ -88,18 +88,18 @@ func TestCollectRLSObjects(t *testing.T) {
 	big := seedFixture(t, ctx, pool)
 	small := seedFixture(t, ctx, pool)
 
-	insert := func(tenantID uuid.UUID, objectKey, state string, size any) {
+	insert := func(tenantID uuid.UUID, collection, state string, size any) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (object_id, tenant_id, object_key, key, state, content_type, checksum_algorithm, size_bytes)
+			`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm, size_bytes)
 			 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6)`,
-			uuid.Must(uuid.NewV7()), tenantID, objectKey, "k-"+uuid.NewString()[:8], state, size)
+			uuid.Must(uuid.NewV7()), tenantID, collection, "k-"+uuid.NewString()[:8], state, size)
 	}
-	insert(big.tenantID, big.objectKey, "AVAILABLE", 100)
-	insert(big.tenantID, big.objectKey, "AVAILABLE", 200)
-	insert(big.tenantID, big.objectKey, "PENDING", nil) // size_bytes NULL until commit
-	insert(big.tenantID, big.objectKey, "DELETED", 50)
-	insert(small.tenantID, small.objectKey, "FAILED", 7)
+	insert(big.tenantID, big.collection, "AVAILABLE", 100)
+	insert(big.tenantID, big.collection, "AVAILABLE", 200)
+	insert(big.tenantID, big.collection, "PENDING", nil) // size_bytes NULL until commit
+	insert(big.tenantID, big.collection, "DELETED", 50)
+	insert(small.tenantID, small.collection, "FAILED", 7)
 
 	census, err := platformstats.CollectRLS(ctx, pool)
 	if err != nil {
@@ -316,8 +316,8 @@ func backendOf(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture)
 	t.Helper()
 	var id string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id FROM object_keys WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey).Scan(&id); err != nil {
+		`SELECT backend_id FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection).Scan(&id); err != nil {
 		t.Fatalf("lookup backend: %v", err)
 	}
 	return id

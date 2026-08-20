@@ -25,13 +25,13 @@ func (r *listRepo) ListObjects(context.Context, ListObjectsArgs) ([]Object, stri
 	return append([]Object(nil), r.page...), r.next, nil
 }
 
-// ListObjects now resolves the objectKey→bucket binding before authz so
-// bucket:/object_key: scopes enforce; supply a stable binding here.
+// ListObjects now resolves the collection→bucket binding before authz so
+// bucket:/collection: scopes enforce; supply a stable binding here.
 func (r *listRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
 	return "backend-list", "bucket-list", nil
 }
 
-// perRowAuthorizer allows the up-front objectKey-scoped check (Resource.Key
+// perRowAuthorizer allows the up-front collection-scoped check (Resource.Key
 // empty) and, per object, denies any object carrying tags[denyTag]=="true". It
 // implements the optional cedar.PerObjectEvaluator so the handler's per-row path
 // is exercised (or skipped) under test control.
@@ -41,7 +41,7 @@ type perRowAuthorizer struct {
 }
 
 func (a perRowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
-	if r.Key == "" { // the up-front objectKey-scoped check
+	if r.Key == "" { // the up-front collection-scoped check
 		return cedar.DecisionAllow, nil
 	}
 	if a.denyTag != "" && r.Tags[a.denyTag] == "true" {
@@ -72,7 +72,7 @@ func TestListObjectsPerRowCedar(t *testing.T) {
 			filter: cel.NewEvaluator(),
 		}
 	}
-	in := ListObjectsInput{ObjectKey: "docs", PageSize: 10}
+	in := ListObjectsInput{Collection: "docs", PageSize: 10}
 
 	t.Run("per-row mode drops policy-declined objects, cursor stable", func(t *testing.T) {
 		h := newHandler(perRowAuthorizer{perObject: true, denyTag: "classified"})

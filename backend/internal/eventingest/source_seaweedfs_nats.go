@@ -51,7 +51,7 @@ import (
 // resulting CloudEvent see this in the `source` attribute.
 //
 // BucketName, when non-empty, is stripped from the start of the
-// SF path before tenant/object_key/key splitting — same convention
+// SF path before tenant/collection/key splitting — same convention
 // as the JSON source. Operators set it to the bucket the SF S3
 // gateway publishes for; leaving it empty disables the strip and
 // expects the path to start at the tenant id.
@@ -96,7 +96,7 @@ func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 
 	subjFields, ok := parseSeaweedFSPath(path, s.BucketName)
 	if !ok {
-		// Path layout doesn't match `<bucket>/<tenant_uuid>/<object_key>/<key>`
+		// Path layout doesn't match `<bucket>/<tenant_uuid>/<collection>/<key>`
 		// — could be a sibling write that lives in the same bucket
 		// (audit logs, snapshots). Ignore silently per the JSON
 		// source's convention.
@@ -121,8 +121,8 @@ func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 		Time:            t,
 		DataContentType: "application/octet-stream", // proto-marshalled body
 		Subject: fmt.Sprintf(
-			"tenants/%s/objectKeys/%s/objects-by-key/%s",
-			subjFields.TenantID, subjFields.ObjectKey, subjFields.Key,
+			"tenants/%s/collections/%s/objects-by-key/%s",
+			subjFields.TenantID, subjFields.Collection, subjFields.Key,
 		),
 		Data:          body,
 		SubjectFields: subjFields,

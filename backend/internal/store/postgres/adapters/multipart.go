@@ -47,7 +47,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
-		args.ObjectKey,
+		args.Collection,
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,
@@ -83,7 +83,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		ObjectID:        objectID,
 		BackendID:       backendID,
 		Bucket:          bucket,
-		ObjectKey:       args.ObjectKey,
+		Collection:      args.Collection,
 		Key:             args.Key,
 		StorageUploadID: storageUploadID,
 		PartSizeBytes:   args.PartSizeBytes,
@@ -97,7 +97,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		SELECT mu.upload_id, mu.object_id, mu.storage_upload_id,
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
 		       mu.backend_id, mu.bucket_name,
-		       o.tenant_id, o.object_key, o.key
+		       o.tenant_id, o.collection, o.key
 		FROM multipart_uploads mu
 		JOIN objects o ON o.object_id = mu.object_id
 		WHERE mu.upload_id = $1
@@ -107,7 +107,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		objectID   uuid.UUID
 		tenantID   uuid.UUID
 		createdAt  time.Time
-		objectKey  string
+		collection string
 		key        string
 		partSize   int64
 		totalParts int32
@@ -122,7 +122,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		&s.BackendID,
 		&s.Bucket,
 		&tenantID,
-		&objectKey,
+		&collection,
 		&key,
 	)
 	if err != nil {
@@ -136,7 +136,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	s.PartSizeBytes = partSize
 	s.TotalParts = totalParts
 	s.CreatedAt = createdAt
-	s.ObjectKey = objectKey
+	s.Collection = collection
 	s.Key = key
 	return s, nil
 }
@@ -155,16 +155,16 @@ func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) erro
 	return r.q.DeleteMultipartUpload(ctx, uploadID)
 }
 
-func (r *MultipartRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUID) (objectKey, key string, err error) {
-	const q = `SELECT object_key, key FROM objects WHERE object_id = $1`
-	err = r.pool.QueryRow(ctx, q, pgUUID(objectID)).Scan(&objectKey, &key)
+func (r *MultipartRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUID) (collection, key string, err error) {
+	const q = `SELECT collection, key FROM objects WHERE object_id = $1`
+	err = r.pool.QueryRow(ctx, q, pgUUID(objectID)).Scan(&collection, &key)
 	if err != nil {
 		if isNoRows(err) {
 			return "", "", fmt.Errorf("object %s not found", objectID)
 		}
 		return "", "", fmt.Errorf("object location: %w", err)
 	}
-	return objectKey, key, nil
+	return collection, key, nil
 }
 
 // ListParts returns recorded parts in part_number order. The sqlc query
@@ -206,20 +206,20 @@ func (r *MultipartRepo) ListParts(ctx context.Context, uploadID string, pageSize
 	return out, next, nil
 }
 
-// LookupBucket reads the physical S3 bucket bound to an ObjectKey via
-// idx_object_keys_bucket_routing. bucket_name is NOT NULL after
+// LookupBucket reads the physical S3 bucket bound to an Collection via
+// idx_collections_bucket_routing. bucket_name is NOT NULL after
 // migration 005 so a successful lookup always returns a non-empty value.
 // `write` splits the read-only-drain gate (migration 047). Every multipart
 // path (init / complete / abort / presign-part) is a mutation, so callers
 // pass write=true; the disabled (feature 002) gate applies to all.
-func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
+func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
 	const q = `
 		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only,
 		       COALESCE(bk.provision_state, 'ready')
-		FROM object_keys ok
+		FROM collections ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
 		LEFT JOIN buckets bk ON bk.backend_id = ok.backend_id AND bk.bucket_name = ok.bucket_name
-		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
+		WHERE ok.tenant_id = $1 AND ok.collection = $2`
 	var (
 		backendID      string
 		bucket         string
@@ -227,9 +227,9 @@ func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, ob
 		readOnly       bool
 		provisionState string
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
 		if isNoRows(err) {
-			return "", "", fmt.Errorf("objectKey %q not found", objectKey)
+			return "", "", fmt.Errorf("collection %q not found", collection)
 		}
 		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}

@@ -12,7 +12,7 @@ func TestSchemaByName(t *testing.T) {
 		want *Schema
 	}{
 		{"Object", ObjectSchema},
-		{"ObjectKey", BucketSchema},
+		{"Collection", BucketSchema},
 		{"AuditLogEntry", AuditLogSchema},
 		{"EventEnvelope", EventEnvelopeSchema},
 		{"", nil},
@@ -46,7 +46,7 @@ func TestValidateEventEnvelope_PayloadDerivedFields(t *testing.T) {
 	// type-check against the schema so the admin UI's richer-filter hints
 	// compile rather than being rejected as unknown identifiers.
 	exprs := []string{
-		`object_key == "invoices"`,
+		`collection == "invoices"`,
 		`size_bytes > 1048576`,
 		`etag != ""`,
 		`bucket_name == "paladin-primary"`,

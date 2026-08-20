@@ -46,7 +46,7 @@ func decide(t *testing.T, policy, authSlug string, p *Principal, r *Resource) De
 func TestAdversarial_LegitMemberAllowed(t *testing.T) {
 	b := uuid.New()
 	member := &Principal{Subject: "u", TenantID: b, TenantSlug: "bravo", Roles: []string{"tenant.user"}}
-	if got := decide(t, bravoMemberPolicy, "bravo", member, &Resource{TenantID: b, ObjectKey: "k"}); got != DecisionAllow {
+	if got := decide(t, bravoMemberPolicy, "bravo", member, &Resource{TenantID: b, Collection: "k"}); got != DecisionAllow {
 		t.Fatal("legit member denied on own tenant")
 	}
 }
@@ -59,7 +59,7 @@ func TestAdversarial_CrossTenantMemberPermitDenied(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	// Attacker in B, claiming A's slug, reaching A's resource.
 	attacker := &Principal{Subject: "evil", TenantID: b, TenantSlug: "alpha", Roles: []string{"tenant.admin"}}
-	if got := decide(t, alphaMemberPolicy, "alpha", attacker, &Resource{TenantID: a, ObjectKey: "k"}); got != DecisionDeny {
+	if got := decide(t, alphaMemberPolicy, "alpha", attacker, &Resource{TenantID: a, Collection: "k"}); got != DecisionDeny {
 		t.Fatal("SECURITY: cross-tenant caller matched a member permit — tenant isolation hole")
 	}
 }
@@ -72,7 +72,7 @@ func TestAdversarial_SpoofedSlugIgnoredOnOwnTenant(t *testing.T) {
 	b := uuid.New()
 	// Real slug is "bravo"; the JWT claims "acme". Accessing own tenant B.
 	spoofer := &Principal{Subject: "u", TenantID: b, TenantSlug: "acme", Roles: []string{"tenant.user"}}
-	if got := decide(t, bravoMemberPolicy, "bravo", spoofer, &Resource{TenantID: b, ObjectKey: "k"}); got != DecisionAllow {
+	if got := decide(t, bravoMemberPolicy, "bravo", spoofer, &Resource{TenantID: b, Collection: "k"}); got != DecisionAllow {
 		t.Fatal("own-tenant access broke when the JWT slug was spoofed — authoritative slug not used")
 	}
 }
@@ -80,7 +80,7 @@ func TestAdversarial_SpoofedSlugIgnoredOnOwnTenant(t *testing.T) {
 // A tenant-less principal never satisfies a tenant-scoped member permit.
 func TestAdversarial_NilTenantPrincipalDenied(t *testing.T) {
 	noTenant := &Principal{Subject: "u", Roles: []string{"tenant.user"}}
-	if got := decide(t, bravoMemberPolicy, "bravo", noTenant, &Resource{TenantID: uuid.New(), ObjectKey: "k"}); got != DecisionDeny {
+	if got := decide(t, bravoMemberPolicy, "bravo", noTenant, &Resource{TenantID: uuid.New(), Collection: "k"}); got != DecisionDeny {
 		t.Fatal("tenant-less principal matched a tenant-scoped permit")
 	}
 }
@@ -91,7 +91,7 @@ func TestAdversarial_NilTenantPrincipalDenied(t *testing.T) {
 func TestAdversarial_CrossTenantRolePermitStillAllowed(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	admin := &Principal{Subject: "root", TenantID: b, Roles: []string{"platform.admin"}}
-	if got := decide(t, alphaMemberPolicy, "alpha", admin, &Resource{TenantID: a, ObjectKey: "k"}); got != DecisionAllow {
+	if got := decide(t, alphaMemberPolicy, "alpha", admin, &Resource{TenantID: a, Collection: "k"}); got != DecisionAllow {
 		t.Fatal("platform.admin cross-tenant reach was denied — role permits must not depend on membership")
 	}
 }

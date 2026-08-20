@@ -148,7 +148,7 @@ type apiTokenInterceptor struct {
 // Scopes are the OPT-IN half of the model: a token minted WITHOUT scopes keeps the
 // tenant-member baseline the default Cedar policy grants (read/write own objects, nothing
 // role-gated), exactly as before. A token minted WITH scopes (tenant:/backend:/bucket:/
-// object_key:/*) is confined by the scope-enforcement built-in policy to matching resources.
+// collection:/*) is confined by the scope-enforcement built-in policy to matching resources.
 //
 // Fail-closed on a malformed scope: a scoped token whose scope won't parse must NOT silently
 // drop the scope and fall back to unrestricted tenant-wide access. ParseScopes returns an

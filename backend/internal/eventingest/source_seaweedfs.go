@@ -22,7 +22,7 @@ import (
 //
 // Since SeaweedFS is configured to publish via S3 path-style buckets
 // the Paladin backend creates, the path follows the Paladin composeKey
-// pattern: "<bucket>/<tenant_uuid>/<object_key>/<key>". The adapter
+// pattern: "<bucket>/<tenant_uuid>/<collection>/<key>". The adapter
 // strips the leading bucket segment (operators set it; not part of
 // the Paladin resource ref) and parses the rest into SubjectFields.
 //
@@ -95,8 +95,8 @@ func (s *SeaweedFSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 		Time:            t,
 		DataContentType: "application/json",
 		Subject: fmt.Sprintf(
-			"tenants/%s/objectKeys/%s/objects-by-key/%s",
-			subjFields.TenantID, subjFields.ObjectKey, subjFields.Key,
+			"tenants/%s/collections/%s/objects-by-key/%s",
+			subjFields.TenantID, subjFields.Collection, subjFields.Key,
 		),
 		Data:          raw,
 		SubjectFields: subjFields,
@@ -118,10 +118,10 @@ func seaweedFSEventType(srcType string) (EventType, bool) {
 	}
 }
 
-// parseSeaweedFSPath extracts (tenant_id, object_key, key) from the
+// parseSeaweedFSPath extracts (tenant_id, collection, key) from the
 // full filer path. Layout (matches s3adapter.composeKey):
 //
-//	/<bucket>/<tenant_uuid>/<object_key>/<key...>
+//	/<bucket>/<tenant_uuid>/<collection>/<key...>
 //
 // The leading "/" is optional (depends on SeaweedFS publisher
 // configuration). Anything else returns ok=false.
@@ -145,7 +145,7 @@ func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
 		trimmed = bp
 	}
 
-	// trimmed is now: <tenant_uuid>/<object_key>/<key...>
+	// trimmed is now: <tenant_uuid>/<collection>/<key...>
 	// Split into 3 parts max — key may contain / and we want it whole.
 	parts := strings.SplitN(trimmed, "/", 3)
 	if len(parts) < 3 {
@@ -153,9 +153,9 @@ func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
 	}
 
 	return SubjectFields{
-		TenantID:  parts[0],
-		ObjectKey: parts[1],
-		Key:       parts[2],
+		TenantID:   parts[0],
+		Collection: parts[1],
+		Key:        parts[2],
 	}, true
 }
 

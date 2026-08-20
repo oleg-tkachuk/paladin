@@ -462,7 +462,7 @@ func TestRefreshToken_DecoderError(t *testing.T) {
 // ─── WhoAmI route table (ADR-0010 Phase 4) ──────────────────────────────────
 
 type stubRouteLister struct {
-	routes   []ObjectKeyRoute
+	routes   []CollectionRoute
 	next     string // next_page_token to return (non-empty ⇒ RoutesTruncated)
 	err      error
 	calls    int
@@ -470,7 +470,7 @@ type stubRouteLister struct {
 	gotToken string
 }
 
-func (s *stubRouteLister) ListObjectKeyRoutes(_ context.Context, tid uuid.UUID, pageToken string) ([]ObjectKeyRoute, string, error) {
+func (s *stubRouteLister) ListCollectionRoutes(_ context.Context, tid uuid.UUID, pageToken string) ([]CollectionRoute, string, error) {
 	s.calls++
 	s.gotTID = tid
 	s.gotToken = pageToken
@@ -501,15 +501,15 @@ func TestWhoAmI_NoRouteListerReturnsIdentityOnly(t *testing.T) {
 
 func TestWhoAmI_ReturnsRoutesFromLister(t *testing.T) {
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
-	want := []ObjectKeyRoute{{
-		Canonical:  "storageBackends/primary/buckets/paladin/tenants/" + u.TenantID.String() + "/objectKeys/invoices",
-		TenantPath: "tenants/" + u.TenantID.String() + "/objectKeys/invoices",
+	want := []CollectionRoute{{
+		Canonical:  "storageBackends/primary/buckets/paladin/tenants/" + u.TenantID.String() + "/collections/invoices",
+		TenantPath: "tenants/" + u.TenantID.String() + "/collections/invoices",
 		BareAlias:  "invoices",
 		Backend:    "primary",
 		Bucket:     "paladin",
 	}}
 	lister := &stubRouteLister{routes: want}
-	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithCollectionRoutes(lister)
 
 	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
@@ -529,10 +529,10 @@ func TestWhoAmI_ReturnsRoutesFromLister(t *testing.T) {
 func TestWhoAmI_PropagatesRoutesTruncated(t *testing.T) {
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
 	lister := &stubRouteLister{
-		routes: []ObjectKeyRoute{{Canonical: "c", TenantPath: "t", Backend: "b", Bucket: "bk"}},
+		routes: []CollectionRoute{{Canonical: "c", TenantPath: "t", Backend: "b", Bucket: "bk"}},
 		next:   "cursor-page-2",
 	}
-	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithCollectionRoutes(lister)
 
 	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
@@ -552,10 +552,10 @@ func TestWhoAmI_PropagatesRoutesTruncated(t *testing.T) {
 func TestWhoAmI_ForwardsRoutePageToken(t *testing.T) {
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
 	lister := &stubRouteLister{
-		routes: []ObjectKeyRoute{{Canonical: "c2", TenantPath: "t2", Backend: "b", Bucket: "bk"}},
+		routes: []CollectionRoute{{Canonical: "c2", TenantPath: "t2", Backend: "b", Bucket: "bk"}},
 		next:   "", // last page
 	}
-	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithCollectionRoutes(lister)
 
 	out, err := h.WhoAmI(whoAmICtx(u), "cursor-page-2")
 	if err != nil {
@@ -574,7 +574,7 @@ func TestWhoAmI_RouteListerErrorDegradesToEmpty(t *testing.T) {
 	// identity still returns, just without routes.
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
 	lister := &stubRouteLister{err: connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))}
-	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithCollectionRoutes(lister)
 
 	out, err := h.WhoAmI(whoAmICtx(u), "")
 	if err != nil {
@@ -592,5 +592,5 @@ var (
 	_ authstore.RefreshTokenRepository = (*fakeRefresh)(nil)
 	_ RefreshTokenDecoder              = stubDecoder{}
 	_ cedar.Authorizer                 = allowAuthorizer{}
-	_ ObjectKeyRouteLister             = (*stubRouteLister)(nil)
+	_ CollectionRouteLister            = (*stubRouteLister)(nil)
 )

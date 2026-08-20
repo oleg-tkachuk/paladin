@@ -95,7 +95,7 @@ func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 // annotateSpan stamps the caller's tenant onto the active RPC span (the
 // otelconnect server span, created upstream of this interceptor). ADR-0001
 // follow-up: gives traces a per-tenant dimension to filter on. tenant_id is
-// bounded-cardinality (one per tenant); object_key is deliberately NOT set
+// bounded-cardinality (one per tenant); collection is deliberately NOT set
 // here — it is per-request and unbounded, so it stays a handler concern.
 // No-op when OTel is disabled (the span is non-recording).
 func annotateSpan(ctx context.Context, p *Principal) {

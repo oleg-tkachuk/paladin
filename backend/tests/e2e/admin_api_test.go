@@ -72,17 +72,17 @@ type fixture struct {
 
 	// JWT-minting parameters kept so the fixture can re-mint a JWT
 	// scoped to a different tenant_id after we create one. The
-	// ObjectKey handler uses the caller's tenant_id as the resource
+	// Collection handler uses the caller's tenant_id as the resource
 	// owner (apiutil.CallerContext) — so writing into a newly-created
 	// tenant needs a JWT minted against THAT tenant's UUID, not the
 	// fixture's bootstrap tenant.
 	jwtSecret string
 	jwtIssuer string
 
-	tenants    paladinadminv1connect.TenantServiceClient
-	backends   paladinadminv1connect.BackendServiceClient
-	buckets    paladinadminv1connect.BucketServiceClient
-	objectKeys paladinadminv1connect.ObjectKeyServiceClient
+	tenants     paladinadminv1connect.TenantServiceClient
+	backends    paladinadminv1connect.BackendServiceClient
+	buckets     paladinadminv1connect.BucketServiceClient
+	collections paladinadminv1connect.CollectionServiceClient
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -125,17 +125,17 @@ func newFixture(t *testing.T) *fixture {
 		tenants:   paladinadminv1connect.NewTenantServiceClient(httpClient, adminURL),
 		backends:  paladinadminv1connect.NewBackendServiceClient(httpClient, adminURL),
 		buckets:   paladinadminv1connect.NewBucketServiceClient(httpClient, adminURL),
-		objectKeys: paladinadminv1connect.NewObjectKeyServiceClient(
+		collections: paladinadminv1connect.NewCollectionServiceClient(
 			httpClient, adminURL),
 	}
 }
 
-// clientForTenant returns a fresh ObjectKey client whose JWT is
-// scoped to `tenantID`. Use for ObjectKey CRUD against a tenant
-// other than the fixture's bootstrap one — the ObjectKey handler
+// clientForTenant returns a fresh Collection client whose JWT is
+// scoped to `tenantID`. Use for Collection CRUD against a tenant
+// other than the fixture's bootstrap one — the Collection handler
 // reads the caller's tenant_id off the principal and uses it as
 // the resource owner.
-func (f *fixture) objectKeysAsTenant(t *testing.T, tenantID string) paladinadminv1connect.ObjectKeyServiceClient {
+func (f *fixture) collectionsAsTenant(t *testing.T, tenantID string) paladinadminv1connect.CollectionServiceClient {
 	t.Helper()
 	jwt := mintJWT(t, f.jwtSecret, f.jwtIssuer, "paladin-admin",
 		tenantID, "e2e-runner", []string{"platform.admin"}, 30*time.Minute)
@@ -143,7 +143,7 @@ func (f *fixture) objectKeysAsTenant(t *testing.T, tenantID string) paladinadmin
 		Timeout:   30 * time.Second,
 		Transport: &authedTransport{jwt: jwt, base: http.DefaultTransport},
 	}
-	return paladinadminv1connect.NewObjectKeyServiceClient(hc, f.adminURL)
+	return paladinadminv1connect.NewCollectionServiceClient(hc, f.adminURL)
 }
 
 // authedTransport injects the bearer JWT on every request without
@@ -201,7 +201,7 @@ func mintJWT(t *testing.T, secret, issuer, audience, tenantID, subject string,
 
 // TestAdminAPI_E2E walks the full admin API surface in dependency
 // order: register backend → create bucket → create tenant (with
-// default binding) → create ObjectKey → exercise reads/lists/updates →
+// default binding) → create Collection → exercise reads/lists/updates →
 // reverse-order cleanup. Each phase asserts shape + invariants of
 // the responses; negative subtests pin error semantics (slug
 // immutability, duplicate detection, missing-binding rejection).
@@ -219,7 +219,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 	// per-segment kebab-case CHECK (`^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$`)
 	// — minimum 3 chars when the optional middle group is present, so
 	// segments like "q1" (2 chars) get rejected. Use ≥3-char segments.
-	objectKeyName := "e2e/" + f.nonce + "/2026"
+	collectionName := "e2e/" + f.nonce + "/2026"
 
 	var (
 		createdTenantID string
@@ -233,10 +233,10 @@ func TestAdminAPI_E2E(t *testing.T) {
 	// teardown auditable in one place.
 	t.Cleanup(func() {
 		if createdTenantID != "" {
-			oks := f.objectKeysAsTenant(t, createdTenantID)
-			_, _ = oks.DeleteObjectKey(f.ctx,
-				connect.NewRequest(&pb.DeleteObjectKeyRequest{
-					Name: "tenants/" + createdTenantID + "/objectKeys/" + objectKeyName,
+			oks := f.collectionsAsTenant(t, createdTenantID)
+			_, _ = oks.DeleteCollection(f.ctx,
+				connect.NewRequest(&pb.DeleteCollectionRequest{
+					Name: "tenants/" + createdTenantID + "/collections/" + collectionName,
 				}))
 			_, _ = f.tenants.DeleteTenant(f.ctx,
 				connect.NewRequest(&pb.DeleteTenantRequest{
@@ -443,48 +443,48 @@ func TestAdminAPI_E2E(t *testing.T) {
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
 
-	// ─── ObjectKey ───────────────────────────────────────────────
-	// ObjectKey handler uses the caller's tenant_id (from JWT) as the
+	// ─── Collection ───────────────────────────────────────────────
+	// Collection handler uses the caller's tenant_id (from JWT) as the
 	// resource owner — re-mint a JWT scoped to the just-created
-	// tenant so the FK on object_keys.tenant_id resolves to a real row.
-	t.Run("ObjectKeyService_CreateMultiSegment", func(t *testing.T) {
-		oks := f.objectKeysAsTenant(t, createdTenantID)
-		got, err := oks.CreateObjectKey(f.ctx, connect.NewRequest(
-			&pb.CreateObjectKeyRequest{
-				Parent:    "tenants/" + createdTenantID,
-				ObjectKey: objectKeyName,
-				ObjectKeyResource: &pb.ObjectKey{
-					ObjectKey:   objectKeyName,
+	// tenant so the FK on collections.tenant_id resolves to a real row.
+	t.Run("CollectionService_CreateMultiSegment", func(t *testing.T) {
+		oks := f.collectionsAsTenant(t, createdTenantID)
+		got, err := oks.CreateCollection(f.ctx, connect.NewRequest(
+			&pb.CreateCollectionRequest{
+				Parent:     "tenants/" + createdTenantID,
+				Collection: collectionName,
+				CollectionResource: &pb.Collection{
+					Collection:  collectionName,
 					DisplayName: "E2E OK " + f.nonce,
 					Bucket:      bucketResourceName(backendID, bucketName),
 				},
 			}))
 		if err != nil {
-			t.Fatalf("CreateObjectKey: %v", err)
+			t.Fatalf("CreateCollection: %v", err)
 		}
-		if got.Msg.GetObjectKey() != objectKeyName {
-			t.Errorf("ObjectKey: got %q want %q",
-				got.Msg.GetObjectKey(), objectKeyName)
+		if got.Msg.GetCollection() != collectionName {
+			t.Errorf("Collection: got %q want %q",
+				got.Msg.GetCollection(), collectionName)
 		}
 		// Multi-segment path round-trip — migration 030 guarantees the
 		// constraint accepts `a/b/c` shapes; the connectshim parser
-		// (admin/object_key_server.go) anchors on `/objectKeys/` so
+		// (admin/collection_server.go) anchors on `/collections/` so
 		// slashes inside the body don't get mistaken for resource-name
 		// separators.
-		if !strings.Contains(got.Msg.GetObjectKey(), "/") {
-			t.Errorf("expected multi-segment object_key, got %q",
-				got.Msg.GetObjectKey())
+		if !strings.Contains(got.Msg.GetCollection(), "/") {
+			t.Errorf("expected multi-segment collection, got %q",
+				got.Msg.GetCollection())
 		}
 	})
 
-	t.Run("ObjectKeyService_GetAndList", func(t *testing.T) {
-		oks := f.objectKeysAsTenant(t, createdTenantID)
-		read, err := oks.GetObjectKey(f.ctx, connect.NewRequest(
-			&pb.GetObjectKeyRequest{
-				Name: "tenants/" + createdTenantID + "/objectKeys/" + objectKeyName,
+	t.Run("CollectionService_GetAndList", func(t *testing.T) {
+		oks := f.collectionsAsTenant(t, createdTenantID)
+		read, err := oks.GetCollection(f.ctx, connect.NewRequest(
+			&pb.GetCollectionRequest{
+				Name: "tenants/" + createdTenantID + "/collections/" + collectionName,
 			}))
 		if err != nil {
-			t.Fatalf("GetObjectKey: %v", err)
+			t.Fatalf("GetCollection: %v", err)
 		}
 		if read.Msg.GetBucket() != bucketResourceName(backendID, bucketName) {
 			t.Errorf("Bucket: got %q want %q",
@@ -492,15 +492,15 @@ func TestAdminAPI_E2E(t *testing.T) {
 				bucketResourceName(backendID, bucketName))
 		}
 
-		list, err := oks.ListObjectKeys(f.ctx, connect.NewRequest(
-			&pb.ListObjectKeysRequest{
+		list, err := oks.ListCollections(f.ctx, connect.NewRequest(
+			&pb.ListCollectionsRequest{
 				Parent: "tenants/" + createdTenantID,
 			}))
 		if err != nil {
-			t.Fatalf("ListObjectKeys: %v", err)
+			t.Fatalf("ListCollections: %v", err)
 		}
-		if !containsObjectKey(list.Msg.GetObjectKeys(), objectKeyName) {
-			t.Errorf("ListObjectKeys missing %q", objectKeyName)
+		if !containsCollection(list.Msg.GetCollections(), collectionName) {
+			t.Errorf("ListCollections missing %q", collectionName)
 		}
 	})
 
@@ -542,9 +542,9 @@ func containsBackend(list []*pb.StorageBackend, id string) bool {
 	return false
 }
 
-func containsObjectKey(list []*pb.ObjectKey, key string) bool {
+func containsCollection(list []*pb.Collection, key string) bool {
 	for _, ok := range list {
-		if ok.GetObjectKey() == key {
+		if ok.GetCollection() == key {
 			return true
 		}
 	}

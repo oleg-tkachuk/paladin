@@ -15,16 +15,16 @@ const checkLiveCollision = `-- name: CheckLiveCollision :one
 SELECT EXISTS(
     SELECT 1 FROM objects
     WHERE tenant_id = $1
-      AND object_key = $2
+      AND collection = $2
       AND key = $3
       AND state <> 'DELETED'
 )::boolean AS exists
 `
 
-// True when a non-DELETED row already exists at (tenant, object_key, key).
+// True when a non-DELETED row already exists at (tenant, collection, key).
 // Used by RestoreObject to refuse restoring into a slot that's been reused.
-func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error) {
-	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, objectKey, key)
+func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, collection string, key string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, collection, key)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -33,12 +33,12 @@ func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, 
 const countObjects = `-- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
-WHERE tenant_id = $1 AND object_key = $2
+WHERE tenant_id = $1 AND collection = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
 `
 
-func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error) {
-	row := q.db.QueryRow(ctx, countObjects, tenantID, objectKey, state)
+func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state NullObjectState) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjects, tenantID, collection, state)
 	var n int64
 	err := row.Scan(&n)
 	return n, err
@@ -47,7 +47,7 @@ func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, object
 const createObject = `-- name: CreateObject :exec
 
 INSERT INTO objects (
-    object_id, tenant_id, object_key, key, state,
+    object_id, tenant_id, collection, key, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -58,11 +58,11 @@ INSERT INTO objects (
 `
 
 // Object queries.
-func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, objectKey string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
+func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, collection string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, createObject,
 		objectID,
 		tenantID,
-		objectKey,
+		collection,
 		key,
 		state,
 		contentType,
@@ -78,7 +78,7 @@ func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenant
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE tenant_id = $1 AND object_id = $2
 `
@@ -93,7 +93,7 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 	err := row.Scan(
 		&i.Object.ObjectID,
 		&i.Object.TenantID,
-		&i.Object.ObjectKey,
+		&i.Object.Collection,
 		&i.Object.Key,
 		&i.Object.State,
 		&i.Object.ContentType,
@@ -142,7 +142,7 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE tenant_id = $1 AND object_id = ANY($2::uuid[])
 `
@@ -166,7 +166,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 		if err := rows.Scan(
 			&i.Object.ObjectID,
 			&i.Object.TenantID,
-			&i.Object.ObjectKey,
+			&i.Object.Collection,
 			&i.Object.Key,
 			&i.Object.State,
 			&i.Object.ContentType,
@@ -260,11 +260,11 @@ func (q *Queries) HardDeleteObjectIfStillDeleted(ctx context.Context, objectID p
 }
 
 const listHardDeletable = `-- name: ListHardDeletable :many
-SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.resource_version,
+SELECT o.object_id, o.tenant_id, o.collection, o.key, o.resource_version,
        k.backend_id, k.bucket_name
 FROM objects o
-JOIN object_keys k
-  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
+JOIN collections k
+  ON k.tenant_id = o.tenant_id AND k.collection = o.collection
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
@@ -284,7 +284,7 @@ LIMIT $2
 type ListHardDeletableRow struct {
 	ObjectID        pgtype.UUID `json:"object_id"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
-	ObjectKey       string      `json:"object_key"`
+	Collection      string      `json:"collection"`
 	Key             string      `json:"key"`
 	ResourceVersion int64       `json:"resource_version"`
 	BackendID       string      `json:"backend_id"`
@@ -292,7 +292,7 @@ type ListHardDeletableRow struct {
 }
 
 // Picks DELETED objects past the cooling-off window for the
-// LifecycleHardDeleter worker. Joins object_keys to materialise
+// LifecycleHardDeleter worker. Joins collections to materialise
 // (backend_id, bucket_name) so the worker issues the storage DELETE
 // in one round-trip per row without a second lookup.
 // Bounded at the caller's batch_size; the worker loops on the
@@ -309,7 +309,7 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 		if err := rows.Scan(
 			&i.ObjectID,
 			&i.TenantID,
-			&i.ObjectKey,
+			&i.Collection,
 			&i.Key,
 			&i.ResourceVersion,
 			&i.BackendID,
@@ -326,10 +326,10 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE tenant_id = $1
-  AND object_key = $2
+  AND collection = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
   AND ($4::text IS NULL OR key LIKE $4::text || '%')
   AND ($5::text IS NULL OR key LIKE '%' || $5::text || '%')
@@ -350,10 +350,10 @@ type ListObjectsRow struct {
 // authoritative, so over-fetching (a hint that's absent) only costs
 // throughput, never correctness. `substr` is escaped for LIKE by the
 // adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		objectKey,
+		collection,
 		state,
 		prefix,
 		substr,
@@ -370,7 +370,7 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectK
 		if err := rows.Scan(
 			&i.Object.ObjectID,
 			&i.Object.TenantID,
-			&i.Object.ObjectKey,
+			&i.Object.Collection,
 			&i.Object.Key,
 			&i.Object.State,
 			&i.Object.ContentType,
@@ -404,18 +404,18 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectK
 }
 
 const lookupObjectByID = `-- name: LookupObjectByID :one
-SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.state,
+SELECT o.object_id, o.tenant_id, o.collection, o.key, o.state,
        b.backend_id, b.bucket_name
 FROM objects o
-JOIN object_keys b
-  ON b.tenant_id = o.tenant_id AND b.object_key = o.object_key
+JOIN collections b
+  ON b.tenant_id = o.tenant_id AND b.collection = o.collection
 WHERE o.object_id = $1
 `
 
 type LookupObjectByIDRow struct {
 	ObjectID   pgtype.UUID `json:"object_id"`
 	TenantID   pgtype.UUID `json:"tenant_id"`
-	ObjectKey  string      `json:"object_key"`
+	Collection string      `json:"collection"`
 	Key        string      `json:"key"`
 	State      ObjectState `json:"state"`
 	BackendID  string      `json:"backend_id"`
@@ -423,7 +423,7 @@ type LookupObjectByIDRow struct {
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
-// replicator) that don't carry a tenant context. Joins object_keys to
+// replicator) that don't carry a tenant context. Joins collections to
 // materialize the bucket binding so the caller can call S3 in one trip.
 func (q *Queries) LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (LookupObjectByIDRow, error) {
 	row := q.db.QueryRow(ctx, lookupObjectByID, objectID)
@@ -431,7 +431,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (L
 	err := row.Scan(
 		&i.ObjectID,
 		&i.TenantID,
-		&i.ObjectKey,
+		&i.Collection,
 		&i.Key,
 		&i.State,
 		&i.BackendID,
@@ -441,23 +441,23 @@ func (q *Queries) LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (L
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
-WHERE tenant_id = $1 AND object_key = $2 AND key = $3 AND state <> 'DELETED'
+WHERE tenant_id = $1 AND collection = $2 AND key = $3 AND state <> 'DELETED'
 `
 
 type LookupObjectByKeyRow struct {
 	Object Object `json:"object"`
 }
 
-// Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
-func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (LookupObjectByKeyRow, error) {
-	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, objectKey, key)
+// Used by resource-name resolution: collections/{b}/objects-by-key/{key} → object_id.
+func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, collection string, key string) (LookupObjectByKeyRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, collection, key)
 	var i LookupObjectByKeyRow
 	err := row.Scan(
 		&i.Object.ObjectID,
 		&i.Object.TenantID,
-		&i.Object.ObjectKey,
+		&i.Object.Collection,
 		&i.Object.Key,
 		&i.Object.State,
 		&i.Object.ContentType,
@@ -541,7 +541,7 @@ WHERE tenant_id = $1 AND object_id = $2
 `
 
 // Undeletes a soft-deleted object iff no live row exists with the same
-// (tenant, object_key, key). Caller is expected to verify uniqueness first;
+// (tenant, collection, key). Caller is expected to verify uniqueness first;
 // a UNIQUE partial index still catches the race at commit time.
 func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, restoreObject, tenantID, objectID)
@@ -552,7 +552,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objec
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.collection, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
@@ -577,7 +577,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 		if err := rows.Scan(
 			&i.Object.ObjectID,
 			&i.Object.TenantID,
-			&i.Object.ObjectKey,
+			&i.Object.Collection,
 			&i.Object.Key,
 			&i.Object.State,
 			&i.Object.ContentType,

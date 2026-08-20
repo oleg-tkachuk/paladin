@@ -59,11 +59,11 @@ func errEngine() *fakeEngine {
 // fakeStore is a configurable cedar.Store; only Fetch is exercised by the
 // handler. Watch satisfies the interface and is never called here.
 type fakeStore struct {
-	fetchFn func(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, []byte, string, error)
+	fetchFn func(ctx context.Context, tenantID uuid.UUID, collection string) (string, []byte, string, error)
 }
 
-func (f *fakeStore) Fetch(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, []byte, string, error) {
-	return f.fetchFn(ctx, tenantID, objectKey)
+func (f *fakeStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (string, []byte, string, error) {
+	return f.fetchFn(ctx, tenantID, collection)
 }
 
 func (f *fakeStore) Watch(context.Context) (<-chan cedar.ChangeEvent, error) { return nil, nil }
@@ -171,7 +171,7 @@ func TestValidatePolicy(t *testing.T) {
 		if fe.calls[0].action != cedar.ActionInspectPolicy {
 			t.Fatalf("gate action: got %q want %q", fe.calls[0].action, cedar.ActionInspectPolicy)
 		}
-		if fe.calls[0].resource.TenantID != uuid.Nil || fe.calls[0].resource.ObjectKey != "" {
+		if fe.calls[0].resource.TenantID != uuid.Nil || fe.calls[0].resource.Collection != "" {
 			t.Fatalf("ValidatePolicy must pass an empty resource, got %+v", fe.calls[0].resource)
 		}
 	})
@@ -184,7 +184,7 @@ func TestSimulateAuthz(t *testing.T) {
 		fe := allowEngine()
 		h := NewHandler(fe, &fakeStore{})
 		_, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
-			ResourceName: "tenants/not-a-uuid/objectKeys/k",
+			ResourceName: "tenants/not-a-uuid/collections/k",
 		})
 		if err == nil || !strings.Contains(err.Error(), "invalid tenant id") {
 			t.Fatalf("expected parse error, got %v", err)
@@ -235,7 +235,7 @@ func TestSimulateAuthz(t *testing.T) {
 			PrincipalSubject: "svc-1",
 			PrincipalRoles:   []string{"tenant.admin"},
 			Action:           cedar.ActionGetObject,
-			ResourceName:     "tenants/" + objTenant.String() + "/objectKeys/logs",
+			ResourceName:     "tenants/" + objTenant.String() + "/collections/logs",
 		}
 		out, err := h.SimulateAuthz(authedCtx(tid), in)
 		if err != nil {
@@ -255,8 +255,8 @@ func TestSimulateAuthz(t *testing.T) {
 		if sim.action != cedar.ActionGetObject {
 			t.Fatalf("simulated action: got %q want %q", sim.action, cedar.ActionGetObject)
 		}
-		if sim.resource.TenantID != objTenant || sim.resource.ObjectKey != "logs" {
-			t.Fatalf("resource from name: got tenant=%v key=%q want %v/logs", sim.resource.TenantID, sim.resource.ObjectKey, objTenant)
+		if sim.resource.TenantID != objTenant || sim.resource.Collection != "logs" {
+			t.Fatalf("resource from name: got tenant=%v key=%q want %v/logs", sim.resource.TenantID, sim.resource.Collection, objTenant)
 		}
 		if sim.princ.Subject != "svc-1" {
 			t.Fatalf("principal subject: got %q want svc-1", sim.princ.Subject)
@@ -327,7 +327,7 @@ func TestGetEffectivePolicy(t *testing.T) {
 	t.Run("tenant-only resource → single tenant layer", func(t *testing.T) {
 		fs := &fakeStore{fetchFn: func(_ context.Context, _ uuid.UUID, key string) (string, []byte, string, error) {
 			if key != "" {
-				t.Fatalf("tenant-only name must fetch empty objectKey, got %q", key)
+				t.Fatalf("tenant-only name must fetch empty collection, got %q", key)
 			}
 			return "permit(principal, action, resource);", nil, "", nil
 		}}
@@ -347,8 +347,8 @@ func TestGetEffectivePolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("objectKey resource → tenant + objectKey layers split at marker", func(t *testing.T) {
-		merged := "tenant-rule\n// --- objectKey-scoped ---\nobj-rule"
+	t.Run("collection resource → tenant + collection layers split at marker", func(t *testing.T) {
+		merged := "tenant-rule\n// --- collection-scoped ---\nobj-rule"
 		objTenant := uuid.New()
 		var gotTenant uuid.UUID
 		var gotKey string
@@ -357,7 +357,7 @@ func TestGetEffectivePolicy(t *testing.T) {
 			return merged, nil, "", nil
 		}}
 		h := NewHandler(allowEngine(), fs)
-		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+objTenant.String()+"/objectKeys/logs", tid)
+		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+objTenant.String()+"/collections/logs", tid)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -371,10 +371,10 @@ func TestGetEffectivePolicy(t *testing.T) {
 			t.Fatalf("tenant layer text: %q", out.Layers[0].CedarPolicy)
 		}
 		if out.Layers[1].CedarPolicy != "obj-rule" {
-			t.Fatalf("objectKey layer text: %q", out.Layers[1].CedarPolicy)
+			t.Fatalf("collection layer text: %q", out.Layers[1].CedarPolicy)
 		}
 		if !strings.Contains(out.Layers[1].Source, "logs") {
-			t.Fatalf("objectKey layer source: %q", out.Layers[1].Source)
+			t.Fatalf("collection layer source: %q", out.Layers[1].Source)
 		}
 	})
 }
@@ -383,8 +383,8 @@ func TestParseSimulateResource(t *testing.T) {
 	fallback := uuid.New()
 	tenant := uuid.New()
 
-	t.Run("tenant + objectKey name", func(t *testing.T) {
-		gotT, gotK, err := parseSimulateResource("tenants/"+tenant.String()+"/objectKeys/logs", fallback)
+	t.Run("tenant + collection name", func(t *testing.T) {
+		gotT, gotK, err := parseSimulateResource("tenants/"+tenant.String()+"/collections/logs", fallback)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -404,7 +404,7 @@ func TestParseSimulateResource(t *testing.T) {
 	})
 
 	t.Run("invalid tenant uuid in 4-part name errors", func(t *testing.T) {
-		if _, _, err := parseSimulateResource("tenants/nope/objectKeys/k", fallback); err == nil {
+		if _, _, err := parseSimulateResource("tenants/nope/collections/k", fallback); err == nil {
 			t.Fatal("expected error for invalid tenant uuid")
 		}
 	})
@@ -427,24 +427,24 @@ func TestParseSimulateResource(t *testing.T) {
 }
 
 func TestExtractLayers(t *testing.T) {
-	t.Run("no marker: tenant layer is the whole text, objectKey empty", func(t *testing.T) {
+	t.Run("no marker: tenant layer is the whole text, collection empty", func(t *testing.T) {
 		merged := "just tenant policy"
 		if got := extractTenantLayer(merged); got != "just tenant policy" {
 			t.Fatalf("tenant layer: %q", got)
 		}
-		if got := extractObjectKeyLayer(merged); got != "" {
-			t.Fatalf("objectKey layer should be empty: %q", got)
+		if got := extractCollectionLayer(merged); got != "" {
+			t.Fatalf("collection layer should be empty: %q", got)
 		}
 	})
 
 	t.Run("with marker: split and right-trim the tenant layer", func(t *testing.T) {
 		// Mirrors PostgresStore.Fetch's concatenation shape.
-		merged := "tenant-rule\n// --- objectKey-scoped ---\nobj-rule"
+		merged := "tenant-rule\n// --- collection-scoped ---\nobj-rule"
 		if got := extractTenantLayer(merged); got != "tenant-rule" {
 			t.Fatalf("tenant layer: %q", got)
 		}
-		if got := extractObjectKeyLayer(merged); got != "obj-rule" {
-			t.Fatalf("objectKey layer: %q", got)
+		if got := extractCollectionLayer(merged); got != "obj-rule" {
+			t.Fatalf("collection layer: %q", got)
 		}
 	})
 }
@@ -462,7 +462,7 @@ func TestSimulateAuthz_CarriesThePrincipalKind(t *testing.T) {
 		PrincipalSubject: "consumer",
 		PrincipalKind:    "capability",
 		Action:           "DeleteObject",
-		ResourceName:     "tenants/" + tid.String() + "/objectKeys/k",
+		ResourceName:     "tenants/" + tid.String() + "/collections/k",
 	})
 	if err != nil {
 		t.Fatalf("SimulateAuthz: %v", err)

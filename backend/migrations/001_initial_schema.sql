@@ -272,7 +272,7 @@ CREATE TABLE replication_state (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- ─── Collections (was: object_keys) ─────────────────────────────────────────
+-- ─── Collections (was: collections) ─────────────────────────────────────────
 
 -- A collection is a policy-bearing container of objects inside a tenant. It is
 -- NOT a key — that naming is what ADR-0013 §3 exists to fix.

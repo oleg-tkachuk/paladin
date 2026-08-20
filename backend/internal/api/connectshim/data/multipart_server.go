@@ -21,12 +21,12 @@ func NewMultipartServer(h *multipart.Handler) *MultipartServer { return &Multipa
 
 func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *connect.Request[pb.InitiateMultipartUploadRequest]) (*connect.Response[pb.InitiateMultipartUploadResponse], error) {
 	m := req.Msg
-	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
+	collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
 	sess, err := s.H.InitiateMultipartUpload(ctx, multipart.InitiateArgs{
-		ObjectKey:    objectKey,
+		Collection:   collection,
 		Key:          m.GetKey(),
 		ContentType:  m.GetContentType(),
 		SizeHint:     m.GetSizeBytes(),
@@ -41,10 +41,10 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 		// Object's full state is fetched lazily via GetObject; we surface the
 		// minimal envelope here.
 		Object: &pb.Object{
-			ObjectId:  sess.ObjectID.String(),
-			TenantId:  sess.TenantID.String(),
-			ObjectKey: sess.ObjectKey,
-			Key:       sess.Key,
+			ObjectId:   sess.ObjectID.String(),
+			TenantId:   sess.TenantID.String(),
+			Collection: sess.Collection,
+			Key:        sess.Key,
 		},
 		UploadId:            sess.UploadID,
 		RecommendedPartSize: sess.PartSizeBytes,

@@ -38,17 +38,17 @@ const (
 )
 
 type Storage interface {
-	PresignGet(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPut(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignGet(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPut(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
 type Repository interface {
-	LookupObjectByName(ctx context.Context, tenantID uuid.UUID, objectKey string, objectID uuid.UUID) (resolvedObjectKey, key, state string, err error)
-	LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, objectKey, key string, err error)
-	// LookupBucket returns the physical S3 bucket bound to an ObjectKey.
+	LookupObjectByName(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (resolvedCollection, key, state string, err error)
+	LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, collection, key string, err error)
+	// LookupBucket returns the physical S3 bucket bound to an Collection.
 	// Used to route presign URLs to the correct bucket.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 }
 
 type Handler struct {
@@ -72,19 +72,19 @@ func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg C
 	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
 }
 
-func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if objectKey == "" || objectIDStr == "" {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if collection == "" || objectIDStr == "" {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	objectKey, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
+	collection, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -92,7 +92,7 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow GET", state))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + key
+	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + key
 	// Presigned GET URL grants OpGet on the underlying object; gate
 	// on both OpPresign (the act of issuing a URL) and OpGet (the op
 	// the URL ultimately authorises).
@@ -102,13 +102,13 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
 	// scoped read PAT enforces here; the same resolution routes PresignGet.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // presign GET (read)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, false) // presign GET (read)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, key, backendID, bucket, cedar.ActionPresignGet); err != nil {
+	if err := h.authorize(ctx, p, tenantID, collection, key, backendID, bucket, cedar.ActionPresignGet); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	// Capability budget burn — gates issuance for over-budget callers
@@ -117,22 +117,22 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignGet(ctx, backendID, bucket, tenantID, objectKey, key, h.resolveTTL(ttl), disposition)
+	return h.storage.PresignGet(ctx, backendID, bucket, tenantID, collection, key, h.resolveTTL(ttl), disposition)
 }
 
-func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignPut(ctx context.Context, collection, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if objectKey == "" || objectIDStr == "" {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if collection == "" || objectIDStr == "" {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	objectKey, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
+	collection, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -143,26 +143,26 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow PUT", state))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + key
+	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
 	// scoped write PAT enforces here; the same resolution routes PresignPut.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign PUT (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, true) // presign PUT (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, key, backendID, bucket, cedar.ActionPresignPut); err != nil {
+	if err := h.authorize(ctx, p, tenantID, collection, key, backendID, bucket, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignPut(ctx, backendID, bucket, tenantID, objectKey, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
+	return h.storage.PresignPut(ctx, backendID, bucket, tenantID, collection, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
 }
 
 func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
@@ -170,30 +170,30 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	storageUploadID, objectKey, key, err := h.repo.LookupMultipartSession(ctx, uploadID)
+	storageUploadID, collection, key, err := h.repo.LookupMultipartSession(ctx, uploadID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + key
+	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
 	// scoped write PAT enforces here; the same resolution routes PresignPart.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign part upload (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, true) // presign part upload (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, key, backendID, bucket, cedar.ActionPresignPut); err != nil {
+	if err := h.authorize(ctx, p, tenantID, collection, key, backendID, bucket, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, storageUploadID, objectKey, key, partNumber, h.resolveTTL(ttl))
+	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, storageUploadID, collection, key, partNumber, h.resolveTTL(ttl))
 }
 
 func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
@@ -209,16 +209,16 @@ func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
 
 // authorize runs the Cedar check for a presign action. backendID/bucket carry
 // the resolved physical binding so the scope-enforcement built-in can confine a
-// bucket:/object_key:-scoped PAT to its own bucket — callers resolve the bucket
+// bucket:/collection:-scoped PAT to its own bucket — callers resolve the bucket
 // (via LookupBucket) BEFORE calling this so a scoped principal is not
 // fail-closed on the write/read path. Empty backendID/bucket (binding not
 // resolvable) leaves the resource without those scope keys, which only ever
 // denies a scoped principal — unscoped/roles-only callers are unaffected.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, backendID, bucket, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipalFor(p, tenantID),
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, BackendID: backendID, BucketName: bucket},
+		&cedar.Resource{TenantID: tenantID, Collection: collection, Key: key, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {

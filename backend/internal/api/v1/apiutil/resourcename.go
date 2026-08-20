@@ -7,11 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// ParseObjectKeyName parses "object_keys/{object_key}".
-func ParseObjectKeyName(name string) (string, error) {
-	const prefix = "object_keys/"
+// ParseCollectionName parses "collections/{collection}".
+func ParseCollectionName(name string) (string, error) {
+	const prefix = "collections/"
 	if !strings.HasPrefix(name, prefix) || len(name) <= len(prefix) {
-		return "", fmt.Errorf("invalid object_key name %q", name)
+		return "", fmt.Errorf("invalid collection name %q", name)
 	}
 	return name[len(prefix):], nil
 }

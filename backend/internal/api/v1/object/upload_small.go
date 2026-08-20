@@ -4,7 +4,7 @@
 //
 // The stream contract:
 //
-//   - Message #1 carries InitMetadata (objectKey, key, content_type, size_hint,
+//   - Message #1 carries InitMetadata (collection, key, content_type, size_hint,
 //     tags, …).
 //   - Subsequent messages carry raw chunk bytes (recommended 256 KiB each).
 //   - The terminal message sets Final=true and may include a client-computed
@@ -40,7 +40,7 @@ import (
 // StreamSink is the storage-side sink for UploadSmall. Implementations may
 // pick PutObject (small) or multipart (large) based on total size.
 type StreamSink interface {
-	Open(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType string, sizeHint int64) (StreamWriter, error)
+	Open(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (StreamWriter, error)
 }
 
 // StreamWriter is the per-upload handle returned by StreamSink.Open.
@@ -56,7 +56,7 @@ type StreamWriter interface {
 // StreamInit mirrors the proto `UploadSmall.InitMetadata` message. Decoded by
 // the Connect adapter before handing off here.
 type StreamInit struct {
-	ObjectKey    string
+	Collection   string
 	Key          string
 	ContentType  string
 	SizeHint     int64
@@ -104,13 +104,13 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 	}
 
 	// Resolve the (backend, bucket) FIRST so the Cedar check can enforce
-	// bucket:/object_key: PAT scopes on this write path (the scope-enforcement
+	// bucket:/collection: PAT scopes on this write path (the scope-enforcement
 	// built-in needs the physical bucket on the resource; without it a
 	// bucket-scoped principal is fail-closed here). The SAME resolution routes
 	// the stream sink below — one lookup — and keeps the disabled/read-only-
 	// backend chokepoint. Resolving before CreateObject also avoids leaving an
 	// orphan PENDING row when the backend is disabled/draining.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.Collection, true) // small-object upload (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -121,7 +121,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		apiutil.CedarPrincipalFor(principal, tenantID),
 		cedar.ActionPutObject,
 		&cedar.Resource{
-			TenantID: tenantID, ObjectKey: init.ObjectKey, Key: init.Key,
+			TenantID: tenantID, Collection: init.Collection, Key: init.Key,
 			BackendID: backendID, BucketName: bucket,
 			ContentType: init.ContentType, SizeBytes: init.SizeHint, Tags: init.Tags,
 		},
@@ -145,7 +145,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 	}
 	ttl := h.presign.DefaultTTL
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
-		TenantID: tenantID, ObjectKey: init.ObjectKey, Key: key,
+		TenantID: tenantID, Collection: init.Collection, Key: key,
 		ContentType: init.ContentType, SizeHint: init.SizeHint,
 		ChecksumAlgo: init.ChecksumAlgo, Metadata: init.Metadata,
 		Tags: init.Tags, ExternalRef: init.ExternalRef,
@@ -155,7 +155,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		return nil, mapCreateErr(err)
 	}
 
-	writer, err := deps.Sink.Open(ctx, backendID, bucket, tenantID, init.ObjectKey, key, init.ContentType, init.SizeHint)
+	writer, err := deps.Sink.Open(ctx, backendID, bucket, tenantID, init.Collection, key, init.ContentType, init.SizeHint)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open sink: %w", err))
 	}
@@ -195,7 +195,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 	if _, err := h.sm.PromoteToAvailable(ctx, obj.ObjectID, etag, finalSize, checksum, "", statemachine.SourceRPC); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, init.ObjectKey, obj.ObjectID.String())
+	fresh, err := h.repo.FindByName(ctx, tenantID, init.Collection, obj.ObjectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

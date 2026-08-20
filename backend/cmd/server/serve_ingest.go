@@ -119,7 +119,7 @@ func runIngest(
 	}
 
 	// Wire the handler. Lookup uses the data-plane object repo
-	// so we can resolve (tenant, object_key, key) → object_id;
+	// so we can resolve (tenant, collection, key) → object_id;
 	// statemachine.Transitioner already lives on SharedDeps but
 	// we replace it with one bound to ingestQueries so PROMOTE
 	// flows through the same BYPASSRLS pool.
@@ -139,7 +139,7 @@ func runIngest(
 
 	handler := &eventingest.PromoteHandler{
 		// Wrap the queries in the per-tenant longest-prefix cache so
-		// ResolveObjectKeyPrefix isn't a SQL round-trip on every storage
+		// ResolveCollectionPrefix isn't a SQL round-trip on every storage
 		// event (bounded-staleness — see eventingest.CachingLookup).
 		Lookup:       eventingest.NewCachingLookup(ingestQueries, eventingest.DefaultPrefixCacheTTL, l.Named("ingest.prefix-cache")),
 		Transitioner: ingestSM,
@@ -489,7 +489,7 @@ func buildWebhookDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, e
 	//
 	// For day-1 we register the adapter with empty BucketName; the
 	// path parser still works as long as the publisher sends a
-	// 3-component path "<tenant>/<object_key>/<key>" without a
+	// 3-component path "<tenant>/<collection>/<key>" without a
 	// bucket prefix — the natural shape if SeaweedFS is configured
 	// with `notification.webhook.endpoint = .../webhook/seaweedfs`.
 	sources["/webhook/seaweedfs"] = &eventingest.SeaweedFSSource{

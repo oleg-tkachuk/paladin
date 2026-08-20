@@ -16,7 +16,7 @@ SELECT object_id, state, content_type, size_bytes,
        metadata, tags, created_at, committed_at
 FROM objects
 WHERE tenant_id = $1
-  AND object_key = $2
+  AND collection = $2
   AND state = 'AVAILABLE'
   AND ($3::uuid IS NULL OR object_id < $3::uuid)
 ORDER BY object_id DESC
@@ -34,13 +34,13 @@ type IterateObjectsForLifecycleRow struct {
 	CommittedAt pgtype.Timestamptz `json:"committed_at"`
 }
 
-// Streams a window of AVAILABLE-only objects under (tenant, object_key)
+// Streams a window of AVAILABLE-only objects under (tenant, collection)
 // newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
 // Lifecycle worker walks via repeated calls until empty page.
-func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, objectKey string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
+func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, collection string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
 	rows, err := q.db.Query(ctx, iterateObjectsForLifecycle,
 		tenantID,
-		objectKey,
+		collection,
 		column3,
 		limit,
 	)
@@ -254,30 +254,30 @@ func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBuckets
 	return items, nil
 }
 
-const listObjectKeyBindingsForBucket = `-- name: ListObjectKeyBindingsForBucket :many
-SELECT tenant_id, object_key
-FROM object_keys
+const listCollectionBindingsForBucket = `-- name: ListCollectionBindingsForBucket :many
+SELECT tenant_id, collection
+FROM collections
 WHERE backend_id = $1 AND bucket_name = $2
-ORDER BY tenant_id, object_key
+ORDER BY tenant_id, collection
 `
 
-type ListObjectKeyBindingsForBucketRow struct {
-	TenantID  pgtype.UUID `json:"tenant_id"`
-	ObjectKey string      `json:"object_key"`
+type ListCollectionBindingsForBucketRow struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	Collection string      `json:"collection"`
 }
 
-// Lists every (tenant_id, object_key) bound to a given bucket. Used by
+// Lists every (tenant_id, collection) bound to a given bucket. Used by
 // lifecycle + replication workers to scope their object scans.
-func (q *Queries) ListObjectKeyBindingsForBucket(ctx context.Context, backendID string, bucketName string) ([]ListObjectKeyBindingsForBucketRow, error) {
-	rows, err := q.db.Query(ctx, listObjectKeyBindingsForBucket, backendID, bucketName)
+func (q *Queries) ListCollectionBindingsForBucket(ctx context.Context, backendID string, bucketName string) ([]ListCollectionBindingsForBucketRow, error) {
+	rows, err := q.db.Query(ctx, listCollectionBindingsForBucket, backendID, bucketName)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListObjectKeyBindingsForBucketRow
+	var items []ListCollectionBindingsForBucketRow
 	for rows.Next() {
-		var i ListObjectKeyBindingsForBucketRow
-		if err := rows.Scan(&i.TenantID, &i.ObjectKey); err != nil {
+		var i ListCollectionBindingsForBucketRow
+		if err := rows.Scan(&i.TenantID, &i.Collection); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

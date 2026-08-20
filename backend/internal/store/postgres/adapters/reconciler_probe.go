@@ -23,7 +23,7 @@ import (
 // from AWS error types in the persistence layer, which is what the stub this
 // replaced was written to avoid.
 type HeadProber interface {
-	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 }
 
 // ReconcilerProbe satisfies worker.StorageProbe. It looks up the object's
@@ -50,7 +50,7 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 	tenantID := uuidFrom(row.TenantID)
 	// LookupObjectByID already materializes the backend binding, so the HEAD
 	// is routed to the object's own backend (not the default).
-	etag, sizeBytes, checksum, sequencer, err = r.head.Head(ctx, row.BackendID, row.BucketName, tenantID, row.ObjectKey, row.Key)
+	etag, sizeBytes, checksum, sequencer, err = r.head.Head(ctx, row.BackendID, row.BucketName, tenantID, row.Collection, row.Key)
 	if err != nil {
 		// HEAD failure is "not found" if the storage adapter signals 404 via
 		// the standard not-found error wrapping; treat as not-found here.

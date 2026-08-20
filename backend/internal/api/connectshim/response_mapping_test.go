@@ -64,12 +64,12 @@ var responseSkipFields = map[string]map[string]string{
 		// guard); it is not projected onto the read Object DTO here.
 		"Lock": "lock state enforced server-side; not projected onto the read Object DTO",
 	},
-	"ObjectKey": {
+	"Collection": {
 		// Mirrors the input-side skip: completion_mode is derived from the
 		// bucket→backend events config server-side and is not carried on the
-		// ObjectKey read projection.
-		"CompletionMode": "server-computed from bucket→backend events; not on the ObjectKey read DTO",
-		"Constraints":    "per-key constraints not yet projected onto the ObjectKey read DTO",
+		// Collection read projection.
+		"CompletionMode": "server-computed from bucket→backend events; not on the Collection read DTO",
+		"Constraints":    "per-key constraints not yet projected onto the Collection read DTO",
 	},
 	"Operation": {
 		// operationToProto projects the initiator tenant; the actor subject is

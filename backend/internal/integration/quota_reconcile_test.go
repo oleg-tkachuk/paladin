@@ -83,7 +83,7 @@ func TestReconcileQuotaUsage_DrivesCountersToLiveTruth(t *testing.T) {
 
 // Bucket-scoped quota rows were never maintained at all — OnObjectPromoted
 // only ever touched the tenant-scoped row — so their usage sat at zero
-// forever. The reconciler reaches them by hopping objects → object_keys →
+// forever. The reconciler reaches them by hopping objects → collections →
 // (backend_id, bucket_name), and must not mix the two scopes up.
 func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 	ctx := context.Background()
@@ -93,9 +93,9 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 
 	var backendID, bucketName string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM object_keys
-		  WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey).Scan(&backendID, &bucketName); err != nil {
+		`SELECT backend_id, bucket_name FROM collections
+		  WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection).Scan(&backendID, &bucketName); err != nil {
 		t.Fatalf("lookup binding: %v", err)
 	}
 
@@ -189,10 +189,10 @@ func TestRollDailyCounters(t *testing.T) {
 func insertObj(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, state string, size any) {
 	t.Helper()
 	mustExec(t, ctx, pool,
-		`INSERT INTO objects (object_id, tenant_id, object_key, key, state,
+		`INSERT INTO objects (object_id, tenant_id, collection, key, state,
 		                      content_type, checksum_algorithm, size_bytes)
 		 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6)`,
-		uuid.Must(uuid.NewV7()), f.tenantID, f.objectKey,
+		uuid.Must(uuid.NewV7()), f.tenantID, f.collection,
 		"k-"+uuid.NewString()[:8], state, size)
 }
 

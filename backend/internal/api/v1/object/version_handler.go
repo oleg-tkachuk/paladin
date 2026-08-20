@@ -29,10 +29,10 @@ func NewVersionHandler(objects Repository, versions VersionRepository) *VersionH
 // ─── List ───────────────────────────────────────────────────────────────────
 
 type ListVersionsInput struct {
-	ObjectKey string
-	ObjectID  string
-	PageSize  int32
-	PageToken string
+	Collection string
+	ObjectID   string
+	PageSize   int32
+	PageToken  string
 }
 
 func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput) ([]ObjectVersion, string, error) {
@@ -40,15 +40,15 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	if err != nil {
 		return nil, "", err
 	}
-	if in.ObjectKey == "" || in.ObjectID == "" {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	if in.Collection == "" || in.ObjectID == "" {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
 	objectID, err := uuid.Parse(in.ObjectID)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	// Confirm the parent object exists + the caller's tenant owns it.
-	if _, err := h.objects.FindByName(ctx, tenantID, in.ObjectKey, in.ObjectID); err != nil {
+	if _, err := h.objects.FindByName(ctx, tenantID, in.Collection, in.ObjectID); err != nil {
 		return nil, "", connect.NewError(connect.CodeNotFound, err)
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
@@ -70,7 +70,7 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	// Tenant guard via parent Object lookup.
-	parent, err := h.objects.FindByName(ctx, tenantID, parsed.objectKey, parsed.objectID.String())
+	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -102,7 +102,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name string) (*Obje
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	parent, err := h.objects.FindByName(ctx, tenantID, parsed.objectKey, parsed.objectID.String())
+	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -121,7 +121,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name string) (*Obje
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// Refresh the parent Object envelope so callers see authoritative state.
-	fresh, err := h.objects.FindByName(ctx, tenantID, parsed.objectKey, parsed.objectID.String())
+	fresh, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -156,7 +156,7 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	if h == nil || h.objects == nil || h.versions == nil {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey, false) // versioning-config read; primary op already gated
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
 	if err != nil {
 		// Best-effort: a missing bucket-meta lookup must not abort the
 		// already-successful promote. Log via the caller.
@@ -168,7 +168,7 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	return h.RecordPromotion(ctx, ObjectVersion{
 		VersionID:    uuid.Must(uuid.NewV7()),
 		ObjectID:     obj.ObjectID,
-		S3Key:        obj.Key,
+		StoragePath:  obj.Key,
 		SizeBytes:    obj.SizeBytes,
 		ETag:         obj.ETag,
 		ChecksumAlgo: obj.ChecksumAlgo,
@@ -187,7 +187,7 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 	if h == nil || h.objects == nil || h.versions == nil {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey, false) // versioning-config read; primary op already gated
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
 	if err != nil {
 		// Don't block restore on a meta lookup failure — the state machine
 		// will still flip the row visible. Surfaces as a Warning at the call
@@ -236,7 +236,7 @@ func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
 	if h == nil || h.objects == nil || h.versions == nil {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey, false) // versioning-config read; primary op already gated
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
 	if err != nil {
 		return fmt.Errorf("on soft delete: lookup meta: %w", err)
 	}
@@ -247,7 +247,7 @@ func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
 		VersionID:      uuid.Must(uuid.NewV7()),
 		ObjectID:       obj.ObjectID,
 		IsDeleteMarker: true,
-		S3Key:          obj.Key,
+		StoragePath:    obj.Key,
 		ContentType:    obj.ContentType,
 	})
 }
@@ -255,13 +255,13 @@ func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 type versionNameParts struct {
-	objectKey string
-	objectID  uuid.UUID
-	versionID uuid.UUID
+	collection string
+	objectID   uuid.UUID
+	versionID  uuid.UUID
 }
 
 // parseVersionName decodes the AIP-122 form
-// "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+// "tenants/{t}/collections/{ok}/objects/{id}/versions/{ver}".
 func parseVersionName(name string) (versionNameParts, error) {
 	const sep = "/versions/"
 	idx := strings.LastIndex(name, sep)
@@ -275,12 +275,12 @@ func parseVersionName(name string) (versionNameParts, error) {
 		return versionNameParts{}, fmt.Errorf("invalid version_id: %w", err)
 	}
 	parts := strings.Split(parentName, "/")
-	if len(parts) != 6 || parts[0] != "tenants" || parts[2] != "objectKeys" || parts[4] != "objects" {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (parent must be tenants/{t}/objectKeys/{ok}/objects/{id})", name)
+	if len(parts) != 6 || parts[0] != "tenants" || parts[2] != "collections" || parts[4] != "objects" {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (parent must be tenants/{t}/collections/{ok}/objects/{id})", name)
 	}
 	objectID, err := uuid.Parse(parts[5])
 	if err != nil {
 		return versionNameParts{}, fmt.Errorf("invalid object_id: %w", err)
 	}
-	return versionNameParts{objectKey: parts[3], objectID: objectID, versionID: verID}, nil
+	return versionNameParts{collection: parts[3], objectID: objectID, versionID: verID}, nil
 }

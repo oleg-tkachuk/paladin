@@ -29,7 +29,7 @@ func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersio
 		VersionId:      v.VersionID.String(),
 		ObjectId:       v.ObjectID.String(),
 		IsDeleteMarker: v.IsDeleteMarker,
-		S3Key:          v.S3Key,
+		StoragePath:    v.StoragePath,
 		SizeBytes:      v.SizeBytes,
 		Etag:           v.ETag,
 		ContentType:    v.ContentType,

@@ -5,7 +5,7 @@
 // visibility rules (migration 023):
 //
 //   - ControlPlane covers `tenants`, `storage_backends`, `buckets`,
-//     `object_keys` and `users` — deliberately NOT RLS'd, precisely so
+//     `collections` and `users` — deliberately NOT RLS'd, precisely so
 //     platform-admin reads span tenants. The admin pod runs these on its
 //     own request pool.
 //
@@ -33,11 +33,11 @@ import (
 // ControlPlane is the un-RLS'd half of the census: resource inventory that
 // any platform admin may see in full.
 type ControlPlane struct {
-	Tenants    TenantCensus    `json:"tenants"`
-	Backends   BackendCensus   `json:"backends"`
-	Buckets    BucketCensus    `json:"buckets"`
-	ObjectKeys ObjectKeyCensus `json:"object_keys"`
-	Users      UserCensus      `json:"users"`
+	Tenants     TenantCensus     `json:"tenants"`
+	Backends    BackendCensus    `json:"backends"`
+	Buckets     BucketCensus     `json:"buckets"`
+	Collections CollectionCensus `json:"collections"`
+	Users       UserCensus       `json:"users"`
 }
 
 type TenantCensus struct {
@@ -49,7 +49,7 @@ type TenantCensus struct {
 	SharedLayout    int64 `json:"shared_layout"`
 	DedicatedLayout int64 `json:"dedicated_layout"`
 	// Active tenants with no tenant_default_bindings row: they cannot
-	// accept a bare (unqualified) ObjectKey bind.
+	// accept a bare (unqualified) Collection bind.
 	WithoutDefaultBinding int64 `json:"without_default_binding"`
 }
 
@@ -73,7 +73,7 @@ type BucketCensus struct {
 	ReplicationOn     int64            `json:"replication_enabled"`
 }
 
-type ObjectKeyCensus struct {
+type CollectionCensus struct {
 	Total     int64            `json:"total"`
 	ByBackend map[string]int64 `json:"by_backend"`
 	// Unbound = bucket_name IS NULL: bound to a backend but never to a
@@ -91,9 +91,9 @@ type UserCensus struct {
 // thousands of rows), so this is cheap enough for a dashboard poll.
 func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane, error) {
 	out := &ControlPlane{
-		Backends:   BackendCensus{ByKind: map[string]int64{}},
-		Buckets:    BucketCensus{ByProvisionState: map[string]int64{}, ByBackend: map[string]int64{}},
-		ObjectKeys: ObjectKeyCensus{ByBackend: map[string]int64{}},
+		Backends:    BackendCensus{ByKind: map[string]int64{}},
+		Buckets:     BucketCensus{ByProvisionState: map[string]int64{}, ByBackend: map[string]int64{}},
+		Collections: CollectionCensus{ByBackend: map[string]int64{}},
 	}
 
 	if err := pool.QueryRow(ctx, `
@@ -153,13 +153,13 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 	}
 
 	if err := pool.QueryRow(ctx, `
-		SELECT count(*), count(*) FILTER (WHERE bucket_name IS NULL) FROM object_keys`,
-	).Scan(&out.ObjectKeys.Total, &out.ObjectKeys.Unbound); err != nil {
+		SELECT count(*), count(*) FILTER (WHERE bucket_name IS NULL) FROM collections`,
+	).Scan(&out.Collections.Total, &out.Collections.Unbound); err != nil {
 		return nil, fmt.Errorf("census: object keys: %w", err)
 	}
 	if err := scanCounts(ctx, pool,
-		`SELECT backend_id, count(*) FROM object_keys GROUP BY backend_id`,
-		out.ObjectKeys.ByBackend); err != nil {
+		`SELECT backend_id, count(*) FROM collections GROUP BY backend_id`,
+		out.Collections.ByBackend); err != nil {
 		return nil, fmt.Errorf("census: object keys by backend: %w", err)
 	}
 

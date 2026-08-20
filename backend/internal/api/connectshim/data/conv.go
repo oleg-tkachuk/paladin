@@ -4,10 +4,10 @@
 //
 // The data plane uses fully hierarchical AIP-122 names like
 //
-//	tenants/{tenant_id}/objectKeys/{object_key}/objects/{object_id}
+//	tenants/{tenant_id}/collections/{collection}/objects/{object_id}
 //
 // The shim parses each name, asserts the URL tenant matches the JWT tenant,
-// and forwards the (object_key, object_id) pair to the handler — handlers
+// and forwards the (collection, object_id) pair to the handler — handlers
 // pull the tenant from JWT context, so it is never re-passed.
 package data
 
@@ -69,18 +69,18 @@ func pageResponseProto(next string) *commonpb.PageResponse {
 
 // ─── Resource-name parsers ──────────────────────────────────────────────────
 
-// objectNameParts decodes "tenants/{tenant_id}/objectKeys/{object_key}/objects/{object_id}".
+// objectNameParts decodes "tenants/{tenant_id}/collections/{collection}/objects/{object_id}".
 // It also asserts the parsed tenant matches the JWT-bound tenant (when the
 // caller has one). Cross-tenant access on the data plane is rejected.
 //
-// `object_key` can be a multi-segment slash-separated path
+// `collection` can be a multi-segment slash-separated path
 // (`invoices/2026/q1`); rather than splitting by `/` and counting
-// fixed positions we anchor on the literal `tenants/<id>/objectKeys/`
+// fixed positions we anchor on the literal `tenants/<id>/collections/`
 // prefix and the `/objects/<uuid>` suffix, treating everything in
-// between as the object_key body.
-func objectNameParts(ctx context.Context, name string) (objectKey, objectID string, err error) {
+// between as the collection body.
+func objectNameParts(ctx context.Context, name string) (collection, objectID string, err error) {
 	const prefix = "tenants/"
-	const okSep = "/objectKeys/"
+	const okSep = "/collections/"
 	const objSep = "/objects/"
 	if !strings.HasPrefix(name, prefix) {
 		return "", "", fmt.Errorf("invalid object name %q", name)
@@ -93,7 +93,7 @@ func objectNameParts(ctx context.Context, name string) (objectKey, objectID stri
 	tIDStr := rest[:tIDEnd]
 	afterOK := rest[tIDEnd+len(okSep):]
 	// Find the LAST "/objects/" so any "/objects/" substring inside
-	// the object_key (unusual but legal) can't shadow the suffix.
+	// the collection (unusual but legal) can't shadow the suffix.
 	objIdx := strings.LastIndex(afterOK, objSep)
 	if objIdx <= 0 {
 		return "", "", fmt.Errorf("invalid object name %q", name)
@@ -115,24 +115,24 @@ func objectNameParts(ctx context.Context, name string) (objectKey, objectID stri
 	return ok, oIDStr, nil
 }
 
-// objectKeyNameParts decodes "tenants/{tenant_id}/objectKeys/{object_key}".
-// object_key can be a multi-segment slash-separated path; everything
-// after `objectKeys/` is the body.
-func objectKeyNameParts(ctx context.Context, name string) (objectKey string, err error) {
+// collectionNameParts decodes "tenants/{tenant_id}/collections/{collection}".
+// collection can be a multi-segment slash-separated path; everything
+// after `collections/` is the body.
+func collectionNameParts(ctx context.Context, name string) (collection string, err error) {
 	const prefix = "tenants/"
-	const okSep = "/objectKeys/"
+	const okSep = "/collections/"
 	if !strings.HasPrefix(name, prefix) {
-		return "", fmt.Errorf("invalid object_key name %q", name)
+		return "", fmt.Errorf("invalid collection name %q", name)
 	}
 	rest := name[len(prefix):]
 	tIDEnd := strings.Index(rest, okSep)
 	if tIDEnd <= 0 {
-		return "", fmt.Errorf("invalid object_key name %q", name)
+		return "", fmt.Errorf("invalid collection name %q", name)
 	}
 	tIDStr := rest[:tIDEnd]
 	ok := rest[tIDEnd+len(okSep):]
 	if ok == "" {
-		return "", fmt.Errorf("invalid object_key name %q", name)
+		return "", fmt.Errorf("invalid collection name %q", name)
 	}
 	if _, err := uuid.Parse(tIDStr); err != nil {
 		return "", fmt.Errorf("invalid tenant_id in name: %w", err)
@@ -192,10 +192,10 @@ func objectToProto(o *object.Object) *pb.Object {
 		return nil
 	}
 	out := &pb.Object{
-		Name:             fmt.Sprintf("tenants/%s/objectKeys/%s/objects/%s", o.TenantID, o.ObjectKey, o.ObjectID),
+		Name:             fmt.Sprintf("tenants/%s/collections/%s/objects/%s", o.TenantID, o.Collection, o.ObjectID),
 		ObjectId:         o.ObjectID.String(),
 		TenantId:         o.TenantID.String(),
-		ObjectKey:        o.ObjectKey,
+		Collection:       o.Collection,
 		Key:              o.Key,
 		State:            objectStateProto(o.State),
 		ContentType:      o.ContentType,

@@ -15,14 +15,14 @@ import (
 // allow) and record it via EvalErrs so the broken policy is observable.
 func TestIsAuthorized_EvalErrorFailsClosed(t *testing.T) {
 	tid := uuid.New()
-	r := &Resource{TenantID: tid, ObjectKey: "invoices", BackendID: "primary", BucketName: "b1"}
+	r := &Resource{TenantID: tid, Collection: "invoices", BackendID: "primary", BucketName: "b1"}
 	const policy = `permit(principal, action, resource);
 forbid(principal, action, resource) when { resource.definitely_missing == "boom" };`
 
 	e := NewEngine(fakeStore{text: policy}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
 		&Principal{Subject: "u@acme", TenantID: tid, Roles: []string{"tenant.user"}},
-		ActionManageObjectKey, r, RequestContext{})
+		ActionManageCollection, r, RequestContext{})
 	if err != nil {
 		t.Fatalf("IsAuthorized: %v", err)
 	}
@@ -39,12 +39,12 @@ forbid(principal, action, resource) when { resource.definitely_missing == "boom"
 // the eval-error counter.
 func TestIsAuthorized_CleanEvalNoEvalErr(t *testing.T) {
 	tid := uuid.New()
-	r := &Resource{TenantID: tid, ObjectKey: "invoices", BackendID: "primary", BucketName: "b1"}
+	r := &Resource{TenantID: tid, Collection: "invoices", BackendID: "primary", BucketName: "b1"}
 
 	e := NewEngine(fakeStore{text: `permit(principal, action, resource);`}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
 		&Principal{Subject: "u@acme", TenantID: tid, Roles: []string{"tenant.user"}},
-		ActionManageObjectKey, r, RequestContext{})
+		ActionManageCollection, r, RequestContext{})
 	if err != nil {
 		t.Fatalf("IsAuthorized: %v", err)
 	}

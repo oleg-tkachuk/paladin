@@ -23,40 +23,40 @@ func TestFlavourObjectCount(t *testing.T) {
 	}
 }
 
-func TestFixtureObjectKey_DeterministicAndSortable(t *testing.T) {
+func TestFixtureCollection_DeterministicAndSortable(t *testing.T) {
 	// Zero-padded so lexical order == numeric order (the UI cursor walks them
 	// in key order).
-	if got := fixtureObjectKey("load", 42); got != "fixture/load/000042.txt" {
-		t.Errorf("fixtureObjectKey = %q", got)
+	if got := fixtureCollection("load", 42); got != "fixture/load/000042.txt" {
+		t.Errorf("fixtureCollection = %q", got)
 	}
-	if got := fixtureObjectKey("stress", 7); got != "fixture/stress/000007.txt" {
-		t.Errorf("fixtureObjectKey = %q", got)
+	if got := fixtureCollection("stress", 7); got != "fixture/stress/000007.txt" {
+		t.Errorf("fixtureCollection = %q", got)
 	}
 	// Lexical < holds across an order-of-magnitude boundary (9 vs 10).
-	if fixtureObjectKey("load", 9) >= fixtureObjectKey("load", 10) {
+	if fixtureCollection("load", 9) >= fixtureCollection("load", 10) {
 		t.Error("zero-padding must keep 9 < 10 lexically")
 	}
 	// Distinct flavours never collide.
-	if fixtureObjectKey("load", 1) == fixtureObjectKey("stress", 1) {
+	if fixtureCollection("load", 1) == fixtureCollection("stress", 1) {
 		t.Error("load and stress keys must not collide")
 	}
 }
 
-func TestIsFixtureObjectKey(t *testing.T) {
-	if !isFixtureObjectKey("load", "fixture/load/000001.txt") {
+func TestIsFixtureCollection(t *testing.T) {
+	if !isFixtureCollection("load", "fixture/load/000001.txt") {
 		t.Error("own fixture key should match")
 	}
 	// A different flavour's key is NOT this flavour's — teardown must not
 	// delete the other flavour's objects.
-	if isFixtureObjectKey("load", "fixture/stress/000001.txt") {
+	if isFixtureCollection("load", "fixture/stress/000001.txt") {
 		t.Error("stress key must not match the load prefix")
 	}
 	// A real user object is never treated as a fixture.
-	if isFixtureObjectKey("load", "invoices/2026/q1.pdf") {
+	if isFixtureCollection("load", "invoices/2026/q1.pdf") {
 		t.Error("a non-fixture user key must not match")
 	}
 	// The key round-trips through its own predicate.
-	if !isFixtureObjectKey("stress", fixtureObjectKey("stress", 999)) {
-		t.Error("fixtureObjectKey output must satisfy isFixtureObjectKey")
+	if !isFixtureCollection("stress", fixtureCollection("stress", 999)) {
+		t.Error("fixtureCollection output must satisfy isFixtureCollection")
 	}
 }

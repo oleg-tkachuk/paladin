@@ -21,7 +21,7 @@ func NewBatchServer(h *batch.Handler) *BatchServer { return &BatchServer{H: h} }
 
 func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Request[pb.BatchDeleteObjectsRequest]) (*connect.Response[pb.Operation], error) {
 	m := req.Msg
-	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
+	collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -30,8 +30,8 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 		return nil, badName(err)
 	}
 	opID, err := s.H.BatchDelete(ctx, batch.BatchDeleteArgs{
-		ObjectKey: objectKey,
-		ObjectIDs: ids,
+		Collection: collection,
+		ObjectIDs:  ids,
 	})
 	if err != nil {
 		return nil, err
@@ -44,11 +44,11 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 
 func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request[pb.BatchCopyObjectsRequest]) (*connect.Response[pb.Operation], error) {
 	m := req.Msg
-	srcOK, err := objectKeyNameParts(ctx, m.GetSourceParent())
+	srcOK, err := collectionNameParts(ctx, m.GetSourceParent())
 	if err != nil {
 		return nil, badName(fmt.Errorf("source: %w", err))
 	}
-	dstOK, err := objectKeyNameParts(ctx, m.GetDestinationObjectKey())
+	dstOK, err := collectionNameParts(ctx, m.GetDestinationCollection())
 	if err != nil {
 		return nil, badName(fmt.Errorf("destination: %w", err))
 	}
@@ -57,10 +57,10 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request
 		return nil, badName(err)
 	}
 	opID, err := s.H.BatchCopy(ctx, batch.BatchCopyArgs{
-		SrcObjectKey: srcOK,
-		DstObjectKey: dstOK,
-		ObjectIDs:    ids,
-		KeyPrefix:    m.GetDestinationKeyTemplate(),
+		SrcCollection: srcOK,
+		DstCollection: dstOK,
+		ObjectIDs:     ids,
+		KeyPrefix:     m.GetDestinationKeyTemplate(),
 	})
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request
 
 func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Request[pb.BatchRestoreObjectsRequest]) (*connect.Response[pb.Operation], error) {
 	m := req.Msg
-	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
+	collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -82,8 +82,8 @@ func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 		return nil, badName(err)
 	}
 	opID, err := s.H.BatchRestoreObjects(ctx, batch.BatchRestoreObjectsArgs{
-		ObjectKey: objectKey,
-		ObjectIDs: ids,
+		Collection: collection,
+		ObjectIDs:  ids,
 	})
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 
 func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[pb.BatchUpdateTagsRequest]) (*connect.Response[pb.Operation], error) {
 	m := req.Msg
-	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
+	collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -105,9 +105,9 @@ func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[
 		return nil, badName(err)
 	}
 	opID, err := s.H.BatchUpdateTags(ctx, batch.BatchUpdateTagsArgs{
-		ObjectKey: objectKey,
-		ObjectIDs: ids,
-		Tags:      m.GetTags(),
+		Collection: collection,
+		ObjectIDs:  ids,
+		Tags:       m.GetTags(),
 	})
 	if err != nil {
 		return nil, err

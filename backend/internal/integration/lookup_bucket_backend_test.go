@@ -13,7 +13,7 @@ import (
 // TestLookupBucketReturnsBackendID proves the resolver plumbing for
 // multi-backend routing (docs/backend-registry.md, ADR-0011 Phase 2):
 // LookupBucket now returns (backend_id, bucket) from the same
-// object_keys × storage_backends JOIN, so the storage boundary can key on
+// collections × storage_backends JOIN, so the storage boundary can key on
 // the physical (backend, bucket) pair. Guards against a column-order swap in
 // the SELECT (backend_id vs bucket_name) — the fixture's ids carry distinct
 // prefixes so a swap is caught, not just a nil.
@@ -25,14 +25,14 @@ func TestLookupBucketReturnsBackendID(t *testing.T) {
 	// Ground truth straight from the row the fixture bound.
 	var wantBackend, wantBucket string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey,
+		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection,
 	).Scan(&wantBackend, &wantBucket); err != nil {
-		t.Fatalf("read fixture object_key binding: %v", err)
+		t.Fatalf("read fixture collection binding: %v", err)
 	}
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
-	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.objectKey, false)
+	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, false)
 	if err != nil {
 		t.Fatalf("LookupBucket: %v", err)
 	}

@@ -161,7 +161,7 @@ func TestAPITokenPrincipalScopes(t *testing.T) {
 		tok := &api_token.Token{
 			ID:       uuid.New(),
 			TenantID: tid,
-			Scopes:   []string{"bucket:medical", "object_key:medical/patient-42"},
+			Scopes:   []string{"bucket:medical", "collection:medical/patient-42"},
 		}
 		i := &apiTokenInterceptor{audience: "data", establishPrincipal: true}
 		ctx, err := i.withTokenIdentity(context.Background(), tok)
@@ -178,12 +178,12 @@ func TestAPITokenPrincipalScopes(t *testing.T) {
 		if p.Scopes[0].Type != ScopeBucket || p.Scopes[0].Value != "medical" {
 			t.Errorf("scope[0] = %+v, want bucket:medical", p.Scopes[0])
 		}
-		if p.Scopes[1].Type != ScopeObjectKey || p.Scopes[1].Value != "medical/patient-42" {
-			t.Errorf("scope[1] = %+v, want object_key:medical/patient-42", p.Scopes[1])
+		if p.Scopes[1].Type != ScopeCollection || p.Scopes[1].Value != "medical/patient-42" {
+			t.Errorf("scope[1] = %+v, want collection:medical/patient-42", p.Scopes[1])
 		}
 		// Wire round-trip: String() must reproduce the exact mint strings.
-		if got := p.Scopes[1].String(); got != "object_key:medical/patient-42" {
-			t.Errorf("String() = %q, want object_key:medical/patient-42", got)
+		if got := p.Scopes[1].String(); got != "collection:medical/patient-42" {
+			t.Errorf("String() = %q, want collection:medical/patient-42", got)
 		}
 	})
 

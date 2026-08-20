@@ -12,7 +12,7 @@ import (
 // ADR-0011 Phase 3 (slice 1): the shared->dedicated storage migration copy job.
 // A tenant switched to the `dedicated` layout keeps serving from its shared
 // bucket until this worker copies every object into the tenant's own bucket
-// (same key, server-side CopyObject), rebinds the object_keys in one
+// (same key, server-side CopyObject), rebinds the collections in one
 // transaction, and flips the layout. Crash-safe + resumable via the
 // tenant_storage_migrations row (migration 056).
 //
@@ -37,11 +37,11 @@ const (
 // (not internal/api/v1/object.Location) because that package imports worker —
 // importing it back would be a cycle. build_jobs adapts the router to this.
 type CopyLocation struct {
-	BackendID string
-	TenantID  uuid.UUID
-	Bucket    string
-	ObjectKey string
-	Key       string
+	BackendID  string
+	TenantID   uuid.UUID
+	Bucket     string
+	Collection string
+	Key        string
 }
 
 // ObjectCopier performs a server-side copy of one object between physical
@@ -72,19 +72,19 @@ type StorageMigration struct {
 	State            string
 	ObjectsTotal     int64
 	ObjectsCopied    int64
-	CursorObjectKey  string
+	CursorCollection string
 	CursorKey        string
 	// CleanupAfter is when the old (shared) copies may be deleted; zero until
 	// the migration is 'completed'. Cleanup runs once time.Now >= CleanupAfter.
 	CleanupAfter time.Time
 }
 
-// ObjectRef is a logical (object_key, key) pair to copy, with its recorded
+// ObjectRef is a logical (collection, key) pair to copy, with its recorded
 // size for the physical verify.
 type ObjectRef struct {
-	ObjectKey string
-	Key       string
-	SizeBytes int64
+	Collection string
+	Key        string
+	SizeBytes  int64
 }
 
 // MigrationRepo is the persistence seam for the migration state machine.
@@ -96,10 +96,10 @@ type MigrationRepo interface {
 	CountObjects(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	// SetCopying records the total and moves provisioning -> copying.
 	SetCopying(ctx context.Context, tenantID uuid.UUID, total int64) error
-	ListObjects(ctx context.Context, tenantID uuid.UUID, afterObjectKey, afterKey string, limit int) ([]ObjectRef, error)
-	AdvanceCopy(ctx context.Context, tenantID uuid.UUID, copied int64, cursorObjectKey, cursorKey string) error
+	ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]ObjectRef, error)
+	AdvanceCopy(ctx context.Context, tenantID uuid.UUID, copied int64, cursorCollection, cursorKey string) error
 	SetState(ctx context.Context, tenantID uuid.UUID, state string) error
-	// RebindTenant, in ONE transaction, rebinds every object_key of the tenant
+	// RebindTenant, in ONE transaction, rebinds every collection of the tenant
 	// to (targetBackendID, targetBucketName) and flips storage_layout to
 	// 'dedicated'. The FK is DEFERRABLE INITIALLY DEFERRED.
 	RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error
@@ -211,7 +211,7 @@ func (w *StorageMigrationWorker) stepProvisioning(ctx context.Context, m Storage
 // stepCopying copies one batch of objects (server-side, identical key) and
 // advances the cursor. Empty batch => every object copied => rebinding.
 func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigration) error {
-	objs, err := w.Repo.ListObjects(ctx, m.TenantID, m.CursorObjectKey, m.CursorKey, w.CopyBatch)
+	objs, err := w.Repo.ListObjects(ctx, m.TenantID, m.CursorCollection, m.CursorKey, w.CopyBatch)
 	if err != nil {
 		return fmt.Errorf("list objects: %w", err)
 	}
@@ -230,29 +230,29 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 		return w.Repo.SetState(ctx, m.TenantID, MigStateRebinding)
 	}
 	copied := m.ObjectsCopied
-	curOK, curKey := m.CursorObjectKey, m.CursorKey
+	curOK, curKey := m.CursorCollection, m.CursorKey
 	for _, o := range objs {
 		if ctx.Err() != nil {
 			break
 		}
-		src := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, ObjectKey: o.ObjectKey, Key: o.Key}
-		dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, ObjectKey: o.ObjectKey, Key: o.Key}
+		src := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, Collection: o.Collection, Key: o.Key}
+		dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
 		if err := w.Copier.CopyObject(ctx, src, dst); err != nil {
 			// Persist progress so far, then bubble — the batch retries from here.
 			_ = w.Repo.AdvanceCopy(ctx, m.TenantID, copied, curOK, curKey)
-			return fmt.Errorf("copy %s/%s: %w", o.ObjectKey, o.Key, err)
+			return fmt.Errorf("copy %s/%s: %w", o.Collection, o.Key, err)
 		}
 		copied++
-		curOK, curKey = o.ObjectKey, o.Key
+		curOK, curKey = o.Collection, o.Key
 	}
 	return w.Repo.AdvanceCopy(ctx, m.TenantID, copied, curOK, curKey)
 }
 
-// stepRebinding atomically repoints the tenant's object_keys at the dedicated
+// stepRebinding atomically repoints the tenant's collections at the dedicated
 // bucket and flips the layout. From here reads/writes resolve to the copy.
 func (w *StorageMigrationWorker) stepRebinding(ctx context.Context, m StorageMigration) error {
 	if err := w.Repo.RebindTenant(ctx, m.TenantID, m.TargetBackendID, m.TargetBucketName); err != nil {
-		return fmt.Errorf("rebind object_keys: %w", err)
+		return fmt.Errorf("rebind collections: %w", err)
 	}
 	return w.Repo.SetState(ctx, m.TenantID, MigStateVerifying)
 }
@@ -260,7 +260,7 @@ func (w *StorageMigrationWorker) stepRebinding(ctx context.Context, m StorageMig
 // stepVerifying confirms the migration is sound before serving from the
 // dedicated bucket: the count matches, and — when a Header is wired — every
 // object physically exists in the TARGET bucket with the recorded size. A miss
-// or size mismatch fails the migration (the object_keys are already rebound, so
+// or size mismatch fails the migration (the collections are already rebound, so
 // completing on a bad copy would serve a broken object; the source copies are
 // still present for a repair). Size, not checksum: S3 ETags differ between a
 // server-side copy and a stream-through (multipart) upload, so they can't be
@@ -297,15 +297,15 @@ func (w *StorageMigrationWorker) verifyPhysical(ctx context.Context, m StorageMi
 			return nil
 		}
 		for _, o := range objs {
-			dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, ObjectKey: o.ObjectKey, Key: o.Key}
+			dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
 			got, err := w.Header.HeadObject(ctx, dst)
 			if err != nil {
-				return fmt.Errorf("%s/%s missing in target: %w", o.ObjectKey, o.Key, err)
+				return fmt.Errorf("%s/%s missing in target: %w", o.Collection, o.Key, err)
 			}
 			if got != o.SizeBytes {
-				return fmt.Errorf("%s/%s size mismatch: target %d != source %d", o.ObjectKey, o.Key, got, o.SizeBytes)
+				return fmt.Errorf("%s/%s size mismatch: target %d != source %d", o.Collection, o.Key, got, o.SizeBytes)
 			}
-			curOK, curKey = o.ObjectKey, o.Key
+			curOK, curKey = o.Collection, o.Key
 		}
 		if len(objs) < w.CopyBatch {
 			return nil
@@ -338,11 +338,11 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 			break
 		}
 		for _, o := range objs {
-			loc := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, ObjectKey: o.ObjectKey, Key: o.Key}
+			loc := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, Collection: o.Collection, Key: o.Key}
 			if err := w.Deleter.DeleteObject(ctx, loc); err != nil {
-				return fmt.Errorf("cleanup delete %s/%s: %w", o.ObjectKey, o.Key, err)
+				return fmt.Errorf("cleanup delete %s/%s: %w", o.Collection, o.Key, err)
 			}
-			curOK, curKey = o.ObjectKey, o.Key
+			curOK, curKey = o.Collection, o.Key
 		}
 		if len(objs) < w.CopyBatch {
 			break

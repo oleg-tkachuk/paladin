@@ -123,7 +123,7 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		zap.Int32("attempts", r.Attempts),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.ObjectKey, r.Key); err != nil {
+	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.Collection, r.Key); err != nil {
 		backoff := w.backoffFor(r.Attempts)
 		if rerr := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.PurgeID, err.Error(),
 			pgtype.Interval{Microseconds: backoff.Microseconds(), Valid: true}); rerr != nil {
@@ -164,11 +164,11 @@ func (w *PurgeDrainer) emitPurged(ctx context.Context, tx pgx.Tx, tenantID uuid.
 		Type:     "paladin.object.purged",
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
-		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/objectKeys/%s/objects-by-key/%s",
-			r.BackendID, r.BucketName, tenantID, r.ObjectKey, r.Key),
+		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
+			r.BackendID, r.BucketName, tenantID, r.Collection, r.Key),
 		Payload: map[string]any{
 			"tenant_id":  tenantID.String(),
-			"object_key": r.ObjectKey,
+			"collection": r.Collection,
 			"key":        r.Key,
 			"object_id":  objectID.String(),
 			"backend_id": r.BackendID,

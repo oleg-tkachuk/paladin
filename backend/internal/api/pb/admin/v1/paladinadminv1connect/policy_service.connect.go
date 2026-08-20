@@ -53,7 +53,7 @@ type PolicyServiceClient interface {
 	// Useful for UI access-pre-flight and for LLM tools.
 	SimulateAuthz(context.Context, *connect.Request[v1.SimulateAuthzRequest]) (*connect.Response[v1.SimulateAuthzResponse], error)
 	// GetEffectivePolicy returns the merged policy stack for a target
-	// (tenant + bucket + object_key inheritance), useful for debugging.
+	// (tenant + bucket + collection inheritance), useful for debugging.
 	GetEffectivePolicy(context.Context, *connect.Request[v1.GetEffectivePolicyRequest]) (*connect.Response[v1.GetEffectivePolicyResponse], error)
 }
 
@@ -120,7 +120,7 @@ type PolicyServiceHandler interface {
 	// Useful for UI access-pre-flight and for LLM tools.
 	SimulateAuthz(context.Context, *connect.Request[v1.SimulateAuthzRequest]) (*connect.Response[v1.SimulateAuthzResponse], error)
 	// GetEffectivePolicy returns the merged policy stack for a target
-	// (tenant + bucket + object_key inheritance), useful for debugging.
+	// (tenant + bucket + collection inheritance), useful for debugging.
 	GetEffectivePolicy(context.Context, *connect.Request[v1.GetEffectivePolicyRequest]) (*connect.Response[v1.GetEffectivePolicyResponse], error)
 }
 

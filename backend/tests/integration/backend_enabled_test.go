@@ -378,7 +378,7 @@ func mustReadObjectFingerprint(t *testing.T, pool *pgxpool.Pool, tenantID uuid.U
 	return fmt.Sprintf("%s|%s|%d", state, contentType, size)
 }
 
-func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName, objectKey string) {
+func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName, collection string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
         INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)
@@ -387,10 +387,10 @@ func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, 
 		t.Fatalf("seed bucket: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name)
+        INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
         VALUES ($1, $2, $3, $4)
-    `, tenantID, objectKey, backendID, bucketName); err != nil {
-		t.Fatalf("seed object_key: %v", err)
+    `, tenantID, collection, backendID, bucketName); err != nil {
+		t.Fatalf("seed collection: %v", err)
 	}
 }
 

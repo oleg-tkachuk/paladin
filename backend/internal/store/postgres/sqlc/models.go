@@ -336,7 +336,7 @@ type OauthClient struct {
 type Object struct {
 	ObjectID          pgtype.UUID        `json:"object_id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
-	ObjectKey         string             `json:"object_key"`
+	Collection        string             `json:"collection"`
 	Key               string             `json:"key"`
 	State             ObjectState        `json:"state"`
 	ContentType       string             `json:"content_type"`
@@ -360,9 +360,9 @@ type Object struct {
 	LegalHold         bool               `json:"legal_hold"`
 }
 
-type ObjectKey struct {
+type Collection struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
-	ObjectKey       string             `json:"object_key"`
+	Collection      string             `json:"collection"`
 	DisplayName     *string            `json:"display_name"`
 	BackendID       string             `json:"backend_id"`
 	CedarPolicy     string             `json:"cedar_policy"`
@@ -390,7 +390,7 @@ type ObjectVersion struct {
 	VersionID         pgtype.UUID        `json:"version_id"`
 	ObjectID          pgtype.UUID        `json:"object_id"`
 	IsDeleteMarker    bool               `json:"is_delete_marker"`
-	S3Key             string             `json:"s3_key"`
+	StoragePath       string             `json:"storage_path"`
 	SizeBytes         *int64             `json:"size_bytes"`
 	Etag              *string            `json:"etag"`
 	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
@@ -424,7 +424,7 @@ type PendingPurge struct {
 	ObjectID      pgtype.UUID        `json:"object_id"`
 	BackendID     string             `json:"backend_id"`
 	BucketName    string             `json:"bucket_name"`
-	ObjectKey     string             `json:"object_key"`
+	Collection    string             `json:"collection"`
 	Key           string             `json:"key"`
 	Attempts      int32              `json:"attempts"`
 	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
@@ -554,7 +554,7 @@ type TenantStorageMigration struct {
 	State                   string             `json:"state"`
 	ObjectsTotal            int64              `json:"objects_total"`
 	ObjectsCopied           int64              `json:"objects_copied"`
-	CursorObjectKey         string             `json:"cursor_object_key"`
+	CursorCollection        string             `json:"cursor_collection"`
 	CursorKey               string             `json:"cursor_key"`
 	Error                   string             `json:"error"`
 	Attempts                int32              `json:"attempts"`

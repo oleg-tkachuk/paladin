@@ -545,8 +545,8 @@ func TestClientCopyObject(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	src := object.Location{Bucket: "src-b", TenantID: testTenant, ObjectKey: "ok1", Key: "k1"}
-	dst := object.Location{Bucket: "dst-b", TenantID: testTenant, ObjectKey: "ok2", Key: "k2"}
+	src := object.Location{Bucket: "src-b", TenantID: testTenant, Collection: "ok1", Key: "k1"}
+	dst := object.Location{Bucket: "dst-b", TenantID: testTenant, Collection: "ok2", Key: "k2"}
 	if err := c.CopyObject(testCtx, src, dst); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -587,8 +587,8 @@ func TestClientCopyObjectError(t *testing.T) {
 	c := newTestClient(t, f.srv.URL)
 
 	err := c.CopyObject(testCtx,
-		object.Location{Bucket: "a", TenantID: testTenant, ObjectKey: "o", Key: "k"},
-		object.Location{Bucket: "b", TenantID: testTenant, ObjectKey: "o", Key: "k"})
+		object.Location{Bucket: "a", TenantID: testTenant, Collection: "o", Key: "k"},
+		object.Location{Bucket: "b", TenantID: testTenant, Collection: "o", Key: "k"})
 	if err == nil {
 		t.Fatal("copy of a missing source: want error")
 	}
@@ -1045,7 +1045,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 
 	t.Run("put", func(t *testing.T) {
 		url, hdrs, exp, err := c.PresignPut(testCtx, object.PresignPutArgs{
-			TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k",
+			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
 			ContentType: "text/plain", TTL: ttl,
 		})
 		if err != nil {
@@ -1060,7 +1060,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 
 	t.Run("get", func(t *testing.T) {
 		url, _, exp, err := c.PresignGet(testCtx, object.PresignGetArgs{
-			TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k",
+			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
 			TTL: ttl, ContentDisposition: `attachment; filename="r.pdf"`,
 		})
 		if err != nil {
@@ -1076,7 +1076,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 
 	t.Run("post falls back to a signed put", func(t *testing.T) {
 		url, fields, _, err := c.PresignPost(testCtx, object.PresignPostArgs{
-			TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k",
+			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
 			ContentType: "text/plain", MaxSizeBytes: 4096, TTL: ttl,
 		})
 		if err != nil {
@@ -1140,7 +1140,7 @@ func TestPresignUsesPublicEndpoint(t *testing.T) {
 	})
 
 	url, _, _, err := c.PresignGet(testCtx, object.PresignGetArgs{
-		TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k", TTL: time.Minute,
+		TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("PresignGet: %v", err)
@@ -1206,17 +1206,17 @@ func TestObjectRouterDelegatesToResolvedBackend(t *testing.T) {
 	}{
 		{"PresignPut", func() error {
 			_, _, _, err := rt.PresignPut(testCtx, object.PresignPutArgs{
-				BackendID: "primary", TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k", TTL: time.Minute})
+				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
 			return err
 		}},
 		{"PresignPost", func() error {
 			_, _, _, err := rt.PresignPost(testCtx, object.PresignPostArgs{
-				BackendID: "primary", TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k", TTL: time.Minute})
+				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
 			return err
 		}},
 		{"PresignGet", func() error {
 			_, _, _, err := rt.PresignGet(testCtx, object.PresignGetArgs{
-				BackendID: "primary", TenantID: testTenant, Bucket: "b", ObjectKey: "ok", Key: "k", TTL: time.Minute})
+				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
 			return err
 		}},
 	} {
@@ -1231,8 +1231,8 @@ func TestObjectRouterSameBackendCopyStaysServerSide(t *testing.T) {
 	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
 	rt := NewObjectRouter(reg)
 
-	src := object.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, ObjectKey: "o1", Key: "k1"}
-	dst := object.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, ObjectKey: "o2", Key: "k2"}
+	src := object.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, Collection: "o1", Key: "k1"}
+	dst := object.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, Collection: "o2", Key: "k2"}
 	if err := rt.CopyObject(testCtx, src, dst); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -1261,8 +1261,8 @@ func TestObjectRouterCrossBackendStreamsThrough(t *testing.T) {
 	})
 	rt := NewObjectRouter(reg)
 
-	src := object.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, ObjectKey: "o1", Key: "k1"}
-	dst := object.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, ObjectKey: "o2", Key: "k2"}
+	src := object.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, Collection: "o1", Key: "k1"}
+	dst := object.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, Collection: "o2", Key: "k2"}
 	if err := rt.CopyObject(testCtx, src, dst); err != nil {
 		t.Fatalf("cross-backend CopyObject: %v", err)
 	}
@@ -1291,8 +1291,8 @@ func TestObjectRouterStreamThroughErrors(t *testing.T) {
 		"src": newTestClient(t, fSrc.srv.URL),
 		"dst": newTestClient(t, fDst.srv.URL),
 	}
-	src := object.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, ObjectKey: "o", Key: "k"}
-	dst := object.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, ObjectKey: "o", Key: "k"}
+	src := object.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, Collection: "o", Key: "k"}
+	dst := object.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, Collection: "o", Key: "k"}
 
 	t.Run("unknown source backend", func(t *testing.T) {
 		rt := NewObjectRouter(registryWith(map[string]*Client{"dst": good["dst"]}))

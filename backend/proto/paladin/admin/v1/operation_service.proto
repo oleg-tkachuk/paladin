@@ -13,7 +13,7 @@ import "paladin/common/v1/pagination.proto";
 // OperationService exposes long-running operations on the admin plane.
 // Mirrors the data-plane OperationService (read access there is restricted
 // to operations the caller initiated; admin sees all).
-service OperationService {
+service PlatformOperationService {
   rpc GetOperation(GetOperationRequest) returns (Operation);
   rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
   rpc CancelOperation(CancelOperationRequest) returns (Operation);

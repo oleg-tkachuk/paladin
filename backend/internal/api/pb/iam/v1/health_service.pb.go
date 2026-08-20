@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: paladin/iam/v1/system_service.proto
+// source: paladin/iam/v1/health_service.proto
 
 package paladiniamv1
 
@@ -62,11 +62,11 @@ func (x ComponentStatus) String() string {
 }
 
 func (ComponentStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_paladin_iam_v1_system_service_proto_enumTypes[0].Descriptor()
+	return file_paladin_iam_v1_health_service_proto_enumTypes[0].Descriptor()
 }
 
 func (ComponentStatus) Type() protoreflect.EnumType {
-	return &file_paladin_iam_v1_system_service_proto_enumTypes[0]
+	return &file_paladin_iam_v1_health_service_proto_enumTypes[0]
 }
 
 func (x ComponentStatus) Number() protoreflect.EnumNumber {
@@ -75,7 +75,7 @@ func (x ComponentStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentStatus.Descriptor instead.
 func (ComponentStatus) EnumDescriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_system_service_proto_rawDescGZIP(), []int{0}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{0}
 }
 
 type GetVersionRequest struct {
@@ -86,7 +86,7 @@ type GetVersionRequest struct {
 
 func (x *GetVersionRequest) Reset() {
 	*x = GetVersionRequest{}
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[0]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -98,7 +98,7 @@ func (x *GetVersionRequest) String() string {
 func (*GetVersionRequest) ProtoMessage() {}
 
 func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[0]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -111,7 +111,7 @@ func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetVersionRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_system_service_proto_rawDescGZIP(), []int{0}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{0}
 }
 
 type VersionInfo struct {
@@ -131,7 +131,7 @@ type VersionInfo struct {
 
 func (x *VersionInfo) Reset() {
 	*x = VersionInfo{}
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[1]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -143,7 +143,7 @@ func (x *VersionInfo) String() string {
 func (*VersionInfo) ProtoMessage() {}
 
 func (x *VersionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[1]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -156,7 +156,7 @@ func (x *VersionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionInfo.ProtoReflect.Descriptor instead.
 func (*VersionInfo) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_system_service_proto_rawDescGZIP(), []int{1}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *VersionInfo) GetVersion() string {
@@ -195,7 +195,7 @@ type GetHealthRequest struct {
 
 func (x *GetHealthRequest) Reset() {
 	*x = GetHealthRequest{}
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[2]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +207,7 @@ func (x *GetHealthRequest) String() string {
 func (*GetHealthRequest) ProtoMessage() {}
 
 func (x *GetHealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[2]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +220,7 @@ func (x *GetHealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHealthRequest.ProtoReflect.Descriptor instead.
 func (*GetHealthRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_system_service_proto_rawDescGZIP(), []int{2}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{2}
 }
 
 type ComponentHealth struct {
@@ -253,7 +253,7 @@ type ComponentHealth struct {
 
 func (x *ComponentHealth) Reset() {
 	*x = ComponentHealth{}
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[3]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -265,7 +265,7 @@ func (x *ComponentHealth) String() string {
 func (*ComponentHealth) ProtoMessage() {}
 
 func (x *ComponentHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[3]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -278,7 +278,7 @@ func (x *ComponentHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentHealth.ProtoReflect.Descriptor instead.
 func (*ComponentHealth) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_system_service_proto_rawDescGZIP(), []int{3}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ComponentHealth) GetName() string {
@@ -340,7 +340,7 @@ type HealthInfo struct {
 
 func (x *HealthInfo) Reset() {
 	*x = HealthInfo{}
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[4]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +352,7 @@ func (x *HealthInfo) String() string {
 func (*HealthInfo) ProtoMessage() {}
 
 func (x *HealthInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_system_service_proto_msgTypes[4]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +365,7 @@ func (x *HealthInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthInfo.ProtoReflect.Descriptor instead.
 func (*HealthInfo) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_system_service_proto_rawDescGZIP(), []int{4}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *HealthInfo) GetStatus() ComponentStatus {
@@ -389,11 +389,11 @@ func (x *HealthInfo) GetRole() string {
 	return ""
 }
 
-var File_paladin_iam_v1_system_service_proto protoreflect.FileDescriptor
+var File_paladin_iam_v1_health_service_proto protoreflect.FileDescriptor
 
-const file_paladin_iam_v1_system_service_proto_rawDesc = "" +
+const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\n" +
-	"\"paladin/iam/v1/system_service.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x13\n" +
+	"\"paladin/iam/v1/health_service.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x13\n" +
 	"\x11GetVersionRequest\"\x99\x01\n" +
 	"\vVersionInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
@@ -423,26 +423,26 @@ const file_paladin_iam_v1_system_service_proto_rawDesc = "" +
 	"\x18COMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n" +
 	"\x19COMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n" +
 	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x032\xa4\x01\n" +
-	"\rSystemService\x12J\n" +
+	"\rHealthService\x12J\n" +
 	"\n" +
 	"GetVersion\x12 .paladin.iam.v1.GetVersionRequest\x1a\x1a.paladin.iam.v1.VersionInfo\x12G\n" +
 	"\tGetHealth\x12\x1f.paladin.iam.v1.GetHealthRequest\x1a\x19.paladin.iam.v1.HealthInfoBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
-	file_paladin_iam_v1_system_service_proto_rawDescOnce sync.Once
-	file_paladin_iam_v1_system_service_proto_rawDescData []byte
+	file_paladin_iam_v1_health_service_proto_rawDescOnce sync.Once
+	file_paladin_iam_v1_health_service_proto_rawDescData []byte
 )
 
-func file_paladin_iam_v1_system_service_proto_rawDescGZIP() []byte {
-	file_paladin_iam_v1_system_service_proto_rawDescOnce.Do(func() {
-		file_paladin_iam_v1_system_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_system_service_proto_rawDesc), len(file_paladin_iam_v1_system_service_proto_rawDesc)))
+func file_paladin_iam_v1_health_service_proto_rawDescGZIP() []byte {
+	file_paladin_iam_v1_health_service_proto_rawDescOnce.Do(func() {
+		file_paladin_iam_v1_health_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_health_service_proto_rawDesc), len(file_paladin_iam_v1_health_service_proto_rawDesc)))
 	})
-	return file_paladin_iam_v1_system_service_proto_rawDescData
+	return file_paladin_iam_v1_health_service_proto_rawDescData
 }
 
-var file_paladin_iam_v1_system_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_iam_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
-var file_paladin_iam_v1_system_service_proto_goTypes = []any{
+var file_paladin_iam_v1_health_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_paladin_iam_v1_health_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_paladin_iam_v1_health_service_proto_goTypes = []any{
 	(ComponentStatus)(0),          // 0: paladin.iam.v1.ComponentStatus
 	(*GetVersionRequest)(nil),     // 1: paladin.iam.v1.GetVersionRequest
 	(*VersionInfo)(nil),           // 2: paladin.iam.v1.VersionInfo
@@ -451,15 +451,15 @@ var file_paladin_iam_v1_system_service_proto_goTypes = []any{
 	(*HealthInfo)(nil),            // 5: paladin.iam.v1.HealthInfo
 	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 }
-var file_paladin_iam_v1_system_service_proto_depIdxs = []int32{
+var file_paladin_iam_v1_health_service_proto_depIdxs = []int32{
 	6, // 0: paladin.iam.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
 	0, // 1: paladin.iam.v1.ComponentHealth.status:type_name -> paladin.iam.v1.ComponentStatus
 	0, // 2: paladin.iam.v1.HealthInfo.status:type_name -> paladin.iam.v1.ComponentStatus
 	4, // 3: paladin.iam.v1.HealthInfo.components:type_name -> paladin.iam.v1.ComponentHealth
-	1, // 4: paladin.iam.v1.SystemService.GetVersion:input_type -> paladin.iam.v1.GetVersionRequest
-	3, // 5: paladin.iam.v1.SystemService.GetHealth:input_type -> paladin.iam.v1.GetHealthRequest
-	2, // 6: paladin.iam.v1.SystemService.GetVersion:output_type -> paladin.iam.v1.VersionInfo
-	5, // 7: paladin.iam.v1.SystemService.GetHealth:output_type -> paladin.iam.v1.HealthInfo
+	1, // 4: paladin.iam.v1.HealthService.GetVersion:input_type -> paladin.iam.v1.GetVersionRequest
+	3, // 5: paladin.iam.v1.HealthService.GetHealth:input_type -> paladin.iam.v1.GetHealthRequest
+	2, // 6: paladin.iam.v1.HealthService.GetVersion:output_type -> paladin.iam.v1.VersionInfo
+	5, // 7: paladin.iam.v1.HealthService.GetHealth:output_type -> paladin.iam.v1.HealthInfo
 	6, // [6:8] is the sub-list for method output_type
 	4, // [4:6] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -467,27 +467,27 @@ var file_paladin_iam_v1_system_service_proto_depIdxs = []int32{
 	0, // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_paladin_iam_v1_system_service_proto_init() }
-func file_paladin_iam_v1_system_service_proto_init() {
-	if File_paladin_iam_v1_system_service_proto != nil {
+func init() { file_paladin_iam_v1_health_service_proto_init() }
+func file_paladin_iam_v1_health_service_proto_init() {
+	if File_paladin_iam_v1_health_service_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_system_service_proto_rawDesc), len(file_paladin_iam_v1_system_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_health_service_proto_rawDesc), len(file_paladin_iam_v1_health_service_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_paladin_iam_v1_system_service_proto_goTypes,
-		DependencyIndexes: file_paladin_iam_v1_system_service_proto_depIdxs,
-		EnumInfos:         file_paladin_iam_v1_system_service_proto_enumTypes,
-		MessageInfos:      file_paladin_iam_v1_system_service_proto_msgTypes,
+		GoTypes:           file_paladin_iam_v1_health_service_proto_goTypes,
+		DependencyIndexes: file_paladin_iam_v1_health_service_proto_depIdxs,
+		EnumInfos:         file_paladin_iam_v1_health_service_proto_enumTypes,
+		MessageInfos:      file_paladin_iam_v1_health_service_proto_msgTypes,
 	}.Build()
-	File_paladin_iam_v1_system_service_proto = out.File
-	file_paladin_iam_v1_system_service_proto_goTypes = nil
-	file_paladin_iam_v1_system_service_proto_depIdxs = nil
+	File_paladin_iam_v1_health_service_proto = out.File
+	file_paladin_iam_v1_health_service_proto_goTypes = nil
+	file_paladin_iam_v1_health_service_proto_depIdxs = nil
 }

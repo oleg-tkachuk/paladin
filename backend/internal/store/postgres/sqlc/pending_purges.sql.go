@@ -37,27 +37,27 @@ func (q *Queries) DeletePendingPurge(ctx context.Context, purgeID pgtype.UUID) (
 const insertPendingPurge = `-- name: InsertPendingPurge :exec
 
 INSERT INTO pending_purges (
-    purge_id, tenant_id, object_id, backend_id, bucket_name, object_key, key
+    purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 // Purge debt: the retry handle for bytes whose DB row is already gone.
 // See migrations/069_pending_purges.sql for why this table exists.
-func (q *Queries) InsertPendingPurge(ctx context.Context, purgeID pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, backendID string, bucketName string, objectKey string, key string) error {
+func (q *Queries) InsertPendingPurge(ctx context.Context, purgeID pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, backendID string, bucketName string, collection string, key string) error {
 	_, err := q.db.Exec(ctx, insertPendingPurge,
 		purgeID,
 		tenantID,
 		objectID,
 		backendID,
 		bucketName,
-		objectKey,
+		collection,
 		key,
 	)
 	return err
 }
 
 const listDuePurges = `-- name: ListDuePurges :many
-SELECT purge_id, tenant_id, object_id, backend_id, bucket_name, object_key, key, attempts
+SELECT purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key, attempts
   FROM pending_purges
  WHERE next_attempt_at <= now()
  ORDER BY next_attempt_at
@@ -71,7 +71,7 @@ type ListDuePurgesRow struct {
 	ObjectID   pgtype.UUID `json:"object_id"`
 	BackendID  string      `json:"backend_id"`
 	BucketName string      `json:"bucket_name"`
-	ObjectKey  string      `json:"object_key"`
+	Collection string      `json:"collection"`
 	Key        string      `json:"key"`
 	Attempts   int32       `json:"attempts"`
 }
@@ -94,7 +94,7 @@ func (q *Queries) ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurg
 			&i.ObjectID,
 			&i.BackendID,
 			&i.BucketName,
-			&i.ObjectKey,
+			&i.Collection,
 			&i.Key,
 			&i.Attempts,
 		); err != nil {

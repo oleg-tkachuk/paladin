@@ -386,7 +386,7 @@ func (x *GetEffectivePolicyRequest) GetResourceName() string {
 
 type GetEffectivePolicyResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Concatenated cedar text in evaluation order: tenant → bucket → object_key.
+	// Concatenated cedar text in evaluation order: tenant → bucket → collection.
 	MergedCedarPolicy string         `protobuf:"bytes,1,opt,name=merged_cedar_policy,json=mergedCedarPolicy,proto3" json:"merged_cedar_policy,omitempty"`
 	Layers            []*PolicyLayer `protobuf:"bytes,2,rep,name=layers,proto3" json:"layers,omitempty"`
 	unknownFields     protoimpl.UnknownFields

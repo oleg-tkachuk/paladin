@@ -91,7 +91,7 @@ func scopeTypeProto(t auth.ScopeType) commonpb.ScopeType {
 		return commonpb.ScopeType_SCOPE_TYPE_BACKEND
 	case auth.ScopeBucket:
 		return commonpb.ScopeType_SCOPE_TYPE_BUCKET
-	case auth.ScopeObjectKey:
+	case auth.ScopeCollection:
 		return commonpb.ScopeType_SCOPE_TYPE_OBJECT_KEY
 	}
 	return commonpb.ScopeType_SCOPE_TYPE_UNSPECIFIED
@@ -106,7 +106,7 @@ func scopeTypeFromProto(t commonpb.ScopeType) auth.ScopeType {
 	case commonpb.ScopeType_SCOPE_TYPE_BUCKET:
 		return auth.ScopeBucket
 	case commonpb.ScopeType_SCOPE_TYPE_OBJECT_KEY:
-		return auth.ScopeObjectKey
+		return auth.ScopeCollection
 	}
 	return auth.ScopeType("")
 }

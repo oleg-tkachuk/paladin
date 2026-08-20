@@ -83,12 +83,12 @@ func (ObjectState) EnumDescriptor() ([]byte, []int) {
 // `view.physical_storage` role (set in JWT claims).
 type Object struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}/objects/{object_id}".
-	Name      string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ObjectId  string `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	TenantId  string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	ObjectKey string `protobuf:"bytes,4,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
-	// Storage path inside the object_key.
+	// Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}/objects/{object_id}".
+	Name       string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ObjectId   string `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	TenantId   string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Collection string `protobuf:"bytes,4,opt,name=collection,proto3" json:"collection,omitempty"`
+	// Storage path inside the collection.
 	Key         string            `protobuf:"bytes,5,opt,name=key,proto3" json:"key,omitempty"`
 	State       ObjectState       `protobuf:"varint,6,opt,name=state,proto3,enum=paladin.data.v1.ObjectState" json:"state,omitempty"`
 	ContentType string            `protobuf:"bytes,7,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
@@ -165,9 +165,9 @@ func (x *Object) GetTenantId() string {
 	return ""
 }
 
-func (x *Object) GetObjectKey() string {
+func (x *Object) GetCollection() string {
 	if x != nil {
-		return x.ObjectKey
+		return x.Collection
 	}
 	return ""
 }
@@ -413,8 +413,8 @@ func (x *ObjectLockState) GetLegalHold() bool {
 type PhysicalPlacement struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BackendId     string                 `protobuf:"bytes,1,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
-	BucketName    string                 `protobuf:"bytes,2,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
-	S3Key         string                 `protobuf:"bytes,3,opt,name=s3_key,json=s3Key,proto3" json:"s3_key,omitempty"` // composed: "<tenant>/<object_key>/<key>"
+	BucketId      string                 `protobuf:"bytes,2,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
+	StoragePath   string                 `protobuf:"bytes,3,opt,name=storage_path,json=storagePath,proto3" json:"storage_path,omitempty"` // composed: "<tenant>/<collection>/<key>"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -456,16 +456,16 @@ func (x *PhysicalPlacement) GetBackendId() string {
 	return ""
 }
 
-func (x *PhysicalPlacement) GetBucketName() string {
+func (x *PhysicalPlacement) GetBucketId() string {
 	if x != nil {
-		return x.BucketName
+		return x.BucketId
 	}
 	return ""
 }
 
-func (x *PhysicalPlacement) GetS3Key() string {
+func (x *PhysicalPlacement) GetStoragePath() string {
 	if x != nil {
-		return x.S3Key
+		return x.StoragePath
 	}
 	return ""
 }
@@ -603,13 +603,14 @@ var File_paladin_data_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1alegate/data/v1/types.proto\x12\x0elegate.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdc\b\n" +
+	"\x1alegate/data/v1/types.proto\x12\x0elegate.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\b\n" +
 	"\x06Object\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x1b\n" +
-	"\ttenant_id\x18\x03 \x01(\tR\btenantId\x12\x1d\n" +
+	"\ttenant_id\x18\x03 \x01(\tR\btenantId\x12\x1e\n" +
 	"\n" +
-	"object_key\x18\x04 \x01(\tR\tobjectKey\x12\x10\n" +
+	"collection\x18\x04 \x01(\tR\n" +
+	"collection\x12\x10\n" +
 	"\x03key\x18\x05 \x01(\tR\x03key\x121\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x1b.paladin.data.v1.ObjectStateR\x05state\x12!\n" +
 	"\fcontent_type\x18\a \x01(\tR\vcontentType\x12\x1d\n" +
@@ -645,13 +646,12 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12=\n" +
 	"\fretain_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vretainUntil\x12\x1d\n" +
 	"\n" +
-	"legal_hold\x18\x03 \x01(\bR\tlegalHold\"j\n" +
+	"legal_hold\x18\x03 \x01(\bR\tlegalHold\"r\n" +
 	"\x11PhysicalPlacement\x12\x1d\n" +
 	"\n" +
-	"backend_id\x18\x01 \x01(\tR\tbackendId\x12\x1f\n" +
-	"\vbucket_name\x18\x02 \x01(\tR\n" +
-	"bucketName\x12\x15\n" +
-	"\x06s3_key\x18\x03 \x01(\tR\x05s3Key\"k\n" +
+	"backend_id\x18\x01 \x01(\tR\tbackendId\x12\x1b\n" +
+	"\tbucket_id\x18\x02 \x01(\tR\bbucketId\x12!\n" +
+	"\fstorage_path\x18\x03 \x01(\tR\vstoragePath\"k\n" +
 	"\rCompletedPart\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x12\n" +

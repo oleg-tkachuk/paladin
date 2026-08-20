@@ -368,18 +368,18 @@ func (*GetPlatformStatsRequest) Descriptor() ([]byte, []int) {
 
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
 // data source: the inventory fields come from the admin pod's own pool
-// (tenants / storage_backends / buckets / object_keys / users are
+// (tenants / storage_backends / buckets / collections / users are
 // deliberately NOT RLS'd — migration 023 — precisely so platform-admin
 // reads span tenants). Everything under `rls` covers tables that ARE
 // row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
 // endpoint and degrades to rls.available=false.
 type GetPlatformStatsResponse struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Tenants    *TenantStats           `protobuf:"bytes,1,opt,name=tenants,proto3" json:"tenants,omitempty"`
-	Backends   *BackendStats          `protobuf:"bytes,2,opt,name=backends,proto3" json:"backends,omitempty"`
-	Buckets    *BucketStats           `protobuf:"bytes,3,opt,name=buckets,proto3" json:"buckets,omitempty"`
-	ObjectKeys *ObjectKeyStats        `protobuf:"bytes,4,opt,name=object_keys,json=objectKeys,proto3" json:"object_keys,omitempty"`
-	Users      *UserStats             `protobuf:"bytes,5,opt,name=users,proto3" json:"users,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Tenants     *TenantStats           `protobuf:"bytes,1,opt,name=tenants,proto3" json:"tenants,omitempty"`
+	Backends    *BackendStats          `protobuf:"bytes,2,opt,name=backends,proto3" json:"backends,omitempty"`
+	Buckets     *BucketStats           `protobuf:"bytes,3,opt,name=buckets,proto3" json:"buckets,omitempty"`
+	Collections *CollectionStats       `protobuf:"bytes,4,opt,name=collections,proto3" json:"collections,omitempty"`
+	Users       *UserStats             `protobuf:"bytes,5,opt,name=users,proto3" json:"users,omitempty"`
 	// Server clock at collection time — the console renders it as
 	// "as of …" rather than trusting the browser's tab age.
 	CollectedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=collected_at,json=collectedAt,proto3" json:"collected_at,omitempty"`
@@ -442,9 +442,9 @@ func (x *GetPlatformStatsResponse) GetBuckets() *BucketStats {
 	return nil
 }
 
-func (x *GetPlatformStatsResponse) GetObjectKeys() *ObjectKeyStats {
+func (x *GetPlatformStatsResponse) GetCollections() *CollectionStats {
 	if x != nil {
-		return x.ObjectKeys
+		return x.Collections
 	}
 	return nil
 }
@@ -574,7 +574,7 @@ type QuotaStats struct {
 	Total int64                  `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`
 	// Scope split; the CHECK on `quotas` makes these exclusive and
 	// exhaustive (tenant-scoped rows carry tenant_id, bucket-scoped rows
-	// carry backend_id + bucket_name).
+	// carry backend_id + bucket_id).
 	TenantScoped int64 `protobuf:"varint,2,opt,name=tenant_scoped,json=tenantScoped,proto3" json:"tenant_scoped,omitempty"`
 	BucketScoped int64 `protobuf:"varint,3,opt,name=bucket_scoped,json=bucketScoped,proto3" json:"bucket_scoped,omitempty"`
 	// Rows with at least one non-zero cap. All-zero caps = usage tracking
@@ -959,7 +959,7 @@ type TenantStats struct {
 	SharedLayout    int64 `protobuf:"varint,4,opt,name=shared_layout,json=sharedLayout,proto3" json:"shared_layout,omitempty"`
 	DedicatedLayout int64 `protobuf:"varint,5,opt,name=dedicated_layout,json=dedicatedLayout,proto3" json:"dedicated_layout,omitempty"`
 	// Active tenants with no row in tenant_default_bindings — they can't
-	// accept an ObjectKey bind without an explicit backend/bucket.
+	// accept an Collection bind without an explicit backend/bucket.
 	WithoutDefaultBinding int64 `protobuf:"varint,6,opt,name=without_default_binding,json=withoutDefaultBinding,proto3" json:"without_default_binding,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
@@ -1229,32 +1229,32 @@ func (x *BucketStats) GetReplicationEnabled() int64 {
 	return 0
 }
 
-type ObjectKeyStats struct {
+type CollectionStats struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Total int64                  `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`
 	// backend_id → count.
 	ByBackend map[string]int64 `protobuf:"bytes,2,rep,name=by_backend,json=byBackend,proto3" json:"by_backend,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	// ObjectKeys whose bucket_name is NULL — bound to a backend but not
+	// Collections whose bucket_id is NULL — bound to a backend but not
 	// yet to a physical bucket.
 	Unbound       int64 `protobuf:"varint,3,opt,name=unbound,proto3" json:"unbound,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ObjectKeyStats) Reset() {
-	*x = ObjectKeyStats{}
+func (x *CollectionStats) Reset() {
+	*x = CollectionStats{}
 	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ObjectKeyStats) String() string {
+func (x *CollectionStats) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ObjectKeyStats) ProtoMessage() {}
+func (*CollectionStats) ProtoMessage() {}
 
-func (x *ObjectKeyStats) ProtoReflect() protoreflect.Message {
+func (x *CollectionStats) ProtoReflect() protoreflect.Message {
 	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1266,26 +1266,26 @@ func (x *ObjectKeyStats) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ObjectKeyStats.ProtoReflect.Descriptor instead.
-func (*ObjectKeyStats) Descriptor() ([]byte, []int) {
+// Deprecated: Use CollectionStats.ProtoReflect.Descriptor instead.
+func (*CollectionStats) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *ObjectKeyStats) GetTotal() int64 {
+func (x *CollectionStats) GetTotal() int64 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ObjectKeyStats) GetByBackend() map[string]int64 {
+func (x *CollectionStats) GetByBackend() map[string]int64 {
 	if x != nil {
 		return x.ByBackend
 	}
 	return nil
 }
 
-func (x *ObjectKeyStats) GetUnbound() int64 {
+func (x *CollectionStats) GetUnbound() int64 {
 	if x != nil {
 		return x.Unbound
 	}
@@ -1602,13 +1602,12 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"last_error\x18\x05 \x01(\tR\tlastError\x12(\n" +
 	"\x10last_status_code\x18\x06 \x01(\x05R\x0elastStatusCode\x12&\n" +
 	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\"\x19\n" +
-	"\x17GetPlatformStatsRequest\"\xb4\x03\n" +
+	"\x17GetPlatformStatsRequest\"\xb6\x03\n" +
 	"\x18GetPlatformStatsResponse\x126\n" +
 	"\atenants\x18\x01 \x01(\v2\x1c.paladin.admin.v1.TenantStatsR\atenants\x129\n" +
 	"\bbackends\x18\x02 \x01(\v2\x1d.paladin.admin.v1.BackendStatsR\bbackends\x126\n" +
-	"\abuckets\x18\x03 \x01(\v2\x1c.paladin.admin.v1.BucketStatsR\abuckets\x12@\n" +
-	"\vobject_keys\x18\x04 \x01(\v2\x1f.paladin.admin.v1.ObjectKeyStatsR\n" +
-	"objectKeys\x120\n" +
+	"\abuckets\x18\x03 \x01(\v2\x1c.paladin.admin.v1.BucketStatsR\abuckets\x12B\n" +
+	"\vcollections\x18\x04 \x01(\v2 .paladin.admin.v1.CollectionStatsR\vcollections\x120\n" +
 	"\x05users\x18\x05 \x01(\v2\x1a.paladin.admin.v1.UserStatsR\x05users\x12=\n" +
 	"\fcollected_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12+\n" +
 	"\x03rls\x18\b \x01(\v2\x19.paladin.admin.v1.RLSStatsR\x03rlsJ\x04\b\x06\x10\aR\aobjects\"\xe4\x02\n" +
@@ -1694,11 +1693,11 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a<\n" +
 	"\x0eByBackendEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xcd\x01\n" +
-	"\x0eObjectKeyStats\x12\x14\n" +
-	"\x05total\x18\x01 \x01(\x03R\x05total\x12M\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xcf\x01\n" +
+	"\x0fCollectionStats\x12\x14\n" +
+	"\x05total\x18\x01 \x01(\x03R\x05total\x12N\n" +
 	"\n" +
-	"by_backend\x18\x02 \x03(\v2..paladin.admin.v1.ObjectKeyStats.ByBackendEntryR\tbyBackend\x12\x18\n" +
+	"by_backend\x18\x02 \x03(\v2/.paladin.admin.v1.CollectionStats.ByBackendEntryR\tbyBackend\x12\x18\n" +
 	"\aunbound\x18\x03 \x01(\x03R\aunbound\x1a<\n" +
 	"\x0eByBackendEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1761,7 +1760,7 @@ var file_paladin_admin_v1_system_service_proto_goTypes = []any{
 	(*TenantStats)(nil),                // 12: paladin.admin.v1.TenantStats
 	(*BackendStats)(nil),               // 13: paladin.admin.v1.BackendStats
 	(*BucketStats)(nil),                // 14: paladin.admin.v1.BucketStats
-	(*ObjectKeyStats)(nil),             // 15: paladin.admin.v1.ObjectKeyStats
+	(*CollectionStats)(nil),            // 15: paladin.admin.v1.CollectionStats
 	(*UserStats)(nil),                  // 16: paladin.admin.v1.UserStats
 	(*ObjectStateStat)(nil),            // 17: paladin.admin.v1.ObjectStateStat
 	(*TenantObjectStats)(nil),          // 18: paladin.admin.v1.TenantObjectStats
@@ -1771,7 +1770,7 @@ var file_paladin_admin_v1_system_service_proto_goTypes = []any{
 	nil,                                // 22: paladin.admin.v1.BackendStats.ByKindEntry
 	nil,                                // 23: paladin.admin.v1.BucketStats.ByProvisionStateEntry
 	nil,                                // 24: paladin.admin.v1.BucketStats.ByBackendEntry
-	nil,                                // 25: paladin.admin.v1.ObjectKeyStats.ByBackendEntry
+	nil,                                // 25: paladin.admin.v1.CollectionStats.ByBackendEntry
 	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_system_service_proto_depIdxs = []int32{
@@ -1779,7 +1778,7 @@ var file_paladin_admin_v1_system_service_proto_depIdxs = []int32{
 	12, // 1: paladin.admin.v1.GetPlatformStatsResponse.tenants:type_name -> paladin.admin.v1.TenantStats
 	13, // 2: paladin.admin.v1.GetPlatformStatsResponse.backends:type_name -> paladin.admin.v1.BackendStats
 	14, // 3: paladin.admin.v1.GetPlatformStatsResponse.buckets:type_name -> paladin.admin.v1.BucketStats
-	15, // 4: paladin.admin.v1.GetPlatformStatsResponse.object_keys:type_name -> paladin.admin.v1.ObjectKeyStats
+	15, // 4: paladin.admin.v1.GetPlatformStatsResponse.collections:type_name -> paladin.admin.v1.CollectionStats
 	16, // 5: paladin.admin.v1.GetPlatformStatsResponse.users:type_name -> paladin.admin.v1.UserStats
 	26, // 6: paladin.admin.v1.GetPlatformStatsResponse.collected_at:type_name -> google.protobuf.Timestamp
 	7,  // 7: paladin.admin.v1.GetPlatformStatsResponse.rls:type_name -> paladin.admin.v1.RLSStats
@@ -1793,7 +1792,7 @@ var file_paladin_admin_v1_system_service_proto_depIdxs = []int32{
 	22, // 15: paladin.admin.v1.BackendStats.by_kind:type_name -> paladin.admin.v1.BackendStats.ByKindEntry
 	23, // 16: paladin.admin.v1.BucketStats.by_provision_state:type_name -> paladin.admin.v1.BucketStats.ByProvisionStateEntry
 	24, // 17: paladin.admin.v1.BucketStats.by_backend:type_name -> paladin.admin.v1.BucketStats.ByBackendEntry
-	25, // 18: paladin.admin.v1.ObjectKeyStats.by_backend:type_name -> paladin.admin.v1.ObjectKeyStats.ByBackendEntry
+	25, // 18: paladin.admin.v1.CollectionStats.by_backend:type_name -> paladin.admin.v1.CollectionStats.ByBackendEntry
 	17, // 19: paladin.admin.v1.TenantObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
 	17, // 20: paladin.admin.v1.ObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
 	18, // 21: paladin.admin.v1.ObjectStats.tenants:type_name -> paladin.admin.v1.TenantObjectStats

@@ -37,15 +37,15 @@ func (f *fakeSubmitter) Submit(_ context.Context, opType string, metadata []byte
 // scope check. byKey overrides per object-key; unset keys fall back to a
 // fixed default so tests that don't care get a stable binding.
 type fakeBuckets struct {
-	byKey map[string][2]string // objectKey -> {backendID, bucket}
+	byKey map[string][2]string // collection -> {backendID, bucket}
 	err   error
 }
 
-func (f fakeBuckets) LookupBucket(_ context.Context, _ uuid.UUID, objectKey string, _ bool) (string, string, error) {
+func (f fakeBuckets) LookupBucket(_ context.Context, _ uuid.UUID, collection string, _ bool) (string, string, error) {
 	if f.err != nil {
 		return "", "", f.err
 	}
-	if v, ok := f.byKey[objectKey]; ok {
+	if v, ok := f.byKey[collection]; ok {
 		return v[0], v[1], nil
 	}
 	return "backend-def", "bucket-def", nil
@@ -172,13 +172,13 @@ func TestBatchDelete(t *testing.T) {
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		h := newHandler(&fakeSubmitter{}, denyAction(cedar.ActionDeleteObject))
-		_, err := h.BatchDelete(authedCtx(tid), BatchDeleteArgs{ObjectIDs: ids(1), ObjectKey: "docs"})
+		_, err := h.BatchDelete(authedCtx(tid), BatchDeleteArgs{ObjectIDs: ids(1), Collection: "docs"})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy engine error → internal", func(t *testing.T) {
 		h := newHandler(&fakeSubmitter{}, engineErr())
-		_, err := h.BatchDelete(authedCtx(tid), BatchDeleteArgs{ObjectIDs: ids(1), ObjectKey: "docs"})
+		_, err := h.BatchDelete(authedCtx(tid), BatchDeleteArgs{ObjectIDs: ids(1), Collection: "docs"})
 		wantCode(t, err, connect.CodeInternal)
 	})
 
@@ -195,9 +195,9 @@ func TestBatchDelete(t *testing.T) {
 		az := allowAll()
 		objs := ids(3)
 		got, err := newHandler(sub, az).BatchDelete(authedCtx(tid), BatchDeleteArgs{
-			ObjectKey: "docs",
-			ObjectIDs: objs,
-			TenantID:  uuid.New(), // must be overwritten by ctx tenant
+			Collection: "docs",
+			ObjectIDs:  objs,
+			TenantID:   uuid.New(), // must be overwritten by ctx tenant
 		})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -215,7 +215,7 @@ func TestBatchDelete(t *testing.T) {
 		if md.TenantID != tid {
 			t.Fatalf("tenant not stamped from ctx: got %v want %v", md.TenantID, tid)
 		}
-		if md.ObjectKey != "docs" || len(md.ObjectIDs) != 3 || md.ObjectIDs[0] != objs[0] {
+		if md.Collection != "docs" || len(md.ObjectIDs) != 3 || md.ObjectIDs[0] != objs[0] {
 			t.Fatalf("metadata mismatch: %+v", md)
 		}
 		if len(az.actions) != 1 || az.actions[0] != cedar.ActionDeleteObject {
@@ -267,7 +267,7 @@ func TestBatchCopy(t *testing.T) {
 	t.Run("source copy denied → permission denied", func(t *testing.T) {
 		az := denyAction(cedar.ActionCopyObject)
 		h := newHandler(&fakeSubmitter{}, az)
-		_, err := h.BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcObjectKey: "src", DstObjectKey: "dst"})
+		_, err := h.BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst"})
 		wantCode(t, err, connect.CodePermissionDenied)
 		// Source is checked first; destination check must not run.
 		if len(az.actions) != 1 || az.actions[0] != cedar.ActionCopyObject {
@@ -279,7 +279,7 @@ func TestBatchCopy(t *testing.T) {
 		az := denyAction(cedar.ActionPutObject)
 		sub := &fakeSubmitter{}
 		h := newHandler(sub, az)
-		_, err := h.BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcObjectKey: "src", DstObjectKey: "dst"})
+		_, err := h.BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst"})
 		wantCode(t, err, connect.CodePermissionDenied)
 		// Both actions evaluated, in order, before the deny.
 		if len(az.actions) != 2 || az.actions[0] != cedar.ActionCopyObject || az.actions[1] != cedar.ActionPutObject {
@@ -295,10 +295,10 @@ func TestBatchCopy(t *testing.T) {
 		sub := &fakeSubmitter{id: opID}
 		objs := ids(2)
 		got, err := newHandler(sub, allowAll()).BatchCopy(authedCtx(tid), BatchCopyArgs{
-			SrcObjectKey: "src",
-			DstObjectKey: "dst",
-			KeyPrefix:    "archive/",
-			ObjectIDs:    objs,
+			SrcCollection: "src",
+			DstCollection: "dst",
+			KeyPrefix:     "archive/",
+			ObjectIDs:     objs,
 		})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -313,7 +313,7 @@ func TestBatchCopy(t *testing.T) {
 		if md.TenantID != tid {
 			t.Fatalf("tenant not stamped: got %v want %v", md.TenantID, tid)
 		}
-		if md.SrcObjectKey != "src" || md.DstObjectKey != "dst" || md.KeyPrefix != "archive/" {
+		if md.SrcCollection != "src" || md.DstCollection != "dst" || md.KeyPrefix != "archive/" {
 			t.Fatalf("metadata mismatch: %+v", md)
 		}
 		if len(md.ObjectIDs) != 2 || md.ObjectIDs[1] != objs[1] {
@@ -346,7 +346,7 @@ func TestBatchUpdateTags(t *testing.T) {
 
 	t.Run("policy denies UpdateObject → permission denied", func(t *testing.T) {
 		h := newHandler(&fakeSubmitter{}, denyAction(cedar.ActionUpdateObject))
-		_, err := h.BatchUpdateTags(authedCtx(tid), BatchUpdateTagsArgs{ObjectIDs: ids(1), ObjectKey: "docs"})
+		_, err := h.BatchUpdateTags(authedCtx(tid), BatchUpdateTagsArgs{ObjectIDs: ids(1), Collection: "docs"})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
@@ -355,9 +355,9 @@ func TestBatchUpdateTags(t *testing.T) {
 		sub := &fakeSubmitter{id: opID}
 		az := allowAll()
 		got, err := newHandler(sub, az).BatchUpdateTags(authedCtx(tid), BatchUpdateTagsArgs{
-			ObjectKey: "docs",
-			ObjectIDs: ids(1),
-			Tags:      map[string]string{"env": "prod"},
+			Collection: "docs",
+			ObjectIDs:  ids(1),
+			Tags:       map[string]string{"env": "prod"},
 		})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -423,7 +423,7 @@ func TestBatchRestoreObjects(t *testing.T) {
 
 	t.Run("policy denies RestoreObject → permission denied", func(t *testing.T) {
 		h := newHandler(&fakeSubmitter{}, denyAction(cedar.ActionRestoreObject))
-		_, err := h.BatchRestoreObjects(authedCtx(tid), BatchRestoreObjectsArgs{ObjectIDs: ids(1), ObjectKey: "docs"})
+		_, err := h.BatchRestoreObjects(authedCtx(tid), BatchRestoreObjectsArgs{ObjectIDs: ids(1), Collection: "docs"})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
@@ -432,8 +432,8 @@ func TestBatchRestoreObjects(t *testing.T) {
 		sub := &fakeSubmitter{id: opID}
 		az := allowAll()
 		got, err := newHandler(sub, az).BatchRestoreObjects(authedCtx(tid), BatchRestoreObjectsArgs{
-			ObjectKey: "docs",
-			ObjectIDs: ids(4),
+			Collection: "docs",
+			ObjectIDs:  ids(4),
 		})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -445,7 +445,7 @@ func TestBatchRestoreObjects(t *testing.T) {
 		if err := json.Unmarshal(sub.lastMeta, &md); err != nil {
 			t.Fatalf("metadata not valid JSON: %v", err)
 		}
-		if md.TenantID != tid || md.ObjectKey != "docs" || len(md.ObjectIDs) != 4 {
+		if md.TenantID != tid || md.Collection != "docs" || len(md.ObjectIDs) != 4 {
 			t.Fatalf("metadata mismatch: %+v", md)
 		}
 		if len(az.actions) != 1 || az.actions[0] != cedar.ActionRestoreObject {
@@ -455,7 +455,7 @@ func TestBatchRestoreObjects(t *testing.T) {
 }
 
 // The submit-time authz Resource must carry the resolved (backend, bucket) for
-// EACH target object-key so a bucket:/object_key:-scoped PAT enforces — the
+// EACH target object-key so a bucket:/collection:-scoped PAT enforces — the
 // batch worker does not re-check Cedar per object.
 func TestBatchAuthzResourceCarriesBucket(t *testing.T) {
 	tid := uuid.New()
@@ -465,7 +465,7 @@ func TestBatchAuthzResourceCarriesBucket(t *testing.T) {
 		"dst": {"be-d", "bucket-dst"},
 	}}
 	_, err := NewHandler(&fakeSubmitter{id: uuid.New()}, az, buckets).
-		BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcObjectKey: "src", DstObjectKey: "dst"})
+		BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst"})
 	if err != nil {
 		t.Fatalf("BatchCopy: %v", err)
 	}
@@ -495,7 +495,7 @@ func scopedCtx(tid uuid.UUID, scopes ...auth.Scope) context.Context {
 	})
 }
 
-// End-to-end against the real Cedar engine: a bucket:/object_key:-scoped PAT
+// End-to-end against the real Cedar engine: a bucket:/collection:-scoped PAT
 // may submit a batch confined to its scoped object-key, and is DENIED when any
 // target object-key is off-scope (BatchCopy dst).
 func TestBatchScopeEnforcedByEngine(t *testing.T) {
@@ -505,12 +505,12 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 		"docs":   {"be", "bkt"},
 		"secret": {"be", "bkt"},
 	}}
-	okScope := auth.Scope{Type: auth.ScopeObjectKey, Value: "bkt/docs"}
+	okScope := auth.Scope{Type: auth.ScopeCollection, Value: "bkt/docs"}
 
 	t.Run("allow on scoped object-key", func(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
 		_, err := NewHandler(sub, engine, buckets).
-			BatchDelete(scopedCtx(tid, okScope), BatchDeleteArgs{ObjectKey: "docs", ObjectIDs: ids(1)})
+			BatchDelete(scopedCtx(tid, okScope), BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1)})
 		if err != nil {
 			t.Fatalf("scoped PAT on its own object-key must be allowed, got %v", err)
 		}
@@ -522,7 +522,7 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 	t.Run("deny off scoped object-key", func(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
 		_, err := NewHandler(sub, engine, buckets).
-			BatchDelete(scopedCtx(tid, okScope), BatchDeleteArgs{ObjectKey: "secret", ObjectIDs: ids(1)})
+			BatchDelete(scopedCtx(tid, okScope), BatchDeleteArgs{Collection: "secret", ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if sub.called {
 			t.Fatal("submitter must not run for an off-scope batch")
@@ -533,7 +533,7 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
 		_, err := NewHandler(sub, engine, buckets).
 			BatchCopy(scopedCtx(tid, okScope), BatchCopyArgs{
-				ObjectIDs: ids(1), SrcObjectKey: "docs", DstObjectKey: "secret",
+				ObjectIDs: ids(1), SrcCollection: "docs", DstCollection: "secret",
 			})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if sub.called {

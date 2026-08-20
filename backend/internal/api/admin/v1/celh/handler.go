@@ -44,7 +44,7 @@ func (h *Handler) Validate(ctx context.Context, req *connect.Request[pb.Validate
 	schema := celfilter.SchemaByName(m.GetSchema())
 	if schema == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unknown schema %q (want one of: Object, ObjectKey, AuditLogEntry, EventEnvelope)", m.GetSchema()))
+			fmt.Errorf("unknown schema %q (want one of: Object, Collection, AuditLogEntry, EventEnvelope)", m.GetSchema()))
 	}
 
 	err := celfilter.CompileFirstError(schema, m.GetExpression())

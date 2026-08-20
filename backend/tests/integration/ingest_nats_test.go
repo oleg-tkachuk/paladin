@@ -49,7 +49,7 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 
 	// Pre-seed the row that the ingest path will promote.
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ingest-nats")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	objectID := mustInsertPendingObject(t, h.PoolMigrate, tenantID, "docs", "report.pdf")
 
 	// Embedded NATS — same helper the dispatcher test uses, but

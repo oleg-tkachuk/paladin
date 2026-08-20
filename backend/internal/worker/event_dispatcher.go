@@ -328,7 +328,7 @@ func (d *Dispatcher) subscriptionMatches(sub admindomain.EventSubscription, evt 
 // zero value (a filter referencing them evaluates to false/0 rather than
 // erroring). The CloudEvents 1.0 envelope fields aren't populated on the
 // producer-side Event; the payload-derived fields are pulled from evt.Payload
-// by key (object events carry object_key / etag / size_bytes today).
+// by key (object events carry collection / etag / size_bytes today).
 func eventCELVars(evt Event) map[string]any {
 	sev := classifyEvent(evt)
 	return map[string]any{
@@ -346,7 +346,7 @@ func eventCELVars(evt Event) map[string]any {
 		"kind":            kindFromType(evt.Type),
 		"severity":        sev.label,
 		"severity_level":  sev.level,
-		"object_key":      payloadString(evt.Payload, "object_key"),
+		"collection":      payloadString(evt.Payload, "collection"),
 		"bucket_name":     eventBucketName(evt),
 		"etag":            payloadString(evt.Payload, "etag"),
 		"size_bytes":      payloadInt(evt.Payload, "size_bytes"),
@@ -367,7 +367,7 @@ func eventBucketName(evt Event) string {
 
 // kindFromType extracts the resource kind from a canonical event type of the
 // form "paladin.<kind>.<verb>" — "paladin.object.uploaded" → "object",
-// "paladin.object_key.created" → "object_key", "paladin.audit.login" → "audit". All
+// "paladin.collection.created" → "collection", "paladin.audit.login" → "audit". All
 // producers emit this shape (see the EventType constants and the paladin.* string
 // literals across the dispatch call sites). Returns "" for anything that
 // doesn't fit, so a `kind ==` filter never matches something wrong.

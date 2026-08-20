@@ -106,8 +106,8 @@ func TestPageResponseProto(t *testing.T) {
 
 // ─── objectNameParts ───────────────────────────────────────────────────────
 
-func name(tenant uuid.UUID, objectKey string, obj uuid.UUID) string {
-	return "tenants/" + tenant.String() + "/objectKeys/" + objectKey + "/objects/" + obj.String()
+func name(tenant uuid.UUID, collection string, obj uuid.UUID) string {
+	return "tenants/" + tenant.String() + "/collections/" + collection + "/objects/" + obj.String()
 }
 
 func TestObjectNamePartsHappyPath(t *testing.T) {
@@ -116,14 +116,14 @@ func TestObjectNamePartsHappyPath(t *testing.T) {
 		t.Fatalf("objectNameParts: %v", err)
 	}
 	if ok != "logs" {
-		t.Errorf("objectKey = %q, want logs", ok)
+		t.Errorf("collection = %q, want logs", ok)
 	}
 	if oid != objUUID.String() {
 		t.Errorf("objectID = %q, want %q", oid, objUUID)
 	}
 }
 
-// object_key is legally a multi-segment path, so the parser must anchor on the
+// collection is legally a multi-segment path, so the parser must anchor on the
 // literal separators rather than counting slash positions.
 func TestObjectNamePartsMultiSegmentKey(t *testing.T) {
 	ok, _, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "invoices/2026/q1", objUUID))
@@ -131,11 +131,11 @@ func TestObjectNamePartsMultiSegmentKey(t *testing.T) {
 		t.Fatalf("objectNameParts: %v", err)
 	}
 	if ok != "invoices/2026/q1" {
-		t.Errorf("objectKey = %q, want the full path", ok)
+		t.Errorf("collection = %q, want the full path", ok)
 	}
 }
 
-// An object_key containing the literal "/objects/" must not shadow the real
+// An collection containing the literal "/objects/" must not shadow the real
 // suffix — that is why the parser uses LastIndex.
 func TestObjectNamePartsKeyContainingObjectsSegment(t *testing.T) {
 	ok, oid, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "a/objects/b", objUUID))
@@ -143,7 +143,7 @@ func TestObjectNamePartsKeyContainingObjectsSegment(t *testing.T) {
 		t.Fatalf("objectNameParts: %v", err)
 	}
 	if ok != "a/objects/b" {
-		t.Errorf("objectKey = %q, want a/objects/b", ok)
+		t.Errorf("collection = %q, want a/objects/b", ok)
 	}
 	if oid != objUUID.String() {
 		t.Errorf("objectID = %q", oid)
@@ -154,14 +154,14 @@ func TestObjectNamePartsRejectsMalformed(t *testing.T) {
 	ctx := ctxTenant(tenantA)
 	cases := map[string]string{
 		"empty":              "",
-		"no tenants prefix":  "objectKeys/logs/objects/" + objUUID.String(),
-		"no objectKeys":      "tenants/" + tenantA.String() + "/objects/" + objUUID.String(),
-		"no objects":         "tenants/" + tenantA.String() + "/objectKeys/logs",
-		"empty tenant id":    "tenants//objectKeys/logs/objects/" + objUUID.String(),
+		"no tenants prefix":  "collections/logs/objects/" + objUUID.String(),
+		"no collections":     "tenants/" + tenantA.String() + "/objects/" + objUUID.String(),
+		"no objects":         "tenants/" + tenantA.String() + "/collections/logs",
+		"empty tenant id":    "tenants//collections/logs/objects/" + objUUID.String(),
 		"empty object key":   name(tenantA, "", objUUID),
-		"bad tenant uuid":    "tenants/not-a-uuid/objectKeys/logs/objects/" + objUUID.String(),
-		"bad object uuid":    "tenants/" + tenantA.String() + "/objectKeys/logs/objects/not-a-uuid",
-		"slash in object id": "tenants/" + tenantA.String() + "/objectKeys/logs/objects/a/b",
+		"bad tenant uuid":    "tenants/not-a-uuid/collections/logs/objects/" + objUUID.String(),
+		"bad object uuid":    "tenants/" + tenantA.String() + "/collections/logs/objects/not-a-uuid",
+		"slash in object id": "tenants/" + tenantA.String() + "/collections/logs/objects/a/b",
 	}
 	for label, n := range cases {
 		t.Run(label, func(t *testing.T) {
@@ -172,32 +172,32 @@ func TestObjectNamePartsRejectsMalformed(t *testing.T) {
 	}
 }
 
-// ─── objectKeyNameParts ────────────────────────────────────────────────────
+// ─── collectionNameParts ────────────────────────────────────────────────────
 
-func TestObjectKeyNameParts(t *testing.T) {
+func TestCollectionNameParts(t *testing.T) {
 	ctx := ctxTenant(tenantA)
 
 	t.Run("happy path", func(t *testing.T) {
-		ok, err := objectKeyNameParts(ctx, "tenants/"+tenantA.String()+"/objectKeys/logs")
+		ok, err := collectionNameParts(ctx, "tenants/"+tenantA.String()+"/collections/logs")
 		if err != nil || ok != "logs" {
 			t.Errorf("got %q, %v", ok, err)
 		}
 	})
 	t.Run("multi-segment key", func(t *testing.T) {
-		ok, err := objectKeyNameParts(ctx, "tenants/"+tenantA.String()+"/objectKeys/a/b/c")
+		ok, err := collectionNameParts(ctx, "tenants/"+tenantA.String()+"/collections/a/b/c")
 		if err != nil || ok != "a/b/c" {
 			t.Errorf("got %q, %v", ok, err)
 		}
 	})
 	t.Run("rejects malformed", func(t *testing.T) {
 		for label, n := range map[string]string{
-			"no prefix":     "objectKeys/logs",
+			"no prefix":     "collections/logs",
 			"no separator":  "tenants/" + tenantA.String(),
-			"empty key":     "tenants/" + tenantA.String() + "/objectKeys/",
-			"empty tenant":  "tenants//objectKeys/logs",
-			"bad tenant id": "tenants/nope/objectKeys/logs",
+			"empty key":     "tenants/" + tenantA.String() + "/collections/",
+			"empty tenant":  "tenants//collections/logs",
+			"bad tenant id": "tenants/nope/collections/logs",
 		} {
-			if _, err := objectKeyNameParts(ctx, n); err == nil {
+			if _, err := collectionNameParts(ctx, n); err == nil {
 				t.Errorf("%s: want an error for %q", label, n)
 			}
 		}
@@ -260,8 +260,8 @@ func TestNameParsersEnforceTheTenantGate(t *testing.T) {
 	if _, _, err := objectNameParts(ctxTenant(tenantA), crossTenant); code(err) != connect.CodePermissionDenied {
 		t.Errorf("objectNameParts code = %v, want PermissionDenied", code(err))
 	}
-	if _, err := objectKeyNameParts(ctxTenant(tenantA), "tenants/"+tenantB.String()+"/objectKeys/logs"); code(err) != connect.CodePermissionDenied {
-		t.Errorf("objectKeyNameParts code = %v, want PermissionDenied", code(err))
+	if _, err := collectionNameParts(ctxTenant(tenantA), "tenants/"+tenantB.String()+"/collections/logs"); code(err) != connect.CodePermissionDenied {
+		t.Errorf("collectionNameParts code = %v, want PermissionDenied", code(err))
 	}
 }
 
@@ -277,7 +277,7 @@ func TestObjectToProtoProjectsEveryField(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	committed := now.Add(time.Minute)
 	o := &object.Object{
-		ObjectID: objUUID, TenantID: tenantA, ObjectKey: "logs", Key: "a.txt",
+		ObjectID: objUUID, TenantID: tenantA, Collection: "logs", Key: "a.txt",
 		State: statemachine.StateAvailable, ContentType: "text/plain", SizeBytes: 123,
 		ETag: "etag-1", ChecksumAlgo: "SHA256", Checksum: "chk", Sequencer: "seq",
 		Metadata: map[string]string{"k": "v"}, Tags: map[string]string{"t": "1"},
@@ -452,7 +452,7 @@ func TestPresignedUrlProto(t *testing.T) {
 // reached a browser as a 400 on an ordinary upload.
 func TestBadName(t *testing.T) {
 	t.Run("malformed name stays invalid_argument", func(t *testing.T) {
-		if got := code(badName(errors.New("invalid object_key name"))); got != connect.CodeInvalidArgument {
+		if got := code(badName(errors.New("invalid collection name"))); got != connect.CodeInvalidArgument {
 			t.Errorf("code = %v, want InvalidArgument", got)
 		}
 	})
@@ -476,9 +476,9 @@ func TestBadName(t *testing.T) {
 	// well-formed name for somebody else's tenant is a denial, not a
 	// malformed argument.
 	t.Run("cross-tenant object key name is denied, not invalid", func(t *testing.T) {
-		name := "tenants/" + tenantB.String() + "/objectKeys/docs"
+		name := "tenants/" + tenantB.String() + "/collections/docs"
 
-		_, err := objectKeyNameParts(ctxTenant(tenantA), name)
+		_, err := collectionNameParts(ctxTenant(tenantA), name)
 
 		if got := code(badName(err)); got != connect.CodePermissionDenied {
 			t.Errorf("code = %v, want PermissionDenied", got)

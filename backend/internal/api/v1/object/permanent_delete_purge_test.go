@@ -109,7 +109,7 @@ func purgeCtx(tenantID uuid.UUID) context.Context {
 func TestPermanentDeleteQueuesPurgeDebtWhenStorageFails(t *testing.T) {
 	tenantID := uuid.New()
 	objectID := uuid.New()
-	repo := &purgeRepo{obj: Object{ObjectID: objectID, TenantID: tenantID, ObjectKey: "docs", Key: "a.txt"}}
+	repo := &purgeRepo{obj: Object{ObjectID: objectID, TenantID: tenantID, Collection: "docs", Key: "a.txt"}}
 	storage := &failingDeleteStorage{err: errors.New("backend unreachable")}
 	h := newPurgeHandler(t, repo, storage)
 
@@ -126,7 +126,7 @@ func TestPermanentDeleteQueuesPurgeDebtWhenStorageFails(t *testing.T) {
 	}
 	d := repo.enqueued[0]
 	if d.BackendID != "backend-1" || d.BucketName != "bucket-1" ||
-		d.ObjectKey != "docs" || d.Key != "a.txt" || d.TenantID != tenantID {
+		d.Collection != "docs" || d.Key != "a.txt" || d.TenantID != tenantID {
 		t.Errorf("purge debt is missing routing needed to find the bytes: %+v", d)
 	}
 	if len(repo.settled) != 0 {
@@ -143,7 +143,7 @@ func TestPermanentDeleteQueuesPurgeDebtWhenStorageFails(t *testing.T) {
 // pending_purges table is always a real backlog.
 func TestPermanentDeleteSettlesDebtWhenStorageSucceeds(t *testing.T) {
 	tenantID := uuid.New()
-	repo := &purgeRepo{obj: Object{ObjectID: uuid.New(), TenantID: tenantID, ObjectKey: "docs", Key: "a.txt"}}
+	repo := &purgeRepo{obj: Object{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "a.txt"}}
 	h := newPurgeHandler(t, repo, &failingDeleteStorage{err: nil})
 
 	if err := h.DeleteObject(purgeCtx(tenantID), "docs", repo.obj.ObjectID.String(), "", true, false); err != nil {

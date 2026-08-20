@@ -40,7 +40,7 @@ service TenantService {
 
   // RenameTenantSlug rewrites the tenant's `slug` and rewrites every
   // `Tenant::"<old_slug>"` reference in the tenant's
-  // inherited_cedar_policy AND in every object_key's cedar_policy to
+  // inherited_cedar_policy AND in every collection's cedar_policy to
   // `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
   // the supplied resource_version. Returns the renamed Tenant.
   rpc RenameTenantSlug(RenameTenantSlugRequest) returns (Tenant);
@@ -48,7 +48,7 @@ service TenantService {
   // MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
   // (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
   // async copy job that server-side-copies every object into it, then rebinds
-  // the object_keys and flips the layout. Returns the initial migration status;
+  // the collections and flips the layout. Returns the initial migration status;
   // poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
   // tenant is not currently `shared` or a migration is already in flight.
   rpc MigrateTenantStorageLayout(MigrateTenantStorageLayoutRequest) returns (StorageMigrationStatus);
@@ -68,7 +68,7 @@ service TenantService {
   rpc ResolveRenamedSlug(ResolveRenamedSlugRequest) returns (ResolveRenamedSlugResponse);
 
   // GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-  // route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+  // route used to complete the bare collection name shape (ADR-0010 Phase 3).
   // NOT_FOUND when the tenant has no binding set.
   rpc GetTenantDefaultBinding(GetTenantDefaultBindingRequest) returns (TenantDefaultBinding);
 
@@ -77,7 +77,7 @@ service TenantService {
   rpc SetTenantDefaultBinding(SetTenantDefaultBindingRequest) returns (TenantDefaultBinding);
 
   // ClearTenantDefaultBinding removes the tenant's default route; bare
-  // object_key names for that tenant then fail with FAILED_PRECONDITION.
+  // collection names for that tenant then fail with FAILED_PRECONDITION.
   rpc ClearTenantDefaultBinding(ClearTenantDefaultBindingRequest) returns (ClearTenantDefaultBindingResponse);
 }
 
@@ -94,7 +94,7 @@ message CreateTenantRequest {
   Tenant tenant = 2 [(buf.validate.field).required = true];
   // default_bucket — resource name of the (backend, bucket) where this
   // tenant's objects will live by default. Format:
-  // "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+  // "storageBackends/{backend_id}/buckets/{bucket_id}". Optional —
   // when empty the tenant has no default binding (legacy shape); when
   // set, the server inserts a matching tenant_default_bindings row in
   // the same tx as the tenant insert.
@@ -115,7 +115,7 @@ message UpdateTenantRequest {
 message DeleteTenantRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
-  // Refuse delete when object_keys/users/api_keys still reference the tenant.
+  // Refuse delete when collections/users/api_keys still reference the tenant.
   bool force = 3;
 }
 
@@ -212,20 +212,22 @@ message StorageMigrationStatus {
   int64 objects_total = 3;
   int64 objects_copied = 4;
   string source_backend_id = 5;
-  string source_bucket_name = 6;
+  string source_bucket_id = 6;
   string target_backend_id = 7;
-  string target_bucket_name = 8;
+  string target_bucket_id = 8;
   // error — non-empty only in the `failed` state.
   string error = 9;
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the
-// bare object_key name shape (ADR-0010 Phase 3 / migration 034).
+// bare collection name shape (ADR-0010 Phase 3 / migration 034).
 message TenantDefaultBinding {
   // name — "tenants/{tenant_id}/defaultBinding".
   string name = 1;
-  string backend_id = 2;
-  string bucket_name = 3;
+  // Reference to the bucket, as a resource name:
+  // "storageBackends/{backend_id}/buckets/{bucket_id}". One field, because a
+  // reference to another resource is its name (AIP-122), not its parts.
+  string bucket = 2;
   // set_at / set_by — audit of the last change.
   google.protobuf.Timestamp set_at = 4;
   string set_by = 5;
@@ -239,8 +241,8 @@ message GetTenantDefaultBindingRequest {
 message SetTenantDefaultBindingRequest {
   // name — "tenants/{tenant_id_or_slug}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string backend_id = 2 [(buf.validate.field).string.min_len = 1];
-  string bucket_name = 3 [(buf.validate.field).string.min_len = 1];
+  // "storageBackends/{backend_id}/buckets/{bucket_id}".
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message ClearTenantDefaultBindingRequest {

@@ -25,7 +25,7 @@ when {
 	p := &Principal{Subject: "u", TenantID: tid, TenantSlug: "t", Roles: []string{"tenant.user"}}
 	// Key must be set so buildEntities materialises the per-object Object entity.
 	obj := func(tags map[string]string) *Resource {
-		return &Resource{TenantID: tid, ObjectKey: "k", Key: "o", Tags: tags}
+		return &Resource{TenantID: tid, Collection: "k", Key: "o", Tags: tags}
 	}
 
 	cases := []struct {

@@ -29,7 +29,7 @@ import (
 //	    "s3": {
 //	      "bucket": { "name": "paladin-primary" },
 //	      "object": {
-//	        "key":       "<tenant_uuid>/<object_key>/<key...>",   // URL-encoded
+//	        "key":       "<tenant_uuid>/<collection>/<key...>",   // URL-encoded
 //	        "size":      1024,
 //	        "eTag":      "abc",
 //	        "sequencer": "0017A53F..."
@@ -132,7 +132,7 @@ func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 		return CloudEvent{}, ErrIgnoredEvent
 	}
 
-	subj, ok := parseS3Key(r.S3.Object.Key)
+	subj, ok := parseStoragePath(r.S3.Object.Key)
 	if !ok {
 		// Not the Paladin layout — a non-Paladin object dropped in the same bucket.
 		// Ignore so we don't fill the dedup table with junk.
@@ -155,8 +155,8 @@ func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 		Time:            t,
 		DataContentType: "application/json",
 		Subject: fmt.Sprintf(
-			"tenants/%s/objectKeys/%s/objects-by-key/%s",
-			subj.TenantID, subj.ObjectKey, subj.Key,
+			"tenants/%s/collections/%s/objects-by-key/%s",
+			subj.TenantID, subj.Collection, subj.Key,
 		),
 		Data:          raw,
 		SubjectFields: subj,
@@ -178,15 +178,15 @@ func s3EventType(name string) (EventType, bool) {
 	}
 }
 
-// parseS3Key URL-decodes the notification object key, then splits it into the
-// Paladin 3-segment layout "<tenant_uuid>/<object_key>/<key...>".
+// parseStoragePath URL-decodes the notification object key, then splits it into the
+// Paladin 3-segment layout "<tenant_uuid>/<collection>/<key...>".
 //
 // S3 event notifications form-encode the key: space → '+', '/' → '%2F', other
 // bytes → '%XX' (AWS docs: "red flower.jpg" → "red+flower.jpg"). MinIO uses
 // the same. url.QueryUnescape decodes all three ('+' and '%20' → space, '%2F'
 // → '/', '%2B' → literal '+'), which is exactly the form-encoding S3 uses. A
 // malformed sequence falls back to the raw key rather than dropping the event.
-func parseS3Key(key string) (SubjectFields, bool) {
+func parseStoragePath(key string) (SubjectFields, bool) {
 	decoded, err := url.QueryUnescape(key)
 	if err != nil {
 		decoded = key
@@ -199,9 +199,9 @@ func parseS3Key(key string) (SubjectFields, bool) {
 		return SubjectFields{}, false
 	}
 	return SubjectFields{
-		TenantID:  parts[0],
-		ObjectKey: parts[1],
-		Key:       parts[2],
+		TenantID:   parts[0],
+		Collection: parts[1],
+		Key:        parts[2],
 	}, true
 }
 

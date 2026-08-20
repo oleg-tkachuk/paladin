@@ -26,8 +26,8 @@ func TestRLS_ObjectsCrossTenantSelectReturnsZero(t *testing.T) {
 	tenantA := mustCreateTenant(t, h.PoolMigrate, "tenant-a")
 	tenantB := mustCreateTenant(t, h.PoolMigrate, "tenant-b")
 
-	mustCreateObjectKey(t, h.PoolMigrate, tenantA, "docs")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantB, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantA, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantB, "docs")
 
 	mustInsertObject(t, h.PoolMigrate, tenantA, "docs", "key-a")
 	mustInsertObject(t, h.PoolMigrate, tenantB, "docs", "key-b")
@@ -124,7 +124,7 @@ func mustCreateTenant(t *testing.T, pool *pgxpool.Pool, slug string) uuid.UUID {
 	return id
 }
 
-func mustCreateObjectKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, name string) {
+func mustCreateCollection(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, name string) {
 	t.Helper()
 	const backendID = "primary"
 	const bucketName = "paladin-test"
@@ -143,24 +143,24 @@ func mustCreateObjectKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, n
 		t.Fatalf("seed bucket: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name)
+        INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
         VALUES ($1, $2, $3, $4)
     `, tenantID, name, backendID, bucketName); err != nil {
-		t.Fatalf("create object_key: %v", err)
+		t.Fatalf("create collection: %v", err)
 	}
 }
 
-func mustInsertObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, objectKey, key string) {
+func mustInsertObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, collection, key string) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            object_id, tenant_id, object_key, key, state,
+            object_id, tenant_id, collection, key, state,
             content_type, checksum_algorithm
         ) VALUES (
             $1, $2, $3, $4, 'AVAILABLE',
             'text/plain', 1
         )
-    `, uuid.New(), tenantID, objectKey, key)
+    `, uuid.New(), tenantID, collection, key)
 	if err != nil {
 		t.Fatalf("insert object: %v", err)
 	}

@@ -28,9 +28,9 @@ const (
 type CreateBucketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent: "storageBackends/{backend_id}".
-	Parent     string  `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	BucketName string  `protobuf:"bytes,2,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
-	Bucket     *Bucket `protobuf:"bytes,3,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	Parent   string  `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	BucketId string  `protobuf:"bytes,2,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
+	Bucket   *Bucket `protobuf:"bytes,3,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	// When true, Paladin also calls the backend to physically create the bucket.
 	// When false, the bucket is assumed to exist out-of-band.
 	ProvisionOnBackend bool `protobuf:"varint,4,opt,name=provision_on_backend,json=provisionOnBackend,proto3" json:"provision_on_backend,omitempty"`
@@ -75,9 +75,9 @@ func (x *CreateBucketRequest) GetParent() string {
 	return ""
 }
 
-func (x *CreateBucketRequest) GetBucketName() string {
+func (x *CreateBucketRequest) GetBucketId() string {
 	if x != nil {
-		return x.BucketName
+		return x.BucketId
 	}
 	return ""
 }
@@ -789,11 +789,10 @@ var File_paladin_admin_v1_bucket_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/bucket_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\xcd\x01\n" +
+	"$paladin/admin/v1/bucket_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\xc9\x01\n" +
 	"\x13CreateBucketRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12*\n" +
-	"\vbucket_name\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\n" +
-	"bucketName\x127\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12&\n" +
+	"\tbucket_id\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\bbucketId\x127\n" +
 	"\x06bucket\x18\x03 \x01(\v2\x17.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01R\x06bucket\x120\n" +
 	"\x14provision_on_backend\x18\x04 \x01(\bR\x12provisionOnBackend\"/\n" +
 	"\x10GetBucketRequest\x12\x1b\n" +

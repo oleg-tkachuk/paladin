@@ -41,7 +41,7 @@ type Clients struct {
 	Backend  adminv1connect.BackendServiceClient
 	Bucket   adminv1connect.BucketServiceClient
 	Tenant   adminv1connect.TenantServiceClient
-	OKey     adminv1connect.ObjectKeyServiceClient
+	OKey     adminv1connect.CollectionServiceClient
 	Policy   adminv1connect.PolicyServiceClient
 	Quota    adminv1connect.QuotaServiceClient
 	Audit    adminv1connect.AuditLogServiceClient
@@ -104,7 +104,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		Backend:  adminv1connect.NewBackendServiceClient(httpc, adminURL, authInjector),
 		Bucket:   adminv1connect.NewBucketServiceClient(httpc, adminURL, authInjector),
 		Tenant:   adminv1connect.NewTenantServiceClient(httpc, adminURL, authInjector),
-		OKey:     adminv1connect.NewObjectKeyServiceClient(httpc, adminURL, authInjector),
+		OKey:     adminv1connect.NewCollectionServiceClient(httpc, adminURL, authInjector),
 		Policy:   adminv1connect.NewPolicyServiceClient(httpc, adminURL, authInjector),
 		Quota:    adminv1connect.NewQuotaServiceClient(httpc, adminURL, authInjector),
 		Audit:    adminv1connect.NewAuditLogServiceClient(httpc, adminURL, authInjector),
@@ -180,7 +180,7 @@ type listBucketsArgs struct {
 type listTenantsArgs struct {
 	PageSize int32 `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
 }
-type listObjectKeysArgs struct {
+type listCollectionsArgs struct {
 	// `tenant_id_or_slug` accepted as input — the field name stays
 	// `tenant_id` for MCP-client backwards compat, but the resolver
 	// downstream (apiutil.ParseTenantNameRef) accepts both forms,
@@ -189,10 +189,10 @@ type listObjectKeysArgs struct {
 	PageSize int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
 }
 type queryObjectsArgs struct {
-	TenantID  string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
-	ObjectKey string `json:"object_key" jsonschema:"object key (namespace) name"`
-	Filter    string `json:"filter,omitempty" jsonschema:"optional CEL filter, e.g. tags['type']=='invoice'"`
-	PageSize  int32  `json:"page_size,omitempty" jsonschema:"page size; default 100, max 1000"`
+	TenantID   string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
+	Collection string `json:"collection" jsonschema:"object key (namespace) name"`
+	Filter     string `json:"filter,omitempty" jsonschema:"optional CEL filter, e.g. tags['type']=='invoice'"`
+	PageSize   int32  `json:"page_size,omitempty" jsonschema:"page size; default 100, max 1000"`
 }
 type getQuotaArgs struct {
 	Name string `json:"name" jsonschema:"Quota resource name (tenants/{tenant_id_or_slug}/quota | storageBackends/{b}/buckets/{n}/quota)"`
@@ -201,14 +201,14 @@ type validatePolicyArgs struct {
 	CedarPolicy string `json:"cedar_policy" jsonschema:"Cedar policy text"`
 }
 type listVersionsArgs struct {
-	ObjectName string `json:"object_name" jsonschema:"Object resource name (tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id})"`
+	ObjectName string `json:"object_name" jsonschema:"Object resource name (tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id})"`
 	PageSize   int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
 }
 type getVersionArgs struct {
 	VersionName string `json:"version_name" jsonschema:".../objects/{id}/versions/{ver}"`
 }
 type getEffectivePolicyArgs struct {
-	ResourceName string `json:"resource_name" jsonschema:"Any resource name; tenants/{tenant_id_or_slug}/objectKeys/{ok} works for namespace-level"`
+	ResourceName string `json:"resource_name" jsonschema:"Any resource name; tenants/{tenant_id_or_slug}/collections/{ok} works for namespace-level"`
 }
 type simulateAuthzArgs struct {
 	PrincipalSubject  string   `json:"principal_subject" jsonschema:"subject (user_id or service-account ref)"`
@@ -273,10 +273,10 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
-		Name:        "paladin_list_object_keys",
+		Name:        "paladin_list_collections",
 		Description: "List object keys (logical namespaces) within a tenant.",
-	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listObjectKeysArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.OKey.ListObjectKeys(ctx, connect.NewRequest(&adminv1.ListObjectKeysRequest{
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listCollectionsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.OKey.ListCollections(ctx, connect.NewRequest(&adminv1.ListCollectionsRequest{
 			Parent: "tenants/" + in.TenantID,
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
 		})))
@@ -284,9 +284,9 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_query_objects",
-		Description: "List objects within an object_key, optionally filtered by CEL.",
+		Description: "List objects within an collection, optionally filtered by CEL.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in queryObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
-		parent := fmt.Sprintf("tenants/%s/objectKeys/%s", in.TenantID, in.ObjectKey)
+		parent := fmt.Sprintf("tenants/%s/collections/%s", in.TenantID, in.Collection)
 		return jsonResult(c.Object.ListObjects(ctx, connect.NewRequest(&datav1.ListObjectsRequest{
 			Parent: parent,
 			Filter: in.Filter,
@@ -331,7 +331,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_effective_policy",
-		Description: "Return the merged Cedar policy stack the engine compiles for a resource (tenant + object_key layers).",
+		Description: "Return the merged Cedar policy stack the engine compiles for a resource (tenant + collection layers).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getEffectivePolicyArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Policy.GetEffectivePolicy(ctx, connect.NewRequest(&adminv1.GetEffectivePolicyRequest{
 			ResourceName: in.ResourceName,
@@ -381,10 +381,10 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
-		Name:        "paladin_get_object_key",
-		Description: "Fetch a single object_key (tenants/{tenant_id_or_slug}/objectKeys/{ok}).",
+		Name:        "paladin_get_collection",
+		Description: "Fetch a single collection (tenants/{tenant_id_or_slug}/collections/{ok}).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.OKey.GetObjectKey(ctx, connect.NewRequest(&adminv1.GetObjectKeyRequest{Name: in.Name})))
+		return jsonResult(c.OKey.GetCollection(ctx, connect.NewRequest(&adminv1.GetCollectionRequest{Name: in.Name})))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -396,7 +396,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_lookup_object",
-		Description: "Resolve an object by its human key within an object_key (the inverse of having the object_id). Returns the same metadata as paladin_get_object.",
+		Description: "Resolve an object by its human key within an collection (the inverse of having the object_id). Returns the same metadata as paladin_get_object.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in lookupObjectArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
 			Parent: in.Parent,
@@ -406,7 +406,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_count_objects",
-		Description: "Count objects under an object_key, optionally narrowed by a CEL filter. Cheaper than paging paladin_query_objects when only the total is needed.",
+		Description: "Count objects under an collection, optionally narrowed by a CEL filter. Cheaper than paging paladin_query_objects when only the total is needed.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in countObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.CountObjects(ctx, connect.NewRequest(&datav1.CountObjectsRequest{
 			Parent: in.Parent,
@@ -442,7 +442,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	// CEL expression validator. Same trust posture as PolicyService.Validate
 	// — admin audience, no DB, no audit. Lets the agent type-check a CEL
-	// expression against a named Paladin schema (Object | ObjectKey |
+	// expression against a named Paladin schema (Object | Collection |
 	// AuditLogEntry | EventEnvelope) before passing it into a list-RPC
 	// query, lifecycle.match, or eventsub.filter.
 	addTool(s, filter, &mcpsdk.Tool{
@@ -475,7 +475,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_distinct_tags",
-		Description: "List the distinct tag keys/values currently in use under an object_key — useful before filtering or tagging.",
+		Description: "List the distinct tag keys/values currently in use under an collection — useful before filtering or tagging.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listChildrenArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, connect.NewRequest(&datav1.ListDistinctTagsRequest{Parent: in.Parent})))
 	})
@@ -510,16 +510,16 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 // ─── Mutating tool argument types ───────────────────────────────────────────
 
-type createObjectKeyArgs struct {
+type createCollectionArgs struct {
 	TenantID    string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
-	ObjectKey   string `json:"object_key" jsonschema:"object key path: kebab-case segments joined by '/' (e.g. 'assets-prod' or 'invoices/2026/q1')"`
+	Collection  string `json:"collection" jsonschema:"object key path: kebab-case segments joined by '/' (e.g. 'assets-prod' or 'invoices/2026/q1')"`
 	Bucket      string `json:"bucket" jsonschema:"bucket resource name (storageBackends/{b}/buckets/{n})"`
 	DisplayName string `json:"display_name,omitempty" jsonschema:"optional display label"`
 	CedarPolicy string `json:"cedar_policy,omitempty" jsonschema:"optional Cedar policy"`
 }
 type grantUserScopesArgs struct {
 	UserName string   `json:"user_name" jsonschema:"tenants/{tenant_id_or_slug}/users/{u}"`
-	Scopes   []string `json:"scopes,omitempty" jsonschema:"scope strings of form type:value (tenant:.., backend:.., bucket:.., object_key:..) or '*'"`
+	Scopes   []string `json:"scopes,omitempty" jsonschema:"scope strings of form type:value (tenant:.., backend:.., bucket:.., collection:..) or '*'"`
 }
 type restoreVersionArgs struct {
 	VersionName string `json:"version_name" jsonschema:".../objects/{id}/versions/{ver}"`
@@ -547,7 +547,7 @@ type setLifecycleRulesArgs struct {
 // internal/filter/cel.SchemaByName; the handler returns
 // CodeInvalidArgument on anything else.
 type validateCELArgs struct {
-	Schema     string `json:"schema" jsonschema:"one of Object | ObjectKey | AuditLogEntry | EventEnvelope"`
+	Schema     string `json:"schema" jsonschema:"one of Object | Collection | AuditLogEntry | EventEnvelope"`
 	Expression string `json:"expression,omitempty" jsonschema:"CEL source; empty validates as 'match all'"`
 }
 
@@ -605,13 +605,13 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	destructive := mcpsdk.ToolAnnotations{DestructiveHint: ptrTrue()}
 
 	addTool(s, filter, &mcpsdk.Tool{
-		Name:        "paladin_create_object_key",
+		Name:        "paladin_create_collection",
 		Description: "Create an object key (logical namespace) under a tenant + bucket binding.",
-	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createObjectKeyArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.OKey.CreateObjectKey(ctx, connect.NewRequest(&adminv1.CreateObjectKeyRequest{
-			Parent:    "tenants/" + in.TenantID,
-			ObjectKey: in.ObjectKey,
-			ObjectKeyResource: &adminv1.ObjectKey{
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createCollectionArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.OKey.CreateCollection(ctx, connect.NewRequest(&adminv1.CreateCollectionRequest{
+			Parent:     "tenants/" + in.TenantID,
+			Collection: in.Collection,
+			CollectionResource: &adminv1.Collection{
 				DisplayName: in.DisplayName,
 				Bucket:      in.Bucket,
 				CedarPolicy: in.CedarPolicy,
@@ -621,7 +621,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_grant_user_scopes",
-		Description: "Add scopes to a user (e.g. bucket:foo, object_key:bar/baz).",
+		Description: "Add scopes to a user (e.g. bucket:foo, collection:bar/baz).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in grantUserScopesArgs) (*mcpsdk.CallToolResult, any, error) {
 		scopes, err := stringScopesToProto(in.Scopes)
 		if err != nil {
@@ -843,19 +843,19 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_copy_object",
-		Description: "Server-side copy of an object to a destination object_key + key. The source is left in place (use paladin_delete_object after for a move).",
+		Description: "Server-side copy of an object to a destination collection + key. The source is left in place (use paladin_delete_object after for a move).",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in copyObjectArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.CopyObject(ctx, connect.NewRequest(&datav1.CopyObjectRequest{
-			SourceName:           in.SourceName,
-			DestinationObjectKey: in.DestinationObjectKey,
-			DestinationKey:       in.DestinationKey,
+			SourceName:            in.SourceName,
+			DestinationCollection: in.DestinationCollection,
+			DestinationKey:        in.DestinationKey,
 		})))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_delete",
-		Description: "Asynchronously delete many objects under one object_key. Select either by explicit `names` (≤100) or a CEL `filter`. Returns a long-running Operation; poll it via paladin_get_operation.",
+		Description: "Asynchronously delete many objects under one collection. Select either by explicit `names` (≤100) or a CEL `filter`. Returns a long-running Operation; poll it via paladin_get_operation.",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchDeleteArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Batch.BatchDeleteObjects(ctx, connect.NewRequest(&datav1.BatchDeleteObjectsRequest{
@@ -870,7 +870,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_copy",
-		Description: "Asynchronously server-side-copy many objects into a destination object_key. Select sources by `names` (≤100) or CEL `filter`; each destination key is computed by `destination_key_template` (a CEL expression over the source Object). Returns an Operation; poll via paladin_get_operation.",
+		Description: "Asynchronously server-side-copy many objects into a destination collection. Select sources by `names` (≤100) or CEL `filter`; each destination key is computed by `destination_key_template` (a CEL expression over the source Object). Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchCopyArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Batch.BatchCopyObjects(ctx, connect.NewRequest(&datav1.BatchCopyObjectsRequest{
 			SourceParent: in.SourceParent,
@@ -878,14 +878,14 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 				Names:  in.Names,
 				Filter: in.Filter,
 			},
-			DestinationObjectKey:   in.DestinationObjectKey,
+			DestinationCollection:  in.DestinationCollection,
 			DestinationKeyTemplate: in.DestinationKeyTemplate,
 		})))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_restore",
-		Description: "Asynchronously restore many soft-deleted objects under one object_key. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
+		Description: "Asynchronously restore many soft-deleted objects under one collection. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchRestoreArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Batch.BatchRestoreObjects(ctx, connect.NewRequest(&datav1.BatchRestoreObjectsRequest{
 			Parent: in.Parent,
@@ -929,7 +929,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_update_tags",
-		Description: "Asynchronously merge (or, with `replace`, overwrite) a tag map across many objects under one object_key. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
+		Description: "Asynchronously merge (or, with `replace`, overwrite) a tag map across many objects under one collection. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchUpdateTagsArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Batch.BatchUpdateTags(ctx, connect.NewRequest(&datav1.BatchUpdateTagsRequest{
 			Parent: in.Parent,
@@ -1034,7 +1034,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 // ─── Presign / tag mutating arg types ───────────────────────────────────────
 
 type uploadObjectArgs struct {
-	Parent         string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Parent         string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Key            string            `json:"key,omitempty" jsonschema:"object key under the namespace; empty = server uses the new object_id as key"`
 	ContentType    string            `json:"content_type" jsonschema:"MIME type (e.g. application/pdf)"`
 	SizeHintBytes  int64             `json:"size_hint_bytes,omitempty" jsonschema:"optional client-reported size"`
@@ -1043,7 +1043,7 @@ type uploadObjectArgs struct {
 	IdempotencyKey string            `json:"idempotency_key,omitempty" jsonschema:"replay-safe key — same value returns the cached response"`
 }
 type completeObjectArgs struct {
-	Name          string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}"`
+	Name          string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}"`
 	Etag          string `json:"etag" jsonschema:"etag the S3 endpoint returned on the PUT"`
 	ChecksumValue string `json:"checksum_value,omitempty" jsonschema:"hex-encoded checksum"`
 }
@@ -1062,34 +1062,34 @@ type deleteObjectArgs struct {
 	Permanent       bool   `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
 }
 type copyObjectArgs struct {
-	SourceName           string `json:"source_name" jsonschema:"source object resource name"`
-	DestinationObjectKey string `json:"destination_object_key" jsonschema:"destination ObjectKey resource name (tenants/{t}/objectKeys/{ok})"`
-	DestinationKey       string `json:"destination_key" jsonschema:"destination key (path) under that object_key"`
+	SourceName            string `json:"source_name" jsonschema:"source object resource name"`
+	DestinationCollection string `json:"destination_collection" jsonschema:"destination Collection resource name (tenants/{t}/collections/{ok})"`
+	DestinationKey        string `json:"destination_key" jsonschema:"destination key (path) under that collection"`
 }
 type batchDeleteArgs struct {
-	Parent    string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Parent    string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Names     []string `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
 	Filter    string   `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
 	Permanent bool     `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
 }
 type batchCopyArgs struct {
-	SourceParent           string   `json:"source_parent" jsonschema:"source ObjectKey: tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	SourceParent           string   `json:"source_parent" jsonschema:"source Collection: tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Names                  []string `json:"names,omitempty" jsonschema:"explicit source object resource names; ≤100. Use filter for larger sets."`
 	Filter                 string   `json:"filter,omitempty" jsonschema:"CEL filter over the source Object"`
-	DestinationObjectKey   string   `json:"destination_object_key" jsonschema:"destination ObjectKey resource name"`
+	DestinationCollection  string   `json:"destination_collection" jsonschema:"destination Collection resource name"`
 	DestinationKeyTemplate string   `json:"destination_key_template" jsonschema:"CEL expression over the source Object that computes each destination key (e.g. 'object.key')"`
 }
 type batchRestoreArgs struct {
-	Parent string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Parent string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Names  []string `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
 	Filter string   `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
 }
 type lookupObjectArgs struct {
-	Parent string `json:"parent" jsonschema:"object_key the key lives under: tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
-	Key    string `json:"key" jsonschema:"the object's human key (path) within that object_key"`
+	Parent string `json:"parent" jsonschema:"collection the key lives under: tenants/{tenant_id_or_slug}/collections/{ok}"`
+	Key    string `json:"key" jsonschema:"the object's human key (path) within that collection"`
 }
 type countObjectsArgs struct {
-	Parent string `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Parent string `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Filter string `json:"filter,omitempty" jsonschema:"optional CEL filter over Object"`
 }
 
@@ -1110,7 +1110,7 @@ type deleteObjectTagsArgs struct {
 	Keys            []string `json:"keys" jsonschema:"tag keys to remove; others are left intact"`
 }
 type batchUpdateTagsArgs struct {
-	Parent  string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Parent  string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Names   []string          `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
 	Filter  string            `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
 	Tags    map[string]string `json:"tags" jsonschema:"tag map to apply to each selected object"`
@@ -1121,7 +1121,7 @@ type regenerateUploadURLArgs struct {
 	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional override; capped server-side by cfg.Limits.Presign.put_ttl"`
 }
 type initiateMultipartArgs struct {
-	Parent      string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Parent      string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Key         string            `json:"key,omitempty" jsonschema:"object key under the namespace; empty = server uses the new object_id as key"`
 	ContentType string            `json:"content_type" jsonschema:"MIME type (e.g. application/octet-stream)"`
 	SizeBytes   int64             `json:"size_bytes,omitempty" jsonschema:"optional total size hint"`
@@ -1236,7 +1236,7 @@ func registerPrompts(s *mcpsdk.Server) {
 				Role: "user",
 				Content: &mcpsdk.TextContent{Text: fmt.Sprintf(
 					"Audit access for tenant %s.\n"+
-						"1) Use paladin_list_object_keys to enumerate the namespaces.\n"+
+						"1) Use paladin_list_collections to enumerate the namespaces.\n"+
 						"2) For each, fetch its Cedar policy via the Paladin admin API.\n"+
 						"3) Identify which user_ids hold scopes that match.\n"+
 						"4) Summarise findings with concrete principal→action→resource bindings.\n",
@@ -1307,7 +1307,7 @@ func stringScopesToProto(in []string) ([]*commonv1.Scope, error) {
 			sc.Type = commonv1.ScopeType_SCOPE_TYPE_BACKEND
 		case "bucket":
 			sc.Type = commonv1.ScopeType_SCOPE_TYPE_BUCKET
-		case "object_key":
+		case "collection":
 			sc.Type = commonv1.ScopeType_SCOPE_TYPE_OBJECT_KEY
 		default:
 			return nil, fmt.Errorf("unknown scope type %q", s[:idx])

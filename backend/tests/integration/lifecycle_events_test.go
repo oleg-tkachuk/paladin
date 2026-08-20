@@ -8,7 +8,7 @@
 // method, assert the outbox row landed and the envelope reached NATS with the
 // expected `type`.
 //
-// Closes the "producer wiring — integration tests for bucket / object_key /
+// Closes the "producer wiring — integration tests for bucket / collection /
 // quota / object lifecycle handlers" BACKLOG follow-up.
 package integration
 
@@ -25,8 +25,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
 	quotahpkg "github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
+	objectkeypkg "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	objectpkg "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	objectkeypkg "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -124,33 +124,33 @@ func TestQuotaHandler_SetQuotaDispatches(t *testing.T) {
 	probe.expect(t, f, tenant.String(), "paladin.quota.set")
 }
 
-// TestObjectKeyHandler_UpdateDispatches pins object_key → paladin.object_key.updated.
-func TestObjectKeyHandler_UpdateDispatches(t *testing.T) {
+// TestCollectionHandler_UpdateDispatches pins collection → paladin.collection.updated.
+func TestCollectionHandler_UpdateDispatches(t *testing.T) {
 	t.Parallel()
 	f := setupDispatcher(t)
 	url := runEmbeddedNATSForIntegration(t)
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "objkey-events")
-	mustCreateObjectKey(t, f.h.PoolMigrate, tenant, "docs")
+	mustCreateCollection(t, f.h.PoolMigrate, tenant, "docs")
 	_ = f.seedNATSSubscription(t, tenant, url, "paladin.events")
 
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
-	repo := adapters.NewObjectKeyRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
+	repo := adapters.NewCollectionRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := objectkeypkg.NewHandler(repo, allowAll{})
 	handler.SetEventProducer(probe.d)
 
 	newName := "Docs Renamed"
-	if _, err := handler.UpdateObjectKey(ctxAdmin(t, tenant), objectkeypkg.UpdateObjectKeyArgs{
-		ObjectKey:       "docs",
+	if _, err := handler.UpdateCollection(ctxAdmin(t, tenant), objectkeypkg.UpdateCollectionArgs{
+		Collection:      "docs",
 		ExpectedVersion: 1,
 		DisplayName:     &newName,
 	}); err != nil {
-		t.Fatalf("UpdateObjectKey: %v", err)
+		t.Fatalf("UpdateCollection: %v", err)
 	}
 
 	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
 		t.Fatalf("event_deliveries rows = %d, want 1 (SetEventProducer wiring)", len(rows))
 	}
-	probe.expect(t, f, tenant.String(), "paladin.object_key.updated")
+	probe.expect(t, f, tenant.String(), "paladin.collection.updated")
 }
 
 // TestBucketHandler_UpdateDispatches pins bucketh → paladin.bucket.updated. The
@@ -197,7 +197,7 @@ func TestObjectHandler_UpdateDispatches(t *testing.T) {
 	f := setupDispatcher(t)
 	url := runEmbeddedNATSForIntegration(t)
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "object-events")
-	mustCreateObjectKey(t, f.h.PoolMigrate, tenant, "docs")
+	mustCreateCollection(t, f.h.PoolMigrate, tenant, "docs")
 	objID := mustInsertAvailableObject(t, f.h.PoolMigrate, tenant, "docs", "mykey")
 	_ = f.seedNATSSubscription(t, tenant, url, "paladin.events")
 
@@ -207,7 +207,7 @@ func TestObjectHandler_UpdateDispatches(t *testing.T) {
 	handler.SetEventProducer(probe.d)
 
 	if _, err := handler.UpdateObject(ctxAdmin(t, tenant), objectpkg.UpdateObjectInput{
-		ObjectKey:       "docs",
+		Collection:      "docs",
 		ObjectID:        objID.String(),
 		ResourceVersion: 1, // fresh object → v1 (this path enforces OCC, no 0-skip)
 		UpdatedFields:   []string{"tags"},

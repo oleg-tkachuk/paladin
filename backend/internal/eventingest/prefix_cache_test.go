@@ -24,7 +24,7 @@ type fakePrefixBackend struct {
 	getCalls    int
 }
 
-func (f *fakePrefixBackend) ListObjectKeyNamesForTenant(_ context.Context, _ pgtype.UUID) ([]string, error) {
+func (f *fakePrefixBackend) ListCollectionNamesForTenant(_ context.Context, _ pgtype.UUID) ([]string, error) {
 	f.listCalls++
 	if f.listErr != nil {
 		return nil, f.listErr
@@ -40,9 +40,9 @@ func (f *fakePrefixBackend) LookupObjectByKey(_ context.Context, _ pgtype.UUID, 
 	return sqlc.LookupObjectByKeyRow{}, nil
 }
 
-func (f *fakePrefixBackend) GetObjectKey(_ context.Context, _ pgtype.UUID, _ string) (sqlc.GetObjectKeyRow, error) {
+func (f *fakePrefixBackend) GetCollection(_ context.Context, _ pgtype.UUID, _ string) (sqlc.GetCollectionRow, error) {
 	f.getCalls++
-	return sqlc.GetObjectKeyRow{}, nil
+	return sqlc.GetCollectionRow{}, nil
 }
 
 func testTenant() pgtype.UUID {
@@ -75,7 +75,7 @@ func TestCachingLookup_LongestPrefixWins(t *testing.T) {
 	c := NewCachingLookup(be, time.Minute, nil)
 	tid := testTenant()
 
-	got, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "invoices/2026/q1/report.pdf")
+	got, err := c.ResolveCollectionPrefix(context.Background(), tid, "invoices/2026/q1/report.pdf")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCachingLookup_LongestPrefixWins(t *testing.T) {
 	}
 
 	// A tail that only the shorter OK prefixes resolves to it.
-	got, err = c.ResolveObjectKeyPrefix(context.Background(), tid, "invoices/legacy.pdf")
+	got, err = c.ResolveCollectionPrefix(context.Background(), tid, "invoices/legacy.pdf")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestCachingLookup_CacheHitSkipsBackend(t *testing.T) {
 	tid := testTenant()
 
 	for i := 0; i < 5; i++ {
-		if _, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
+		if _, err := c.ResolveCollectionPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
 			t.Fatalf("resolve #%d: %v", i, err)
 		}
 	}
@@ -115,12 +115,12 @@ func TestCachingLookup_TTLExpiryReloads(t *testing.T) {
 	c.now = func() time.Time { return now }
 	tid := testTenant()
 
-	if _, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
+	if _, err := c.ResolveCollectionPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	// Within TTL → cache hit.
 	now = now.Add(29 * time.Second)
-	if _, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
+	if _, err := c.ResolveCollectionPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if be.listCalls != 1 {
@@ -128,7 +128,7 @@ func TestCachingLookup_TTLExpiryReloads(t *testing.T) {
 	}
 	// Past TTL → reload.
 	now = now.Add(2 * time.Second)
-	if _, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
+	if _, err := c.ResolveCollectionPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if be.listCalls != 2 {
@@ -143,7 +143,7 @@ func TestCachingLookup_RefreshOnMissPicksUpNewKey(t *testing.T) {
 
 	// Warm the cache with a matching resolve (photos), so the next lookup for a
 	// brand-new top-level key starts from a populated-but-stale cache.
-	if _, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
+	if _, err := c.ResolveCollectionPrefix(context.Background(), tid, "photos/a.jpg"); err != nil {
 		t.Fatalf("warm: %v", err)
 	}
 	if be.listCalls != 1 {
@@ -154,7 +154,7 @@ func TestCachingLookup_RefreshOnMissPicksUpNewKey(t *testing.T) {
 	// stale, so the first resolve misses — the refresh-on-miss must reload and
 	// resolve it rather than wait out the TTL.
 	be.keys = []string{"photos", "invoices"}
-	got, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "invoices/2026.pdf")
+	got, err := c.ResolveCollectionPrefix(context.Background(), tid, "invoices/2026.pdf")
 	if err != nil {
 		t.Fatalf("resolve new key: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestCachingLookup_NoMatchIsErrNoRows(t *testing.T) {
 	c := NewCachingLookup(be, time.Minute, nil)
 	tid := testTenant()
 
-	_, err := c.ResolveObjectKeyPrefix(context.Background(), tid, "unregistered/x.txt")
+	_, err := c.ResolveCollectionPrefix(context.Background(), tid, "unregistered/x.txt")
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Errorf("no-match err = %v, want pgx.ErrNoRows", err)
 	}
@@ -187,7 +187,7 @@ func TestCachingLookup_BackendErrorPropagates(t *testing.T) {
 	be := &fakePrefixBackend{listErr: errors.New("db down")}
 	c := NewCachingLookup(be, time.Minute, nil)
 
-	_, err := c.ResolveObjectKeyPrefix(context.Background(), testTenant(), "photos/a.jpg")
+	_, err := c.ResolveCollectionPrefix(context.Background(), testTenant(), "photos/a.jpg")
 	if err == nil || errors.Is(err, pgx.ErrNoRows) {
 		t.Errorf("err = %v, want the backend error propagated", err)
 	}
@@ -201,7 +201,7 @@ func TestCachingLookup_PassthroughDelegates(t *testing.T) {
 	if _, err := c.LookupObjectByKey(context.Background(), tid, "ok", "k"); err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	if _, err := c.GetObjectKey(context.Background(), tid, "ok"); err != nil {
+	if _, err := c.GetCollection(context.Background(), tid, "ok"); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if be.lookupCalls != 1 || be.getCalls != 1 {

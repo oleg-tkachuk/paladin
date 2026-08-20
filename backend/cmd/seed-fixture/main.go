@@ -13,13 +13,13 @@
 //	demo    1 tenant, 4 EventSubscriptions (HTTP / NATS / disabled / filtered).
 //	        Hand-curated so screenshots stay readable. ~1 second to apply.
 //
-//	load    N objects (default 500) seeded under an existing objectKey via the
+//	load    N objects (default 500) seeded under an existing collection via the
 //	        real UploadObject → PUT → CompleteObject flow, so /objects listings
 //	        and the object.* event fan-out have realistic data.
 //	stress  same, defaulting to 1001 objects — just past a 1000-row page so the
 //	        cursor pagination logic gets exercised across a boundary.
 //
-// load / stress take --object-key (an existing objectKey bound to a bucket,
+// load / stress take --object-key (an existing collection bound to a bucket,
 // like smoke-upload), --tenant (slug for the parent name), and --count (0 =
 // the flavour default). Objects are stamped at the current time — the API
 // can't backdate created_at, so the "/billing 24h time-series spread" remains
@@ -122,17 +122,17 @@ func main() {
 	}
 	for _, c := range []*cobra.Command{upCmd, downCmd} {
 		c.Flags().String("flavour", "demo", "demo | load | stress")
-		// load / stress seed objects under an existing objectKey (like
+		// load / stress seed objects under an existing collection (like
 		// smoke-upload). demo ignores these.
 		c.Flags().String("object-key", "test",
-			"load/stress: existing objectKey (bound to a bucket) to seed objects under")
+			"load/stress: existing collection (bound to a bucket) to seed objects under")
 		c.Flags().String("tenant", "platform",
 			"load/stress: tenant slug for the parent resource name")
 		c.Flags().Int("count", 0,
 			"load/stress: number of objects to seed (0 = flavour default: load 500, stress 1001)")
 	}
 	smokeCmd.Flags().String("object-key", "test",
-		"existing objectKey on the caller's tenant — must already be bound to a bucket")
+		"existing collection on the caller's tenant — must already be bound to a bucket")
 	smokeCmd.Flags().String("key", "",
 		"storage key (server picks when empty)")
 	smokeCmd.Flags().String("tenant", "platform",
@@ -221,21 +221,21 @@ func login(ctx context.Context, httpc *http.Client, iamURL, user, password, audi
 
 // fixtureObjectPrefix is the user-key prefix every load/stress object gets, so
 // tear-down can find them and re-runs can count existing ones. Per-flavour so
-// load and stress don't clobber each other under the same objectKey.
+// load and stress don't clobber each other under the same collection.
 func fixtureObjectPrefix(flavour string) string {
 	return "fixture/" + flavour + "/"
 }
 
-// fixtureObjectKey builds the deterministic, zero-padded user key for the i-th
+// fixtureCollection builds the deterministic, zero-padded user key for the i-th
 // (0-based) seeded object. Zero-padding keeps lexical == numeric order so the
 // UI's cursor pagination walks them predictably.
-func fixtureObjectKey(flavour string, i int) string {
+func fixtureCollection(flavour string, i int) string {
 	return fmt.Sprintf("%s%06d.txt", fixtureObjectPrefix(flavour), i)
 }
 
-// isFixtureObjectKey reports whether a user key was written by this seeder for
+// isFixtureCollection reports whether a user key was written by this seeder for
 // the flavour — the tear-down predicate.
-func isFixtureObjectKey(flavour, key string) bool {
+func isFixtureCollection(flavour, key string) bool {
 	return strings.HasPrefix(key, fixtureObjectPrefix(flavour))
 }
 
@@ -294,7 +294,7 @@ func runUp(cmd *cobra.Command) error {
 // token separately from the admin token runUp/runDown already hold (mirrors
 // smoke-upload's rationale).
 func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, user, password, flavour string, seed bool) error {
-	objectKey, _ := cmd.Flags().GetString("object-key")
+	collection, _ := cmd.Flags().GetString("object-key")
 	tenant, _ := cmd.Flags().GetString("tenant")
 	countOverride, _ := cmd.Flags().GetInt("count")
 	httpc := httpClientFor(cmd)
@@ -304,7 +304,7 @@ func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, use
 		return fmt.Errorf("data login: %w", err)
 	}
 	dc := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
-	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenant, objectKey)
+	parent := fmt.Sprintf("tenants/%s/collections/%s", tenant, collection)
 
 	if !seed {
 		return teardownObjects(ctx, dc, parent, flavour)
@@ -460,7 +460,7 @@ func teardownDemo(ctx context.Context, c *mcp.Clients) error {
 // ─── Load / stress flavours: object seeding ───────────────────────────────
 
 // seedObjects seeds `count` fixture objects under `parent` (an existing
-// objectKey resource name) through the real UploadObject → PUT → CompleteObject
+// collection resource name) through the real UploadObject → PUT → CompleteObject
 // flow, so /objects listings + cursor pagination + the object.* event fan-out
 // see realistic data. Idempotent: it counts the fixture objects already present
 // and creates only the remainder, so re-running converges to `count`.
@@ -483,7 +483,7 @@ func seedObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string, c
 	}
 	fmt.Printf("%s: seeding objects [%d, %d) under %s\n", flavour, existing, count, parent)
 	for i := existing; i < count; i++ {
-		if err := uploadFixtureObject(ctx, dc, parent, fixtureObjectKey(flavour, i)); err != nil {
+		if err := uploadFixtureObject(ctx, dc, parent, fixtureCollection(flavour, i)); err != nil {
 			return fmt.Errorf("object %d: %w", i, err)
 		}
 		if (i+1)%100 == 0 {
@@ -536,7 +536,7 @@ func uploadFixtureObject(ctx context.Context, dc *mcp.Clients, parent, key strin
 	return nil
 }
 
-// countFixtureObjects pages the objectKey's objects and counts the ones this
+// countFixtureObjects pages the collection's objects and counts the ones this
 // seeder wrote for the flavour (by user-key prefix).
 func countFixtureObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string) (int, error) {
 	names, err := listFixtureObjectNames(ctx, dc, parent, flavour)
@@ -557,7 +557,7 @@ func listFixtureObjectNames(ctx context.Context, dc *mcp.Clients, parent, flavou
 			return nil, fmt.Errorf("ListObjects: %w", err)
 		}
 		for _, o := range resp.Msg.GetObjects() {
-			if isFixtureObjectKey(flavour, o.GetKey()) {
+			if isFixtureCollection(flavour, o.GetKey()) {
 				names = append(names, o.GetName())
 			}
 		}
@@ -697,7 +697,7 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	httpc := httpClientFor(cmd)
 	user, _ := cmd.Flags().GetString("user")
 	password, _ := cmd.Flags().GetString("password")
-	objectKey, _ := cmd.Flags().GetString("object-key")
+	collection, _ := cmd.Flags().GetString("object-key")
 	storageKey, _ := cmd.Flags().GetString("key")
 
 	tenantHint, _ := cmd.Flags().GetString("tenant")
@@ -717,7 +717,7 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	}
 	dataClients := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
 
-	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenantHint, objectKey)
+	parent := fmt.Sprintf("tenants/%s/collections/%s", tenantHint, collection)
 
 	// Compose a deterministic-looking storage key when the operator
 	// didn't pass one. Includes a unix timestamp so re-runs don't

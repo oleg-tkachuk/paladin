@@ -78,11 +78,11 @@ const (
 	ObjectLockMode_COMPLIANCE = internal.ObjectLockMode_OBJECT_LOCK_MODE_COMPLIANCE
 )
 
-// ─── Tenant / ObjectKey ─────────────────────────────────────────────────────
+// ─── Tenant / Collection ─────────────────────────────────────────────────────
 
 type (
 	Tenant                    = internal.Tenant
-	ObjectKey                 = internal.ObjectKey
+	Collection                = internal.Collection
 	CreateTenantRequest       = internal.CreateTenantRequest
 	GetTenantRequest          = internal.GetTenantRequest
 	UpdateTenantRequest       = internal.UpdateTenantRequest
@@ -92,15 +92,15 @@ type (
 	ListTenantsResponse       = internal.ListTenantsResponse
 	SetInheritedPolicyRequest = internal.SetInheritedPolicyRequest
 
-	CreateObjectKeyRequest       = internal.CreateObjectKeyRequest
-	GetObjectKeyRequest          = internal.GetObjectKeyRequest
-	UpdateObjectKeyRequest       = internal.UpdateObjectKeyRequest
-	DeleteObjectKeyRequest       = internal.DeleteObjectKeyRequest
-	DeleteObjectKeyResponse      = internal.DeleteObjectKeyResponse
-	ListObjectKeysRequest        = internal.ListObjectKeysRequest
-	ListObjectKeysResponse       = internal.ListObjectKeysResponse
-	SetObjectKeyPolicyRequest    = internal.SetObjectKeyPolicyRequest
-	BindObjectKeyToBucketRequest = internal.BindObjectKeyToBucketRequest
+	CreateCollectionRequest       = internal.CreateCollectionRequest
+	GetCollectionRequest          = internal.GetCollectionRequest
+	UpdateCollectionRequest       = internal.UpdateCollectionRequest
+	DeleteCollectionRequest       = internal.DeleteCollectionRequest
+	DeleteCollectionResponse      = internal.DeleteCollectionResponse
+	ListCollectionsRequest        = internal.ListCollectionsRequest
+	ListCollectionsResponse       = internal.ListCollectionsResponse
+	SetCollectionPolicyRequest    = internal.SetCollectionPolicyRequest
+	BindCollectionToBucketRequest = internal.BindCollectionToBucketRequest
 )
 
 // ─── Operation / Audit / Quota / EventSubscription ──────────────────────────

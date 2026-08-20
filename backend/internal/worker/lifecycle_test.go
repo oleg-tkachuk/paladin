@@ -16,13 +16,13 @@ import (
 
 type fakeBucketSource struct {
 	buckets  []admindomain.Bucket
-	bindings map[string][]ObjectKeyBinding
+	bindings map[string][]CollectionBinding
 }
 
 func (f *fakeBucketSource) ListBucketsWithLifecycle(_ context.Context) ([]admindomain.Bucket, error) {
 	return f.buckets, nil
 }
-func (f *fakeBucketSource) ListObjectKeyBindings(_ context.Context, backend, bucket string) ([]ObjectKeyBinding, error) {
+func (f *fakeBucketSource) ListCollectionBindings(_ context.Context, backend, bucket string) ([]CollectionBinding, error) {
 	return f.bindings[backend+"/"+bucket], nil
 }
 
@@ -158,8 +158,8 @@ func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
 	}
 	src := &fakeBucketSource{
 		buckets: []admindomain.Bucket{bucket},
-		bindings: map[string][]ObjectKeyBinding{
-			"primary/paladin-archive": {{TenantID: tenantID, ObjectKey: "k"}},
+		bindings: map[string][]CollectionBinding{
+			"primary/paladin-archive": {{TenantID: tenantID, Collection: "k"}},
 		},
 	}
 

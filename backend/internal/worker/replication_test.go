@@ -13,13 +13,13 @@ import (
 
 type fakeReplSource struct {
 	buckets  []admindomain.Bucket
-	bindings map[string][]ObjectKeyBinding
+	bindings map[string][]CollectionBinding
 }
 
 func (f *fakeReplSource) ListBucketsWithReplication(_ context.Context) ([]admindomain.Bucket, error) {
 	return f.buckets, nil
 }
-func (f *fakeReplSource) ListObjectKeyBindings(_ context.Context, backend, bucket string) ([]ObjectKeyBinding, error) {
+func (f *fakeReplSource) ListCollectionBindings(_ context.Context, backend, bucket string) ([]CollectionBinding, error) {
 	return f.bindings[backend+"/"+bucket], nil
 }
 
@@ -79,8 +79,8 @@ func TestReplicationWorkerCopiesAvailableNewerThanCutoff(t *testing.T) {
 				DestinationBucket: "storageBackends/secondary/buckets/paladin-archive-dr",
 			},
 		}},
-		bindings: map[string][]ObjectKeyBinding{
-			"primary/paladin-archive": {{TenantID: tenantID, ObjectKey: "k"}},
+		bindings: map[string][]CollectionBinding{
+			"primary/paladin-archive": {{TenantID: tenantID, Collection: "k"}},
 		},
 	}
 	committedNew := now.Add(-30 * time.Second)
@@ -144,8 +144,8 @@ func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
 				DestinationBucket: "storageBackends/secondary/buckets/paladin-archive-dr",
 			},
 		}},
-		bindings: map[string][]ObjectKeyBinding{
-			"primary/paladin-archive": {{TenantID: tenantID, ObjectKey: "k"}},
+		bindings: map[string][]CollectionBinding{
+			"primary/paladin-archive": {{TenantID: tenantID, Collection: "k"}},
 		},
 	}
 	committed := now.Add(-30 * time.Second)

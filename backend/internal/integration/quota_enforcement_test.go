@@ -59,7 +59,7 @@ func TestQuotaEnforcementEndToEnd(t *testing.T) {
 		UploadProcedures: map[string]struct{}{uploadProc: {}},
 	}
 	callerCtx := auth.WithPrincipal(ctx, &auth.Principal{TenantID: f.tenantID})
-	parent := "tenants/" + f.tenantID.String() + "/objectKeys/" + f.objectKey
+	parent := "tenants/" + f.tenantID.String() + "/collections/" + f.collection
 
 	// A tenant cap of 1000 bytes, and 900 bytes actually stored. The quota
 	// row starts at zero usage — exactly the state a freshly-created quota
@@ -96,7 +96,7 @@ func TestQuotaEnforcementEndToEnd(t *testing.T) {
 
 // TestBucketQuotaEnforcementEndToEnd proves the scope that previously
 // rejected nothing: a bucket-scoped quota row, reached from an upload that
-// names only its ObjectKey, resolved through the real object repository.
+// names only its Collection, resolved through the real object repository.
 func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
@@ -109,12 +109,12 @@ func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 		UploadProcedures: map[string]struct{}{uploadProc: {}},
 	}
 	callerCtx := auth.WithPrincipal(ctx, &auth.Principal{TenantID: f.tenantID})
-	parent := "tenants/" + f.tenantID.String() + "/objectKeys/" + f.objectKey
+	parent := "tenants/" + f.tenantID.String() + "/collections/" + f.collection
 
 	var backendID, bucketName string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey).Scan(&backendID, &bucketName); err != nil {
+		`SELECT backend_id, bucket_name FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection).Scan(&backendID, &bucketName); err != nil {
 		t.Fatalf("lookup binding: %v", err)
 	}
 

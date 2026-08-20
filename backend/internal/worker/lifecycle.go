@@ -5,7 +5,7 @@
 // lifecycle-config integration lands (slice 12+). Each tick:
 //
 //  1. ListBucketsWithLifecycle — only buckets with a non-empty rules array.
-//  2. For each bucket, walk its bound object_keys and stream objects.
+//  2. For each bucket, walk its bound collections and stream objects.
 //  3. For each object, evaluate every rule whose CEL `match` compiles;
 //     first matching `Expiration.after` whose age is exceeded triggers
 //     soft-delete via the state machine.
@@ -28,10 +28,10 @@ import (
 )
 
 // LifecycleObjectIter exposes the read seam the worker needs: enumerate
-// objects under a (tenant, object_key) scope. Implementations stream
+// objects under a (tenant, collection) scope. Implementations stream
 // pages — the worker iterates lazily to keep memory bounded.
 type LifecycleObjectIter interface {
-	IterateObjects(ctx context.Context, tenantID uuid.UUID, objectKey string, cb func(LifecycleObjectRow) error) error
+	IterateObjects(ctx context.Context, tenantID uuid.UUID, collection string, cb func(LifecycleObjectRow) error) error
 }
 
 // LifecycleObjectRow is the minimal projection per object the worker reads.
@@ -47,16 +47,16 @@ type LifecycleObjectRow struct {
 }
 
 // BucketLifecycleSource lists buckets that carry non-empty lifecycle rules.
-// Plus enumerates the (tenant, object_key) pairs bound to each bucket so
+// Plus enumerates the (tenant, collection) pairs bound to each bucket so
 // the worker can scope its scans.
 type BucketLifecycleSource interface {
 	ListBucketsWithLifecycle(ctx context.Context) ([]admindomain.Bucket, error)
-	ListObjectKeyBindings(ctx context.Context, backendID, bucketName string) ([]ObjectKeyBinding, error)
+	ListCollectionBindings(ctx context.Context, backendID, bucketName string) ([]CollectionBinding, error)
 }
 
-type ObjectKeyBinding struct {
-	TenantID  uuid.UUID
-	ObjectKey string
+type CollectionBinding struct {
+	TenantID   uuid.UUID
+	Collection string
 }
 
 // LifecycleWorker is the worker fan entry. SoftDeleter is the state-machine
@@ -117,9 +117,9 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 	if len(expirers) == 0 {
 		return // no expiration rules → nothing to evaluate this tick
 	}
-	bindings, err := w.Buckets.ListObjectKeyBindings(ctx, b.BackendID, b.BucketName)
+	bindings, err := w.Buckets.ListCollectionBindings(ctx, b.BackendID, b.BucketName)
 	if err != nil {
-		w.log().Warn("failed to list object_key bindings",
+		w.log().Warn("failed to list collection bindings",
 			zap.String("backend", b.BackendID),
 			zap.String("bucket", b.BucketName),
 			zap.Error(err))
@@ -129,7 +129,7 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 		if err := ctx.Err(); err != nil {
 			return
 		}
-		err := w.Objects.IterateObjects(ctx, bind.TenantID, bind.ObjectKey, func(row LifecycleObjectRow) error {
+		err := w.Objects.IterateObjects(ctx, bind.TenantID, bind.Collection, func(row LifecycleObjectRow) error {
 			if row.State != string(statemachine.StateAvailable) {
 				return nil
 			}
@@ -161,7 +161,7 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 		if err != nil {
 			w.log().Warn("failed to iterate objects",
 				zap.String("tenant", bind.TenantID.String()),
-				zap.String("object_key", bind.ObjectKey),
+				zap.String("collection", bind.Collection),
 				zap.Error(err))
 		}
 	}

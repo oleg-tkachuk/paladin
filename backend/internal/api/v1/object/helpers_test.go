@@ -361,7 +361,7 @@ func TestObjectResourceName(t *testing.T) {
 	tenant := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 	got := objectResourceName(tenant, "logs", "a.txt")
-	want := "tenants/" + tenant.String() + "/objectKeys/logs/objects-by-key/a.txt"
+	want := "tenants/" + tenant.String() + "/collections/logs/objects-by-key/a.txt"
 	if got != want {
 		t.Errorf("objectResourceName = %q, want %q", got, want)
 	}

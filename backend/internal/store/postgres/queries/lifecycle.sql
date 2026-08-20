@@ -43,23 +43,23 @@ WHERE jsonb_array_length(lifecycle_rules) > 0
   AND provision_state = 'ready'
 ORDER BY backend_id, bucket_name;
 
--- name: ListObjectKeyBindingsForBucket :many
--- Lists every (tenant_id, object_key) bound to a given bucket. Used by
+-- name: ListCollectionBindingsForBucket :many
+-- Lists every (tenant_id, collection) bound to a given bucket. Used by
 -- lifecycle + replication workers to scope their object scans.
-SELECT tenant_id, object_key
-FROM object_keys
+SELECT tenant_id, collection
+FROM collections
 WHERE backend_id = $1 AND bucket_name = $2
-ORDER BY tenant_id, object_key;
+ORDER BY tenant_id, collection;
 
 -- name: IterateObjectsForLifecycle :many
--- Streams a window of AVAILABLE-only objects under (tenant, object_key)
+-- Streams a window of AVAILABLE-only objects under (tenant, collection)
 -- newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
 -- Lifecycle worker walks via repeated calls until empty page.
 SELECT object_id, state, content_type, size_bytes,
        metadata, tags, created_at, committed_at
 FROM objects
 WHERE tenant_id = $1
-  AND object_key = $2
+  AND collection = $2
   AND state = 'AVAILABLE'
   AND ($3::uuid IS NULL OR object_id < $3::uuid)
 ORDER BY object_id DESC

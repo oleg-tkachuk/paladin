@@ -22,7 +22,7 @@ func init() {
 	var err error
 	resourceNameShapeTotal, err = meter.Int64Counter(
 		"paladin_resource_name_shape_total",
-		metric.WithDescription("ObjectKey resource-name shapes received at the connectshim edge, by shape"),
+		metric.WithDescription("Collection resource-name shapes received at the connectshim edge, by shape"),
 	)
 	if err != nil {
 		otel.Handle(err)

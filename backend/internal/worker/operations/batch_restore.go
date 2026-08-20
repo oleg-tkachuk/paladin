@@ -25,7 +25,7 @@ import (
 //     caller raced us). The per-row failure carries the original
 //     state-machine error message; callers branch on the string.
 //   - statemachine.ErrConflict — guarded by a UNIQUE partial index
-//     on (tenant, object_key, key) WHERE state <> 'DELETED': if a
+//     on (tenant, collection, key) WHERE state <> 'DELETED': if a
 //     live row has been created at the same key since the soft-delete,
 //     restore would collide and the SQL fails. Caller cleans up the
 //     newer live row (or hard-deletes the soft row) before retrying.
@@ -63,8 +63,8 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operation.Operati
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
-	if args.TenantID == uuid.Nil || args.ObjectKey == "" || len(args.ObjectIDs) == 0 {
-		return nil, errors.New("invalid metadata: tenant_id, object_key, object_ids required")
+	if args.TenantID == uuid.Nil || args.Collection == "" || len(args.ObjectIDs) == 0 {
+		return nil, errors.New("invalid metadata: tenant_id, collection, object_ids required")
 	}
 	if args.TenantID != op.TenantID {
 		return nil, fmt.Errorf("metadata tenant_id %s != operation tenant_id %s",

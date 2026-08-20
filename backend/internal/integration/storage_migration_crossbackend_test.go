@@ -74,13 +74,13 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 	want := sha256.Sum256(data)
 
 	tenant := uuid.New()
-	const objectKey, key = "invoices", "2026/big.bin"
+	const collection, key = "invoices", "2026/big.bin"
 
 	srcClient, err := reg.For(ctx, "shared")
 	if err != nil {
 		t.Fatalf("registry For(shared): %v", err)
 	}
-	w, err := srcClient.Open(ctx, bucketShared, tenant, objectKey, key, "application/octet-stream", int64(len(data)))
+	w, err := srcClient.Open(ctx, bucketShared, tenant, collection, key, "application/octet-stream", int64(len(data)))
 	if err != nil {
 		t.Fatalf("open on shared backend: %v", err)
 	}
@@ -93,14 +93,14 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 
 	// The migration copy: cross-backend, so the router stream-throughs it.
 	router := s3adapter.NewObjectRouter(reg)
-	src := objpkg.Location{BackendID: "shared", TenantID: tenant, Bucket: bucketShared, ObjectKey: objectKey, Key: key}
-	dst := objpkg.Location{BackendID: "dedicated", TenantID: tenant, Bucket: bucketDedicated, ObjectKey: objectKey, Key: key}
+	src := objpkg.Location{BackendID: "shared", TenantID: tenant, Bucket: bucketShared, Collection: collection, Key: key}
+	dst := objpkg.Location{BackendID: "dedicated", TenantID: tenant, Bucket: bucketDedicated, Collection: collection, Key: key}
 	if err := router.CopyObject(ctx, src, dst); err != nil {
 		t.Fatalf("cross-backend CopyObject: %v", err)
 	}
 
 	// The object landed on the dedicated backend with the right size...
-	if _, size, _, _, err := router.Head(ctx, "dedicated", bucketDedicated, tenant, objectKey, key); err != nil || size != int64(len(data)) {
+	if _, size, _, _, err := router.Head(ctx, "dedicated", bucketDedicated, tenant, collection, key); err != nil || size != int64(len(data)) {
 		t.Fatalf("Head on dedicated backend: size=%d err=%v (want the 12MiB copy)", size, err)
 	}
 	// ...and byte-for-byte identical content (sha256 over the streamed body).
@@ -108,7 +108,7 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry For(dedicated): %v", err)
 	}
-	rc, _, err := dstClient.GetStream(ctx, bucketDedicated, tenant, objectKey, key)
+	rc, _, err := dstClient.GetStream(ctx, bucketDedicated, tenant, collection, key)
 	if err != nil {
 		t.Fatalf("GetStream on dedicated backend: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 	}
 
 	// The source copy is RETAINED (cleanup is a separate, retention-gated slice).
-	if _, _, _, _, err := router.Head(ctx, "shared", bucketShared, tenant, objectKey, key); err != nil {
+	if _, _, _, _, err := router.Head(ctx, "shared", bucketShared, tenant, collection, key); err != nil {
 		t.Errorf("source object missing after copy: %v (Phase 3 retains the source until cleanup)", err)
 	}
 }

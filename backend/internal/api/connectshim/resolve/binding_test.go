@@ -34,15 +34,15 @@ func TestResolveWithBinding_BareEnriched(t *testing.T) {
 	tid := uuid.New()
 	b := &fakeBindings{backend: "primary", bucket: "acme-eu", found: true}
 
-	ref, err := ResolveObjectKeyNameWithBinding(ctxWithTenant(tid), "invoices/q1", b)
+	ref, err := ResolveCollectionNameWithBinding(ctxWithTenant(tid), "invoices/q1", b)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if ref.Shape != ShapeBare {
 		t.Errorf("shape = %v, want bare", ref.Shape)
 	}
-	if ref.TenantID != tid || ref.ObjectKey != "invoices/q1" {
-		t.Errorf("ref = {%s, %q}, want {%s, invoices/q1}", ref.TenantID, ref.ObjectKey, tid)
+	if ref.TenantID != tid || ref.Collection != "invoices/q1" {
+		t.Errorf("ref = {%s, %q}, want {%s, invoices/q1}", ref.TenantID, ref.Collection, tid)
 	}
 	if ref.BackendID != "primary" || ref.BucketName != "acme-eu" {
 		t.Errorf("binding = (%q, %q), want (primary, acme-eu)", ref.BackendID, ref.BucketName)
@@ -54,7 +54,7 @@ func TestResolveWithBinding_BareEnriched(t *testing.T) {
 func TestResolveWithBinding_BareNoBinding(t *testing.T) {
 	tid := uuid.New()
 	b := &fakeBindings{found: false}
-	if _, err := ResolveObjectKeyNameWithBinding(ctxWithTenant(tid), "just-a-key", b); !errors.Is(err, ErrNoDefaultBinding) {
+	if _, err := ResolveCollectionNameWithBinding(ctxWithTenant(tid), "just-a-key", b); !errors.Is(err, ErrNoDefaultBinding) {
 		t.Fatalf("err = %v, want ErrNoDefaultBinding", err)
 	}
 }
@@ -64,9 +64,9 @@ func TestResolveWithBinding_BareNoBinding(t *testing.T) {
 func TestResolveWithBinding_CanonicalAndTenantUntouched(t *testing.T) {
 	tid := uuid.New()
 
-	// C-shape: no lookup, no binding populated (matches ResolveObjectKeyName).
+	// C-shape: no lookup, no binding populated (matches ResolveCollectionName).
 	b1 := &fakeBindings{found: true, backend: "x", bucket: "y"}
-	refC, err := ResolveObjectKeyNameWithBinding(ctxWithTenant(tid), "tenants/"+tid.String()+"/objectKeys/inv", b1)
+	refC, err := ResolveCollectionNameWithBinding(ctxWithTenant(tid), "tenants/"+tid.String()+"/collections/inv", b1)
 	if err != nil {
 		t.Fatalf("C resolve: %v", err)
 	}
@@ -79,8 +79,8 @@ func TestResolveWithBinding_CanonicalAndTenantUntouched(t *testing.T) {
 
 	// A-shape: carries its own binding; lookup not consulted.
 	b2 := &fakeBindings{found: true, backend: "x", bucket: "y"}
-	refA, err := ResolveObjectKeyNameWithBinding(ctxWithTenant(tid),
-		"storageBackends/primary/buckets/acme-eu/tenants/"+tid.String()+"/objectKeys/inv", b2)
+	refA, err := ResolveCollectionNameWithBinding(ctxWithTenant(tid),
+		"storageBackends/primary/buckets/acme-eu/tenants/"+tid.String()+"/collections/inv", b2)
 	if err != nil {
 		t.Fatalf("A resolve: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestResolveWithBinding_CanonicalAndTenantUntouched(t *testing.T) {
 func TestResolveWithBinding_LookupError(t *testing.T) {
 	tid := uuid.New()
 	b := &fakeBindings{err: errors.New("db down")}
-	_, err := ResolveObjectKeyNameWithBinding(ctxWithTenant(tid), "bare", b)
+	_, err := ResolveCollectionNameWithBinding(ctxWithTenant(tid), "bare", b)
 	if err == nil || errors.Is(err, ErrNoDefaultBinding) {
 		t.Fatalf("err = %v, want a wrapped store error", err)
 	}

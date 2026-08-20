@@ -12,30 +12,30 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// fakeLookup records the (object_key, key) the handler resolves to and returns
+// fakeLookup records the (collection, key) the handler resolves to and returns
 // ErrNoRows from LookupObjectByKey so Handle skips before the state machine —
 // isolating the multi-segment disambiguation glue.
 type fakeLookup struct {
 	resolveReturn string
 	resolveErr    error
-	gotObjectKey  string
+	gotCollection string
 	gotKey        string
 	lookupCalled  bool
-	binding       sqlc.GetObjectKeyRow
+	binding       sqlc.GetCollectionRow
 	bindingErr    error
 }
 
-func (f *fakeLookup) ResolveObjectKeyPrefix(_ context.Context, _ pgtype.UUID, _ string) (string, error) {
+func (f *fakeLookup) ResolveCollectionPrefix(_ context.Context, _ pgtype.UUID, _ string) (string, error) {
 	return f.resolveReturn, f.resolveErr
 }
 
-func (f *fakeLookup) GetObjectKey(_ context.Context, _ pgtype.UUID, _ string) (sqlc.GetObjectKeyRow, error) {
+func (f *fakeLookup) GetCollection(_ context.Context, _ pgtype.UUID, _ string) (sqlc.GetCollectionRow, error) {
 	return f.binding, f.bindingErr
 }
 
-func (f *fakeLookup) LookupObjectByKey(_ context.Context, _ pgtype.UUID, objectKey, key string) (sqlc.LookupObjectByKeyRow, error) {
+func (f *fakeLookup) LookupObjectByKey(_ context.Context, _ pgtype.UUID, collection, key string) (sqlc.LookupObjectByKeyRow, error) {
 	f.lookupCalled = true
-	f.gotObjectKey = objectKey
+	f.gotCollection = collection
 	f.gotKey = key
 	return sqlc.LookupObjectByKeyRow{}, pgx.ErrNoRows
 }
@@ -45,19 +45,19 @@ func uploadedEvent(tenant uuid.UUID, naiveOK, naiveKey string) CloudEvent {
 		ID:   "evt-1",
 		Type: EventTypeUploaded,
 		SubjectFields: SubjectFields{
-			TenantID:  tenant.String(),
-			ObjectKey: naiveOK,
-			Key:       naiveKey,
+			TenantID:   tenant.String(),
+			Collection: naiveOK,
+			Key:        naiveKey,
 		},
 	}
 }
 
-// TestHandle_MultiSegmentObjectKeyDisambiguation: the source naively split the
+// TestHandle_MultiSegmentCollectionDisambiguation: the source naively split the
 // tail at the first segment (OK=`invoices`, key=`2026/q1/report.pdf`), but the
 // real OK is the longer `invoices/2026/q1`. The handler must recombine the
 // tail, take the longest-prefix OK, and look the object up with the corrected
 // split.
-func TestHandle_MultiSegmentObjectKeyDisambiguation(t *testing.T) {
+func TestHandle_MultiSegmentCollectionDisambiguation(t *testing.T) {
 	tenant := uuid.New()
 	f := &fakeLookup{resolveReturn: "invoices/2026/q1"}
 	h := &PromoteHandler{Lookup: f, Logger: zap.NewNop()}
@@ -68,8 +68,8 @@ func TestHandle_MultiSegmentObjectKeyDisambiguation(t *testing.T) {
 	if !f.lookupCalled {
 		t.Fatal("LookupObjectByKey was not called")
 	}
-	if f.gotObjectKey != "invoices/2026/q1" {
-		t.Errorf("resolved object_key = %q, want invoices/2026/q1", f.gotObjectKey)
+	if f.gotCollection != "invoices/2026/q1" {
+		t.Errorf("resolved collection = %q, want invoices/2026/q1", f.gotCollection)
 	}
 	if f.gotKey != "report.pdf" {
 		t.Errorf("resolved key = %q, want report.pdf", f.gotKey)
@@ -87,8 +87,8 @@ func TestHandle_SingleSegmentUnchanged(t *testing.T) {
 	if err := h.Handle(context.Background(), uploadedEvent(tenant, "assets", "logo.png")); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if f.gotObjectKey != "assets" || f.gotKey != "logo.png" {
-		t.Errorf("split = (%q, %q), want (assets, logo.png)", f.gotObjectKey, f.gotKey)
+	if f.gotCollection != "assets" || f.gotKey != "logo.png" {
+		t.Errorf("split = (%q, %q), want (assets, logo.png)", f.gotCollection, f.gotKey)
 	}
 }
 
@@ -103,7 +103,7 @@ func TestHandle_NoRegisteredPrefixKeepsSourceSplit(t *testing.T) {
 	if err := h.Handle(context.Background(), uploadedEvent(tenant, "ghost", "x/y.bin")); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if f.gotObjectKey != "ghost" || f.gotKey != "x/y.bin" {
-		t.Errorf("split = (%q, %q), want the source's (ghost, x/y.bin)", f.gotObjectKey, f.gotKey)
+	if f.gotCollection != "ghost" || f.gotKey != "x/y.bin" {
+		t.Errorf("split = (%q, %q), want the source's (ghost, x/y.bin)", f.gotCollection, f.gotKey)
 	}
 }

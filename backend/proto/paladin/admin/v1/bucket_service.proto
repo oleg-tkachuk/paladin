@@ -10,7 +10,7 @@ import "paladin/admin/v1/types.proto";
 import "paladin/common/v1/pagination.proto";
 
 // BucketService manages physical S3 buckets. Bucket admins create buckets
-// and bind them to backends; tenant admins consume them via ObjectKey.
+// and bind them to backends; tenant admins consume them via Collection.
 service BucketService {
   rpc CreateBucket(CreateBucketRequest) returns (Bucket);
   rpc GetBucket(GetBucketRequest) returns (Bucket);
@@ -29,14 +29,14 @@ service BucketService {
   rpc SetReplication(SetReplicationRequest) returns (Bucket);
 
   // ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-  // the caller's principal/scopes are allowed to bind ObjectKeys to.
+  // the caller's principal/scopes are allowed to bind Collections to.
   rpc ListAccessibleBuckets(ListAccessibleBucketsRequest) returns (ListBucketsResponse);
 }
 
 message CreateBucketRequest {
   // Parent: "storageBackends/{backend_id}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
-  string bucket_name = 2 [(buf.validate.field).string = {min_len: 3, max_len: 63}];
+  string bucket_id = 2 [(buf.validate.field).string = {min_len: 3, max_len: 63}];
   Bucket bucket = 3 [(buf.validate.field).required = true];
   // When true, Paladin also calls the backend to physically create the bucket.
   // When false, the bucket is assumed to exist out-of-band.

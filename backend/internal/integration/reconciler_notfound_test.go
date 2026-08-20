@@ -31,10 +31,10 @@ import (
 // object" warnings in four minutes.
 
 // headFunc adapts a function to adapters.HeadProber.
-type headFunc func(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) (string, int64, string, string, error)
+type headFunc func(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error)
 
-func (f headFunc) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) (string, int64, string, string, error) {
-	return f(ctx, backendID, bucket, tenantID, objectKey, key)
+func (f headFunc) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error) {
+	return f(ctx, backendID, bucket, tenantID, collection, key)
 }
 
 // runOneTick starts the reconciler, lets it fire at least once, and stops it.
@@ -74,11 +74,11 @@ func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, object_key, key, state,
+		INSERT INTO objects (object_id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
 		VALUES ($1, $2, $3, 'k-gone', 'PENDING', 'application/octet-stream', 0,
 		        now() - interval '48 hours')`,
-		id, f.tenantID, f.objectKey)
+		id, f.tenantID, f.collection)
 
 	// The backend answers exactly as garage/seaweedfs did in production: the
 	// object is not there. Built through the real s3adapter wrapper so the
@@ -107,11 +107,11 @@ func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, object_key, key, state,
+		INSERT INTO objects (object_id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
 		VALUES ($1, $2, $3, 'k-unreachable', 'PENDING', 'application/octet-stream', 0,
 		        now() - interval '48 hours')`,
-		id, f.tenantID, f.objectKey)
+		id, f.tenantID, f.collection)
 
 	probe := adapters.NewReconcilerProbe(sqlc.New(pool),
 		headFunc(func(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {
@@ -138,11 +138,11 @@ func TestReconcilerPromotesWhenBytesArePresent(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, object_key, key, state,
+		INSERT INTO objects (object_id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
 		VALUES ($1, $2, $3, 'k-present', 'PENDING', 'application/octet-stream', 0,
 		        now() - interval '48 hours')`,
-		id, f.tenantID, f.objectKey)
+		id, f.tenantID, f.collection)
 
 	probe := adapters.NewReconcilerProbe(sqlc.New(pool),
 		headFunc(func(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {

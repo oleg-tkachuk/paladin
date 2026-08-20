@@ -23,10 +23,10 @@ import (
 )
 
 type Storage interface {
-	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (storageUploadID string, err error)
-	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
-	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
-	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (storageUploadID string, err error)
+	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
+	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error
+	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
 // Part is a record of an uploaded multipart part as stored in multipart_parts.
@@ -49,7 +49,7 @@ type Session struct {
 	TenantID        uuid.UUID
 	BackendID       string // storage backend the upload was initiated against
 	Bucket          string // physical S3 bucket; anchored at initiate time
-	ObjectKey       string
+	Collection      string
 	Key             string
 	StorageUploadID string
 	PartSizeBytes   int64
@@ -59,7 +59,7 @@ type Session struct {
 
 type InitiateArgs struct {
 	TenantID      uuid.UUID
-	ObjectKey     string
+	Collection    string
 	Key           string
 	ContentType   string
 	TotalParts    int32
@@ -81,12 +81,12 @@ type Repository interface {
 	GetSession(ctx context.Context, uploadID string) (Session, error)
 	RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error
 	DeleteSession(ctx context.Context, uploadID string) error
-	GetObjectLocation(ctx context.Context, objectID uuid.UUID) (objectKey, key string, err error)
+	GetObjectLocation(ctx context.Context, objectID uuid.UUID) (collection, key string, err error)
 	// LookupBucket returns the storage backend id and the physical S3 bucket
-	// bound to the ObjectKey. Used to route storage calls to the right
+	// bound to the Collection. Used to route storage calls to the right
 	// (backend, bucket); callers that don't route on backend yet may discard
 	// backendID (docs/backend-registry.md).
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 	// ListParts returns recorded parts for an upload, ordered by part_number.
 	// Pagination is keyset on part_number; pageToken is the last seen number.
 	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
@@ -105,7 +105,7 @@ type VersionRecorder interface {
 type VersionedObject struct {
 	ObjectID     uuid.UUID
 	TenantID     uuid.UUID
-	ObjectKey    string
+	Collection   string
 	Key          string
 	ContentType  string
 	SizeBytes    int64
@@ -157,22 +157,22 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("size_bytes is required for multipart uploads"))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + args.ObjectKey + "/" + args.Key
+	objectURI := "object://" + tenantID.String() + "/" + args.Collection + "/" + args.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the (backend, bucket) BEFORE authz so a bucket:/object_key:-
+	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
 	// scoped write PAT enforces on multipart init; the same resolution routes
 	// InitiateMultipart and anchors the session below.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey, true) // multipart init (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.Collection, true) // multipart init (mutation)
 	if err != nil {
 		return nil, object.MapResolveErr(err)
 	}
-	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, args.Key, backendID, bucket, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, args.Key, backendID, bucket, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
 		return nil, err
 	}
 
-	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.ObjectKey, args.Key, args.ContentType)
+	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.Collection, args.Key, args.ContentType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}
@@ -182,7 +182,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err != nil {
 		// Best-effort rollback: abort the orphan storage session. Log and
 		// proceed — a background sweeper eventually cleans stragglers.
-		_ = h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, storageUploadID, args.ObjectKey, args.Key)
+		_ = h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, storageUploadID, args.Collection, args.Key)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &session, nil
@@ -199,23 +199,23 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + sess.ObjectKey + "/" + sess.Key
+	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return err
 	}
 	// The session anchored its (backend, bucket) at initiate time; pass it to
-	// authz so a bucket:/object_key:-scoped PAT enforces on complete.
-	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPutObject, 0, ""); err != nil {
+	// authz so a bucket:/collection:-scoped PAT enforces on complete.
+	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPutObject, 0, ""); err != nil {
 		return err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
-		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // multipart complete (mutation)
+		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // multipart complete (mutation)
 		if err != nil {
 			return object.MapResolveErr(err)
 		}
 	}
-	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, args.Parts)
+	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, args.Parts)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
@@ -228,7 +228,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		_ = h.versions.OnPromote(ctx, VersionedObject{
 			ObjectID:    sess.ObjectID,
 			TenantID:    sess.TenantID,
-			ObjectKey:   sess.ObjectKey,
+			Collection:  sess.Collection,
 			Key:         sess.Key,
 			SizeBytes:   size,
 			ETag:        etag,
@@ -258,23 +258,23 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + sess.ObjectKey + "/" + sess.Key
+	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
 		return err
 	}
-	// Session-anchored (backend, bucket) → authz enforces bucket:/object_key:
+	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
 	// scopes on abort.
-	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionDeleteObject, 0, ""); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
-		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // abort multipart (mutation)
+		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // abort multipart (mutation)
 		if err != nil {
 			return object.MapResolveErr(err)
 		}
 	}
-	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key); err != nil {
+	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	// Mark the underlying object FAILED so reconciler won't promote it.
@@ -289,8 +289,8 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 
 // PresignPart issues a presigned URL for uploading a single part of an
 // in-flight multipart session. Authorization is checked against the underlying
-// object's (objectKey, key); the storage URL targets the bucket bound to that
-// ObjectKey.
+// object's (collection, key); the storage URL targets the bucket bound to that
+// Collection.
 func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -307,7 +307,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("part_number %d out of range (1..%d)", partNumber, sess.TotalParts))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + sess.ObjectKey + "/" + sess.Key
+	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
 	// Presigned part URL grants Put on the underlying object; gate on
 	// both OpPresign (the act of issuing a URL) and OpPut (the op the
 	// URL ultimately authorises). Either failure short-circuits.
@@ -317,14 +317,14 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Session-anchored (backend, bucket) → authz enforces bucket:/object_key:
+	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
 	// scopes on the part presign.
-	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPresignPut, 0, ""); err != nil {
+	if err := h.authorize(ctx, p, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
-		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // presign part (mutation)
+		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // presign part (mutation)
 		if err != nil {
 			return "", nil, time.Time{}, object.MapResolveErr(err)
 		}
@@ -332,7 +332,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
 	}
-	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, partNumber, ttl)
+	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, partNumber, ttl)
 }
 
 // ListParts returns the parts already recorded for an upload session. Used
@@ -352,9 +352,9 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err
 	}
-	// Session-anchored (backend, bucket) → authz enforces bucket:/object_key:
+	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
 	// read scopes on listing parts.
-	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionGetObject, 0, ""); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
 	}
 	if pageSize <= 0 || pageSize > 1000 {
@@ -370,14 +370,14 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 // authorize runs the Cedar check for a multipart action. backendID/bucket
 // carry the resolved physical binding (from the session, or a pre-authz
 // LookupBucket on initiate) so the scope-enforcement built-in can confine a
-// bucket:/object_key:-scoped PAT to its own bucket. Empty backendID/bucket
+// bucket:/collection:-scoped PAT to its own bucket. Empty backendID/bucket
 // leaves the resource without those scope keys, which only ever denies a
 // scoped principal — unscoped/roles-only callers are unaffected.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, backendID, bucket, action string, sizeBytes int64, contentType string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket, action string, sizeBytes int64, contentType string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipalFor(p, tenantID),
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, BackendID: backendID, BucketName: bucket, SizeBytes: sizeBytes, ContentType: contentType},
+		&cedar.Resource{TenantID: tenantID, Collection: collection, Key: key, BackendID: backendID, BucketName: bucket, SizeBytes: sizeBytes, ContentType: contentType},
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
 	)
 	if err != nil {

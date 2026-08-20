@@ -36,7 +36,7 @@ import (
 func TestBatchExecutor_Delete(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "batch-del")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	id1 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "a")
 	id2 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "b")
 	id3 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "c")
@@ -49,9 +49,9 @@ func TestBatchExecutor_Delete(t *testing.T) {
 	}
 
 	args := batch.BatchDeleteArgs{
-		TenantID:  tenantID,
-		ObjectKey: "docs",
-		ObjectIDs: []uuid.UUID{id1, id2, id3, idGhost},
+		TenantID:   tenantID,
+		Collection: "docs",
+		ObjectIDs:  []uuid.UUID{id1, id2, id3, idGhost},
 	}
 	resp := runExecutor(t, exec, tenantID, args)
 
@@ -78,7 +78,7 @@ func TestBatchExecutor_Delete(t *testing.T) {
 func TestBatchExecutor_UpdateTags(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "batch-tags")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	id1 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "a")
 	id2 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "b")
 
@@ -88,10 +88,10 @@ func TestBatchExecutor_UpdateTags(t *testing.T) {
 	}
 
 	args := batch.BatchUpdateTagsArgs{
-		TenantID:  tenantID,
-		ObjectKey: "docs",
-		ObjectIDs: []uuid.UUID{id1, id2},
-		Tags:      map[string]string{"env": "prod", "team": "platform"},
+		TenantID:   tenantID,
+		Collection: "docs",
+		ObjectIDs:  []uuid.UUID{id1, id2},
+		Tags:       map[string]string{"env": "prod", "team": "platform"},
 	}
 	resp := runExecutor(t, exec, tenantID, args)
 
@@ -114,7 +114,7 @@ func TestBatchExecutor_UpdateTags(t *testing.T) {
 func TestBatchExecutor_Restore(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "batch-restore")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
 	id1 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "a")
 	id2 := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "b")
 
@@ -134,9 +134,9 @@ func TestBatchExecutor_Restore(t *testing.T) {
 	}
 
 	args := batch.BatchRestoreObjectsArgs{
-		TenantID:  tenantID,
-		ObjectKey: "docs",
-		ObjectIDs: []uuid.UUID{id1, id2},
+		TenantID:   tenantID,
+		Collection: "docs",
+		ObjectIDs:  []uuid.UUID{id1, id2},
 	}
 	resp := runExecutor(t, exec, tenantID, args)
 
@@ -162,7 +162,7 @@ func TestBatchExecutor_TenantMismatch_FailsWholeOp(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantA := mustCreateTenant(t, h.PoolMigrate, "tenant-a")
 	tenantB := mustCreateTenant(t, h.PoolMigrate, "tenant-b")
-	mustCreateObjectKey(t, h.PoolMigrate, tenantA, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantA, "docs")
 	id := mustInsertAvailableObject(t, h.PoolMigrate, tenantA, "docs", "a")
 
 	q := sqlc.New(h.PoolMigrate)
@@ -173,9 +173,9 @@ func TestBatchExecutor_TenantMismatch_FailsWholeOp(t *testing.T) {
 
 	// Args claim tenant A, but we wrap in a tenant-B operation.
 	args := batch.BatchDeleteArgs{
-		TenantID:  tenantA,
-		ObjectKey: "docs",
-		ObjectIDs: []uuid.UUID{id},
+		TenantID:   tenantA,
+		Collection: "docs",
+		ObjectIDs:  []uuid.UUID{id},
 	}
 	md, _ := json.Marshal(args)
 	op := operation.Operation{
@@ -197,18 +197,18 @@ func TestBatchExecutor_TenantMismatch_FailsWholeOp(t *testing.T) {
 
 // ─── helpers ────────────────────────────────────────────────────────
 
-func mustInsertAvailableObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, objectKey, key string) uuid.UUID {
+func mustInsertAvailableObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, collection, key string) uuid.UUID {
 	t.Helper()
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            object_id, tenant_id, object_key, key, state,
+            object_id, tenant_id, collection, key, state,
             content_type, checksum_algorithm, size_bytes, etag, committed_at
         ) VALUES (
             $1, $2, $3, $4, 'AVAILABLE',
             'application/octet-stream', 1, 100, 'etag', now()
         )
-    `, objID, tenantID, objectKey, key)
+    `, objID, tenantID, collection, key)
 	if err != nil {
 		t.Fatalf("insert available object: %v", err)
 	}

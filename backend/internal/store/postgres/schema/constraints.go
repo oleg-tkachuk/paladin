@@ -31,19 +31,19 @@ const (
 	TenantsImmutableColumnsTrigger = "tenants_immutable_columns"
 )
 
-// object_keys table constraint names — see migration 005 (FK to
+// collections table constraint names — see migration 005 (FK to
 // buckets), 030 (multi-segment path CHECK).
 const (
-	// ObjectKeysPK — composite primary key (tenant_id, object_key).
-	ObjectKeysPK = "object_keys_pkey"
-	// ObjectKeysTenantIDFK — FK to tenants.tenant_id.
-	ObjectKeysTenantIDFK = "object_keys_tenant_id_fkey"
-	// ObjectKeysBucketFK — composite FK to (buckets.backend_id,
+	// CollectionsPK — composite primary key (tenant_id, collection).
+	CollectionsPK = "collections_pkey"
+	// CollectionsTenantIDFK — FK to tenants.tenant_id.
+	CollectionsTenantIDFK = "collections_tenant_id_fkey"
+	// CollectionsBucketFK — composite FK to (buckets.backend_id,
 	// buckets.bucket_name).
-	ObjectKeysBucketFK = "object_keys_backend_id_fkey"
-	// ObjectKeysFormat — CHECK accepting multi-segment slash-separated
+	CollectionsBucketFK = "collections_backend_id_fkey"
+	// CollectionsFormat — CHECK accepting multi-segment slash-separated
 	// kebab-case paths (post-migration 030).
-	ObjectKeysFormat = "object_key_format"
+	CollectionsFormat = "collection_format"
 )
 
 // tenant_default_bindings constraint names — see migration 034.

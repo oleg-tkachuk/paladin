@@ -10,7 +10,7 @@
 //     AVAILABLE objects are copied.
 //  4. For each match, call StorageReplicator.Replicate which copies the
 //     bytes from the source bucket to `replication.destination_bucket`
-//     using the same object_key prefix.
+//     using the same collection prefix.
 //  5. On success, advance the watermark.
 //
 // v2 ships the worker scaffold + test stubs; the actual S3-side bytewise
@@ -34,20 +34,20 @@ type StorageReplicator interface {
 	Replicate(ctx context.Context, src, dst ReplicationTarget) error
 }
 
-// ReplicationTarget identifies one side of a copy. ObjectKey + Key are the
+// ReplicationTarget identifies one side of a copy. Collection + Key are the
 // logical pair; BackendID + BucketName are the physical routing.
 type ReplicationTarget struct {
 	BackendID  string
 	BucketName string
 	TenantID   uuid.UUID
-	ObjectKey  string
+	Collection string
 	Key        string
 }
 
 // ReplicationSource lists buckets with replication enabled.
 type ReplicationSource interface {
 	ListBucketsWithReplication(ctx context.Context) ([]admindomain.Bucket, error)
-	ListObjectKeyBindings(ctx context.Context, backendID, bucketName string) ([]ObjectKeyBinding, error)
+	ListCollectionBindings(ctx context.Context, backendID, bucketName string) ([]CollectionBinding, error)
 }
 
 // WatermarkStore persists the per-bucket replication high-water mark
@@ -126,9 +126,9 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 		r.log().Warn("invalid destination", zap.String("dst", b.Replication.DestinationBucket), zap.Error(err))
 		return
 	}
-	bindings, err := r.Buckets.ListObjectKeyBindings(ctx, b.BackendID, b.BucketName)
+	bindings, err := r.Buckets.ListCollectionBindings(ctx, b.BackendID, b.BucketName)
 	if err != nil {
-		r.log().Warn("failed to list object_key bindings",
+		r.log().Warn("failed to list collection bindings",
 			zap.String("backend", b.BackendID),
 			zap.String("bucket", b.BucketName),
 			zap.Error(err))
@@ -139,7 +139,7 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 		if err := ctx.Err(); err != nil {
 			return
 		}
-		err := r.Objects.IterateObjects(ctx, bind.TenantID, bind.ObjectKey, func(row LifecycleObjectRow) error {
+		err := r.Objects.IterateObjects(ctx, bind.TenantID, bind.Collection, func(row LifecycleObjectRow) error {
 			if row.State != "AVAILABLE" {
 				return nil
 			}
@@ -154,13 +154,13 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 				BackendID:  b.BackendID,
 				BucketName: b.BucketName,
 				TenantID:   bind.TenantID,
-				ObjectKey:  bind.ObjectKey,
+				Collection: bind.Collection,
 			}
 			dst := ReplicationTarget{
 				BackendID:  dstBackend,
 				BucketName: dstBucket,
 				TenantID:   bind.TenantID,
-				ObjectKey:  bind.ObjectKey,
+				Collection: bind.Collection,
 			}
 			if r.Replicator == nil {
 				r.log().Info("dry-run match",

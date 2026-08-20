@@ -44,10 +44,10 @@ func (f *fakeMigRepo) SetCopying(_ context.Context, _ uuid.UUID, total int64) er
 	return nil
 }
 
-func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterObjectKey, afterKey string, limit int) ([]ObjectRef, error) {
+func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollection, afterKey string, limit int) ([]ObjectRef, error) {
 	out := []ObjectRef{}
 	for _, o := range f.objects {
-		if o.ObjectKey > afterObjectKey || (o.ObjectKey == afterObjectKey && o.Key > afterKey) {
+		if o.Collection > afterCollection || (o.Collection == afterCollection && o.Key > afterKey) {
 			out = append(out, o)
 			if len(out) == limit {
 				break
@@ -57,9 +57,9 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterObjectKey
 	return out, nil
 }
 
-func (f *fakeMigRepo) AdvanceCopy(_ context.Context, _ uuid.UUID, copied int64, cursorObjectKey, cursorKey string) error {
+func (f *fakeMigRepo) AdvanceCopy(_ context.Context, _ uuid.UUID, copied int64, cursorCollection, cursorKey string) error {
 	f.mig.ObjectsCopied = copied
-	f.mig.CursorObjectKey = cursorObjectKey
+	f.mig.CursorCollection = cursorCollection
 	f.mig.CursorKey = cursorKey
 	return nil
 }
@@ -86,7 +86,7 @@ func (f *fakeMigRepo) Fail(_ context.Context, _ uuid.UUID, _ string) error {
 
 // fakeCopier records every copy.
 type fakeCopier struct {
-	copies []string // "objectKey/key : srcBucket->dstBucket"
+	copies []string // "collection/key : srcBucket->dstBucket"
 	failOn string   // key to fail on (transient), "" = never
 }
 
@@ -94,7 +94,7 @@ func (c *fakeCopier) CopyObject(_ context.Context, src, dst CopyLocation) error 
 	if c.failOn != "" && dst.Key == c.failOn {
 		return errors.New("copy boom")
 	}
-	c.copies = append(c.copies, src.ObjectKey+"/"+src.Key+" : "+src.Bucket+"->"+dst.Bucket)
+	c.copies = append(c.copies, src.Collection+"/"+src.Key+" : "+src.Bucket+"->"+dst.Bucket)
 	return nil
 }
 
@@ -102,7 +102,7 @@ func (c *fakeCopier) CopyObject(_ context.Context, src, dst CopyLocation) error 
 type fakeDeleter struct{ deleted []string }
 
 func (d *fakeDeleter) DeleteObject(_ context.Context, loc CopyLocation) error {
-	d.deleted = append(d.deleted, loc.ObjectKey+"/"+loc.Key+" @ "+loc.Bucket)
+	d.deleted = append(d.deleted, loc.Collection+"/"+loc.Key+" @ "+loc.Bucket)
 	return nil
 }
 
@@ -131,9 +131,9 @@ func TestStorageMigration_HappyPath(t *testing.T) {
 		},
 		bucketState: "ready",
 		objects: []ObjectRef{
-			{ObjectKey: "docs", Key: "a.txt"},
-			{ObjectKey: "docs", Key: "b.txt"},
-			{ObjectKey: "docs", Key: "c.txt"},
+			{Collection: "docs", Key: "a.txt"},
+			{Collection: "docs", Key: "b.txt"},
+			{Collection: "docs", Key: "c.txt"},
 		},
 	}
 	cop := &fakeCopier{}
@@ -149,7 +149,7 @@ func TestStorageMigration_HappyPath(t *testing.T) {
 		t.Fatalf("objects_copied = %d, want 3", repo.mig.ObjectsCopied)
 	}
 	if !repo.rebound {
-		t.Fatal("object_keys were never rebound")
+		t.Fatal("collections were never rebound")
 	}
 	// Every copy is shared -> dedicated on the same backend, identical key.
 	for _, c := range cop.copies {
@@ -183,7 +183,7 @@ func TestStorageMigration_CrossBackendProceeds(t *testing.T) {
 			TargetBackendID: "secondary", TargetBucketName: "paladin-" + tid.String(),
 		},
 		bucketState: "ready",
-		objects:     []ObjectRef{{ObjectKey: "docs", Key: "a.txt"}},
+		objects:     []ObjectRef{{Collection: "docs", Key: "a.txt"}},
 	}
 	cop := &fakeCopier{}
 	runToTerminal(t, newWorker(repo, cop), repo)
@@ -214,7 +214,7 @@ func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
 		t.Fatalf("state = %q, want failed (must not rebind on incomplete copy)", repo.mig.State)
 	}
 	if repo.rebound {
-		t.Fatal("SECURITY: rebound object_keys despite an incomplete copy — data would be orphaned")
+		t.Fatal("SECURITY: rebound collections despite an incomplete copy — data would be orphaned")
 	}
 }
 
@@ -222,7 +222,7 @@ func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
 type fakeHeader struct{ sizes map[string]int64 }
 
 func (h *fakeHeader) HeadObject(_ context.Context, loc CopyLocation) (int64, error) {
-	if s, ok := h.sizes[loc.ObjectKey+"/"+loc.Key]; ok {
+	if s, ok := h.sizes[loc.Collection+"/"+loc.Key]; ok {
 		return s, nil
 	}
 	return -1, errors.New("not found")
@@ -237,7 +237,7 @@ func TestStorageMigration_PhysicalVerifyPass(t *testing.T) {
 			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
 		},
 		bucketState: "ready",
-		objects:     []ObjectRef{{ObjectKey: "docs", Key: "a.txt", SizeBytes: 11}, {ObjectKey: "docs", Key: "b.txt", SizeBytes: 22}},
+		objects:     []ObjectRef{{Collection: "docs", Key: "a.txt", SizeBytes: 11}, {Collection: "docs", Key: "b.txt", SizeBytes: 22}},
 	}
 	hdr := &fakeHeader{sizes: map[string]int64{"docs/a.txt": 11, "docs/b.txt": 22}} // sizes match
 	w := &StorageMigrationWorker{Repo: repo, Copier: &fakeCopier{}, Header: hdr, CopyBatch: 2, Now: time.Now}
@@ -254,7 +254,7 @@ func TestStorageMigration_PhysicalVerifyFailsOnMismatch(t *testing.T) {
 			TenantID: tid, State: MigStateVerifying, ObjectsTotal: 1, ObjectsCopied: 1,
 			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
 		},
-		objects: []ObjectRef{{ObjectKey: "docs", Key: "a.txt", SizeBytes: 100}},
+		objects: []ObjectRef{{Collection: "docs", Key: "a.txt", SizeBytes: 100}},
 	}
 	hdr := &fakeHeader{sizes: map[string]int64{"docs/a.txt": 50}} // wrong size in target
 	w := &StorageMigrationWorker{Repo: repo, Copier: &fakeCopier{}, Header: hdr, CopyBatch: 2, Now: time.Now}
@@ -274,7 +274,7 @@ func TestStorageMigration_CleanupAfterRetention(t *testing.T) {
 			ObjectsTotal: 2, ObjectsCopied: 2,
 			CleanupAfter: time.Now().Add(-time.Minute), // retention elapsed
 		},
-		objects: []ObjectRef{{ObjectKey: "docs", Key: "a.txt"}, {ObjectKey: "docs", Key: "b.txt"}},
+		objects: []ObjectRef{{Collection: "docs", Key: "a.txt"}, {Collection: "docs", Key: "b.txt"}},
 	}
 	del := &fakeDeleter{}
 	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}
@@ -297,7 +297,7 @@ func TestStorageMigration_CleanupWaitsForRetention(t *testing.T) {
 	tid := uuid.New()
 	repo := &fakeMigRepo{
 		mig:     StorageMigration{TenantID: tid, State: MigStateCompleted, CleanupAfter: time.Now().Add(time.Hour)},
-		objects: []ObjectRef{{ObjectKey: "docs", Key: "a.txt"}},
+		objects: []ObjectRef{{Collection: "docs", Key: "a.txt"}},
 	}
 	del := &fakeDeleter{}
 	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}

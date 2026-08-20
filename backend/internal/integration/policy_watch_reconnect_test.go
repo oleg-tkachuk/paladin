@@ -51,7 +51,7 @@ func TestPolicyWatchReconnect(t *testing.T) {
 	mustExec(t, ctx, pool,
 		`UPDATE tenants SET inherited_cedar_policy = 'permit(principal, action, resource);' WHERE tenant_id = $1`,
 		f.tenantID)
-	if ev := next("baseline update", 10*time.Second); ev.ResyncAll || ev.TenantID != f.tenantID || ev.ObjectKey != "" {
+	if ev := next("baseline update", 10*time.Second); ev.ResyncAll || ev.TenantID != f.tenantID || ev.Collection != "" {
 		t.Fatalf("baseline event = %+v, want {%s \"\" false}", ev, f.tenantID)
 	}
 
@@ -71,10 +71,10 @@ func TestPolicyWatchReconnect(t *testing.T) {
 	// The NEW LISTEN is live: a subsequent policy write still invalidates,
 	// with the correct targeted payload.
 	mustExec(t, ctx, pool,
-		`UPDATE object_keys SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND object_key = $2`,
-		f.tenantID, f.objectKey)
-	if ev := next("post-reconnect update", 10*time.Second); ev.ResyncAll || ev.TenantID != f.tenantID || ev.ObjectKey != f.objectKey {
-		t.Fatalf("post-reconnect event = %+v, want {%s %q false}", ev, f.tenantID, f.objectKey)
+		`UPDATE collections SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND collection = $2`,
+		f.tenantID, f.collection)
+	if ev := next("post-reconnect update", 10*time.Second); ev.ResyncAll || ev.TenantID != f.tenantID || ev.Collection != f.collection {
+		t.Fatalf("post-reconnect event = %+v, want {%s %q false}", ev, f.tenantID, f.collection)
 	}
 }
 

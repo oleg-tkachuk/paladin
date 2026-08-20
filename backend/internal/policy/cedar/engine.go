@@ -40,9 +40,9 @@ const (
 	ActionUpdateObject  = "UpdateObject"
 	ActionCopyObject    = "CopyObject"
 
-	// ObjectKey-scoped actions (admin plane).
-	ActionManageObjectKey       = "ManageObjectKey"
-	ActionBindObjectKeyToBucket = "BindObjectKeyToBucket"
+	// Collection-scoped actions (admin plane).
+	ActionManageCollection       = "ManageCollection"
+	ActionBindCollectionToBucket = "BindCollectionToBucket"
 
 	// Backend-scoped actions.
 	ActionManageBackend = "ManageBackend"
@@ -135,7 +135,7 @@ const (
 // Entity type names — must match the Cedar schema exactly.
 const (
 	entityTypeTenant         = "Tenant"
-	entityTypeObjectKey      = "ObjectKey"
+	entityTypeCollection     = "Collection"
 	entityTypeBucket         = "Bucket"         // physical S3 bucket
 	entityTypeStorageBackend = "StorageBackend" // physical backend
 	entityTypeObject         = "Object"
@@ -164,7 +164,7 @@ type Principal struct {
 	Kind  string
 	Roles []string
 	// Scopes are the JWT-carried scope strings (already in wire form,
-	// e.g. "objects:read:tenant_id/object_key/key"). Exposed to Cedar as
+	// e.g. "objects:read:tenant_id/collection/key"). Exposed to Cedar as
 	// `principal.scopes` so policies can match scope prefixes for
 	// fine-grained delegation. Empty when the principal carries roles only.
 	Scopes []string
@@ -173,8 +173,8 @@ type Principal struct {
 // Resource is the entity under authorization. Different fields are
 // populated depending on the action target:
 //
-//   - Object:        TenantID + ObjectKey + Key + ObjectID + bucket fields
-//   - ObjectKey:     TenantID + ObjectKey  (+ bucket fields if known)
+//   - Object:        TenantID + Collection + Key + ObjectID + bucket fields
+//   - Collection:     TenantID + Collection  (+ bucket fields if known)
 //   - Bucket:        BackendID + BucketName + (optional OwnerTenantID)
 //   - StorageBackend: BackendID
 //   - Tenant:        TenantID
@@ -186,8 +186,8 @@ type Resource struct {
 	TenantID   uuid.UUID
 	TenantSlug string // optional; preferred for Cedar Tenant UID when set
 
-	// ObjectKey + Object.
-	ObjectKey   string
+	// Collection + Object.
+	Collection  string
 	Key         string
 	ObjectID    uuid.UUID
 	State       string
@@ -223,7 +223,7 @@ type RequestContext struct {
 
 // Engine is a thread-safe Cedar authorizer with a compiled-policy cache.
 //
-// The cache is keyed by (tenant, objectKey). Empty objectKey means "tenant-level
+// The cache is keyed by (tenant, collection). Empty collection means "tenant-level
 // inherited policy only". Cache entries are invalidated by Store.Watch
 // events.
 type Engine struct {
@@ -236,13 +236,13 @@ type Engine struct {
 	// Set short (~30s) so a missed invalidation event self-corrects.
 	ttl time.Duration
 
-	// canonicalObjectKeyEUID switches the ObjectKey entity UID from the legacy
-	// `{tenant_uuid}/{object_key}` form to the canonical A-shape name
+	// canonicalCollectionEUID switches the Collection entity UID from the legacy
+	// `{tenant_uuid}/{collection}` form to the canonical A-shape name
 	// (ADR-0010). Only takes effect where (backend, bucket) are in scope on the
 	// request; attribute/parent-based policies are unaffected by the UID string
 	// either way. Default off; flip per-environment after confirming no policy
-	// hardcodes a `resource == ObjectKey::"…"` literal.
-	canonicalObjectKeyEUID bool
+	// hardcodes a `resource == Collection::"…"` literal.
+	canonicalCollectionEUID bool
 
 	// log surfaces policy-EVALUATION errors (a policy that fails to evaluate is
 	// SKIPPED by cedar — a skipped forbid could otherwise flip a deny to an
@@ -255,10 +255,10 @@ type Engine struct {
 // EngineOption configures an Engine at construction.
 type EngineOption func(*Engine)
 
-// WithCanonicalObjectKeyEUID enables the canonical A-shape ObjectKey entity
+// WithCanonicalCollectionEUID enables the canonical A-shape Collection entity
 // UID (ADR-0010, Phase 1). Off by default.
-func WithCanonicalObjectKeyEUID(on bool) EngineOption {
-	return func(e *Engine) { e.canonicalObjectKeyEUID = on }
+func WithCanonicalCollectionEUID(on bool) EngineOption {
+	return func(e *Engine) { e.canonicalCollectionEUID = on }
 }
 
 // WithLogger wires a logger so policy-evaluation errors are surfaced (not just
@@ -272,8 +272,8 @@ func WithLogger(l *zap.Logger) EngineOption {
 }
 
 type cacheKey struct {
-	tenant    uuid.UUID
-	objectKey string
+	tenant     uuid.UUID
+	collection string
 }
 
 type compiledPolicy struct {
@@ -285,7 +285,7 @@ type compiledPolicy struct {
 	tenantSlug string
 	// perObjectEval is true when at least one policy in the set reads a
 	// per-object resource attribute (analysed once at compile time). List
-	// handlers use it to decide between a single objectKey-scoped Cedar check
+	// handlers use it to decide between a single collection-scoped Cedar check
 	// and a per-row check. See NeedsPerObjectEval.
 	perObjectEval bool
 	expiresAt     time.Time
@@ -330,9 +330,9 @@ func (e *Engine) Start(ctx context.Context) error {
 					})
 					continue
 				}
-				if ev.ObjectKey == "" {
+				if ev.Collection == "" {
 					// Tenant-level change: the inherited text is concatenated
-					// into every objectKey-scoped compile, so drop all of the
+					// into every collection-scoped compile, so drop all of the
 					// tenant's entries, not just the tenant-level one.
 					e.compiled.Range(func(k, _ any) bool {
 						if k.(cacheKey).tenant == ev.TenantID {
@@ -341,7 +341,7 @@ func (e *Engine) Start(ctx context.Context) error {
 						return true
 					})
 				} else {
-					e.compiled.Delete(cacheKey{tenant: ev.TenantID, objectKey: ev.ObjectKey})
+					e.compiled.Delete(cacheKey{tenant: ev.TenantID, collection: ev.Collection})
 				}
 			}
 		}
@@ -364,7 +364,7 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 	// returns that tenant's DB-authoritative slug. The slug — never the
 	// JWT-supplied one — keys tenant membership in the entity graph (ADR-0012),
 	// so a spoofed tenant_slug claim cannot satisfy a member permit.
-	set, authSlug, err := e.compiledFor(ctx, r.TenantID, r.ObjectKey)
+	set, authSlug, err := e.compiledFor(ctx, r.TenantID, r.Collection)
 	if err != nil {
 		e.m.compileErrs.Add(1)
 		return DecisionDeny, err
@@ -402,8 +402,8 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 	return DecisionDeny, nil
 }
 
-func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey string) (*cedar.PolicySet, string, error) {
-	cp, err := e.loadCompiled(ctx, tenantID, objectKey)
+func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, collection string) (*cedar.PolicySet, string, error) {
+	cp, err := e.loadCompiled(ctx, tenantID, collection)
 	if err != nil {
 		return nil, "", err
 	}
@@ -414,8 +414,8 @@ func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey 
 // for the scope, refreshing on TTL expiry. The per-object-eval flag is analysed
 // once here, on the compile path, so the authz hot path never re-inspects the
 // policy AST.
-func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, objectKey string) (*compiledPolicy, error) {
-	key := cacheKey{tenant: tenantID, objectKey: objectKey}
+func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, collection string) (*compiledPolicy, error) {
+	key := cacheKey{tenant: tenantID, collection: collection}
 	if v, ok := e.compiled.Load(key); ok {
 		cp := v.(*compiledPolicy)
 		if time.Now().Before(cp.expiresAt) {
@@ -425,7 +425,7 @@ func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, objectKey
 	}
 	e.m.cacheMisses.Add(1)
 
-	text, hash, slug, err := e.store.Fetch(ctx, tenantID, objectKey)
+	text, hash, slug, err := e.store.Fetch(ctx, tenantID, collection)
 	if err != nil {
 		return nil, fmt.Errorf("cedar: fetch policy: %w", err)
 	}
@@ -445,26 +445,26 @@ func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, objectKey
 }
 
 // PerObjectEvaluator is the optional capability an Authorizer may expose so a
-// list handler can choose between one objectKey-scoped Cedar check and per-row
+// list handler can choose between one collection-scoped Cedar check and per-row
 // checks. *Engine implements it; permissive test fakes need not — the handler
 // then takes the cheap single-check path.
 type PerObjectEvaluator interface {
-	NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, objectKey string) (bool, error)
+	NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, collection string) (bool, error)
 }
 
 // NeedsPerObjectEval reports whether the policies applicable to (tenantID,
-// objectKey) decide on per-object resource attributes (tags, state, size, …),
+// collection) decide on per-object resource attributes (tags, state, size, …),
 // so a list handler must Cedar-check each returned object individually. It is
-// false when every applicable policy is constant across the objectKey scope
-// (reads only tenant_id/object_key, or no resource attributes at all), in which
-// case the single up-front objectKey-scoped check already covers the whole page.
+// false when every applicable policy is constant across the collection scope
+// (reads only tenant_id/collection, or no resource attributes at all), in which
+// case the single up-front collection-scoped check already covers the whole page.
 //
 // Conservative by design: it does not scope the analysis by action, so a policy
 // that reads a per-object attribute for ANY action turns on per-row evaluation
 // for listing. That only ever costs extra Cedar calls — never a wrong decision,
 // since an action-mismatched policy simply doesn't match the per-row request.
-func (e *Engine) NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, objectKey string) (bool, error) {
-	cp, err := e.loadCompiled(ctx, tenantID, objectKey)
+func (e *Engine) NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, collection string) (bool, error) {
+	cp, err := e.loadCompiled(ctx, tenantID, collection)
 	if err != nil {
 		e.m.compileErrs.Add(1)
 		return false, err
@@ -473,18 +473,18 @@ func (e *Engine) NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, obj
 }
 
 // constantResourceAttrs are the Object resource attributes that do NOT vary
-// across a ListObjects page — they ARE the objectKey scope. A policy reading
-// only these decides identically for every object under the objectKey, so the
+// across a ListObjects page — they ARE the collection scope. A policy reading
+// only these decides identically for every object under the collection, so the
 // single up-front check suffices. Every other resource attribute (key, state,
 // size_bytes, content_type, tags, bucket_name, backend_id, and any future one)
 // varies per object and forces per-row evaluation.
 var constantResourceAttrs = map[string]bool{
 	"tenant_id":  true,
-	"object_key": true,
+	"collection": true,
 	// scope_keys is the Go-precomputed set of scope-strings that admit the
 	// resource (see resourceScopeKeys / the scope-enforcement built-in). Within
-	// a single ObjectKey scope it is CONSTANT — an ObjectKey binds to one bucket
-	// under one backend in one tenant, so tenant:/backend:/bucket:/object_key:
+	// a single Collection scope it is CONSTANT — an Collection binds to one bucket
+	// under one backend in one tenant, so tenant:/backend:/bucket:/collection:
 	// are all fixed across a ListObjects page. Marking it constant keeps the
 	// scope-enforcement forbid (present in every compiled set) from forcing
 	// per-row Cedar evaluation on every list handler. Real tenant policies that
@@ -516,7 +516,7 @@ func policyReadsPerObjectResourceAttr(set *cedar.PolicySet) bool {
 
 // walkReadsPerObjectResourceAttr recursively scans a decoded Cedar JSON
 // expression tree for an attribute access (`.`) or presence test (`has`) rooted
-// directly at the `resource` variable whose attribute is not an objectKey-scope
+// directly at the `resource` variable whose attribute is not an collection-scope
 // constant. Cedar JSON encodes `resource.tags` as
 // {".": {"left": {"Var": "resource"}, "attr": "tags"}}.
 func walkReadsPerObjectResourceAttr(n any) bool {
@@ -557,7 +557,7 @@ func isResourceVar(n any) bool {
 	return ok && name == "resource"
 }
 
-// builtinPolicy is concatenated with every fetched tenant/objectKey
+// builtinPolicy is concatenated with every fetched tenant/collection
 // policy before compile. It carries the platform-admin escape hatch:
 // any principal whose `roles` set contains "platform.admin" gets ALLOW
 // on every action and resource. Without this, cross-tenant RPCs whose
@@ -631,7 +631,7 @@ when {
 // Built-in: a MACHINE principal may delete and restore objects in its OWN
 // tenant.
 //
-// The per-tenant default policy gates the delete family on "objectKey:admin" or
+// The per-tenant default policy gates the delete family on "collection:admin" or
 // "platform.admin", which is right for people — deletion is destructive and a
 // tenant member should not do it casually — and wrong for the service that owns
 // the object lifecycle. A consumer records an object, later removes the record,
@@ -691,7 +691,7 @@ when {
 // RenameTenantSlug all route through ManageTenant, so the handler-side gates
 // keep those on platform.admin and this permit alone cannot reach them.
 //
-// ManageObjectKey covers both reading and creating an object key: the
+// ManageCollection covers both reading and creating an object key: the
 // object-key handler authorises Get with the same action as Create.
 // A tenant policy can still forbid it (first-forbid wins).
 permit (
@@ -701,8 +701,8 @@ permit (
     Action::"ReadTenant",
     Action::"ManageBucket",
     Action::"ReadBucket",
-    Action::"ManageObjectKey",
-    Action::"BindObjectKeyToBucket"
+    Action::"ManageCollection",
+    Action::"BindCollectionToBucket"
   ],
   resource
 )
@@ -720,10 +720,10 @@ when {
 //
 // resource.scope_keys is precomputed in Go (buildEntities → resourceScopeKeys)
 // as the Set<String> of every scope that admits the resource
-// (tenant:/backend:/bucket:/object_key:<bucket>/<object_key>). Matching is a
+// (tenant:/backend:/bucket:/collection:<bucket>/<collection>). Matching is a
 // pure set-intersection here: the wire format is produced ONCE, in Go, and is
 // never re-derived in Cedar. That is deliberate — Cedar has no string
-// concatenation, so a policy that tried to rebuild "object_key:"+bucket+"/"+key
+// concatenation, so a policy that tried to rebuild "collection:"+bucket+"/"+key
 // would be a type error (skipped policy → fail-open). Keeping the format in Go
 // makes the Go side and this policy structurally incapable of disagreeing.
 //
@@ -779,36 +779,36 @@ func tenantUID(tenantID uuid.UUID, slug string) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(tenantID.String()))
 }
 
-func objectKeyUID(tenantID uuid.UUID, objectKey string) cedartypes.EntityUID {
-	// Namespace by tenant to keep objectKey IDs unique across tenants.
-	return cedartypes.NewEntityUID(entityTypeObjectKey, cedartypes.String(tenantID.String()+"/"+objectKey))
+func collectionUID(tenantID uuid.UUID, collection string) cedartypes.EntityUID {
+	// Namespace by tenant to keep collection IDs unique across tenants.
+	return cedartypes.NewEntityUID(entityTypeCollection, cedartypes.String(tenantID.String()+"/"+collection))
 }
 
-// Canonical A-shape ObjectKey name segments (ADR-0010). Inlined here rather
-// than importing internal/api/v1/object_key (that package imports cedar —
+// Canonical A-shape Collection name segments (ADR-0010). Inlined here rather
+// than importing internal/api/v1/collection (that package imports cedar —
 // importing it back would cycle).
 const (
 	cedarCanonBackendPrefix = "storageBackends/"
 	cedarCanonBucketSep     = "/buckets/"
 	cedarCanonTenantSep     = "/tenants/"
-	cedarCanonObjectKeySep  = "/objectKeys/"
+	cedarCanonCollectionSep = "/collections/"
 )
 
-// objectKeyUIDFor returns the ObjectKey entity UID for the resource. When the
+// collectionUIDFor returns the Collection entity UID for the resource. When the
 // canonical-EUID flag is on AND (backend, bucket) are in scope, it emits the
-// canonical A-shape name; otherwise the legacy `{tenant_uuid}/{object_key}`
+// canonical A-shape name; otherwise the legacy `{tenant_uuid}/{collection}`
 // form. Both keep identical entity attributes/parents, so attribute/parent
-// policies are unaffected — only a hardcoded `resource == ObjectKey::"literal"`
+// policies are unaffected — only a hardcoded `resource == Collection::"literal"`
 // would see the difference (Paladin ships none; see cedar-authoring.md §4).
-func (e *Engine) objectKeyUIDFor(r *Resource) cedartypes.EntityUID {
-	if e.canonicalObjectKeyEUID && r.BackendID != "" && r.BucketName != "" {
+func (e *Engine) collectionUIDFor(r *Resource) cedartypes.EntityUID {
+	if e.canonicalCollectionEUID && r.BackendID != "" && r.BucketName != "" {
 		name := cedarCanonBackendPrefix + r.BackendID +
 			cedarCanonBucketSep + r.BucketName +
 			cedarCanonTenantSep + r.TenantID.String() +
-			cedarCanonObjectKeySep + r.ObjectKey
-		return cedartypes.NewEntityUID(entityTypeObjectKey, cedartypes.String(name))
+			cedarCanonCollectionSep + r.Collection
+		return cedartypes.NewEntityUID(entityTypeCollection, cedartypes.String(name))
 	}
-	return objectKeyUID(r.TenantID, r.ObjectKey)
+	return collectionUID(r.TenantID, r.Collection)
 }
 
 func physicalBucketUID(backendID, bucketName string) cedartypes.EntityUID {
@@ -821,8 +821,8 @@ func storageBackendUID(backendID string) cedartypes.EntityUID {
 
 // resourceUID picks the most-specific entity type populated on the resource:
 //   - Object         when Key/ObjectID set
-//   - ObjectKey      when ObjectKey set (without Object)
-//   - Bucket         when BackendID+BucketName set (without ObjectKey)
+//   - Collection      when Collection set (without Object)
+//   - Bucket         when BackendID+BucketName set (without Collection)
 //   - StorageBackend when only BackendID set
 //   - User           when TargetUserID or TargetSubject set
 //   - Tenant         when only TenantID set (admin tenant ops)
@@ -830,12 +830,12 @@ func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID 
 	if r.Key != "" || r.ObjectID != uuid.Nil {
 		id := r.ObjectID.String()
 		if r.ObjectID == uuid.Nil {
-			id = r.ObjectKey + "/" + r.Key
+			id = r.Collection + "/" + r.Key
 		}
 		return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
 	}
-	if r.ObjectKey != "" {
-		return e.objectKeyUIDFor(r)
+	if r.Collection != "" {
+		return e.collectionUIDFor(r)
 	}
 	if r.BackendID != "" && r.BucketName != "" {
 		return physicalBucketUID(r.BackendID, r.BucketName)
@@ -877,14 +877,14 @@ func actionUID(name string) cedartypes.EntityUID {
 //	tenant:<tenant_uuid>
 //	backend:<backend_id>
 //	bucket:<bucket_name>
-//	object_key:<bucket_name>/<object_key>   (requires BOTH bucket and object_key)
+//	collection:<bucket_name>/<collection>   (requires BOTH bucket and collection)
 //
 // The scope-enforcement built-in policy matches principal.scopes against the
 // Set<String> this produces (exposed as resource.scope_keys) via containsAny,
-// so the wire format is asserted in exactly one place. object_key deliberately
+// so the wire format is asserted in exactly one place. collection deliberately
 // requires the physical bucket to be known — mirroring MatchScope — so a
 // resource whose bucket is not resolved at authz time simply won't carry an
-// object_key/bucket key and a principal scoped by those is denied (fail-closed).
+// collection/bucket key and a principal scoped by those is denied (fail-closed).
 func resourceScopeKeys(r *Resource) []string {
 	keys := make([]string, 0, 4)
 	if r.TenantID != uuid.Nil {
@@ -896,8 +896,8 @@ func resourceScopeKeys(r *Resource) []string {
 	if r.BucketName != "" {
 		keys = append(keys, "bucket:"+r.BucketName)
 	}
-	if r.ObjectKey != "" && r.BucketName != "" {
-		keys = append(keys, "object_key:"+r.BucketName+"/"+r.ObjectKey)
+	if r.Collection != "" && r.BucketName != "" {
+		keys = append(keys, "collection:"+r.BucketName+"/"+r.Collection)
 	}
 	return keys
 }
@@ -945,7 +945,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 
 	// Tenant (resource scope) — keyed on the DB-AUTHORITATIVE slug (authSlug),
 	// not the request/JWT slug, so the entity graph reflects the tenant's real
-	// identity. The ObjectKey/Object hierarchy parents under this entity.
+	// identity. The Collection/Object hierarchy parents under this entity.
 	var tUID cedartypes.EntityUID
 	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
 		tUID = tenantUID(r.TenantID, authSlug)
@@ -1043,10 +1043,10 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 		m[bUID] = bucketEntity
 	}
 
-	// ObjectKey — child of Tenant (and Bucket when bucket is in scope).
+	// Collection — child of Tenant (and Bucket when bucket is in scope).
 	var okUID cedartypes.EntityUID
-	if r.ObjectKey != "" && r.TenantID != uuid.Nil {
-		okUID = e.objectKeyUIDFor(r)
+	if r.Collection != "" && r.TenantID != uuid.Nil {
+		okUID = e.collectionUIDFor(r)
 		parents := cedartypes.NewEntityUIDSet(tUID)
 		if r.BackendID != "" && r.BucketName != "" {
 			parents = cedartypes.NewEntityUIDSet(tUID, bUID)
@@ -1055,7 +1055,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 			UID:     okUID,
 			Parents: parents,
 			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-				"object_key":  cedartypes.String(r.ObjectKey),
+				"collection":  cedartypes.String(r.Collection),
 				"tenant_id":   cedartypes.String(r.TenantID.String()),
 				"bucket_name": cedartypes.String(r.BucketName),
 				"backend_id":  cedartypes.String(r.BackendID),
@@ -1064,7 +1064,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 		}
 	}
 
-	// Object — child of ObjectKey.
+	// Object — child of Collection.
 	if r.Key != "" || r.ObjectID != uuid.Nil {
 		oUID := e.resourceUID(r, authSlug)
 		// tags: Set<String> of KEYS (membership tests, back-compat).
@@ -1092,7 +1092,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"size_bytes":   cedartypes.Long(r.SizeBytes),
 				"content_type": cedartypes.String(r.ContentType),
 				"tenant_id":    cedartypes.String(r.TenantID.String()),
-				"object_key":   cedartypes.String(r.ObjectKey),
+				"collection":   cedartypes.String(r.Collection),
 				"bucket_name":  cedartypes.String(r.BucketName),
 				"backend_id":   cedartypes.String(r.BackendID),
 				"tags":         cedartypes.NewSet(tagsSet...),

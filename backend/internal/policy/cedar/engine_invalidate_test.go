@@ -38,9 +38,9 @@ func waitTenantEntries(t *testing.T, e *Engine, tenant uuid.UUID, want int) {
 	}
 }
 
-// A tenant-level ChangeEvent (empty ObjectKey) must drop every cache entry
+// A tenant-level ChangeEvent (empty Collection) must drop every cache entry
 // for that tenant — the inherited policy text is concatenated into all
-// objectKey-scoped compiles — while other tenants' entries survive. A
+// collection-scoped compiles — while other tenants' entries survive. A
 // scoped event drops exactly its own entry.
 func TestStartInvalidation(t *testing.T) {
 	events := make(chan ChangeEvent)
@@ -54,24 +54,24 @@ func TestStartInvalidation(t *testing.T) {
 	tid, other := uuid.New(), uuid.New()
 	for _, k := range []cacheKey{
 		{tenant: tid},
-		{tenant: tid, objectKey: "a"},
-		{tenant: tid, objectKey: "b"},
-		{tenant: other, objectKey: "a"},
+		{tenant: tid, collection: "a"},
+		{tenant: tid, collection: "b"},
+		{tenant: other, collection: "a"},
 	} {
 		e.compiled.Store(k, &compiledPolicy{})
 	}
 
 	// Scoped event → only (tid, "a") goes.
-	events <- ChangeEvent{TenantID: tid, ObjectKey: "a"}
+	events <- ChangeEvent{TenantID: tid, Collection: "a"}
 	waitTenantEntries(t, e, tid, 2)
-	if _, ok := e.compiled.Load(cacheKey{tenant: tid, objectKey: "b"}); !ok {
-		t.Fatalf("scoped event evicted an unrelated objectKey entry")
+	if _, ok := e.compiled.Load(cacheKey{tenant: tid, collection: "b"}); !ok {
+		t.Fatalf("scoped event evicted an unrelated collection entry")
 	}
 
 	// Tenant-level event → everything under tid goes, other tenant untouched.
 	events <- ChangeEvent{TenantID: tid}
 	waitTenantEntries(t, e, tid, 0)
-	if _, ok := e.compiled.Load(cacheKey{tenant: other, objectKey: "a"}); !ok {
+	if _, ok := e.compiled.Load(cacheKey{tenant: other, collection: "a"}); !ok {
 		t.Fatalf("tenant-level event evicted another tenant's entry")
 	}
 }
@@ -92,8 +92,8 @@ func TestStartInvalidation_ResyncAll(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	for _, k := range []cacheKey{
 		{tenant: a},
-		{tenant: a, objectKey: "x"},
-		{tenant: b, objectKey: "y"},
+		{tenant: a, collection: "x"},
+		{tenant: b, collection: "y"},
 	} {
 		e.compiled.Store(k, &compiledPolicy{})
 	}

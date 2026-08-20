@@ -31,9 +31,9 @@ type EnsureTenantStorageRequest struct {
 	// bucket is the physical bucket to ensure. Same 3–63 char rule as
 	// admin CreateBucket.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// object_keys are the logical namespaces to ensure under this tenant/bucket.
+	// collections are the logical namespaces to ensure under this tenant/bucket.
 	// May be empty to ensure only the bucket.
-	ObjectKeys    []string `protobuf:"bytes,3,rep,name=object_keys,json=objectKeys,proto3" json:"object_keys,omitempty"`
+	Collections   []string `protobuf:"bytes,3,rep,name=collections,proto3" json:"collections,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -82,9 +82,9 @@ func (x *EnsureTenantStorageRequest) GetBucket() string {
 	return ""
 }
 
-func (x *EnsureTenantStorageRequest) GetObjectKeys() []string {
+func (x *EnsureTenantStorageRequest) GetCollections() []string {
 	if x != nil {
-		return x.ObjectKeys
+		return x.Collections
 	}
 	return nil
 }
@@ -94,12 +94,12 @@ type EnsureTenantStorageResponse struct {
 	// bucket_created is true only when this call wrote a new bucket row; false
 	// when the bucket already existed (idempotent no-op).
 	BucketCreated bool `protobuf:"varint,1,opt,name=bucket_created,json=bucketCreated,proto3" json:"bucket_created,omitempty"`
-	// object_keys_created lists the object-keys this call created.
-	ObjectKeysCreated []string `protobuf:"bytes,2,rep,name=object_keys_created,json=objectKeysCreated,proto3" json:"object_keys_created,omitempty"`
-	// object_keys_existing lists the requested object-keys that already existed.
-	ObjectKeysExisting []string `protobuf:"bytes,3,rep,name=object_keys_existing,json=objectKeysExisting,proto3" json:"object_keys_existing,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// collections_created lists the object-keys this call created.
+	CollectionsCreated []string `protobuf:"bytes,2,rep,name=collections_created,json=collectionsCreated,proto3" json:"collections_created,omitempty"`
+	// collections_existing lists the requested object-keys that already existed.
+	CollectionsExisting []string `protobuf:"bytes,3,rep,name=collections_existing,json=collectionsExisting,proto3" json:"collections_existing,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *EnsureTenantStorageResponse) Reset() {
@@ -139,16 +139,16 @@ func (x *EnsureTenantStorageResponse) GetBucketCreated() bool {
 	return false
 }
 
-func (x *EnsureTenantStorageResponse) GetObjectKeysCreated() []string {
+func (x *EnsureTenantStorageResponse) GetCollectionsCreated() []string {
 	if x != nil {
-		return x.ObjectKeysCreated
+		return x.CollectionsCreated
 	}
 	return nil
 }
 
-func (x *EnsureTenantStorageResponse) GetObjectKeysExisting() []string {
+func (x *EnsureTenantStorageResponse) GetCollectionsExisting() []string {
 	if x != nil {
-		return x.ObjectKeysExisting
+		return x.CollectionsExisting
 	}
 	return nil
 }
@@ -157,17 +157,16 @@ var File_paladin_data_v1_storage_bootstrap_service_proto protoreflect.FileDescri
 
 const file_paladin_data_v1_storage_bootstrap_service_proto_rawDesc = "" +
 	"\n" +
-	".paladin/data/v1/storage_bootstrap_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\"\x88\x01\n" +
+	".paladin/data/v1/storage_bootstrap_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\"\x89\x01\n" +
 	"\x1aEnsureTenantStorageRequest\x12&\n" +
 	"\n" +
 	"backend_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbackendId\x12!\n" +
-	"\x06bucket\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\x06bucket\x12\x1f\n" +
-	"\vobject_keys\x18\x03 \x03(\tR\n" +
-	"objectKeys\"\xa6\x01\n" +
+	"\x06bucket\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\x06bucket\x12 \n" +
+	"\vcollections\x18\x03 \x03(\tR\vcollections\"\xa8\x01\n" +
 	"\x1bEnsureTenantStorageResponse\x12%\n" +
-	"\x0ebucket_created\x18\x01 \x01(\bR\rbucketCreated\x12.\n" +
-	"\x13object_keys_created\x18\x02 \x03(\tR\x11objectKeysCreated\x120\n" +
-	"\x14object_keys_existing\x18\x03 \x03(\tR\x12objectKeysExisting2\x89\x01\n" +
+	"\x0ebucket_created\x18\x01 \x01(\bR\rbucketCreated\x12/\n" +
+	"\x13collections_created\x18\x02 \x03(\tR\x12collectionsCreated\x121\n" +
+	"\x14collections_existing\x18\x03 \x03(\tR\x13collectionsExisting2\x89\x01\n" +
 	"\x17StorageBootstrapService\x12n\n" +
 	"\x13EnsureTenantStorage\x12*.paladin.data.v1.EnsureTenantStorageRequest\x1a+.paladin.data.v1.EnsureTenantStorageResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 

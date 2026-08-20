@@ -33,7 +33,7 @@ WHERE tenant_id = $1;
 -- Records copy progress + the resume cursor after a batch.
 UPDATE tenant_storage_migrations
 SET objects_copied    = $2,
-    cursor_object_key = $3,
+    cursor_collection = $3,
     cursor_key        = $4,
     updated_at        = now()
 WHERE tenant_id = $1;
@@ -59,15 +59,15 @@ SET state = 'failed', error = $2, attempts = attempts + 1, updated_at = now()
 WHERE tenant_id = $1;
 
 -- name: MigrationListTenantObjects :many
--- Objects to copy, keyset-paginated by (object_key, key) after the cursor so a
+-- Objects to copy, keyset-paginated by (collection, key) after the cursor so a
 -- worker restart resumes mid-prefix instead of rescanning from the top.
 -- size_bytes feeds the physical (HEAD size) verify after copy.
-SELECT object_key, key, COALESCE(size_bytes, 0)::bigint AS size_bytes
+SELECT collection, key, COALESCE(size_bytes, 0)::bigint AS size_bytes
 FROM objects
 WHERE tenant_id = $1
   AND state = 'AVAILABLE'
-  AND ROW(object_key, key) > ROW(sqlc.arg('after_object_key')::text, sqlc.arg('after_key')::text)
-ORDER BY object_key, key
+  AND ROW(collection, key) > ROW(sqlc.arg('after_collection')::text, sqlc.arg('after_key')::text)
+ORDER BY collection, key
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MigrationCountTenantObjects :one
@@ -80,12 +80,12 @@ SET storage_layout   = $2,
     updated_at       = now()
 WHERE tenant_id = $1;
 
--- name: MigrationListTenantObjectKeys :many
--- All object_keys of a tenant, for the transactional rebind.
-SELECT object_key FROM object_keys WHERE tenant_id = $1 ORDER BY object_key;
+-- name: MigrationListTenantCollections :many
+-- All collections of a tenant, for the transactional rebind.
+SELECT collection FROM collections WHERE tenant_id = $1 ORDER BY collection;
 
--- name: TenantObjectKeyBuckets :many
--- Distinct (backend, bucket) the tenant's object_keys currently bind to. The
+-- name: TenantCollectionBuckets :many
+-- Distinct (backend, bucket) the tenant's collections currently bind to. The
 -- migration copies FROM this — a shared tenant's keys normally share one bucket;
 -- more than one row means the tenant spans buckets (not supported in slice 1).
-SELECT DISTINCT backend_id, bucket_name FROM object_keys WHERE tenant_id = $1;
+SELECT DISTINCT backend_id, bucket_name FROM collections WHERE tenant_id = $1;

@@ -8,34 +8,34 @@ import (
 
 var rnTID = uuid.MustParse("0a8c0000-0000-7000-8000-000000000f12")
 
-func TestParseObjectKeyName(t *testing.T) {
+func TestParseCollectionName(t *testing.T) {
 	cases := []struct {
 		name    string
 		in      string
 		want    string
 		wantErr bool
 	}{
-		{"valid", "object_keys/assets-prod", "assets-prod", false},
-		{"valid-with-slash-in-key", "object_keys/a/b/c", "a/b/c", false},
+		{"valid", "collections/assets-prod", "assets-prod", false},
+		{"valid-with-slash-in-key", "collections/a/b/c", "a/b/c", false},
 		{"missing-prefix", "assets-prod", "", true},
-		{"wrong-prefix", "objectKeys/x", "", true},
-		{"prefix-only", "object_keys/", "", true},
+		{"wrong-prefix", "collections/x", "", true},
+		{"prefix-only", "collections/", "", true},
 		{"empty", "", "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ParseObjectKeyName(tc.in)
+			got, err := ParseCollectionName(tc.in)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("ParseObjectKeyName(%q) = %q, want error", tc.in, got)
+					t.Fatalf("ParseCollectionName(%q) = %q, want error", tc.in, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("ParseObjectKeyName(%q): unexpected error %v", tc.in, err)
+				t.Fatalf("ParseCollectionName(%q): unexpected error %v", tc.in, err)
 			}
 			if got != tc.want {
-				t.Errorf("ParseObjectKeyName(%q) = %q, want %q", tc.in, got, tc.want)
+				t.Errorf("ParseCollectionName(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

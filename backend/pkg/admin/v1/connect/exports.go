@@ -10,7 +10,7 @@ type (
 	BackendServiceHandler           = internal.BackendServiceHandler
 	BucketServiceHandler            = internal.BucketServiceHandler
 	TenantServiceHandler            = internal.TenantServiceHandler
-	ObjectKeyServiceHandler         = internal.ObjectKeyServiceHandler
+	CollectionServiceHandler        = internal.CollectionServiceHandler
 	PolicyServiceHandler            = internal.PolicyServiceHandler
 	OperationServiceHandler         = internal.OperationServiceHandler
 	AuditLogServiceHandler          = internal.AuditLogServiceHandler
@@ -23,7 +23,7 @@ var (
 	NewBackendServiceClient           = internal.NewBackendServiceClient
 	NewBucketServiceClient            = internal.NewBucketServiceClient
 	NewTenantServiceClient            = internal.NewTenantServiceClient
-	NewObjectKeyServiceClient         = internal.NewObjectKeyServiceClient
+	NewCollectionServiceClient        = internal.NewCollectionServiceClient
 	NewPolicyServiceClient            = internal.NewPolicyServiceClient
 	NewOperationServiceClient         = internal.NewOperationServiceClient
 	NewAuditLogServiceClient          = internal.NewAuditLogServiceClient

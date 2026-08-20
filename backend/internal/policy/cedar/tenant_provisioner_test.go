@@ -49,8 +49,8 @@ func TestTenantProvisioner_MayProvision(t *testing.T) {
 		ActionReadTenant,
 		ActionManageBucket,
 		ActionReadBucket,
-		ActionManageObjectKey,
-		ActionBindObjectKeyToBucket,
+		ActionManageCollection,
+		ActionBindCollectionToBucket,
 	} {
 		t.Run(action, func(t *testing.T) {
 			if got := authzAsProvisioner(t, action); got != DecisionAllow {

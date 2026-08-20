@@ -80,16 +80,16 @@ type CloudEvent struct {
 // refers to. The handler resolves an object_id from this tuple and
 // promotes the matching row.
 //
-// At least TenantID + ObjectKey + Key must be present for the handler
+// At least TenantID + Collection + Key must be present for the handler
 // to act; if any is missing the event is logged and dropped (with a
 // dedup row written so we don't reprocess the same garbage).
 type SubjectFields struct {
-	TenantID  string // UUID; "" if the source key didn't include one
-	ObjectKey string // logical namespace
-	Key       string // intra-namespace key
-	Etag      string // S3 etag, when source provides it
-	SizeBytes int64  // when source provides it
-	Sequencer string // S3 sequencer for ordering, when source provides it
+	TenantID   string // UUID; "" if the source key didn't include one
+	Collection string // logical namespace
+	Key        string // intra-namespace key
+	Etag       string // S3 etag, when source provides it
+	SizeBytes  int64  // when source provides it
+	Sequencer  string // S3 sequencer for ordering, when source provides it
 }
 
 // ErrUnrecognisedEvent is returned by source adapters when the payload

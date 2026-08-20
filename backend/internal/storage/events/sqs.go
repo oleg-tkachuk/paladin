@@ -30,7 +30,7 @@ type SQSClient interface {
 	DeleteMessage(ctx context.Context, in *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 }
 
-// Resolver maps (objectKey, key) pairs to Paladin object_ids. Event payloads carry
+// Resolver maps (collection, key) pairs to Paladin object_ids. Event payloads carry
 // physical S3 coordinates, not Paladin logical identity.
 type Resolver interface {
 	ResolveObjectID(ctx context.Context, physicalBucket, key string) (uuid.UUID, error)
@@ -111,7 +111,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg sqstypes.Message) {
 	for _, ev := range events {
 		if err := c.processEvent(ctx, ev); err != nil {
 			c.log.Warn("failed to process event", zap.Error(err),
-				zap.String("objectKey", ev.ObjectKey), zap.String("key", ev.Key))
+				zap.String("collection", ev.Collection), zap.String("key", ev.Key))
 			allSuccess = false
 		}
 	}
@@ -127,7 +127,7 @@ func (c *Consumer) processEvent(ctx context.Context, ev s3Event) error {
 	if !strings.HasPrefix(ev.EventName, "ObjectCreated:") {
 		return nil
 	}
-	objectID, err := c.resolver.ResolveObjectID(ctx, ev.ObjectKey, ev.Key)
+	objectID, err := c.resolver.ResolveObjectID(ctx, ev.Collection, ev.Key)
 	if err != nil {
 		return fmt.Errorf("resolve object: %w", err)
 	}
@@ -149,12 +149,12 @@ func (c *Consumer) delete(ctx context.Context, handle *string) error {
 // s3Event is the flattened shape Paladin cares about, extracted from the S3
 // notification JSON envelope.
 type s3Event struct {
-	EventName string
-	ObjectKey string
-	Key       string
-	ETag      string
-	Size      int64
-	Sequencer string
+	EventName  string
+	Collection string
+	Key        string
+	ETag       string
+	Size       int64
+	Sequencer  string
 }
 
 // parseS3Event handles both direct S3-to-SQS and EventBridge-wrapped payloads.
@@ -164,9 +164,9 @@ func parseS3Event(body string) ([]s3Event, error) {
 		Records []struct {
 			EventName string `json:"eventName"`
 			S3        struct {
-				ObjectKey struct {
+				Collection struct {
 					Name string `json:"name"`
-				} `json:"objectKey"`
+				} `json:"collection"`
 				Object struct {
 					Key       string `json:"key"`
 					Size      int64  `json:"size"`
@@ -180,12 +180,12 @@ func parseS3Event(body string) ([]s3Event, error) {
 		out := make([]s3Event, 0, len(direct.Records))
 		for _, r := range direct.Records {
 			out = append(out, s3Event{
-				EventName: r.EventName,
-				ObjectKey: r.S3.ObjectKey.Name,
-				Key:       r.S3.Object.Key,
-				ETag:      strings.Trim(r.S3.Object.ETag, `"`),
-				Size:      r.S3.Object.Size,
-				Sequencer: r.S3.Object.Sequencer,
+				EventName:  r.EventName,
+				Collection: r.S3.Collection.Name,
+				Key:        r.S3.Object.Key,
+				ETag:       strings.Trim(r.S3.Object.ETag, `"`),
+				Size:       r.S3.Object.Size,
+				Sequencer:  r.S3.Object.Sequencer,
 			})
 		}
 		return out, nil

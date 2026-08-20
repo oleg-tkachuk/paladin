@@ -110,14 +110,14 @@ enum EventTarget {
 // ─── Bucket ─────────────────────────────────────────────────────────────────
 
 message Bucket {
-  // Resource name: "storageBackends/{backend_id}/buckets/{bucket_name}".
+  // Resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
   string name = 1;
   string backend_id = 2;
-  string bucket_name = 3;
+  string bucket_id = 3;
   string display_name = 4;
   string region = 5;
   // Optional binding to a single tenant. Empty → shared bucket; tenants
-  // bind ObjectKeys to it via prefixes.
+  // bind Collections to it via prefixes.
   string owner_tenant_id = 6;
   // Per-bucket Cedar policy layered on top of tenant policy.
   string cedar_policy = 7;
@@ -221,7 +221,7 @@ message Tenant {
   string tenant_id = 2;
   string display_name = 3;
   map<string, string> labels = 4;
-  // Cedar policy inherited by all object_keys/buckets bound to this tenant.
+  // Cedar policy inherited by all collections/buckets bound to this tenant.
   string inherited_cedar_policy = 5;
   string resource_version = 6;
   google.protobuf.Timestamp created_at = 7;
@@ -239,7 +239,7 @@ message Tenant {
   // removes the row physically.
   google.protobuf.Timestamp deleted_at = 10;
   // default_bucket — resource name of the (backend, bucket) this tenant is
-  // bound to by default: "storageBackends/{backend_id}/buckets/{bucket_name}".
+  // bound to by default: "storageBackends/{backend_id}/buckets/{bucket_id}".
   // Sourced from the tenant_default_bindings row written at CreateTenant time;
   // empty when the tenant has no default binding (legacy / never set).
   // Read-only here — set the binding via CreateTenant.default_bucket.
@@ -250,21 +250,21 @@ message Tenant {
   string storage_layout = 12;
 }
 
-// ─── ObjectKey ──────────────────────────────────────────────────────────────
+// ─── Collection ──────────────────────────────────────────────────────────────
 
-message ObjectKey {
-  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}".
+message Collection {
+  // Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
   string name = 1;
   string tenant_id = 2;
-  string object_key = 3;
+  string collection = 3;
   string display_name = 4;
-  // Bucket the object_key is bound to (resource name).
-  string bucket = 5; // "storageBackends/{backend_id}/buckets/{bucket_name}"
+  // Bucket the collection is bound to (resource name).
+  string bucket = 5; // "storageBackends/{backend_id}/buckets/{bucket_id}"
   // Effective completion mode (derived from bucket → backend events).
   paladin.common.v1.CompletionMode completion_mode = 6;
-  // Cedar policy at the object_key layer.
+  // Cedar policy at the collection layer.
   string cedar_policy = 7;
-  // Per-object_key constraints overlay on top of bucket constraints.
+  // Per-collection constraints overlay on top of bucket constraints.
   BucketConstraints constraints = 8;
   string resource_version = 9;
   google.protobuf.Timestamp created_at = 10;
@@ -276,7 +276,7 @@ message ObjectKey {
 // Quota caps usage at tenant or bucket scope. Enforced at presign time.
 message Quota {
   // Resource name: "tenants/{tenant_id_or_slug}/quota" or
-  // "storageBackends/{backend_id}/buckets/{bucket_name}/quota".
+  // "storageBackends/{backend_id}/buckets/{bucket_id}/quota".
   string name = 1;
   // Hard caps. 0 → no cap.
   int64 max_total_bytes = 2;

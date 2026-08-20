@@ -82,7 +82,7 @@ type ObjectServiceClient interface {
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
 	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
 	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
-	// LookupObject resolves an Object by (object_key, key) instead of object_id.
+	// LookupObject resolves an Object by (collection, key) instead of object_id.
 	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
 	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
 	// CompleteObject is no-op for IMPLICIT completion mode and the event has
@@ -295,7 +295,7 @@ type ObjectServiceHandler interface {
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
 	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
 	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
-	// LookupObject resolves an Object by (object_key, key) instead of object_id.
+	// LookupObject resolves an Object by (collection, key) instead of object_id.
 	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
 	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
 	// CompleteObject is no-op for IMPLICIT completion mode and the event has

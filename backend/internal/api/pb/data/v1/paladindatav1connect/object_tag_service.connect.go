@@ -54,7 +54,7 @@ type ObjectTagServiceClient interface {
 	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
 	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
 	// ListDistinctTags enumerates the distinct tag key→values present across an
-	// ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+	// Collection's live objects, so a UI can populate a tag-facet filter from the
 	// whole tenant scope rather than only the objects on the current page.
 	ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error)
 }
@@ -131,7 +131,7 @@ type ObjectTagServiceHandler interface {
 	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
 	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
 	// ListDistinctTags enumerates the distinct tag key→values present across an
-	// ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+	// Collection's live objects, so a UI can populate a tag-facet filter from the
 	// whole tenant scope rather than only the objects on the current page.
 	ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error)
 }

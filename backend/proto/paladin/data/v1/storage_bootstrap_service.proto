@@ -31,17 +31,17 @@ message EnsureTenantStorageRequest {
   // bucket is the physical bucket to ensure. Same 3–63 char rule as
   // admin CreateBucket.
   string bucket = 2 [(buf.validate.field).string = {min_len: 3, max_len: 63}];
-  // object_keys are the logical namespaces to ensure under this tenant/bucket.
+  // collections are the logical namespaces to ensure under this tenant/bucket.
   // May be empty to ensure only the bucket.
-  repeated string object_keys = 3;
+  repeated string collections = 3;
 }
 
 message EnsureTenantStorageResponse {
   // bucket_created is true only when this call wrote a new bucket row; false
   // when the bucket already existed (idempotent no-op).
   bool bucket_created = 1;
-  // object_keys_created lists the object-keys this call created.
-  repeated string object_keys_created = 2;
-  // object_keys_existing lists the requested object-keys that already existed.
-  repeated string object_keys_existing = 3;
+  // collections_created lists the object-keys this call created.
+  repeated string collections_created = 2;
+  // collections_existing lists the requested object-keys that already existed.
+  repeated string collections_existing = 3;
 }

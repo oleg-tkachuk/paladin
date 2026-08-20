@@ -21,7 +21,7 @@ service MultipartUploadService {
 }
 
 message InitiateMultipartUploadRequest {
-  string parent = 1 [(buf.validate.field).string.min_len = 1]; // ObjectKey
+  string parent = 1 [(buf.validate.field).string.min_len = 1]; // Collection
   string key = 2;
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
   int64 size_bytes = 4 [(buf.validate.field).int64.gt = 0];

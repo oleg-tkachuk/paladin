@@ -101,13 +101,13 @@ func TestBackendRegistryRouting(t *testing.T) {
 	// Write an object ONLY to backend "a", through backend a's own client so
 	// the physical key composition matches what Head will look up.
 	tenant := uuid.New()
-	const objectKey, key = "docs", "obj-1"
+	const collection, key = "docs", "obj-1"
 	data := []byte("hello-from-A")
 	ca, err := reg.For(ctx, "a")
 	if err != nil {
 		t.Fatalf("registry For(a): %v", err)
 	}
-	w, err := ca.Open(ctx, bucketA, tenant, objectKey, key, "text/plain", int64(len(data)))
+	w, err := ca.Open(ctx, bucketA, tenant, collection, key, "text/plain", int64(len(data)))
 	if err != nil {
 		t.Fatalf("open on backend a: %v", err)
 	}
@@ -121,16 +121,16 @@ func TestBackendRegistryRouting(t *testing.T) {
 	// Route Head through the object router: backend "a" resolves the object,
 	// backend "b" (a distinct MinIO with the same bucket name) does not.
 	orouter := s3adapter.NewObjectRouter(reg)
-	if _, size, _, _, err := orouter.Head(ctx, "a", bucketA, tenant, objectKey, key); err != nil || size != int64(len(data)) {
+	if _, size, _, _, err := orouter.Head(ctx, "a", bucketA, tenant, collection, key); err != nil || size != int64(len(data)) {
 		t.Fatalf("Head via backend a: size=%d err=%v (want the object)", size, err)
 	}
-	if _, _, _, _, err := orouter.Head(ctx, "b", bucketB, tenant, objectKey, key); err == nil {
+	if _, _, _, _, err := orouter.Head(ctx, "b", bucketB, tenant, collection, key); err == nil {
 		t.Fatal("Head via backend b resolved the object — routing leaked across backends")
 	}
 
 	// An unknown backend id is refused by the registry, never silently
 	// defaulted onto another tenant's store.
-	if _, _, _, _, err := orouter.Head(ctx, "ghost", bucketA, tenant, objectKey, key); err == nil {
+	if _, _, _, _, err := orouter.Head(ctx, "ghost", bucketA, tenant, collection, key); err == nil {
 		t.Fatal("Head via unknown backend must error")
 	}
 }

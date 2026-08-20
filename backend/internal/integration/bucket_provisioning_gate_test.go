@@ -40,20 +40,20 @@ func TestBucketProvisioningGate(t *testing.T) {
 	}
 	bucket := "paladin-" + tid.String()
 
-	// Bind an object_key to the tenant's (still pending) dedicated bucket.
-	objectKey := "ok-" + hex
+	// Bind an collection to the tenant's (still pending) dedicated bucket.
+	collection := "ok-" + hex
 	mustExec(t, ctx, pool,
-		`INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
-		tid, objectKey, backendID, bucket)
+		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		tid, collection, backendID, bucket)
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
 
 	// Mutation is gated while the bucket is provisioning.
-	if _, _, err := repo.LookupBucket(ctx, tid, objectKey, true); !errors.Is(err, objecth.ErrBucketProvisioning) {
+	if _, _, err := repo.LookupBucket(ctx, tid, collection, true); !errors.Is(err, objecth.ErrBucketProvisioning) {
 		t.Fatalf("write LookupBucket on a pending bucket: err = %v, want ErrBucketProvisioning", err)
 	}
 	// Reads still resolve (nothing to read yet, but resolution succeeds).
-	if _, _, err := repo.LookupBucket(ctx, tid, objectKey, false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tid, collection, false); err != nil {
 		t.Fatalf("read LookupBucket on a pending bucket: %v, want success", err)
 	}
 
@@ -61,7 +61,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 	mustExec(t, ctx, pool,
 		`UPDATE buckets SET provision_state = 'ready' WHERE backend_id = $1 AND bucket_name = $2`,
 		backendID, bucket)
-	if _, _, err := repo.LookupBucket(ctx, tid, objectKey, true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tid, collection, true); err != nil {
 		t.Fatalf("write LookupBucket after ready: %v, want success", err)
 	}
 }

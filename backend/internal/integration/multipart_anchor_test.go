@@ -15,10 +15,10 @@ import (
 
 // TestMultipartSessionAnchorsBackend proves migration 053 + the session
 // anchoring: InitiateSession persists the (backend_id, bucket_name) it was
-// given, and GetSession reads back exactly those — NOT the object_key's
+// given, and GetSession reads back exactly those — NOT the collection's
 // current binding. This is what keeps complete/abort/presign-part (and the
 // reaper) targeting where the parts actually live after an operator rebinds
-// the object_key to another backend mid-upload.
+// the collection to another backend mid-upload.
 func TestMultipartSessionAnchorsBackend(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
@@ -26,14 +26,14 @@ func TestMultipartSessionAnchorsBackend(t *testing.T) {
 
 	repo := adapters.NewMultipartRepo(sqlc.New(pool), pool)
 
-	// Anchor values deliberately distinct from the fixture's object_key
+	// Anchor values deliberately distinct from the fixture's collection
 	// binding, so a match on read can only come from the stored session, not
 	// a re-resolution of the current binding.
 	const anchorBackend, anchorBucket = "be-anchored", "bkt-anchored"
 	objectID := uuid.Must(uuid.NewV7())
 	sess, err := repo.InitiateSession(ctx, multipart.InitiateArgs{
 		TenantID:      f.tenantID,
-		ObjectKey:     f.objectKey,
+		Collection:    f.collection,
 		Key:           "mpu-" + uuid.NewString()[:8],
 		ContentType:   "application/octet-stream",
 		TotalParts:    2,

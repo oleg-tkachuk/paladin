@@ -9,21 +9,21 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// EnsureObjectKey is idempotent: an already-present key is a no-op success
+// EnsureCollection is idempotent: an already-present key is a no-op success
 // (created=false) and no CreateTx is attempted.
-func TestEnsureObjectKey_ExistingIsNoOp(t *testing.T) {
+func TestEnsureCollection_ExistingIsNoOp(t *testing.T) {
 	tid := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000c1")
 	fr := &fakeRepo{
-		getFn: func(_ context.Context, _ uuid.UUID, key string) (ObjectKey, error) {
+		getFn: func(_ context.Context, _ uuid.UUID, key string) (Collection, error) {
 			return fullKey(tid, key), nil // exists
 		},
 	}
 	h := NewHandler(fr, allowAll())
-	created, err := h.EnsureObjectKey(authedCtx(tid), CreateObjectKeyArgs{
-		ObjectKey: "docs", BackendID: "b", BucketName: "cab",
+	created, err := h.EnsureCollection(authedCtx(tid), CreateCollectionArgs{
+		Collection: "docs", BackendID: "b", BucketName: "cab",
 	})
 	if err != nil {
-		t.Fatalf("EnsureObjectKey: %v", err)
+		t.Fatalf("EnsureCollection: %v", err)
 	}
 	if created {
 		t.Error("created = true, want false (already existed)")
@@ -33,26 +33,26 @@ func TestEnsureObjectKey_ExistingIsNoOp(t *testing.T) {
 	}
 }
 
-// EnsureObjectKey creates a missing key under the CALLER's tenant, ignoring any
+// EnsureCollection creates a missing key under the CALLER's tenant, ignoring any
 // tenant on the args (self-scoping).
-func TestEnsureObjectKey_CreatesUnderCallerTenant(t *testing.T) {
+func TestEnsureCollection_CreatesUnderCallerTenant(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000c2")
 	other := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000c3")
 	fr := &fakeRepo{
-		getFn: func(_ context.Context, _ uuid.UUID, _ string) (ObjectKey, error) {
-			return ObjectKey{}, pgx.ErrNoRows // missing
+		getFn: func(_ context.Context, _ uuid.UUID, _ string) (Collection, error) {
+			return Collection{}, pgx.ErrNoRows // missing
 		},
-		createTxFn: func(_ context.Context, args CreateObjectKeyArgs) (ObjectKey, error) {
-			return fullKey(args.TenantID, args.ObjectKey), nil
+		createTxFn: func(_ context.Context, args CreateCollectionArgs) (Collection, error) {
+			return fullKey(args.TenantID, args.Collection), nil
 		},
 	}
 	h := NewHandler(fr, allowAll())
-	created, err := h.EnsureObjectKey(authedCtx(caller), CreateObjectKeyArgs{
-		TenantID:  other, // must be overridden with the caller's tenant
-		ObjectKey: "docs", BackendID: "b", BucketName: "cab",
+	created, err := h.EnsureCollection(authedCtx(caller), CreateCollectionArgs{
+		TenantID:   other, // must be overridden with the caller's tenant
+		Collection: "docs", BackendID: "b", BucketName: "cab",
 	})
 	if err != nil {
-		t.Fatalf("EnsureObjectKey: %v", err)
+		t.Fatalf("EnsureCollection: %v", err)
 	}
 	if !created {
 		t.Error("created = false, want true")
@@ -64,10 +64,10 @@ func TestEnsureObjectKey_CreatesUnderCallerTenant(t *testing.T) {
 }
 
 // A missing backend/bucket binding is rejected before any write.
-func TestEnsureObjectKey_RequiresBinding(t *testing.T) {
+func TestEnsureCollection_RequiresBinding(t *testing.T) {
 	tid := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000c4")
 	h := NewHandler(&fakeRepo{}, allowAll())
-	if _, err := h.EnsureObjectKey(authedCtx(tid), CreateObjectKeyArgs{ObjectKey: "docs"}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := h.EnsureCollection(authedCtx(tid), CreateCollectionArgs{Collection: "docs"}); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
 	}
 }
