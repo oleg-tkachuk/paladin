@@ -74,10 +74,11 @@ func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
-		VALUES ($1, $2, $3, 'k-gone', 'PENDING', 'application/octet-stream', 0,
-		        now() - interval '48 hours')`,
+		SELECT $1, $2, c.id, 'k-gone', 'PENDING', 'application/octet-stream', 0,
+		       now() - interval '48 hours'
+		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
 
 	// The backend answers exactly as garage/seaweedfs did in production: the
@@ -107,10 +108,11 @@ func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
-		VALUES ($1, $2, $3, 'k-unreachable', 'PENDING', 'application/octet-stream', 0,
-		        now() - interval '48 hours')`,
+		SELECT $1, $2, c.id, 'k-unreachable', 'PENDING', 'application/octet-stream', 0,
+		       now() - interval '48 hours'
+		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
 
 	probe := adapters.NewReconcilerProbe(sqlc.New(pool),
@@ -138,10 +140,11 @@ func TestReconcilerPromotesWhenBytesArePresent(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
-		VALUES ($1, $2, $3, 'k-present', 'PENDING', 'application/octet-stream', 0,
-		        now() - interval '48 hours')`,
+		SELECT $1, $2, c.id, 'k-present', 'PENDING', 'application/octet-stream', 0,
+		       now() - interval '48 hours'
+		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
 
 	probe := adapters.NewReconcilerProbe(sqlc.New(pool),

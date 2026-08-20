@@ -284,11 +284,13 @@ func seedObjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixtur
 func seedObjectsUnder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, collection string, n int, state string) {
 	t.Helper()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, size_bytes)
-		SELECT gen_random_uuid(), $1, $2, 'k-' || g, $3::object_state,
+		SELECT gen_random_uuid(), $1, c.id, 'k-' || g, $3::object_state,
 		       'application/octet-stream', 0, 100
-		  FROM generate_series(1, $4) AS g`,
+		  FROM generate_series(1, $4) AS g
+		 CROSS JOIN collections c
+		 WHERE c.tenant_id = $1 AND c.name = $2`,
 		f.tenantID, collection, state, n)
 }
 

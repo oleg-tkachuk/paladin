@@ -103,8 +103,9 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 			  WHERE sb.name = $3 AND b.name = $4)`,
 			tid, ok, backendID, bucket)
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
-			 VALUES ($1,$2,$3,$4,'AVAILABLE','text/plain',0)`,
+			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
+			 SELECT $1, $2, c.id, $4, 'AVAILABLE','text/plain',0
+			   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 			uuid.Must(uuid.NewV7()), tid, ok, "k-"+uuid.NewString()[:8])
 	}
 	tenantA, _ := mkTenant(t, ctx, pool, "shared")
