@@ -188,7 +188,7 @@ type Querier interface {
 	// Purge debt: the retry handle for bytes whose DB row is already gone.
 	// See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
 	// denormalised here because the object row is gone before the purge runs.
-	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, storagePath string) error
+	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, collectionName string, path string) error
 	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
@@ -245,6 +245,8 @@ type Querier interface {
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.
+	// Backend and bucket come back by NAME: the storage adapter addresses S3 by
+	// name, and the bucket still exists even though the object row does not.
 	ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error)
 	// Cursor pagination with optional tenant filter. The after_id branch
 	// MUST be wrapped in `IS NULL OR …` — first-page callers pass
@@ -253,11 +255,19 @@ type Querier interface {
 	// cursor query in the package.
 	ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error)
 	// Picks DELETED objects past the cooling-off window for the
-	// LifecycleHardDeleter worker. Joins collections to materialise
-	// (backend_id, bucket_name) so the worker issues the storage DELETE
-	// in one round-trip per row without a second lookup.
-	// Bounded at the caller's batch_size; the worker loops on the
-	// ticker to drain a backlog without holding a single statement open.
+	// LifecycleHardDeleter worker.
+	//
+	// Returns the backend and bucket by NAME, not by id: the storage layer
+	// addresses S3 by name, so resolving ids here saves the worker a lookup per
+	// row — and makes it impossible to hand a uuid to a DELETE that wanted a name.
+	// The collection's NAME comes back for the same reason: it is a segment of the
+	// object's storage path (<tenant>/<collection>/<path>), not a lookup key.
+	//
+	// Locks live on object_locks keyed by the object's CURRENT version, so the
+	// guard is a LEFT JOIN. legal_hold and any active retention window block the
+	// purge; the worker has no governance bypass, so GOVERNANCE is honoured here
+	// exactly like COMPLIANCE. Locked rows are skipped until the lock lapses.
+	// COALESCE on legal_hold because most objects have no lock row at all.
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
 	ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]ListMultipartPartsRow, error)
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
@@ -289,6 +299,10 @@ type Querier interface {
 	// round-trip per row. Prefer the session-anchored location (migration 053);
 	// bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
 	// fallback to the collection's binding is gone with the rows that needed it.
+	//
+	// Names, not ids: the reaper aborts the upload against the storage backend,
+	// which addresses buckets by name, and the collection name is a segment of the
+	// object's storage path.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
 	// an empty/NULL cursor on the first page, and a bare `id > NULL`

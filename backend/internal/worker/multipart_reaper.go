@@ -66,22 +66,22 @@ func (r *MultipartReaper) sweep(ctx context.Context, batch int32) {
 		// Abort the S3 session first. If it fails we keep the DB row so
 		// the next sweep retries — deleting it would orphan the S3
 		// session with no record to reclaim it from.
-		if err := r.Storage.AbortMultipart(ctx, row.BackendID, row.BucketName, tenantID,
-			row.StorageUploadID, row.Collection, row.Key); err != nil {
+		if err := r.Storage.AbortMultipart(ctx, row.BackendName, row.BucketName, tenantID,
+			row.StorageUploadID, row.CollectionName, row.Path); err != nil {
 			r.log().Warn("abort multipart failed; will retry next sweep",
-				zap.String("upload_id", row.UploadID),
+				zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()),
 				zap.String("tenant_id", tenantID.String()),
 				zap.Error(err),
 			)
 			continue
 		}
-		if err := r.Q.DeleteMultipartUpload(ctx, row.UploadID); err != nil {
+		if err := r.Q.DeleteMultipartUpload(ctx, row.ID); err != nil {
 			r.log().Warn("delete multipart session row failed",
-				zap.String("upload_id", row.UploadID), zap.Error(err))
+				zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()), zap.Error(err))
 			continue
 		}
 		r.log().Info("reaped abandoned multipart upload",
-			zap.String("upload_id", row.UploadID),
+			zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()),
 			zap.String("tenant_id", tenantID.String()),
 		)
 	}

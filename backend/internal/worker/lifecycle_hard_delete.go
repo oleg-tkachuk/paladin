@@ -150,11 +150,11 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 	logger := w.log().With(
 		zap.String("object_id", objectID.String()),
 		zap.String("tenant_id", tenantID.String()),
-		zap.String("bucket", r.BucketID),
+		zap.String("bucket", r.BucketName),
 		zap.String("key", r.Path),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BucketID, r.BucketID, tenantID, r.CollectionID, r.Path); err != nil {
+	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
 		// We don't fail the whole sweep — log and try the next row.
 		// Storage-side missing-key errors should be tolerated by
 		// the adapter (S3 DELETE on absent key is a 204; SeaweedFS
@@ -213,14 +213,14 @@ func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
 		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
-			r.BucketID, r.BucketID, tenantID, r.CollectionID, r.Path),
+			r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path),
 		Payload: map[string]any{
 			"tenant_id":  tenantID.String(),
-			"collection": r.CollectionID,
+			"collection": r.CollectionName,
 			"key":        r.Path,
 			"object_id":  objectID.String(),
-			"backend_id": r.BucketID,
-			"bucket":     r.BucketID,
+			"backend":    r.BackendName,
+			"bucket":     r.BucketName,
 			"reclaimed":  true,
 			"source":     "lifecycle",
 		},

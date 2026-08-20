@@ -37,45 +37,54 @@ func (q *Queries) DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64
 const insertPendingPurge = `-- name: InsertPendingPurge :exec
 
 INSERT INTO pending_purges (
-    id, tenant_id, object_id, bucket_id, storage_path
-) VALUES ($1, $2, $3, $4, $5)
+    id, tenant_id, object_id, bucket_id, collection_name, path
+) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 // Purge debt: the retry handle for bytes whose DB row is already gone.
 // See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
 // denormalised here because the object row is gone before the purge runs.
-func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, storagePath string) error {
+func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, bucketID pgtype.UUID, collectionName string, path string) error {
 	_, err := q.db.Exec(ctx, insertPendingPurge,
 		iD,
 		tenantID,
 		objectID,
 		bucketID,
-		storagePath,
+		collectionName,
+		path,
 	)
 	return err
 }
 
 const listDuePurges = `-- name: ListDuePurges :many
-SELECT id, tenant_id, object_id, bucket_id, storage_path, attempts
-  FROM pending_purges
- WHERE next_attempt_at <= now()
- ORDER BY next_attempt_at
+SELECT p.id, p.tenant_id, p.object_id, p.collection_name, p.path, p.attempts,
+       sb.name AS backend_name,
+       b.name  AS bucket_name
+  FROM pending_purges p
+  JOIN buckets b           ON b.id = p.bucket_id
+  JOIN storage_backends sb ON sb.id = b.backend_id
+ WHERE p.next_attempt_at <= now()
+ ORDER BY p.next_attempt_at
  LIMIT $1
- FOR UPDATE SKIP LOCKED
+ FOR UPDATE OF p SKIP LOCKED
 `
 
 type ListDuePurgesRow struct {
-	ID          pgtype.UUID `json:"id"`
-	TenantID    pgtype.UUID `json:"tenant_id"`
-	ObjectID    pgtype.UUID `json:"object_id"`
-	BucketID    pgtype.UUID `json:"bucket_id"`
-	StoragePath string      `json:"storage_path"`
-	Attempts    int32       `json:"attempts"`
+	ID             pgtype.UUID `json:"id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	ObjectID       pgtype.UUID `json:"object_id"`
+	CollectionName string      `json:"collection_name"`
+	Path           string      `json:"path"`
+	Attempts       int32       `json:"attempts"`
+	BackendName    string      `json:"backend_name"`
+	BucketName     string      `json:"bucket_name"`
 }
 
 // ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 // concurrent worker replicas divide the backlog instead of colliding on it —
 // the same claim discipline the event-delivery outbox uses.
+// Backend and bucket come back by NAME: the storage adapter addresses S3 by
+// name, and the bucket still exists even though the object row does not.
 func (q *Queries) ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error) {
 	rows, err := q.db.Query(ctx, listDuePurges, limit)
 	if err != nil {
@@ -89,9 +98,11 @@ func (q *Queries) ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurg
 			&i.ID,
 			&i.TenantID,
 			&i.ObjectID,
-			&i.BucketID,
-			&i.StoragePath,
+			&i.CollectionName,
+			&i.Path,
 			&i.Attempts,
+			&i.BackendName,
+			&i.BucketName,
 		); err != nil {
 			return nil, err
 		}

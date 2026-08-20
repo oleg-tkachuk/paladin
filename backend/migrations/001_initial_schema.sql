@@ -487,8 +487,11 @@ CREATE TABLE pending_purges (
     object_id       uuid NOT NULL,
     bucket_id       uuid NOT NULL REFERENCES buckets(id) ON DELETE RESTRICT,
     -- Denormalised on purpose: the object row is deleted before the purge runs,
-    -- so the location cannot be resolved by join at execution time.
-    storage_path    text NOT NULL,
+    -- so the location cannot be resolved by join at execution time. Stored as
+    -- the two segments the storage adapter takes, not as a joined path — a
+    -- pre-joined string would have to be split again at the call site.
+    collection_name text NOT NULL,
+    path            text NOT NULL,
     attempts        integer NOT NULL DEFAULT 0,
     next_attempt_at timestamptz NOT NULL DEFAULT now(),
     last_error      text,

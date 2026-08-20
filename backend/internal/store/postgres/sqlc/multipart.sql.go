@@ -121,10 +121,16 @@ func (q *Queries) ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]Lis
 }
 
 const listStaleMultipartUploads = `-- name: ListStaleMultipartUploads :many
-SELECT m.id, m.storage_upload_id, m.bucket_id,
-       o.id AS object_id, o.tenant_id, o.collection_id, o.path
+SELECT m.id, m.storage_upload_id,
+       sb.name AS backend_name,
+       b.name  AS bucket_name,
+       k.name  AS collection_name,
+       o.id AS object_id, o.tenant_id, o.path
 FROM multipart_uploads m
-JOIN objects o ON o.id = m.object_id
+JOIN objects o           ON o.id = m.object_id
+JOIN buckets b           ON b.id = m.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+JOIN collections k       ON k.id = o.collection_id
 WHERE m.created_at < $1
 ORDER BY m.created_at
 LIMIT $2
@@ -133,10 +139,11 @@ LIMIT $2
 type ListStaleMultipartUploadsRow struct {
 	ID              pgtype.UUID `json:"id"`
 	StorageUploadID string      `json:"storage_upload_id"`
-	BucketID        pgtype.UUID `json:"bucket_id"`
+	BackendName     string      `json:"backend_name"`
+	BucketName      string      `json:"bucket_name"`
+	CollectionName  string      `json:"collection_name"`
 	ObjectID        pgtype.UUID `json:"object_id"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
-	CollectionID    pgtype.UUID `json:"collection_id"`
 	Path            string      `json:"path"`
 }
 
@@ -148,6 +155,10 @@ type ListStaleMultipartUploadsRow struct {
 // round-trip per row. Prefer the session-anchored location (migration 053);
 // bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
 // fallback to the collection's binding is gone with the rows that needed it.
+//
+// Names, not ids: the reaper aborts the upload against the storage backend,
+// which addresses buckets by name, and the collection name is a segment of the
+// object's storage path.
 func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error) {
 	rows, err := q.db.Query(ctx, listStaleMultipartUploads, createdAt, batchSize)
 	if err != nil {
@@ -160,10 +171,11 @@ func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtyp
 		if err := rows.Scan(
 			&i.ID,
 			&i.StorageUploadID,
-			&i.BucketID,
+			&i.BackendName,
+			&i.BucketName,
+			&i.CollectionName,
 			&i.ObjectID,
 			&i.TenantID,
-			&i.CollectionID,
 			&i.Path,
 		); err != nil {
 			return nil, err

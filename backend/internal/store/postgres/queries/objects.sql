@@ -125,28 +125,33 @@ WHERE tenant_id = $1 AND id = $2
 
 -- name: ListHardDeletable :many
 -- Picks DELETED objects past the cooling-off window for the
--- LifecycleHardDeleter worker. Joins collections to materialise
--- (backend_id, bucket_name) so the worker issues the storage DELETE
--- in one round-trip per row without a second lookup.
--- Bounded at the caller's batch_size; the worker loops on the
--- ticker to drain a backlog without holding a single statement open.
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.resource_version,
-       k.bucket_id
+-- LifecycleHardDeleter worker.
+--
+-- Returns the backend and bucket by NAME, not by id: the storage layer
+-- addresses S3 by name, so resolving ids here saves the worker a lookup per
+-- row — and makes it impossible to hand a uuid to a DELETE that wanted a name.
+-- The collection's NAME comes back for the same reason: it is a segment of the
+-- object's storage path (<tenant>/<collection>/<path>), not a lookup key.
+--
+-- Locks live on object_locks keyed by the object's CURRENT version, so the
+-- guard is a LEFT JOIN. legal_hold and any active retention window block the
+-- purge; the worker has no governance bypass, so GOVERNANCE is honoured here
+-- exactly like COMPLIANCE. Locked rows are skipped until the lock lapses.
+-- COALESCE on legal_hold because most objects have no lock row at all.
+SELECT o.id, o.tenant_id, o.path, o.resource_version,
+       sb.name AS backend_name,
+       b.name  AS bucket_name,
+       k.name  AS collection_name
 FROM objects o
-JOIN collections k
-  ON k.tenant_id = o.tenant_id AND k.collection_id = o.collection_id
+JOIN collections k     ON k.id = o.collection_id
+JOIN buckets b         ON b.id = k.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+LEFT JOIN object_locks l ON l.version_id = o.current_version_id
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
-  -- Never purge a locked object: legal hold or an active COMPLIANCE /
-  -- GOVERNANCE retention window. The worker has no governance-bypass,
-  -- so governance locks are honoured here too. Locked rows are simply
-  -- skipped until the lock lapses, then become eligible normally.
-  AND NOT o.legal_hold
-  AND NOT (o.lock_mode = 'COMPLIANCE' AND o.lock_retain_until IS NOT NULL
-           AND o.lock_retain_until > now())
-  AND NOT (o.lock_mode = 'GOVERNANCE' AND o.lock_retain_until IS NOT NULL
-           AND o.lock_retain_until > now())
+  AND NOT COALESCE(l.legal_hold, false)
+  AND NOT (l.retain_until IS NOT NULL AND l.retain_until > now())
 ORDER BY o.terminated_at
 LIMIT sqlc.arg('batch_size');
 

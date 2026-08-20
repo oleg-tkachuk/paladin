@@ -113,19 +113,19 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) {
 // live row to strand. The row this debt describes was deleted before the debt
 // was ever written.
 func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow) {
-	purgeID := uuid.UUID(r.PurgeID.Bytes)
+	purgeID := uuid.UUID(r.ID.Bytes)
 	tenantID := uuid.UUID(r.TenantID.Bytes)
 	logger := w.log().With(
 		zap.String("purge_id", purgeID.String()),
 		zap.String("tenant_id", tenantID.String()),
 		zap.String("bucket", r.BucketName),
-		zap.String("key", r.Key),
+		zap.String("path", r.Path),
 		zap.Int32("attempts", r.Attempts),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.Collection, r.Key); err != nil {
+	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
 		backoff := w.backoffFor(r.Attempts)
-		if rerr := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.PurgeID, err.Error(),
+		if rerr := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.ID, ptrTo(err.Error()),
 			pgtype.Interval{Microseconds: backoff.Microseconds(), Valid: true}); rerr != nil {
 			logger.Warn("purge drainer: reschedule failed", zap.Error(rerr))
 			return
@@ -139,7 +139,7 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 	// here and on the equivalent path in LifecycleHardDeleter — never on a
 	// state transition — so a consumer that sees it can rely on the bytes
 	// being gone.
-	if _, err := w.Q.WithTx(tx).DeletePendingPurge(ctx, r.PurgeID); err != nil {
+	if _, err := w.Q.WithTx(tx).DeletePendingPurge(ctx, r.ID); err != nil {
 		logger.Warn("purge drainer: settle failed", zap.Error(err))
 		return
 	}
@@ -165,13 +165,13 @@ func (w *PurgeDrainer) emitPurged(ctx context.Context, tx pgx.Tx, tenantID uuid.
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
 		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
-			r.BackendID, r.BucketName, tenantID, r.Collection, r.Key),
+			r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path),
 		Payload: map[string]any{
 			"tenant_id":  tenantID.String(),
-			"collection": r.Collection,
-			"key":        r.Key,
+			"collection": r.CollectionName,
+			"key":        r.Path,
 			"object_id":  objectID.String(),
-			"backend_id": r.BackendID,
+			"backend_id": r.BackendName,
 			"bucket":     r.BucketName,
 			"reclaimed":  true,
 		},
@@ -199,3 +199,5 @@ func (w *PurgeDrainer) log() *zap.Logger {
 	}
 	return w.Logger
 }
+
+func ptrTo[T any](v T) *T { return &v }

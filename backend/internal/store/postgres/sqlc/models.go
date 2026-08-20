@@ -611,15 +611,16 @@ type Operation struct {
 }
 
 type PendingPurge struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	ObjectID      pgtype.UUID        `json:"object_id"`
-	BucketID      pgtype.UUID        `json:"bucket_id"`
-	StoragePath   string             `json:"storage_path"`
-	Attempts      int32              `json:"attempts"`
-	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
-	LastError     *string            `json:"last_error"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	ObjectID       pgtype.UUID        `json:"object_id"`
+	BucketID       pgtype.UUID        `json:"bucket_id"`
+	CollectionName string             `json:"collection_name"`
+	Path           string             `json:"path"`
+	Attempts       int32              `json:"attempts"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError      *string            `json:"last_error"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Quota struct {

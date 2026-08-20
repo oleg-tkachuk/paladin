@@ -4,8 +4,8 @@
 
 -- name: InsertPendingPurge :exec
 INSERT INTO pending_purges (
-    id, tenant_id, object_id, bucket_id, storage_path
-) VALUES ($1, $2, $3, $4, $5);
+    id, tenant_id, object_id, bucket_id, collection_name, path
+) VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: DeletePendingPurge :execrows
 DELETE FROM pending_purges WHERE id = $1;
@@ -14,12 +14,18 @@ DELETE FROM pending_purges WHERE id = $1;
 -- concurrent worker replicas divide the backlog instead of colliding on it —
 -- the same claim discipline the event-delivery outbox uses.
 -- name: ListDuePurges :many
-SELECT id, tenant_id, object_id, bucket_id, storage_path, attempts
-  FROM pending_purges
- WHERE next_attempt_at <= now()
- ORDER BY next_attempt_at
+-- Backend and bucket come back by NAME: the storage adapter addresses S3 by
+-- name, and the bucket still exists even though the object row does not.
+SELECT p.id, p.tenant_id, p.object_id, p.collection_name, p.path, p.attempts,
+       sb.name AS backend_name,
+       b.name  AS bucket_name
+  FROM pending_purges p
+  JOIN buckets b           ON b.id = p.bucket_id
+  JOIN storage_backends sb ON sb.id = b.backend_id
+ WHERE p.next_attempt_at <= now()
+ ORDER BY p.next_attempt_at
  LIMIT $1
- FOR UPDATE SKIP LOCKED;
+ FOR UPDATE OF p SKIP LOCKED;
 
 -- ReschedulePendingPurge records a failed attempt and pushes the row out by
 -- the caller-computed backoff. Attempts is bumped here rather than in the

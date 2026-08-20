@@ -27,10 +27,20 @@ WHERE id = $1;
 -- round-trip per row. Prefer the session-anchored location (migration 053);
 -- bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
 -- fallback to the collection's binding is gone with the rows that needed it.
-SELECT m.id, m.storage_upload_id, m.bucket_id,
-       o.id AS object_id, o.tenant_id, o.collection_id, o.path
+--
+-- Names, not ids: the reaper aborts the upload against the storage backend,
+-- which addresses buckets by name, and the collection name is a segment of the
+-- object's storage path.
+SELECT m.id, m.storage_upload_id,
+       sb.name AS backend_name,
+       b.name  AS bucket_name,
+       k.name  AS collection_name,
+       o.id AS object_id, o.tenant_id, o.path
 FROM multipart_uploads m
-JOIN objects o ON o.id = m.object_id
+JOIN objects o           ON o.id = m.object_id
+JOIN buckets b           ON b.id = m.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+JOIN collections k       ON k.id = o.collection_id
 WHERE m.created_at < $1
 ORDER BY m.created_at
 LIMIT sqlc.arg('batch_size');
