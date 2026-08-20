@@ -288,7 +288,7 @@ CREATE TABLE collections (
     id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     name              text NOT NULL,
-    display_name      text,
+    display_name      text NOT NULL DEFAULT '',
     bucket_id         uuid NOT NULL REFERENCES buckets(id) ON DELETE RESTRICT,
     constraints       jsonb NOT NULL DEFAULT '{}'::jsonb,
     lifecycle_rules   jsonb NOT NULL DEFAULT '[]'::jsonb,

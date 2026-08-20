@@ -163,7 +163,7 @@ func userFromSQLC(u sqlc.User) authstore.User {
 	_ = json.Unmarshal(u.Scopes, &scopeStrs)
 	scopes, _ := auth.ParseScopes(scopeStrs)
 	return authstore.User{
-		UserID:          uuidFrom(u.UserID),
+		UserID:          uuidFrom(u.ID),
 		TenantID:        uuidFrom(u.TenantID),
 		Subject:         u.Subject,
 		DisplayName:     derefStr(u.DisplayName),

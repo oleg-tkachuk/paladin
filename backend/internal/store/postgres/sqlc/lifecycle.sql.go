@@ -72,7 +72,8 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 }
 
 const listBucketsWithLifecycle = `-- name: ListBucketsWithLifecycle :many
-SELECT id, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name AS bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -87,7 +88,8 @@ ORDER BY name
 `
 
 type ListBucketsWithLifecycleRow struct {
-	ID                                pgtype.UUID        `json:"id"`
+	BackendName                       string             `json:"backend_name"`
+	BucketName                        string             `json:"bucket_name"`
 	DisplayName                       string             `json:"display_name"`
 	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -125,7 +127,8 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 	for rows.Next() {
 		var i ListBucketsWithLifecycleRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.BackendName,
+			&i.BucketName,
 			&i.DisplayName,
 			&i.Region,
 			&i.Labels,
@@ -159,7 +162,8 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 
 const listBucketsWithReplication = `-- name: ListBucketsWithReplication :many
 
-SELECT id, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name AS bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -175,7 +179,8 @@ ORDER BY name
 `
 
 type ListBucketsWithReplicationRow struct {
-	ID                                pgtype.UUID        `json:"id"`
+	BackendName                       string             `json:"backend_name"`
+	BucketName                        string             `json:"bucket_name"`
 	DisplayName                       string             `json:"display_name"`
 	Region                            string             `json:"region"`
 	Labels                            []byte             `json:"labels"`
@@ -218,7 +223,8 @@ func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBuckets
 	for rows.Next() {
 		var i ListBucketsWithReplicationRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.BackendName,
+			&i.BucketName,
 			&i.DisplayName,
 			&i.Region,
 			&i.Labels,

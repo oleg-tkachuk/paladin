@@ -2,8 +2,7 @@
 -- means "user has never customized; serve defaults".
 
 -- name: GetUserSettings :one
-SELECT user_id, tenant_id, timezone, locale, theme, preferences,
-       resource_version, created_at, updated_at
+SELECT sqlc.embed(user_settings)
 FROM user_settings
 WHERE user_id = $1;
 
@@ -20,14 +19,12 @@ SET timezone    = EXCLUDED.timezone,
     locale      = EXCLUDED.locale,
     theme       = EXCLUDED.theme,
     preferences = EXCLUDED.preferences
-RETURNING user_id, tenant_id, timezone, locale, theme, preferences,
-          resource_version, created_at, updated_at;
+RETURNING *;
 
 -- name: ListUserSettingsByTenant :many
 -- Admin-side: surface configured settings across a tenant for support and
 -- compliance flows ("which users opted into the dark theme?").
-SELECT user_id, tenant_id, timezone, locale, theme, preferences,
-       resource_version, created_at, updated_at
+SELECT sqlc.embed(user_settings)
 FROM user_settings
 WHERE tenant_id = $1
 ORDER BY user_id

@@ -410,7 +410,7 @@ type Collection struct {
 	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	Name            string             `json:"name"`
-	DisplayName     *string            `json:"display_name"`
+	DisplayName     string             `json:"display_name"`
 	BucketID        pgtype.UUID        `json:"bucket_id"`
 	Constraints     []byte             `json:"constraints"`
 	LifecycleRules  []byte             `json:"lifecycle_rules"`

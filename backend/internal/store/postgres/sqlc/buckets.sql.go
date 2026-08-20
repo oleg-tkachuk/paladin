@@ -7,18 +7,18 @@ package sqlc
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countCollectionsReferencingBucket = `-- name: CountCollectionsReferencingBucket :one
 SELECT count(*)::bigint AS count
-FROM collections
-WHERE bucket_id = $1
+FROM collections c
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2
 `
 
-func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, bucketID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countCollectionsReferencingBucket, bucketID)
+func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error) {
+	row := q.db.QueryRow(ctx, countCollectionsReferencingBucket, name, name_2)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -68,7 +68,8 @@ func (q *Queries) DeleteBucket(ctx context.Context, name string, name_2 string, 
 }
 
 const getBucket = `-- name: GetBucket :one
-SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at
+SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at,
+       (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name
 FROM buckets
 WHERE id = (SELECT b2.id FROM buckets b2
               JOIN storage_backends sb2 ON sb2.id = b2.backend_id
@@ -76,7 +77,8 @@ WHERE id = (SELECT b2.id FROM buckets b2
 `
 
 type GetBucketRow struct {
-	Bucket Bucket `json:"bucket"`
+	Bucket      Bucket `json:"bucket"`
+	BackendName string `json:"backend_name"`
 }
 
 func (q *Queries) GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error) {
@@ -109,12 +111,14 @@ func (q *Queries) GetBucket(ctx context.Context, name string, name_2 string) (Ge
 		&i.Bucket.ResourceVersion,
 		&i.Bucket.CreatedAt,
 		&i.Bucket.UpdatedAt,
+		&i.BackendName,
 	)
 	return i, err
 }
 
 const listBuckets = `-- name: ListBuckets :many
-SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at
+SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at,
+       (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name
 FROM buckets
 WHERE ($1::text IS NULL OR backend_id = $1::text)
   AND ($2::text IS NULL
@@ -124,7 +128,8 @@ LIMIT $4
 `
 
 type ListBucketsRow struct {
-	Bucket Bucket `json:"bucket"`
+	Bucket      Bucket `json:"bucket"`
+	BackendName string `json:"backend_name"`
 }
 
 func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error) {
@@ -168,6 +173,7 @@ func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName 
 			&i.Bucket.ResourceVersion,
 			&i.Bucket.CreatedAt,
 			&i.Bucket.UpdatedAt,
+			&i.BackendName,
 		); err != nil {
 			return nil, err
 		}

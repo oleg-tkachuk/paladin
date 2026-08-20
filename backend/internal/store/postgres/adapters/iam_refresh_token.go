@@ -43,7 +43,7 @@ func (r *RefreshTokenRepo) Get(ctx context.Context, jti uuid.UUID) (authstore.Re
 		return authstore.RefreshToken{}, authstore.ErrTokenRevoked
 	}
 	return authstore.RefreshToken{
-		JTI:       uuidFrom(row.Jti),
+		JTI:       uuidFrom(row.ID),
 		FamilyID:  uuidFrom(row.FamilyID),
 		UserID:    uuidFrom(row.UserID),
 		TenantID:  uuidFrom(row.TenantID),

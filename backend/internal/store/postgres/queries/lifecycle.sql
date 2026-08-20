@@ -10,7 +10,8 @@
 -- their way out, and 'failed' / 'deletion_failed' need operator triage —
 -- replicating into or out of any of those is at best wasted work and at
 -- worst ships objects into a bucket that's about to be torn down.
-SELECT id, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name AS bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
@@ -30,7 +31,8 @@ ORDER BY name;
 -- wasteful when most carry no rules.
 --
 -- See ListBucketsWithReplication for why we restrict to provision_state='ready'.
-SELECT id, display_name, region, labels,
+SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
+       name AS bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,

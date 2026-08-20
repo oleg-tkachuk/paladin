@@ -13,10 +13,10 @@ import (
 type Querier interface {
 	// Records copy progress + the resume cursor after a batch.
 	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection *string, cursorPath *string) (int64, error)
-	// Atomically rebinds a name to a different bucket. Tenancy is enforced
+	// Atomically rebinds a collection to a different bucket. Tenancy is enforced
 	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
 	// name cannot be moved under a bucket that would orphan them.
-	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, bucketID pgtype.UUID, expectedVersion int64) (int64, error)
+	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, expectedVersion int64) (int64, error)
 	// Per-capability runtime counters. Atomic UPSERT-and-check shape so
 	// the hot path is a single round-trip with concurrency-safe semantics.
 	//
@@ -52,7 +52,7 @@ type Querier interface {
 	// rollback-able within the window.
 	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
-	CountCollectionsReferencingBucket(ctx context.Context, bucketID pgtype.UUID) (int64, error)
+	CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, collectionID pgtype.UUID, state NullObjectState) (int64, error)
 	CountPendingPurges(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
@@ -65,7 +65,7 @@ type Querier interface {
 	CreateBucket(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte) error
 	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
 	// Collection queries.
-	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, bucketID pgtype.UUID, cedarPolicy string, lifecycleRules []byte) error
+	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte) error
 	CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error
 	// Multipart upload queries.
 	// backend_id / bucket_name anchor the upload to the physical location resolved
@@ -562,7 +562,7 @@ type Querier interface {
 	UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error
 	// Insert-or-update with a single round trip. Returns the post-write row so
 	// the handler can echo the bumped resource_version back to the caller.
-	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UpsertUserSettingsRow, error)
+	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)

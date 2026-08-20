@@ -40,7 +40,7 @@ func (r *BucketRepo) Get(ctx context.Context, backendID, bucketName string) (buc
 	if err != nil {
 		return bucket.Bucket{}, err
 	}
-	return BucketFromSQLC(row.Bucket), nil
+	return BucketFromSQLC(row.Bucket, row.BackendName), nil
 }
 
 func (r *BucketRepo) Update(ctx context.Context, args bucket.UpdateArgs) (bucket.Bucket, error) {
@@ -94,7 +94,7 @@ func (r *BucketRepo) List(ctx context.Context, args bucket.ListArgs) ([]bucket.B
 	}
 	out := make([]bucket.Bucket, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, BucketFromSQLC(row.Bucket))
+		out = append(out, BucketFromSQLC(row.Bucket, row.BackendName))
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {
@@ -112,12 +112,14 @@ func (r *BucketRepo) CountCollections(ctx context.Context, backendID, bucketName
 	return n, nil
 }
 
-func BucketFromSQLC(b sqlc.Bucket) bucket.Bucket {
+// backendName is passed in rather than read off the row: sqlc.Bucket carries
+// backend_id as a uuid, and the domain speaks names.
+func BucketFromSQLC(b sqlc.Bucket, backendName string) bucket.Bucket {
 	return bucket.Bucket{
-		BackendID:       b.BackendID,
-		BucketId:      b.BucketName,
-		DisplayName:     derefStr(b.DisplayName),
-		Region:          derefStr(b.Region),
+		BackendID:       backendName,
+		BucketName:      b.Name,
+		DisplayName:     b.DisplayName,
+		Region:          b.Region,
 		Labels:          b.Labels,
 		ResourceVersion: b.ResourceVersion,
 		CreatedAt:       timeFrom(b.CreatedAt),

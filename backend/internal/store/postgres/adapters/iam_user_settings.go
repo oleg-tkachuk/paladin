@@ -31,7 +31,7 @@ func (r *UserSettingsRepo) Get(ctx context.Context, userID uuid.UUID) (usersetti
 		}
 		return usersettingsh.Settings{}, fmt.Errorf("get user_settings: %w", err)
 	}
-	return settingsFromSQLC(row), nil
+	return settingsFromSQLC(row.UserSetting), nil
 }
 
 func (r *UserSettingsRepo) Upsert(ctx context.Context, s usersettingsh.Settings) (usersettingsh.Settings, error) {
@@ -62,7 +62,7 @@ func (r *UserSettingsRepo) ListByTenant(ctx context.Context, tenantID uuid.UUID,
 	}
 	out := make([]usersettingsh.Settings, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, settingsFromSQLC(row))
+		out = append(out, settingsFromSQLC(row.UserSetting))
 	}
 	return out, nil
 }

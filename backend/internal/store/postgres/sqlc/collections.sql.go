@@ -13,20 +13,23 @@ import (
 
 const bindCollectionToBucket = `-- name: BindCollectionToBucket :execrows
 UPDATE collections
-SET bucket_id = $3
-WHERE tenant_id = $1 AND name = $2
-  AND ($4::bigint = 0
-       OR resource_version = $4::bigint)
+SET bucket_id = (SELECT b.id FROM buckets b
+            JOIN storage_backends sb ON sb.id = b.backend_id
+           WHERE sb.name = $3 AND b.name = $4)
+WHERE collections.tenant_id = $1 AND collections.name = $2
+  AND ($5::bigint = 0
+       OR resource_version = $5::bigint)
 `
 
-// Atomically rebinds a name to a different bucket. Tenancy is enforced
+// Atomically rebinds a collection to a different bucket. Tenancy is enforced
 // declaratively now: objects carry a composite FK to (tenant_id, id), so a
 // name cannot be moved under a bucket that would orphan them.
-func (q *Queries) BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, bucketID pgtype.UUID, expectedVersion int64) (int64, error) {
+func (q *Queries) BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, bindCollectionToBucket,
 		tenantID,
 		name,
-		bucketID,
+		name_2,
+		name_3,
 		expectedVersion,
 	)
 	if err != nil {
@@ -40,16 +43,19 @@ const createCollection = `-- name: CreateCollection :exec
 INSERT INTO collections (
     tenant_id, name, display_name, bucket_id,
     cedar_policy, lifecycle_rules
-) VALUES ($1, $2, $3, $4, $5, $6)
+) VALUES ($1, $2, $3, (SELECT b.id FROM buckets b
+            JOIN storage_backends sb ON sb.id = b.backend_id
+           WHERE sb.name = $4 AND b.name = $5), $6, $7)
 `
 
 // Collection queries.
-func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, bucketID pgtype.UUID, cedarPolicy string, lifecycleRules []byte) error {
+func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte) error {
 	_, err := q.db.Exec(ctx, createCollection,
 		tenantID,
 		name,
 		displayName,
-		bucketID,
+		name_2,
+		name_3,
 		cedarPolicy,
 		lifecycleRules,
 	)
@@ -177,16 +183,23 @@ func (q *Queries) ListCollectionNamesForTenant(ctx context.Context, tenantID pgt
 }
 
 const listCollections = `-- name: ListCollections :many
-SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at
+SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at,
+       sb.name AS backend_name,
+       b.name  AS bucket_name
 FROM collections
-WHERE tenant_id = $1
-  AND ($2::text IS NULL OR name > $2::text)
-ORDER BY name
+JOIN buckets b           ON b.id = collections.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE collections.tenant_id = $1
+  AND ($2::text IS NULL
+       OR collections.name > $2::text)
+ORDER BY collections.name
 LIMIT $3
 `
 
 type ListCollectionsRow struct {
-	Collection Collection `json:"collection"`
+	Collection  Collection `json:"collection"`
+	BackendName string     `json:"backend_name"`
+	BucketName  string     `json:"bucket_name"`
 }
 
 func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListCollectionsRow, error) {
@@ -211,6 +224,8 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, aft
 			&i.Collection.ResourceVersion,
 			&i.Collection.CreatedAt,
 			&i.Collection.UpdatedAt,
+			&i.BackendName,
+			&i.BucketName,
 		); err != nil {
 			return nil, err
 		}

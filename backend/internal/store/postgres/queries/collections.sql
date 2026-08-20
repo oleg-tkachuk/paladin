@@ -4,7 +4,9 @@
 INSERT INTO collections (
     tenant_id, name, display_name, bucket_id,
     cedar_policy, lifecycle_rules
-) VALUES ($1, $2, $3, $4, $5, $6);
+) VALUES ($1, $2, $3, (SELECT b.id FROM buckets b
+            JOIN storage_backends sb ON sb.id = b.backend_id
+           WHERE sb.name = $4 AND b.name = $5), $6, $7);
 
 -- name: GetCollection :one
 -- Returns the backend and bucket by NAME alongside the row: callers build
@@ -58,20 +60,27 @@ WHERE tenant_id = $1 AND name = $2
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: ListCollections :many
-SELECT sqlc.embed(collections)
+SELECT sqlc.embed(collections),
+       sb.name AS backend_name,
+       b.name  AS bucket_name
 FROM collections
-WHERE tenant_id = $1
-  AND (sqlc.narg('after_id')::text IS NULL OR name > sqlc.narg('after_id')::text)
-ORDER BY name
+JOIN buckets b           ON b.id = collections.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE collections.tenant_id = $1
+  AND (sqlc.narg('after_id')::text IS NULL
+       OR collections.name > sqlc.narg('after_id')::text)
+ORDER BY collections.name
 LIMIT sqlc.arg('page_size');
 
 -- name: BindCollectionToBucket :execrows
--- Atomically rebinds a name to a different bucket. Tenancy is enforced
+-- Atomically rebinds a collection to a different bucket. Tenancy is enforced
 -- declaratively now: objects carry a composite FK to (tenant_id, id), so a
 -- name cannot be moved under a bucket that would orphan them.
 UPDATE collections
-SET bucket_id = $3
-WHERE tenant_id = $1 AND name = $2
+SET bucket_id = (SELECT b.id FROM buckets b
+            JOIN storage_backends sb ON sb.id = b.backend_id
+           WHERE sb.name = $3 AND b.name = $4)
+WHERE collections.tenant_id = $1 AND collections.name = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 

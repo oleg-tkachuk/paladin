@@ -67,7 +67,7 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 	if err := q.CreateCollection(ctx,
 		pgUUID(args.TenantID),
 		args.Collection,
-		strPtr(args.DisplayName),
+		args.DisplayName,
 		args.BackendID,
 		args.BucketName,
 		args.CedarPolicy,
@@ -87,7 +87,7 @@ func (r *CollectionRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID 
 	if err != nil {
 		return objectkey.Collection{}, err
 	}
-	return bucketFromSQLC(row.Collection), nil
+	return collectionFromSQLC(row.Collection, row.BackendName, row.BucketName), nil
 }
 
 func (r *CollectionRepo) Update(ctx context.Context, args objectkey.UpdateCollectionArgs) (objectkey.Collection, error) {
@@ -190,7 +190,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		}
 		out := make([]objectkey.Collection, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, bucketFromSQLC(row.Collection))
+			out = append(out, collectionFromSQLC(row.Collection, row.BackendName, row.BucketName))
 		}
 		var next string
 		if int32(len(out)) == pageSize && len(out) > 0 {
@@ -205,15 +205,18 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	// (tenant_id, collection) so pagination stays deterministic
 	// across tenants.
 	const filteredQ = `
-		SELECT tenant_id, collection, display_name, backend_id, bucket_name,
-		       cedar_policy, lifecycle_rules, resource_version,
-		       created_at, updated_at
-		  FROM collections
-		 WHERE backend_id  = $1
-		   AND bucket_name = $2
-		   AND ($3::uuid IS NULL OR tenant_id = $3)
-		   AND ($4::text IS NULL OR collection > $4)
-		 ORDER BY tenant_id, collection
+		SELECT c.tenant_id, c.name, c.display_name, c.bucket_id,
+		       c.cedar_policy, c.lifecycle_rules, c.resource_version,
+		       c.created_at, c.updated_at,
+		       sb.name AS backend_name, b.name AS bucket_name
+		  FROM collections c
+		  JOIN buckets b           ON b.id = c.bucket_id
+		  JOIN storage_backends sb ON sb.id = b.backend_id
+		 WHERE sb.name = $1
+		   AND b.name  = $2
+		   AND ($3::uuid IS NULL OR c.tenant_id = $3)
+		   AND ($4::text IS NULL OR c.name > $4)
+		 ORDER BY c.tenant_id, c.name
 		 LIMIT $5
 	`
 	var tenantFilter any
@@ -233,15 +236,17 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	out := make([]objectkey.Collection, 0)
 	for rows.Next() {
 		var row sqlc.Collection
+		var backendName, bucketName string
 		if err := rows.Scan(
-			&row.TenantID, &row.Collection, &row.DisplayName,
-			&row.BackendID, &row.BucketName,
+			&row.TenantID, &row.Name, &row.DisplayName,
+			&row.BucketID,
 			&row.CedarPolicy, &row.LifecycleRules,
 			&row.ResourceVersion, &row.CreatedAt, &row.UpdatedAt,
+			&backendName, &bucketName,
 		); err != nil {
 			return nil, "", fmt.Errorf("list collections: scan: %w", err)
 		}
-		out = append(out, bucketFromSQLC(row))
+		out = append(out, collectionFromSQLC(row, backendName, bucketName))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("list collections: rows err: %w", err)
@@ -278,13 +283,15 @@ func (r *CollectionRepo) Stats(ctx context.Context, tenantID uuid.UUID, collecti
 	return s, nil
 }
 
-func bucketFromSQLC(b sqlc.Collection) objectkey.Collection {
+// Named for what it converts, not for what it used to: backend and bucket
+// names come from the caller, because sqlc.Collection carries bucket_id.
+func collectionFromSQLC(b sqlc.Collection, backendName, bucketName string) objectkey.Collection {
 	return objectkey.Collection{
 		TenantID:        uuidFrom(b.TenantID),
-		Collection:      b.Collection,
-		DisplayName:     derefStr(b.DisplayName),
-		BackendID:       b.BackendID,
-		BucketId:      b.BucketName,
+		Collection:      b.Name,
+		DisplayName:     b.DisplayName,
+		BackendID:       backendName,
+		BucketName:      bucketName,
 		CedarPolicy:     b.CedarPolicy,
 		LifecycleRules:  b.LifecycleRules,
 		ResourceVersion: b.ResourceVersion,
