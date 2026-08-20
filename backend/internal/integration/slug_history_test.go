@@ -25,7 +25,7 @@ func TestRenameRecordsSlugHistory(t *testing.T) {
 
 	id := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, $2, $3)`,
+		`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		id, "acme", "Acme")
 
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)

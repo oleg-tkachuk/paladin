@@ -26,7 +26,7 @@ func mkTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, layout stri
 	hex := uuid.NewString()[:8]
 	slug := "t-" + hex
 	mustExec(t, ctx, pool,
-		`INSERT INTO tenants (tenant_id, slug, display_name, storage_layout) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO tenants (id, slug, display_name, storage_layout) VALUES ($1, $2, $3, $4)`,
 		id, slug, "tn-"+hex, layout)
 	return id, slug
 }
@@ -41,7 +41,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	pool := startPostgres(t)
 
 	const backendID = "be-iso"
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
 	// Tenant A owns a dedicated bucket.
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
@@ -58,7 +58,10 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	// Tenant B (attacker) exists and tries to bind an collection to A's bucket.
 	attackerB, _ := mkTenant(t, ctx, pool, "shared")
 	_, err := pool.Exec(ctx,
-		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4`,
 		attackerB, "steal", backendID, victimBucket)
 	if err == nil {
 		t.Fatal("SECURITY: tenant B bound an collection to tenant A's dedicated bucket — tenancy trigger bypassed")
@@ -70,7 +73,10 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 
 	// Positive control: tenant A CAN bind to its own dedicated bucket.
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4`,
 		victimA, "docs", backendID, victimBucket); err != nil {
 		t.Fatalf("owner could not bind to its own dedicated bucket: %v", err)
 	}
@@ -86,15 +92,16 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 	pool := startPostgres(t)
 
 	const backendID, bucket = "be-rls", "shared-rls"
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
-	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)`, backendID, bucket)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, bucket)
 
 	seedObj := func(tid uuid.UUID) {
 		ok := "ok-" + uuid.NewString()[:8]
-		mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
+		mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
 			tid, ok, backendID, bucket)
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
+			`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 			 VALUES ($1,$2,$3,$4,'AVAILABLE','text/plain',0)`,
 			uuid.Must(uuid.NewV7()), tid, ok, "k-"+uuid.NewString()[:8])
 	}
@@ -155,7 +162,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	pool := startPostgres(t)
 
 	const backendID = "be-gate2"
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
 	hex := uuid.NewString()[:8]
@@ -166,7 +173,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 		t.Fatalf("create dedicated tenant: %v", err)
 	}
 	bucket := "paladin-" + tid.String()
-	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
+	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, backend_id, bucket_name) VALUES ($1,$2,$3,$4)`,
 		tid, "docs", backendID, bucket)
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
@@ -199,7 +206,7 @@ func TestAdversarial_CedarAuthoritativeSlugIsolation(t *testing.T) {
 	alpha := uuid.New()
 	const alphaPolicy = `permit ( principal in Tenant::"alpha", action in [Action::"GetObject"], resource );`
 	mustExec(t, ctx, pool,
-		`INSERT INTO tenants (tenant_id, slug, display_name, inherited_cedar_policy) VALUES ($1,'alpha','Alpha',$2)`,
+		`INSERT INTO tenants (id, slug, display_name, inherited_cedar_policy) VALUES ($1,'alpha','Alpha',$2)`,
 		alpha, alphaPolicy)
 	// Tenant B — no relation to A.
 	bravo, _ := mkTenant(t, ctx, pool, "shared")

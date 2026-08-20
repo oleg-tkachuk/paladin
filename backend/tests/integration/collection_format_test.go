@@ -16,7 +16,7 @@ import (
 
 func insertCollection(pool *pgxpool.Pool, tenant uuid.UUID, ok string) error {
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
+		`INSERT INTO collections (tenant_id, name, backend_id, bucket_name)
 		 VALUES ($1, $2, 'primary', 'paladin-test')`,
 		tenant, ok)
 	return err

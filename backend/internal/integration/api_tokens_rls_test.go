@@ -45,8 +45,8 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 	digestA := []byte("hmac-digest-A-0123456789abcdef0123456789") // 32-byte-ish bytea
 	tokA := uuid.New()
 	mustExec(t, ctx, pool, `INSERT INTO api_tokens
-		(id, tenant_id, name, prefix, token_hmac, scopes, audience, expires_at)
-		VALUES ($1, $2, 'svc-a', 'AAAAAAAA', $3, '{}'::text[], '{data}'::text[], now() + interval '1 year')`,
+		(id, tenant_id, name, prefix, token_hmac, scopes, audience, expires_at, created_by)
+		VALUES ($1, $2, 'svc-a', 'AAAAAAAA', $3, '{}'::text[], '{data}'::text[], now() + interval '1 year', 'test')`,
 		tokA, fA.tenantID, digestA)
 
 	// asApp runs fn as paladin_app with paladin.tenant_id = tenantGUC (empty string =
@@ -95,8 +95,8 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 	// tenant B must be rejected by tenant_isolation's WITH CHECK.
 	asApp(t, fB.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
 		_, err := tx.Exec(ctx, `INSERT INTO api_tokens
-			(id, tenant_id, name, prefix, token_hmac, scopes, audience, expires_at)
-			VALUES ($1, $2, 'evil', 'BBBBBBBB', $3, '{}'::text[], '{data}'::text[], now() + interval '1 year')`,
+			(id, tenant_id, name, prefix, token_hmac, scopes, audience, expires_at, created_by)
+			VALUES ($1, $2, 'evil', 'BBBBBBBB', $3, '{}'::text[], '{data}'::text[], now() + interval '1 year', 'test')`,
 			uuid.New(), fA.tenantID, []byte("hmac-digest-B-cross-tenant-write-000000"))
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "42501" {

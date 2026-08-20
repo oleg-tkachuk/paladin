@@ -47,7 +47,7 @@ func TestEventSubscriptionRepoV2_Create_StampsGeneratedID(t *testing.T) {
 	// satisfy RLS during the seed.
 	tenantID := uuid.New()
 	if _, err := h.PoolMigrate.Exec(ctx,
-		`INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, $2, $3)`,
+		`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		tenantID, "regression-create-stamp", "Regression Tenant",
 	); err != nil {
 		t.Fatalf("seed tenant: %v", err)
@@ -105,7 +105,7 @@ func TestEventSubscriptionRepoV2_Create_AcceptsNATSSinkKind(t *testing.T) {
 
 	tenantID := uuid.New()
 	if _, err := h.PoolMigrate.Exec(ctx,
-		`INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, $2, $3)`,
+		`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		tenantID, "regression-nats-kind", "Regression NATS",
 	); err != nil {
 		t.Fatalf("seed tenant: %v", err)

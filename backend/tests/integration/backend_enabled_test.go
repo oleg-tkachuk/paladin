@@ -381,14 +381,17 @@ func mustReadObjectFingerprint(t *testing.T, pool *pgxpool.Pool, tenantID uuid.U
 func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName, collection string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)
+        INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1
         ON CONFLICT DO NOTHING
     `, backendID, bucketName); err != nil {
 		t.Fatalf("seed bucket: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4
     `, tenantID, collection, backendID, bucketName); err != nil {
 		t.Fatalf("seed collection: %v", err)
 	}
@@ -397,7 +400,7 @@ func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, 
 func seedBackend(t *testing.T, pool *pgxpool.Pool, id string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO storage_backends (id, kind, region, endpoint)
+        INSERT INTO storage_backends (name, kind, region, endpoint)
         VALUES ($1, 's3-compatible', 'us-east-1', 'http://localhost')
         ON CONFLICT (id) DO NOTHING
     `, id); err != nil {

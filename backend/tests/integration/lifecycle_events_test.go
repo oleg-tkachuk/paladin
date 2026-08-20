@@ -226,7 +226,7 @@ func TestObjectHandler_UpdateDispatches(t *testing.T) {
 func seedOwnedBucket(t *testing.T, pool *pgxpool.Pool, tenant uuid.UUID, backendID, bucketName string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO storage_backends (id, kind, region, endpoint)
+        INSERT INTO storage_backends (name, kind, region, endpoint)
         VALUES ($1, 's3-compatible', 'us-east-1', 'http://localhost')
         ON CONFLICT (id) DO NOTHING`, backendID); err != nil {
 		t.Fatalf("seed backend: %v", err)

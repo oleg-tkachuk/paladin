@@ -51,7 +51,7 @@ func seedAuditRows(b testing.TB, ctx context.Context, pool interface {
 		return row, nil
 	})
 	if _, err := pool.CopyFrom(ctx, pgx.Identifier{"audit_log"},
-		[]string{"entry_id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name"},
+		[]string{"id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name"},
 		src); err != nil {
 		b.Fatalf("copy audit rows: %v", err)
 	}
@@ -95,7 +95,7 @@ func seedAuditRows(b testing.TB, ctx context.Context, pool interface {
 // (audit_action_index_test.go) proves the split with EXPLAIN: prefix-range
 // rides the at-ordered index; EXACT-action queries DO use the action index
 // (that is what it earns its keep for). Both carry a cheap incremental sort
-// from the entry_id cursor tiebreaker + the cross-partition merge — inherent,
+// from the id cursor tiebreaker + the cross-partition merge — inherent,
 // not an index defect. Conclusion: no partial-per-action-class index is
 // warranted; the prefix-range path is already index-driven and pushdown wins
 // on bytes. BACKLOG entry closed.

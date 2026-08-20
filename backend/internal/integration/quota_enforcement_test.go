@@ -65,7 +65,7 @@ func TestQuotaEnforcementEndToEnd(t *testing.T) {
 	// row starts at zero usage — exactly the state a freshly-created quota
 	// is in — so only the reconciler can make enforcement see reality.
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, tenant_id, max_total_bytes) VALUES ($1, $2, 1000)`,
+		`INSERT INTO quotas (id, tenant_id, max_total_bytes) VALUES ($1, $2, 1000)`,
 		uuid.New(), f.tenantID)
 	insertObj(t, ctx, pool, f, "AVAILABLE", 900)
 
@@ -121,7 +121,7 @@ func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 	// No tenant quota at all — this must be the BUCKET row doing the work,
 	// not a tenant row happening to reject.
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, backend_id, bucket_name, max_object_count) VALUES ($1, $2, $3, 2)`,
+		`INSERT INTO quotas (id, backend_id, bucket_name, max_object_count) VALUES ($1, $2, $3, 2)`,
 		uuid.New(), backendID, bucketName)
 	insertObj(t, ctx, pool, f, "AVAILABLE", 10)
 	insertObj(t, ctx, pool, f, "AVAILABLE", 10)

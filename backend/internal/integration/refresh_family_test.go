@@ -25,8 +25,8 @@ func TestRefreshTokenFamilyRevoke(t *testing.T) {
 
 	tenantID := uuid.New()
 	userID := uuid.New()
-	mustExec(t, ctx, pool, `INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, 'acme', 'acme')`, tenantID)
-	mustExec(t, ctx, pool, `INSERT INTO users (user_id, tenant_id, subject) VALUES ($1, $2, 'svc@acme')`, userID, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, 'acme', 'acme')`, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO users (id, tenant_id, subject) VALUES ($1, $2, 'svc@acme')`, userID, tenantID)
 
 	famA, famB := uuid.New(), uuid.New()
 	mk := func(family uuid.UUID) uuid.UUID {

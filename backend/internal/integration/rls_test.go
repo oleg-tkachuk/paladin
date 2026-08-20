@@ -66,7 +66,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	objVisible := func(t *testing.T, tx pgx.Tx, id uuid.UUID) bool {
 		t.Helper()
 		var n int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM objects WHERE object_id = $1`, id).Scan(&n); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM objects WHERE id = $1`, id).Scan(&n); err != nil {
 			t.Fatalf("count objects: %v", err)
 		}
 		return n == 1
@@ -130,7 +130,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 			// the RLS WITH CHECK (tenant_id must equal the GUC) can reject
 			// this — proving the policy, not a constraint, is the gate.
 			_, err := tx.Exec(ctx,
-				`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
+				`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 				 VALUES ($1, $2, $3, 'rls-probe', 'PENDING', 'application/octet-stream', 0)`,
 				uuid.Must(uuid.NewV7()), fB.tenantID, fB.collection)
 			if err == nil {
@@ -146,7 +146,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	t.Run("WITH CHECK allows own-tenant INSERT", func(t *testing.T) {
 		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
-				`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
+				`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0)`,
 				uuid.Must(uuid.NewV7()), fA.tenantID, fA.collection)
 			if err != nil {
@@ -160,7 +160,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	seedAudit := func(t *testing.T, actorTenant uuid.UUID) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO audit_log (entry_id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
+			`INSERT INTO audit_log (id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
 			 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`,
 			uuid.Must(uuid.NewV7()), actorTenant)
 	}
@@ -182,7 +182,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	t.Run("audit_log: INSERT stamping another tenant is rejected", func(t *testing.T) {
 		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
-				`INSERT INTO audit_log (entry_id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
+				`INSERT INTO audit_log (id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
 				 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`,
 				uuid.Must(uuid.NewV7()), fB.tenantID)
 			var pgErr *pgconn.PgError

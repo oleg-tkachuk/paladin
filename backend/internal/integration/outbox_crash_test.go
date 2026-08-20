@@ -93,18 +93,22 @@ func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture 
 	backendID := "be-" + hex
 	bucketName := "bkt-" + hex // satisfies buckets.bucket_name_format
 
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 	// Shared bucket (owner_tenant_id NULL) so the collections tenancy trigger
 	// permits binding from the test tenant. collections FKs (backend_id,
 	// bucket_name) → buckets.
-	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)`, backendID, bucketName)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, bucketName)
 	// slug + display_name are NOT NULL with format/unique CHECKs (migrations
 	// 009 / 033). Mirror 009's `t-<hex>` backfill shape for the slug.
-	mustExec(t, ctx, pool, `INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, $2, $3)`,
+	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		f.tenantID, "t-"+hex, "tn-"+hex)
-	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4`,
 		f.tenantID, f.collection, backendID, bucketName)
-	mustExec(t, ctx, pool, `INSERT INTO event_subscriptions (subscription_id, tenant_id, cel_filter, sink_kind, sink_config) VALUES ($1, $2, '', 'http', '{}'::jsonb)`, uuid.New(), f.tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO event_subscriptions (id, tenant_id, cel_filter, sink_kind, sink_config) VALUES ($1, $2, '', 'http', '{}'::jsonb)`, uuid.New(), f.tenantID)
 	return f
 }
 
@@ -114,7 +118,7 @@ func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f 
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool,
-		`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm)
+		`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm)
 		 VALUES ($1, $2, $3, $4, 'PENDING', 'application/octet-stream', 0)`,
 		id, f.tenantID, f.collection, "key-"+uuid.NewString()[:8])
 	return id
@@ -130,7 +134,7 @@ func mustExec(t testing.TB, ctx context.Context, pool *pgxpool.Pool, sql string,
 func objectState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) string {
 	t.Helper()
 	var s string
-	if err := pool.QueryRow(ctx, `SELECT state FROM objects WHERE object_id = $1`, id).Scan(&s); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT state FROM objects WHERE id = $1`, id).Scan(&s); err != nil {
 		t.Fatalf("read state: %v", err)
 	}
 	return s
@@ -150,7 +154,7 @@ func deliveryCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant
 func objectExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) bool {
 	t.Helper()
 	var exists bool
-	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM objects WHERE object_id = $1)`, id).Scan(&exists); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM objects WHERE id = $1)`, id).Scan(&exists); err != nil {
 		t.Fatalf("exists: %v", err)
 	}
 	return exists
@@ -225,7 +229,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	// ── repo seam: permanent delete + event commit together ──────────────
 	t.Run("hard delete commits row removal and outbox atomically", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE object_id = $1`, id)
+		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
 		err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			if e := repo.HardDeleteTx(ctx, tx, f.tenantID, id, 0); e != nil {
 				return e
@@ -249,7 +253,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	// ── repo seam: dispatch error rolls BOTH back ────────────────────────
 	t.Run("dispatch error rolls back hard delete and outbox", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE object_id = $1`, id)
+		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
 		before := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted")
 		err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			if e := repo.HardDeleteTx(ctx, tx, f.tenantID, id, 0); e != nil {
@@ -282,7 +286,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 		t.Helper()
 		be := "be2-" + uuid.NewString()[:8]
 		bn := "bkt2-" + uuid.NewString()[:8]
-		mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, be)
+		mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, be)
 		mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, bucket_name, owner_tenant_id) VALUES ($1, $2, $3)`, be, bn, f.tenantID)
 		return be, bn
 	}
@@ -342,7 +346,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 func objectEtag(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) string {
 	t.Helper()
 	var e *string
-	if err := pool.QueryRow(ctx, `SELECT etag FROM objects WHERE object_id = $1`, id).Scan(&e); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT etag FROM objects WHERE id = $1`, id).Scan(&e); err != nil {
 		t.Fatalf("read etag: %v", err)
 	}
 	if e == nil {

@@ -104,7 +104,7 @@ func mustInsertPendingObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUI
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            object_id, tenant_id, collection, key, state,
+            id, tenant_id, collection, key, state,
             content_type, checksum_algorithm, presign_expires_at
         ) VALUES (
             $1, $2, $3, $4, 'PENDING',
@@ -121,7 +121,7 @@ func mustObjectState(t *testing.T, pool *pgxpool.Pool, objectID uuid.UUID) strin
 	t.Helper()
 	var state string
 	err := pool.QueryRow(context.Background(),
-		`SELECT state::text FROM objects WHERE object_id = $1`,
+		`SELECT state::text FROM objects WHERE id = $1`,
 		pgtype.UUID{Bytes: objectID, Valid: true},
 	).Scan(&state)
 	if err != nil {

@@ -18,7 +18,7 @@ func insertTenantWithSlug(pool *pgxpool.Pool, slug string) error {
 	// display_name is UNIQUE (tenants_display_name_unique) — use a fresh value
 	// per call so the ONLY constraint that can reject a row is the slug format.
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO tenants (tenant_id, display_name, slug)
+		`INSERT INTO tenants (id, display_name, slug)
 		 VALUES (gen_random_uuid(), gen_random_uuid()::text, $1)`,
 		slug)
 	return err

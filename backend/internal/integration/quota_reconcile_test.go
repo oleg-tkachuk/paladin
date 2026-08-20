@@ -40,7 +40,7 @@ func TestReconcileQuotaUsage_DrivesCountersToLiveTruth(t *testing.T) {
 	// produces after a few upload/delete cycles.
 	quotaID := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, tenant_id, max_total_bytes, max_object_count,
+		`INSERT INTO quotas (id, tenant_id, max_total_bytes, max_object_count,
 		                     usage_total_bytes, usage_object_count)
 		 VALUES ($1, $2, 10000, 100, 99999, 42)`, quotaID, f.tenantID)
 
@@ -101,16 +101,17 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 
 	bucketQuota := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, backend_id, bucket_name, max_total_bytes)
+		`INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes)
 		 VALUES ($1, $2, $3, 100000)`, bucketQuota, backendID, bucketName)
 	// An unrelated bucket with a quota and no objects must land on 0, not
 	// inherit the other bucket's rollup.
 	emptyQuota := uuid.New()
 	hex := uuid.NewString()[:8]
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)`, backendID, "bkt-e-"+hex)
+		`INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, "bkt-e-"+hex)
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, backend_id, bucket_name, max_total_bytes)
+		`INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes)
 		 VALUES ($1, $2, $3, 100000)`, emptyQuota, backendID, "bkt-e-"+hex)
 
 	if _, err := adapters.NewQuotaReconcileRepo(pool).ReconcileUsage(ctx); err != nil {
@@ -136,7 +137,7 @@ func TestRollDailyCounters(t *testing.T) {
 
 	stale := uuid.New() // accumulated yesterday, never rolled
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, tenant_id, max_bytes_per_day,
+		`INSERT INTO quotas (id, tenant_id, max_bytes_per_day,
 		                     usage_bytes_today, usage_objects_today, last_reset_at)
 		 VALUES ($1, $2, 1000, 900, 9, now() - interval '2 days')`, stale, f.tenantID)
 
@@ -152,7 +153,7 @@ func TestRollDailyCounters(t *testing.T) {
 	var lastReset time.Time
 	if err := pool.QueryRow(ctx,
 		`SELECT usage_bytes_today, usage_objects_today, last_reset_at
-		   FROM quotas WHERE quota_id = $1`, stale).
+		   FROM quotas WHERE id = $1`, stale).
 		Scan(&bytesToday, &objectsToday, &lastReset); err != nil {
 		t.Fatalf("read rolled row: %v", err)
 	}
@@ -172,12 +173,12 @@ func TestRollDailyCounters(t *testing.T) {
 	// Usage accrued *after* today's roll must survive further ticks —
 	// otherwise the daily budget would reset continuously and never cap.
 	mustExec(t, ctx, pool,
-		`UPDATE quotas SET usage_bytes_today = 250 WHERE quota_id = $1`, stale)
+		`UPDATE quotas SET usage_bytes_today = 250 WHERE id = $1`, stale)
 	if _, err := repo.RollDailyCounters(ctx, dayStart); err != nil {
 		t.Fatalf("third roll: %v", err)
 	}
 	if err := pool.QueryRow(ctx,
-		`SELECT usage_bytes_today FROM quotas WHERE quota_id = $1`, stale).
+		`SELECT usage_bytes_today FROM quotas WHERE id = $1`, stale).
 		Scan(&bytesToday); err != nil {
 		t.Fatalf("re-read: %v", err)
 	}
@@ -189,7 +190,7 @@ func TestRollDailyCounters(t *testing.T) {
 func insertObj(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, state string, size any) {
 	t.Helper()
 	mustExec(t, ctx, pool,
-		`INSERT INTO objects (object_id, tenant_id, collection, key, state,
+		`INSERT INTO objects (id, tenant_id, collection, key, state,
 		                      content_type, checksum_algorithm, size_bytes)
 		 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6)`,
 		uuid.Must(uuid.NewV7()), f.tenantID, f.collection,
@@ -200,7 +201,7 @@ func quotaUsage(t *testing.T, ctx context.Context, pool *pgxpool.Pool, quotaID u
 	t.Helper()
 	var bytes, count int64
 	if err := pool.QueryRow(ctx,
-		`SELECT usage_total_bytes, usage_object_count FROM quotas WHERE quota_id = $1`,
+		`SELECT usage_total_bytes, usage_object_count FROM quotas WHERE id = $1`,
 		quotaID).Scan(&bytes, &count); err != nil {
 		t.Fatalf("read quota usage: %v", err)
 	}

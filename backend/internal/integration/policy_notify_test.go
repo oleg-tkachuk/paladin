@@ -86,7 +86,7 @@ func TestPolicyChangedNotify(t *testing.T) {
 	}
 	newKey := f.collection + "-b"
 	mustExec(t, ctx, pool,
-		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name, cedar_policy)
+		`INSERT INTO collections (tenant_id, name, backend_id, bucket_name, cedar_policy)
 		 VALUES ($1, $2, $3, $4, 'permit(principal, action, resource);')`,
 		f.tenantID, newKey, backendID, bucketName)
 	if ev := next("collection insert with policy"); ev.TenantID != f.tenantID || ev.Collection != newKey {

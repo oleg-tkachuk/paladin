@@ -88,7 +88,7 @@ func TestPartitionRewrite(t *testing.T) {
 	// (migration 004); the row must exist before seeding and the rewrite
 	// must preserve the FK. slug obeys the kebab format check (migration 009).
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO tenants (tenant_id, display_name, slug) VALUES ($1, 'Test', 't-part')`,
+		`INSERT INTO tenants (id, display_name, slug) VALUES ($1, 'Test', 't-part')`,
 		tenant); err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestPartitionRewrite(t *testing.T) {
 		{now, nil},
 	} {
 		_, err := pool.Exec(ctx,
-			`INSERT INTO audit_log (entry_id, at, actor_subject, actor_tenant_id,
+			`INSERT INTO audit_log (id, at, actor_subject, actor_tenant_id,
 			   actor_audience, action, resource_name)
 			 VALUES (gen_random_uuid(), $1, 'tester', $2, 'admin', 'admin.X.Do', 'res')`,
 			r.at, r.tenant)
@@ -177,7 +177,7 @@ func TestPartitionRewrite(t *testing.T) {
 
 	// 7. New writes route through the parent and are queryable.
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO audit_log (entry_id, at, actor_subject, actor_tenant_id,
+		`INSERT INTO audit_log (id, at, actor_subject, actor_tenant_id,
 		   actor_audience, action, resource_name)
 		 VALUES (gen_random_uuid(), now(), 'post', $1, 'admin', 'admin.X.Do', 'res')`,
 		tenant); err != nil {

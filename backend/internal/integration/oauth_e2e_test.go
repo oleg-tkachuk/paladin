@@ -42,9 +42,9 @@ func TestOAuthFlowE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hash: %v", err)
 	}
-	mustExec(t, ctx, pool, `INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1,'acme','acme')`, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1,'acme','acme')`, tenantID)
 	mustExec(t, ctx, pool,
-		`INSERT INTO users (user_id, tenant_id, subject, password_hash) VALUES ($1,$2,'svc@acme',$3)`,
+		`INSERT INTO users (id, tenant_id, subject, password_hash) VALUES ($1,$2,'svc@acme',$3)`,
 		userID, tenantID, hash)
 
 	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(e2eSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})

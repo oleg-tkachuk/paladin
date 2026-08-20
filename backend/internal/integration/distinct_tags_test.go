@@ -24,8 +24,9 @@ func TestListDistinctTags(t *testing.T) {
 	insert := func(state, tags string) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm, tags)
-			 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6::jsonb)`,
+			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, tags)
+			 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6::jsonb FROM collections c
+			  WHERE c.tenant_id = $2 AND c.name = $3`,
 			uuid.Must(uuid.NewV7()), f.tenantID, f.collection,
 			"k-"+uuid.NewString()[:8], state, tags)
 	}

@@ -67,7 +67,7 @@ func seedRecentAudit(t *testing.T, ctx context.Context, pool interface {
 		return row, nil
 	})
 	if _, err := pool.CopyFrom(ctx, pgx.Identifier{"audit_log"},
-		[]string{"entry_id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name"},
+		[]string{"id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name"},
 		src); err != nil {
 		t.Fatalf("copy audit rows: %v", err)
 	}
@@ -113,9 +113,9 @@ func TestAuditActionIndex_PlannerChoice(t *testing.T) {
 	// at-ordered index per partition — a prefix spans many distinct actions,
 	// so the (action, at) order cannot produce a global at-DESC stream.
 	prefixPlan := explain(t, ctx, pool, `
-		SELECT entry_id FROM audit_log
+		SELECT id FROM audit_log
 		WHERE action LIKE $1 AND at >= $2
-		ORDER BY at DESC, entry_id DESC LIMIT 50`, idxTestPrefix, cutoff)
+		ORDER BY at DESC, id DESC LIMIT 50`, idxTestPrefix, cutoff)
 	t.Logf("prefix-range plan:\n%s", prefixPlan)
 	if strings.Contains(prefixPlan, "Seq Scan") {
 		t.Errorf("prefix-range query fell back to a Seq Scan:\n%s", prefixPlan)
@@ -131,16 +131,16 @@ func TestAuditActionIndex_PlannerChoice(t *testing.T) {
 	// action value lets (action, at DESC) drive the per-partition scan.
 	// Assert the action index is chosen (child suffix _action_at_idx).
 	exactPlan := explain(t, ctx, pool, `
-		SELECT entry_id FROM audit_log
+		SELECT id FROM audit_log
 		WHERE action = $1 AND at >= $2
-		ORDER BY at DESC, entry_id DESC LIMIT 50`, idxTestExactAction, cutoff)
+		ORDER BY at DESC, id DESC LIMIT 50`, idxTestExactAction, cutoff)
 	t.Logf("exact-action plan:\n%s", exactPlan)
 	if !strings.Contains(exactPlan, "action_at_idx") {
 		t.Errorf("exact-action query did not use the action index — it is not earning its keep:\n%s", exactPlan)
 	}
 	// NOTE on the Incremental Sort both plans carry: it comes from the
-	// `entry_id DESC` cursor tiebreaker (no single-column index supplies it)
+	// `id DESC` cursor tiebreaker (no single-column index supplies it)
 	// and the cross-partition merge — cheap (tens of kB, sub-ms here), and
-	// inherent to the (at, entry_id) cursor, not an index defect. We do NOT
+	// inherent to the (at, id) cursor, not an index defect. We do NOT
 	// assert sort-free for that reason.
 }

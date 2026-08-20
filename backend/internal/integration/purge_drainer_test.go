@@ -44,7 +44,7 @@ func seedPurgeDebt(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixt
 	id := uuid.New()
 	mustExec(t, ctx, pool, `
 		INSERT INTO pending_purges
-		  (purge_id, tenant_id, object_id, backend_id, bucket_name, collection, key)
+		  (id, tenant_id, id, backend_id, bucket_name, collection, key)
 		VALUES ($1, $2, $3, 'primary', 'bkt-1', $4, 'k-orphan')`,
 		id, f.tenantID, uuid.New(), f.collection)
 	return id
@@ -54,7 +54,7 @@ func purgeRowCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uui
 	t.Helper()
 	var n int64
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM pending_purges WHERE purge_id = $1`, id).Scan(&n); err != nil {
+		`SELECT count(*) FROM pending_purges WHERE id = $1`, id).Scan(&n); err != nil {
 		t.Fatalf("count purge rows: %v", err)
 	}
 	return n
@@ -94,7 +94,7 @@ func TestPurgeDrainerKeepsDebtWhenStorageFails(t *testing.T) {
 	var attempts int32
 	var lastErr string
 	if err := pool.QueryRow(ctx,
-		`SELECT attempts, last_error FROM pending_purges WHERE purge_id = $1`, id).
+		`SELECT attempts, last_error FROM pending_purges WHERE id = $1`, id).
 		Scan(&attempts, &lastErr); err != nil {
 		t.Fatalf("read debt row: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestPurgeDrainerRetriesUntilSuccess(t *testing.T) {
 	}
 
 	// Fast-forward past the backoff.
-	mustExec(t, ctx, pool, `UPDATE pending_purges SET next_attempt_at = now() WHERE purge_id = $1`, id)
+	mustExec(t, ctx, pool, `UPDATE pending_purges SET next_attempt_at = now() WHERE id = $1`, id)
 	d.Sweep(ctx)
 
 	if got := purgeRowCount(t, ctx, pool, id); got != 0 {

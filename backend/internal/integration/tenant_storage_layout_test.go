@@ -28,7 +28,7 @@ func TestTenantStorageLayout(t *testing.T) {
 	// to work before the FK landed; the suite ran nowhere, so the drift went
 	// unnoticed until it was wired into CI.
 	const backendID = "be-layout"
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
 	hex := uuid.NewString()[:8]
 	ded, err := repo.Create(ctx, tenant.CreateTenantArgs{

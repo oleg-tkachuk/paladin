@@ -77,7 +77,7 @@ func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 
 	// Shared harness assertion: the seeded object is cross-tenant-invisible on a
 	// GUC-less paladin_app pool — the root reason the reaper must run on BYPASSRLS.
-	h.AssertRLSHidesCrossTenant(t, `SELECT count(*) FROM objects WHERE object_id = $1`, objectID)
+	h.AssertRLSHidesCrossTenant(t, `SELECT count(*) FROM objects WHERE id = $1`, objectID)
 
 	sweptCount := func(pool *pgxpool.Pool) int {
 		st := &recordingStorage{}
@@ -173,7 +173,7 @@ func mustSoftDeleteWithBackdate(t *testing.T, pool *pgxpool.Pool, objectID uuid.
         UPDATE objects
         SET state = 'DELETED',
             terminated_at = now() - ($2::bigint || ' seconds')::interval
-        WHERE object_id = $1
+        WHERE id = $1
     `, objectID, intervalSec)
 	if err != nil {
 		t.Fatalf("backdate soft-delete: %v", err)
@@ -184,7 +184,7 @@ func mustObjectExists(t *testing.T, pool *pgxpool.Pool, objectID uuid.UUID) bool
 	t.Helper()
 	var exists bool
 	if err := pool.QueryRow(context.Background(),
-		`SELECT EXISTS(SELECT 1 FROM objects WHERE object_id = $1)`, objectID,
+		`SELECT EXISTS(SELECT 1 FROM objects WHERE id = $1)`, objectID,
 	).Scan(&exists); err != nil {
 		t.Fatalf("exists check: %v", err)
 	}

@@ -74,7 +74,7 @@ func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
 		VALUES ($1, $2, $3, 'k-gone', 'PENDING', 'application/octet-stream', 0,
 		        now() - interval '48 hours')`,
@@ -107,7 +107,7 @@ func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
 		VALUES ($1, $2, $3, 'k-unreachable', 'PENDING', 'application/octet-stream', 0,
 		        now() - interval '48 hours')`,
@@ -138,7 +138,7 @@ func TestReconcilerPromotesWhenBytesArePresent(t *testing.T) {
 
 	id := uuid.Must(uuid.NewV7())
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
 		VALUES ($1, $2, $3, 'k-present', 'PENDING', 'application/octet-stream', 0,
 		        now() - interval '48 hours')`,

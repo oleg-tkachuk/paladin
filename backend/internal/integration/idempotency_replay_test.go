@@ -88,7 +88,7 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 
 	tenant := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO tenants (tenant_id, display_name, slug) VALUES ($1, 'Test', 't-idem')`,
+		`INSERT INTO tenants (id, display_name, slug) VALUES ($1, 'Test', 't-idem')`,
 		tenant); err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}

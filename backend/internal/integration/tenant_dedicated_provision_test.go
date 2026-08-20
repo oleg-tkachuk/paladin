@@ -22,7 +22,7 @@ func TestCreateDedicatedTenantProvisionsBucket(t *testing.T) {
 	pool := startPostgres(t)
 
 	const backendID = "be-dedicated"
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()

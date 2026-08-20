@@ -18,7 +18,7 @@ func TestRotateCredentialsGraceWindow(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (id, kind, credentials_secret_ref)
+		`INSERT INTO storage_backends (name, kind, credentials_secret_ref)
 		 VALUES ('primary', 's3-compatible', 'ref-v1')`)
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 

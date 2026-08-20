@@ -33,12 +33,12 @@ func TestCollectControlPlane(t *testing.T) {
 	trashed := uuid.New()
 	hex := uuid.NewString()[:8]
 	mustExec(t, ctx, pool,
-		`INSERT INTO tenants (tenant_id, slug, display_name, storage_layout, deleted_at)
+		`INSERT INTO tenants (id, slug, display_name, storage_layout, deleted_at)
 		 VALUES ($1, $2, $3, 'dedicated', now())`,
 		trashed, "t-"+hex, "tn-"+hex)
 	// A disabled + drained backend of a different kind.
 	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (id, kind, enabled, read_only) VALUES ($1, 'aws-s3', false, true)`,
+		`INSERT INTO storage_backends (name, kind, enabled, read_only) VALUES ($1, 'aws-s3', false, true)`,
 		"be-off-"+hex)
 	// A tenant-owned bucket that never finished provisioning.
 	mustExec(t, ctx, pool,
@@ -91,7 +91,7 @@ func TestCollectRLSObjects(t *testing.T) {
 	insert := func(tenantID uuid.UUID, collection, state string, size any) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO objects (object_id, tenant_id, collection, key, state, content_type, checksum_algorithm, size_bytes)
+			`INSERT INTO objects (id, tenant_id, collection, key, state, content_type, checksum_algorithm, size_bytes)
 			 VALUES ($1, $2, $3, $4, $5, 'application/octet-stream', 0, $6)`,
 			uuid.Must(uuid.NewV7()), tenantID, collection, "k-"+uuid.NewString()[:8], state, size)
 	}
@@ -167,16 +167,17 @@ func TestCollectRLSSiblings(t *testing.T) {
 	// ─── quotas ─────────────────────────────────────────────────────────
 	// Tenant-scoped row sitting exactly on its object cap → at_limit.
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, tenant_id, max_object_count, max_total_bytes,
+		`INSERT INTO quotas (id, tenant_id, max_object_count, max_total_bytes,
 		                     usage_object_count, usage_total_bytes)
 		 VALUES ($1, $2, 10, 0, 10, 4096)`, uuid.New(), f.tenantID)
 	// Bucket-scoped row at 95% of its byte cap → near_limit, not at_limit.
 	// Its usage must NOT land in the tenant-scoped usage sums.
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)`,
+		`INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`,
 		backendOf(t, ctx, pool, f), "bkt-q-"+hex)
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (quota_id, backend_id, bucket_name, max_total_bytes,
+		`INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes,
 		                     usage_total_bytes)
 		 VALUES ($1, $2, $3, 1000, 950)`,
 		uuid.New(), backendOf(t, ctx, pool, f), "bkt-q-"+hex)
@@ -226,12 +227,12 @@ func TestCollectRLSSiblings(t *testing.T) {
 
 	// ─── subscriptions ──────────────────────────────────────────────────
 	mustExec(t, ctx, pool,
-		`INSERT INTO event_subscriptions (subscription_id, tenant_id, cel_filter,
+		`INSERT INTO event_subscriptions (id, tenant_id, cel_filter,
 		                                  sink_kind, sink_config, disabled)
 		 VALUES ($1, $2, 'kind == "object.created"', 'nats', '{}'::jsonb, false)`,
 		uuid.New(), f.tenantID)
 	mustExec(t, ctx, pool,
-		`INSERT INTO event_subscriptions (subscription_id, tenant_id, cel_filter,
+		`INSERT INTO event_subscriptions (id, tenant_id, cel_filter,
 		                                  sink_kind, sink_config, disabled)
 		 VALUES ($1, $2, '', 'http', '{}'::jsonb, true)`,
 		uuid.New(), f.tenantID)

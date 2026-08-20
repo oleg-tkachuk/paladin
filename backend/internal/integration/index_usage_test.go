@@ -50,7 +50,7 @@ func assertPlanAvoidsSeqScan(t *testing.T, plan, table, what string) {
 
 // TestIndexUsage_ObjectsKeysetPagination covers migration 064. ListObjects is
 // the console's object browser: equality on (tenant_id, collection), a keyset
-// cursor on object_id, ordered by object_id.
+// cursor on id, ordered by object_id.
 //
 // Seeded across MANY Collections on purpose. With a single Collection the
 // primary key is an adequate fallback — every row matches the filter, so a
@@ -69,9 +69,9 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 	analyze(t, ctx, pool, "objects")
 
 	plan := explain(t, ctx, pool, `
-		SELECT object_id FROM objects
-		 WHERE tenant_id = $1 AND collection = $2 AND object_id > $3
-		 ORDER BY object_id
+		SELECT id FROM objects
+		 WHERE tenant_id = $1 AND collection = $2 AND id > $3
+		 ORDER BY id
 		 LIMIT 50`, f.tenantID, keys[0], uuid.Nil)
 
 	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects keyset page")
@@ -84,9 +84,9 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 	// PK scan's LIMIT to stop on, so it reads to the end of the table.
 	empty := seedCollections(t, ctx, pool, f, 1)[0]
 	plan = explain(t, ctx, pool, `
-		SELECT object_id FROM objects
-		 WHERE tenant_id = $1 AND collection = $2 AND object_id > $3
-		 ORDER BY object_id
+		SELECT id FROM objects
+		 WHERE tenant_id = $1 AND collection = $2 AND id > $3
+		 ORDER BY id
 		 LIMIT 50`, f.tenantID, empty, uuid.Nil)
 
 	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects on an empty Collection")
@@ -105,12 +105,12 @@ func TestIndexUsage_ObjectsHardDeletable(t *testing.T) {
 	mustExec(t, ctx, pool, `
 		UPDATE objects SET state = 'DELETED', terminated_at = now() - interval '30 days'
 		 WHERE tenant_id = $1
-		   AND object_id IN (SELECT object_id FROM objects WHERE tenant_id = $1 LIMIT 100)`,
+		   AND id IN (SELECT id FROM objects WHERE tenant_id = $1 LIMIT 100)`,
 		f.tenantID)
 	analyze(t, ctx, pool, "objects")
 
 	plan := explain(t, ctx, pool, `
-		SELECT object_id FROM objects
+		SELECT id FROM objects
 		 WHERE state = 'DELETED' AND terminated_at IS NOT NULL AND terminated_at < now()
 		   AND NOT legal_hold
 		 ORDER BY terminated_at
@@ -130,7 +130,7 @@ func TestIndexUsage_MultipartReaper(t *testing.T) {
 	for i, oid := range ids {
 		mustExec(t, ctx, pool,
 			`INSERT INTO multipart_uploads
-			   (upload_id, object_id, storage_upload_id, part_size_bytes, total_parts, created_at)
+			   (upload_id, id, storage_upload_id, part_size_bytes, total_parts, created_at)
 			 VALUES ($1, $2, 's3-upload', 5242880, 4, now() - make_interval(hours => $3))`,
 			fmt.Sprintf("up-%d", i), oid, i%200)
 	}
@@ -174,7 +174,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 	// 300 operations per tenant, interleaved by the UUIDv7 ordering.
 	mustExec(t, ctx, pool, `
 		INSERT INTO operations (operation_id, tenant_id, type, state)
-		SELECT gen_random_uuid(), t.tenant_id, 'BatchDelete', 'PENDING'
+		SELECT gen_random_uuid(), t.id, 'BatchDelete', 'PENDING'
 		  FROM generate_series(1, 300) g, tenants t`)
 	analyze(t, ctx, pool, "operations")
 
@@ -238,7 +238,7 @@ func seedTenants(t *testing.T, ctx context.Context, pool *pgxpool.Pool, n int) u
 		id := uuid.New()
 		hex := uuid.NewString()[:8]
 		mustExec(t, ctx, pool,
-			`INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, $2, $3)`,
+			`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 			id, "t-"+hex, "tn-"+hex)
 		if i == n/2 {
 			picked = id
@@ -261,7 +261,7 @@ func seedObjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixtur
 	seedObjectsUnder(t, ctx, pool, f, f.collection, n, state)
 
 	rows, err := pool.Query(ctx,
-		`SELECT object_id FROM objects WHERE tenant_id = $1 AND collection = $2`,
+		`SELECT id FROM objects WHERE tenant_id = $1 AND collection = $2`,
 		f.tenantID, f.collection)
 	if err != nil {
 		t.Fatalf("read seeded ids: %v", err)
@@ -284,7 +284,7 @@ func seedObjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixtur
 func seedObjectsUnder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, collection string, n int, state string) {
 	t.Helper()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (object_id, tenant_id, collection, key, state,
+		INSERT INTO objects (id, tenant_id, collection, key, state,
 		                     content_type, checksum_algorithm, size_bytes)
 		SELECT gen_random_uuid(), $1, $2, 'k-' || g, $3::object_state,
 		       'application/octet-stream', 0, 100
@@ -306,8 +306,10 @@ func seedCollections(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fi
 	for i := 0; i < n; i++ {
 		name := "ok-" + uuid.NewString()[:8]
 		mustExec(t, ctx, pool,
-			`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
-			 VALUES ($1, $2, $3, $4)`, f.tenantID, name, backendID, bucketName)
+			`INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4`, f.tenantID, name, backendID, bucketName)
 		out = append(out, name)
 	}
 	return out

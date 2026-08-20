@@ -25,9 +25,9 @@ func TestOAuthStore(t *testing.T) {
 	// which references tenants(tenant_id).
 	tenantID := uuid.New()
 	userID := uuid.New()
-	mustExec(t, ctx, pool, `INSERT INTO tenants (tenant_id, slug, display_name) VALUES ($1, 'acme', 'acme')`, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, 'acme', 'acme')`, tenantID)
 	mustExec(t, ctx, pool,
-		`INSERT INTO users (user_id, tenant_id, subject) VALUES ($1, $2, 'svc@acme')`, userID, tenantID)
+		`INSERT INTO users (id, tenant_id, subject) VALUES ($1, $2, 'svc@acme')`, userID, tenantID)
 
 	t.Run("client upsert + get roundtrip", func(t *testing.T) {
 		want := oauth.Client{

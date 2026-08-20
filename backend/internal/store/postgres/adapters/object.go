@@ -341,12 +341,11 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, colle
 	// 047): a mutation (`write`) against a read-only backend is refused;
 	// reads still resolve.
 	const q = `
-		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only,
-		       COALESCE(bk.provision_state, 'ready')
-		FROM collections ok
-		JOIN storage_backends sb ON sb.id = ok.backend_id
-		LEFT JOIN buckets bk ON bk.backend_id = ok.backend_id AND bk.bucket_name = ok.bucket_name
-		WHERE ok.tenant_id = $1 AND ok.collection = $2`
+		SELECT sb.name, bk.name, sb.enabled, sb.read_only, bk.provision_state
+		FROM collections c
+		JOIN buckets bk          ON bk.id = c.bucket_id
+		JOIN storage_backends sb ON sb.id = bk.backend_id
+		WHERE c.tenant_id = $1 AND c.name = $2`
 	var (
 		backendID      string
 		bucket         string

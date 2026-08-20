@@ -202,7 +202,7 @@ func mustInsertAvailableObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.U
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            object_id, tenant_id, collection, key, state,
+            id, tenant_id, collection, key, state,
             content_type, checksum_algorithm, size_bytes, etag, committed_at
         ) VALUES (
             $1, $2, $3, $4, 'AVAILABLE',
@@ -219,7 +219,7 @@ func mustObjectTags(t *testing.T, pool *pgxpool.Pool, objectID uuid.UUID) map[st
 	t.Helper()
 	var raw []byte
 	if err := pool.QueryRow(context.Background(),
-		`SELECT tags FROM objects WHERE object_id = $1`, objectID,
+		`SELECT tags FROM objects WHERE id = $1`, objectID,
 	).Scan(&raw); err != nil {
 		t.Fatalf("read tags: %v", err)
 	}

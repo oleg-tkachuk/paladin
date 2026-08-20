@@ -24,7 +24,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 	pool := startPostgres(t)
 
 	const backendID = "be-gate"
-	mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, backendID)
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
@@ -43,7 +43,10 @@ func TestBucketProvisioningGate(t *testing.T) {
 	// Bind an collection to the tenant's (still pending) dedicated bucket.
 	collection := "ok-" + hex
 	mustExec(t, ctx, pool,
-		`INSERT INTO collections (tenant_id, collection, backend_id, bucket_name) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4`,
 		tid, collection, backendID, bucket)
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)

@@ -80,7 +80,7 @@ func TestRLS_AuditLogInsertWithCheck(t *testing.T) {
 
 	_, err = conn.Exec(ctxA, `
         INSERT INTO audit_log (
-            entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+            id, at, actor_subject, actor_tenant_id, actor_audience,
             action, resource_name
         ) VALUES (
             $1, now(), 'test-actor', $2, 'data',
@@ -97,7 +97,7 @@ func TestRLS_AuditLogInsertWithCheck(t *testing.T) {
 	// Sanity: matched actor_tenant_id passes.
 	_, err = conn.Exec(ctxA, `
         INSERT INTO audit_log (
-            entry_id, at, actor_subject, actor_tenant_id, actor_audience,
+            id, at, actor_subject, actor_tenant_id, actor_audience,
             action, resource_name
         ) VALUES (
             $1, now(), 'test-actor', $2, 'data',
@@ -115,7 +115,7 @@ func mustCreateTenant(t *testing.T, pool *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
 	_, err := pool.Exec(context.Background(), `
-        INSERT INTO tenants (tenant_id, display_name, slug)
+        INSERT INTO tenants (id, display_name, slug)
         VALUES ($1, $2, $3)
     `, id, slug, slug)
 	if err != nil {
@@ -129,22 +129,24 @@ func mustCreateCollection(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, 
 	const backendID = "primary"
 	const bucketName = "paladin-test"
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO storage_backends (id, kind, region, endpoint)
+        INSERT INTO storage_backends (name, kind, region, endpoint)
         VALUES ($1, 's3-compatible', 'us-east-1', 'http://localhost')
         ON CONFLICT (id) DO NOTHING
     `, backendID); err != nil {
 		t.Fatalf("seed backend: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO buckets (backend_id, bucket_name)
-        VALUES ($1, $2)
+        INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1
         ON CONFLICT DO NOTHING
     `, backendID, bucketName); err != nil {
 		t.Fatalf("seed bucket: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO collections (tenant_id, collection, backend_id, bucket_name)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO collections (tenant_id, name, bucket_id)
+		 SELECT $1, $2, b.id FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $3 AND b.name = $4
     `, tenantID, name, backendID, bucketName); err != nil {
 		t.Fatalf("create collection: %v", err)
 	}
@@ -154,7 +156,7 @@ func mustInsertObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, coll
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            object_id, tenant_id, collection, key, state,
+            id, tenant_id, collection, key, state,
             content_type, checksum_algorithm
         ) VALUES (
             $1, $2, $3, $4, 'AVAILABLE',
