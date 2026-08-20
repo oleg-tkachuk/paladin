@@ -136,8 +136,9 @@ FROM oauth_clients WHERE client_id = $1`
 func (s *PgxStore) CreateCode(ctx context.Context, c AuthCode) error {
 	const q = `
 INSERT INTO oauth_authorization_codes
-    (code_hash, client_id, user_id, tenant_id, redirect_uri, code_challenge, code_challenge_method, scopes, audience, expires_at)
-VALUES ($1, $2, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, $10)`
+    (code_hash, oauth_client_id, user_id, tenant_id, redirect_uri, code_challenge, code_challenge_method, scopes, audience, expires_at)
+SELECT $1, c.id, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, $10
+FROM oauth_clients c WHERE c.client_id = $2`
 	_, err := s.pool.Exec(ctx, q,
 		hashCode(c.Code), c.ClientID, c.UserID.String(), c.TenantID.String(),
 		c.RedirectURI, c.CodeChallenge, c.ChallengeMethod, nonNil(c.Scopes), c.Audience, c.ExpiresAt)
@@ -152,7 +153,7 @@ func (s *PgxStore) ConsumeCode(ctx context.Context, code string) (AuthCode, erro
 UPDATE oauth_authorization_codes
 SET consumed_at = now()
 WHERE code_hash = $1 AND consumed_at IS NULL AND expires_at > now()
-RETURNING client_id, user_id::text, tenant_id::text, redirect_uri,
+RETURNING (SELECT c.client_id FROM oauth_clients c WHERE c.id = oauth_client_id), user_id::text, tenant_id::text, redirect_uri,
           code_challenge, code_challenge_method, scopes, audience, expires_at`
 	var (
 		out              AuthCode

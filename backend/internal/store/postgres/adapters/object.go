@@ -394,16 +394,15 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 	// the resolution chokepoint covers every promote/delete/version path.
 	// `write` splits the read_only (drain) gate by operation class (047).
 	const q = `
-		SELECT b.backend_id, b.bucket_name,
-		       COALESCE(bk.versioning_enabled, false),
-		       COALESCE(bk.object_lock_enabled, false),
-		       b.constraints, sb.enabled, sb.read_only, sb.events_enabled,
-		       COALESCE(bk.provision_state, 'ready')
-		FROM collections b
-		JOIN storage_backends sb ON sb.id = b.backend_id
-		LEFT JOIN buckets bk
-		  ON bk.backend_id = b.backend_id AND bk.bucket_name = b.bucket_name
-		WHERE b.tenant_id = $1 AND b.collection = $2
+		SELECT sb.name, bk.name,
+		       bk.versioning_enabled,
+		       bk.object_lock_enabled,
+		       c.constraints, sb.enabled, sb.read_only, sb.events_enabled,
+		       bk.provision_state
+		FROM collections c
+		JOIN buckets bk          ON bk.id = c.bucket_id
+		JOIN storage_backends sb ON sb.id = bk.backend_id
+		WHERE c.tenant_id = $1 AND c.name = $2
 	`
 	var (
 		meta            object.BucketMeta
