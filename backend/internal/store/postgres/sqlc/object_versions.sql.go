@@ -26,9 +26,7 @@ func (q *Queries) GetCurrentVersionID(ctx context.Context, id pgtype.UUID) (pgty
 }
 
 const getObjectVersion = `-- name: GetObjectVersion :one
-SELECT v.id, v.object_id, v.is_delete_marker, v.storage_path,
-       v.size_bytes, v.etag, v.checksum_algorithm, v.checksum,
-       v.content_type, v.metadata, v.tags,
+SELECT v.id, v.tenant_id, v.object_id, v.is_delete_marker, v.storage_path, v.size_bytes, v.etag, v.checksum_algorithm, v.checksum, v.content_type, v.metadata, v.tags, v.created_at,
        l.mode AS lock_mode, l.retain_until AS lock_retain_until,
        COALESCE(l.legal_hold, false) AS legal_hold,
        v.created_at
@@ -38,38 +36,30 @@ WHERE v.id = $1
 `
 
 type GetObjectVersionRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	ObjectID          pgtype.UUID        `json:"object_id"`
-	IsDeleteMarker    bool               `json:"is_delete_marker"`
-	StoragePath       string             `json:"storage_path"`
-	SizeBytes         *int64             `json:"size_bytes"`
-	Etag              *string            `json:"etag"`
-	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
-	Checksum          *string            `json:"checksum"`
-	ContentType       *string            `json:"content_type"`
-	Metadata          []byte             `json:"metadata"`
-	Tags              []byte             `json:"tags"`
-	LockMode          NullObjectLockMode `json:"lock_mode"`
-	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
-	LegalHold         bool               `json:"legal_hold"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ObjectVersion   ObjectVersion      `json:"object_version"`
+	LockMode        NullObjectLockMode `json:"lock_mode"`
+	LockRetainUntil pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold       bool               `json:"legal_hold"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 func (q *Queries) GetObjectVersion(ctx context.Context, id pgtype.UUID) (GetObjectVersionRow, error) {
 	row := q.db.QueryRow(ctx, getObjectVersion, id)
 	var i GetObjectVersionRow
 	err := row.Scan(
-		&i.ID,
-		&i.ObjectID,
-		&i.IsDeleteMarker,
-		&i.StoragePath,
-		&i.SizeBytes,
-		&i.Etag,
-		&i.ChecksumAlgorithm,
-		&i.Checksum,
-		&i.ContentType,
-		&i.Metadata,
-		&i.Tags,
+		&i.ObjectVersion.ID,
+		&i.ObjectVersion.TenantID,
+		&i.ObjectVersion.ObjectID,
+		&i.ObjectVersion.IsDeleteMarker,
+		&i.ObjectVersion.StoragePath,
+		&i.ObjectVersion.SizeBytes,
+		&i.ObjectVersion.Etag,
+		&i.ObjectVersion.ChecksumAlgorithm,
+		&i.ObjectVersion.Checksum,
+		&i.ObjectVersion.ContentType,
+		&i.ObjectVersion.Metadata,
+		&i.ObjectVersion.Tags,
+		&i.ObjectVersion.CreatedAt,
 		&i.LockMode,
 		&i.LockRetainUntil,
 		&i.LegalHold,
@@ -107,9 +97,7 @@ func (q *Queries) InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objec
 }
 
 const listObjectVersions = `-- name: ListObjectVersions :many
-SELECT v.id, v.object_id, v.is_delete_marker, v.storage_path,
-       v.size_bytes, v.etag, v.checksum_algorithm, v.checksum,
-       v.content_type, v.metadata, v.tags,
+SELECT v.id, v.tenant_id, v.object_id, v.is_delete_marker, v.storage_path, v.size_bytes, v.etag, v.checksum_algorithm, v.checksum, v.content_type, v.metadata, v.tags, v.created_at,
        l.mode AS lock_mode, l.retain_until AS lock_retain_until,
        COALESCE(l.legal_hold, false) AS legal_hold,
        v.created_at
@@ -125,21 +113,11 @@ LIMIT $4
 `
 
 type ListObjectVersionsRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	ObjectID          pgtype.UUID        `json:"object_id"`
-	IsDeleteMarker    bool               `json:"is_delete_marker"`
-	StoragePath       string             `json:"storage_path"`
-	SizeBytes         *int64             `json:"size_bytes"`
-	Etag              *string            `json:"etag"`
-	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
-	Checksum          *string            `json:"checksum"`
-	ContentType       *string            `json:"content_type"`
-	Metadata          []byte             `json:"metadata"`
-	Tags              []byte             `json:"tags"`
-	LockMode          NullObjectLockMode `json:"lock_mode"`
-	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
-	LegalHold         bool               `json:"legal_hold"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ObjectVersion   ObjectVersion      `json:"object_version"`
+	LockMode        NullObjectLockMode `json:"lock_mode"`
+	LockRetainUntil pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold       bool               `json:"legal_hold"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 // Newest first. Cursor: (created_at, id).
@@ -158,17 +136,19 @@ func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, 
 	for rows.Next() {
 		var i ListObjectVersionsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ObjectID,
-			&i.IsDeleteMarker,
-			&i.StoragePath,
-			&i.SizeBytes,
-			&i.Etag,
-			&i.ChecksumAlgorithm,
-			&i.Checksum,
-			&i.ContentType,
-			&i.Metadata,
-			&i.Tags,
+			&i.ObjectVersion.ID,
+			&i.ObjectVersion.TenantID,
+			&i.ObjectVersion.ObjectID,
+			&i.ObjectVersion.IsDeleteMarker,
+			&i.ObjectVersion.StoragePath,
+			&i.ObjectVersion.SizeBytes,
+			&i.ObjectVersion.Etag,
+			&i.ObjectVersion.ChecksumAlgorithm,
+			&i.ObjectVersion.Checksum,
+			&i.ObjectVersion.ContentType,
+			&i.ObjectVersion.Metadata,
+			&i.ObjectVersion.Tags,
+			&i.ObjectVersion.CreatedAt,
 			&i.LockMode,
 			&i.LockRetainUntil,
 			&i.LegalHold,

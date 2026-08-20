@@ -323,8 +323,8 @@ CREATE TABLE tenant_storage_migrations (
     state              text NOT NULL DEFAULT 'PENDING',
     objects_total      bigint NOT NULL DEFAULT 0,
     objects_copied     bigint NOT NULL DEFAULT 0,
-    cursor_collection  text,
-    cursor_path        text,
+    cursor_collection  text NOT NULL DEFAULT '',
+    cursor_path        text NOT NULL DEFAULT '',
     error              text,
     attempts           integer NOT NULL DEFAULT 0,
     -- Source bytes are retained after a migration completes, then swept.

@@ -34,10 +34,6 @@ func (r *ObjectVersionRepo) Insert(ctx context.Context, v object.ObjectVersion) 
 		s := v.SizeBytes
 		sizeBytes = &s
 	}
-	var retain pgtype.Timestamptz
-	if v.LockRetainUntil != nil {
-		retain = pgTS(*v.LockRetainUntil)
-	}
 	return r.q.InsertObjectVersion(ctx,
 		pgUUID(v.VersionID),
 		pgUUID(v.ObjectID),
@@ -50,9 +46,6 @@ func (r *ObjectVersionRepo) Insert(ctx context.Context, v object.ObjectVersion) 
 		strPtr(v.ContentType),
 		encodeMap(v.Metadata),
 		encodeMap(v.Tags),
-		v.LockMode,
-		retain,
-		v.LegalHold,
 	)
 }
 
@@ -64,7 +57,7 @@ func (r *ObjectVersionRepo) Get(ctx context.Context, versionID uuid.UUID) (objec
 		}
 		return object.ObjectVersion{}, err
 	}
-	return versionFromSQLC(row), nil
+	return versionFromSQLC(row.ObjectVersion, lockModeFromSQL(row.LockMode), row.LockRetainUntil, row.LegalHold), nil
 }
 
 func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSize int32, pageToken string) ([]object.ObjectVersion, string, error) {
@@ -92,7 +85,7 @@ func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSi
 	currentID, _ := r.CurrentVersionID(ctx, objectID)
 	out := make([]object.ObjectVersion, 0, len(rows))
 	for _, row := range rows {
-		v := versionFromSQLC(row)
+		v := versionFromSQLC(row.ObjectVersion, lockModeFromSQL(row.LockMode), row.LockRetainUntil, row.LegalHold)
 		if v.VersionID == currentID {
 			v.IsCurrent = true
 		}
@@ -121,13 +114,15 @@ func (r *ObjectVersionRepo) SetCurrentVersionID(ctx context.Context, objectID, v
 	return r.q.SetCurrentVersionID(ctx, pgUUID(objectID), pgUUID(versionID))
 }
 
-func versionFromSQLC(row sqlc.ObjectVersion) object.ObjectVersion {
+// lock* arrive from the LEFT JOIN to object_locks: most versions have no lock
+// row at all, so they are passed separately rather than assumed present.
+func versionFromSQLC(row sqlc.ObjectVersion, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) object.ObjectVersion {
 	var size int64
 	if row.SizeBytes != nil {
 		size = *row.SizeBytes
 	}
 	return object.ObjectVersion{
-		VersionID:       uuidFrom(row.VersionID),
+		VersionID:       uuidFrom(row.ID),
 		ObjectID:        uuidFrom(row.ObjectID),
 		IsDeleteMarker:  row.IsDeleteMarker,
 		StoragePath:     row.StoragePath,
@@ -138,9 +133,9 @@ func versionFromSQLC(row sqlc.ObjectVersion) object.ObjectVersion {
 		ContentType:     derefStr(row.ContentType),
 		Metadata:        decodeMap(row.Metadata),
 		Tags:            decodeMap(row.Tags),
-		LockMode:        row.LockMode,
-		LockRetainUntil: timePtr(row.LockRetainUntil),
-		LegalHold:       row.LegalHold,
+		LockMode:        lockMode,
+		LockRetainUntil: timePtr(lockRetainUntil),
+		LegalHold:       legalHold,
 		CreatedAt:       timeFrom(row.CreatedAt),
 	}
 }

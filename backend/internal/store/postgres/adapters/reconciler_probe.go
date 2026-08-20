@@ -50,7 +50,7 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 	tenantID := uuidFrom(row.TenantID)
 	// LookupObjectByID already materializes the backend binding, so the HEAD
 	// is routed to the object's own backend (not the default).
-	etag, sizeBytes, checksum, sequencer, err = r.head.Head(ctx, row.BackendID, row.BucketName, tenantID, row.Collection, row.Key)
+	etag, sizeBytes, checksum, sequencer, err = r.head.Head(ctx, row.BackendName, row.BucketName, tenantID, row.CollectionName, row.Path)
 	if err != nil {
 		// HEAD failure is "not found" if the storage adapter signals 404 via
 		// the standard not-found error wrapping; treat as not-found here.

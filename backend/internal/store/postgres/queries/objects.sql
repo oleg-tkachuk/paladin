@@ -34,11 +34,14 @@ WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[]);
 -- Reads an object by id alone. Used by background workers (reconciler,
 -- replicator) that don't carry a tenant context. Joins collections to
 -- materialize the bucket binding so the caller can call S3 in one trip.
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state,
-       b.bucket_id
+SELECT o.id, o.tenant_id, o.path, o.state,
+       c.name  AS collection_name,
+       sb.name AS backend_name,
+       bk.name AS bucket_name
 FROM objects o
-JOIN collections b
-  ON b.id = o.collection_id
+JOIN collections c       ON c.id = o.collection_id
+JOIN buckets bk          ON bk.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = bk.backend_id
 WHERE o.id = $1;
 
 -- name: LookupObjectByKey :one

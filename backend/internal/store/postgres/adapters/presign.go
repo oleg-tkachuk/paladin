@@ -33,10 +33,10 @@ func (r *PresignRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID
 	if err != nil {
 		return "", "", "", err
 	}
-	if row.Object.Collection != collection {
+	if row.CollectionName != collection {
 		return "", "", "", fmt.Errorf("object %s not in collection %s", objectID, collection)
 	}
-	return row.Object.Collection, row.Object.Key, string(row.Object.State), nil
+	return row.CollectionName, row.Object.Path, string(row.Object.State), nil
 }
 
 func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, collection, key string, err error) {

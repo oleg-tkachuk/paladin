@@ -37,10 +37,17 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 		s := args.SizeHint
 		sizePtr = &s
 	}
+	// The collection is known by name here; CreateObject stores its id.
+	// Resolved rather than joined because sqlc rejects a parameter used only
+	// inside a subquery in VALUES.
+	collectionID, err := r.q.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
+	if err != nil {
+		return object.Object{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
+	}
 	if err := r.q.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
-		args.Collection,
+		collectionID,
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,

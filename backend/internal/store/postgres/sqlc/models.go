@@ -744,8 +744,8 @@ type TenantStorageMigration struct {
 	State                   string             `json:"state"`
 	ObjectsTotal            int64              `json:"objects_total"`
 	ObjectsCopied           int64              `json:"objects_copied"`
-	CursorCollection        *string            `json:"cursor_collection"`
-	CursorPath              *string            `json:"cursor_path"`
+	CursorCollection        string             `json:"cursor_collection"`
+	CursorPath              string             `json:"cursor_path"`
 	Error                   *string            `json:"error"`
 	Attempts                int32              `json:"attempts"`
 	CleanupRetentionSeconds int64              `json:"cleanup_retention_seconds"`

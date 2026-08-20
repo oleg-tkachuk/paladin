@@ -21,7 +21,7 @@ WHERE tenant_id = $1
 `
 
 // Records copy progress + the resume cursor after a batch.
-func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection *string, cursorPath *string) (int64, error) {
+func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorPath string) (int64, error) {
 	result, err := q.db.Exec(ctx, advanceStorageMigrationCopy,
 		tenantID,
 		objectsCopied,
@@ -108,70 +108,109 @@ func (q *Queries) FailStorageMigration(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at FROM tenant_storage_migrations WHERE tenant_id = $1
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at,
+       ssb.name AS source_backend_name, sb.name AS source_bucket_name,
+       tsb.name AS target_backend_name, tb.name AS target_bucket_name
+FROM tenant_storage_migrations m
+JOIN buckets sb           ON sb.id = m.source_bucket_id
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+JOIN buckets tb           ON tb.id = m.target_bucket_id
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE m.tenant_id = $1
 `
 
-func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error) {
+type GetStorageMigrationRow struct {
+	TenantStorageMigration TenantStorageMigration `json:"tenant_storage_migration"`
+	SourceBackendName      string                 `json:"source_backend_name"`
+	SourceBucketName       string                 `json:"source_bucket_name"`
+	TargetBackendName      string                 `json:"target_backend_name"`
+	TargetBucketName       string                 `json:"target_bucket_name"`
+}
+
+func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error) {
 	row := q.db.QueryRow(ctx, getStorageMigration, tenantID)
-	var i TenantStorageMigration
+	var i GetStorageMigrationRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.SourceBucketID,
-		&i.TargetBucketID,
-		&i.State,
-		&i.ObjectsTotal,
-		&i.ObjectsCopied,
-		&i.CursorCollection,
-		&i.CursorPath,
-		&i.Error,
-		&i.Attempts,
-		&i.CleanupRetentionSeconds,
-		&i.CleanupAfter,
-		&i.CleanedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.CompletedAt,
+		&i.TenantStorageMigration.ID,
+		&i.TenantStorageMigration.TenantID,
+		&i.TenantStorageMigration.SourceBucketID,
+		&i.TenantStorageMigration.TargetBucketID,
+		&i.TenantStorageMigration.State,
+		&i.TenantStorageMigration.ObjectsTotal,
+		&i.TenantStorageMigration.ObjectsCopied,
+		&i.TenantStorageMigration.CursorCollection,
+		&i.TenantStorageMigration.CursorPath,
+		&i.TenantStorageMigration.Error,
+		&i.TenantStorageMigration.Attempts,
+		&i.TenantStorageMigration.CleanupRetentionSeconds,
+		&i.TenantStorageMigration.CleanupAfter,
+		&i.TenantStorageMigration.CleanedAt,
+		&i.TenantStorageMigration.CreatedAt,
+		&i.TenantStorageMigration.UpdatedAt,
+		&i.TenantStorageMigration.CompletedAt,
+		&i.SourceBackendName,
+		&i.SourceBucketName,
+		&i.TargetBackendName,
+		&i.TargetBucketName,
 	)
 	return i, err
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at FROM tenant_storage_migrations
-WHERE state NOT IN ('cleaned', 'failed')
-ORDER BY updated_at
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at,
+       ssb.name AS source_backend_name, sb.name AS source_bucket_name,
+       tsb.name AS target_backend_name, tb.name AS target_bucket_name
+FROM tenant_storage_migrations m
+JOIN buckets sb           ON sb.id = m.source_bucket_id
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+JOIN buckets tb           ON tb.id = m.target_bucket_id
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE m.state NOT IN ('cleaned', 'failed')
+ORDER BY m.updated_at
 LIMIT $1::int
 `
 
+type ListActiveStorageMigrationsRow struct {
+	TenantStorageMigration TenantStorageMigration `json:"tenant_storage_migration"`
+	SourceBackendName      string                 `json:"source_backend_name"`
+	SourceBucketName       string                 `json:"source_bucket_name"`
+	TargetBackendName      string                 `json:"target_backend_name"`
+	TargetBucketName       string                 `json:"target_bucket_name"`
+}
+
 // Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 // still active — the worker must run retention-gated cleanup on it.
-func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error) {
+func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveStorageMigrations, limitCount)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TenantStorageMigration
+	var items []ListActiveStorageMigrationsRow
 	for rows.Next() {
-		var i TenantStorageMigration
+		var i ListActiveStorageMigrationsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.SourceBucketID,
-			&i.TargetBucketID,
-			&i.State,
-			&i.ObjectsTotal,
-			&i.ObjectsCopied,
-			&i.CursorCollection,
-			&i.CursorPath,
-			&i.Error,
-			&i.Attempts,
-			&i.CleanupRetentionSeconds,
-			&i.CleanupAfter,
-			&i.CleanedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.CompletedAt,
+			&i.TenantStorageMigration.ID,
+			&i.TenantStorageMigration.TenantID,
+			&i.TenantStorageMigration.SourceBucketID,
+			&i.TenantStorageMigration.TargetBucketID,
+			&i.TenantStorageMigration.State,
+			&i.TenantStorageMigration.ObjectsTotal,
+			&i.TenantStorageMigration.ObjectsCopied,
+			&i.TenantStorageMigration.CursorCollection,
+			&i.TenantStorageMigration.CursorPath,
+			&i.TenantStorageMigration.Error,
+			&i.TenantStorageMigration.Attempts,
+			&i.TenantStorageMigration.CleanupRetentionSeconds,
+			&i.TenantStorageMigration.CleanupAfter,
+			&i.TenantStorageMigration.CleanedAt,
+			&i.TenantStorageMigration.CreatedAt,
+			&i.TenantStorageMigration.UpdatedAt,
+			&i.TenantStorageMigration.CompletedAt,
+			&i.SourceBackendName,
+			&i.SourceBucketName,
+			&i.TargetBackendName,
+			&i.TargetBucketName,
 		); err != nil {
 			return nil, err
 		}

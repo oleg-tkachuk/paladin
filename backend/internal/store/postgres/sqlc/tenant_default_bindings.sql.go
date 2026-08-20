@@ -52,7 +52,10 @@ func (q *Queries) GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.U
 const setTenantDefaultBinding = `-- name: SetTenantDefaultBinding :exec
 
 INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
-VALUES ($1, $2, $3)
+SELECT $1, b.id, $4
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $2 AND b.name = $3
 ON CONFLICT (tenant_id) DO UPDATE
    SET bucket_id  = EXCLUDED.bucket_id = EXCLUDED.bucket_id,
        set_at      = now(),
@@ -65,7 +68,12 @@ ON CONFLICT (tenant_id) DO UPDATE
 // SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
 // deleted; deletion of the underlying bucket is RESTRICTed so an
 // operator must rebind before tearing down the bucket.
-func (q *Queries) SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, bucketID pgtype.UUID, setBy string) error {
-	_, err := q.db.Exec(ctx, setTenantDefaultBinding, tenantID, bucketID, setBy)
+func (q *Queries) SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) error {
+	_, err := q.db.Exec(ctx, setTenantDefaultBinding,
+		tenantID,
+		name,
+		name_2,
+		setBy,
+	)
 	return err
 }

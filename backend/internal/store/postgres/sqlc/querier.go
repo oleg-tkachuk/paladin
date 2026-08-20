@@ -12,7 +12,7 @@ import (
 
 type Querier interface {
 	// Records copy progress + the resume cursor after a batch.
-	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection *string, cursorPath *string) (int64, error)
+	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorPath string) (int64, error)
 	// Atomically rebinds a collection to a different bucket. Tenancy is enforced
 	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
 	// name cannot be moved under a bucket that would orphan them.
@@ -146,10 +146,10 @@ type Querier interface {
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
-	GetReplicationWatermark(ctx context.Context, bucketID pgtype.UUID) (pgtype.Timestamptz, error)
+	GetReplicationWatermark(ctx context.Context, name string, name_2 string) (pgtype.Timestamptz, error)
 	GetStorageBackend(ctx context.Context, id pgtype.UUID) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
-	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (TenantStorageMigration, error)
+	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error)
 	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
@@ -204,7 +204,7 @@ type Querier interface {
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 	// still active — the worker must run retention-gated cleanup on it.
-	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]TenantStorageMigration, error)
+	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error)
 	// Cursor: (at, id) tuple. Optional predicates use the canonical
 	// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
 	// constant-folds the disabled branches at plan time.
@@ -511,7 +511,7 @@ type Querier interface {
 	// SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
 	// deleted; deletion of the underlying bucket is RESTRICTed so an
 	// operator must rebind before tearing down the bucket.
-	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, bucketID pgtype.UUID, setBy string) error
+	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) error
 	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)
@@ -549,7 +549,7 @@ type Querier interface {
 	// Monotonic upsert: never moves the watermark backwards. Concurrent
 	// replicas may try to advance with stale values; the GREATEST() guard
 	// preserves the highest seen committed_at.
-	UpsertReplicationWatermark(ctx context.Context, bucketID pgtype.UUID, watermark pgtype.Timestamptz) error
+	UpsertReplicationWatermark(ctx context.Context, name string, name_2 string, watermark pgtype.Timestamptz) error
 	// Keyed by backend NAME: callers are health probes that know the config key.
 	// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
 	// state in its own 1:1 table — writing it does NOT touch storage_backends, so

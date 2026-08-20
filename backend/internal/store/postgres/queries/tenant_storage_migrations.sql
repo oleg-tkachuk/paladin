@@ -8,14 +8,29 @@ VALUES ($1, $2, $3, $4, 'provisioning')
 RETURNING *;
 
 -- name: GetStorageMigration :one
-SELECT * FROM tenant_storage_migrations WHERE tenant_id = $1;
+SELECT sqlc.embed(m),
+       ssb.name AS source_backend_name, sb.name AS source_bucket_name,
+       tsb.name AS target_backend_name, tb.name AS target_bucket_name
+FROM tenant_storage_migrations m
+JOIN buckets sb           ON sb.id = m.source_bucket_id
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+JOIN buckets tb           ON tb.id = m.target_bucket_id
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE m.tenant_id = $1;
 
 -- name: ListActiveStorageMigrations :many
 -- Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 -- still active — the worker must run retention-gated cleanup on it.
-SELECT * FROM tenant_storage_migrations
-WHERE state NOT IN ('cleaned', 'failed')
-ORDER BY updated_at
+SELECT sqlc.embed(m),
+       ssb.name AS source_backend_name, sb.name AS source_bucket_name,
+       tsb.name AS target_backend_name, tb.name AS target_bucket_name
+FROM tenant_storage_migrations m
+JOIN buckets sb           ON sb.id = m.source_bucket_id
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+JOIN buckets tb           ON tb.id = m.target_bucket_id
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE m.state NOT IN ('cleaned', 'failed')
+ORDER BY m.updated_at
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: SetStorageMigrationState :execrows

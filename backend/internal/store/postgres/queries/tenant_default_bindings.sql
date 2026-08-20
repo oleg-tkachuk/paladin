@@ -7,7 +7,10 @@
 
 -- name: SetTenantDefaultBinding :exec
 INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
-VALUES ($1, $2, $3)
+SELECT $1, b.id, $4
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $2 AND b.name = $3
 ON CONFLICT (tenant_id) DO UPDATE
    SET bucket_id  = EXCLUDED.bucket_id = EXCLUDED.bucket_id,
        set_at      = now(),

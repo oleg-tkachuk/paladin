@@ -421,21 +421,25 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, name st
 }
 
 const lookupObjectByID = `-- name: LookupObjectByID :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state,
-       b.bucket_id
+SELECT o.id, o.tenant_id, o.path, o.state,
+       c.name  AS collection_name,
+       sb.name AS backend_name,
+       bk.name AS bucket_name
 FROM objects o
-JOIN collections b
-  ON b.id = o.collection_id
+JOIN collections c       ON c.id = o.collection_id
+JOIN buckets bk          ON bk.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = bk.backend_id
 WHERE o.id = $1
 `
 
 type LookupObjectByIDRow struct {
-	ID           pgtype.UUID `json:"id"`
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	CollectionID pgtype.UUID `json:"collection_id"`
-	Path         string      `json:"path"`
-	State        ObjectState `json:"state"`
-	BucketID     pgtype.UUID `json:"bucket_id"`
+	ID             pgtype.UUID `json:"id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	Path           string      `json:"path"`
+	State          ObjectState `json:"state"`
+	CollectionName string      `json:"collection_name"`
+	BackendName    string      `json:"backend_name"`
+	BucketName     string      `json:"bucket_name"`
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
@@ -447,10 +451,11 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.CollectionID,
 		&i.Path,
 		&i.State,
-		&i.BucketID,
+		&i.CollectionName,
+		&i.BackendName,
+		&i.BucketName,
 	)
 	return i, err
 }

@@ -46,10 +46,14 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		s := args.SizeHint
 		sizePtr = &s
 	}
+	collectionID, err := qtx.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
+	if err != nil {
+		return multipart.Session{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
+	}
 	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
-		args.Collection,
+		collectionID,
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,

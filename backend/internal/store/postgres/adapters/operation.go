@@ -179,7 +179,7 @@ func (r *OperationRepo) PurgeTerminalBefore(ctx context.Context, cutoff time.Tim
 
 func operationFromSQLC(o sqlc.Operation) operation.Operation {
 	return operation.Operation{
-		OperationID:  uuidFrom(o.OperationID),
+		OperationID:  uuidFrom(o.ID),
 		TenantID:     uuidFrom(o.TenantID),
 		Type:         o.Type,
 		State:        operation.State(string(o.State)),

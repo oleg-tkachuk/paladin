@@ -21,9 +21,7 @@ ON CONFLICT (version_id) DO UPDATE SET
     updated_at   = now();
 
 -- name: GetObjectVersion :one
-SELECT v.id, v.object_id, v.is_delete_marker, v.storage_path,
-       v.size_bytes, v.etag, v.checksum_algorithm, v.checksum,
-       v.content_type, v.metadata, v.tags,
+SELECT sqlc.embed(v),
        l.mode AS lock_mode, l.retain_until AS lock_retain_until,
        COALESCE(l.legal_hold, false) AS legal_hold,
        v.created_at
@@ -33,9 +31,7 @@ WHERE v.id = $1;
 
 -- name: ListObjectVersions :many
 -- Newest first. Cursor: (created_at, id).
-SELECT v.id, v.object_id, v.is_delete_marker, v.storage_path,
-       v.size_bytes, v.etag, v.checksum_algorithm, v.checksum,
-       v.content_type, v.metadata, v.tags,
+SELECT sqlc.embed(v),
        l.mode AS lock_mode, l.retain_until AS lock_retain_until,
        COALESCE(l.legal_hold, false) AS legal_hold,
        v.created_at

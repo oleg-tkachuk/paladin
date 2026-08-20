@@ -27,18 +27,22 @@ func NewStorageMigrationRepo(q *sqlc.Queries, pool *pgxpool.Pool) *StorageMigrat
 
 var _ worker.MigrationRepo = (*StorageMigrationRepo)(nil)
 
-func migFromSQLC(m sqlc.TenantStorageMigration) worker.StorageMigration {
+// Names come from the joins, not the row: the row stores bucket ids, and the
+// worker calls S3, which takes names.
+func migFromSQLC(m sqlc.TenantStorageMigration,
+	srcBackend, srcBucket, tgtBackend, tgtBucket string,
+) worker.StorageMigration {
 	return worker.StorageMigration{
 		TenantID:         uuidFrom(m.TenantID),
-		SourceBackendID:  m.SourceBackendID,
-		SourceBucketName: m.SourceBucketName,
-		TargetBackendID:  m.TargetBackendID,
-		TargetBucketName: m.TargetBucketName,
+		SourceBackendID:  srcBackend,
+		SourceBucketName: srcBucket,
+		TargetBackendID:  tgtBackend,
+		TargetBucketName: tgtBucket,
 		State:            m.State,
 		ObjectsTotal:     m.ObjectsTotal,
 		ObjectsCopied:    m.ObjectsCopied,
 		CursorCollection: m.CursorCollection,
-		CursorKey:        m.CursorKey,
+		CursorKey:        m.CursorPath,
 		CleanupAfter:     m.CleanupAfter.Time, // zero when NULL (CleanupAfter.Valid == false)
 	}
 }
@@ -50,7 +54,7 @@ func (r *StorageMigrationRepo) ListActive(ctx context.Context, limit int) ([]wor
 	}
 	out := make([]worker.StorageMigration, 0, len(rows))
 	for _, m := range rows {
-		out = append(out, migFromSQLC(m))
+		out = append(out, migFromSQLC(m.TenantStorageMigration, m.SourceBackendName, m.SourceBucketName, m.TargetBackendName, m.TargetBucketName))
 	}
 	return out, nil
 }
@@ -108,7 +112,7 @@ func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UU
 		}
 		out = make([]worker.ObjectRef, 0, len(rows))
 		for _, o := range rows {
-			out = append(out, worker.ObjectRef{Collection: o.Collection, Key: o.Key, SizeBytes: o.SizeBytes})
+			out = append(out, worker.ObjectRef{Collection: o.CollectionID, Key: o.Path, SizeBytes: o.SizeBytes})
 		}
 		return nil
 	})
@@ -174,6 +178,6 @@ func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, tenantID uuid.UU
 }
 
 func (r *StorageMigrationRepo) Fail(ctx context.Context, tenantID uuid.UUID, reason string) error {
-	_, err := r.q.FailStorageMigration(ctx, pgUUID(tenantID), reason)
+	_, err := r.q.FailStorageMigration(ctx, pgUUID(tenantID), &reason)
 	return err
 }
