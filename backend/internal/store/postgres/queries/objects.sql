@@ -43,13 +43,13 @@ WHERE o.id = $1;
 
 -- name: LookupObjectByKey :one
 -- Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
-SELECT sqlc.embed(objects), c.name AS collection_name
+SELECT sqlc.embed(o), c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.collection_id = (SELECT c.id FROM collections c
-                          WHERE c.tenant_id = $1 AND c.name = $2)
-  AND o.path = $3 AND o.state <> 'DELETED';
+  AND c.name = $2
+  AND o.path = $3
+  AND o.state <> 'DELETED';
 
 -- name: PromoteObject :execrows
 -- Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
@@ -189,9 +189,9 @@ WHERE id = $1
 -- Used by RestoreObject to refuse restoring into a slot that's been reused.
 SELECT EXISTS(
     SELECT 1 FROM objects o
+    JOIN collections c ON c.id = o.collection_id
     WHERE o.tenant_id = $1
-      AND o.collection_id = (SELECT c.id FROM collections c
-                              WHERE c.tenant_id = $1 AND c.name = $2)
+      AND c.name = $2
       AND o.path = $3
       AND o.state <> 'DELETED'
 )::boolean AS exists;
@@ -205,25 +205,25 @@ SELECT EXISTS(
 -- authoritative, so over-fetching (a hint that's absent) only costs
 -- throughput, never correctness. `substr` is escaped for LIKE by the
 -- adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
-SELECT sqlc.embed(objects), c.name AS collection_name
+SELECT sqlc.embed(o), c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.collection_id = (SELECT c.id FROM collections c
-                          WHERE c.tenant_id = $1 AND c.name = $2)
-  AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
-  AND (sqlc.narg('prefix')::text IS NULL OR path LIKE sqlc.narg('prefix')::text || '%')
-  AND (sqlc.narg('substr')::text IS NULL OR path LIKE '%' || sqlc.narg('substr')::text || '%')
-  AND (sqlc.narg('after_id')::uuid IS NULL OR id > sqlc.narg('after_id')::uuid)
-ORDER BY id
+  AND c.name = $2
+  AND (sqlc.narg('state')::object_state IS NULL OR o.state = sqlc.narg('state')::object_state)
+  AND (sqlc.narg('prefix')::text IS NULL OR o.path LIKE sqlc.narg('prefix')::text || '%')
+  AND (sqlc.narg('substr')::text IS NULL
+       OR o.path LIKE '%' || sqlc.narg('substr')::text || '%')
+  AND (sqlc.narg('after_id')::uuid IS NULL OR o.id > sqlc.narg('after_id')::uuid)
+ORDER BY o.id
 LIMIT sqlc.arg('page_size');
 
 -- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects o
+JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.collection_id = (SELECT c.id FROM collections c
-                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND c.name = $2
   AND (sqlc.narg('state')::object_state IS NULL
        OR o.state = sqlc.narg('state')::object_state);
 

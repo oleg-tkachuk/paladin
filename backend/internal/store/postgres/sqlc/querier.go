@@ -73,7 +73,8 @@ type Querier interface {
 	// collection rebind. Resolved from the (backend, bucket) name pair here.
 	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string) error
 	// Object queries.
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
+	// collection_id is resolved by the caller via ResolveCollectionID.
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
 	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
 	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
@@ -440,6 +441,7 @@ type Querier interface {
 	// count.
 	ReschedulePendingPurge(ctx context.Context, iD pgtype.UUID, lastError *string, column3 pgtype.Interval) error
 	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) error
+	ResolveCollectionID(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
 	// Longest registered collection name that is a prefix of the candidate (the
 	// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
 	// collections (migration 030) make the naive "the OK is the first path

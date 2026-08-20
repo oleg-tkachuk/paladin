@@ -14,9 +14,9 @@ import (
 const checkLiveCollision = `-- name: CheckLiveCollision :one
 SELECT EXISTS(
     SELECT 1 FROM objects o
+    JOIN collections c ON c.id = o.collection_id
     WHERE o.tenant_id = $1
-      AND o.collection_id = (SELECT c.id FROM collections c
-                              WHERE c.tenant_id = $1 AND c.name = $2)
+      AND c.name = $2
       AND o.path = $3
       AND o.state <> 'DELETED'
 )::boolean AS exists
@@ -34,9 +34,9 @@ func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, 
 const countObjects = `-- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects o
+JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.collection_id = (SELECT c.id FROM collections c
-                          WHERE c.tenant_id = $1 AND c.name = $2)
+  AND c.name = $2
   AND ($3::object_state IS NULL
        OR o.state = $3::object_state)
 `
@@ -55,23 +55,21 @@ INSERT INTO objects (
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
-    $1, $2,
-    -- Callers know the collection by name; the id never leaves the schema.
-    (SELECT c.id FROM collections c WHERE c.tenant_id = $2 AND c.name = $3),
-    $4, $5,
+    $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
     $10, $11, $12, $13
 )
 `
 
 // Object queries.
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, path string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
+// collection_id is resolved by the caller via ResolveCollectionID.
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, createObject,
 		iD,
 		tenantID,
-		name,
+		collectionID,
 		path,
-		state,
+		column5,
 		contentType,
 		sizeBytes,
 		checksumAlgorithm,
@@ -85,13 +83,15 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgt
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, c.name AS collection_name
 FROM objects
-WHERE tenant_id = $1 AND id = $2
+JOIN collections c ON c.id = objects.collection_id
+WHERE objects.tenant_id = $1 AND objects.id = $2
 `
 
 type GetObjectRow struct {
-	Object Object `json:"object"`
+	Object         Object `json:"object"`
+	CollectionName string `json:"collection_name"`
 }
 
 func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error) {
@@ -119,6 +119,7 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
+		&i.CollectionName,
 	)
 	return i, err
 }
@@ -152,13 +153,15 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, c.name AS collection_name
 FROM objects
-WHERE tenant_id = $1 AND id = ANY($2::uuid[])
+JOIN collections c ON c.id = objects.collection_id
+WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[])
 `
 
 type GetObjectsByIDsRow struct {
-	Object Object `json:"object"`
+	Object         Object `json:"object"`
+	CollectionName string `json:"collection_name"`
 }
 
 // Batch lookup for batch-operation executors: one round-trip for the
@@ -195,6 +198,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.CollectionName,
 		); err != nil {
 			return nil, err
 		}
@@ -338,21 +342,23 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT 
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, c.name AS collection_name
 FROM objects o
+JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.collection_id = (SELECT c.id FROM collections c
-                          WHERE c.tenant_id = $1 AND c.name = $2)
-  AND ($3::object_state IS NULL OR state = $3::object_state)
-  AND ($4::text IS NULL OR path LIKE $4::text || '%')
-  AND ($5::text IS NULL OR path LIKE '%' || $5::text || '%')
-  AND ($6::uuid IS NULL OR id > $6::uuid)
-ORDER BY id
+  AND c.name = $2
+  AND ($3::object_state IS NULL OR o.state = $3::object_state)
+  AND ($4::text IS NULL OR o.path LIKE $4::text || '%')
+  AND ($5::text IS NULL
+       OR o.path LIKE '%' || $5::text || '%')
+  AND ($6::uuid IS NULL OR o.id > $6::uuid)
+ORDER BY o.id
 LIMIT $7
 `
 
 type ListObjectsRow struct {
-	Object Object `json:"object"`
+	Object         Object `json:"object"`
+	CollectionName string `json:"collection_name"`
 }
 
 // The full CEL filter is still applied by the caller post-load; the
@@ -402,6 +408,7 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, name st
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.CollectionName,
 		); err != nil {
 			return nil, err
 		}
@@ -449,16 +456,18 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT 
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, c.name AS collection_name
 FROM objects o
+JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.collection_id = (SELECT c.id FROM collections c
-                          WHERE c.tenant_id = $1 AND c.name = $2)
-  AND o.path = $3 AND o.state <> 'DELETED'
+  AND c.name = $2
+  AND o.path = $3
+  AND o.state <> 'DELETED'
 `
 
 type LookupObjectByKeyRow struct {
-	Object Object `json:"object"`
+	Object         Object `json:"object"`
+	CollectionName string `json:"collection_name"`
 }
 
 // Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
@@ -487,6 +496,7 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
+		&i.CollectionName,
 	)
 	return i, err
 }
@@ -540,6 +550,17 @@ func (q *Queries) PromoteObject(ctx context.Context, iD pgtype.UUID, sizeBytes *
 	return result.RowsAffected(), nil
 }
 
+const resolveCollectionID = `-- name: ResolveCollectionID :one
+SELECT id FROM collections WHERE tenant_id = $1 AND name = $2
+`
+
+func (q *Queries) ResolveCollectionID(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveCollectionID, tenantID, name)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const restoreObject = `-- name: RestoreObject :execrows
 UPDATE objects
 SET state         = 'AVAILABLE',
@@ -560,8 +581,9 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pg
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, c.name AS collection_name
 FROM objects
+JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
 ORDER BY presign_expires_at
@@ -569,7 +591,8 @@ LIMIT $1
 `
 
 type ScanPendingExpiredRow struct {
-	Object Object `json:"object"`
+	Object         Object `json:"object"`
+	CollectionName string `json:"collection_name"`
 }
 
 // Reconciler picks up PENDING rows whose presign has expired.
@@ -604,6 +627,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.CollectionName,
 		); err != nil {
 			return nil, err
 		}
