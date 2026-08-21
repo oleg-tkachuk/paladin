@@ -15,24 +15,68 @@
 -- is the safe default — a deployment grants LOGIN with an explicit
 -- ALTER ROLE … WITH LOGIN PASSWORD '…'.
 
+-- Role management is privileged, and the role running migrations may not
+-- hold that privilege. Three deploy shapes, all of which must work:
+--
+--   1. Migrations run as superuser (a fresh testcontainer, a laptop) —
+--      everything below succeeds.
+--   2. Migrations run as a non-superuser with CREATEROLE — the roles get
+--      created, but ALTER ROLE … BYPASSRLS fails with 42501: a CREATEROLE
+--      user cannot grant that attribute.
+--   3. Migrations run as `paladin_migrate` itself, which is what a
+--      provisioned cluster does — a role cannot ALTER its own attributes,
+--      and it cannot CREATE roles either.
+--
+-- On shapes (2) and (3) the operator MUST have provisioned the roles, with
+-- BYPASSRLS on paladin_migrate and paladin_reaper, at cluster-creation time.
+-- Without it the workers that legitimately span tenants — outbox dispatch,
+-- lifecycle sweeps, the reapers — silently see zero rows, because RLS
+-- filters rather than errors.
+--
+-- The migration therefore *attempts* the privileged parts and tolerates
+-- being refused. Failing hard here would wedge every deploy on shape (3),
+-- which is the normal production shape.
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_app') THEN
-        CREATE ROLE paladin_app NOLOGIN;
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_app') THEN
+            CREATE ROLE paladin_app NOLOGIN;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_migrate') THEN
+            CREATE ROLE paladin_migrate NOLOGIN;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_reaper') THEN
+            CREATE ROLE paladin_reaper NOLOGIN;
+        END IF;
+    EXCEPTION
+        WHEN insufficient_privilege THEN
+            RAISE NOTICE 'cannot CREATE ROLE without privilege; the operator '
+                         'must have provisioned paladin_app / paladin_migrate / '
+                         'paladin_reaper out-of-band';
+    END;
+
+    -- The dispatcher and the reapers legitimately span tenants: the outbox
+    -- drain and the lifecycle sweeps are platform work, not tenant work.
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_migrate') THEN
+        BEGIN
+            ALTER ROLE paladin_migrate BYPASSRLS;
+        EXCEPTION
+            WHEN insufficient_privilege THEN
+                RAISE NOTICE 'cannot ALTER ROLE paladin_migrate BYPASSRLS without '
+                             'SUPERUSER; the role must be provisioned with it';
+        END;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_migrate') THEN
-        CREATE ROLE paladin_migrate NOLOGIN;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_reaper') THEN
-        CREATE ROLE paladin_reaper NOLOGIN;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_reaper') THEN
+        BEGIN
+            ALTER ROLE paladin_reaper BYPASSRLS;
+        EXCEPTION
+            WHEN insufficient_privilege THEN
+                RAISE NOTICE 'cannot ALTER ROLE paladin_reaper BYPASSRLS without '
+                             'SUPERUSER; the role must be provisioned with it';
+        END;
     END IF;
 END
 $$;
-
--- The dispatcher and the reapers legitimately span tenants: the outbox drain
--- and the lifecycle sweeps are platform work, not tenant work.
-ALTER ROLE paladin_migrate BYPASSRLS;
-ALTER ROLE paladin_reaper BYPASSRLS;
 
 GRANT USAGE ON SCHEMA public TO paladin_app, paladin_reaper;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO paladin_app;
