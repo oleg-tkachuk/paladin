@@ -5,7 +5,12 @@
 -- deleted; deletion of the underlying bucket is RESTRICTed so an
 -- operator must rebind before tearing down the bucket.
 
--- name: SetTenantDefaultBinding :exec
+-- name: SetTenantDefaultBinding :execrows
+-- :execrows, not :exec — the bucket is resolved by name in a SELECT, so a
+-- name that matches nothing produces an INSERT of zero rows rather than a
+-- foreign-key violation. Without the count the caller cannot tell "bound"
+-- from "silently did nothing", and a client that asked to bind to a
+-- nonexistent bucket would be told it succeeded.
 INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
 SELECT $1, b.id, $4
 FROM buckets b

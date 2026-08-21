@@ -78,9 +78,10 @@ func (f *billingFixture) seedCapability(t *testing.T, tenant uuid.UUID, subject 
 	if _, err := f.h.PoolMigrate.Exec(context.Background(),
 		`INSERT INTO capability_records
 		   (id, tenant_id, issuer, principal_kind, principal_subject,
-		    audience, caveats, expires_at)
+		    audience, caveats, created_by, expires_at)
 		 VALUES ($1, $2, 'test-issuer', 'agent', $3,
-		         '{admin}', '{}'::jsonb, now() + interval '1 hour')`,
+		         '{admin}', '{}'::jsonb, 'test-issuer',
+		         now() + interval '1 hour')`,
 		id, tenant, subject,
 	); err != nil {
 		t.Fatalf("seed capability: %v", err)
@@ -118,8 +119,10 @@ func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount float64, u
 func (f *billingFixture) chargeAt(t *testing.T, capID uuid.UUID, tenant uuid.UUID, when time.Time, amount float64, unit, op, actor string) {
 	t.Helper()
 	if _, err := f.h.PoolMigrate.Exec(context.Background(),
-		`INSERT INTO charges (id, tenant_id, capability_id, occurred_at, amount, unit_code, op, actor_subject)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO charges (id, tenant_id, tenant_slug, capability_id,
+		                      occurred_at, amount, unit_code, op, actor_subject)
+		 SELECT $1, $2, t.slug, $3, $4, $5, $6, $7, $8
+		   FROM tenants t WHERE t.id = $2`,
 		uuid.New(), tenant, capID, when, amount, unit, op, actor,
 	); err != nil {
 		t.Fatalf("seed charge at %v: %v", when, err)

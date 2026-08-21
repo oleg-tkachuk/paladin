@@ -131,7 +131,7 @@ func TestHardDelete_RestoreWinsRace(t *testing.T) {
 	}
 
 	// Now run with the stale version — DELETE must affect 0 rows.
-	n, err := q.HardDeleteObjectIfStillDeleted(context.Background(), rows[0].ObjectID, staleVersion)
+	n, err := q.HardDeleteObjectIfStillDeleted(context.Background(), rows[0].ID, staleVersion)
 	if err != nil {
 		t.Fatalf("HardDeleteObjectIfStillDeleted: %v", err)
 	}

@@ -6,7 +6,7 @@
 -- name: ClaimIngestedEvent :one
 INSERT INTO ingested_events (event_id, source, type, subject)
 VALUES ($1, $2, $3, sqlc.narg('subject')::text)
-ON CONFLICT (event_id) DO NOTHING
+ON CONFLICT (source, event_id) DO NOTHING
 RETURNING event_id;
 
 -- name: PurgeIngestedEventsBefore :execrows

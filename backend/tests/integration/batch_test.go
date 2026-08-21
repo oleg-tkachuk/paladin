@@ -202,12 +202,13 @@ func mustInsertAvailableObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.U
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            id, tenant_id, collection, key, state,
+            id, tenant_id, collection_id, path, state,
             content_type, checksum_algorithm, size_bytes, etag, committed_at
-        ) VALUES (
-            $1, $2, $3, $4, 'AVAILABLE',
-            'application/octet-stream', 1, 100, 'etag', now()
         )
+        SELECT $1, $2, c.id, $4, 'AVAILABLE',
+               'application/octet-stream', 1, 100, 'etag', now()
+          FROM collections c
+         WHERE c.tenant_id = $2 AND c.name = $3
     `, objID, tenantID, collection, key)
 	if err != nil {
 		t.Fatalf("insert available object: %v", err)

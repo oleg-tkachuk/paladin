@@ -133,7 +133,7 @@ func TestEventSubscriptionRepoV2_Create_AcceptsNATSSinkKind(t *testing.T) {
 	// Sanity: row is actually there + sink_kind round-trips.
 	var sinkKind string
 	if err := h.PoolMigrate.QueryRow(ctx,
-		`SELECT sink_kind FROM event_subscriptions WHERE subscription_id = $1`,
+		`SELECT sink_kind FROM event_subscriptions WHERE id = $1`,
 		sub.SubscriptionID,
 	).Scan(&sinkKind); err != nil {
 		if err == pgx.ErrNoRows {

@@ -131,7 +131,7 @@ func mustCreateCollection(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, 
 	if _, err := pool.Exec(context.Background(), `
         INSERT INTO storage_backends (name, kind, region, endpoint)
         VALUES ($1, 's3-compatible', 'us-east-1', 'http://localhost')
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT (name) DO NOTHING
     `, backendID); err != nil {
 		t.Fatalf("seed backend: %v", err)
 	}
@@ -156,12 +156,12 @@ func mustInsertObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, coll
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            id, tenant_id, collection, key, state,
+            id, tenant_id, collection_id, path, state,
             content_type, checksum_algorithm
-        ) VALUES (
-            $1, $2, $3, $4, 'AVAILABLE',
-            'text/plain', 1
         )
+        SELECT $1, $2, c.id, $4, 'AVAILABLE', 'text/plain', 1
+          FROM collections c
+         WHERE c.tenant_id = $2 AND c.name = $3
     `, uuid.New(), tenantID, collection, key)
 	if err != nil {
 		t.Fatalf("insert object: %v", err)

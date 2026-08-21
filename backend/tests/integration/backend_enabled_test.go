@@ -371,7 +371,7 @@ func mustReadObjectFingerprint(t *testing.T, pool *pgxpool.Pool, tenantID uuid.U
 	var size int64
 	if err := pool.QueryRow(context.Background(), `
         SELECT state, content_type, COALESCE(size_bytes, 0)
-        FROM objects WHERE tenant_id = $1 AND key = $2
+        FROM objects WHERE tenant_id = $1 AND path = $2
     `, tenantID, key).Scan(&state, &contentType, &size); err != nil {
 		t.Fatalf("read object fingerprint: %v", err)
 	}
@@ -402,7 +402,7 @@ func seedBackend(t *testing.T, pool *pgxpool.Pool, id string) {
 	if _, err := pool.Exec(context.Background(), `
         INSERT INTO storage_backends (name, kind, region, endpoint)
         VALUES ($1, 's3-compatible', 'us-east-1', 'http://localhost')
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT (name) DO NOTHING
     `, id); err != nil {
 		t.Fatalf("seed backend %q: %v", id, err)
 	}

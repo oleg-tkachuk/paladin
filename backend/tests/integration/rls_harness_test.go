@@ -29,7 +29,7 @@ func TestRLSHarness_HidesCrossTenant_DispatcherOutbox(t *testing.T) {
 		`INSERT INTO event_deliveries
 		   (id, tenant_id, subscription_id, event_type, event_at, event_payload)
 		 VALUES ($1, $2, $3, 'paladin.test.event', now(), '{}'::jsonb)`,
-		uuid.New(), tenantID, uuid.New(),
+		uuid.New(), tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID),
 	); err != nil {
 		t.Fatalf("seed event_deliveries: %v", err)
 	}

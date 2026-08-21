@@ -38,6 +38,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-charge")
 	capID := uuid.New()
+	seedCapRecord(t, h, capID, tenantID)
 
 	// First charge: 4. Cap allows 10, tenant allows 5. Both fit.
 	spent, err := store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID, "", "", nil)
@@ -98,6 +99,7 @@ func TestCharge_RefundFloorsAtZero(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
+	seedCapRecord(t, h, capID, tenantID)
 
 	if _, err := store.Charge(ctx, capID, 1.0, 0, "USD", tenantID, "", "", nil); err != nil {
 		t.Fatalf("seed charge: %v", err)
@@ -147,6 +149,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 	capID := uuid.New()
+	seedCapRecord(t, h, capID, tenantID)
 	if _, err := store.Charge(ctx, capID, 7.0, 0, "USD", tenantID, "", "", nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
@@ -188,9 +191,10 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	if _, err := h.PoolMigrate.Exec(ctx,
 		`INSERT INTO capability_records
 		 (id, tenant_id, issuer, principal_kind, principal_subject,
-		  audience, caveats, expires_at)
+		  audience, caveats, created_by, expires_at)
 		 VALUES ($1, $2, 'test-issuer', 'agent', 'agent-1',
-		         '{admin}', '{}'::jsonb, now() + interval '1 hour')`,
+		         '{admin}', '{}'::jsonb, 'test-issuer',
+		         now() + interval '1 hour')`,
 		capID, tenantID,
 	); err != nil {
 		t.Fatalf("seed capability_records: %v", err)

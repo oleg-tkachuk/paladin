@@ -191,8 +191,14 @@ func (s *UsageStore) Charge(
 	// Ledger row on the same tx — atomic with the counters.
 	ledgerID := uuid.New()
 	if _, lErr := tx.Exec(ctx,
-		`INSERT INTO charges (id, tenant_id, capability_id, amount, unit_code, op, actor_subject)
-		 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7)`,
+		// tenant_slug is captured here rather than joined at read time: the
+		// ledger has to stay readable after a tenant renames itself, and a
+		// charge is a record of what was true when it happened. Resolved in
+		// the same statement so it cannot drift from tenant_id.
+		`INSERT INTO charges (id, tenant_id, tenant_slug, capability_id,
+		                      amount, unit_code, op, actor_subject)
+		 SELECT $1, $2, t.slug, $3, $4::numeric, $5, $6, $7
+		   FROM tenants t WHERE t.id = $2`,
 		ledgerID, tenantID, capID, amountNumeric, resolvedUnit, op, actor,
 	); lErr != nil {
 		return 0, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)

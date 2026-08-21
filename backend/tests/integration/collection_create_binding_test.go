@@ -47,7 +47,8 @@ func TestCreateCollection_UsesDefaultBinding(t *testing.T) {
 	}
 
 	// Set a default binding, then create without a bucket → lands in it.
-	if _, err := tenantRepo.SetDefaultBinding(context.Background(), tid, "primary", "paladin-test", "admin@local"); err != nil {
+	if _, err := tenantRepo.SetDefaultBinding(context.Background(), tid,
+		"storageBackends/primary/buckets/paladin-test", "admin@local"); err != nil {
 		t.Fatalf("set binding: %v", err)
 	}
 	resp, err := createNoBucket("routed-ok")

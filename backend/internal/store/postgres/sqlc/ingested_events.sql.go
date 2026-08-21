@@ -15,7 +15,7 @@ const claimIngestedEvent = `-- name: ClaimIngestedEvent :one
 
 INSERT INTO ingested_events (event_id, source, type, subject)
 VALUES ($1, $2, $3, $4::text)
-ON CONFLICT (event_id) DO NOTHING
+ON CONFLICT (source, event_id) DO NOTHING
 RETURNING event_id
 `
 

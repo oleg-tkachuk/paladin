@@ -15,6 +15,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -134,7 +136,7 @@ func (f *dispatcherFixture) seedSubscription(t *testing.T, tenant uuid.UUID, opt
 	// to land in the table so the dispatcher's List can read them.
 	if _, err := f.h.PoolMigrate.Exec(context.Background(),
 		`INSERT INTO event_subscriptions
-		   (subscription_id, tenant_id, cel_filter, sink_kind, sink_config, disabled)
+		   (id, tenant_id, cel_filter, sink_kind, sink_config, disabled)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		subID, tenant, opts.Filter, opts.SinkKind, cfg, opts.Disabled,
 	); err != nil {
@@ -213,7 +215,8 @@ func (f *dispatcherFixture) deliveryRow(t *testing.T, id uuid.UUID) deliveryRow 
 	var r deliveryRow
 	r.ID = id
 	if err := f.h.PoolMigrate.QueryRow(context.Background(),
-		`SELECT status, attempts, last_error, last_status_code, next_attempt_at, delivered_at
+		`SELECT status, attempts, COALESCE(last_error, ''),
+		        COALESCE(last_status_code, 0), next_attempt_at, delivered_at
 		   FROM event_deliveries WHERE id = $1`, id,
 	).Scan(&r.Status, &r.Attempts, &r.LastError, &r.LastStatusCode, &r.NextAttemptAt, &r.DeliveredAt); err != nil {
 		t.Fatalf("scan delivery row: %v", err)
@@ -226,7 +229,8 @@ func (f *dispatcherFixture) deliveryRow(t *testing.T, id uuid.UUID) deliveryRow 
 func (f *dispatcherFixture) allDeliveryRows(t *testing.T, tenant uuid.UUID) []deliveryRow {
 	t.Helper()
 	rows, err := f.h.PoolMigrate.Query(context.Background(),
-		`SELECT id, status, attempts, last_error, last_status_code, next_attempt_at, delivered_at
+		`SELECT id, status, attempts, COALESCE(last_error, ''),
+		        COALESCE(last_status_code, 0), next_attempt_at, delivered_at
 		   FROM event_deliveries WHERE tenant_id = $1 ORDER BY created_at`, tenant)
 	if err != nil {
 		t.Fatalf("query rows: %v", err)
@@ -254,7 +258,7 @@ type directSubStore struct {
 
 func (s directSubStore) List(ctx context.Context, _ admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT subscription_id, tenant_id, cel_filter, sink_kind, sink_config, disabled, resource_version
+		`SELECT id, tenant_id, cel_filter, sink_kind, sink_config, disabled, resource_version
 		   FROM event_subscriptions`)
 	if err != nil {
 		return nil, "", err
@@ -275,8 +279,8 @@ func (s directSubStore) List(ctx context.Context, _ admindomain.ListEventSubscri
 func (s directSubStore) Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
 	var sub admindomain.EventSubscription
 	err := s.pool.QueryRow(ctx,
-		`SELECT subscription_id, tenant_id, cel_filter, sink_kind, sink_config, disabled, resource_version
-		   FROM event_subscriptions WHERE subscription_id = $1`, id,
+		`SELECT id, tenant_id, cel_filter, sink_kind, sink_config, disabled, resource_version
+		   FROM event_subscriptions WHERE id = $1`, id,
 	).Scan(&sub.SubscriptionID, &sub.TenantID, &sub.CELFilter,
 		&sub.SinkKind, &sub.SinkConfig, &sub.Disabled, &sub.ResourceVersion)
 	if err != nil {
@@ -573,46 +577,61 @@ func TestDispatcher_DisabledSubsSkipped(t *testing.T) {
 	}
 }
 
-// TestDispatcher_OrphanSubscription_RowMarkedFailed: a row whose
-// subscription_id does not resolve must be marked failed (permanent —
-// no further retry can ever succeed).
-func TestDispatcher_OrphanSubscription_RowMarkedFailed(t *testing.T) {
+// TestDispatcher_DeletedSubscription_TakesItsQueueWithIt: the guarantee
+// that used to be the dispatcher's job is now the schema's.
+// event_deliveries.subscription_id is a FK with ON DELETE CASCADE, so a row
+// pointing at a subscription that does not exist cannot be written at all,
+// and deleting a subscription removes whatever it still had queued.
+//
+// That is strictly stronger than the old behaviour (dispatcher notices the
+// orphan on its next tick and marks it failed), and it is what this test
+// asserts now: the FK rejects the orphan, and the cascade cleans up.
+func TestDispatcher_DeletedSubscription_TakesItsQueueWithIt(t *testing.T) {
 	t.Parallel()
 	f := setupDispatcher(t)
-	rec := newRecorder(http.StatusOK) // never hit
-	defer rec.Close()
+	ctx := context.Background()
 
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "disp-orphan")
-	rowID := uuid.New()
-	missingSub := uuid.New()
 	payload, _ := json.Marshal(makeEvent("", tenant))
-	if _, err := f.h.PoolMigrate.Exec(context.Background(),
+
+	// 1. An orphan cannot be created.
+	_, err := f.h.PoolMigrate.Exec(ctx,
 		`INSERT INTO event_deliveries
 		   (id, tenant_id, subscription_id, event_type, event_at, event_payload)
 		 VALUES ($1, $2, $3, $4, now(), $5)`,
-		rowID, tenant, missingSub, "paladin.object.uploaded", payload,
+		uuid.New(), tenant, uuid.New(), "paladin.object.uploaded", payload,
+	)
+	if err == nil {
+		t.Fatal("insert with a nonexistent subscription_id succeeded; the FK is missing")
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23503" { // foreign_key_violation
+		t.Fatalf("orphan insert error = %v, want foreign_key_violation", err)
+	}
+
+	// 2. Deleting a subscription takes its queued rows with it, so no row
+	//    is ever left addressing a sink that is gone.
+	subID := seedSubscriptionRow(t, f.h.PoolMigrate, tenant)
+	if _, err := f.h.PoolMigrate.Exec(ctx,
+		`INSERT INTO event_deliveries
+		   (id, tenant_id, subscription_id, event_type, event_at, event_payload)
+		 VALUES ($1, $2, $3, $4, now(), $5)`,
+		uuid.New(), tenant, subID, "paladin.object.uploaded", payload,
 	); err != nil {
-		t.Fatalf("seed orphan row: %v", err)
+		t.Fatalf("seed queued row: %v", err)
 	}
-
-	d := f.dispatcher()
-	r := f.outboxRunner(d)
-	if n := f.tickOnce(t, r); n != 1 {
-		t.Errorf("processed = %d, want 1", n)
+	if _, err := f.h.PoolMigrate.Exec(ctx,
+		`DELETE FROM event_subscriptions WHERE id = $1`, subID); err != nil {
+		t.Fatalf("delete subscription: %v", err)
 	}
-
-	row := f.deliveryRow(t, rowID)
-	if row.Status != "failed" {
-		t.Errorf("status = %q, want failed", row.Status)
+	var n int
+	if err := f.h.PoolMigrate.QueryRow(ctx,
+		`SELECT count(*) FROM event_deliveries WHERE subscription_id = $1`, subID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count after cascade: %v", err)
 	}
-	// "subscription deleted" is the canonical error string from
-	// runner.tick(). Tolerate any phrasing that contains "subscription"
-	// to keep the assertion future-proof.
-	if !containsCI(row.LastError, "subscription") {
-		t.Errorf("last_error = %q, want substring 'subscription'", row.LastError)
-	}
-	if rec.count() != 0 {
-		t.Errorf("orphan triggered HTTP, count = %d", rec.count())
+	if n != 0 {
+		t.Errorf("deliveries left after subscription delete = %d, want 0", n)
 	}
 }
 
@@ -720,7 +739,7 @@ func (f *dispatcherFixture) seedNATSSubscription(t *testing.T, tenant uuid.UUID,
 	subID := uuid.New()
 	if _, err := f.h.PoolMigrate.Exec(context.Background(),
 		`INSERT INTO event_subscriptions
-		   (subscription_id, tenant_id, cel_filter, sink_kind, sink_config, disabled)
+		   (id, tenant_id, cel_filter, sink_kind, sink_config, disabled)
 		 VALUES ($1, $2, '', 'nats', $3, false)`,
 		subID, tenant, cfg,
 	); err != nil {

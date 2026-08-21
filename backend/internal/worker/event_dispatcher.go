@@ -934,9 +934,22 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 
 		sub, err := r.Dispatcher.Store.Get(ctx, p.subID)
 		if err != nil {
-			// Subscription deleted while the row sat in the queue.
-			// Permanent fail — don't retry a row we can never deliver.
-			r.markFailed(ctx, tx, p.id, p.attempts, 0, "subscription deleted", true)
+			// Only a genuinely missing subscription is permanent. Any
+			// other error — connection dropped, statement timeout — is
+			// transient, and burning the row on it would discard an event
+			// the sink never saw because the database blinked.
+			//
+			// The missing case is itself all but unreachable now that
+			// event_deliveries.subscription_id is a FK with ON DELETE
+			// CASCADE: deleting a subscription takes its queued rows with
+			// it. Kept as a belt for rows written before that constraint
+			// existed, and for any future path that detaches the two.
+			if errors.Is(err, admindomain.ErrNotFound) {
+				r.markFailed(ctx, tx, p.id, p.attempts, 0, "subscription deleted", true)
+				continue
+			}
+			r.markFailed(ctx, tx, p.id, p.attempts, 0,
+				"subscription lookup: "+err.Error(), false)
 			continue
 		}
 		if sub.Disabled {

@@ -33,17 +33,17 @@ func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 	}
 
 	// Set.
-	b, err := repo.SetDefaultBinding(ctx, tid, "primary", "paladin-test", "admin@local")
+	b, err := repo.SetDefaultBinding(ctx, tid, "storageBackends/primary/buckets/paladin-test", "admin@local")
 	if err != nil {
 		t.Fatalf("SetDefaultBinding: %v", err)
 	}
-	if b.TenantID != tid || b.BackendID != "primary" || b.BucketName != "paladin-test" || b.SetBy != "admin@local" || b.SetAt.IsZero() {
+	if b.TenantID != tid || b.BackendName != "primary" || b.BucketName != "paladin-test" || b.SetBy != "admin@local" || b.SetAt.IsZero() {
 		t.Fatalf("set returned %+v", b)
 	}
 
 	// Get + resolve lookup agree.
 	got, err := repo.GetDefaultBinding(ctx, tid)
-	if err != nil || got.BackendID != "primary" || got.BucketName != "paladin-test" {
+	if err != nil || got.BackendName != "primary" || got.BucketName != "paladin-test" {
 		t.Fatalf("Get after set: %+v, err=%v", got, err)
 	}
 	backend, bucket, found, err := repo.TenantDefaultBinding(ctx, tid)
@@ -53,7 +53,7 @@ func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 
 	// Upsert to a different bucket.
 	seedOwnedBucket(t, f.h.PoolMigrate, tid, "primary", "paladin-test-2")
-	if _, err := repo.SetDefaultBinding(ctx, tid, "primary", "paladin-test-2", "admin@local"); err != nil {
+	if _, err := repo.SetDefaultBinding(ctx, tid, "storageBackends/primary/buckets/paladin-test-2", "admin@local"); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
 	if got, _ := repo.GetDefaultBinding(ctx, tid); got.BucketName != "paladin-test-2" {
@@ -61,7 +61,7 @@ func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 	}
 
 	// A bucket that does not exist trips the composite FK.
-	if _, err := repo.SetDefaultBinding(ctx, tid, "primary", "nope", "admin@local"); !errors.Is(err, tenant.ErrDefaultBindingBucketMissing) {
+	if _, err := repo.SetDefaultBinding(ctx, tid, "storageBackends/primary/buckets/nope", "admin@local"); !errors.Is(err, tenant.ErrDefaultBindingBucketMissing) {
 		t.Fatalf("bad bucket: err = %v, want ErrDefaultBindingBucketMissing", err)
 	}
 

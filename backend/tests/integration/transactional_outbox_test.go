@@ -31,13 +31,16 @@ import (
 // event_deliveries row on the caller's tx, exactly as
 // dispatcher.DispatchTx would. Runs on the BYPASSRLS migrate pool's tx
 // so the event_deliveries RLS policy is out of the picture.
-func insertOutboxOnTx(tenantID uuid.UUID) func(context.Context, pgx.Tx) error {
+// subID is a parameter rather than a fresh uuid because
+// event_deliveries.subscription_id is a real FK — the row it points at has to
+// have been seeded by the caller, on a pool the transaction can see.
+func insertOutboxOnTx(tenantID, subID uuid.UUID) func(context.Context, pgx.Tx) error {
 	return func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO event_deliveries
 			   (id, tenant_id, subscription_id, event_type, event_at, event_payload)
 			 VALUES ($1, $2, $3, 'paladin.test.event', now(), '{}'::jsonb)`,
-			uuid.New(), tenantID, uuid.New(),
+			uuid.New(), tenantID, subID,
 		)
 		return err
 	}
@@ -70,9 +73,10 @@ func seedCapRecord(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID
 	if _, err := h.PoolMigrate.Exec(context.Background(),
 		`INSERT INTO capability_records
 		   (id, tenant_id, issuer, principal_kind, principal_subject,
-		    audience, caveats, expires_at)
+		    audience, caveats, created_by, expires_at)
 		 VALUES ($1, $2, 'test-issuer', 'agent', 'agent-1',
-		         '{admin}', '{}'::jsonb, now() + interval '1 hour')`,
+		         '{admin}', '{}'::jsonb, 'test-issuer',
+		         now() + interval '1 hour')`,
 		capID, tenantID,
 	); err != nil {
 		t.Fatalf("seed capability_records: %v", err)
@@ -92,7 +96,7 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	seedCapRecord(t, h, capID, tenantID)
 
 	spent, err := store.Charge(ctx, capID, 2.5, 10.0, "USD", tenantID, "presign.put", "agent-1",
-		insertOutboxOnTx(tenantID))
+		insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
@@ -170,7 +174,7 @@ func TestAudit_InsertWithOutbox_AtomicCommit(t *testing.T) {
 		ResourceName:  "tenants/" + tenantID.String(),
 	}
 
-	if err := repo.InsertWithOutbox(ctx, entry, insertOutboxOnTx(tenantID)); err != nil {
+	if err := repo.InsertWithOutbox(ctx, entry, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID))); err != nil {
 		t.Fatalf("InsertWithOutbox: %v", err)
 	}
 

@@ -228,12 +228,13 @@ func seedOwnedBucket(t *testing.T, pool *pgxpool.Pool, tenant uuid.UUID, backend
 	if _, err := pool.Exec(context.Background(), `
         INSERT INTO storage_backends (name, kind, region, endpoint)
         VALUES ($1, 's3-compatible', 'us-east-1', 'http://localhost')
-        ON CONFLICT (id) DO NOTHING`, backendID); err != nil {
+        ON CONFLICT (name) DO NOTHING`, backendID); err != nil {
 		t.Fatalf("seed backend: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO buckets (backend_id, bucket_name, owner_tenant_id)
-        VALUES ($1, $2, $3)`, backendID, bucketName, tenant); err != nil {
+        INSERT INTO buckets (backend_id, name, owner_tenant_id)
+        SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`,
+		backendID, bucketName, tenant); err != nil {
 		t.Fatalf("seed owned bucket: %v", err)
 	}
 }

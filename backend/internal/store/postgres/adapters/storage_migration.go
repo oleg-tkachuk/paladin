@@ -161,8 +161,15 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 	}
 	// Point the default binding at the dedicated bucket too, so bare-name
 	// collections created after the migration land there rather than failing.
-	if err := qtx.SetTenantDefaultBinding(ctx, pgUUID(tenantID), targetBackendID, targetBucketName, "storage-migration"); err != nil {
+	n, err := qtx.SetTenantDefaultBinding(ctx, pgUUID(tenantID), targetBackendID, targetBucketName, "storage-migration")
+	if err != nil {
 		return fmt.Errorf("set default binding: %w", err)
+	}
+	if n == 0 {
+		// Rebinding to a bucket that does not exist would leave the tenant
+		// pointing at its old storage after the data has moved.
+		return fmt.Errorf("set default binding: bucket %q/%q not found",
+			targetBackendID, targetBucketName)
 	}
 	return tx.Commit(ctx)
 }

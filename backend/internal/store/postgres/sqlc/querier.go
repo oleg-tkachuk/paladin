@@ -511,7 +511,12 @@ type Querier interface {
 	// SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
 	// deleted; deletion of the underlying bucket is RESTRICTed so an
 	// operator must rebind before tearing down the bucket.
-	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) error
+	// :execrows, not :exec — the bucket is resolved by name in a SELECT, so a
+	// name that matches nothing produces an INSERT of zero rows rather than a
+	// foreign-key violation. Without the count the caller cannot tell "bound"
+	// from "silently did nothing", and a client that asked to bind to a
+	// nonexistent bucket would be told it succeeded.
+	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) (int64, error)
 	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)

@@ -55,7 +55,7 @@ func (q *Queries) GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.U
 	return i, err
 }
 
-const setTenantDefaultBinding = `-- name: SetTenantDefaultBinding :exec
+const setTenantDefaultBinding = `-- name: SetTenantDefaultBinding :execrows
 
 INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
 SELECT $1, b.id, $4
@@ -74,12 +74,20 @@ ON CONFLICT (tenant_id) DO UPDATE
 // SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
 // deleted; deletion of the underlying bucket is RESTRICTed so an
 // operator must rebind before tearing down the bucket.
-func (q *Queries) SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) error {
-	_, err := q.db.Exec(ctx, setTenantDefaultBinding,
+// :execrows, not :exec — the bucket is resolved by name in a SELECT, so a
+// name that matches nothing produces an INSERT of zero rows rather than a
+// foreign-key violation. Without the count the caller cannot tell "bound"
+// from "silently did nothing", and a client that asked to bind to a
+// nonexistent bucket would be told it succeeded.
+func (q *Queries) SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) (int64, error) {
+	result, err := q.db.Exec(ctx, setTenantDefaultBinding,
 		tenantID,
 		name,
 		name_2,
 		setBy,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

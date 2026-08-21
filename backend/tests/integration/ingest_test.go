@@ -104,12 +104,13 @@ func mustInsertPendingObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUI
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            id, tenant_id, collection, key, state,
+            id, tenant_id, collection_id, path, state,
             content_type, checksum_algorithm, presign_expires_at
-        ) VALUES (
-            $1, $2, $3, $4, 'PENDING',
-            'application/octet-stream', 1, now() + interval '15 minutes'
         )
+        SELECT $1, $2, c.id, $4, 'PENDING',
+               'application/octet-stream', 1, now() + interval '15 minutes'
+          FROM collections c
+         WHERE c.tenant_id = $2 AND c.name = $3
     `, objID, tenantID, collection, key)
 	if err != nil {
 		t.Fatalf("insert pending object: %v", err)

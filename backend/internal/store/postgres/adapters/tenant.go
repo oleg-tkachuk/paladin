@@ -124,10 +124,20 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		); err != nil {
 			return fmt.Errorf("create tenant: provision dedicated bucket: %w", err)
 		}
-		if err := qtx.SetTenantDefaultBinding(ctx,
+		n, err := qtx.SetTenantDefaultBinding(ctx,
 			pgUUID(args.TenantID), args.DedicatedBackend, bucketName, actor,
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("create tenant: bind dedicated bucket: %w", err)
+		}
+		if n == 0 {
+			// The bucket was inserted a few statements up in this same tx,
+			// so zero rows here means the insert and this lookup disagree
+			// about the name — a bug, not a user error. Fail the tx rather
+			// than leaving a dedicated tenant with no binding.
+			return fmt.Errorf(
+				"create tenant: dedicated bucket %q/%q not found for binding",
+				args.DedicatedBackend, bucketName)
 		}
 	}
 
@@ -136,12 +146,18 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 	// "both set" into a row in tenant_default_bindings.
 	if args.DefaultBackendID != "" && args.DefaultBucketName != "" {
 		actor := actorFromContext(ctx)
-		if err := qtx.SetTenantDefaultBinding(ctx,
+		n, err := qtx.SetTenantDefaultBinding(ctx,
 			pgUUID(args.TenantID),
 			args.DefaultBackendID,
 			args.DefaultBucketName,
 			actor,
-		); err != nil {
+		)
+		if n == 0 && err == nil {
+			// Resolved to no bucket: same meaning as the FK violation
+			// handled below, but it arrives as a zero count instead.
+			return tenant.ErrDefaultBindingBucketMissing
+		}
+		if err != nil {
 			// FK violation = picked bucket doesn't exist on this backend.
 			// Surface as a typed sentinel so the handler can return a
 			// clean InvalidArgument instead of a Postgres error string.
@@ -237,12 +253,19 @@ func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, 
 	if err != nil {
 		return tenant.DefaultBinding{}, err
 	}
-	if err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy); err != nil {
+	n, err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy)
+	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
 			return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
 		}
 		return tenant.DefaultBinding{}, err
+	}
+	// Zero rows means the (backend, bucket) pair resolved to nothing — see
+	// the note on the query. The FK cannot fire for a row that was never
+	// built, so this is the only place the missing bucket is detectable.
+	if n == 0 {
+		return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
 	}
 	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
 	if err != nil {

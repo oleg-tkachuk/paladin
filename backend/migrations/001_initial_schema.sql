@@ -55,8 +55,13 @@ CREATE TABLE tenants (
     created_at             timestamptz NOT NULL DEFAULT now(),
     updated_at             timestamptz NOT NULL DEFAULT now(),
     deleted_at             timestamptz,
+    -- Mirrors apiutil.ValidateTenantSlug: must start with a LETTER (a slug
+    -- starting with a digit is ambiguous against a uuid at the resource-name
+    -- parser) and be 3..63 chars. The Go side spells the length as a separate
+    -- check; here the {1,61} middle segment carries it, which is the same
+    -- rule written once.
     CONSTRAINT tenants_slug_format
-        CHECK (slug ~ '^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$'),
+        CHECK (slug ~ '^[a-z][a-z0-9-]{1,61}[a-z0-9]$'),
     CONSTRAINT tenants_display_name_format
         CHECK (char_length(display_name) BETWEEN 1 AND 255)
 );
