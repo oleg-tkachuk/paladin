@@ -133,6 +133,9 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 		nbf = t.AsTime()
 	}
 
+	// The row lands under the subject's tenant, so the connection has to be
+	// scoped there — the cross-tenant gate above is what makes this safe.
+	ctx = auth.WithActingTenant(ctx, subj.TenantID)
 	cap, token, err := h.issuer.Issue(ctx, capability.IssueRequest{
 		Subject: subj,
 		// Who ASKED for this capability, as opposed to who it authorises.
@@ -271,7 +274,8 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 
 // List enumerates capabilities issued to a principal.
 func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceListRequest]) (*connect.Response[adminv1.CapabilityServiceListResponse], error) {
-	if _, err := h.authorize(ctx, "list"); err != nil {
+	caller, err := h.authorize(ctx, "list")
+	if err != nil {
 		return nil, err
 	}
 
@@ -279,6 +283,19 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
+	// Same gate as Issue: `list` in a tenant's own policy must not become a
+	// read of every other tenant's capabilities. Cedar above authorised the
+	// ACTION against the caller's own tenant, not against this one.
+	if tenantID != caller.TenantID &&
+		!caller.HasRole(apiutil.RolePlatformAdmin) &&
+		!caller.HasRole(apiutil.RoleCapabilityIssuer) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("listing another tenant's capabilities requires platform.admin or platform.capability-issuer"))
+	}
+	// capability_records is RLS-isolated, so reading another tenant's rows
+	// needs the connection scoped to that tenant. Without this the admin
+	// console renders an empty list instead of an error — RLS filters.
+	ctx = auth.WithActingTenant(ctx, tenantID)
 	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalArgs{
 		TenantID:       tenantID,
 		PrincipalT:     protoToPrincipalKind(req.Msg.GetPrincipalKind()),

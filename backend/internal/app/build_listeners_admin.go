@@ -252,7 +252,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		))
 	}
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
+	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH, tenantH), adminOpts))
 	// MCPInspectService — read-only operator visibility into the MCP
 	// bridge configuration (profiles, deny-list, tool catalog,
 	// upstreams, transport state). Always mounted; the admin's Cedar

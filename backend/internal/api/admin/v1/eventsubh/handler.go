@@ -31,12 +31,17 @@ func NewHandler(r admindomain.EventSubscriptionRepository, policy cedar.Authoriz
 	return &Handler{repo: r, policy: policy}
 }
 
-// authorize gates a subscription RPC against Cedar; existing role +
-// tenant-isolation guards stay as defense-in-depth.
-func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+// authorize gates a subscription RPC against Cedar and, on success, returns
+// a context scoped to the tenant that was authorised. Returning the context
+// rather than just an error is deliberate: the RLS pool reads its tenant
+// from there, so authorising a cross-tenant action and being able to perform
+// it become one step that cannot be half-done.
+//
+// existing role + tenant-isolation guards stay as defense-in-depth.
+func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -45,12 +50,12 @@ func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UU
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return ctx, connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return ctx, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
-	return nil
+	return auth.WithActingTenant(ctx, tenantID), nil
 }
 
 func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (*admindomain.EventSubscription, error) {
@@ -64,7 +69,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && s.TenantID != caller {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant denied"))
 	}
-	if err := h.authorize(ctx, cedar.ActionManageSubscription, s.TenantID); err != nil {
+	if ctx, err = h.authorize(ctx, cedar.ActionManageSubscription, s.TenantID); err != nil {
 		return nil, err
 	}
 	// Reject a malformed CEL filter synchronously — otherwise the dispatcher
@@ -88,30 +93,35 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	return &got, nil
 }
 
-func (h *Handler) Get(ctx context.Context, id uuid.UUID) (*admindomain.EventSubscription, error) {
+// Get takes the tenant from the resource name rather than discovering it
+// from the row. The row cannot be read first: event_subscriptions is
+// RLS-isolated, so a read before the scope is set returns nothing for any
+// tenant but the caller's — which would surface as "not found" for a
+// platform admin looking at a subscription that plainly exists.
+func (h *Handler) Get(ctx context.Context, tenantID, id uuid.UUID) (*admindomain.EventSubscription, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("subscription not found"))
+	}
+	if ctx, err = h.authorize(ctx, cedar.ActionReadSubscription, tenantID); err != nil {
 		return nil, err
 	}
 	s, err := h.repo.Get(ctx, id)
 	if err != nil {
 		return nil, apiutil.MapError(err)
 	}
-	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && s.TenantID != caller {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("subscription not found"))
-	}
-	if err := h.authorize(ctx, cedar.ActionReadSubscription, s.TenantID); err != nil {
-		return nil, err
-	}
 	return &s, nil
 }
 
-func (h *Handler) Update(ctx context.Context, s admindomain.EventSubscription, expectedVersion int64, mask []string) (*admindomain.EventSubscription, error) {
-	current, err := h.Get(ctx, s.SubscriptionID)
+func (h *Handler) Update(ctx context.Context, tenantID uuid.UUID, s admindomain.EventSubscription, expectedVersion int64, mask []string) (*admindomain.EventSubscription, error) {
+	current, err := h.Get(ctx, tenantID, s.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
+	if ctx, err = h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
 		return nil, err
 	}
 	// Validate the CEL filter only when this update actually writes it —
@@ -130,12 +140,12 @@ func (h *Handler) Update(ctx context.Context, s admindomain.EventSubscription, e
 	return &got, nil
 }
 
-func (h *Handler) Delete(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
-	current, err := h.Get(ctx, id)
+func (h *Handler) Delete(ctx context.Context, tenantID, id uuid.UUID, expectedVersion int64) error {
+	current, err := h.Get(ctx, tenantID, id)
 	if err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
+	if ctx, err = h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, id, expectedVersion); err != nil {
@@ -152,7 +162,7 @@ func (h *Handler) List(ctx context.Context, args admindomain.ListEventSubscripti
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		args.TenantID = caller
 	}
-	if err := h.authorize(ctx, cedar.ActionReadSubscription, args.TenantID); err != nil {
+	if ctx, err = h.authorize(ctx, cedar.ActionReadSubscription, args.TenantID); err != nil {
 		return nil, "", err
 	}
 	return h.repo.List(ctx, args)
@@ -172,12 +182,12 @@ func (h *Handler) SetDispatcher(d Dispatcher) { h.dispatcher = d }
 // TestSubscription delivers a synthetic event ("paladin.test") to the sink.
 // Returns the delivery attempt's status as the connect-level error so the
 // admin UI surfaces it directly to the operator.
-func (h *Handler) TestSubscription(ctx context.Context, id uuid.UUID) error {
-	sub, err := h.Get(ctx, id)
+func (h *Handler) TestSubscription(ctx context.Context, tenantID, id uuid.UUID) error {
+	sub, err := h.Get(ctx, tenantID, id)
 	if err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, cedar.ActionTestSubscription, sub.TenantID); err != nil {
+	if ctx, err = h.authorize(ctx, cedar.ActionTestSubscription, sub.TenantID); err != nil {
 		return err
 	}
 	if h.dispatcher == nil {

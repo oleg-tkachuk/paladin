@@ -165,7 +165,7 @@ func TestCreate_ValidFilterAccepted(t *testing.T) {
 
 func TestGet_NotFound(t *testing.T) {
 	h := NewHandler(&fakeRepo{getErr: admindomain.ErrNotFound}, allowAuthorizer{})
-	_, err := h.Get(ctxAs(uuid.New(), apiutil.RoleTenantAdmin), uuid.New())
+	_, err := h.Get(ctxAs(uuid.New(), apiutil.RoleTenantAdmin), uuid.New(), uuid.New())
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
 	}
@@ -179,7 +179,7 @@ func TestGet_CrossTenantHiddenAsNotFound(t *testing.T) {
 		SubscriptionID: uuid.New(), TenantID: uuid.New(),
 	}}
 	h := NewHandler(repo, allowAuthorizer{})
-	_, err := h.Get(ctxAs(caller, apiutil.RoleTenantAdmin), repo.sub.SubscriptionID)
+	_, err := h.Get(ctxAs(caller, apiutil.RoleTenantAdmin), repo.sub.TenantID, repo.sub.SubscriptionID)
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound (cross-tenant hidden)", code(err))
 	}
@@ -190,7 +190,7 @@ func TestGet_Success(t *testing.T) {
 	id := uuid.New()
 	repo := &fakeRepo{sub: admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}}
 	h := NewHandler(repo, allowAuthorizer{})
-	got, err := h.Get(ctxAs(caller, apiutil.RoleTenantAdmin), id)
+	got, err := h.Get(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestUpdate_VersionMismatchAborts(t *testing.T) {
 		updateErr: admindomain.ErrVersionMismatch,
 	}
 	h := NewHandler(repo, allowAuthorizer{})
-	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin),
+	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin), caller,
 		admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}, 1, nil)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -221,7 +221,7 @@ func TestUpdate_InvalidFilterRejectedWhenMasked(t *testing.T) {
 	id := uuid.New()
 	repo := &fakeRepo{sub: admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}}
 	h := NewHandler(repo, allowAuthorizer{})
-	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin),
+	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin), caller,
 		admindomain.EventSubscription{SubscriptionID: id, TenantID: caller, CELFilter: "bogus_field == 1"},
 		0, []string{"filter"})
 	if code(err) != connect.CodeInvalidArgument {
@@ -236,7 +236,7 @@ func TestUpdate_InvalidFilterIgnoredWhenNotMasked(t *testing.T) {
 	id := uuid.New()
 	repo := &fakeRepo{sub: admindomain.EventSubscription{SubscriptionID: id, TenantID: caller}}
 	h := NewHandler(repo, allowAuthorizer{})
-	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin),
+	_, err := h.Update(ctxAs(caller, apiutil.RoleTenantAdmin), caller,
 		admindomain.EventSubscription{SubscriptionID: id, TenantID: caller, CELFilter: "bogus_field == 1"},
 		0, []string{"sink"})
 	if err != nil {
@@ -252,7 +252,7 @@ func TestDelete_VersionMismatchAborts(t *testing.T) {
 		deleteErr: admindomain.ErrVersionMismatch,
 	}
 	h := NewHandler(repo, allowAuthorizer{})
-	err := h.Delete(ctxAs(caller, apiutil.RoleTenantAdmin), id, 1)
+	err := h.Delete(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id, 1)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
 	}
@@ -302,7 +302,7 @@ func newGettableHandler(t *testing.T, caller uuid.UUID, authz cedar.Authorizer) 
 func TestTestSubscription_UnimplementedWithoutDispatcher(t *testing.T) {
 	caller := uuid.New()
 	h, id := newGettableHandler(t, caller, allowAuthorizer{})
-	err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), id)
+	err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id)
 	if code(err) != connect.CodeUnimplemented {
 		t.Fatalf("code = %v, want Unimplemented (no dispatcher)", code(err))
 	}
@@ -312,7 +312,7 @@ func TestTestSubscription_DeliveryFailureMapped(t *testing.T) {
 	caller := uuid.New()
 	h, id := newGettableHandler(t, caller, allowAuthorizer{})
 	h.SetDispatcher(failDispatcher{})
-	err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), id)
+	err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id)
 	if code(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition", code(err))
 	}
@@ -322,7 +322,7 @@ func TestTestSubscription_Success(t *testing.T) {
 	caller := uuid.New()
 	h, id := newGettableHandler(t, caller, allowAuthorizer{})
 	h.SetDispatcher(okDispatcher{})
-	if err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), id); err != nil {
+	if err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

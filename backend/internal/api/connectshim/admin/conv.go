@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -204,7 +206,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 	return &pb.Bucket{
 		Name:            fmt.Sprintf("storageBackends/%s/buckets/%s", b.BackendID, b.BucketName),
 		BackendId:       b.BackendID,
-		BucketId:      b.BucketName,
+		BucketId:        b.BucketName,
 		DisplayName:     b.DisplayName,
 		Region:          b.Region,
 		OwnerTenantId:   uuidStrEmpty(b.OwnerTenantID.String()),
@@ -536,10 +538,19 @@ func tenantIDFromName(name string) (string, error) {
 	return rest, nil
 }
 
-func subscriptionIDFromName(name string) (string, error) {
+// subscriptionFromName splits "tenants/{tenant}/eventSubscriptions/{id}".
+// The tenant segment is returned, not discarded: the handler authorises
+// against it and scopes the connection to it before reading, so a
+// cross-tenant read is checked rather than filtered away to a confusing
+// "not found".
+func subscriptionFromName(name string) (apiutil.TenantRef, string, error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 4 || parts[0] != "tenants" || parts[2] != "eventSubscriptions" {
-		return "", fmt.Errorf("invalid subscription name %q", name)
+		return apiutil.TenantRef{}, "", fmt.Errorf("invalid subscription name %q", name)
 	}
-	return parts[3], nil
+	ref, err := apiutil.ParseTenantNameRef(parts[1])
+	if err != nil {
+		return apiutil.TenantRef{}, "", fmt.Errorf("invalid subscription name %q: %w", name, err)
+	}
+	return ref, parts[3], nil
 }

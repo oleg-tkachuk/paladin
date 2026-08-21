@@ -192,6 +192,10 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	if err := h.authorizeFull(ctx, principal, args.TenantID, args.Collection, args.BackendID, args.BucketName, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
+	// Scope the connection's RLS tenant to the row's owner, now that Cedar
+	// has allowed this caller to act on it. Without this a platform admin
+	// creating for another tenant writes a row WITH CHECK rejects.
+	ctx = auth.WithActingTenant(ctx, args.TenantID)
 	// Create + paladin.collection.created in one tx (ADR-0003).
 	var b Collection
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -310,6 +314,7 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
+	ctx = auth.WithActingTenant(ctx, tenantID)
 	b, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
@@ -326,6 +331,7 @@ func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArg
 	if err := h.authorize(ctx, principal, tenantID, args.Collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
+	ctx = auth.WithActingTenant(ctx, tenantID)
 	// Update + paladin.collection.updated in one tx (ADR-0003). UpdateTx reads
 	// the post-update row back on the same tx (for resource_version).
 	var b Collection
@@ -359,6 +365,7 @@ func (h *Handler) DeleteCollection(ctx context.Context, collection string, expec
 	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return err
 	}
+	ctx = auth.WithActingTenant(ctx, tenantID)
 	// Read the row before delete so the event payload can carry the
 	// canonical resource name (which needs backend + bucket). Best-
 	// effort: if Get fails we fall back to the C-shape resource name —
@@ -424,6 +431,7 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageCollection); err != nil {
 		return nil, "", err
 	}
+	ctx = auth.WithActingTenant(ctx, authzTenant)
 	return h.repo.List(ctx, args)
 }
 
@@ -435,6 +443,7 @@ func (h *Handler) GetCollectionStats(ctx context.Context, collection string) (*C
 	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
+	ctx = auth.WithActingTenant(ctx, tenantID)
 	s, err := h.repo.Stats(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

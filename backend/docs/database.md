@@ -125,6 +125,26 @@ Three tables are isolated through their parent rather than a local
 capability), and nothing else. The duplication is for the hot path, not a
 reflex.
 
+### Acting on another tenant's behalf
+
+The admin plane manages resources it does not own: a platform admin creating
+a collection for tenant B writes a row whose `tenant_id` is B while its own
+principal is bound to `platform`. Scoping the connection to the caller would
+reject that write (`WITH CHECK`) and — worse — silently return nothing on the
+matching read, because RLS filters rather than errors.
+
+`auth.WithActingTenant` moves the connection's scope to the tenant being
+acted on, and `EnableRLS` binds `paladin.tenant_id` from it. The rule is that
+it is called only *after* the Cedar check that authorised this caller for
+this tenant, and only with the tenant that check ran against — it is the
+mechanism RLS otherwise denies, so the gate ahead of it is the protection.
+It moves access rather than widening it: acting as B makes A's rows
+invisible, which `internal/integration/acting_tenant_test.go` pins.
+
+`tenants`, `storage_backends` and `buckets` stay uncovered for a different
+reason: they are platform-level resources with no single owning tenant, so
+there is no tenant to scope a connection to.
+
 Two policies are deliberately open:
 
 - `api_tokens` allows an unauthenticated read, because token verification

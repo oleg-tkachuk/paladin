@@ -90,10 +90,14 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 // authorize gates a quota RPC against Cedar. The Resource carries the
 // tenant or bucket coordinates so policies can pin "tenant.admin manages
 // own quota" via resource.tenant_id == principal.tenant_id.
-func (h *Handler) authorize(ctx context.Context, action string, q admindomain.Quota) error {
+// On success it returns a context scoped to q.TenantID, so the RLS pool
+// reads the quota rows the caller was just authorised for rather than the
+// caller's own. A bucket-scoped quota carries no tenant; the context is
+// returned unchanged there and the caller's own scope applies.
+func (h *Handler) authorize(ctx context.Context, action string, q admindomain.Quota) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -106,12 +110,12 @@ func (h *Handler) authorize(ctx context.Context, action string, q admindomain.Qu
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return ctx, connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return ctx, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
-	return nil
+	return auth.WithActingTenant(ctx, q.TenantID), nil
 }
 
 func (h *Handler) GetTenantQuota(ctx context.Context, tenantID uuid.UUID) (*admindomain.Quota, error) {
@@ -122,7 +126,7 @@ func (h *Handler) GetTenantQuota(ctx context.Context, tenantID uuid.UUID) (*admi
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant denied"))
 	}
-	if err := h.authorize(ctx, cedar.ActionReadQuota, admindomain.Quota{TenantID: tenantID}); err != nil {
+	if ctx, err = h.authorize(ctx, cedar.ActionReadQuota, admindomain.Quota{TenantID: tenantID}); err != nil {
 		return nil, err
 	}
 	q, err := h.repo.GetTenant(ctx, tenantID)
@@ -137,8 +141,9 @@ func (h *Handler) GetBucketQuota(ctx context.Context, backendID, bucketName stri
 		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionReadQuota,
-		admindomain.Quota{BackendID: backendID, BucketName: bucketName}); err != nil {
+	ctx, err := h.authorize(ctx, cedar.ActionReadQuota,
+		admindomain.Quota{BackendID: backendID, BucketName: bucketName})
+	if err != nil {
 		return nil, err
 	}
 	q, err := h.repo.GetBucket(ctx, backendID, bucketName)
@@ -155,7 +160,8 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionManageQuota, q); err != nil {
+	ctx, err := h.authorize(ctx, cedar.ActionManageQuota, q)
+	if err != nil {
 		return nil, err
 	}
 	// Mask is informational here — upsert writes all four caps. Future:
@@ -235,7 +241,8 @@ func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
 	// coordinates pre-load, so we only attach the principal — policies
 	// that want to gate by quota_id can reference it via the action's
 	// future Quota entity (slice 20+).
-	if err := h.authorize(ctx, cedar.ActionResetQuotaUsage, admindomain.Quota{}); err != nil {
+	ctx, err := h.authorize(ctx, cedar.ActionResetQuotaUsage, admindomain.Quota{})
+	if err != nil {
 		return err
 	}
 	return h.repo.ResetDaily(ctx, quotaID, time.Now().UTC())

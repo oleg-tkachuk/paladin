@@ -155,3 +155,50 @@ var (
 	ErrNoPrincipal = errors.New("auth: no authenticated principal")
 	ErrNoTenant    = errors.New("auth: principal is not bound to a tenant")
 )
+
+// ─── Acting on another tenant's behalf ──────────────────────────────────────
+
+type actingTenantKey struct{}
+
+// WithActingTenant marks the request as operating on `tenantID`'s data rather
+// than the caller's own. The RLS pool sets `paladin.tenant_id` from this value
+// when present, so every query on the derived context — reads and writes
+// alike — is scoped to that tenant instead of the caller's.
+//
+// This is what lets the admin plane work: a platform admin's principal is
+// bound to the `platform` tenant, but the resources it manages belong to
+// someone else. Without it a cross-tenant write trips WITH CHECK, and a
+// cross-tenant read silently returns nothing — RLS filters rather than
+// errors, so the second failure looks like an empty list.
+//
+// # It authorises nothing
+//
+// Call it only AFTER the Cedar check that permits this caller to act on this
+// tenant, and only with the tenant that check was performed against. Calling
+// it earlier, or with a tenant taken from somewhere other than the authorised
+// resource name, hands the request another tenant's data — this function is
+// the mechanism that RLS otherwise denies, so the gate in front of it is the
+// whole protection.
+func WithActingTenant(ctx context.Context, tenantID uuid.UUID) context.Context {
+	if tenantID == uuid.Nil {
+		return ctx
+	}
+	return context.WithValue(ctx, actingTenantKey{}, tenantID)
+}
+
+// ActingTenant returns the tenant this request is acting on behalf of, and
+// whether one was set.
+func ActingTenant(ctx context.Context) (uuid.UUID, bool) {
+	tid, ok := ctx.Value(actingTenantKey{}).(uuid.UUID)
+	return tid, ok && tid != uuid.Nil
+}
+
+// EffectiveTenant is the tenant whose rows this request may touch: the one it
+// is acting on behalf of, or failing that the caller's own. This is the value
+// the RLS pool binds to `paladin.tenant_id`.
+func EffectiveTenant(ctx context.Context) (uuid.UUID, error) {
+	if tid, ok := ActingTenant(ctx); ok {
+		return tid, nil
+	}
+	return TenantFromContext(ctx)
+}

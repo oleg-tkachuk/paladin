@@ -354,9 +354,14 @@ func TestTenantIDFromName(t *testing.T) {
 }
 
 func TestSubscriptionIDFromName(t *testing.T) {
-	got, err := subscriptionIDFromName("tenants/acme/eventSubscriptions/s1")
+	// The tenant segment is returned now, not discarded — the handler needs
+	// it to scope the connection before reading an RLS-isolated row.
+	ref, got, err := subscriptionFromName("tenants/acme/eventSubscriptions/s1")
 	if err != nil || got != "s1" {
 		t.Errorf("got %q, %v", got, err)
+	}
+	if ref.Slug != "acme" {
+		t.Errorf("tenant ref = %+v, want slug acme", ref)
 	}
 	for label, n := range map[string]string{
 		"empty":        "",
@@ -366,7 +371,7 @@ func TestSubscriptionIDFromName(t *testing.T) {
 		"wrong prefix": "orgs/acme/eventSubscriptions/s1",
 	} {
 		t.Run(label, func(t *testing.T) {
-			if _, err := subscriptionIDFromName(n); err == nil {
+			if _, _, err := subscriptionFromName(n); err == nil {
 				t.Errorf("want an error for %q", n)
 			}
 		})

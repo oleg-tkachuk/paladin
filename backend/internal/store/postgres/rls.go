@@ -42,6 +42,13 @@ const wipeTimeout = 2 * time.Second
 // if (somehow) PrepareConn is bypassed. The policy's "NULL ⇒ no
 // rows" rule means a wiped GUC fails closed.
 //
+// The tenant comes from auth.EffectiveTenant, which is the tenant the
+// request is ACTING ON — normally the caller's own, but the admin plane
+// swaps it for the tenant named in the resource it was authorised to
+// touch (auth.WithActingTenant). Without that swap a platform admin
+// managing tenant B would write rows WITH CHECK rejects and read rows
+// the policy filters away to nothing.
+//
 // Worker / migrate paths run as `paladin_migrate` (BYPASSRLS) so they
 // don't need to set the GUC. Application paths run as `paladin_app` —
 // queries without the GUC return zero rows, which surfaces the
@@ -51,7 +58,7 @@ const wipeTimeout = 2 * time.Second
 // it up. Caller passes a fresh pgxpool.Config.
 func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 	cfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
-		tenantID, err := auth.TenantFromContext(ctx)
+		tenantID, err := auth.EffectiveTenant(ctx)
 		if err != nil || tenantID.String() == "" {
 			// No tenant in ctx: zero the GUC. RLS policies will see
 			// NULL and reject every row. Application code that
