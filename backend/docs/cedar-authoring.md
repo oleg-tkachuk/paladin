@@ -70,10 +70,10 @@ CopyObject
 Each of these takes an `Object` resource and exposes context attributes
 `size_bytes`, `content_type`, `now`, `ip` for matching.
 
-### ObjectKey / Bucket (admin plane)
+### Collection / Bucket (admin plane)
 
 ```
-ManageObjectKey       BindObjectKeyToBucket
+ManageCollection      BindCollectionToBucket
 ManageBucket          ReadBucket
 ConfigureBucketPolicy ConfigureLifecycle      ConfigureLock
 ConfigureVersioning   ConfigureReplication
@@ -128,7 +128,7 @@ ones that come up often:
 - `key: String` — S3 key.
 - `state: String` — `PENDING` | `AVAILABLE` | `FAILED` | `DELETED`.
 - `size_bytes: Long`, `content_type: String`.
-- `tenant_id`, `object_key`, `bucket_name`, `backend_id` — anchor strings.
+- `tenant_id`, `collection`, `bucket_name`, `backend_id` — anchor strings.
 - `tags: Set<String>` — set of tag keys (values not exposed; intentional
   to keep policies portable across tenants).
 
@@ -156,16 +156,16 @@ Resource side (the user being managed):
 
 ### Resource identifiers (EUIDs) — prefer attributes over literals
 
-Each resource is a Cedar entity with a UID. Today the ObjectKey UID is
-`ObjectKey::"{tenant_uuid}/{object_key}"` and the Tenant UID is
+Each resource is a Cedar entity with a UID. Today the Collection UID is
+`Collection::"{tenant_uuid}/{collection}"` and the Tenant UID is
 `Tenant::"{slug}"`. Under [ADR-0010](adr/0010-canonical-resource-names.md)
-the ObjectKey UID is migrating to the **canonical A-shape** name:
+the Collection UID is migrating to the **canonical A-shape** name:
 
 ```
-ObjectKey::"storageBackends/{backend}/buckets/{bucket}/tenants/{tid}/objectKeys/{ok}"
+Collection::"storageBackends/{backend}/buckets/{bucket}/tenants/{tid}/objectKeys/{ok}"
 ```
 
-**Do not hardcode a resource EUID literal** (`resource == ObjectKey::"…"`).
+**Do not hardcode a resource EUID literal** (`resource == Collection::"…"`).
 It ties the policy to one identifier form and will break across the canonical
 migration; it is also brittle (object keys are multi-segment and tenant-scoped).
 Gate on **attributes and parents** instead — they are stable across UID changes:
@@ -173,10 +173,10 @@ Gate on **attributes and parents** instead — they are stable across UID change
 ```cedar
 // Good — attribute / parent conditions (survive the EUID migration):
 permit (principal in Tenant::"acme", action in [Action::"GetObject"], resource)
-when { resource.object_key == "invoices" && resource.tenant_id == principal.tenant_id };
+when { resource.collection == "invoices" && resource.tenant_id == principal.tenant_id };
 
 // Avoid — a hardcoded resource UID literal:
-permit (principal, action, resource == ObjectKey::"…/objectKeys/invoices");
+permit (principal, action, resource == Collection::"…/objectKeys/invoices");
 ```
 
 The default template and every policy Paladin ships use unconstrained `resource` +
@@ -258,12 +258,12 @@ permit (principal, action == Action::"GetObject", resource)
 when {
   principal.scopes.contains("objects:read:" +
                             resource.tenant_id + "/" +
-                            resource.object_key + "/*")
+                            resource.collection + "/*")
 };
 ```
 
 Mind the prefix shape — wire-form scopes are
-`<resource>:<verb>:<tenant_id>/<object_key>/<key>`. Wildcards on the key
+`<resource>:<verb>:<tenant_id>/<collection>/<key>`. Wildcards on the key
 slot are matched verbatim by Cedar's `like`-free `String.contains` — this
 is intentional (Cedar refuses regex by design).
 
@@ -304,7 +304,7 @@ the regression").
   default seeded at tenant creation is the floor — start there, narrow
   later.
 
-- **Hardcoding a resource EUID literal.** `resource == ObjectKey::"…"` ties
+- **Hardcoding a resource EUID literal.** `resource == Collection::"…"` ties
   the policy to one identifier form and breaks across the canonical-name
   migration (ADR-0010). Gate on attributes/parents instead — see §4.
 
@@ -319,7 +319,7 @@ the regression").
 4. Simulate before committing via `SimulateAuthz` — it returns the
    decision + the matching rules without persisting anything.
 5. Commit via `UpdateTenant` (tenant-inherited policy) or
-   `UpdateObjectKey` (per-objectKey overlay).
+   `UpdateCollection` (per-objectKey overlay).
 
 The engine compiles policies on first use and caches the result for 30
 seconds; an update is observed by all workers within ~30s of the write

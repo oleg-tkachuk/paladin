@@ -19,14 +19,14 @@ Object lifecycle management.
 
 | RPC | HTTP | Description |
 |-----|------|-------------|
-| `UploadObject` | `POST /v1/tenants/{tenant_id}/object_keys/{object_key}/objects` | Create object + presigned upload URL |
-| `DownloadObject` | `GET /v1/tenants/{tenant_id}/object_keys/{object_key}/objects/{key}` | Metadata + presigned download URL |
-| `GetObjectMetadata` | `GET /v1/tenants/{tenant_id}/object_keys/{object_key}/objects/{key}/metadata` | Metadata only (no download URL) |
-| `UpdateObjectMetadata` | `PATCH /v1/tenants/{tenant_id}/object_keys/{object_key}/objects/{key}/metadata` | Partial metadata update via FieldMask |
-| `DeleteObject` | `DELETE /v1/tenants/{tenant_id}/object_keys/{object_key}/objects/{key}` | Soft or hard delete (via `permanent` flag) |
+| `UploadObject` | `POST /v1/tenants/{tenant_id}/collections/{collection}/objects` | Create object + presigned upload URL |
+| `DownloadObject` | `GET /v1/tenants/{tenant_id}/collections/{collection}/objects/{key}` | Metadata + presigned download URL |
+| `GetObjectMetadata` | `GET /v1/tenants/{tenant_id}/collections/{collection}/objects/{key}/metadata` | Metadata only (no download URL) |
+| `UpdateObjectMetadata` | `PATCH /v1/tenants/{tenant_id}/collections/{collection}/objects/{key}/metadata` | Partial metadata update via FieldMask |
+| `DeleteObject` | `DELETE /v1/tenants/{tenant_id}/collections/{collection}/objects/{key}` | Soft or hard delete (via `permanent` flag) |
 | `CopyObject` | `POST .../objects/{key}:copy` | Server-side S3 copy |
 | `MoveObject` | `POST .../objects/{key}:move` | Copy + soft-delete source |
-| `ListObjects` | `GET /v1/tenants/{tenant_id}/object_keys/{object_key}/objects` | Paginated listing with rich filters |
+| `ListObjects` | `GET /v1/tenants/{tenant_id}/collections/{collection}/objects` | Paginated listing with rich filters |
 | `CompleteObject` | `POST .../objects/{key}:complete` | Mark single-part upload as complete |
 | `RestoreObject` | `POST .../objects/{key}:restore` | Recover a soft-deleted object |
 
@@ -45,7 +45,7 @@ Multipart upload management.
 
 | RPC | HTTP | Description |
 |-----|------|-------------|
-| `InitiateMultipartUpload` | `POST /v1/tenants/{tenant_id}/object_keys/{object_key}/uploads` | Start multipart session |
+| `InitiateMultipartUpload` | `POST /v1/tenants/{tenant_id}/collections/{collection}/uploads` | Start multipart session |
 | `GeneratePartUploadUrl` | `POST .../uploads/{upload_id}/parts/{part_number}:sign` | Sign individual part |
 | `CompleteMultipartUpload` | `POST .../uploads/{upload_id}:complete` | Finalize multipart |
 | `AbortMultipartUpload` | `POST .../uploads/{upload_id}:abort` | Cancel multipart |
@@ -70,9 +70,12 @@ Health and diagnostics.
 | `Readyz` | `GET /paladin.v1.SystemService/Readyz`   | Readiness check (Postgres + S3) |
 | `Version` | `GET /paladin.v1.SystemService/Version`  | Build info |
 
-### ObjectKeyService (Stub)
+### CollectionService
 
-ObjectKey management — not yet implemented. See `docs/TODO.md`.
+Collection management: create, get, update, delete, list, plus
+`SetCollectionPolicy` and `BindCollectionToBucket`. Lives in
+`paladin.admin.v1`; see `proto/paladin/admin/v1/collection_service.proto`
+for the full surface.
 
 ---
 

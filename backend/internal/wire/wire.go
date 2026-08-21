@@ -184,7 +184,7 @@ func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operation.Handler 
 
 func ProvideBatchHandler(repos Repos, opH *operation.Handler, pe *policy.Engine) *batch.Handler {
 	// repos.Object satisfies batch.BucketResolver — the submit-time Cedar check
-	// resolves each target object-key's bucket so bucket:/collection: PAT
+	// resolves each target collection's bucket so bucket:/collection: PAT
 	// scopes enforce (the batch worker does not re-check Cedar per object).
 	return batch.NewHandler(opH, pe, repos.Object)
 }

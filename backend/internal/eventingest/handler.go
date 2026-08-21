@@ -28,7 +28,7 @@ type ObjectLookup interface {
 	) (sqlc.LookupObjectByKeyRow, error)
 	// ResolveCollectionPrefix returns the longest registered collection that
 	// prefixes `tail` (the recombined "<collection>/<key>" path) for the
-	// tenant — disambiguates multi-segment object keys. pgx.ErrNoRows when no
+	// tenant — disambiguates multi-segment collections. pgx.ErrNoRows when no
 	// collection is a prefix.
 	ResolveCollectionPrefix(
 		ctx context.Context,
@@ -104,10 +104,10 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 
 	tenantPg := pgtype.UUID{Bytes: tenantUUID, Valid: true}
 
-	// Disambiguate multi-segment object keys. The source adapters split the
+	// Disambiguate multi-segment collections. The source adapters split the
 	// "<collection>/<key>" tail at the first path segment, which is wrong when
 	// the collection itself is multi-segment (migration 030). Recombine the
-	// tail and re-derive the real OK by longest-prefix-match so a nested OK
+	// tail and re-derive the real collection by longest-prefix-match so a nested one
 	// (`invoices/2026/q1`) wins over a shorter sibling (`invoices`).
 	collection, key := ev.SubjectFields.Collection, ev.SubjectFields.Key
 	fullTail := collection + "/" + key
@@ -122,7 +122,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		// as an unknown object.
 	default:
 		// Genuine DB error → return so the worker retries the event.
-		return fmt.Errorf("resolve object key prefix: %w", perr)
+		return fmt.Errorf("resolve collection prefix: %w", perr)
 	}
 
 	row, err := h.Lookup.LookupObjectByKey(ctx, tenantPg, collection, key)

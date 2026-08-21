@@ -86,9 +86,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	mpH.SetQuotaUpdater(quotaUpdater)
 
 	// Storage self-provisioning (StorageBootstrapService) — a tenant ensures
-	// its own bucket + object-keys with its data-plane PAT (aud=data), no
+	// its own bucket + collections with its data-plane PAT (aud=data), no
 	// admin credential. Reuses the admin bucket-create path (bucketh) and the
-	// object-key create path (objectkey), each wired to the api dispatcher so
+	// collection create path (collection), each wired to the api dispatcher so
 	// a self-provision emits the same paladin.bucket.created / paladin.collection.created
 	// lifecycle events an admin create would. repos.BucketV2 doubles as the
 	// backend-existence checker (a tenant may not create backends).
@@ -97,7 +97,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
 	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
 	collectionBootstrapH.SetEventProducer(apiDispatcher)
-	collectionBootstrapH.SetLogger(l.Named("object-key-events"))
+	collectionBootstrapH.SetLogger(l.Named("collection-events"))
 	storageBootstrapH := storagebootstrap.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
 
 	// ─── IAM-plane handlers ──────────────────────────────────────────────

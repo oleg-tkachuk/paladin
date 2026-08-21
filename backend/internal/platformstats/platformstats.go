@@ -155,14 +155,14 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*), count(*) FILTER (WHERE bucket_id IS NULL) FROM collections`,
 	).Scan(&out.Collections.Total, &out.Collections.Unbound); err != nil {
-		return nil, fmt.Errorf("census: object keys: %w", err)
+		return nil, fmt.Errorf("census: collections: %w", err)
 	}
 	if err := scanCounts(ctx, pool,
 		`SELECT sb.name, count(*) FROM collections c
 		   JOIN buckets b ON b.id = c.bucket_id
 		   JOIN storage_backends sb ON sb.id = b.backend_id GROUP BY sb.name`,
 		out.Collections.ByBackend); err != nil {
-		return nil, fmt.Errorf("census: object keys by backend: %w", err)
+		return nil, fmt.Errorf("census: collections by backend: %w", err)
 	}
 
 	if err := pool.QueryRow(ctx, `

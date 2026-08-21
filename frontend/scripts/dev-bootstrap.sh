@@ -7,7 +7,7 @@
 #   tenant = 3a823fd4-0b3d-4ce2-a280-93b8d75cc07b
 #   roles  = ["platform-admin"]
 #
-# After running, the UI can immediately list tenants/buckets/object-keys
+# After running, the UI can immediately list tenants/buckets/collections
 # and exercise the full object lifecycle without any manual setup.
 #
 # Requires: curl, jq. Backend reachable at $PALADIN_HOST.
@@ -17,8 +17,8 @@ set -euo pipefail
 PALADIN_HOST="${PALADIN_HOST:-https://api.paladin.local}"
 TENANT_ID="${TENANT_ID:-3a823fd4-0b3d-4ce2-a280-93b8d75cc07b}"
 BACKEND_ID="${BACKEND_ID:-primary}"
-BUCKET_NAME="${BUCKET_NAME:-paladin-primary}"
-OBJECT_KEY="${OBJECT_KEY:-default}"
+BUCKET_ID="${BUCKET_ID:-paladin-primary}"
+COLLECTION="${COLLECTION:-default}"
 JWT="${JWT:-}"
 
 if [[ -z "$JWT" ]]; then
@@ -100,7 +100,7 @@ fetch_resource_version() {
 # OCC. Polls Get to grab the current resource_version first.
 patch_tenant_policy() {
     local rv
-    rv=$(fetch_resource_version paladin.v1.TenantService/GetTenant "tenants/$TENANT_ID")
+    rv=$(fetch_resource_version paladin.admin.v1.TenantService/GetTenant "tenants/$TENANT_ID")
     if [[ -z "$rv" ]]; then
         echo "  ✗ tenant policy: could not fetch resource_version" >&2
         return 1
@@ -120,10 +120,10 @@ patch_tenant_policy() {
            name: $name,
            resource_version: $rv,
            update_mask: "inheritedCedarPolicy",
-           inherited_cedar_policy: $policy
+           tenant: { inherited_cedar_policy: $policy }
          }')
     local resp code
-    resp=$(call paladin.v1.TenantService/UpdateTenant "$body")
+    resp=$(call paladin.admin.v1.TenantService/UpdateTenant "$body")
     code=$(echo "$resp" | jq -r '.code // empty')
     if [[ -z "$code" ]]; then
         echo "  ✓ tenant cedar policy (permissive)"
@@ -133,37 +133,37 @@ patch_tenant_policy() {
     fi
 }
 
-# patch_object_key_policy
-# Same idea, but writes to the ObjectKey's own policy field. Belt-and-
+# patch_collection_policy
+# Same idea, but writes to the Collection's own policy field. Belt-and-
 # suspenders so even if tenant inheritance is broken or scoped, the
-# object_key still authorizes everything.
-patch_object_key_policy() {
+# collection still authorizes everything.
+patch_collection_policy() {
     local rv
-    rv=$(fetch_resource_version paladin.v1.ObjectKeyService/GetObjectKey "object_keys/$OBJECT_KEY")
+    rv=$(fetch_resource_version paladin.admin.v1.CollectionService/GetCollection \
+         "tenants/$TENANT_ID/collections/$COLLECTION")
     if [[ -z "$rv" ]]; then
-        echo "  ✗ object_key policy: could not fetch resource_version" >&2
+        echo "  ✗ collection policy: could not fetch resource_version" >&2
         return 1
     fi
     local policy_json
     policy_json=$(build_permissive_policy | jq -Rs .)
     local body
     body=$(jq -nc \
-        --arg name "object_keys/$OBJECT_KEY" \
+        --arg name "tenants/$TENANT_ID/collections/$COLLECTION" \
         --arg rv "$rv" \
         --argjson policy "$policy_json" \
         '{
            name: $name,
            resource_version: $rv,
-           update_mask: "policy",
-           policy: { cedar_policy: $policy, lifecycle_rules: [] }
+           cedar_policy: $policy
          }')
     local resp code
-    resp=$(call paladin.v1.ObjectKeyService/UpdateObjectKey "$body")
+    resp=$(call paladin.admin.v1.CollectionService/SetCollectionPolicy "$body")
     code=$(echo "$resp" | jq -r '.code // empty')
     if [[ -z "$code" ]]; then
-        echo "  ✓ object_key cedar policy (permissive)"
+        echo "  ✓ collection cedar policy (permissive)"
     else
-        echo "  ✗ object_key cedar policy: $resp" >&2
+        echo "  ✗ collection cedar policy: $resp" >&2
         return 1
     fi
 }
@@ -173,14 +173,33 @@ patch_object_key_policy() {
 echo "─── Bootstrapping dev tenant against $PALADIN_HOST ───"
 
 # 1. Resources
-ensure "tenant"     paladin.v1.TenantService/CreateTenant       "{\"tenant_id\":\"$TENANT_ID\",\"display_name\":\"UI dev tenant\"}"
-ensure "bucket"     paladin.v1.BucketService/CreateBucket       "{\"backend_id\":\"$BACKEND_ID\",\"bucket_name\":\"$BUCKET_NAME\",\"display_name\":\"primary\"}"
-ensure "object_key" paladin.v1.ObjectKeyService/CreateObjectKey "{\"object_key\":\"$OBJECT_KEY\",\"backend_id\":\"$BACKEND_ID\",\"bucket_name\":\"$BUCKET_NAME\",\"display_name\":\"default namespace\"}"
+ensure "tenant" paladin.admin.v1.TenantService/CreateTenant \
+    "$(jq -nc --arg tid "$TENANT_ID" \
+        '{tenant_id: $tid,
+          tenant: {slug: "ui-dev", display_name: "UI dev tenant"}}')"
+
+ensure "bucket" paladin.admin.v1.BucketService/CreateBucket \
+    "$(jq -nc --arg be "$BACKEND_ID" --arg b "$BUCKET_ID" \
+        '{parent: ("storageBackends/" + $be),
+          bucket_id: $b,
+          bucket: {display_name: "primary"}}')"
+
+ensure "collection" paladin.admin.v1.CollectionService/CreateCollection \
+    "$(jq -nc --arg tid "$TENANT_ID" --arg c "$COLLECTION" \
+        --arg be "$BACKEND_ID" --arg b "$BUCKET_ID" \
+        '{parent: ("tenants/" + $tid),
+          collection: $c,
+          collection_resource: {
+            tenant_id: $tid,
+            collection: $c,
+            display_name: "default namespace",
+            bucket: ("storageBackends/" + $be + "/buckets/" + $b)
+          }}')"
 
 # 2. Permissive Cedar policy at both scopes
 patch_tenant_policy
-patch_object_key_policy
+patch_collection_policy
 
 echo
 echo "Done. The UI can now talk to the backend AND perform every operation"
-echo "(upload, delete, copy, restore, …) on bucket=$BUCKET_NAME / key=$OBJECT_KEY."
+echo "(upload, delete, copy, restore, …) on bucket=$BUCKET_ID / collection=$COLLECTION."

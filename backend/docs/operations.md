@@ -131,7 +131,7 @@ For Helm chart details, refer to [`deploy/chart/`](../deploy/chart/).
 | `internal/middleware/http_stack.go` | HTTP middleware chain setup |
 | `internal/middleware/connect_chain.go` | Connect interceptor chain setup |
 | `internal/middleware/auth.go` | HTTP tenant enforcement middleware |
-| `internal/middleware/ratelimit.go` | Per-tenant token object_key rate limiter |
+| `internal/middleware/ratelimit.go` | Per-tenant token bucket rate limiter |
 | `internal/middleware/audit_log.go` | HTTP audit logging middleware |
 | `internal/middleware/security_headers.go` | Security response headers |
 | `internal/middleware/request_size_limit.go` | Request body size enforcement |

@@ -97,7 +97,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	bucketV2H.SetEventProducer(dispatcher)
 	bucketV2H.SetLogger(l.Named("bucket-events"))
 	collectionH.SetEventProducer(dispatcher)
-	collectionH.SetLogger(l.Named("object-key-events"))
+	collectionH.SetLogger(l.Named("collection-events"))
 	quotaH.SetEventProducer(dispatcher)
 	quotaH.SetLogger(l.Named("quota-events"))
 	backendH.SetEventProducer(dispatcher)

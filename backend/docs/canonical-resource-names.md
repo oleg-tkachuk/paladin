@@ -12,18 +12,18 @@ Last updated: 2026-07-01
 
 ## Goal
 
-Unify three resource-name shapes for ObjectKey-rooted resources behind
+Unify three resource-name shapes for Collection-rooted resources behind
 a single canonical form, with two ergonomic aliases that resolve to it
 on the API edge.
 
 | Shape | Example | Where |
 |---|---|---|
-| **A — canonical** | `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}` | DB rows, audit log, event payloads, Cedar `resource ==` checks |
-| **C — tenant-first alias** | `tenants/{tid}/objectKeys/{ok}` | Operator UI, admin console, current API surface |
-| **B — bare alias** | `objectKeys/{ok}` or `{ok}` | CLI/SDK quick commands; uses `tenant_default_bindings` |
+| **A — canonical** | `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}` | DB rows, audit log, event payloads, Cedar `resource ==` checks |
+| **C — tenant-first alias** | `tenants/{tid}/collections/{ok}` | Operator UI, admin console, current API surface |
+| **B — bare alias** | `collections/{ok}` or `{ok}` | CLI/SDK quick commands; uses `tenant_default_bindings` |
 
 Internal storage layer is unchanged: physical S3 key remains
-`<bucket>/<tenant_id>/<object_key_path>/<user_key>` regardless of which
+`<bucket>/<tenant_id>/<collection_path>/<user_key>` regardless of which
 shape the request came in as. S3 presign keeps working for all three
 because presign signs the physical `(bucket, key)`, not the API name.
 
@@ -36,7 +36,7 @@ because presign signs the physical `(bucket, key)`, not the API name.
    Resolution from B/C → A happens *before* the policy gate, never
    after.
 3. **No mixed shapes.** Reject inputs that look like a hybrid (e.g.
-   `storageBackends/x/buckets/y/objectKeys/{ok}` without `tenants/...`
+   `storageBackends/x/buckets/y/collections/{ok}` without `tenants/...`
    in the middle). Such a 4th shape is where security bugs spawn.
 4. **JWT-derived `tenant_id` is authoritative.** When an alias supplies
    a tenant scope (C carries it; B implies it from auth), the resolved
@@ -51,11 +51,11 @@ Existing C-shaped API stays the public contract.
 
 Changes:
 
-- `backend/internal/api/v1/object_key/`: domain layer learns to emit
-  and parse canonical form. Add `ObjectKey.CanonicalName()` helper.
+- `backend/internal/api/v1/collection/`: domain layer learns to emit
+  and parse canonical form. Add `Collection.CanonicalName()` helper.
 - `backend/internal/audit/`: switch `resource_name` column writes to
   canonical. Backfill migration over existing rows (deterministic
-  join on `object_keys.tenant_id + bucket_name + backend_id`).
+  join on `collections.tenant_id + bucket_id`).
 - `backend/internal/cedar/`: resource literals in policy templates
   switch to canonical; existing tenant-scoped policies regenerated.
   Cedar policy authoring docs updated.
@@ -68,12 +68,12 @@ Changes:
 
 Acceptance:
 - `rtk go test ./...` green.
-- New unit tests in `internal/api/v1/object_key/canonical_test.go`
+- New unit tests in `internal/api/v1/collection/canonical_test.go`
   covering all three shapes round-trip.
 - Audit log for any resource event after deploy contains canonical.
 - `cedarc lint` (existing CI step) passes against regenerated
   policy templates.
-- No public API breakage: C-shaped `tenants/{tid}/objectKeys/{ok}` in
+- No public API breakage: C-shaped `tenants/{tid}/collections/{ok}` in
   every existing RPC still works exactly as before.
 
 Out of scope: any new RPC shape, any new alias.
@@ -92,13 +92,13 @@ Changes:
   type CanonicalRef struct {
       Backend, Bucket string
       TenantID        uuid.UUID
-      ObjectKey       string  // multi-segment path, no slashes escaped
+      Collection      string  // multi-segment path, no slashes escaped
   }
-  func ResolveObjectKeyName(ctx, name string) (CanonicalRef, error)
+  func ResolveCollectionName(ctx, name string) (CanonicalRef, error)
   ```
   Detects A | C | rejects B (B comes in Phase 3).
 - Every existing `objectKeyParts(name)` call site swaps to
-  `ResolveObjectKeyName`. The split between `tenantUUIDFromParent`
+  `ResolveCollectionName`. The split between `tenantUUIDFromParent`
   and `objectKeyParts` collapses — resolver handles both.
 - `frontend/src/lib/paladin/names.ts` mirror: same shape detection, same
   invariants, used by SDK callers if any client-side normalization
@@ -120,7 +120,7 @@ Out of scope: B alias, default-binding table, WhoAmI changes.
 
 ### Phase 3 — B alias + tenant_default_bindings
 
-**Scope:** unlock bare-name (`objectKeys/{ok}` or `{ok}`) for ergonomic
+**Scope:** unlock bare-name (`collections/{ok}` or `{ok}`) for ergonomic
 CLI/SDK use. Requires a per-tenant default route.
 
 DB migration `032_tenant_default_bindings.sql`:
@@ -146,7 +146,7 @@ rpc SetTenantDefaultBinding(SetTenantDefaultBindingRequest) returns (TenantDefau
 rpc ClearTenantDefaultBinding(ClearTenantDefaultBindingRequest) returns (google.protobuf.Empty);
 ```
 
-Resolver extension: when input matches `objectKeys/{ok}` or bare `{ok}`
+Resolver extension: when input matches `collections/{ok}` or bare `{ok}`
 shape, resolver pulls `tenant_id` from JWT, joins with
 `tenant_default_bindings`, and emits canonical. If no default binding
 exists → `FAILED_PRECONDITION` with structured detail
@@ -154,7 +154,7 @@ exists → `FAILED_PRECONDITION` with structured detail
 
 UI: new tab under `/tenants/[id]/settings/default-binding` with
 a single dropdown of `(backend, bucket)` pairs the tenant has
-ObjectKeys on, and a "Clear" button.
+Collections on, and a "Clear" button.
 
 Acceptance:
 - Migration up/down clean on `task migrate-test`.
@@ -174,14 +174,14 @@ canonical themselves.
 
 `WhoAmIResponse` extension:
 ```protobuf
-message ObjectKeyRoute {
+message CollectionRoute {
   string canonical    = 1;  // A
   string tenant_path  = 2;  // C
   string bare_alias   = 3;  // B (empty if no default binding)
   string backend      = 4;
   string bucket       = 5;
 }
-repeated ObjectKeyRoute routes = N;
+repeated CollectionRoute routes = N;
 ```
 
 SDK behavior: after WhoAmI, the SDK has the full route table. Helper
@@ -190,10 +190,10 @@ sending. End user writes whichever shape feels natural; wire format
 to the server is canonical (A) once SDK adoption rolls out.
 
 Acceptance:
-- WhoAmI returns ≥1 route per ObjectKey the caller can read.
+- WhoAmI returns ≥1 route per Collection the caller can read.
 - TS SDK test: `paladin.objectKey("invoices/q1").presignPut(...)` works
   after a single `whoAmI()` call.
-- Stale-cache scenario: admin rebinds an ObjectKey to a different
+- Stale-cache scenario: admin rebinds an Collection to a different
   bucket; client cache TTL = 60s; after expiry next call uses new
   route without restart.
 
@@ -216,13 +216,13 @@ the rewrite rule we'll add.
 
 ### Budget / Quotas
 
-Both index by `(tenant_id, object_key_id)` foreign keys, not by
+Both index by `(tenant_id, collection_id)` foreign keys, not by
 resource name string. Untouched by this work.
 
 ### M2M tokens
 
 Audience and tenant claims unchanged. Token *scopes* may reference
-ObjectKeys; switch scope storage to canonical (Phase 1 backfill
+Collections; switch scope storage to canonical (Phase 1 backfill
 covers this).
 
 ### Event subscriptions
@@ -243,7 +243,7 @@ on its way into the API.
 
 The longest-prefix-match work for parsing `<bucket>/<tid>/<okPath>/<userKey>`
 back into components becomes simpler under canonical: events arrive
-with explicit `(backend, bucket, tenant_id, object_key)` from S3
+with explicit `(backend, bucket, tenant_id, collection)` from S3
 notification config, no parsing needed. Closes that BACKLOG item as
 a side effect of Phase 1.
 
@@ -452,8 +452,8 @@ Phase 0 (~8 files):
 - regenerated proto/sqlc
 
 Phase 1 (~15 files):
-- `backend/internal/api/v1/object_key/canonical.go` (new)
-- `backend/internal/api/v1/object_key/canonical_test.go` (new)
+- `backend/internal/api/v1/collection/canonical.go` (new)
+- `backend/internal/api/v1/collection/canonical_test.go` (new)
 - `backend/internal/audit/recorder.go`
 - `backend/internal/cedar/templates/*.cedar`
 - `backend/internal/eventbus/publisher.go`
@@ -497,7 +497,7 @@ Phase 4 (~6 files):
 1. Should canonical use `tenants/{slug}` or `tenants/{uuid}`? — UUID
    for stability (slug can be renamed). Renames don't invalidate
    canonical refs in audit log. **Decision: UUID.**
-2. Do we want a 4th alias `slugs/{tenant_slug}/objectKeys/{ok}` for
+2. Do we want a 4th alias `slugs/{tenant_slug}/collections/{ok}` for
    human-pasteable URLs? — Out of scope; can add later behind same
    resolver without schema changes.
 3. Phase 5 deprecation timing — defer; revisit after Phase 4 ships.

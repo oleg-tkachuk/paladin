@@ -4,7 +4,7 @@ The ingest plane (`internal/eventingest`) lets objects written **directly to
 the storage bucket** — bypassing Paladin's data-plane RPCs — still get promoted to
 `AVAILABLE`. A storage backend fires a notification when a key lands; the
 ingest pod (`serve ingest`) consumes it, normalises it to a CloudEvents 1.0
-envelope, parses the object path into `(tenant_id, object_key, key)`, and runs
+envelope, parses the object path into `(tenant_id, collection, key)`, and runs
 the same PROMOTE the data plane would have.
 
 This is a safety net for the "someone wrote straight to S3" case (a legacy
@@ -66,19 +66,19 @@ Every source normalises to `eventingest.CloudEvent` (`cloudevent.go`):
 | `Type` | `paladin.object.uploaded` \| `paladin.object.deleted` |
 | `Source` | e.g. `s3://primary`, `seaweedfs-nats://primary` |
 | `ID` | **load-bearing for dedup** — stable across replays of the same physical event |
-| `Subject` | `tenants/<t>/objectKeys/<ok>/objects-by-key/<key>` |
-| `SubjectFields` | parsed `(TenantID, ObjectKey, Key, Etag, SizeBytes, Sequencer)` |
+| `Subject` | `tenants/<t>/collections/<c>/objects-by-key/<key>` |
+| `SubjectFields` | parsed `(TenantID, Collection, Key, Etag, SizeBytes, Sequencer)` |
 
 The **object path** the parser depends on is an *observed* contract with the
 backend, not one Paladin controls — a backend upgrade that changes the shape
 silently stops promotions. After per-source normalisation the key is always:
 
 ```
-<tenant_uuid>/<object_key>/<key...>
+<tenant_uuid>/<collection>/<key...>
 ```
 
 - `tenant_uuid` — owning tenant (UUID). All three segments must be non-empty.
-- `object_key` — the Paladin object-key namespace.
+- `collection` — the Paladin collection namespace.
 - `key` — the object key; **may contain `/`** (parsed with `SplitN(…, 3)`
   so the remainder is kept whole).
 
@@ -136,8 +136,8 @@ Two publishers disagree on the leading path:
 
 | Publisher | Emitted path |
 |---|---|
-| SF S3-gateway **webhook** | `<bucket>/<tenant>/<object_key>/<key>` |
-| **gocdk_pubsub-over-NATS** (lab) | `buckets/<bucket>/<tenant>/<object_key>/<key>` |
+| SF S3-gateway **webhook** | `<bucket>/<tenant>/<collection>/<key>` |
+| **gocdk_pubsub-over-NATS** (lab) | `buckets/<bucket>/<tenant>/<collection>/<key>` |
 
 The NATS path observes the **full filer namespace**, where the S3 gateway
 materialises bucket-rooted objects under `/buckets/<bucket>/…`. So
@@ -168,7 +168,7 @@ S3-compatible store that speaks bucket notifications.
     "s3": {
       "bucket": { "name": "paladin-primary" },
       "object": {
-        "key":       "<tenant_uuid>/<object_key>/<key>",  // URL-encoded
+        "key":       "<tenant_uuid>/<collection>/<key>",  // URL-encoded
         "size":      2048, "eTag": "…", "sequencer": "…"
       }
     },

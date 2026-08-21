@@ -691,8 +691,8 @@ when {
 // RenameTenantSlug all route through ManageTenant, so the handler-side gates
 // keep those on platform.admin and this permit alone cannot reach them.
 //
-// ManageCollection covers both reading and creating an object key: the
-// object-key handler authorises Get with the same action as Create.
+// ManageCollection covers both reading and creating a collection: the
+// collection handler authorises Get with the same action as Create.
 // A tenant policy can still forbid it (first-forbid wins).
 permit (
   principal,

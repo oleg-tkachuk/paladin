@@ -20,7 +20,7 @@ per-tenant IAM (ADR-0011 `dedicated` layout) become possible. Today
 `internal/app/build_deps.go` builds a single `s3adapter.New(ctx, backend)` from
 `config.Storage.DefaultBackend`; `resolveBucket(perCall)` swaps only the bucket
 **name**, reusing one endpoint/credentials/region. Multi-backend routing is
-schematically present (`object_keys.backend_id` FK) but unreachable through the
+schematically present (`collections.bucket_id` FK) but unreachable through the
 client wiring.
 
 ## The one principle
@@ -36,7 +36,7 @@ Three parts with single responsibilities:
 
 | Component | Responsibility | Source of truth |
 |---|---|---|
-| **Resolver** (`LookupBucket` / `LookupBucketMeta`) | `(tenant, object_key)` → `(backendID, bucket, enabled, read_only, provision_state)` + the disabled/read-only policy gate | DB `storage_backends` / `buckets` |
+| **Resolver** (`LookupBucket` / `LookupBucketMeta`) | `(tenant, collection)` → `(backendID, bucket, enabled, read_only, provision_state)` + the disabled/read-only policy gate | DB `storage_backends` / `buckets` |
 | **BackendRegistry** | `backendID` → `*s3adapter.Client` (lazy build + cache) | `config.Storage.Backends` |
 | **Router** | implements the existing narrow `wire.Storage` interfaces; dispatches each call to `registry.For(backendID)` | — |
 
@@ -55,7 +55,7 @@ still yield a client so a drain/migration can read from it.
 - `object.BucketMeta` **already** carries `BackendID` and `EventsEnabled`
   (`internal/api/v1/object/handler.go`), so the resolver already knows the
   backend and the completion-mode input.
-- `object.Location{TenantID, Bucket, ObjectKey, Key}` has **no** `BackendID`;
+- `object.Location{TenantID, Bucket, Collection, Key}` has **no** `BackendID`;
   presign args (`PresignPutArgs`, …) carry `Bucket` but no `BackendID`.
 - `config.Storage{DefaultBackend string, Backends map[string]StorageBackend}`
   is already a map; each `StorageBackend` has its own `Auth` block. DB
@@ -183,7 +183,7 @@ type Location struct {
 	BackendID string    // NEW — "" → default (back-compat)
 	TenantID  uuid.UUID
 	Bucket    string
-	ObjectKey string
+	Collection string
 	Key       string
 }
 
@@ -323,7 +323,7 @@ integration tests.
 
 **Out (Phase 3+):** `streamThrough` cross-backend copy, `LISTEN`-driven
 credential invalidation, and the per-tenant backend-selection policy at
-`CreateObjectKey`.
+`CreateCollection`.
 
 **Follow-ups surfaced while landing Phase 2 — now DONE:**
 
@@ -337,5 +337,5 @@ credential invalidation, and the per-tenant backend-selection policy at
   `backend_id` / `bucket_name` (migration 053); `InitiateSession` anchors the
   physical location resolved at initiate time and `GetSession` reads it back,
   so complete / abort / presign-part and the reaper target where the parts
-  actually live even after a `BindObjectKeyToBucket` rebind. Legacy in-flight
+  actually live even after a `BindCollectionToBucket` rebind. Legacy in-flight
   rows fall back to re-resolution.

@@ -190,7 +190,7 @@ type listCollectionsArgs struct {
 }
 type queryObjectsArgs struct {
 	TenantID   string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
-	Collection string `json:"collection" jsonschema:"object key (namespace) name"`
+	Collection string `json:"collection" jsonschema:"collection (namespace) name"`
 	Filter     string `json:"filter,omitempty" jsonschema:"optional CEL filter, e.g. tags['type']=='invoice'"`
 	PageSize   int32  `json:"page_size,omitempty" jsonschema:"page size; default 100, max 1000"`
 }
@@ -274,7 +274,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_collections",
-		Description: "List object keys (logical namespaces) within a tenant.",
+		Description: "List collections (logical namespaces) within a tenant.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listCollectionsArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.OKey.ListCollections(ctx, connect.NewRequest(&adminv1.ListCollectionsRequest{
 			Parent: "tenants/" + in.TenantID,
@@ -512,7 +512,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 type createCollectionArgs struct {
 	TenantID    string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
-	Collection  string `json:"collection" jsonschema:"object key path: kebab-case segments joined by '/' (e.g. 'assets-prod' or 'invoices/2026/q1')"`
+	Collection  string `json:"collection" jsonschema:"collection path: kebab-case segments joined by '/' (e.g. 'assets-prod' or 'invoices/2026/q1')"`
 	Bucket      string `json:"bucket" jsonschema:"bucket resource name (storageBackends/{b}/buckets/{n})"`
 	DisplayName string `json:"display_name,omitempty" jsonschema:"optional display label"`
 	CedarPolicy string `json:"cedar_policy,omitempty" jsonschema:"optional Cedar policy"`
@@ -606,7 +606,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_create_collection",
-		Description: "Create an object key (logical namespace) under a tenant + bucket binding.",
+		Description: "Create a collection (logical namespace) under a tenant + bucket binding.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createCollectionArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.OKey.CreateCollection(ctx, connect.NewRequest(&adminv1.CreateCollectionRequest{
 			Parent:     "tenants/" + in.TenantID,

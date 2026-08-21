@@ -22,7 +22,7 @@ Follow [the README](../README.md); a fresh install is already correct.
 
 ### What reprovisioning means
 
-You lose the control-plane database: tenants, buckets, ObjectKeys,
+You lose the control-plane database: tenants, buckets, Collections,
 capabilities, API tokens, event subscriptions, and the audit log. You do
 not lose object bytes — those live in the S3 backend and are untouched —
 but with the `objects` rows gone they are orphaned, referenced by

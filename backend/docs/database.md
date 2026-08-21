@@ -28,7 +28,7 @@ Child table for `multipart_uploads` to track individual uploaded parts and their
 
 ### 4. `tenants`
 
-Stores tenant-specific configuration and metadata (e.g., specific S3 object_keys or quotas).
+Stores tenant-specific configuration and metadata (e.g., specific S3 buckets or quotas).
 
 ### 5. `audit_logs`
 

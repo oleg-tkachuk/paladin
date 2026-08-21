@@ -70,7 +70,7 @@ graph LR
     end
     subgraph "Managed Services"
         DB[("RDS / Postgres")]
-        S3["S3 ObjectKey / SeaweedFS"]
+        S3["S3 Bucket / SeaweedFS"]
     end
 
     C -- "HTTPS" --> LB

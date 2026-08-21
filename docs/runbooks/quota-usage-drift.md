@@ -100,13 +100,13 @@ overshoot beats falsely rejecting. Count caps move one at a time and are
 exact.
 
 **Two scopes.** The caller's tenant row is checked first, then the row for the
-bucket the upload's ObjectKey resolves to. The rejection message names which
+bucket the upload's Collection resolves to. The rejection message names which
 one stopped the request (`tenant quota exceeded` vs `bucket quota exceeded`),
 so a caller does not have to guess. Bucket-scope resolution costs one point
-lookup on `object_keys`, skipped entirely when the client sent a canonical
+lookup on `collections`, skipped entirely when the client sent a canonical
 `storageBackends/…` name that already carries the binding.
 
-**Everything about the bucket scope fails open.** An unbound ObjectKey, a
+**Everything about the bucket scope fails open.** An unbound Collection, a
 disabled backend, a bucket with no quota row — all pass the interceptor and
 let the handler report the real problem. A routing failure surfacing as
 `ResourceExhausted` would tell a caller to delete data that is not the issue.

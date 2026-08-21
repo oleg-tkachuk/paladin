@@ -6,7 +6,7 @@ The console's **Platform Stats** page (`/stats`) is backed by one RPC,
 
 | Half | Source | Tables |
 |------|--------|--------|
-| Inventory (tenants, backends, buckets, object keys, users) | the **admin** pod's own pool | not RLS'd — [migration 023](../../backend/migrations/023_rls.sql) deliberately leaves these cross-tenant readable |
+| Inventory (tenants, backends, buckets, collections, users) | the **admin** pod's own pool | not RLS'd — [migration 002](../../backend/migrations/002_roles_and_rls.sql) deliberately leaves these cross-tenant readable |
 | RLS'd census (objects, quotas, capabilities, M2M tokens, event subscriptions) | the **worker** pod's ops listener, proxied | all RLS'd, so only a BYPASSRLS pool sees the fleet |
 
 When the second half can't be reached the RPC still succeeds — it returns
