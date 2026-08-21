@@ -2,7 +2,6 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 
@@ -54,10 +53,4 @@ func HashApiKeySecret(secret string) ([]byte, error) {
 // CheckApiKeySecret returns nil iff the presented secret matches the hash.
 func CheckApiKeySecret(hash []byte, secret string) error {
 	return bcrypt.CompareHashAndPassword(hash, []byte(secret))
-}
-
-// ConstantTimeEqual is a small wrapper used by sites where we compare opaque
-// tokens that aren't bcrypt-hashed (e.g. webhook signatures).
-func ConstantTimeEqual(a, b []byte) bool {
-	return subtle.ConstantTimeCompare(a, b) == 1
 }

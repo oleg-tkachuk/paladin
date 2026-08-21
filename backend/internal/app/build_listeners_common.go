@@ -111,26 +111,6 @@ func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *healt
 	}
 }
 
-// AddStorageBackendChecks registers one Ready check per configured
-// storage backend. Pings the backend's HEAD via S3 ListBuckets-style
-// probe; failure marks degraded (Critical=false) — the runtime can
-// still serve other backends. The default backend is escalated to
-// Critical=true since most uploads land there.
-func AddStorageBackendChecks(h *health.Handler, cfg config.Storage, defaultBackend string, ping func(ctx context.Context, backendName string) error) {
-	for name := range cfg.Backends {
-		// Capture loop var.
-		backendName := name
-		h.Ready = append(h.Ready, health.Check{
-			Name:     "storage:" + backendName,
-			Category: health.CategoryStorage,
-			Critical: backendName == defaultBackend,
-			Func: func(ctx context.Context) error {
-				return ping(ctx, backendName)
-			},
-		})
-	}
-}
-
 // AddSubsystemCheck appends a Category=subsystem check (capability,
 // cedar, ingest). Critical default true — these gate request-path
 // authorisation and should fail readiness when broken.
@@ -155,17 +135,5 @@ func AddDisabledSubsystem(h *health.Handler, name string) {
 		Critical: false,
 		Func:     func(ctx context.Context) error { return nil },
 		Note:     "disabled",
-	})
-}
-
-// AddUpstreamCheck appends a Category=upstream check. Always
-// non-critical: an upstream blip on the mcp bridge shouldn't take
-// the data plane out of rotation.
-func AddUpstreamCheck(h *health.Handler, name string, fn func(ctx context.Context) error) {
-	h.Ready = append(h.Ready, health.Check{
-		Name:     name,
-		Category: health.CategoryUpstream,
-		Critical: false,
-		Func:     fn,
 	})
 }

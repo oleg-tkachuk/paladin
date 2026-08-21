@@ -18,16 +18,6 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, token string) (*Principal, error)
 }
 
-// Interceptor is a Connect interceptor that extracts the Authorization
-// header, verifies the bearer token via the provided Verifier, and attaches
-// the resulting Principal to the context for both unary and streaming RPCs.
-//
-// Handlers rely exclusively on context for identity — the token never leaks
-// beyond this interceptor.
-func Interceptor(v TokenVerifier) connect.Interceptor {
-	return &authInterceptor{verifier: v}
-}
-
 // InterceptorSkipAPITokens is Interceptor that PASSES THROUGH (setting no principal) when
 // the bearer is a Paladin API token (`paladin_pat_…`), deferring authentication to a downstream
 // APITokenAuthInterceptor. Every other case is handled exactly like Interceptor — a JWT is

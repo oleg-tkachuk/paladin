@@ -21,12 +21,8 @@ import (
 	"context"
 
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/audith"
@@ -54,18 +50,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 )
-
-// Version / Commit / BuildTime carry build metadata from the CLI entrypoint.
-type Version string
-type Commit string
-type BuildTime string
-type ConfigPath string
-
-// BootstrapLogger is a distinct type so Wire can inject an early-boot logger
-// that exists before the config-driven logger is built.
-type BootstrapLogger *zap.Logger
 
 // NOTE: this package holds the plain constructor functions (Provide*) + the
 // shared Repos/Storage seam types that internal/app wires by hand. The former
@@ -75,37 +60,6 @@ type BootstrapLogger *zap.Logger
 // through Uber fx (internal/app/appfx.go). The batch.Submitter/policy.Store
 // bindings the old wire.Bind expressed are satisfied structurally where the
 // handlers are passed.
-
-// ProvidePgxPool extracts the concrete *pgxpool.Pool from *postgres.DB.
-// statemachine + policy store need the concrete pool for LISTEN/NOTIFY
-// and transaction APIs the narrower interface doesn't expose.
-func ProvidePgxPool(db *postgres.DB) (*pgxpool.Pool, error) {
-	p, ok := db.Pool.(*pgxpool.Pool)
-	if !ok {
-		return nil, errors.New("wire: DB.Pool is not *pgxpool.Pool — tests must wire this directly")
-	}
-	return p, nil
-}
-
-func ProvideCELEvaluator() *cel.Evaluator {
-	return cel.NewEvaluator()
-}
-
-func ProvidePolicyStore(pool *pgxpool.Pool, _ *zap.Logger) *policy.PostgresStore {
-	return policy.NewPostgresStore(pool)
-}
-
-func ProvidePolicyEngine(store policy.Store, cfg config.Config) *policy.Engine {
-	ttl := cfg.Cedar.PolicyCacheTTL
-	if ttl == 0 {
-		ttl = 30 * time.Second
-	}
-	return policy.NewEngine(store, ttl)
-}
-
-func ProvideStateMachine(pool *pgxpool.Pool) *statemachine.Transitioner {
-	return statemachine.New(pool)
-}
 
 // Repos bundles all repository interfaces. The caller constructs this from
 // its Postgres adapters (see cmd/server).
@@ -166,16 +120,8 @@ func ProvideCollectionHandler(repos Repos, pe *policy.Engine, _ config.Config) *
 	return objectkey.NewHandler(repos.Collection, pe)
 }
 
-func ProvideBucketHandler(repos Repos, storage Storage, _ config.Config) *bucket.Handler {
-	return bucket.NewHandler(repos.Bucket, storage.Provisioner)
-}
-
 func ProvideTenantHandler(repos Repos, pe *policy.Engine, _ config.Config) *tenant.Handler {
 	return tenant.NewHandler(repos.Tenant, pe)
-}
-
-func ProvideObjectTagHandler(repos Repos) *objecttag.Handler {
-	return objecttag.NewHandler(repos.ObjectTag)
 }
 
 func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operation.Handler {

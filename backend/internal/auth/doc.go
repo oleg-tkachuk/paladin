@@ -8,7 +8,7 @@
 // Wiring:
 //
 //	verifier := &auth.JWTVerifier{Key: pubkey, ExpectedIssuer: ..., ExpectedAudience: ...}
-//	mux.Handle(path, connect.WithInterceptors(auth.Interceptor(verifier)))
+//	mux.Handle(path, connect.WithInterceptors(auth.InterceptorSkipAPITokens(verifier)))
 //
 // Inside a handler:
 //

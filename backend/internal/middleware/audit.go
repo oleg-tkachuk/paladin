@@ -33,19 +33,6 @@ type auditBeforeKey struct{}
 // so domain handlers can call StashResource without importing this
 // middleware package (which sits above them in the dependency graph).
 
-// StashBefore attaches a pre-mutation snapshot to ctx. Handlers that mutate
-// existing rows (Update*, Set*, Bind*, Patch*) should call this before
-// applying the change so the audit middleware can record diffs.
-//
-// The value is JSON-marshaled at write time — pass a struct, map, or
-// proto.Message; nil values are skipped silently.
-func StashBefore(ctx context.Context, snapshot any) context.Context {
-	if snapshot == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, auditBeforeKey{}, snapshot)
-}
-
 func beforeFromContext(ctx context.Context) []byte {
 	v := ctx.Value(auditBeforeKey{})
 	if v == nil {
@@ -93,14 +80,6 @@ type AuditWriter interface {
 // error rolls the audit row back with the fan-out.
 type AuditMirrorEmitter interface {
 	EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admindomain.AuditEntry) error
-}
-
-// Audit returns a Connect interceptor that records every successful and
-// failed mutation against the configured AuditRepository. Reads are skipped
-// to keep audit volume manageable; turn `recordReads=true` for stricter
-// compliance regimes.
-func Audit(w AuditWriter, audience string, recordReads bool) connect.Interceptor {
-	return AuditWithMirror(w, audience, recordReads, nil)
 }
 
 // AuditWithMirror is the events-aware variant — fan-out one

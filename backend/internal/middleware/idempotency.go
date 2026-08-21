@@ -236,13 +236,6 @@ func (i *idempotencyInterceptor) WrapStreamingHandler(next connect.StreamingHand
 	return next
 }
 
-// IdempotencyKeyFromHeader reads the canonical header and trims
-// whitespace. Centralised so future header-name changes (e.g. a
-// migration to `X-Idempotency-Token`) live in one place.
-func IdempotencyKeyFromHeader(req connect.AnyRequest) string {
-	return strings.TrimSpace(req.Header().Get(idempotencyHeader))
-}
-
 // marshalResponse extracts the proto message from an AnyResponse and
 // marshals it to bytes. Connect responses always wrap a proto.Message
 // (the generated Resp type), so the type assertion is safe in

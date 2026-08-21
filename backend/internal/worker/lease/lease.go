@@ -313,21 +313,3 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 		return true
 	}
 }
-
-// Generation reads the current generation for the lease without claiming
-// it. Useful for callers that want to assert their fence token before a
-// long batch — though the more common pattern is to receive `generation`
-// via the Run callback.
-func (l *Lease) Generation(ctx context.Context) (int64, bool, error) {
-	const stmt = `SELECT generation, expires_at > NOW() FROM worker_leases WHERE name = $1`
-	var gen int64
-	var live bool
-	err := l.pool.QueryRow(ctx, stmt, l.cfg.Name).Scan(&gen, &live)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, false, nil
-		}
-		return 0, false, err
-	}
-	return gen, live, nil
-}
