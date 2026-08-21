@@ -59,8 +59,8 @@ func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID strin
 
 // LookupBucket reads the physical S3 bucket bound to a Collection via
 // idx_collections_bucket_routing. bucket_name is NOT NULL after
-// migration 005 so a successful lookup always returns a non-empty value.
-// `write` splits the read-only-drain gate (migration 047): presign-GET is a
+// the schema baseline (001_initial_schema.sql) so a successful lookup always returns a non-empty value.
+// `write` splits the read-only-drain gate (the schema baseline (001_initial_schema.sql)): presign-GET is a
 // read, presign-PUT / presign-part are writes. Both the disabled (feature
 // 002) and drain gates are enforced here so a presign URL is never issued
 // against a backend that can't serve the op.

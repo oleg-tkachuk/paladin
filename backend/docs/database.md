@@ -1,58 +1,185 @@
-# Database - Paladin
+# Database — Paladin
 
-## Overview
+Postgres is the control plane's only durable store: object metadata, tenancy,
+policy, capabilities, the billing ledger, and the event outbox all live here.
+S3 (or any S3-compatible backend) holds bytes and nothing else — every fact
+Paladin reasons about is a row.
 
-Paladin uses **PostgreSQL** as its primary metadata store. The schema is optimized for multi-tenant isolation and object lifecycle tracking.
+## Schema baseline
 
-## Tables
+The schema ships as three ordered migrations rather than an accumulated
+history:
 
-### 1. `objects`
+| File | Contents |
+|------|----------|
+| [`001_initial_schema.sql`](../migrations/001_initial_schema.sql) | Types, tables, constraints, indexes |
+| [`002_roles_and_rls.sql`](../migrations/002_roles_and_rls.sql) | Roles, grants, row-level security policies |
+| [`003_triggers.sql`](../migrations/003_triggers.sql) | Triggers: resource versioning, immutability, lock enforcement, policy invalidation |
 
-The primary table for object metadata.
+They replace the 65 incremental migrations that preceded them. The split is
+by *kind*, not by date, so a reviewer can read the whole isolation story in
+one file instead of reconstructing it from forty diffs.
 
-- **PK**: `id` (UUID)
-- **Indices**:
-  - `idx_objects_tenant_created_at`: For performant listing and filtering by tenant.
-  - `uq_objects_tenant_key`: Enforces unique object keys within a single tenant.
-- **Statuses**: `pending`, `uploading`, `uploaded`, `complete`, `aborted`, `deleted`, `error`, `soft_deleted`, `hard_deleted`.
+**`001`'s down migration drops the schema.** Reprovision, do not migrate
+backwards. Applying the baseline to a database that already holds data is
+not supported — see [upgrading.md](../../docs/upgrading.md).
 
-### 2. `multipart_uploads`
+Migrations run under [Goose](https://github.com/pressly/goose) as
+`paladin_migrate`, which holds DDL rights. The application role does not.
 
-Tracks the state of active multi-part upload sessions.
+## Identity and naming
 
-- **Retention**: Expired uploads are purged by the Reaper worker.
+Every table follows [ADR-0013](adr/0013-single-identity-model-and-naming.md):
 
-### 3. `multipart_parts`
+- The primary key is always `id uuid`, never a natural key.
+- `<entity>_id` names a foreign key and nothing else.
+- Natural uniqueness is a `UNIQUE` constraint, not a primary key.
+- `name` is the resource's own identifier within its parent; `display_name`
+  is free text for humans.
+- Fixed vocabularies are Postgres `ENUM`s, not `text` + `CHECK`.
 
-Child table for `multipart_uploads` to track individual uploaded parts and their ETags.
+One deliberate exception: `oauth_clients.client_id`, which is an identifier
+the OAuth protocol itself defines.
 
-### 4. `tenants`
+## Table groups
 
-Stores tenant-specific configuration and metadata (e.g., specific S3 buckets or quotas).
+**Tenancy** — `tenants`, `tenant_slug_history`, `tenant_default_bindings`,
+`tenant_storage_migrations`, `tenant_budgets`. A tenant's slug is unique
+among live tenants only; a soft-deleted tenant keeps its slug so the audit
+trail stays resolvable, and renames are recorded in `tenant_slug_history`.
 
-### 5. `audit_logs`
+**Identity** — `users`, `user_settings`, `refresh_tokens`, `api_tokens`,
+`api_token_rate_buckets`, `oauth_clients`, `oauth_authorization_codes`.
 
-Structured audit trail for all object mutations.
+**Storage topology** — `storage_backends`, `storage_backend_health`,
+`buckets`, `replication_state`. A bucket row can exist before the physical
+bucket does: `provision_state` carries the asynchronous provisioning.
 
----
+**Namespaces** — `collections`. A collection is a logical namespace bound to
+exactly one bucket. Objects address their collection by id; the *name* is a
+segment of the storage path, which is why queries resolve names at the
+boundary and carry ids inside.
 
-## Data Lifecycle
+**Objects** — `objects`, `object_versions`, `object_locks`, `object_tags`,
+`multipart_uploads`, `multipart_parts`, `pending_purges`. State is the
+`object_state` enum: `PENDING` → `AVAILABLE` | `FAILED`, and `DELETED` for
+soft deletion. `objects.current_version_id` carries a deferred composite FK
+to `object_versions (object_id, id)`, so the two rows can be written in
+either order within one transaction but can never disagree at commit.
 
-### Soft vs Hard Delete
+**Governance** — `quotas`, `capability_records`, `capability_revocations`,
+`capability_usage`, `charges`. Quota caps are `NOT NULL DEFAULT 0` where 0
+means "no cap" — the convention every reader uses (`max_x > 0 AND usage_x >=
+max_x`). Nullable caps would poison those comparisons three-valued.
+`charges` captures `tenant_slug` at charge time: the ledger must stay
+readable after a rename, and history is not rewritten by a later `UPDATE`
+elsewhere.
 
-- **Soft Delete**: Marks the record as `deleted` in the `objects` table. The object remains in S3.
-- **Hard Delete (Purge)**: Immediately removes the metadata record and triggers the physical removal of the object from S3.
+**Events** — `event_subscriptions`, `event_deliveries`, `ingested_events`.
+`event_deliveries` is the transactional outbox ([ADR-0003](../../docs/adr/0003-transactional-outbox.md)):
+producers write it on the caller's transaction, and a dispatcher drains it.
+`subscription_id` is a real FK with `ON DELETE CASCADE`, so deleting a
+subscription takes its queued rows with it and an orphaned delivery cannot
+be written at all. `ingested_events` deduplicates inbound storage events,
+keyed `(source, event_id)` — two brokers may legitimately mint the same id.
 
-### Housekeeping (Reaper)
+**Operations** — `operations`, `audit_log`, `idempotency_keys`,
+`worker_leases`.
 
-The Reaper worker runs periodically to:
+## Partitioned tables
 
-1. Purge `pending` objects that have exceeded their time-to-live (`pending_ttl`).
-2. Abort and cleanup expired multipart uploads.
-3. (Optional) Permanently delete files from storage that were soft-deleted beyond the retention period.
+Two tables are partitioned by range, with a `DEFAULT` partition as the
+catch-all:
 
-## Migrations
+| Table | Key | Period | Reclaimed by |
+|-------|-----|--------|--------------|
+| `audit_log` | `at` | monthly | `DROP PARTITION` past retention |
+| `idempotency_keys` | `expires_at` | daily | `DROP PARTITION` past expiry |
 
-Managed using [Goose](https://github.com/pressly/goose). Migrations are located in [../migrations/](../migrations/).
+`idempotency_keys` partitions on `expires_at` rather than `created_at`
+deliberately: the partition key has to match the TTL semantics, or a whole
+partition can never be dropped because one long-lived row sits in it.
 
-- **Latest Version**: See current directory listing for migration count (021_relax_object_tag_constraints.sql as of last check).
+Partitions are created by `PartitionMaintainer`, not by a migration — a
+fresh database starts with only `DEFAULT`, and the maintainer relocates
+rows out of it on its first tick. Indexes are declared on the partitioned
+parent so every partition inherits them.
+
+## Row-level security
+
+RLS is a **primary** isolation control, not defence in depth. The data plane
+runs as `paladin_app`, which has no `BYPASSRLS` — a missing policy is a
+missing wall, and RLS filters rather than errors, so the failure is silent.
+
+`FORCE ROW LEVEL SECURITY` is set on every protected table: without it the
+table owner bypasses its own policies, and migrations run as the owner.
+
+Policies read `tenant_id` directly from the row, which is why `tenant_id` is
+denormalised onto every tenant-scoped table instead of being reached through
+a join. The session's tenant comes from the `paladin.tenant_id` GUC, read
+through `paladin_session_tenant_id()`; an unset GUC yields NULL, which
+matches no row — the safe direction.
+
+Three tables are isolated through their parent rather than a local
+`tenant_id`: `multipart_parts` (via its upload), `capability_usage` (via its
+capability), and nothing else. The duplication is for the hot path, not a
+reflex.
+
+Two policies are deliberately open:
+
+- `api_tokens` allows an unauthenticated read, because token verification
+  happens *before* the session tenant is known — that is what the lookup is
+  for.
+- `audit_log` allows unrestricted `SELECT`. The audit trail is an operator
+  surface; an investigation that can only see one tenant cannot answer "who
+  touched this", which is the question the log exists for.
+
+See [db-roles.md](db-roles.md) for the role split.
+
+## Triggers
+
+| Trigger | Table(s) | Purpose |
+|---------|----------|---------|
+| `bump_resource_version` | every versioned table | Optimistic concurrency: `resource_version` increments on write |
+| `tenants_block_immutable_columns` | `tenants` | `id` and `slug` are immutable post-create |
+| `object_locks_enforce_retention` | `object_locks` | A retention window may be extended, never shortened; `COMPLIANCE` has no bypass |
+| `collections_enforce_bucket_tenancy` | `collections` | A collection may not bind to a bucket another tenant owns — RLS cannot catch this, because the inserted row carries the *attacker's* `tenant_id` and passes the policy cleanly |
+| `*_notify_policy_changed` | `tenants`, `collections` | `pg_notify('policy_changed', …)` so the Cedar engine invalidates its cache |
+
+The policy-invalidation payload is a contract with
+`internal/policy/cedar/store.go`: `"<tenant_uuid>"` for a tenant,
+`"<tenant_uuid>:<collection>"` for a collection. The guard compares policy
+*text*, not its hash — the hash is computed by the application after the
+write, so a hash-based guard is silent on the statement that changed the
+policy.
+
+## Data lifecycle
+
+**Soft delete** moves an object to `DELETED` and stamps `terminated_at`. The
+bytes stay in the backend and the row stays queryable, so restore is a state
+change.
+
+**Hard delete** removes the row and enqueues `pending_purges` in the same
+transaction. Debt in `pending_purges` is the only remaining record of where
+the bytes are, so a failed reclaim must stay owed rather than be dropped —
+`PurgeDrainer` retries with backoff.
+
+Object locks gate both: `legal_hold` and an unexpired `retain_until` block
+the purge, and the worker has no governance bypass — `GOVERNANCE` is
+honoured exactly like `COMPLIANCE` there.
+
+**Housekeeping** (see [ops-housekeeping.md](ops-housekeeping.md)) reaps
+expired `PENDING` objects, aborts abandoned multipart sessions, purges
+terminal `operations`, drops expired partitions, and drains `pending_purges`.
+
+## Hand-written SQL
+
+Most queries are generated by [sqlc](https://sqlc.dev) from
+[`internal/store/postgres/queries/`](../internal/store/postgres/queries/).
+A minority are hand-written where sqlc cannot express the statement —
+dynamic DDL for partitions, census aggregates assembled from fragments.
+
+sqlc validates its own queries against the schema at generate time. The
+hand-written ones have no such gate, and that gap has produced real bugs
+(a conflict target with no matching constraint; a column renamed everywhere
+but one raw string). BACKLOG carries the item for a `PREPARE`-based check.

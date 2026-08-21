@@ -14,7 +14,7 @@ import (
 // bucket until this worker copies every object into the tenant's own bucket
 // (same key, server-side CopyObject), rebinds the collections in one
 // transaction, and flips the layout. Crash-safe + resumable via the
-// tenant_storage_migrations row (migration 056).
+// tenant_storage_migrations row (the schema baseline (001_initial_schema.sql)).
 //
 // State machine (driven here):
 //   provisioning -> copying -> rebinding -> verifying -> completed
@@ -22,7 +22,7 @@ import (
 // `failed`; transient errors (a DB blip, one failed CopyObject) are retried on
 // the next tick without abandoning the migration.
 
-// Migration states (mirror the CHECK constraint in migrations 056 + 057).
+// Migration states (mirror the CHECK constraint in the schema baseline (001_initial_schema.sql) + 057).
 const (
 	MigStateProvisioning = "provisioning"
 	MigStateCopying      = "copying"

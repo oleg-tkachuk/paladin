@@ -39,18 +39,18 @@ type StorageBackend struct {
 	// rejects every Paladin-mediated operation that resolves to it. Operator
 	// managed via SetBackendEnabled; never mirrored from static config.
 	Enabled bool
-	// ReadOnly is the drain state (migration 047). When true on an enabled
+	// ReadOnly is the drain state (the schema baseline (001_initial_schema.sql)). When true on an enabled
 	// backend, reads / presign-GET / HEAD / list still resolve but mutations
 	// (PUT / POST / multipart-init / copy-dest / update / delete / version
 	// writes) are refused, so an operator can migrate data off before fully
 	// disabling. Operator-managed via SetBackendReadOnly; not config-mirrored.
 	ReadOnly bool
-	// Maintenance is the OPERATOR-SET, advisory flag (migration 049): a label
+	// Maintenance is the OPERATOR-SET, advisory flag (the schema baseline (001_initial_schema.sql)): a label
 	// signalling "under maintenance" surfaced in the UI. Unlike enabled /
 	// read_only it does NOT gate operations; unlike Health it's operator-set,
 	// not derived. Operator-managed via SetBackendMaintenance; not config-mirrored.
 	Maintenance bool
-	// Health is the DERIVED, advisory health state (migration 048): the
+	// Health is the DERIVED, advisory health state (the schema baseline (001_initial_schema.sql)): the
 	// outcome of the last TestBackend probe. "unknown" | "ok" | "error".
 	// Surfaced in the UI but NOT a gate — the operator decides whether to
 	// disable/drain in response. HealthMessage carries the probe error when

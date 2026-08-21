@@ -13,7 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// TestTenantStorageLayout proves migration 054 + the storage_layout plumbing
+// TestTenantStorageLayout proves the schema baseline (001_initial_schema.sql) + the storage_layout plumbing
 // (ADR-0011 Phase 1): a tenant created with storage_layout="dedicated"
 // persists and reads back as such, while the default is "shared".
 func TestTenantStorageLayout(t *testing.T) {

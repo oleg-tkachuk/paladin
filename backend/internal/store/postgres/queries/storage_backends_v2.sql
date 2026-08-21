@@ -107,7 +107,7 @@ WHERE storage_backends.name = sqlc.arg('name')
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: SetStorageBackendMaintenance :execrows
--- Flip the operator-set maintenance flag (migration 049). Same OCC +
+-- Flip the operator-set maintenance flag (the schema baseline (001_initial_schema.sql)). Same OCC +
 -- operator-managed contract as the enable/read-only setters; advisory only.
 UPDATE storage_backends
 SET maintenance = sqlc.arg('maintenance')
@@ -117,7 +117,7 @@ WHERE storage_backends.name = sqlc.arg('name')
 
 -- name: UpsertStorageBackendHealth :exec
 -- Keyed by backend NAME: callers are health probes that know the config key.
--- Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
+-- Record the outcome of a TestBackend probe (the schema baseline (001_initial_schema.sql)). DERIVED, advisory
 -- state in its own 1:1 table — writing it does NOT touch storage_backends, so
 -- it never fires the bump_rv trigger (no resource_version / updated_at churn)
 -- and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.

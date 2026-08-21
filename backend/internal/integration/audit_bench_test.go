@@ -86,7 +86,7 @@ func seedAuditRows(b testing.TB, ctx context.Context, pool interface {
 // full candidate set — plus, in production, one avoided compiled-CEL eval per
 // shipped row (not modelled here, which understates the win).
 //
-// FOLLOW-UP RESOLVED (migration 040 + partitioning 041). Migration 040 added
+// FOLLOW-UP RESOLVED (the schema baseline (001_initial_schema.sql) + partitioning 041). Migration 040 added
 // idx_audit_log_action_at = (action text_pattern_ops, at DESC). Re-running
 // this bench WITH that index did NOT move prefix-range latency (pushdown
 // 1.79 -> 1.92 ms/op, within noise) — the planner never picks the action

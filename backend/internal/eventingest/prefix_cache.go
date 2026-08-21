@@ -35,7 +35,7 @@ type prefixBackend interface {
 }
 
 // CachingLookup is an ObjectLookup that resolves the longest-prefix collection
-// (multi-segment disambiguation, migration 030) from an in-process per-tenant
+// (multi-segment disambiguation, the schema baseline (001_initial_schema.sql)) from an in-process per-tenant
 // cache instead of a per-event SQL query. LookupObjectByKey / GetCollection pass
 // straight through — only ResolveCollectionPrefix is cached.
 //

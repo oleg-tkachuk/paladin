@@ -38,13 +38,13 @@ type BackendRepository interface {
 	List(ctx context.Context, pageSize int32, afterID string) ([]StorageBackend, string, error)
 	Update(ctx context.Context, b StorageBackend, expectedVersion int64, mask []string) error
 	SetEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) error
-	// SetReadOnly flips the drain (read-only) state (migration 047). Same
+	// SetReadOnly flips the drain (read-only) state (the schema baseline (001_initial_schema.sql)). Same
 	// OCC + operator-managed contract as SetEnabled.
 	SetReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) error
-	// SetMaintenance flips the operator-set maintenance flag (migration 049).
+	// SetMaintenance flips the operator-set maintenance flag (the schema baseline (001_initial_schema.sql)).
 	// Same OCC + operator-managed contract as SetReadOnly; advisory only.
 	SetMaintenance(ctx context.Context, backendID string, maintenance bool, expectedVersion int64) error
-	// SetHealth records the outcome of a TestBackend probe (migration 048).
+	// SetHealth records the outcome of a TestBackend probe (the schema baseline (001_initial_schema.sql)).
 	// DERIVED/advisory: no OCC, writes a separate 1:1 table so it never
 	// bumps the backend's resource_version. status is "ok" | "error".
 	SetHealth(ctx context.Context, backendID, status, message string, checkedAt time.Time) error

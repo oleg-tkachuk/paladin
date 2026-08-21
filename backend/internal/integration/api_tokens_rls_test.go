@@ -14,7 +14,7 @@ import (
 )
 
 // TestAPITokensPreAuthLookup is the regression test whose absence let the
-// api_tokens RLS bug ship: migration 023 placed api_tokens under a plain
+// api_tokens RLS bug ship: the RLS baseline (002_roles_and_rls.sql) placed api_tokens under a plain
 // tenant_isolation policy, which filtered the PRE-AUTH verify lookup to zero
 // rows (the token is what establishes the tenant, so no paladin.tenant_id GUC is
 // set yet) — breaking data-plane API-token auth for every tenant.

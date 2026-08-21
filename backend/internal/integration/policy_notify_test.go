@@ -10,7 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
-// TestPolicyChangedNotify proves migration 051: writes to the two Cedar
+// TestPolicyChangedNotify proves the trigger baseline (003_triggers.sql): writes to the two Cedar
 // policy columns (tenants.inherited_cedar_policy, collections.cedar_policy)
 // fire NOTIFY "policy_changed" in exactly the payload shape
 // cedar.PostgresStore.Watch parses, and non-policy writes stay silent — so

@@ -296,7 +296,7 @@ func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, read
 // ─── SetBackendMaintenance ───────────────────────────────────────────────────
 
 // SetBackendMaintenance raises/clears the operator-set maintenance flag
-// (migration 049). Same platform-admin + Cedar gate, OCC, and idempotency as
+// (the schema baseline (001_initial_schema.sql)). Same platform-admin + Cedar gate, OCC, and idempotency as
 // SetBackendReadOnly. Advisory only — it does not gate operations, and (like
 // drain) the configured default backend may be flagged.
 func (h *Handler) SetBackendMaintenance(ctx context.Context, backendID string, maintenance bool, expectedVersion int64) (*admindomain.StorageBackend, error) {

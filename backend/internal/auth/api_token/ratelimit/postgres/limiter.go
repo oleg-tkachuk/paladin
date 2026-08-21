@@ -1,5 +1,5 @@
 // Package postgres is the Limiter backed by api_token_rate_buckets
-// (migration 018). One atomic SQL statement does the increment + read
+// (the schema baseline (001_initial_schema.sql)). One atomic SQL statement does the increment + read
 // of both the current and previous bucket so callers see a consistent
 // weighted count without round-trip-multiplied races.
 //

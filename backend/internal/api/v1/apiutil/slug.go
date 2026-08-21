@@ -6,7 +6,7 @@ import (
 )
 
 // tenantSlugRE mirrors the Postgres CHECK constraint
-// `tenants_slug_format` in migrations/009_tenant_slug.sql. Keep both in sync.
+// `tenants_slug_format` in migrations/001_initial_schema.sql. Keep both in sync.
 //
 // Format:
 //   - 3..63 chars

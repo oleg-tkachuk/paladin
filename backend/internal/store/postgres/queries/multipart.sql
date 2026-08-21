@@ -28,7 +28,7 @@ WHERE id = $1;
 -- AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
 -- the reaper aborts the S3-side session (which otherwise accrues part-storage
 -- charges forever) on the backend the parts actually live on, in one
--- round-trip per row. Prefer the session-anchored location (migration 053);
+-- round-trip per row. Prefer the session-anchored location (the schema baseline (001_initial_schema.sql));
 -- bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
 -- fallback to the collection's binding is gone with the rows that needed it.
 --

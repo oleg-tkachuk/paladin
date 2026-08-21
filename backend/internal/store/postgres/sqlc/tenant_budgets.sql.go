@@ -219,7 +219,7 @@ type SetTenantBudgetRow struct {
 // Tenant aggregate budget queries.
 //
 // Naming dichotomy: SQL columns retain `_usd` suffixes for historical
-// reasons; unit_code (migration 026) is the source of truth for the
+// reasons; unit_code (the schema baseline (001_initial_schema.sql)) is the source of truth for the
 // currency interpretation. Go domain types use Amount + UnitCode.
 // Upserts the cap and rolls the period. Operators call this from
 // admin tooling on every billing cycle; spent_usd is reset to 0

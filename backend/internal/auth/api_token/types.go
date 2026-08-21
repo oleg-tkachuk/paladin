@@ -27,7 +27,7 @@
 //     token hashes to a digest that matches no row, so the failure is
 //     indistinguishable from "no such token".
 //
-//   - TTL: `expires_at` is NOT NULL at the schema level (migration 017).
+//   - TTL: `expires_at` is NOT NULL at the schema level (the schema baseline (001_initial_schema.sql)).
 //     Application-level cap: ≤1 year for service tokens.
 //
 //   - Scopes: coarse-grained text[] mirror of auth.Scope — fine-grained

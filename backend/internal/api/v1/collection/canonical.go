@@ -19,7 +19,7 @@ import (
 //
 //	storageBackends/{backend_id}/buckets/{bucket_name}/tenants/{tenant_id}/collections/{collection}
 //
-// `{collection}` may itself be slash-separated (migration 030: multi-
+// `{collection}` may itself be slash-separated (the schema baseline (001_initial_schema.sql): multi-
 // segment Collection path) — parsers must NOT split on slash, they
 // anchor on the literal `/collections/` separator.
 const (

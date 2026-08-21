@@ -1,8 +1,8 @@
 // Package postgres is the Store implementation for capability records,
-// backed by migration 016. SQL is hand-written rather than sqlc-generated
+// backed by the schema baseline (001_initial_schema.sql). SQL is hand-written rather than sqlc-generated
 // because the surface is small (six methods) and the JSON-encoded claim
 // payload is awkward through sqlc's typed-mapping path. Schema lives at
-// migrations/016_capabilities.sql.
+// migrations/001_initial_schema.sql.
 //
 // Connection ownership: Store does not Close the pool — the caller
 // (cmd/server boot path) owns the *pgxpool.Pool lifecycle. The hot-path
@@ -46,7 +46,7 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 
 // Insert implements capability.Store.
 //
-// RLS handling: migration 023 enables row-level security on
+// RLS handling: the RLS baseline (002_roles_and_rls.sql) enables row-level security on
 // capability_records keyed on the session GUC `paladin.tenant_id`. The
 // pool's PrepareConn hook (see internal/store/postgres/rls.go) sets
 // that GUC from the request's JWT — which is correct for in-tenant
@@ -99,7 +99,7 @@ INSERT INTO capability_records (
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Align the session GUC with the row's tenant_id so the
-	// capability_records RLS policy (migration 023) admits the
+	// capability_records RLS policy (the RLS baseline (002_roles_and_rls.sql)) admits the
 	// INSERT regardless of the caller's JWT tenant. See the doc
 	// comment above for the cross-tenant platform-admin case.
 	if _, err := tx.Exec(

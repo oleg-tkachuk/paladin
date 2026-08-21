@@ -108,6 +108,15 @@ the same commit. Treat this file like a runtime invariant.
   - `platformstats` counted collections by a dropped column, failing an
     operator dashboard at runtime.
   - `ListDistinctTags` and the duplicated `LookupBucket` in two adapters.
+  Two more surfaced on 2026-08-21 once the second integration suite could
+  run, and neither is a rename artefact — both were simply never checked
+  against the schema:
+  - `ClaimIngestedEvent` said `ON CONFLICT (event_id)` while the table is
+    `UNIQUE (source, event_id)`. Postgres rejects a conflict target with no
+    matching constraint (42P10), so *every* ingested event failed at the
+    dedup claim, not just duplicates. A `PREPARE` catches this exactly.
+  - the `charges` ledger INSERT omitted `tenant_slug`, which is `NOT NULL`.
+    Every charge would have failed at runtime.
 - **Why not just port everything to sqlc:**
   - 6 of the 77 cannot be ported at all: `partition_maintainer.go` issues
     `CREATE TABLE … PARTITION OF` with a runtime-computed name, and sqlc
@@ -126,8 +135,8 @@ the same commit. Treat this file like a runtime invariant.
   including the queries sqlc can never cover. Failure output must name the
   file. Port individual queries to sqlc opportunistically when they are being
   edited anyway; do not schedule a 72-call migration for its own sake.
-- **Blockers:** none. Sequence after the identity refactor lands, so the gate
-  is added against a settled schema.
+- **Blockers:** none — the identity refactor has landed, so the gate would
+  now be written against a settled schema.
 
 ---
 
@@ -427,7 +436,7 @@ open deliberately — each notes why._
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked
-- **Reason:** [migration 008](migrations/008_db_optimization.sql)
+- **Reason:** [the consolidated baseline](backend/migrations/001_initial_schema.sql) (was migration 008 before consolidation)
   set fillfactor on hot-update tables but didn't touch
   `autovacuum_vacuum_scale_factor` / `autovacuum_analyze_scale_factor`
   per table — needs live bloat metrics to choose values that aren't
@@ -446,8 +455,8 @@ open deliberately — each notes why._
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational
-- **Reason:** [internal/worker/replication.go](internal/worker/replication.go)
-  walks replicated buckets and logs intent; [cmd/server/root.go](cmd/server/root.go)
+- **Reason:** [internal/worker/replication.go](backend/internal/worker/replication.go)
+  walks replicated buckets and logs intent; [cmd/server/root.go](backend/cmd/server/root.go)
   injects `Replicator: nil` so the worker is dry-run only.
 - **Definition of Done:**
   - `StorageReplicator` impl that performs cross-backend `CopyObject`
@@ -464,7 +473,7 @@ open deliberately — each notes why._
 - **Reason:** Paladin is an **engineer-operated** service: its `users` are
   operators, not end-customers, so password resets are an operational task,
   not a self-service flow. An admin already calls
-  [userh/handler.go](internal/api/iam/v1/userh/handler.go) `ResetPassword`,
+  [userh/handler.go](backend/internal/api/iam/v1/userh/handler.go) `ResetPassword`,
   which returns the new password to hand off out-of-band — that is the
   intended model and it is sufficient. Same direction as withdrawing the
   external/federated IdP: human auth stays Paladin's own IAM, kept deliberately
@@ -1208,27 +1217,6 @@ open deliberately — each notes why._
     lands.
 - **Blockers:** the StorageReplicator worker.
 
-### Tenant slug min-length — NOT the object_key 2-char bug (misdiagnosis)
-
-- **Status:** Resolved (2026-07-01) — decision recorded + DB drift fixed.
-- **The 2-char question (Won't-do):** initially flagged as the twin of the
-  object_key 2-char bug, but it is not. `ValidateTenantSlug`
-  (`internal/api/v1/apiutil/slug.go`) has an EXPLICIT `len < 3` check and is
-  documented as "3..63 chars, DNS-label-compatible"; migration 009 states the
-  same intent. Tenant slugs double as Cedar `Tenant::"…"` UIDs and subdomain
-  handles, so the 3-char floor is deliberate — 2-char slugs (`eu`/`hq`) are
-  rejected ON PURPOSE. Relaxing it (as 045 did for object_key) would WEAKEN a
-  deliberate constraint. Left as-is.
-- **The 1-char DB drift (fixed in migration 046):** the migration-009 CHECK
-  `slug ~ '^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$'` accepted a 1-char slug (the
-  group is optional) while the Go validator requires ≥3 — a direct DB insert
-  could create a slug the API rejects. Migration 046 adds
-  `char_length(slug) BETWEEN 3 AND 63` so both layers enforce 3..63.
-  `tests/integration/tenant_slug_format_test.go` pins it (1/2-char rejected,
-  3/63 accepted).
-
-
-
 ### Phase 3: deprecate redundant resource-name shapes
 
 - **Ratified under [ADR-0010](backend/docs/adr/0010-canonical-resource-names.md)
@@ -1566,6 +1554,47 @@ _Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)
 mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
+
+### `dev-bootstrap.sh` is repaired but unexercised
+
+- **Status:** Open. Surfaced 2026-08-21.
+- **Reason:** the script had been calling `paladin.v1.TenantService` — a proto
+  package that has not existed for some time — and sending UpdateTenant's
+  fields at the top level after they moved under `tenant`. It could not have
+  worked, which means nobody ran it and nothing noticed. It has been ported to
+  the current contract (AIP-122 create shape, `SetCollectionPolicy`), but only
+  `bash -n` has been run against it; no live backend has executed it.
+- **Definition of Done:** run it against a fresh dev stack and confirm the UI
+  can list tenants, buckets and collections afterwards. Then decide whether it
+  is worth a smoke job — a bootstrap script that silently rots is worse than
+  no bootstrap script, because it is the first thing a new contributor runs.
+- **Blockers:** none; needs a running stack.
+
+---
+
+### `verify-all` does not run the integration suites — one rotted unseen
+
+- **Status:** Open. Surfaced 2026-08-21.
+- **Reason:** `task verify-all` runs unit tests, lint and the frontend build.
+  Both integration suites sit behind the `integration` build tag and run only
+  in `.github/workflows/integration.yml`. With CI blocked on the account-wide
+  Actions spending limit, nothing ran them for the length of a large refactor
+  — and `backend/tests/integration/` (23 files) stopped compiling entirely
+  without anyone noticing. When it was fixed, 45 tests failed and four of the
+  failures were production bugs, not stale fixtures: a silent no-op on default
+  binding, broken ingest dedup, a charges ledger that could never insert, and
+  a dispatcher that treated transient DB errors as permanent failures.
+- **Definition of Done:** either (a) `verify-all` gains a cheap
+  compile-only step — `go vet -tags=integration ./...` — so a suite that stops
+  building fails the local gate in seconds, or (b) a documented, enforced rule
+  that the integration task runs before merge. (a) is the cheaper half and
+  catches the failure mode that actually occurred; it does not catch a suite
+  that compiles but fails, which is what CI is for.
+- **Blockers:** the full suites take ~11 minutes and need Docker, so putting
+  them in `verify-all` outright would make the local gate unusable. That is
+  the reason they are not there, and it is still a good reason.
+
+---
 
 ### Playwright e2e suite wired into CI
 

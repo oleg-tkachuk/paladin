@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// PartitionMaintainer keeps RANGE-partitioned tables (migrations 041
+// PartitionMaintainer keeps RANGE-partitioned tables (the schema baseline (001_initial_schema.sql)
 // audit_log, 042 idempotency_keys) healthy: it pre-creates upcoming
 // partitions so writes never fall to the DEFAULT catch-all, and DROPs whole
 // partitions once their entire range is past the retention cutoff — turning

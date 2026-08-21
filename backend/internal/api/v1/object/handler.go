@@ -134,7 +134,7 @@ var ErrBackendDisabled = errors.New("storage backend is disabled")
 
 // ErrBackendReadOnly is returned by the resolution path for a MUTATION
 // (write=true) when the resolved backend is in the read-only drain state
-// (migration 047): enabled, so reads/presign-GET/HEAD/list still resolve,
+// (the schema baseline (001_initial_schema.sql)): enabled, so reads/presign-GET/HEAD/list still resolve,
 // but PUT/POST/multipart-init/copy-dest/update/delete/version writes are
 // refused so an operator can migrate data off before disabling. Same
 // chokepoint + FailedPrecondition mapping as ErrBackendDisabled.
@@ -248,7 +248,7 @@ type Repository interface {
 	// half the multi-backend routing keys on (docs/backend-registry.md);
 	// callers that don't route yet may discard it.
 	// `write` classifies the operation for the read-only (drain) gate
-	// (migration 047): pass true for mutations (PUT/POST/multipart-init/
+	// (the schema baseline (001_initial_schema.sql)): pass true for mutations (PUT/POST/multipart-init/
 	// copy-dest/delete/version-write), false for reads (GET/HEAD/list). A
 	// write against a read-only backend returns ErrBackendReadOnly.
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
@@ -299,7 +299,7 @@ type Repository interface {
 
 // PurgeDebt is one permanent delete's byte-reclaim obligation: everything the
 // drainer needs to find and remove the bytes after the row that described them
-// is gone. Denormalised on purpose — see migrations/069_pending_purges.sql.
+// is gone. Denormalised on purpose — see migrations/001_initial_schema.sql.
 type PurgeDebt struct {
 	PurgeID    uuid.UUID
 	TenantID   uuid.UUID
@@ -563,7 +563,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	//    storage_backends rows the old BucketCompletionMode + LookupBucket
 	//    pair each queried separately. Empty BucketName means "row exists but
 	//    bucket_name is NULL" — the storage adapter falls back to its
-	//    configured default; after migration 005 / startup backfill this case
+	//    configured default; after the schema baseline (001_initial_schema.sql) / startup backfill this case
 	//    is impossible. It runs before authz: the lookup is tenant-RLS-scoped,
 	//    so it only reveals the caller's own tenant's object-key existence
 	//    (which MapResolveErr already surfaced pre-scoping).

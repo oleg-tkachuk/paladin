@@ -3,7 +3,7 @@
 --
 -- Naming dichotomy: the SQL columns retain their `_usd` suffixes for
 -- historical reasons (avoiding sqlc regen + every-query churn). The
--- unit_code column added in migration 026 is the source of truth for
+-- unit_code column added in the schema baseline (001_initial_schema.sql) is the source of truth for
 -- currency interpretation; the Go domain types use Amount + UnitCode.
 
 -- name: BumpCapabilityRequestCount :one

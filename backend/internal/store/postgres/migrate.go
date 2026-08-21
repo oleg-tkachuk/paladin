@@ -106,7 +106,7 @@ func (d *DB) RunMigrationsWith(ctx context.Context, fs embed.FS, migrateCfg conf
 // RunMigrationsTo runs goose up only as far as the supplied version. A
 // version of 0 means "all the way". Used to interleave application-level
 // data work (seeds, backfills) between schema phases — e.g. populate
-// collections.bucket_name before migration 005 enforces NOT NULL on it.
+// collections.bucket_name before the schema baseline (001_initial_schema.sql) enforces NOT NULL on it.
 func (d *DB) RunMigrationsTo(ctx context.Context, fs embed.FS, target int64) error {
 	return d.runMigrationsTo(ctx, fs, target, nil)
 }

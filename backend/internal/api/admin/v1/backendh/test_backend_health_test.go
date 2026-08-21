@@ -6,7 +6,7 @@ import (
 )
 
 // TestBackend records the probe outcome as the backend's derived health
-// (migration 048): ok on success, error (+message) on failure. (fakeProber
+// (the schema baseline (001_initial_schema.sql)): ok on success, error (+message) on failure. (fakeProber
 // lives in probe_test.go.)
 
 func TestTestBackend_RecordsHealthOK(t *testing.T) {

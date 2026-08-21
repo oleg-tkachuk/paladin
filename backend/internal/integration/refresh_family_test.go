@@ -16,7 +16,7 @@ import (
 )
 
 // TestRefreshTokenFamilyRevoke verifies the ADR-0009 per-family reuse
-// revocation against real Postgres (migration 044): RevokeFamilyOf revokes
+// revocation against real Postgres (the schema baseline (001_initial_schema.sql)): RevokeFamilyOf revokes
 // only the compromised chain, leaving other families intact.
 func TestRefreshTokenFamilyRevoke(t *testing.T) {
 	ctx := context.Background()

@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Channel is the NOTIFY channel migration 050's trigger fires on.
+// Channel is the NOTIFY channel the trigger baseline (003_triggers.sql)'s trigger fires on.
 const Channel = "paladin_audit"
 
 // Entry is the compact audit projection carried in the NOTIFY payload —

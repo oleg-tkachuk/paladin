@@ -27,7 +27,7 @@
   | Mechanism | Where | Effect |
   |---|---|---|
   | Key prefix `<tenant_id>/…` | [`s3adapter/s3.go`](../../internal/storage/s3adapter/s3.go) `composeKey` | every object's S3 key is tenant-rooted |
-  | `buckets.owner_tenant_id` + trigger | [`migrations/006_v2_planes.sql`](../../migrations/006_v2_planes.sql) `enforce_object_key_bucket_tenancy` | NULL ⇒ any tenant may bind; set ⇒ only the owner may |
+  | `buckets.owner_tenant_id` + trigger | [`migrations/003_triggers.sql`](../../migrations/003_triggers.sql) `collections_enforce_bucket_tenancy` | NULL ⇒ any tenant may bind; set ⇒ only the owner may |
   | Per-object_key bucket binding | `object_keys.(backend_id, bucket_name)` FK | each namespace names its own physical bucket |
 
   Concrete state discovered while designing this (do not re-derive):

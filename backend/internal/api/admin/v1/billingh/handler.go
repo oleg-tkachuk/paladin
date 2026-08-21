@@ -1,5 +1,5 @@
 // Package billingh implements the admin BillingService — read-only
-// aggregation over the charges ledger (migration 027).
+// aggregation over the charges ledger (the schema baseline (001_initial_schema.sql)).
 //
 // The handler runs raw SQL against the *pgxpool.Pool because the
 // queries are aggregation-only, lightly parameterised, and the time

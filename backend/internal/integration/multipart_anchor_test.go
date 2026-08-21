@@ -13,7 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// TestMultipartSessionAnchorsBackend proves migration 053 + the session
+// TestMultipartSessionAnchorsBackend proves the schema baseline (001_initial_schema.sql) + the session
 // anchoring: InitiateSession persists the (backend_id, bucket_name) it was
 // given, and GetSession reads back exactly those — NOT the collection's
 // current binding. This is what keeps complete/abort/presign-part (and the

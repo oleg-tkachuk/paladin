@@ -29,7 +29,7 @@ RETURNING request_count
 //
 // Naming dichotomy: the SQL columns retain their `_usd` suffixes for
 // historical reasons (avoiding sqlc regen + every-query churn). The
-// unit_code column added in migration 026 is the source of truth for
+// unit_code column added in the schema baseline (001_initial_schema.sql) is the source of truth for
 // currency interpretation; the Go domain types use Amount + UnitCode.
 // Increments request_count by 1 and rejects when over the supplied cap.
 // max=0 means unlimited; we still write the row for spend tracking + UI.

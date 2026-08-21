@@ -277,7 +277,7 @@ func (r *BackendRepoV2) SetEnabled(ctx context.Context, backendID string, enable
 }
 
 // SetReadOnly flips the backend's drain (read-only) state under OCC
-// (migration 047). Same NotFound / VersionMismatch disambiguation as
+// (the schema baseline (001_initial_schema.sql)). Same NotFound / VersionMismatch disambiguation as
 // SetEnabled.
 func (r *BackendRepoV2) SetReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) error {
 	rows, err := r.q.SetStorageBackendReadOnly(ctx, readOnly, backendID, expectedVersion)
@@ -294,7 +294,7 @@ func (r *BackendRepoV2) SetReadOnly(ctx context.Context, backendID string, readO
 }
 
 // SetMaintenance flips the operator-set maintenance flag under OCC
-// (migration 049). Same NotFound / VersionMismatch disambiguation as
+// (the schema baseline (001_initial_schema.sql)). Same NotFound / VersionMismatch disambiguation as
 // SetEnabled / SetReadOnly.
 func (r *BackendRepoV2) SetMaintenance(ctx context.Context, backendID string, maintenance bool, expectedVersion int64) error {
 	rows, err := r.q.SetStorageBackendMaintenance(ctx, maintenance, backendID, expectedVersion)
@@ -310,7 +310,7 @@ func (r *BackendRepoV2) SetMaintenance(ctx context.Context, backendID string, ma
 	return nil
 }
 
-// SetHealth upserts the derived health state (migration 048). No OCC and no
+// SetHealth upserts the derived health state (the schema baseline (001_initial_schema.sql)). No OCC and no
 // resource_version churn — it writes the separate storage_backend_health
 // table. The FK is ON DELETE CASCADE, so a probe racing a backend delete
 // simply no-ops (or the row is cleaned up); a missing backend surfaces as an

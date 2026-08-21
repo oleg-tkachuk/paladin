@@ -605,7 +605,7 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 		resolvedUnit = capability.DefaultUnitCode
 	}
 	tenantID := cap.Subject.TenantID // zero ⇒ tenant-budget path skipped
-	// op + actor populate the charges ledger row (migration 027).
+	// op + actor populate the charges ledger row (the schema baseline (001_initial_schema.sql)).
 	// op is read from the per-request holder that AssertCapabilityOp
 	// writes into. If the handler hasn't called AssertCapabilityOp
 	// (legacy paths, JWT-only flows) op stays "" and the ledger row

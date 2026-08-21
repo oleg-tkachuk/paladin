@@ -57,7 +57,7 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 			// NULL and reject every row. Application code that
 			// genuinely needs cross-tenant access (admin RPCs over
 			// the limited set of un-RLS'd tables) runs queries
-			// against tables not covered by migration 023.
+			// against tables not covered by the schema baseline (001_initial_schema.sql).
 			if _, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', '', false)`); err != nil {
 				return false, err
 			}

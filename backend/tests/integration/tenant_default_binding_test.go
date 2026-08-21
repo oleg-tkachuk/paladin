@@ -1,7 +1,7 @@
 //go:build integration
 
 // Exercises the tenant default-binding store adapter (ADR-0010 Phase 3 /
-// migration 034) end-to-end against a real Postgres: set → get → the resolve
+// the schema baseline (001_initial_schema.sql)) end-to-end against a real Postgres: set → get → the resolve
 // lookup → bad-bucket FK → clear. Pure store/SQL behaviour, so it can only be
 // verified against the real schema.
 package integration

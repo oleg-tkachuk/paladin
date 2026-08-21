@@ -12,26 +12,29 @@
 // adapters shows the full chain.
 package schema
 
-// tenants table constraint names — see migrations 001 (PK + initial
-// columns), 009 (slug UNIQUE + format), 033 (display_name UNIQUE +
-// format + immutability trigger).
+// tenants table constraint names — see 001_initial_schema.sql for the
+// columns and CHECKs, 003_triggers.sql for the immutability trigger.
 const (
 	// TenantsPK — primary key on tenants.tenant_id (UUID).
 	TenantsPK = "tenants_pkey"
-	// TenantsSlugUnique — UNIQUE (slug). Phase 0 enforced.
-	TenantsSlugUnique = "tenants_slug_unique"
+	// TenantsSlugUnique — the partial unique index over live tenants.
+	// Soft-deleted rows keep their slug, so uniqueness is scoped to
+	// deleted_at IS NULL and the index carries that name, not a
+	// constraint name.
+	TenantsSlugUnique = "tenants_slug_live_key"
 	// TenantsSlugFormat — CHECK that slug matches kebab-case.
 	TenantsSlugFormat = "tenants_slug_format"
-	// TenantsDisplayNameUnique — UNIQUE (display_name). Migration 033.
-	TenantsDisplayNameUnique = "tenants_display_name_unique"
+	// TenantsDisplayNameUnique — partial unique index, same scoping as
+	// the slug one.
+	TenantsDisplayNameUnique = "tenants_display_name_live_key"
 	// TenantsDisplayNameFormat — CHECK on display_name length + trim.
 	TenantsDisplayNameFormat = "tenants_display_name_format"
 	// TenantsImmutableColumnsTrigger — BEFORE UPDATE trigger that
 	// blocks slug + tenant_id mutation outside the rename-RPC path.
-	TenantsImmutableColumnsTrigger = "tenants_immutable_columns"
+	TenantsImmutableColumnsTrigger = "tenants_block_immutable_columns"
 )
 
-// collections table constraint names — see migration 005 (FK to
+// collections table constraint names — see the schema baseline (001_initial_schema.sql) (FK to
 // buckets), 030 (multi-segment path CHECK).
 const (
 	// CollectionsPK — composite primary key (tenant_id, collection).
@@ -40,13 +43,13 @@ const (
 	CollectionsTenantIDFK = "collections_tenant_id_fkey"
 	// CollectionsBucketFK — composite FK to (buckets.backend_id,
 	// buckets.bucket_name).
-	CollectionsBucketFK = "collections_backend_id_fkey"
+	CollectionsBucketFK = "collections_bucket_id_fkey"
 	// CollectionsFormat — CHECK accepting multi-segment slash-separated
-	// kebab-case paths (post-migration 030).
-	CollectionsFormat = "collection_format"
+	// kebab-case paths (post-the schema baseline (001_initial_schema.sql)).
+	CollectionsFormat = "collections_name_format"
 )
 
-// tenant_default_bindings constraint names — see migration 034.
+// tenant_default_bindings constraint names — see the schema baseline (001_initial_schema.sql).
 const (
 	// TenantDefaultBindingsPK — PRIMARY KEY (tenant_id).
 	TenantDefaultBindingsPK = "tenant_default_bindings_pkey"
@@ -58,7 +61,7 @@ const (
 	// a composite FK after ALL its columns, so it's `…_backend_id_bucket_name_fkey`
 	// — not `…_backend_id_fkey`. The shorter name never matched, so the FK
 	// violation was surfacing raw instead of as ErrDefaultBindingBucketMissing.
-	TenantDefaultBindingsBucketFK = "tenant_default_bindings_backend_id_bucket_name_fkey"
+	TenantDefaultBindingsBucketFK = "tenant_default_bindings_bucket_id_fkey"
 )
 
 // buckets table constraint names — see migration 003.

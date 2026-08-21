@@ -2,7 +2,7 @@
 // console's /stats page.
 //
 // It is split in two because the underlying tables have two different
-// visibility rules (migration 023):
+// visibility rules (the schema baseline (001_initial_schema.sql)):
 //
 //   - ControlPlane covers `tenants`, `storage_backends`, `buckets`,
 //     `collections` and `users` — deliberately NOT RLS'd, precisely so
@@ -205,7 +205,7 @@ const maxTenantRows = 200
 // at typical ingest rates without crying wolf on a half-full tenant.
 const nearLimitRatio float64 = 0.9
 
-// RLSCensus is everything migration 023 puts behind row-level security:
+// RLSCensus is everything the RLS baseline (002_roles_and_rls.sql) puts behind row-level security:
 // objects, quotas, capability records, API tokens and event subscriptions.
 // All of it is computed on the worker pod's BYPASSRLS pool and shipped as
 // one JSON payload over its ops listener — one round-trip, not five.

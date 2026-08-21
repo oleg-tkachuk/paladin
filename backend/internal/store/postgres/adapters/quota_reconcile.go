@@ -25,7 +25,7 @@ import (
 // into an N+1 loop over every quota row.
 //
 // Pool contract: the caller MUST pass a BYPASSRLS pool. `quotas` and
-// `objects` are both RLS'd (migration 023), so on the RLS-scoped runtime
+// `objects` are both RLS'd (the RLS baseline (002_roles_and_rls.sql)), so on the RLS-scoped runtime
 // pool with no paladin.tenant_id GUC these statements match zero rows and the
 // reconciler silently does nothing — the same failure mode the background
 // jobs' pool split exists to prevent.

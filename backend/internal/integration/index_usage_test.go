@@ -47,7 +47,7 @@ func assertPlanAvoidsSeqScan(t *testing.T, plan, table, what string) {
 	}
 }
 
-// TestIndexUsage_ObjectsKeysetPagination covers migration 064. ListObjects is
+// TestIndexUsage_ObjectsKeysetPagination covers the schema baseline (001_initial_schema.sql). ListObjects is
 // the console's object browser: equality on (tenant_id, collection), a keyset
 // cursor on id, ordered by object_id.
 //
@@ -104,7 +104,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects on an empty Collection")
 }
 
-// TestIndexUsage_ObjectsHardDeletable covers migration 065. The hard-deleter
+// TestIndexUsage_ObjectsHardDeletable covers the schema baseline (001_initial_schema.sql). The hard-deleter
 // looks for a small set of soft-deleted rows inside a large live table — the
 // case a partial index is for. Before it, this was a full scan of `objects`.
 func TestIndexUsage_ObjectsHardDeletable(t *testing.T) {
@@ -130,7 +130,7 @@ func TestIndexUsage_ObjectsHardDeletable(t *testing.T) {
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListHardDeletable")
 }
 
-// TestIndexUsage_MultipartReaper covers migration 066 — an age predicate that
+// TestIndexUsage_MultipartReaper covers the schema baseline (001_initial_schema.sql) — an age predicate that
 // had no index at all on multipart_uploads.
 func TestIndexUsage_MultipartReaper(t *testing.T) {
 	ctx := context.Background()
@@ -160,7 +160,7 @@ func TestIndexUsage_MultipartReaper(t *testing.T) {
 	assertPlanAvoidsSeqScan(t, plan, "multipart_uploads", "ListStaleMultipartUploads")
 }
 
-// TestIndexUsage_OperationsKeysetPagination covers migration 067. The
+// TestIndexUsage_OperationsKeysetPagination covers the schema baseline (001_initial_schema.sql). The
 // pre-existing idx_operations_tenant_state cannot serve this ordering because
 // `state` sits between the equality column and the sort column.
 //
@@ -215,7 +215,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 	assertPlanAvoidsSeqScan(t, plan, "operations", "ListOperations for a quiet tenant")
 }
 
-// TestIndexUsage_OutboxDepthGauge covers migration 068. The gauge groups
+// TestIndexUsage_OutboxDepthGauge covers the schema baseline (001_initial_schema.sql). The gauge groups
 // pending deliveries by tenant; without tenant_id in a partial index the
 // grouping had to visit the heap for every pending row.
 func TestIndexUsage_OutboxDepthGauge(t *testing.T) {

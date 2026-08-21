@@ -113,7 +113,7 @@ type OutboxWriter interface {
 }
 
 // OutboxRow is the shape of a single row inserted by the producer and
-// consumed by the dispatcher pod. Mirrors the migration 028 columns
+// consumed by the dispatcher pod. Mirrors the event_deliveries columns
 // the producer is responsible for stamping.
 type OutboxRow struct {
 	ID             uuid.UUID

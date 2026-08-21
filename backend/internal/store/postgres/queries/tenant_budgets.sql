@@ -1,7 +1,7 @@
 -- Tenant aggregate budget queries.
 --
 -- Naming dichotomy: SQL columns retain `_usd` suffixes for historical
--- reasons; unit_code (migration 026) is the source of truth for the
+-- reasons; unit_code (the schema baseline (001_initial_schema.sql)) is the source of truth for the
 -- currency interpretation. Go domain types use Amount + UnitCode.
 
 -- name: SetTenantBudget :one

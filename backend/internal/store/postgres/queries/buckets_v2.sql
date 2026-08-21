@@ -64,7 +64,7 @@ WHERE id = (SELECT b.id FROM buckets b
 -- name: ListBucketsV2 :many
 -- owner_tenant_id is an optional filter (nullable arg → skipped).
 -- Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
--- (migration 006) makes the per-tenant filter cheap; the WHERE clause
+-- (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 -- below is plain equality so the planner uses the partial index.
 SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
        name, display_name, region, labels,

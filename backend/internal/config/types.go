@@ -186,7 +186,7 @@ type Datastores struct {
 type Postgres struct {
 	// DSN is the runtime connection string. The user portion of this DSN
 	// should resolve to a minimum-privilege role (`paladin_app` by convention,
-	// see migrations/011_app_role.sql). It must NOT carry DDL rights.
+	// see migrations/002_roles_and_rls.sql). It must NOT carry DDL rights.
 	DSN            string     `yaml:"dsn" json:"dsn"`
 	Password       string     `yaml:"password" json:"password"`
 	PasswordSecret *SecretRef `yaml:"password_secret" json:"password_secret"`
@@ -203,7 +203,7 @@ type Postgres struct {
 	// ReaperDSN is the connection the worker's cross-tenant background DML
 	// jobs (purgers, lifecycle reapers, dispatcher outbox) use. Its user
 	// should resolve to a dedicated least-privilege role (`paladin_reaper` by
-	// convention, migration 058): BYPASSRLS — so the jobs see every tenant's
+	// convention, the RLS baseline (002_roles_and_rls.sql)): BYPASSRLS — so the jobs see every tenant's
 	// rows with no per-request GUC — but DML-only, no DDL/ownership. When
 	// empty the worker falls back to MigrateDSN (dev parity). The one DDL
 	// background job (PartitionMaintainer) always runs on the migrate role,
@@ -360,7 +360,7 @@ type Security struct {
 	// installs the PrepareConn hook that stamps paladin.tenant_id GUC
 	// (cmd/server/common.go). Operator-visible knob would only
 	// surface a footgun (every "off" position breaks writes since
-	// paladin_app is NOBYPASSRLS by design). See migrations/023_rls.sql
+	// paladin_app is NOBYPASSRLS by design). See migrations/002_roles_and_rls.sql
 	// for the full role + policy matrix.
 }
 
@@ -485,7 +485,7 @@ type WorkerJobs struct {
 }
 
 // PurgeDrain reclaims bytes owed by permanent deletes whose synchronous
-// storage delete failed (pending_purges, migration 069).
+// storage delete failed (pending_purges, the schema baseline (001_initial_schema.sql)).
 //
 // Effectively mandatory wherever permanent delete is reachable: the objects
 // row is gone by the time the debt exists, so this loop is the only remaining
@@ -947,7 +947,7 @@ type MCPHTTP struct {
 }
 
 // Capability configures the agent-runtime authorisation primitive. See
-// internal/capability for the package and migrations/016_capabilities.sql
+// internal/capability for the package and migrations/001_initial_schema.sql
 // for the schema.
 //
 // In dev (`enabled: true`, no `signing_key_path` set) the boot path
@@ -1024,7 +1024,7 @@ type Capability struct {
 // APIToken configures the hashed-bearer M2M token subsystem. Distinct
 // from Capability (agent-runtime, JWT, short-lived) and from Auth
 // (user authn via OIDC / HS256 bootstrap). See internal/auth/api_token
-// for the package and migrations/017_api_tokens.sql for the schema.
+// for the package and migrations/001_initial_schema.sql for the schema.
 //
 // API tokens are long-lived service-to-service credentials following
 // the hashed-bearer pattern (Hatchet / GitHub PATs / Stripe / GitLab

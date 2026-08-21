@@ -1,7 +1,7 @@
 //go:build integration
 
 // RLS behaviour against a real Postgres. Validates the policies in
-// migrations/023_rls.sql + the BeforeAcquire / AfterRelease hooks
+// migrations/002_roles_and_rls.sql + the BeforeAcquire / AfterRelease hooks
 // in internal/store/postgres/rls.go.
 package integration
 
@@ -56,7 +56,7 @@ func TestRLS_ObjectsCrossTenantSelectReturnsZero(t *testing.T) {
 
 // TestRLS_ObjectsForceRLSAppliesToOwner — even an owner connection
 // must obey RLS. paladin_app is NOT the table owner (paladin_migrate is),
-// but FORCE RLS in migration 023 closes the door for the owner too.
+// but FORCE RLS in the RLS baseline (002_roles_and_rls.sql) closes the door for the owner too.
 // We can't directly test the owner path under the harness because
 // the pool runs as paladin_migrate (BYPASSRLS) — but the next test
 // covers the runtime invariant we actually care about.

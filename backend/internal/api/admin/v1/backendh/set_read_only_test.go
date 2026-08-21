@@ -6,7 +6,7 @@ import (
 	"connectrpc.com/connect"
 )
 
-// SetBackendReadOnly (drain, migration 047) mirrors SetBackendEnabled's
+// SetBackendReadOnly (drain, the schema baseline (001_initial_schema.sql)) mirrors SetBackendEnabled's
 // platform-admin + OCC + idempotency contract, but with NO default-backend
 // guard: draining the configured default is a legitimate migration step.
 

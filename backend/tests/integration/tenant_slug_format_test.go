@@ -1,6 +1,6 @@
 //go:build integration
 
-// Pins tenants_slug_format after migration 046 added the explicit 3-char floor
+// Pins tenants_slug_format after the schema baseline (001_initial_schema.sql) added the explicit 3-char floor
 // so the DB CHECK matches ValidateTenantSlug (the migration-009 regex alone
 // accepted a 1-char slug the API rejects). Pure DB-constraint behaviour, so it
 // can only be verified against the real schema.

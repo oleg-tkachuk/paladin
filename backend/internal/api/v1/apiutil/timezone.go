@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// localeRE mirrors the loose CHECK in migrations/010_user_settings.sql.
+// localeRE mirrors the loose CHECK in migrations/001_initial_schema.sql.
 // We allow both BCP-47 hyphenated form (`uk-UA`, `pt-BR`) and the older
 // underscore form (`uk_UA`) that some clients still emit.
 var localeRE = regexp.MustCompile(`^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$`)

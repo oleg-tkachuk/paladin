@@ -215,7 +215,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 	backendID := "e2e-" + f.nonce
 	bucketName := "paladin-e2e-" + f.nonce
 	tenantSlug := "e2e-" + f.nonce
-	// Multi-segment per migration 030. Every segment must satisfy the
+	// Multi-segment per the schema baseline (001_initial_schema.sql). Every segment must satisfy the
 	// per-segment kebab-case CHECK (`^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$`)
 	// — minimum 3 chars when the optional middle group is present, so
 	// segments like "q1" (2 chars) get rejected. Use ≥3-char segments.
@@ -466,7 +466,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 			t.Errorf("Collection: got %q want %q",
 				got.Msg.GetCollection(), collectionName)
 		}
-		// Multi-segment path round-trip — migration 030 guarantees the
+		// Multi-segment path round-trip — the schema baseline (001_initial_schema.sql) guarantees the
 		// constraint accepts `a/b/c` shapes; the connectshim parser
 		// (admin/collection_server.go) anchors on `/collections/` so
 		// slashes inside the body don't get mistaken for resource-name

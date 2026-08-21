@@ -96,7 +96,7 @@ var skipFields = map[string]map[string]string{
 		// RPC), never on create/update — read-only on the StorageBackend.
 		"PreviousCredentialsSecretRef":  "set by RotateCredentials; not client-settable",
 		"PreviousCredentialsValidUntil": "set by RotateCredentials; not client-settable",
-		// Health is derived from TestBackend probes (migration 048), never
+		// Health is derived from TestBackend probes (the schema baseline (001_initial_schema.sql)), never
 		// client-set — output-only on the StorageBackend resource.
 		"HealthStatus":    "derived from TestBackend probe; not client-settable",
 		"HealthMessage":   "derived from TestBackend probe; not client-settable",

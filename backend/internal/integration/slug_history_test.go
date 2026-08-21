@@ -14,7 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// TestRenameRecordsSlugHistory proves migration 039 + the transactional
+// TestRenameRecordsSlugHistory proves the schema baseline (001_initial_schema.sql) + the transactional
 // capture in TenantRepo.Rename: a real slug rotation writes exactly one
 // tenant_slug_history row mapping old→new (in the same tx as the slug bump),
 // while the idempotent same-slug rename writes none. This is the durable

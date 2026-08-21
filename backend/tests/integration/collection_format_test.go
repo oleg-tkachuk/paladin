@@ -1,6 +1,6 @@
 //go:build integration
 
-// Pins the collection_format CHECK after migration 045 fixed the
+// Pins the collection_format CHECK after the schema baseline (001_initial_schema.sql) fixed the
 // exactly-2-char-segment rejection. Pure DB-constraint behaviour, so it can
 // only be verified against the real schema.
 package integration

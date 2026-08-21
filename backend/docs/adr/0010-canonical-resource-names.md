@@ -1,5 +1,12 @@
 # ADR-0010: Canonical resource names for ObjectKey-rooted resources (A + B + C)
 
+> **Naming note (2026-08-20):** the resource this ADR calls an *ObjectKey*
+> was renamed to **Collection** by
+> [ADR-0013](0013-single-identity-model-and-naming.md); `objectKeys/{ok}`
+> in the resource names below is now `collections/{collection}`. The
+> decision recorded here is unchanged — only the noun moved.
+
+
 - **Status:** Accepted 2026-07-01 — ratifies the previously *proposed* design
   in [docs/canonical-resource-names.md](../canonical-resource-names.md)
   (Status/Owner had been "proposed / TBD"). This ADR is the authoritative
@@ -153,4 +160,4 @@ deploy-window coordination is required for Phase 1.
   still requires the backend+bucket threading, so it is neither small nor safe
   in isolation.
 - **Federated resource naming / external registry.** Out of scope; Paladin owns
-  its namespace (consistent with [ADR-0006](0006-deferred-roadmap.md)).
+  its namespace (consistent with [ADR-0006](../../../docs/adr/0006-deferred-roadmap.md)).

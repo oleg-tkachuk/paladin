@@ -268,21 +268,21 @@ type StorageBackend struct {
 	// render "rotated — old key valid for another N".
 	PreviousCredentialsSecretRef  string                 `protobuf:"bytes,17,opt,name=previous_credentials_secret_ref,json=previousCredentialsSecretRef,proto3" json:"previous_credentials_secret_ref,omitempty"`
 	PreviousCredentialsValidUntil *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=previous_credentials_valid_until,json=previousCredentialsValidUntil,proto3" json:"previous_credentials_valid_until,omitempty"`
-	// Read-only "drain" state (migration 047). Only meaningful when enabled=true:
+	// Read-only "drain" state (the schema baseline (001_initial_schema.sql)). Only meaningful when enabled=true:
 	// reads / presign-GET / HEAD / list still resolve, but mutations
 	// (PUT / POST / multipart-init / copy-dest / update / delete / version
 	// writes) are refused (FailedPrecondition) so an operator can migrate data
 	// off before disabling. Operator-managed via SetBackendReadOnly; NOT
 	// mirrored from static config.
 	ReadOnly bool `protobuf:"varint,19,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
-	// Derived, advisory health from the last TestBackend probe (migration 048).
+	// Derived, advisory health from the last TestBackend probe (the schema baseline (001_initial_schema.sql)).
 	// "unknown" | "ok" | "error". Surfaced in the UI; NOT a gate. health_message
 	// carries the probe error when status is "error"; health_checked_at is the
 	// instant of the last probe (unset until first probed).
 	HealthStatus    string                 `protobuf:"bytes,20,opt,name=health_status,json=healthStatus,proto3" json:"health_status,omitempty"`
 	HealthMessage   string                 `protobuf:"bytes,21,opt,name=health_message,json=healthMessage,proto3" json:"health_message,omitempty"`
 	HealthCheckedAt *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=health_checked_at,json=healthCheckedAt,proto3" json:"health_checked_at,omitempty"`
-	// Operator-set, advisory maintenance flag (migration 049): "under
+	// Operator-set, advisory maintenance flag (the schema baseline (001_initial_schema.sql)): "under
 	// maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
 	// and operator-set (unlike the derived health_*). Managed via
 	// SetBackendMaintenance; NOT mirrored from static config.
@@ -290,7 +290,7 @@ type StorageBackend struct {
 	// Vendor/implementation behind `kind` — a free-form slug ("garage" |
 	// "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …). `kind` is
 	// too coarse (every self-hosted S3 is S3_COMPATIBLE); `provider` records
-	// which one, for UI display. Mirrored from static config (migration 055);
+	// which one, for UI display. Mirrored from static config (the schema baseline (001_initial_schema.sql));
 	// empty when unset (the UI falls back to an endpoint heuristic).
 	Provider      string `protobuf:"bytes,24,opt,name=provider,proto3" json:"provider,omitempty"`
 	unknownFields protoimpl.UnknownFields

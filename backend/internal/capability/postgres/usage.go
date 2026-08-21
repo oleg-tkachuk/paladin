@@ -16,7 +16,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// UsageStore implements capability.UsageStore[pgx.Tx] against migration 022's
+// UsageStore implements capability.UsageStore[pgx.Tx] against the schema baseline (001_initial_schema.sql)'s
 // capability_usage table. Single-row UPSERT per call → concurrency-safe
 // without explicit locking.
 //

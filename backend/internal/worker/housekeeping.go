@@ -59,7 +59,7 @@ func (r *RefreshTokenPurger) log() *zap.Logger {
 // Terminal states are SUCCEEDED / FAILED / CANCELLED — the row's `done_at`
 // is set when the state machine transitions in. Active rows (PENDING /
 // RUNNING) are never touched: they don't have a `done_at` to compare and
-// the partial index `idx_operations_terminal_done_at` (migration 008)
+// the partial index `idx_operations_terminal_done_at` (the schema baseline (001_initial_schema.sql))
 // excludes them anyway, so the reaper never reads them.
 //
 // Disabled when TTL == 0. Default TTL chosen at the call site

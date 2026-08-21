@@ -24,7 +24,7 @@ type stateBackendRepo struct {
 	setReadOnlyHit    int
 	maintenance       bool
 	setMaintenanceHit int
-	// Health probe recording (migration 048).
+	// Health probe recording (the schema baseline (001_initial_schema.sql)).
 	healthStatus  string
 	healthMessage string
 	setHealthHit  int

@@ -12,9 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// TestRLSTenantIsolation proves the migration 023/024 row-level-security
-// policies actually enforce tenant isolation at the DB layer — the
-// defence-in-depth guarantee the app-level Cedar checks sit on top of.
+// TestRLSTenantIsolation proves the row-level-security policies actually
+// enforce tenant isolation at the DB layer. RLS is the PRIMARY isolation
+// control here, not defence in depth: the data plane runs without
+// BYPASSRLS, so a missing policy is a missing wall — and because RLS
+// filters rather than errors, the failure is silent. Cedar decides
+// authorisation above it; neither substitutes for the other.
 //
 // The testcontainer connects as the bootstrap superuser (which bypasses RLS
 // unconditionally), so every case runs inside a tx that `SET LOCAL ROLE`s to

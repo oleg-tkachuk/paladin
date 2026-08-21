@@ -281,7 +281,7 @@ WHERE storage_backends.name = $2
        OR resource_version = $3::bigint)
 `
 
-// Flip the operator-set maintenance flag (migration 049). Same OCC +
+// Flip the operator-set maintenance flag (the schema baseline (001_initial_schema.sql)). Same OCC +
 // operator-managed contract as the enable/read-only setters; advisory only.
 func (q *Queries) SetStorageBackendMaintenance(ctx context.Context, maintenance bool, name string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageBackendMaintenance, maintenance, name, expectedVersion)
@@ -364,7 +364,7 @@ SET status     = EXCLUDED.status,
 `
 
 // Keyed by backend NAME: callers are health probes that know the config key.
-// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
+// Record the outcome of a TestBackend probe (the schema baseline (001_initial_schema.sql)). DERIVED, advisory
 // state in its own 1:1 table — writing it does NOT touch storage_backends, so
 // it never fires the bump_rv trigger (no resource_version / updated_at churn)
 // and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.

@@ -6,7 +6,7 @@ import (
 	"connectrpc.com/connect"
 )
 
-// SetBackendMaintenance (migration 049) mirrors SetBackendReadOnly's
+// SetBackendMaintenance (the schema baseline (001_initial_schema.sql)) mirrors SetBackendReadOnly's
 // platform-admin + OCC + idempotency contract; advisory, and the default
 // backend may be flagged.
 

@@ -219,7 +219,7 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 // TenantDefaultBinding returns the tenant's default (backend, bucket) route,
 // with found=false (nil error) when none is set. Implements
 // resolve.DefaultBindingLookup — completes the bare (B) collection shape to
-// canonical (ADR-0010 Phase 3 / migration 034).
+// canonical (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
 func (r *TenantRepo) TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (string, string, bool, error) {
 	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
 	if err != nil {
@@ -487,7 +487,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 // audit_log entry's after_json.
 //
 // Uniqueness on the new slug is enforced by the tenants_slug_unique
-// constraint (migration 009) — caught here as ErrSlugConflict.
+// constraint (the schema baseline (001_initial_schema.sql)) — caught here as ErrSlugConflict.
 //
 // Implementation uses a single tx so a partial rewrite (tenant
 // updated, collections not) cannot leak.
@@ -627,7 +627,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	}
 
 	// Record the rotation so a later 404 on the old slug can resolve to the
-	// new one (see migration 039). Same tx as the slug bump: the trail can
+	// new one (see the schema baseline (001_initial_schema.sql)). Same tx as the slug bump: the trail can
 	// never disagree with the live slug. The same-slug no-op returned above
 	// before reaching here, so old_slug != new_slug always holds.
 	if _, err := tx.Exec(ctx,

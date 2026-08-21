@@ -46,7 +46,7 @@ type SharedDeps struct {
 	// DDL — PartitionMaintainer (CREATE/ATTACH/DROP PARTITION), which requires
 	// the migrate role's table ownership that ReaperPool deliberately lacks.
 	// Nil outside the worker; nil → BuildBackgroundJobs falls back to ReaperPool
-	// then Pool. See migration 058 / serve_worker for the privilege split.
+	// then Pool. See the RLS baseline (002_roles_and_rls.sql) / serve_worker for the privilege split.
 	PartitionPool *pgxpool.Pool
 	Repos         wire.Repos
 	Storage       wire.Storage

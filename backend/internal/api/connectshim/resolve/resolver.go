@@ -42,7 +42,7 @@ type CanonicalRef struct {
 
 // DefaultBindingLookup resolves a tenant's default (backend, bucket) route,
 // used to complete the bare (B) collection shape to canonical. Implemented by
-// the tenant store adapter (ADR-0010 Phase 3 / migration 034).
+// the tenant store adapter (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
 type DefaultBindingLookup interface {
 	TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (backendID, bucketName string, found bool, err error)
 }

@@ -266,7 +266,7 @@ type ListBucketsV2Row struct {
 
 // owner_tenant_id is an optional filter (nullable arg → skipped).
 // Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
-// (migration 006) makes the per-tenant filter cheap; the WHERE clause
+// (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 // below is plain equality so the planner uses the partial index.
 func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,

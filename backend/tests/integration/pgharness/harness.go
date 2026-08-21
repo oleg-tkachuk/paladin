@@ -101,7 +101,7 @@ func Setup(t *testing.T) *Harness {
 		_ = pgC.Terminate(context.Background())
 	})
 
-	// Tier the migrate role up to BYPASSRLS so migration 023 can
+	// Tier the migrate role up to BYPASSRLS so the RLS baseline (002_roles_and_rls.sql) can
 	// re-set the same property idempotently. testcontainers/postgres
 	// creates the configured user without it.
 	migrateDSN, err := pgC.ConnectionString(ctx, "sslmode=disable")

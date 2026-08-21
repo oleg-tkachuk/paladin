@@ -34,7 +34,7 @@ func TestBackendSetEnabled_RepoRoundTrip(t *testing.T) {
 
 	seedBackend(t, h.PoolMigrate, "be-roundtrip")
 
-	// Fresh backends default to enabled (migration 037 DEFAULT true).
+	// Fresh backends default to enabled (the schema baseline (001_initial_schema.sql) DEFAULT true).
 	got, err := repo.Get(ctx, "be-roundtrip")
 	if err != nil {
 		t.Fatalf("get: %v", err)
@@ -147,7 +147,7 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 }
 
 // TestBackendHealth_RecordAndSurface proves the derived-health round-trip
-// (migration 048): Get/List start at "unknown" (LEFT JOIN COALESCE), SetHealth
+// (the schema baseline (001_initial_schema.sql)): Get/List start at "unknown" (LEFT JOIN COALESCE), SetHealth
 // upserts into the separate storage_backend_health table, and the outcome
 // surfaces on the backend read — WITHOUT bumping resource_version (health is
 // not an operator config change).
@@ -194,7 +194,7 @@ func TestBackendHealth_RecordAndSurface(t *testing.T) {
 }
 
 // TestBackendMaintenance_AdvisoryNotAGate proves the operator-set maintenance
-// flag (migration 049) round-trips via the repo AND is purely advisory: a
+// flag (the schema baseline (001_initial_schema.sql)) round-trips via the repo AND is purely advisory: a
 // backend flagged for maintenance still resolves reads AND writes (it is a UI
 // label, not a resolver gate — unlike enabled/read_only).
 func TestBackendMaintenance_AdvisoryNotAGate(t *testing.T) {
@@ -228,7 +228,7 @@ func TestBackendMaintenance_AdvisoryNotAGate(t *testing.T) {
 }
 
 // TestBackendReadOnly_ResolverGate proves the drain (read-only) split by
-// operation class (migration 047): on an enabled+read_only backend, the
+// operation class (the schema baseline (001_initial_schema.sql)): on an enabled+read_only backend, the
 // resolver refuses MUTATIONS (write=true) with object.ErrBackendReadOnly but
 // still serves READS (write=false). Clearing read_only restores writes.
 func TestBackendReadOnly_ResolverGate(t *testing.T) {

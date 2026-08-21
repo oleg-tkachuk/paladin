@@ -55,7 +55,7 @@ backend/
 
 - `paladin/data/v1` — object, tag, presign, multipart, batch, operation,
   storage bootstrap.
-- `paladin/admin/v1` — tenant, bucket, object key, quota, capability, API
+- `paladin/admin/v1` — tenant, bucket, collection, quota, capability, API
   token, policy, audit, billing, tenant budget, event subscription,
   backend, MCP inspection, CEL, operation, system.
 - `paladin/iam/v1` — auth, system.
@@ -73,9 +73,12 @@ the RLS pool carries the tenant context, and the reaper/BYPASSRLS pool is
 deliberately separate so a background job cannot inherit a request's
 tenant scope.
 
-65 migrations, embedded in the binary and applied by `paladin migrate`.
-`migrations/CONVENTIONS.md` documents the numbering and the rules for
-partitioned tables.
+Three migrations — schema, roles + RLS, triggers — embedded in the binary
+and applied by `paladin migrate`. They are a baseline, not a history: the
+down migration on `001` drops the schema, so the supported path from an
+older database is to reprovision, not to migrate. `migrations/CONVENTIONS.md`
+documents the rules; [`docs/database.md`](docs/database.md) walks the schema
+itself.
 
 Queries are sqlc-generated where they can be; the store layer's
 hand-written SQL mapping is the largest single source of subtle bugs in

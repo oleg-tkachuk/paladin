@@ -39,7 +39,7 @@ const (
 )
 
 // seedRecentAudit inserts rows whose `at` lands within the current month so
-// they route into a real partition (migration 041 created the current month),
+// they route into a real partition (the schema baseline (001_initial_schema.sql) created the current month),
 // not the DEFAULT catch-all — keeping the EXPLAIN representative of hot data.
 func seedRecentAudit(t *testing.T, ctx context.Context, pool interface {
 	CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error)

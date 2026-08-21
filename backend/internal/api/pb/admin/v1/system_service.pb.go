@@ -369,7 +369,7 @@ func (*GetPlatformStatsRequest) Descriptor() ([]byte, []int) {
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
 // data source: the inventory fields come from the admin pod's own pool
 // (tenants / storage_backends / buckets / collections / users are
-// deliberately NOT RLS'd — migration 023 — precisely so platform-admin
+// deliberately NOT RLS'd — the RLS baseline (002_roles_and_rls.sql) — precisely so platform-admin
 // reads span tenants). Everything under `rls` covers tables that ARE
 // row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
 // endpoint and degrades to rls.available=false.

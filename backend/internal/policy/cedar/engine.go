@@ -128,7 +128,7 @@ const (
 
 	// Billing-scoped actions. Resource is the Tenant entity. Used by
 	// BillingService (admin plane) over the charges ledger from
-	// migration 027.
+	// the schema baseline (001_initial_schema.sql).
 	ActionReadBilling = "ReadBilling"
 )
 

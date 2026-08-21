@@ -174,7 +174,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 }
 
 // TestCharge_LedgerRowAppearsAfterCharge: a successful Charge() must
-// also write a row into the charges ledger (migration 027) carrying
+// also write a row into the charges ledger (the schema baseline (001_initial_schema.sql)) carrying
 // the same amount + unit + tenant + op + actor. The ledger backs the
 // BillingService time-series surface.
 func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {

@@ -106,7 +106,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 
 	// Disambiguate multi-segment collections. The source adapters split the
 	// "<collection>/<key>" tail at the first path segment, which is wrong when
-	// the collection itself is multi-segment (migration 030). Recombine the
+	// the collection itself is multi-segment (the schema baseline (001_initial_schema.sql)). Recombine the
 	// tail and re-derive the real collection by longest-prefix-match so a nested one
 	// (`invoices/2026/q1`) wins over a shorter sibling (`invoices`).
 	collection, key := ev.SubjectFields.Collection, ev.SubjectFields.Key

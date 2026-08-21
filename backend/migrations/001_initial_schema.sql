@@ -70,6 +70,8 @@ CREATE TABLE tenants (
 -- in the row (for restore) but must not block a new tenant from taking it.
 CREATE UNIQUE INDEX tenants_slug_live_key
     ON tenants (slug) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX tenants_display_name_live_key
+    ON tenants (display_name) WHERE deleted_at IS NULL;
 
 -- Append-only: bigint identity, not uuid (ADR-0013).
 CREATE TABLE tenant_slug_history (

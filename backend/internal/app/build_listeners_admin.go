@@ -241,7 +241,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			admin.NewTenantBudgetServer(usageStore), adminOpts,
 		))
 		// BillingService — read-only aggregation over the charges
-		// ledger (migration 027). Only mounted with a real handler
+		// ledger (the schema baseline (001_initial_schema.sql)). Only mounted with a real handler
 		// when the capability subsystem is wired (pool + usage).
 		var billingHandler *billingh.Handler
 		if deps.Capability != nil {
@@ -270,7 +270,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// Connect). Auth: the same admin-audience bearer the console's RPCs
 	// use, verified inline by the handler; the stream is scoped to the
 	// JWT's tenant claim like ListAuditLog. One LISTEN connection per pod
-	// (migration 050's trigger NOTIFYs on every audit_log insert). The hub
+	// (the trigger baseline (003_triggers.sql)'s trigger NOTIFYs on every audit_log insert). The hub
 	// runs on a dedicated context registered with deps.StopWatchers — NOT the
 	// passed `ctx` (context.Background() under fx) — so the held LISTEN
 	// connection is released at shutdown before db.Close(); otherwise

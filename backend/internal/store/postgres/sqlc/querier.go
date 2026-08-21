@@ -22,7 +22,7 @@ type Querier interface {
 	//
 	// Naming dichotomy: the SQL columns retain their `_usd` suffixes for
 	// historical reasons (avoiding sqlc regen + every-query churn). The
-	// unit_code column added in migration 026 is the source of truth for
+	// unit_code column added in the schema baseline (001_initial_schema.sql) is the source of truth for
 	// currency interpretation; the Go domain types use Amount + UnitCode.
 	// Increments request_count by 1 and rejects when over the supplied cap.
 	// max=0 means unlimited; we still write the row for spend tracking + UI.
@@ -219,7 +219,7 @@ type Querier interface {
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
 	// owner_tenant_id is an optional filter (nullable arg → skipped).
 	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
-	// (migration 006) makes the per-tenant filter cheap; the WHERE clause
+	// (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 	// below is plain equality so the planner uses the partial index.
 	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
@@ -302,7 +302,7 @@ type Querier interface {
 	// AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
 	// the reaper aborts the S3-side session (which otherwise accrues part-storage
 	// charges forever) on the backend the parts actually live on, in one
-	// round-trip per row. Prefer the session-anchored location (migration 053);
+	// round-trip per row. Prefer the session-anchored location (the schema baseline (001_initial_schema.sql));
 	// bucket_id is NOT NULL on multipart_uploads now, so the legacy COALESCE
 	// fallback to the collection's binding is gone with the rows that needed it.
 	//
@@ -407,7 +407,7 @@ type Querier interface {
 	// statement for minutes.
 	PurgeIngestedEventsBefore(ctx context.Context, ingestedAt pgtype.Timestamptz) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0. Uses
-	// idx_operations_terminal_done_at (added in migration 008) so the planner
+	// idx_operations_terminal_done_at (added in the schema baseline (001_initial_schema.sql)) so the planner
 	// never scans the live PENDING/RUNNING tail.
 	PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error)
 	// The ON CONFLICT target MUST match a real unique constraint. Migration 042
@@ -444,12 +444,12 @@ type Querier interface {
 	ResolveCollectionID(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
 	// Longest registered collection name that is a prefix of the candidate (the
 	// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
-	// collections (migration 030) make the naive "the OK is the first path
+	// collections (the schema baseline (001_initial_schema.sql)) make the naive "the OK is the first path
 	// segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
 	// collection `invoices` + path `2026/q1/report.pdf`, OR collection
 	// `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
 	// more specific one wins). name is constrained to `[a-z0-9-]` path segments
-	// (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
+	// (the schema baseline (001_initial_schema.sql)) — no LIKE metacharacters — so `|| '/%'` is safe.
 	ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, candidate string) (string, error)
 	// Undeletes a soft-deleted object iff no live row exists with the same
 	// (tenant, collection_id, path). Caller is expected to verify uniqueness first;
@@ -481,7 +481,7 @@ type Querier interface {
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
 	// config-mirror must never touch this operator-managed column.
 	SetStorageBackendEnabled(ctx context.Context, enabled bool, name string, expectedVersion int64) (int64, error)
-	// Flip the operator-set maintenance flag (migration 049). Same OCC +
+	// Flip the operator-set maintenance flag (the schema baseline (001_initial_schema.sql)). Same OCC +
 	// operator-managed contract as the enable/read-only setters; advisory only.
 	SetStorageBackendMaintenance(ctx context.Context, maintenance bool, name string, expectedVersion int64) (int64, error)
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
@@ -493,7 +493,7 @@ type Querier interface {
 	// Tenant aggregate budget queries.
 	//
 	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical
-	// reasons; unit_code (migration 026) is the source of truth for the
+	// reasons; unit_code (the schema baseline (001_initial_schema.sql)) is the source of truth for the
 	// currency interpretation. Go domain types use Amount + UnitCode.
 	// Upserts the cap and rolls the period. Operators call this from
 	// admin tooling on every billing cycle; spent_usd is reset to 0
@@ -556,7 +556,7 @@ type Querier interface {
 	// preserves the highest seen committed_at.
 	UpsertReplicationWatermark(ctx context.Context, name string, name_2 string, watermark pgtype.Timestamptz) error
 	// Keyed by backend NAME: callers are health probes that know the config key.
-	// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
+	// Record the outcome of a TestBackend probe (the schema baseline (001_initial_schema.sql)). DERIVED, advisory
 	// state in its own 1:1 table — writing it does NOT touch storage_backends, so
 	// it never fires the bump_rv trigger (no resource_version / updated_at churn)
 	// and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.

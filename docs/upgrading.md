@@ -92,6 +92,61 @@ matching `paladin.object.uploaded` goes quiet rather than erroring, in the
 same way the environment variables do. Update filters as part of the
 cutover, not afterwards.
 
+### The schema is one baseline, not a history
+
+The 65 incremental migrations were replaced by three ordered files —
+`001_initial_schema.sql`, `002_roles_and_rls.sql`, `003_triggers.sql` —
+split by kind rather than by date. `001`'s down migration drops the
+schema outright.
+
+This reinforces the reprovision-only path rather than adding to it:
+Goose has no record of the old versions, so pointing the new baseline at
+a v3 database is not a supported operation and will not be made one.
+Fresh installs are unaffected — the baseline builds the same schema the
+65 files built, minus the dead ends they accumulated on the way.
+
+### Resource rename: ObjectKey became Collection
+
+The logical namespace an object lives in was called an *ObjectKey*, which
+collided with "object key" in the S3 sense — the path within a bucket.
+It is now a **Collection**, and the rename runs through the schema, the
+protos, the console URLs and the Cedar action names.
+
+| Contract | before | after |
+| --- | --- | --- |
+| Table | `object_keys` | `collections` |
+| Proto service | `ObjectKeyService` | `CollectionService` |
+| Cedar actions | `ManageObjectKey`, `BindObjectKeyToBucket` | `ManageCollection`, `BindCollectionToBucket` |
+| Resource name | `tenants/{t}/objectKeys/{ok}` | `tenants/{t}/collections/{c}` |
+| Console route | `/tenants/{id}/object-keys/…` | `/tenants/{id}/collections/…` |
+| Storage path segment | `<tenant>/<object_key>/<key>` | `<tenant>/<collection>/<key>` |
+
+**A Cedar policy that names the old actions does not error — it stops
+matching.** Update policies as part of the cutover. The same applies to
+anything parsing the storage path layout.
+
+### Bucket references travel as one field
+
+A reference to another resource is its name, not its parts (AIP-122).
+Requests and messages that carried a `(backend_id, bucket_name)` pair now
+carry a single `bucket` holding
+`storageBackends/{backend_id}/buckets/{bucket_id}` — `TenantDefaultBinding`,
+`SetTenantDefaultBinding`, `StorageMigrationStatus`, and `Collection.bucket`
+among them. Clients that set the halves separately will fail validation
+rather than silently binding to the wrong place.
+
+### Attribution is mandatory where it was optional
+
+Rows that record *who did something* now require it: `multipart_uploads`
+carries the initiating principal, `capability_records.created_by` and
+`api_tokens.created_by` are `NOT NULL`, and `capability.Store.Insert`
+takes an `issuedBy Principal` argument. Previously these were nullable or
+defaulted to the empty string, which made "who owns this upload" a
+question the data could not answer.
+
+Custom `capability.Store` implementations must be updated for the widened
+signature — it is a compile-time break, not a runtime one.
+
 ### Deployments in a cluster
 
 The Helm release name changed, so the old `paladin*` /

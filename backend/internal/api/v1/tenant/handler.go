@@ -104,7 +104,7 @@ type UpdateTenantArgs struct {
 }
 
 // DefaultBinding is a tenant's default (backend, bucket) route for the bare
-// collection name shape (ADR-0010 Phase 3 / migration 034).
+// collection name shape (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
 type DefaultBinding struct {
 	TenantID uuid.UUID
 	// BucketID is the stored reference; BackendName and BucketName are carried
@@ -953,7 +953,7 @@ var ErrTenantIDConflict = errors.New("tenant_id already in use")
 
 // ErrDisplayNameConflict — Repository.Create or Update returns this
 // when the requested display_name collides with another tenant's.
-// display_name is UNIQUE since migration 033.
+// display_name is UNIQUE since the schema baseline (001_initial_schema.sql).
 var ErrDisplayNameConflict = errors.New("display_name already in use")
 
 // ErrAlreadyDeleted — Repository.SoftDelete returns this when the

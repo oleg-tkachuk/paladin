@@ -1,5 +1,5 @@
 // Package postgres is the api_token.Store implementation backed by
-// migration 017. SQL is hand-written rather than sqlc-generated because
+// the schema baseline (001_initial_schema.sql). SQL is hand-written rather than sqlc-generated because
 // the surface is small (six methods) and the array-typed columns
 // (`scopes`, `audience`) flow more cleanly through pgx than through
 // sqlc's typed-mapping path.
@@ -18,7 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
 )
 
-// Store implements api_token.Store against api_tokens (migration 017).
+// Store implements api_token.Store against api_tokens (the schema baseline (001_initial_schema.sql)).
 type Store struct {
 	pool *pgxpool.Pool
 }
@@ -34,7 +34,7 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // Insert implements api_token.Store. The Token's Plaintext field is
 // intentionally NOT persisted — only prefix (display) + token_hmac (the
 // HMAC-SHA256 lookup digest). The legacy argon2 token_hash column was dropped
-// in migration 062.
+// in the schema baseline (001_initial_schema.sql).
 //
 // The INSERT runs in a transaction that SET LOCALs paladin.tenant_id to the
 // TOKEN's tenant, not the caller's.

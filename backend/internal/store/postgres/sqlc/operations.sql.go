@@ -139,7 +139,7 @@ WHERE ctid IN (
 `
 
 // Bounded batch (10k). Worker loops until result is 0. Uses
-// idx_operations_terminal_done_at (added in migration 008) so the planner
+// idx_operations_terminal_done_at (added in the schema baseline (001_initial_schema.sql)) so the planner
 // never scans the live PENDING/RUNNING tail.
 func (q *Queries) PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeTerminalOperations, doneAt)

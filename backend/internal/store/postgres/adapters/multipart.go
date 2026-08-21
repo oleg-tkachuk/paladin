@@ -220,8 +220,8 @@ func (r *MultipartRepo) ListParts(ctx context.Context, uploadID string, pageSize
 
 // LookupBucket reads the physical S3 bucket bound to a Collection via
 // idx_collections_bucket_routing. bucket_name is NOT NULL after
-// migration 005 so a successful lookup always returns a non-empty value.
-// `write` splits the read-only-drain gate (migration 047). Every multipart
+// the schema baseline (001_initial_schema.sql) so a successful lookup always returns a non-empty value.
+// `write` splits the read-only-drain gate (the schema baseline (001_initial_schema.sql)). Every multipart
 // path (init / complete / abort / presign-part) is a mutation, so callers
 // pass write=true; the disabled (feature 002) gate applies to all.
 func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {

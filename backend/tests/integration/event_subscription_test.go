@@ -94,7 +94,7 @@ func TestEventSubscriptionRepoV2_Create_StampsGeneratedID(t *testing.T) {
 }
 
 // TestEventSubscriptionRepoV2_Create_AcceptsNATSSinkKind guards
-// migration 029 — the CHECK constraint widening that lets sink_kind
+// the schema baseline (001_initial_schema.sql) — the CHECK constraint widening that lets sink_kind
 // take 'nats'. Before 029, an INSERT with sink_kind='nats' failed
 // SQLSTATE 23514. The migration is part of `migrations.FS`, applied
 // automatically by pgharness.Setup, so this test will fail at INSERT
@@ -125,7 +125,7 @@ func TestEventSubscriptionRepoV2_Create_AcceptsNATSSinkKind(t *testing.T) {
 
 	if err := repo.Create(ctx, &sub); err != nil {
 		t.Fatalf("Create with sink_kind='nats': %v "+
-			"(migration 029 likely failed to apply — check the "+
+			"(the schema baseline (001_initial_schema.sql) likely failed to apply — check the "+
 			"goose annotations on 029_event_subscriptions_sink_kind_nats.sql)",
 			err)
 	}

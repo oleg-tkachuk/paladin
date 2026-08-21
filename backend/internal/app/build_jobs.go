@@ -24,7 +24,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// Background jobs are cross-tenant and run with no request principal, so they
 	// must NOT read/write through the RLS-scoped runtime pool (paladin_app): with no
 	// paladin.tenant_id GUC set, RLS on objects / multipart_uploads / event_deliveries
-	// / api_tokens (migration 023) returns zero rows and every reaper silently
+	// / api_tokens (the schema baseline (001_initial_schema.sql)) returns zero rows and every reaper silently
 	// no-ops. Bind them to the BYPASSRLS reaper pool (serve_worker opens it from
 	// ReaperDSN / MigrateDSN). deps.ReaperPool is nil only in the un-wired
 	// fallback → degrade to deps.Pool (RLS-gated, as before; serve_worker warns).

@@ -1,7 +1,7 @@
 //go:build integration
 
 // Exercises worker.PartitionMaintainer against the real partitioned tables
-// (migrations 041/042): create-ahead provisions upcoming partitions, and
+// (the schema baseline (001_initial_schema.sql)): create-ahead provisions upcoming partitions, and
 // drop-old removes a partition whose whole range is past retention. The pure
 // period/selection logic is unit-tested in the worker package; this proves
 // the DDL the maintainer emits actually runs on a partitioned parent.

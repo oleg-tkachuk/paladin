@@ -51,7 +51,7 @@ type Settings struct {
 }
 
 // Defaults applied when a user has no row yet. Mirrors the column defaults
-// in migrations/010_user_settings.sql so server-side fallback matches what
+// in migrations/001_initial_schema.sql so server-side fallback matches what
 // the database would have produced on first write.
 func DefaultsFor(userID, tenantID uuid.UUID) Settings {
 	return Settings{

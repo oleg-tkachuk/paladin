@@ -333,7 +333,7 @@ func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, c
 }
 
 // LookupBucket returns the physical S3 bucket bound to a tenant's
-// Collection. Hits idx_collections_bucket_routing. After migration 005
+// Collection. Hits idx_collections_bucket_routing. After the schema baseline (001_initial_schema.sql)
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
 func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
