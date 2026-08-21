@@ -140,7 +140,6 @@ func (f *fakeRepo) Update(ctx context.Context, a UpdateTenantArgs) (Tenant, erro
 }
 
 func (f *fakeRepo) SoftDelete(context.Context, uuid.UUID, int64) error { return nil }
-func (f *fakeRepo) HardDelete(context.Context, uuid.UUID, int64) error { return nil }
 func (f *fakeRepo) Restore(context.Context, uuid.UUID) (Tenant, error) { return Tenant{}, nil }
 
 func (f *fakeRepo) List(ctx context.Context, a ListTenantsArgs) ([]Tenant, string, error) {

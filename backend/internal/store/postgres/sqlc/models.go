@@ -481,16 +481,6 @@ type IngestedEvent struct {
 	IngestedAt pgtype.Timestamptz `json:"ingested_at"`
 }
 
-type MultipartPart struct {
-	ID         pgtype.UUID        `json:"id"`
-	UploadID   pgtype.UUID        `json:"upload_id"`
-	PartNumber int32              `json:"part_number"`
-	SizeBytes  int64              `json:"size_bytes"`
-	Etag       string             `json:"etag"`
-	Checksum   *string            `json:"checksum"`
-	UploadedAt pgtype.Timestamptz `json:"uploaded_at"`
-}
-
 type MultipartUpload struct {
 	ID                 pgtype.UUID        `json:"id"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`

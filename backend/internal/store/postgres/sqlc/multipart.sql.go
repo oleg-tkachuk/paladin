@@ -53,35 +53,6 @@ func (q *Queries) DeleteMultipartUpload(ctx context.Context, id pgtype.UUID) err
 	return err
 }
 
-const getMultipartUpload = `-- name: GetMultipartUpload :one
-SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.bucket_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.initiated_by_subject, multipart_uploads.initiated_by_kind, multipart_uploads.created_at, multipart_uploads.updated_at
-FROM multipart_uploads
-WHERE id = $1
-`
-
-type GetMultipartUploadRow struct {
-	MultipartUpload MultipartUpload `json:"multipart_upload"`
-}
-
-func (q *Queries) GetMultipartUpload(ctx context.Context, id pgtype.UUID) (GetMultipartUploadRow, error) {
-	row := q.db.QueryRow(ctx, getMultipartUpload, id)
-	var i GetMultipartUploadRow
-	err := row.Scan(
-		&i.MultipartUpload.ID,
-		&i.MultipartUpload.TenantID,
-		&i.MultipartUpload.ObjectID,
-		&i.MultipartUpload.BucketID,
-		&i.MultipartUpload.StorageUploadID,
-		&i.MultipartUpload.PartSizeBytes,
-		&i.MultipartUpload.TotalParts,
-		&i.MultipartUpload.InitiatedBySubject,
-		&i.MultipartUpload.InitiatedByKind,
-		&i.MultipartUpload.CreatedAt,
-		&i.MultipartUpload.UpdatedAt,
-	)
-	return i, err
-}
-
 const listStaleMultipartUploads = `-- name: ListStaleMultipartUploads :many
 SELECT m.id, m.storage_upload_id,
        sb.name AS backend_name,

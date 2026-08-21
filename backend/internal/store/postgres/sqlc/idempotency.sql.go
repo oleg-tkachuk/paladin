@@ -11,29 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createStorageBackend = `-- name: CreateStorageBackend :exec
-INSERT INTO storage_backends (id, kind, endpoint, region, events_enabled, events_target)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (id) DO UPDATE
-SET kind = EXCLUDED.kind,
-    endpoint = EXCLUDED.endpoint,
-    region = EXCLUDED.region,
-    events_enabled = EXCLUDED.events_enabled,
-    events_target = EXCLUDED.events_target
-`
-
-func (q *Queries) CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string) error {
-	_, err := q.db.Exec(ctx, createStorageBackend,
-		iD,
-		kind,
-		endpoint,
-		region,
-		eventsEnabled,
-		eventsTarget,
-	)
-	return err
-}
-
 const getIdempotencyKey = `-- name: GetIdempotencyKey :one
 
 SELECT tenant_id, method, key, response, response_sha, created_at, expires_at
@@ -69,37 +46,6 @@ func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, m
 		&i.ResponseSha,
 		&i.CreatedAt,
 		&i.ExpiresAt,
-	)
-	return i, err
-}
-
-const getStorageBackend = `-- name: GetStorageBackend :one
-SELECT id, kind, endpoint, region, events_enabled, events_target, created_at
-FROM storage_backends
-WHERE id = $1
-`
-
-type GetStorageBackendRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	Kind          string             `json:"kind"`
-	Endpoint      string             `json:"endpoint"`
-	Region        string             `json:"region"`
-	EventsEnabled bool               `json:"events_enabled"`
-	EventsTarget  string             `json:"events_target"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) GetStorageBackend(ctx context.Context, id pgtype.UUID) (GetStorageBackendRow, error) {
-	row := q.db.QueryRow(ctx, getStorageBackend, id)
-	var i GetStorageBackendRow
-	err := row.Scan(
-		&i.ID,
-		&i.Kind,
-		&i.Endpoint,
-		&i.Region,
-		&i.EventsEnabled,
-		&i.EventsTarget,
-		&i.CreatedAt,
 	)
 	return i, err
 }

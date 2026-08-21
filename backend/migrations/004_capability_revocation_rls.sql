@@ -9,7 +9,7 @@
 --
 -- The table carries no tenant_id of its own; its id IS a capability_records id.
 -- So isolation comes from the capability the revocation points at, the same
--- shape capability_usage and multipart_parts already use.
+-- shape capability_usage already uses.
 --
 -- The cascade path was already safe by accident (its recursive CTE reads
 -- capability_records, which RLS filters). The single-revoke path was not.

@@ -537,9 +537,9 @@ func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID 
 //
 // The control plane cannot answer this from its own tables: clients PUT parts
 // straight to the object store through presigned URLs, so no part upload ever
-// passes through Paladin. A multipart_parts journal could only ever record
-// what we handed out a URL for, not what the client managed to store — which
-// is precisely the difference a resuming client needs to know.
+// passes through Paladin. A local journal could only ever record what we
+// handed out a URL for, not what the client managed to store — which is
+// precisely the difference a resuming client needs to know.
 //
 // Pagination is the S3 contract's: part_number_marker is the last part number
 // seen, and the caller pages while IsTruncated holds.

@@ -139,9 +139,6 @@ type Repository interface {
 	// SoftDelete sets deleted_at = now() on an active row. Returns
 	// ErrAlreadyDeleted when the row is already trashed.
 	SoftDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
-	// HardDelete physically removes the row regardless of deleted_at
-	// state. Used by Delete(force=true) and by Purge.
-	HardDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
 	// Restore clears deleted_at on a trashed row. Returns
 	// ErrNotTrashed when the row is currently active.
 	Restore(ctx context.Context, tenantID uuid.UUID) (Tenant, error)

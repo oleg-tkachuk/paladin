@@ -54,7 +54,6 @@ type Querier interface {
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState) (int64, error)
-	CountPendingPurges(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; Collection rows FK to the
 	// bucket_id foreign key.
@@ -79,7 +78,6 @@ type Querier interface {
 	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
-	CreateStorageBackend(ctx context.Context, iD pgtype.UUID, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string) error
 	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
 	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, name_4 string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
@@ -134,7 +132,6 @@ type Querier interface {
 	// and each inserted a row (they differ only in expires_at — see Put). The
 	// freshest live row wins; the loser ages out with its partition.
 	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (GetIdempotencyKeyRow, error)
-	GetMultipartUpload(ctx context.Context, id pgtype.UUID) (GetMultipartUploadRow, error)
 	GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error)
 	// Lock state for one object, so the delete handler can return a clear
 	// "locked" error instead of a bare version-mismatch when the SQL guard
@@ -153,7 +150,6 @@ type Querier interface {
 	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	GetReplicationWatermark(ctx context.Context, name string, name_2 string) (pgtype.Timestamptz, error)
-	GetStorageBackend(ctx context.Context, id pgtype.UUID) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
 	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error)
 	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
@@ -386,7 +382,6 @@ type Querier interface {
 	// retried on the next tick after the configured backoff.
 	MarkBucketProvisionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error)
 	MarkBucketProvisionReady(ctx context.Context, name string, name_2 string) (int64, error)
-	MarkObjectFailed(ctx context.Context, id pgtype.UUID) (int64, error)
 	MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// All collections of a tenant, for the transactional rebind.
@@ -395,11 +390,6 @@ type Querier interface {
 	// worker restart resumes mid-prefix instead of rescanning from the top.
 	// size_bytes feeds the physical (HEAD size) verify after copy.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
-	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
-	// out-of-order S3 events + reconciler + RPC calls from regressing state.
-	// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
-	// strictly greater than the stored sequencer (or either is NULL).
-	PromoteObject(ctx context.Context, iD pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error)
 	// Deletes audit_log rows older than the cutoff in batches of 10k. The
 	// worker calls this in a loop until it returns 0 — keeps each statement
 	// bounded so a long-overdue first-run doesn't lock the table for minutes
@@ -533,8 +523,6 @@ type Querier interface {
 	// nonexistent bucket would be told it succeeded.
 	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) (int64, error)
 	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
-	// expected_version=0 disables the OCC guard (force).
-	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Sets deleted_at on an active row. expected_version=0 means
 	// "no OCC guard" (legacy / scripted path); a non-zero value enforces
 	// the match. Updates resource_version + updated_at so audit reflects

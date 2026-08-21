@@ -54,10 +54,6 @@ func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (str
 func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (object.BucketMeta, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) error { panic("unused") }
-func (*copyFakeRepo) HardDeleteWithBypass(context.Context, uuid.UUID, uuid.UUID, int64) error {
-	panic("unused")
-}
 func (*copyFakeRepo) UpdateMetadataTx(context.Context, pgx.Tx, object.UpdateMetadataArgs) (object.Object, error) {
 	panic("unused")
 }

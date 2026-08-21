@@ -13,11 +13,6 @@ INSERT INTO multipart_uploads (
             WHERE sb.name = $7 AND b.name = $8),
           $9, $10);
 
--- name: GetMultipartUpload :one
-SELECT sqlc.embed(multipart_uploads)
-FROM multipart_uploads
-WHERE id = $1;
-
 -- name: DeleteMultipartUpload :exec
 DELETE FROM multipart_uploads
 WHERE id = $1;

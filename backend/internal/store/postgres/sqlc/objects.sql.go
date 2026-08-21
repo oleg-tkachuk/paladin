@@ -512,55 +512,6 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 	return i, err
 }
 
-const markObjectFailed = `-- name: MarkObjectFailed :execrows
-UPDATE objects
-SET state         = 'FAILED',
-    terminated_at = now()
-WHERE id = $1
-  AND state = 'PENDING'
-`
-
-func (q *Queries) MarkObjectFailed(ctx context.Context, id pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markObjectFailed, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const promoteObject = `-- name: PromoteObject :execrows
-UPDATE objects
-SET state      = 'AVAILABLE',
-    size_bytes = $2,
-    etag       = $3,
-    checksum   = $4,
-    sequencer  = $5,
-    committed_at = COALESCE(committed_at, now())
-WHERE id = $1
-  AND state IN ('PENDING', 'AVAILABLE')
-  AND ($5::text IS NULL
-       OR sequencer IS NULL
-       OR $5::text > sequencer)
-`
-
-// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
-// out-of-order S3 events + reconciler + RPC calls from regressing state.
-// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
-// strictly greater than the stored sequencer (or either is NULL).
-func (q *Queries) PromoteObject(ctx context.Context, iD pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error) {
-	result, err := q.db.Exec(ctx, promoteObject,
-		iD,
-		sizeBytes,
-		etag,
-		checksum,
-		sequencer,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const resolveCollectionID = `-- name: ResolveCollectionID :one
 SELECT id FROM collections WHERE tenant_id = $1 AND name = $2
 `
@@ -648,25 +599,6 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 		return nil, err
 	}
 	return items, nil
-}
-
-const softDeleteObject = `-- name: SoftDeleteObject :execrows
-UPDATE objects
-SET state         = 'DELETED',
-    terminated_at = now()
-WHERE tenant_id = $1 AND id = $2
-  AND state IN ('AVAILABLE', 'PENDING')
-  AND ($3::bigint = 0
-       OR resource_version = $3::bigint)
-`
-
-// expected_version=0 disables the OCC guard (force).
-func (q *Queries) SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteObject, tenantID, iD, expectedVersion)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const updateObjectMetadata = `-- name: UpdateObjectMetadata :execrows

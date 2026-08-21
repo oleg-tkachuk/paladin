@@ -42,18 +42,3 @@ WHERE ctid IN (
     ORDER BY ik.expires_at
     LIMIT 10000
 );
-
--- name: CreateStorageBackend :exec
-INSERT INTO storage_backends (id, kind, endpoint, region, events_enabled, events_target)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (id) DO UPDATE
-SET kind = EXCLUDED.kind,
-    endpoint = EXCLUDED.endpoint,
-    region = EXCLUDED.region,
-    events_enabled = EXCLUDED.events_enabled,
-    events_target = EXCLUDED.events_target;
-
--- name: GetStorageBackend :one
-SELECT id, kind, endpoint, region, events_enabled, events_target, created_at
-FROM storage_backends
-WHERE id = $1;

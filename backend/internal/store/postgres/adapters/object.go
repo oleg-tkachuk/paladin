@@ -479,12 +479,6 @@ func (r *ObjectRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, t
 	return tx.Commit(ctx)
 }
 
-func (r *ObjectRepo) HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
-	return r.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		return r.HardDeleteWithBypassTx(ctx, tx, tenantID, objectID, expectedVersion)
-	})
-}
-
 // HardDeleteWithBypassTx performs the bypass delete on the caller's tx,
 // setting the governance-bypass GUC on that same tx (so the object_versions
 // trigger permits removal of GOVERNANCE-locked rows). Used by the permanent-
@@ -497,12 +491,6 @@ func (r *ObjectRepo) HardDeleteWithBypassTx(ctx context.Context, tx pgx.Tx, tena
 		return fmt.Errorf("hard delete (bypass): %w", err)
 	}
 	return nil
-}
-
-// HardDelete removes the row. expectedVersion=0 disables the OCC guard.
-// ErrVersionMismatch when no rows match (either gone or version drift).
-func (r *ObjectRepo) HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
-	return hardDeleteObject(ctx, r.q, tenantID, objectID, expectedVersion)
 }
 
 // HardDeleteTx runs HardDelete on the caller's tx so the permanent-delete

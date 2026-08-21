@@ -11,17 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countPendingPurges = `-- name: CountPendingPurges :one
-SELECT count(*) FROM pending_purges
-`
-
-func (q *Queries) CountPendingPurges(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countPendingPurges)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const deletePendingPurge = `-- name: DeletePendingPurge :execrows
 DELETE FROM pending_purges WHERE id = $1
 `

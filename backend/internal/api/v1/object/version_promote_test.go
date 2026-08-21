@@ -54,12 +54,6 @@ func (*fakeObjectRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (Object
 func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
 	panic("not used")
 }
-func (*fakeObjectRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) error {
-	panic("not used")
-}
-func (*fakeObjectRepo) HardDeleteWithBypass(context.Context, uuid.UUID, uuid.UUID, int64) error {
-	panic("not used")
-}
 func (*fakeObjectRepo) UpdateMetadataTx(context.Context, pgx.Tx, UpdateMetadataArgs) (Object, error) {
 	panic("not used")
 }

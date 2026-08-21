@@ -167,22 +167,10 @@ CALL paladin_apply_tenant_isolation('tenant_storage_migrations');
 
 DROP PROCEDURE paladin_apply_tenant_isolation(regclass);
 
--- multipart_parts has no tenant_id of its own — it is strictly subordinate to
--- an upload. Isolating it through the parent keeps the denormalisation rule
+-- capability_usage has no tenant_id of its own — it is strictly subordinate to
+-- a capability. Isolating it through the parent keeps the denormalisation rule
 -- honest: we duplicate tenant_id where RLS needs it on the hot path, not
 -- everywhere by reflex.
-ALTER TABLE multipart_parts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE multipart_parts FORCE ROW LEVEL SECURITY;
-CREATE POLICY tenant_isolation ON multipart_parts FOR ALL
-    USING (EXISTS (SELECT 1 FROM multipart_uploads u
-                   WHERE u.id = multipart_parts.upload_id
-                     AND u.tenant_id = paladin_session_tenant_id()))
-    WITH CHECK (EXISTS (SELECT 1 FROM multipart_uploads u
-                        WHERE u.id = multipart_parts.upload_id
-                          AND u.tenant_id = paladin_session_tenant_id()));
-
--- capability_usage is keyed by capability, and the capability carries the
--- tenant. Same reasoning as multipart_parts.
 ALTER TABLE capability_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE capability_usage FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON capability_usage FOR ALL

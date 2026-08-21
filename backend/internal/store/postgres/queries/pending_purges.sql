@@ -41,6 +41,3 @@ UPDATE pending_purges
        last_error      = $2,
        next_attempt_at = now() + $3::interval
  WHERE id = $1;
-
--- name: CountPendingPurges :one
-SELECT count(*) FROM pending_purges;

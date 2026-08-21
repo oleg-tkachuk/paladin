@@ -1,8 +1,9 @@
 // Package multipart implements the MultipartService business logic.
 //
 // Lifecycle: Initiate → (PresignPart × N) → Complete|Abort. Session state
-// lives in multipart_uploads and multipart_parts; the backing S3-level
-// multipart upload is owned by the chosen storage backend.
+// lives in multipart_uploads; the parts themselves are known only to the
+// storage backend, because clients PUT them there directly through presigned
+// URLs and no part upload passes through Paladin.
 package multipart
 
 import (
@@ -35,7 +36,7 @@ type Storage interface {
 	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
-// Part is a record of an uploaded multipart part as stored in multipart_parts.
+// Part is one part the storage backend reports as uploaded.
 type Part struct {
 	PartNumber int32
 	SizeBytes  int64

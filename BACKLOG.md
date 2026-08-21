@@ -229,21 +229,31 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### `multipart_parts` table is now unreferenced
+### Object Lock is wired everywhere except the part that sets it
 
-- **Status:** Deferred (needs an operator decision, not a code change).
-- **Reason:** The table backed a journal of uploaded parts that nothing could
-  ever write. Parts are PUT straight to the object store through presigned
-  URLs, so the control plane never observes one — a journal could only record
-  what was authorised, never what arrived, and those differ in exactly the case
-  the journal existed to serve. `ListParts` now asks the backend (S3 ListParts),
-  which is the only party that knows. `RecordPart`, both sqlc queries and the
-  adapter methods are gone; the table itself is not.
-- **Definition of Done:** a migration dropping `multipart_parts`, once someone
-  has confirmed no deployment has rows worth keeping. It is referenced by the
-  RLS policy added in `002_roles_and_rls.sql`, so the drop takes that with it.
-- **Blockers:** DROP TABLE is irreversible and the table exists in the running
-  cluster. Cheap to leave in place; not safe to remove from a coding session.
+- **Status:** Blocked (needs a product decision: finish it or remove it).
+- **Reason:** ADR-0013's object-lock machinery is all present — the
+  `object_locks` table, the `object_locks_enforce_retention` DELETE trigger
+  that refuses early release, `ObjectLockState` on the data-plane `Object`
+  message, the LEFT JOINs that read a lock into every Get/List response, and
+  the admin `SetObjectLock` RPC that stores a bucket-level default mode and
+  retention. What is missing is the one path that puts a version under lock:
+  `UpsertObjectLock` is the only write to the table and nothing calls it.
+  So `object_locks` is always empty, every response reports no lock, the trigger
+  never fires, and the bucket default is stored and never applied. The feature
+  reads as implemented from the proto, the schema and the console.
+  Found by enumerating unreferenced sqlc queries; kept rather than deleted,
+  because deleting the only writer would close the door on the half that
+  exists.
+- **Definition of Done:** either
+  - a data-plane RPC that sets retention / legal hold on a version, calling
+    `UpsertObjectLock`, plus applying the bucket default at promote time so
+    `SetObjectLock` means something; with an integration test that a
+    COMPLIANCE-locked version cannot be deleted and a GOVERNANCE-locked one
+    can be only through the bypass path; or
+  - removal of the table, trigger, proto field and admin RPC together, so the
+    API stops advertising a control it does not have.
+- **Blockers:** which of the two — this is a product call, not a cleanup.
 
 ### Tables carrying `tenant_id` with no RLS policy
 

@@ -260,17 +260,6 @@ type Repository interface {
 	// ObjectLock returns the object row's lock state so the delete path
 	// can refuse (and report) a locked object before touching storage.
 	ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (ObjectLock, error)
-	// HardDelete removes the row outright; caller is responsible for
-	// having already deleted the storage-side object. expectedVersion=0
-	// skips OCC. Returns ErrVersionMismatch if no rows affected. The SQL
-	// also refuses locked rows (legal hold / active COMPLIANCE; active
-	// GOVERNANCE unless the bypass variant set the session GUC).
-	HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
-	// HardDeleteWithBypass performs the same delete as HardDelete but inside
-	// a transaction that sets `SET LOCAL paladin.governance_bypass = true`, which
-	// the object_versions trigger reads to permit removal of GOVERNANCE-locked
-	// rows. COMPLIANCE-locked rows are still rejected by the trigger.
-	HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
 	// HardDeleteTx / HardDeleteWithBypassTx run the permanent delete on the
 	// caller's tx so the handler can enqueue paladin.object.deleted atomically
 	// with the row removal (ADR-0003). The bypass variant sets the governance

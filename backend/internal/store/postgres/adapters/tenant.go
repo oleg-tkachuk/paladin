@@ -370,12 +370,6 @@ func (r *TenantRepo) softDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 	return nil
 }
 
-// HardDelete physically removes the row. expected_version=0 means
-// "no OCC guard" (purge path); a non-zero value enforces match.
-func (r *TenantRepo) HardDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
-	return r.hardDeleteWith(ctx, r.q, tenantID, expectedVersion)
-}
-
 // HardDeleteTx runs HardDelete on the caller's tx (ADR-0003).
 func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error {
 	return r.hardDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion)

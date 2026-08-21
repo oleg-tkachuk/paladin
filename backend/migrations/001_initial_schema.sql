@@ -483,17 +483,6 @@ CREATE TABLE multipart_uploads (
 CREATE INDEX multipart_uploads_object_idx ON multipart_uploads (object_id);
 CREATE INDEX idx_multipart_uploads_created ON multipart_uploads (created_at);
 
-CREATE TABLE multipart_parts (
-    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    upload_id   uuid NOT NULL REFERENCES multipart_uploads(id) ON DELETE CASCADE,
-    part_number integer NOT NULL,
-    size_bytes  bigint NOT NULL,
-    etag        text NOT NULL,
-    checksum    text,
-    uploaded_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (upload_id, part_number)
-);
-
 -- Work queue for bytes whose row is already gone.
 CREATE TABLE pending_purges (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),

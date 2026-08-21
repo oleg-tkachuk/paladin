@@ -17,8 +17,8 @@ import (
 // part-storage charges indefinitely — the reconciler MarkFailed's the
 // PENDING object but never tells S3 to drop the parts. This worker
 // closes that leak: it lists sessions past a TTL, calls AbortMultipart
-// on the backend, then deletes the DB session row (which cascades the
-// multipart_parts rows). The PENDING object is left to the reconciler.
+// on the backend, then deletes the DB session row. The PENDING object is
+// left to the reconciler.
 type MultipartReaper struct {
 	Q         *sqlc.Queries
 	Storage   MultipartAborter
