@@ -415,7 +415,9 @@ func bucketExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, backend
 	t.Helper()
 	var exists bool
 	if err := pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM buckets WHERE backend_id = $1 AND bucket_name = $2)`,
+		`SELECT EXISTS (SELECT 1 FROM buckets b
+		                  JOIN storage_backends sb ON sb.id = b.backend_id
+		                 WHERE sb.name = $1 AND b.name = $2)`,
 		backendID, bucketName).Scan(&exists); err != nil {
 		t.Fatalf("bucket exists: %v", err)
 	}

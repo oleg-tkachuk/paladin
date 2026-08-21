@@ -148,7 +148,10 @@ func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 	// Raising the bucket cap unblocks it — proving the rejection tracked
 	// that row rather than some unrelated condition.
 	mustExec(t, ctx, pool,
-		`UPDATE quotas SET max_object_count = 10 WHERE backend_id = $1 AND bucket_name = $2`,
+		`UPDATE quotas SET max_object_count = 10
+		 WHERE bucket_id = (SELECT b.id FROM buckets b
+		                      JOIN storage_backends sb ON sb.id = b.backend_id
+		                     WHERE sb.name = $1 AND b.name = $2)`,
 		backendID, bucketName)
 	if err := check.CheckUpload(callerCtx, uploadProc, &uploadRequest{parent: parent, sizeHint: 1}); err != nil {
 		t.Errorf("want admit after raising the bucket cap, got %v", err)

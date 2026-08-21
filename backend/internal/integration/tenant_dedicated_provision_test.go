@@ -49,7 +49,10 @@ func TestCreateDedicatedTenantProvisionsBucket(t *testing.T) {
 		gotOwner             uuid.UUID
 	)
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, provision_state, owner_tenant_id FROM buckets WHERE bucket_name = $1`,
+		`SELECT sb.name, b.provision_state, b.owner_tenant_id
+		   FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE b.name = $1`,
 		wantBucket,
 	).Scan(&gotBackend, &gotState, &gotOwner); err != nil {
 		t.Fatalf("read provisioned bucket %q: %v", wantBucket, err)
@@ -67,7 +70,11 @@ func TestCreateDedicatedTenantProvisionsBucket(t *testing.T) {
 	// The tenant's default binding points at its dedicated bucket.
 	var bindBackend, bindBucket string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM tenant_default_bindings WHERE tenant_id = $1`,
+		`SELECT sb.name, b.name
+		   FROM tenant_default_bindings tdb
+		   JOIN buckets b           ON b.id = tdb.bucket_id
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE tdb.tenant_id = $1`,
 		tid,
 	).Scan(&bindBackend, &bindBucket); err != nil {
 		t.Fatalf("read default binding: %v", err)

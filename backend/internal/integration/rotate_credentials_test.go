@@ -27,7 +27,7 @@ func TestRotateCredentialsGraceWindow(t *testing.T) {
 		if err := pool.QueryRow(ctx,
 			`SELECT credentials_secret_ref, previous_credentials_secret_ref,
 			        previous_credentials_valid_until
-			   FROM storage_backends WHERE id = 'primary'`,
+			   FROM storage_backends WHERE name = 'primary'`,
 		).Scan(&active, &prev, &validUntil); err != nil {
 			t.Fatalf("read backend: %v", err)
 		}

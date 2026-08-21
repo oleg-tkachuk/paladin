@@ -130,8 +130,12 @@ func TestIndexUsage_MultipartReaper(t *testing.T) {
 	for i, oid := range ids {
 		mustExec(t, ctx, pool,
 			`INSERT INTO multipart_uploads
-			   (upload_id, id, storage_upload_id, part_size_bytes, total_parts, created_at)
-			 VALUES ($1, $2, 's3-upload', 5242880, 4, now() - make_interval(hours => $3))`,
+			   (id, tenant_id, object_id, storage_upload_id, part_size_bytes,
+			    total_parts, bucket_id, initiated_by_subject, initiated_by_kind, created_at)
+			 SELECT $1, o.tenant_id, $2, 's3-upload', 5242880, 4, c.bucket_id,
+			        'test', 'user', now() - make_interval(hours => $3)
+			   FROM objects o JOIN collections c ON c.id = o.collection_id
+			  WHERE o.id = $2`,
 			fmt.Sprintf("up-%d", i), oid, i%200)
 	}
 	analyze(t, ctx, pool, "multipart_uploads")
@@ -180,7 +184,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 
 	plan := explain(t, ctx, pool, `
 		SELECT id FROM operations
-		 WHERE tenant_id = $1 AND operation_id > $2
+		 WHERE tenant_id = $1 AND id > $2
 		 ORDER BY id
 		 LIMIT 50`, f.tenantID, uuid.Nil)
 
@@ -193,7 +197,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 
 	plan = explain(t, ctx, pool, `
 		SELECT id FROM operations
-		 WHERE tenant_id = $1 AND operation_id > $2
+		 WHERE tenant_id = $1 AND id > $2
 		 ORDER BY id
 		 LIMIT 50`, quiet, uuid.Nil)
 
@@ -261,7 +265,9 @@ func seedObjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixtur
 	seedObjectsUnder(t, ctx, pool, f, f.collection, n, state)
 
 	rows, err := pool.Query(ctx,
-		`SELECT id FROM objects WHERE tenant_id = $1 AND collection = $2`,
+		`SELECT o.id FROM objects o
+		   JOIN collections c ON c.id = o.collection_id
+		  WHERE o.tenant_id = $1 AND c.name = $2`,
 		f.tenantID, f.collection)
 	if err != nil {
 		t.Fatalf("read seeded ids: %v", err)
