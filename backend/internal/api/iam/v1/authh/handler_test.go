@@ -57,6 +57,13 @@ func (f *fakeUsers) GetBySubject(context.Context, uuid.UUID, string) (authstore.
 func (f *fakeUsers) FindBySubjectGlobal(context.Context, string) ([]authstore.User, error) {
 	return f.global, f.err
 }
+
+// ListMembershipsBySubject: for a fake, memberships and subject
+// matches are the same set — the production cap that separates
+// them is exactly what this does not model.
+func (f *fakeUsers) ListMembershipsBySubject(ctx context.Context, subject string) ([]authstore.User, error) {
+	return f.FindBySubjectGlobal(ctx, subject)
+}
 func (f *fakeUsers) Create(context.Context, authstore.User) (authstore.User, error) {
 	return authstore.User{}, nil
 }

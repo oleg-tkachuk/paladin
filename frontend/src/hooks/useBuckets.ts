@@ -109,7 +109,7 @@ export function useBuckets() {
         throw err;
       }
     },
-    [],
+    [bumpRefresh],
   );
 
   const deleteBucket = useCallback(
@@ -137,7 +137,7 @@ export function useBuckets() {
         throw err;
       }
     },
-    [],
+    [bumpRefresh],
   );
 
   // Update + lifecycle/policy/lock/replication setters are out of scope for

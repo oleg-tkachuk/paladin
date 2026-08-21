@@ -102,8 +102,14 @@ type Querier interface {
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error *string) (int64, error)
-	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
-	// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
+	// Cross-tenant subject lookup for AuthService.Login when the caller supplied
+	// no tenant hint. The handler only needs to know whether the subject is
+	// unambiguous, so five rows is plenty and the cap keeps a shared subject from
+	// turning every login into a full scan.
+	//
+	// NOT for listing a user's memberships: that needs all of them, in a stable
+	// order — see ListMembershipsBySubject below. The two shared this query once,
+	// and the tenant switcher silently hid every membership past the fifth.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
@@ -275,6 +281,11 @@ type Querier interface {
 	// exactly like COMPLIANCE. Locked rows are skipped until the lock lapses.
 	// COALESCE on legal_hold because most objects have no lock row at all.
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
+	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
+	// creation so the list is stable across calls rather than whatever the
+	// planner returns; unbounded because a membership the UI does not show is a
+	// tenant the user cannot reach.
+	ListMembershipsBySubject(ctx context.Context, subject string) ([]User, error)
 	ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]ListMultipartPartsRow, error)
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// Newest first. Cursor: (created_at, id).

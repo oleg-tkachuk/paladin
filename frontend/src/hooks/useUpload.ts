@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { ConnectError } from "@connectrpc/connect";
 
-import { objectClient } from "@/lib/connect/client";
+import { objectClient, multipartClient } from "@/lib/connect/client";
 import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { PresignTransport } from "@/gen/paladin/data/v1/object_service_pb";
 import { useAuth } from "@/context/AuthContext";
@@ -40,6 +40,131 @@ export type UploadQueueItem = {
 
 // Legacy alias kept so /upload page imports still resolve.
 export type UploadTask = UploadQueueItem;
+
+/**
+ * Files at or below this go through the single-shot presigned PUT: one
+ * request, no session to abandon if the tab closes. Above it, multipart —
+ * which is also the only way past the backend's max_object_size.
+ *
+ * 8 MiB is the smallest part S3 semantics allow us to rely on (the 5 MiB
+ * floor applies to every part but the last), with headroom.
+ */
+const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
+
+/** Concurrent part PUTs — enough to use the link, few enough that one
+ *  failure does not cost several parts at once. */
+const PART_CONCURRENCY = 3;
+
+/**
+ * Runs Initiate → (PresignPart → PUT) × N → Complete and returns the
+ * object's resource name.
+ *
+ * Each part's ETag comes back only from its PUT response, and Complete
+ * needs all of them — the backend cannot reconstruct them, so a dropped
+ * ETag loses the upload. Browsers expose that header only when the backend
+ * lists it in Access-Control-Expose-Headers, which is why a missing one is
+ * reported as configuration rather than as a transfer error.
+ *
+ * On failure the session is aborted: the parts already stored are released
+ * rather than left to bill as storage until the reaper notices.
+ */
+async function uploadMultipart(args: {
+  parent: string;
+  file: File;
+  tags: Record<string, string>;
+  onProgress: (pct: number) => void;
+}): Promise<string> {
+  const { parent, file } = args;
+  const init = await multipartClient.initiateMultipartUpload({
+    parent,
+    key: file.name,
+    contentType: file.type || "application/octet-stream",
+    sizeBytes: BigInt(file.size),
+    tags: args.tags,
+    // Required: buf-validate rejects UNSPECIFIED here, same as the
+    // single-shot path. SHA256 is what the data plane verifies on complete.
+    checksumAlgorithm: ChecksumAlgorithm.SHA256,
+  });
+  const objectName = init.object?.name ?? "";
+  if (!objectName || !init.uploadId) {
+    throw new Error("InitiateMultipartUpload returned no session");
+  }
+
+  // The server picks the part size; it knows the backend's limits, and
+  // trusting it keeps total_parts consistent with what Complete verifies.
+  const partSize = Number(init.recommendedPartSize);
+  const partsTotal =
+    init.totalParts || Math.max(1, Math.ceil(file.size / partSize));
+  const etags = new Array<string>(partsTotal);
+
+  try {
+    let bytesSent = 0;
+    let next = 0;
+    const worker = async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= partsTotal) return;
+        const partNumber = index + 1; // S3 part numbers are 1-based
+        const start = index * partSize;
+        const slice = file.slice(start, Math.min(start + partSize, file.size));
+
+        const signed = await multipartClient.presignPart({
+          objectName,
+          uploadId: init.uploadId,
+          partNumber,
+        });
+        const url = signed.uploadUrl;
+        if (!url?.url) {
+          throw new Error(`No presigned URL for part ${partNumber}`);
+        }
+        const res = await fetch(url.url, {
+          method: url.method || "PUT",
+          // required_headers are covered by the signature; omitting one
+          // makes the backend reject the PUT as a signature mismatch,
+          // which reads like a credentials problem.
+          headers: { ...url.requiredHeaders },
+          body: slice,
+        });
+        if (!res.ok) {
+          throw new Error(
+            `Part ${partNumber} failed: ${res.status} ${res.statusText}`,
+          );
+        }
+        const etag = (res.headers.get("ETag") ?? "").replaceAll('"', "");
+        if (!etag) {
+          throw new Error(
+            `Part ${partNumber} returned no ETag — the storage backend must ` +
+              `list it in Access-Control-Expose-Headers for browser uploads`,
+          );
+        }
+        etags[index] = etag;
+        bytesSent += slice.size;
+        args.onProgress(Math.round((bytesSent / file.size) * 100));
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(PART_CONCURRENCY, partsTotal) }, worker),
+    );
+
+    await multipartClient.completeMultipartUpload({
+      objectName,
+      uploadId: init.uploadId,
+      parts: etags.map((etag, i) => ({ partNumber: i + 1, etag })),
+    });
+    return objectName;
+  } catch (e) {
+    // Best-effort: a failed abort must not mask the error that caused it.
+    try {
+      await multipartClient.abortMultipartUpload({
+        objectName,
+        uploadId: init.uploadId,
+      });
+    } catch {
+      /* the reaper sweeps abandoned sessions */
+    }
+    throw e;
+  }
+}
 
 function uploadXhr(
   url: string,
@@ -107,6 +232,27 @@ export function useUpload() {
       try {
         update(id, { status: "uploading" });
         const parent = `tenants/${tenantId}/collections/${parentCollection}`;
+
+        // Above the threshold the single-shot path cannot help: one presigned
+        // PUT means one request, one timeout, and one failure that costs the
+        // whole transfer. Multipart splits it, and is the only route for a
+        // file over the backend's max_object_size.
+        if (file.size > MULTIPART_THRESHOLD_BYTES) {
+          const objectName = await uploadMultipart({
+            parent,
+            file,
+            tags,
+            onProgress: (pct) => update(id, { progress: pct }),
+          });
+          update(id, { status: "completed", progress: 100, objectName });
+          bumpRefresh("objects");
+          showNotification({
+            type: "success",
+            title: "Upload complete",
+            message: `${file.name} uploaded in parts.`,
+          });
+          return;
+        }
 
         const allocated = await objectClient.uploadObject({
           parent,

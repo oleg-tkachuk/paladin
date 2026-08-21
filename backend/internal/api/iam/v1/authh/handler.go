@@ -452,7 +452,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context) ([]Membership, error) {
 	if err != nil {
 		return nil, err
 	}
-	matches, err := h.users.FindBySubjectGlobal(ctx, cur.Subject)
+	matches, err := h.users.ListMembershipsBySubject(ctx, cur.Subject)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -497,7 +497,12 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	}
 	p, _ := auth.PrincipalFromContext(ctx) // callerUser already validated it
 
-	matches, err := h.users.FindBySubjectGlobal(ctx, cur.Subject)
+	// Every membership, not the first five: FindBySubjectGlobal caps its
+	// result because Login only needs to know whether a subject is
+	// ambiguous. Using it here made the sixth and later tenants
+	// unreachable — the switch refused with "not a member" for a
+	// membership that plainly existed.
+	matches, err := h.users.ListMembershipsBySubject(ctx, cur.Subject)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

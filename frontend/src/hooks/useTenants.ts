@@ -119,7 +119,7 @@ export function useTenants() {
         throw err;
       }
     },
-    [],
+    [bumpRefresh],
   );
 
   const updateTenantMetadata = useCallback(
@@ -157,7 +157,7 @@ export function useTenants() {
         throw err;
       }
     },
-    [],
+    [bumpRefresh],
   );
 
   // deleteTenant — defaults to SOFT delete (server moves the row to
@@ -184,7 +184,7 @@ export function useTenants() {
         throw err;
       }
     },
-    [],
+    [bumpRefresh],
   );
 
   // restoreTenant — clears deleted_at on a trashed row. Returns the

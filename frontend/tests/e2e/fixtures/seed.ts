@@ -30,6 +30,8 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
+import { MultipartUploadService } from "@/gen/paladin/data/v1/multipart_service_pb";
+import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
@@ -661,4 +663,76 @@ export async function seedObject(opts: {
 /** Soft-delete an object through the data plane, by its canonical name. */
 export async function softDeleteObject(name: string): Promise<void> {
   await createClient(ObjectService, dataTransport()).deleteObject({ name });
+}
+
+/**
+ * Upload a file large enough to require multipart, exercising the same
+ * Initiate → PresignPart → PUT → Complete chain the console runs.
+ *
+ * Returns the object's resource name. A failure anywhere in the chain
+ * throws rather than being papered over — the point is that the whole
+ * sequence works, not that a row appeared.
+ */
+export async function seedMultipartObject(opts: {
+  tenantId: string;
+  collection: string;
+  sizeBytes: number;
+  key?: string;
+}): Promise<{ name: string; key: string }> {
+  const key = opts.key ?? `e2e/${uniqueSlug("big")}.bin`;
+  const body = Buffer.alloc(opts.sizeBytes, "L");
+  const client = createClient(MultipartUploadService, dataTransport());
+
+  const init = await client.initiateMultipartUpload({
+    parent: `tenants/${opts.tenantId}/collections/${opts.collection}`,
+    key,
+    contentType: "application/octet-stream",
+    sizeBytes: BigInt(opts.sizeBytes),
+    checksumAlgorithm: ChecksumAlgorithm.SHA256,
+  });
+  const objectName = init.object?.name ?? "";
+  if (!objectName || !init.uploadId) {
+    throw new Error("seed.ts: InitiateMultipartUpload returned no session");
+  }
+
+  const partSize = Number(init.recommendedPartSize);
+  const partsTotal =
+    init.totalParts || Math.max(1, Math.ceil(opts.sizeBytes / partSize));
+  const parts: Array<{ partNumber: number; etag: string }> = [];
+
+  for (let i = 0; i < partsTotal; i++) {
+    const partNumber = i + 1;
+    const signed = await client.presignPart({
+      objectName,
+      uploadId: init.uploadId,
+      partNumber,
+    });
+    if (!signed.uploadUrl?.url) {
+      throw new Error(`seed.ts: no presigned URL for part ${partNumber}`);
+    }
+    const slice = body.subarray(
+      i * partSize,
+      Math.min((i + 1) * partSize, opts.sizeBytes),
+    );
+    const res = await fetch(signed.uploadUrl.url, {
+      method: signed.uploadUrl.method || "PUT",
+      headers: { ...signed.uploadUrl.requiredHeaders },
+      body: slice,
+    });
+    if (!res.ok) {
+      throw new Error(`seed.ts: part ${partNumber} PUT failed: ${res.status}`);
+    }
+    const etag = (res.headers.get("etag") ?? "").replaceAll('"', "");
+    if (!etag) {
+      throw new Error(`seed.ts: part ${partNumber} returned no ETag`);
+    }
+    parts.push({ partNumber, etag });
+  }
+
+  await client.completeMultipartUpload({
+    objectName,
+    uploadId: init.uploadId,
+    parts,
+  });
+  return { name: objectName, key };
 }

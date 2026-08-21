@@ -43,7 +43,9 @@ type fakeStore struct {
 	cap *capability.Capability
 }
 
-func (s *fakeStore) Insert(_ context.Context, _ capability.Capability, _ capability.Principal) error { return nil }
+func (s *fakeStore) Insert(_ context.Context, _ capability.Capability, _ capability.Principal) error {
+	return nil
+}
 func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (*capability.Capability, error) {
 	if s.cap != nil && s.cap.ID == id {
 		return s.cap, nil

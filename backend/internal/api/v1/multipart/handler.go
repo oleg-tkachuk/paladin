@@ -58,20 +58,20 @@ type Session struct {
 }
 
 type InitiateArgs struct {
-	TenantID      uuid.UUID
+	TenantID uuid.UUID
 	// InitiatedBy* attribute the upload to the principal that started it.
 	// Filled from the request context, never by the caller — see Initiate.
 	InitiatedBySubject string
 	InitiatedByKind    string
-	Collection    string
-	Key           string
-	ContentType   string
-	TotalParts    int32
-	PartSizeBytes int64
-	SizeHint      int64
-	ChecksumAlgo  string
-	Metadata      map[string]string
-	Tags          map[string]string
+	Collection         string
+	Key                string
+	ContentType        string
+	TotalParts         int32
+	PartSizeBytes      int64
+	SizeHint           int64
+	ChecksumAlgo       string
+	Metadata           map[string]string
+	Tags               map[string]string
 }
 
 type CompleteArgs struct {
@@ -151,6 +151,30 @@ func (h *Handler) SetVersionRecorder(v VersionRecorder) { h.versions = v }
 // InitiateMultipartUpload creates the PENDING object row and opens a storage
 // multipart session. Handler contract: size_bytes is required here because
 // part sizing needs it (unlike UploadObject where it's a hint).
+// S3 semantics, which every supported backend follows: a part must be at
+// least 5 MiB except the last, and an upload may have at most 10 000 parts.
+// Together they cap a multipart upload at ~48.8 GiB with the minimum part
+// size, so the part size grows with the object rather than the count.
+const (
+	minPartSizeBytes int64 = 5 * 1024 * 1024
+	maxPartCount     int64 = 10000
+)
+
+// planParts picks a part size and count for an object of `size` bytes.
+// Starts at the minimum and doubles until the count fits, so small uploads
+// stay cheap to retry and large ones stay within the part limit.
+func planParts(size int64) (partSize int64, totalParts int32) {
+	partSize = minPartSizeBytes
+	for (size+partSize-1)/partSize > maxPartCount {
+		partSize *= 2
+	}
+	n := (size + partSize - 1) / partSize
+	if n < 1 {
+		n = 1
+	}
+	return partSize, int32(n)
+}
+
 func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (*Session, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -165,6 +189,12 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("size_bytes is required for multipart uploads"))
 	}
+	// The client does not choose the part size — the request has no field
+	// for it, and the response promises a `recommended_part_size` plus a
+	// `total_parts`. Computing them here is what makes those promises true:
+	// they were left zero, so a caller had nothing to slice the file by and
+	// PresignPart rejected every part number as out of range.
+	args.PartSizeBytes, args.TotalParts = planParts(args.SizeHint)
 	objectURI := "object://" + tenantID.String() + "/" + args.Collection + "/" + args.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err

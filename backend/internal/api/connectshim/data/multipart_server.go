@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -39,8 +40,12 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 	}
 	return connect.NewResponse(&pb.InitiateMultipartUploadResponse{
 		// Object's full state is fetched lazily via GetObject; we surface the
-		// minimal envelope here.
+		// minimal envelope here — plus `name`, without which the caller
+		// cannot continue: PresignPart and Complete both address the upload
+		// by object_name, and there is nowhere else to get it.
 		Object: &pb.Object{
+			Name: fmt.Sprintf("tenants/%s/collections/%s/objects/%s",
+				sess.TenantID, sess.Collection, sess.ObjectID),
 			ObjectId:   sess.ObjectID.String(),
 			TenantId:   sess.TenantID.String(),
 			Collection: sess.Collection,

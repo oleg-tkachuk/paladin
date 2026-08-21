@@ -71,12 +71,19 @@ export function RefreshProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Module-level so the fallback is referentially stable. Building it inside
+// the hook returned a fresh `bump` on every render, which is the opposite of
+// what a dependency array needs: any hook listing it would re-create its
+// callbacks forever. Inside the provider `bump` is already stable
+// (useCallback with no deps); outside it now is too.
+const NO_REFRESH: RefreshContextValue = { counters: {}, bump: () => {} };
+
 function useRefreshContext(): RefreshContextValue {
   const ctx = useContext(RefreshContext);
   // No-op fallback so hooks that subscribe outside the provider tree
   // (e.g., on /login) don't crash. Bumps from there are silently dropped,
   // which is the correct behaviour — there's nothing to refresh.
-  if (!ctx) return { counters: {}, bump: () => {} };
+  if (!ctx) return NO_REFRESH;
   return ctx;
 }
 

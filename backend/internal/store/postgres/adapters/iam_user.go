@@ -73,6 +73,24 @@ func (r *UserRepo) FindBySubjectGlobal(ctx context.Context, subject string) ([]a
 	return out, nil
 }
 
+// ListMembershipsBySubject returns every tenant the subject belongs to.
+//
+// Separate from FindBySubjectGlobal, which caps at five rows because Login
+// only needs to detect ambiguity. Sharing that query made the tenant
+// switcher drop memberships past the fifth — silently, since a shorter list
+// looks exactly like a smaller account.
+func (r *UserRepo) ListMembershipsBySubject(ctx context.Context, subject string) ([]authstore.User, error) {
+	rows, err := r.q.ListMembershipsBySubject(ctx, subject)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]authstore.User, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, userFromSQLC(row))
+	}
+	return out, nil
+}
+
 func (r *UserRepo) GetBySubject(ctx context.Context, tenantID uuid.UUID, subject string) (authstore.User, error) {
 	row, err := r.q.GetUserBySubject(ctx, pgUUID(tenantID), subject)
 	if err != nil {

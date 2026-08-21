@@ -19,6 +19,7 @@ import {
   seedPhysicalBucket,
   seedCollection,
   seedObject,
+  seedMultipartObject,
   softDeleteObject,
   seedAdminTenantID,
 } from "./fixtures/seed";
@@ -146,6 +147,30 @@ test.describe("US6 — Object lifecycle", () => {
     await page.getByText("Soft Delete", { exact: true }).click();
 
     await expect(objectRow(page, obj.key)).toHaveCount(0, { timeout: 10_000 });
+  });
+
+  test("a multipart upload lands as one object in the list", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const { tenantSlug, tenantId, collection } = await seedScope();
+
+    // Two parts: past the 5 MiB floor S3 imposes on every part but the last,
+    // so the server splits it and Complete has more than one ETag to
+    // reconcile. A single-part "multipart" upload would pass without
+    // exercising the reconciliation that actually breaks.
+    const big = await seedMultipartObject({
+      tenantId,
+      collection,
+      sizeBytes: 12 * 1024 * 1024,
+    });
+
+    await page.goto(objectsURL(tenantSlug, collection));
+    // One row, not one per part: the parts are an implementation detail of
+    // the transfer, and a listing that showed them would mean Complete did
+    // not merge them.
+    await expectKeyVisible(page, big.key);
+    await expect(objectRow(page, big.key)).toHaveCount(1);
   });
 });
 

@@ -57,12 +57,12 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 	tenantID := uuid.New()
 	objectID := uuid.New()
 	row := sqlc.ListHardDeletableRow{
-		ID:        pgtype.UUID{Bytes: objectID, Valid: true},
+		ID:              pgtype.UUID{Bytes: objectID, Valid: true},
 		TenantID:        pgtype.UUID{Bytes: tenantID, Valid: true},
-		CollectionName:      "docs",
-		Path:             "a.pdf",
+		CollectionName:  "docs",
+		Path:            "a.pdf",
 		ResourceVersion: 1,
-		BackendName:       "primary",
+		BackendName:     "primary",
 		BucketName:      "paladin-test",
 	}
 	w := &LifecycleHardDeleter{

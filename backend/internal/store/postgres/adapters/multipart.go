@@ -88,8 +88,12 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 	}
 
 	return multipart.Session{
-		UploadID:        uploadID,
-		ObjectID:        objectID,
+		UploadID: uploadID,
+		ObjectID: objectID,
+		// Carried back so the caller can build the object's resource name.
+		// Leaving it zero made every Initiate response name a tenant of all
+		// zeroes, which no subsequent call could resolve.
+		TenantID:        args.TenantID,
 		BackendID:       backendID,
 		Bucket:          bucket,
 		Collection:      args.Collection,

@@ -55,8 +55,14 @@ WHERE subject = $1
 LIMIT 5
 `
 
-// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
-// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
+// Cross-tenant subject lookup for AuthService.Login when the caller supplied
+// no tenant hint. The handler only needs to know whether the subject is
+// unambiguous, so five rows is plenty and the cap keeps a shared subject from
+// turning every login into a full scan.
+//
+// NOT for listing a user's memberships: that needs all of them, in a stable
+// order — see ListMembershipsBySubject below. The two shared this query once,
+// and the tenant switcher silently hid every membership past the fifth.
 func (q *Queries) FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error) {
 	rows, err := q.db.Query(ctx, findUsersBySubjectGlobal, subject)
 	if err != nil {
@@ -144,6 +150,52 @@ func (q *Queries) GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, su
 		&i.LastLoginAt,
 	)
 	return i, err
+}
+
+const listMembershipsBySubject = `-- name: ListMembershipsBySubject :many
+SELECT id, tenant_id, subject, display_name, password_hash,
+       roles, scopes, disabled, resource_version,
+       created_at, updated_at, last_login_at
+FROM users
+WHERE subject = $1
+ORDER BY created_at ASC, id ASC
+`
+
+// Every tenant this subject belongs to, for the tenant switcher. Ordered by
+// creation so the list is stable across calls rather than whatever the
+// planner returns; unbounded because a membership the UI does not show is a
+// tenant the user cannot reach.
+func (q *Queries) ListMembershipsBySubject(ctx context.Context, subject string) ([]User, error) {
+	rows, err := q.db.Query(ctx, listMembershipsBySubject, subject)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Subject,
+			&i.DisplayName,
+			&i.PasswordHash,
+			&i.Roles,
+			&i.Scopes,
+			&i.Disabled,
+			&i.ResourceVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUsersAll = `-- name: ListUsersAll :many

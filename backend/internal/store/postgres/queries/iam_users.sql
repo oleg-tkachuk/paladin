@@ -75,11 +75,29 @@ ORDER BY id ASC
 LIMIT sqlc.arg('page_size')::int;
 
 -- name: FindUsersBySubjectGlobal :many
--- Cross-tenant subject lookup. Used by AuthService.Login when the caller did
--- not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
+-- Cross-tenant subject lookup for AuthService.Login when the caller supplied
+-- no tenant hint. The handler only needs to know whether the subject is
+-- unambiguous, so five rows is plenty and the cap keeps a shared subject from
+-- turning every login into a full scan.
+--
+-- NOT for listing a user's memberships: that needs all of them, in a stable
+-- order — see ListMembershipsBySubject below. The two shared this query once,
+-- and the tenant switcher silently hid every membership past the fifth.
 SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
 WHERE subject = $1
 LIMIT 5;
+
+-- name: ListMembershipsBySubject :many
+-- Every tenant this subject belongs to, for the tenant switcher. Ordered by
+-- creation so the list is stable across calls rather than whatever the
+-- planner returns; unbounded because a membership the UI does not show is a
+-- tenant the user cannot reach.
+SELECT id, tenant_id, subject, display_name, password_hash,
+       roles, scopes, disabled, resource_version,
+       created_at, updated_at, last_login_at
+FROM users
+WHERE subject = $1
+ORDER BY created_at ASC, id ASC;
