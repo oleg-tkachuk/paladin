@@ -26,6 +26,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -112,7 +113,7 @@ func call(t *testing.T, base, path, token string) (int, string) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	resp, err := httpClient(15 * time.Second).Do(req)
 	if err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
@@ -156,7 +157,7 @@ func login(t *testing.T, iamURL, audience string) string {
 		t.Fatalf("build login: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := httpClient(10 * time.Second).Do(req)
 	if err != nil {
 		return ""
 	}
@@ -169,6 +170,25 @@ func login(t *testing.T, iamURL, audience string) string {
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	_ = json.Unmarshal(raw, &out)
 	return out.Tokens.AccessToken
+}
+
+// httpClient builds the client every probe uses.
+//
+// PALADIN_RPC_INSECURE_TLS=1 skips certificate verification. A cluster serves
+// these planes over TLS from its own internal CA, which the test host does not
+// trust — without an opt-out the whole suite silently SKIPs there, which is
+// the worst outcome: the one environment worth probing is the one it refuses
+// to look at. The flag is off by default and has to be set deliberately,
+// because it is exactly the check you would not want quietly disabled against
+// a real deployment.
+func httpClient(timeout time.Duration) *http.Client {
+	c := &http.Client{Timeout: timeout}
+	if os.Getenv("PALADIN_RPC_INSECURE_TLS") == "1" {
+		c.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 — opt-in, tests only
+		}
+	}
+	return c
 }
 
 func envOr(k, def string) string {
@@ -184,7 +204,7 @@ func envOr(k, def string) string {
 func requireStack(t *testing.T, ps []plane) {
 	t.Helper()
 	for _, p := range ps {
-		resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(p.baseURL + "/readyz")
+		resp, err := httpClient(2 * time.Second).Get(p.baseURL + "/readyz")
 		if err == nil {
 			_ = resp.Body.Close()
 			continue
