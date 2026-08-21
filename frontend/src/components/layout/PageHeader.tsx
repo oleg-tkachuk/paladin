@@ -14,8 +14,6 @@ import { Breadcrumbs } from "./Breadcrumbs";
 interface PageHeaderProps {
   title: React.ReactNode;
   description?: string;
-  /** @deprecated scope now lives in the top-bar ScopePicker; kept for API back-compat. */
-  tenantId?: string;
   actions?: React.ReactNode;
   /**
    * Inject the standard Upload + Explore buttons. Defaults to `false`:

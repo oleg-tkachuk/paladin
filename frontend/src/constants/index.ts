@@ -61,12 +61,6 @@ export const STORAGE_KEYS = {
    * Real per-audience tokens live in memory (tokenStore), not localStorage.
    */
   authToken: "paladin_token",
-  /**
-   * @deprecated Tenant now comes from the JWT `tenant` claim, set at login
-   * time. Key reserved so old browser sessions don't collide if we ever
-   * reuse "paladin_selected_tenant" for something else.
-   */
-  selectedTenant: "paladin_selected_tenant",
   /** Active backend ID for soft-scope filters (set in TenantSwitcher). */
   scopeBackend: "paladin_scope_backend",
   /** Active bucket name for soft-scope filters. */

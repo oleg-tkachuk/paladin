@@ -188,13 +188,3 @@ function makePlaneTransport(plane: Plane, audience: Audience): Transport {
 export const dataTransport = makePlaneTransport("data", AUDIENCES.data);
 export const iamTransport = makePlaneTransport("iam", AUDIENCES.iam);
 export const adminTransport = makePlaneTransport("admin", AUDIENCES.admin);
-
-/**
- * Legacy single-transport export. Old callers (pre-multi-plane refactor)
- * imported `transport` directly. It points at the data plane — services
- * outside data will 401 with audience mismatch. Migrate call sites to
- * lib/connect/client.ts which dispatches to the right transport per service.
- *
- * @deprecated import a typed client from `@/lib/connect/client` instead.
- */
-export const transport = dataTransport;
