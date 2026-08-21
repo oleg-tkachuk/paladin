@@ -174,6 +174,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// must land a principal first.
 		apiTokAdmin,
 		auth.RequireAudience(auth.AudienceAdmin),
+		// See the data plane: after otel (span) and after auth (principal).
+		middleware.LogContextStreaming(l),
 		capAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		// Idempotency-Key gate. RequireOnCreate=true means every

@@ -83,7 +83,10 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observ
 	// service from starting — so we log and continue with the no-op
 	// providers. With cfg.OTel.Enabled=false, InitOTel itself returns a
 	// no-op shutdown and never errors.
-	otelShutdown, err := observability.InitOTel(ctx, cfg.OTel)
+	// The metrics handler is discarded here: boot() serves the one-shot
+	// commands (bootstrap, migrate), which exit before a scraper could reach
+	// them. The long-lived roles get theirs through ProvideOTel.
+	otelShutdown, _, err := observability.InitOTel(ctx, cfg.OTel)
 	if err != nil {
 		l.Error("failed to initialise OpenTelemetry; continuing without it", zap.Error(err))
 		otelShutdown = func(context.Context) error { return nil }

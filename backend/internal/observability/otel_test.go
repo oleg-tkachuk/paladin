@@ -16,7 +16,7 @@ func TestInitOTel_Disabled(t *testing.T) {
 		Enabled: false,
 	}
 
-	shutdown, err := observability.InitOTel(ctx, cfg)
+	shutdown, _, err := observability.InitOTel(ctx, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, shutdown)
 
@@ -35,7 +35,7 @@ func TestInitOTel_Enabled(t *testing.T) {
 		},
 	}
 
-	shutdown, err := observability.InitOTel(ctx, cfg)
+	shutdown, _, err := observability.InitOTel(ctx, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, shutdown)
 

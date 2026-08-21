@@ -1059,10 +1059,8 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*
 func (h *Handler) attachLock(ctx context.Context, tenantID uuid.UUID, obj *Object) {
 	lock, err := h.repo.ObjectLock(ctx, tenantID, obj.ObjectID)
 	if err != nil {
-		if h.log != nil {
-			logger.WithTrace(ctx, h.log).Warn("object lock read failed; reporting object without lock state",
-				zap.String("object_id", obj.ObjectID.String()), zap.Error(err))
-		}
+		logger.FromContext(ctx).Warn("object lock read failed; reporting object without lock state",
+			zap.String("object_id", obj.ObjectID.String()), zap.Error(err))
 		return
 	}
 	obj.Lock = lock
@@ -1362,10 +1360,8 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		// the lock, so we proceed and let it (and the version check)
 		// decide; the caller may see CodeAborted instead of a precise
 		// lock reason, which the log explains.
-		if h.log != nil {
-			logger.WithTrace(ctx, h.log).Warn("object lock pre-check failed; relying on SQL guard",
-				zap.String("object_id", objectID.String()), zap.Error(lerr))
-		}
+		logger.FromContext(ctx).Warn("object lock pre-check failed; relying on SQL guard",
+			zap.String("object_id", objectID.String()), zap.Error(lerr))
 	} else if lock.Active(time.Now(), bypassGovernance) {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("cannot delete: %s", lock.Reason()))
@@ -1419,16 +1415,14 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	// and the debt table stays empty. A failure here is no longer terminal —
 	// the debt row survives and worker.PurgeDrainer retries it with backoff.
 	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, obj.Key); err != nil {
-		if h.log != nil {
-			logger.WithTrace(ctx, h.log).Warn("permanent delete: storage delete failed; queued for retry",
-				zap.String("tenant_id", tenantID.String()),
-				zap.String("collection", collection),
-				zap.String("key", obj.Key),
-				zap.String("bucket", bucket),
-				zap.String("purge_id", debt.PurgeID.String()),
-				zap.Error(err),
-			)
-		}
+		logger.FromContext(ctx).Warn("permanent delete: storage delete failed; queued for retry",
+			zap.String("tenant_id", tenantID.String()),
+			zap.String("collection", collection),
+			zap.String("key", obj.Key),
+			zap.String("bucket", bucket),
+			zap.String("purge_id", debt.PurgeID.String()),
+			zap.Error(err),
+		)
 		// Deliberately NOT an error to the caller. The delete IS committed —
 		// the row is gone and paladin.object.deleted is enqueued — and the bytes
 		// are now owed rather than lost. Returning an error here would tell
@@ -1463,12 +1457,10 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		// self-correcting: the drainer will retry a DELETE against a key that
 		// no longer exists (S3 DELETE is idempotent), succeed, and emit the
 		// event then.
-		if h.log != nil {
-			h.log.Warn("permanent delete: bytes reclaimed but purge bookkeeping failed; drainer will settle",
-				zap.String("purge_id", debt.PurgeID.String()),
-				zap.Error(err),
-			)
-		}
+		logger.FromContext(ctx).Warn("permanent delete: bytes reclaimed but purge bookkeeping failed; drainer will settle",
+			zap.String("purge_id", debt.PurgeID.String()),
+			zap.Error(err),
+		)
 	}
 	return nil
 }

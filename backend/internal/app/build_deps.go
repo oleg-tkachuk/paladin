@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/observability"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
@@ -35,6 +36,11 @@ type SharedDeps struct {
 	Logger *zap.Logger
 	DB     *postgres.DB
 	Pool   *pgxpool.Pool
+	// Metrics is the /metrics handler, non-nil only when
+	// otel.metrics_exporter = "prometheus". Mounted on each plane's mux
+	// beside the health endpoints — the scraper reaches a pod through
+	// whichever port it advertises, so every listener has to serve it.
+	Metrics observability.MetricsHandler
 	// ReaperPool is an optional BYPASSRLS pool for the worker's cross-tenant
 	// background DML jobs (least-privilege paladin_reaper in prod; paladin_migrate in
 	// dev). Nil on every pod except the worker, which opens it in serve_worker;

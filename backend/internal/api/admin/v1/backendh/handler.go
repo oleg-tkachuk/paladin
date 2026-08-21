@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
@@ -420,7 +421,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	// so a slow probe doesn't also lose the recording. Writes a separate table
 	// — no resource_version churn, so TestBackend stays read-only w.r.t. config.
 	if err := h.repo.SetHealth(ctx, backendID, status, out.ErrorMessage, time.Now().UTC()); err != nil {
-		h.log.Warn("failed to record backend health probe outcome",
+		logger.FromContext(ctx).Warn("failed to record backend health probe outcome",
 			zap.String("backend_id", backendID), zap.String("status", status), zap.Error(err))
 	}
 	return out, nil

@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -416,11 +417,9 @@ func (h *Handler) WhoAmI(ctx context.Context, routePageToken string) (*WhoAmIOut
 	if h.routes != nil && u.TenantID != uuid.Nil {
 		routes, nextToken, rErr := h.routes.ListCollectionRoutes(ctx, u.TenantID, routePageToken)
 		if rErr != nil {
-			if h.log != nil {
-				h.log.Warn("whoami: object-key route lookup failed; returning identity without routes",
-					zap.String("tenant_id", u.TenantID.String()),
-					zap.Error(rErr))
-			}
+			logger.FromContext(ctx).Warn("whoami: object-key route lookup failed; returning identity without routes",
+				zap.String("tenant_id", u.TenantID.String()),
+				zap.Error(rErr))
 		} else {
 			out.Routes = routes
 			out.NextPageToken = nextToken
@@ -793,12 +792,10 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 // decided rejection.
 func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
 	revoked, err := h.refresh.RevokeFamilyOf(ctx, jti)
-	if h.log != nil {
-		h.log.Warn("refresh token reuse detected; revoked the token family",
-			zap.String("user_id", userID.String()),
-			zap.Int64("revoked", revoked),
-			zap.Error(err))
-	}
+	logger.FromContext(ctx).Warn("refresh token reuse detected; revoked the token family",
+		zap.String("user_id", userID.String()),
+		zap.Int64("revoked", revoked),
+		zap.Error(err))
 	if h.audit == nil {
 		return
 	}

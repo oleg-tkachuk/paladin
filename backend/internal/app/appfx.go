@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 )
@@ -69,13 +70,16 @@ func ProvideLogger(cfg config.Config) (*zap.Logger, error) {
 // returns a no-op shutdown so observability never blocks startup. The returned
 // hook is run by *App.Shutdown (NOT a separate fx OnStop) so teardown ordering
 // matches the pre-fx path exactly.
-func ProvideOTel(cfg config.Config, l *zap.Logger) observability.ShutdownFunc {
-	sh, err := observability.InitOTel(context.Background(), cfg.OTel)
+func ProvideOTel(cfg config.Config, l *zap.Logger) (observability.ShutdownFunc, observability.MetricsHandler) {
+	sh, h, err := observability.InitOTel(context.Background(), cfg.OTel)
 	if err != nil {
 		l.Error("failed to initialise OpenTelemetry; continuing without it", zap.Error(err))
-		return func(context.Context) error { return nil }
+		return func(context.Context) error { return nil }, nil
 	}
-	return sh
+	if h != nil {
+		l.Info("metrics exposed for scraping", zap.String("path", middleware.PathMetrics))
+	}
+	return sh, h
 }
 
 // ProvideDB opens + pings the RLS-scoped pool. *App.Shutdown closes it.
@@ -93,8 +97,13 @@ func ProvideDB(cfg config.Config, l *zap.Logger) (*postgres.DB, error) {
 
 // ProvideSharedDeps builds the heavy shared dependency product every plane and
 // worker needs.
-func ProvideSharedDeps(cfg config.Config, db *postgres.DB, l *zap.Logger) (*SharedDeps, error) {
-	return BuildSharedDeps(context.Background(), cfg, db, l)
+func ProvideSharedDeps(cfg config.Config, db *postgres.DB, l *zap.Logger, m observability.MetricsHandler) (*SharedDeps, error) {
+	deps, err := BuildSharedDeps(context.Background(), cfg, db, l)
+	if err != nil {
+		return nil, err
+	}
+	deps.Metrics = m
+	return deps, nil
 }
 
 // ProvideApp assembles the runtime container from the resolved graph. It takes
@@ -188,6 +197,12 @@ func ProvideAPIListenerSet(deps *SharedDeps, meta BuildMeta) (ListenerSet, error
 	if err != nil {
 		return ListenerSet{}, err
 	}
+	// The scrape endpoint rides alongside the planes rather than on one of
+	// them: those serve TLS from an internal CA, and pointing the collector at
+	// them would mean disabling verification for every target in the cluster.
+	if m := BuildMetricsListener(deps); m != nil {
+		listeners = append(listeners, *m)
+	}
 	return ListenerSet{Listeners: listeners, Health: healthH, Jobs: deps.BackgroundJobs}, nil
 }
 
@@ -204,7 +219,11 @@ func ProvideAdminListenerSet(deps *SharedDeps, meta BuildMeta) (ListenerSet, err
 	if err != nil {
 		return ListenerSet{}, err
 	}
-	return ListenerSet{Listeners: []HTTPListener{listener}, Health: healthH, Jobs: deps.BackgroundJobs}, nil
+	set := []HTTPListener{listener}
+	if m := BuildMetricsListener(deps); m != nil {
+		set = append(set, *m)
+	}
+	return ListenerSet{Listeners: set, Health: healthH, Jobs: deps.BackgroundJobs}, nil
 }
 
 // AdminModule is the fx graph for `paladin serve admin`.

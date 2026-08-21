@@ -36,6 +36,14 @@ otel: {
   endpoint: string | *""
   protocol: "grpc" | "http" | *"http"
   insecure: bool | *true
+  // How metrics leave the process. "otlp" pushes to endpoint; "prometheus"
+  // exposes /metrics for a scraper to pull; "none" is traces only. Defaults
+  // to otlp so an existing config keeps its behaviour.
+  metrics_exporter: "otlp" | "prometheus" | "none" | *"otlp"
+  // Where the Prometheus endpoint listens when metrics_exporter is
+  // "prometheus". Plain HTTP on a port of its own — see the field comment in
+  // config/types.go for why it is not a path on the API planes.
+  metrics_addr: string | *"0.0.0.0:9095"
   resource: {
     "service.name":           string | *app.name
     "deployment.environment": string | *app.env

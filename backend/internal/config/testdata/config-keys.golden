@@ -322,6 +322,8 @@ otel
 otel.enabled
 otel.endpoint
 otel.insecure
+otel.metrics_addr
+otel.metrics_exporter
 otel.protocol
 otel.resource
 otel.resource.deployment.environment

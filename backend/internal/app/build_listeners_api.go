@@ -227,6 +227,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// one has to run first.
 		capData,
 		auth.RequireAudience(auth.AudienceData),
+		// After otel (span exists) and after auth (principal known), so the
+		// request logger carries trace_id, span_id, request_id and tenant_id
+		// for every line the handlers write through logger.FromContext.
+		middleware.LogContextStreaming(l),
 		// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
 		// resolves the upload's Collection to its (backend, bucket) so a
 		// bucket quota row can be found. Without WithBucketScope those rows
@@ -258,6 +262,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Synchronous + crash-durable (ADR-0004): the row commits before
 		// the RPC returns, so a kill can't drop a credential-misuse trail.
 		middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
+		// See the data plane: after otel and after auth. On IAM the principal
+		// is often absent (Login, RefreshToken are permissive), so these lines
+		// carry trace and request id without a tenant — which is correct, not
+		// a gap. An anonymous failed login is exactly the line worth finding.
+		middleware.LogContextStreaming(l),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,
 	)

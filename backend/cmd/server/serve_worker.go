@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/health"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
@@ -150,6 +151,7 @@ func runWorker(
 	}
 	opsMux, opsHealth := workerOpsMux(cfg.Runtime, deps, l)
 	_ = opsHealth // exported for future subsystem-check registration
+
 	opsSrv := &http.Server{
 		Addr:              opsAddr,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -247,6 +249,15 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 	healthH := app.NewHealthHandler(deps.DB, cfg, l).WithRole("worker")
 	mux := http.NewServeMux()
 	healthH.Register(mux)
+
+	// The worker's ops listener is already plain HTTP and cluster-internal,
+	// which is what a scraper needs — so /metrics goes here rather than on a
+	// listener of its own. It matters most on this pod: the worker owns
+	// paladin_worker_* and the outbox depth gauges, which are the series a
+	// stall alert is built from.
+	if h := metricsHandler(deps); h != nil {
+		mux.Handle(middleware.PathMetrics, h)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = "/livez"
@@ -298,4 +309,13 @@ func errorsIsCancelled(err error) bool {
 		return true
 	}
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// metricsHandler returns the Prometheus handler when one was built, nil
+// otherwise. Split out so the mount reads the same on every role.
+func metricsHandler(deps *app.SharedDeps) http.Handler {
+	if deps == nil || deps.Metrics == nil {
+		return nil
+	}
+	return deps.Metrics
 }

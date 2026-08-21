@@ -669,10 +669,40 @@ type RateLimit struct {
 }
 
 type OTel struct {
-	Enabled  bool         `yaml:"enabled" json:"enabled"`
-	Endpoint string       `yaml:"endpoint" json:"endpoint"`
-	Protocol string       `yaml:"protocol" json:"protocol"`
-	Insecure bool         `yaml:"insecure" json:"insecure"`
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
+	Endpoint string `yaml:"endpoint" json:"endpoint"`
+	Protocol string `yaml:"protocol" json:"protocol"`
+	Insecure bool   `yaml:"insecure" json:"insecure"`
+
+	// MetricsExporter selects how metrics leave the process.
+	//
+	//   otlp       push to Endpoint, alongside traces.
+	//   prometheus expose a /metrics endpoint for a scraper to pull.
+	//   none       traces only.
+	//
+	// The two are not interchangeable by deployment taste: a collector that
+	// accepts OTLP and a scraper that pulls Prometheus are different pieces of
+	// infrastructure, and a cluster usually runs one. Paladin shipped only the
+	// push path, into a cluster whose collector only pulls — so every
+	// instrument it defined went nowhere.
+	//
+	// Traces always use OTLP: there is no pull model for a span.
+	MetricsExporter string `yaml:"metrics_exporter" json:"metrics_exporter"`
+
+	// MetricsAddr is where the Prometheus endpoint listens, when
+	// MetricsExporter is "prometheus".
+	//
+	// A listener of its own, in plain HTTP, rather than a path on the API
+	// planes: those serve TLS from an internal CA, and a scraper would have to
+	// be told to skip verification for every target in the cluster to reach
+	// them. Every other exporter here is scraped the same way — Garage on
+	// 3903, SeaweedFS on 9327 — so this follows the shape the cluster already
+	// has instead of asking the collector to accommodate one service.
+	//
+	// Metrics carry no credentials, and the port is never exposed beyond the
+	// pod network.
+	MetricsAddr string `yaml:"metrics_addr" json:"metrics_addr"`
+
 	Resource OTelResource `yaml:"resource" json:"resource"`
 }
 

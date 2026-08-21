@@ -21,4 +21,9 @@ const (
 
 	// OTel handler name
 	OTelHandlerName = "http"
+
+	// HeaderRequestID is the inbound correlation id. Configurable per
+	// deployment as server.request_id_header; this is the default and what
+	// the audit interceptor already reads.
+	HeaderRequestID = "X-Request-Id"
 )

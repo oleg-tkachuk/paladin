@@ -216,7 +216,7 @@ func (s *UsageStore) Charge(
 			// spend was rejected because the event infra hiccuped — worth
 			// surfacing so operators can correlate a charge-rejection spike
 			// with dispatcher trouble.
-			logger.WithTrace(ctx, s.log).Warn("capability/postgres: charge rolled back on fan-out failure",
+			logger.FromContext(ctx).Warn("capability/postgres: charge rolled back on fan-out failure",
 				zap.String("capability_id", capID.String()),
 				zap.String("tenant_id", tenantID.String()),
 				zap.Float64("amount", amount),
