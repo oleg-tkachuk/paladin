@@ -31,6 +31,19 @@ export default defineConfig({
   // empty files.
   testIgnore: ["**/fixtures/**"],
 
+  // An external stack is slower than the local compose one by construction:
+  // every seeding call crosses an ingress, and objects land in a real object
+  // store rather than a MinIO container on the same bridge. Against a
+  // cluster the heaviest tests measure 28-48s — a multipart upload of 12 MiB
+  // through presigned URLs is most of that — so the 30s default fails them
+  // for being slow rather than wrong, which is the least useful kind of red.
+  //
+  // The rest of this config is already parameterised for an external target
+  // (PALADIN_E2E_BASE_URL); the budget was the piece that was not.
+  timeout:
+    Number(process.env.PALADIN_E2E_TIMEOUT ?? 0) ||
+    (process.env.PALADIN_E2E_BASE_URL ? 90_000 : 30_000),
+
   // Local: no retry — flake is surfaced. CI: 1 retry only when
   // --ci flag / CI env is set (forward-compat for deferred CI
   // integration). See FR-006.
@@ -58,9 +71,11 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     trace: "retain-on-failure",
-    // Strict locator timeouts catch silent regressions.
-    actionTimeout: 10_000,
-    navigationTimeout: 15_000,
+    // Strict locator timeouts catch silent regressions. Scaled for an
+    // external target for the same reason as the test budget above — a
+    // navigation through an ingress is not a regression.
+    actionTimeout: process.env.PALADIN_E2E_BASE_URL ? 20_000 : 10_000,
+    navigationTimeout: process.env.PALADIN_E2E_BASE_URL ? 30_000 : 15_000,
   },
 
   // Chromium only per Clarification Q1.
