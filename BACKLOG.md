@@ -229,6 +229,44 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
+### Telemetry is disabled in the cluster, so none of it is reachable
+
+- **Status:** Blocked (deploy-config change + a dashboard, not a code change).
+- **Reason:** `paladin-core-config` in the cluster carries `otel.enabled: false`,
+  and the pods have no `prometheus.io/scrape` annotations. Every instrument
+  described below therefore goes nowhere: Alloy scrapes nothing from Paladin and
+  VictoriaMetrics holds no `paladin_*` series, while Grafana has 22 dashboards
+  and none for Paladin. This is why the SeaweedFS volume-slot outage had to be
+  diagnosed from logs — the same would be true of any Paladin incident today.
+- **Definition of Done:**
+  - `otel.enabled: true` with the endpoint pointed at Alloy, in the values that
+    ArgoCD renders — verified by a `paladin_*` series appearing in
+    VictoriaMetrics, not by the config diff.
+  - A Paladin dashboard built on the metric names that actually arrive (the
+    Garage and SeaweedFS dashboards were built that way, and it is why they
+    show the right things): RED per plane from otelconnect, presign outcomes,
+    outbox depth, worker staleness, capability charge rejections.
+  - Alerts for the four that page: outbox depth climbing without drain, a
+    worker whose `last_run` exceeds its interval, `paladin_api_token_ratelimit_fail_open`
+    non-zero (rate limiting silently off), and capability charges rejecting at
+    a rate that means a tenant is stuck.
+- **Blockers:** none technical. The instruments and the collector both exist;
+  the switch is off.
+
+### Domains still uninstrumented
+
+- **Status:** Deferred (each is small; none is on the critical path today).
+- **Reason:** presign, capability charge and object lock are now counted, and
+  otelconnect gives RED for every RPC. Four domains still emit nothing of their
+  own: storage-backend call latency and errors (an S3 that degrades shows up
+  only as slow RPCs), quota enforcement decisions, login success/failure rates,
+  and idempotency-key hits. None blocks an incident today because the RPC-level
+  signal covers the symptom, but each answers a different "why".
+- **Definition of Done:** a counter per domain with a bounded outcome label,
+  reaching a collector under test the way `internal/metrics/domain_test.go`
+  checks the existing three.
+- **Blockers:** none; ordering is by whichever incident asks first.
+
 ### Tables carrying `tenant_id` with no RLS policy
 
 - **Status:** Blocked (needs the pre-auth read path designed, like `api_tokens` has).

@@ -222,8 +222,15 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 	}
 	d, err := i.limiter.Allow(ctx, tok.ID, tok.RateLimitRPM)
 	if err != nil {
-		// Fail-open on limiter errors; nothing to record (the call
-		// didn't actually go through the rate-limit decision).
+		// Fail open: a limiter outage should not deny a request whose token
+		// already passed signature, expiry and audience.
+		//
+		// But record it. Failing open silently means rate limiting can stop
+		// existing and nothing says so — the decisions counter just goes
+		// quiet, which is indistinguishable from no traffic. This counter is
+		// what tells the two apart, and a non-zero rate on it means every
+		// token is effectively uncapped.
+		recordRateLimitFailOpen(ctx, tok.TenantID.String())
 		return nil
 	}
 	recordRateLimitDecision(ctx, tok.TenantID.String(), d.Allowed, d.WeightedCount, tok.RateLimitRPM)

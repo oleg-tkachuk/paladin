@@ -29,6 +29,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -1059,7 +1060,7 @@ func (h *Handler) attachLock(ctx context.Context, tenantID uuid.UUID, obj *Objec
 	lock, err := h.repo.ObjectLock(ctx, tenantID, obj.ObjectID)
 	if err != nil {
 		if h.log != nil {
-			h.log.Warn("object lock read failed; reporting object without lock state",
+			logger.WithTrace(ctx, h.log).Warn("object lock read failed; reporting object without lock state",
 				zap.String("object_id", obj.ObjectID.String()), zap.Error(err))
 		}
 		return
@@ -1362,7 +1363,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		// decide; the caller may see CodeAborted instead of a precise
 		// lock reason, which the log explains.
 		if h.log != nil {
-			h.log.Warn("object lock pre-check failed; relying on SQL guard",
+			logger.WithTrace(ctx, h.log).Warn("object lock pre-check failed; relying on SQL guard",
 				zap.String("object_id", objectID.String()), zap.Error(lerr))
 		}
 	} else if lock.Active(time.Now(), bypassGovernance) {
@@ -1419,7 +1420,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	// the debt row survives and worker.PurgeDrainer retries it with backoff.
 	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, obj.Key); err != nil {
 		if h.log != nil {
-			h.log.Warn("permanent delete: storage delete failed; queued for retry",
+			logger.WithTrace(ctx, h.log).Warn("permanent delete: storage delete failed; queued for retry",
 				zap.String("tenant_id", tenantID.String()),
 				zap.String("collection", collection),
 				zap.String("key", obj.Key),

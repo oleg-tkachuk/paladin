@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -153,10 +154,21 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (O
 	})
 	if err != nil {
 		if errors.Is(err, ErrRetentionWeakened) {
+			metrics.RecordObjectLock(ctx, "retention", in.Mode, "refused_weakening")
 			return ObjectLock{}, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
+		metrics.RecordObjectLock(ctx, "retention", in.Mode, "error")
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err)
 	}
+	// A COMPLIANCE window cannot be shortened by anyone, so every one of these
+	// is an irreversible commitment of storage until its date passes. Counting
+	// them is the only way an operator learns how much of that has accumulated
+	// before the bill or the capacity alert does the telling.
+	outcome := "applied"
+	if in.BypassGovernance {
+		outcome = "applied_with_bypass"
+	}
+	metrics.RecordObjectLock(ctx, "retention", in.Mode, outcome)
 	return lock, nil
 }
 
@@ -176,8 +188,14 @@ func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID str
 
 	lock, err := h.locks.SetLegalHold(ctx, res.tenantID, res.versionID, hold)
 	if err != nil {
+		metrics.RecordObjectLock(ctx, "legal_hold", "", "error")
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err)
 	}
+	outcome := "released"
+	if hold {
+		outcome = "placed"
+	}
+	metrics.RecordObjectLock(ctx, "legal_hold", "", outcome)
 	return lock, nil
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -72,7 +73,21 @@ func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg C
 	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
 }
 
-func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string) (url string, hdrs map[string]string, exp time.Time, err error) {
+	// Instrumented with a defer rather than a wrapper: the connectshim
+	// coverage gate reads the body of the method the shim calls, and
+	// delegating to an unexported twin hid this method's authorize call from
+	// it. Named results are the cost of keeping the gate able to see the
+	// gating — a fair trade.
+	//
+	// Paladin never proxies bytes, so a presigned URL IS the transfer as far
+	// as the control plane is concerned. otelconnect counts the RPC; this
+	// counts whether it produced a usable URL.
+	start := time.Now()
+	defer func() {
+		metrics.RecordPresign(ctx, "get", presignOutcome(err), time.Since(start).Seconds())
+	}()
+
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -120,7 +135,21 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	return h.storage.PresignGet(ctx, backendID, bucket, tenantID, collection, key, h.resolveTTL(ttl), disposition)
 }
 
-func (h *Handler) PresignPut(ctx context.Context, collection, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignPut(ctx context.Context, collection, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, hdrs map[string]string, exp time.Time, err error) {
+	// Instrumented with a defer rather than a wrapper: the connectshim
+	// coverage gate reads the body of the method the shim calls, and
+	// delegating to an unexported twin hid this method's authorize call from
+	// it. Named results are the cost of keeping the gate able to see the
+	// gating — a fair trade.
+	//
+	// Paladin never proxies bytes, so a presigned URL IS the transfer as far
+	// as the control plane is concerned. otelconnect counts the RPC; this
+	// counts whether it produced a usable URL.
+	start := time.Now()
+	defer func() {
+		metrics.RecordPresign(ctx, "put", presignOutcome(err), time.Since(start).Seconds())
+	}()
+
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -165,7 +194,21 @@ func (h *Handler) PresignPut(ctx context.Context, collection, objectIDStr, conte
 	return h.storage.PresignPut(ctx, backendID, bucket, tenantID, collection, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
 }
 
-func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (url string, hdrs map[string]string, exp time.Time, err error) {
+	// Instrumented with a defer rather than a wrapper: the connectshim
+	// coverage gate reads the body of the method the shim calls, and
+	// delegating to an unexported twin hid this method's authorize call from
+	// it. Named results are the cost of keeping the gate able to see the
+	// gating — a fair trade.
+	//
+	// Paladin never proxies bytes, so a presigned URL IS the transfer as far
+	// as the control plane is concerned. otelconnect counts the RPC; this
+	// counts whether it produced a usable URL.
+	start := time.Now()
+	defer func() {
+		metrics.RecordPresign(ctx, "part", presignOutcome(err), time.Since(start).Seconds())
+	}()
+
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -228,4 +271,15 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 	return nil
+}
+
+// presignOutcome collapses an error into a bounded label. The connect code is
+// the right granularity: it separates "denied by policy" from "no such object"
+// from "budget exhausted" — three different operational problems — without
+// admitting the unbounded set of error strings.
+func presignOutcome(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	return connect.CodeOf(err).String()
 }

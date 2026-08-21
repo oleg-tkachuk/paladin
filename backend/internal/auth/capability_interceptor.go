@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // Header names for capability tokens. Two are accepted:
@@ -629,12 +630,22 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 	}
 	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor, onCharged)
 	if err != nil {
-		if errors.Is(err, capability.ErrBudgetExceeded) ||
-			errors.Is(err, capability.ErrTenantBudgetExceeded) {
+		// The two exhaustion cases are separated because they need different
+		// answers: a capability at its cap is reissued, a tenant at its cap
+		// is a billing conversation. Collapsed into one counter they are
+		// indistinguishable, and both look like "the API is rejecting us".
+		switch {
+		case errors.Is(err, capability.ErrBudgetExceeded):
+			metrics.RecordCapabilityCharge(ctx, tenantID.String(), "capability_exhausted", 0)
+			return connect.NewError(connect.CodeResourceExhausted, err)
+		case errors.Is(err, capability.ErrTenantBudgetExceeded):
+			metrics.RecordCapabilityCharge(ctx, tenantID.String(), "tenant_exhausted", 0)
 			return connect.NewError(connect.CodeResourceExhausted, err)
 		}
+		metrics.RecordCapabilityCharge(ctx, tenantID.String(), "error", 0)
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
+	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount)
 	return nil
 }
 

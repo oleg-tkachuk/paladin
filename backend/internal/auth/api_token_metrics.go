@@ -27,6 +27,7 @@ var (
 	apiTokVerifyDuration metric.Float64Histogram
 	apiTokRLDecisions    metric.Int64Counter
 	apiTokRLWeighted     metric.Float64Histogram
+	apiTokRLFailOpen     metric.Int64Counter
 )
 
 // initAPITokenMetrics wires the instruments against otel's package
@@ -50,6 +51,12 @@ func initAPITokenMetrics() {
 			"paladin.api_token.ratelimit.weighted_ratio",
 			metric.WithDescription("Weighted-window count divided by token capacity. >1.0 means denied."),
 			metric.WithUnit("1"),
+		)
+		apiTokRLFailOpen, _ = meter.Int64Counter(
+			"paladin.api_token.ratelimit.fail_open",
+			metric.WithDescription(
+				"Requests admitted without a rate-limit decision because the limiter errored. "+
+					"Non-zero means rate limiting is not in force."),
 		)
 	})
 }
@@ -91,4 +98,25 @@ func recordRateLimitDecision(ctx context.Context, tenantID string, allowed bool,
 	if capacity > 0 {
 		apiTokRLWeighted.Record(ctx, weighted/float64(capacity), metric.WithAttributes(attrs...))
 	}
+}
+
+// recordRateLimitFailOpen counts a request admitted WITHOUT a rate-limit
+// decision because the limiter itself failed.
+//
+// The interceptor fails open on purpose — a limiter outage should not deny
+// requests whose token already passed signature, expiry and audience. But
+// failing open silently means rate limiting can stop existing and nothing
+// says so: the decisions counter simply goes quiet, which looks identical to
+// no traffic. This is the signal that separates the two, and it belongs in an
+// alert — a non-zero rate here means every token is effectively uncapped.
+func recordRateLimitFailOpen(ctx context.Context, tenantID string) {
+	initAPITokenMetrics()
+	if apiTokRLFailOpen == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{}
+	if tenantID != "" {
+		attrs = append(attrs, attribute.String("tenant_id", tenantID))
+	}
+	apiTokRLFailOpen.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
