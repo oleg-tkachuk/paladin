@@ -585,7 +585,7 @@ export type TenantStats = Message<"paladin.admin.v1.TenantStats"> & {
 
   /**
    * Active tenants with no row in tenant_default_bindings — they can't
-   * accept an Collection bind without an explicit backend/bucket.
+   * accept a Collection bind without an explicit backend/bucket.
    *
    * @generated from field: int64 without_default_binding = 6;
    */

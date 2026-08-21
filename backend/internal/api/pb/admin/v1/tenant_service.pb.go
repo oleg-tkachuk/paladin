@@ -30,7 +30,7 @@ type CreateTenantRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// tenant_id — optional. When empty the server generates a fresh
 	// UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
-	// the zero UUID. Immutable post-create (enforced by the schema baseline (001_initial_schema.sql)'s
+	// the zero UUID. Immutable post-create (enforced by migration 033's
 	// tenants_immutable_columns trigger).
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// tenant.slug is required and validated against ValidateTenantSlug.
@@ -1001,7 +1001,7 @@ func (x *StorageMigrationStatus) GetError() string {
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the
-// bare collection name shape (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
+// bare collection name shape (ADR-0010 Phase 3 / migration 034).
 type TenantDefaultBinding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name — "tenants/{tenant_id}/defaultBinding".

@@ -27,7 +27,9 @@ const (
 
 type CreateUserRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent: "tenants/{tenant_id_or_slug}". Empty for platform-level users.
+	// Parent: "tenants/{tenant_id_or_slug}". Empty means the caller's own
+	// tenant — every user belongs to exactly one, including the bootstrap
+	// admin, so there is no tenant-less user to address.
 	Parent          string      `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Subject         string      `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	DisplayName     string      `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`

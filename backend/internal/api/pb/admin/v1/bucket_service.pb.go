@@ -316,7 +316,7 @@ type ListBucketsRequest struct {
 	// empty = no tenant filter (cross-tenant listing for platform-
 	// admin). Backed by the partial index on
 	// buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
-	// (the schema baseline (001_initial_schema.sql)), so per-tenant lookups are cheap.
+	// (migration 006), so per-tenant lookups are cheap.
 	OwnerTenantId string `protobuf:"bytes,4,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

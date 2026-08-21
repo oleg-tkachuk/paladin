@@ -369,7 +369,7 @@ func (*GetPlatformStatsRequest) Descriptor() ([]byte, []int) {
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
 // data source: the inventory fields come from the admin pod's own pool
 // (tenants / storage_backends / buckets / collections / users are
-// deliberately NOT RLS'd — the RLS baseline (002_roles_and_rls.sql) — precisely so platform-admin
+// deliberately NOT RLS'd — migration 023 — precisely so platform-admin
 // reads span tenants). Everything under `rls` covers tables that ARE
 // row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
 // endpoint and degrades to rls.available=false.
@@ -959,7 +959,7 @@ type TenantStats struct {
 	SharedLayout    int64 `protobuf:"varint,4,opt,name=shared_layout,json=sharedLayout,proto3" json:"shared_layout,omitempty"`
 	DedicatedLayout int64 `protobuf:"varint,5,opt,name=dedicated_layout,json=dedicatedLayout,proto3" json:"dedicated_layout,omitempty"`
 	// Active tenants with no row in tenant_default_bindings — they can't
-	// accept an Collection bind without an explicit backend/bucket.
+	// accept a Collection bind without an explicit backend/bucket.
 	WithoutDefaultBinding int64 `protobuf:"varint,6,opt,name=without_default_binding,json=withoutDefaultBinding,proto3" json:"without_default_binding,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache

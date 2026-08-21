@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
+import { ChangePasswordCard } from "@/components/features/ChangePasswordCard";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
@@ -427,6 +428,8 @@ export default function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      <ChangePasswordCard />
     </div>
   );
 }

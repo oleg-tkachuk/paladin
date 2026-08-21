@@ -44,7 +44,9 @@ export const file_paladin_iam_v1_user_service: GenFile =
  */
 export type CreateUserRequest = Message<"paladin.iam.v1.CreateUserRequest"> & {
   /**
-   * Parent: "tenants/{tenant_id_or_slug}". Empty for platform-level users.
+   * Parent: "tenants/{tenant_id_or_slug}". Empty means the caller's own
+   * tenant — every user belongs to exactly one, including the bootstrap
+   * admin, so there is no tenant-less user to address.
    *
    * @generated from field: string parent = 1;
    */

@@ -84,12 +84,12 @@ type BackendServiceClient interface {
 	// refused (FailedPrecondition).
 	SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error)
 	// SetBackendReadOnly flips the backend's read-only "drain" state
-	// (the schema baseline (001_initial_schema.sql)). Idempotent, OCC-guarded via resource_version. Only
+	// (migration 047). Idempotent, OCC-guarded via resource_version. Only
 	// meaningful on an enabled backend: reads keep working, mutations are
 	// refused so an operator can migrate data off before disabling.
 	SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error)
 	// SetBackendMaintenance raises/clears the operator-set, advisory
-	// maintenance flag (the schema baseline (001_initial_schema.sql)). Idempotent, OCC-guarded via
+	// maintenance flag (migration 049). Idempotent, OCC-guarded via
 	// resource_version. Advisory — it does not gate operations.
 	SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error)
 }
@@ -250,12 +250,12 @@ type BackendServiceHandler interface {
 	// refused (FailedPrecondition).
 	SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error)
 	// SetBackendReadOnly flips the backend's read-only "drain" state
-	// (the schema baseline (001_initial_schema.sql)). Idempotent, OCC-guarded via resource_version. Only
+	// (migration 047). Idempotent, OCC-guarded via resource_version. Only
 	// meaningful on an enabled backend: reads keep working, mutations are
 	// refused so an operator can migrate data off before disabling.
 	SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error)
 	// SetBackendMaintenance raises/clears the operator-set, advisory
-	// maintenance flag (the schema baseline (001_initial_schema.sql)). Idempotent, OCC-guarded via
+	// maintenance flag (migration 049). Idempotent, OCC-guarded via
 	// resource_version. Advisory — it does not gate operations.
 	SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error)
 }

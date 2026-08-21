@@ -17,6 +17,12 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { UserCreateDialog } from "@/components/features/users/UserCreateDialog";
+import {
+  UserRowActions,
+  PasswordResetResult,
+  type ResetTarget,
+} from "@/components/features/users/UserRowActions";
 import { userClient } from "@/lib/connect/client";
 import { useTenants } from "@/hooks/useTenants";
 import { normalizeError } from "@/lib/connect/error";
@@ -42,6 +48,11 @@ import { T } from "@/lib/ui/typography";
 export default function UsersPage() {
   const { tenants, fetchTenants } = useTenants();
   const [search, setSearch] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  // The generated password is returned once and never again, so it is held
+  // here until the operator dismisses it rather than shown in a toast that
+  // can be missed.
+  const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
 
   const usersQuery = useQuery({
     queryKey: ["users"],
@@ -111,6 +122,7 @@ export default function UsersPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
+        <Button onClick={() => setCreateOpen(true)}>New user</Button>
       </div>
 
       {error && (
@@ -128,20 +140,21 @@ export default function UsersPage() {
               <TableHead>Roles</TableHead>
               <TableHead className="hidden md:table-cell">Last login</TableHead>
               <TableHead className="w-[80px]">State</TableHead>
+              <TableHead className="w-[120px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && users.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={5} className="py-3">
+                  <TableCell colSpan={6} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center">
+                <TableCell colSpan={6} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <UserCircleIcon className="size-8 opacity-40" />
                     <p className="text-sm">
@@ -223,6 +236,13 @@ export default function UsersPage() {
                         </Badge>
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <UserRowActions
+                        user={u}
+                        onChanged={refreshUsers}
+                        onResetPassword={setResetTarget}
+                      />
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -230,6 +250,21 @@ export default function UsersPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <UserCreateDialog
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={refreshUsers}
+        tenants={tenants.map((t) => ({
+          tenantId: t.tenantId,
+          slug: t.slug,
+          displayName: t.displayName,
+        }))}
+      />
+      <PasswordResetResult
+        target={resetTarget}
+        onClose={() => setResetTarget(null)}
+      />
     </div>
   );
 }

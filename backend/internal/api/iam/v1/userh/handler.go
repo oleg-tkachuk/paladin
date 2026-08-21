@@ -76,6 +76,14 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	if err != nil {
 		return nil, err
 	}
+	// An omitted parent means "the caller's own tenant", not "no tenant":
+	// users.tenant_id is NOT NULL and every user belongs to exactly one
+	// tenant, the bootstrap admin included. Passing the zero uuid through
+	// reached the database and failed there with a constraint violation,
+	// which told the operator nothing about what they had left out.
+	if in.TenantID == uuid.Nil {
+		in.TenantID = caller
+	}
 	// Tenant admins limited to their own tenant — code-level guard.
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && in.TenantID != caller {

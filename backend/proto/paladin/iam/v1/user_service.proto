@@ -29,7 +29,9 @@ service UserService {
 }
 
 message CreateUserRequest {
-  // Parent: "tenants/{tenant_id_or_slug}". Empty for platform-level users.
+  // Parent: "tenants/{tenant_id_or_slug}". Empty means the caller's own
+  // tenant — every user belongs to exactly one, including the bootstrap
+  // admin, so there is no tenant-less user to address.
   string parent = 1;
   string subject = 2 [(buf.validate.field).string.min_len = 1];
   string display_name = 3;
