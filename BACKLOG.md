@@ -71,25 +71,45 @@ the same commit. Treat this file like a runtime invariant.
   - Delete this entry when the cutover is done and verified.
 - **Blockers:** operator must run the deploy + sync; not automatable from here.
 
-### The `paladin` name was never checked for collisions
+### The `paladin` name collides — decide qualify-vs-rename before publishing
 
-- **Status:** Open — never done, and cheap to get wrong quietly.
-- **Reason:** "Paladin" is an ordinary English word, not a coined one. The
-  GitHub side is now settled by construction — `oleg-tkachuk/paladin` was
-  taken successfully — but that is the only namespace anyone checked, and it
-  is the one that mattered least. Nothing here publishes to npm, and the Go
-  module path is not resolvable through the proxy (see `backend/README.md`),
-  so those two are theoretical today and become real the moment either
-  changes. A trademark collision is the one that does not care whether we
-  publish: it applies to the name as used, and a public repository is use.
-- **Definition of Done:** check the name against npm, pkg.go.dev and a
-  trademark register in the relevant jurisdictions; write the result here —
-  including "clear", which is the answer most likely to be lost otherwise.
-  If a collision turns up, decide rename-vs-qualify BEFORE the repository is
-  widely linked, because the cost is in other people's bookmarks, not in
-  this tree.
-- **Blockers:** none — it is a decision to spend twenty minutes, not a
-  technical dependency.
+- **Status:** Open, and now informed. Registries checked 2026-08-21; the
+  trademark question is still open and is the one that matters most.
+- **What the check found:**
+  - **PyPI `paladin` is taken by NVIDIA** — `nv-paladin/paladin`, "The
+    Foundation for All Paladin Libraries", Apache-2.0, 242 stars, version
+    26.6.1 released 2026-06. This is the significant one: an active project
+    from a large vendor, in adjacent infrastructure-software territory,
+    holding the bare name on a major registry and a GitHub org (`nv-paladin`).
+    We publish nothing to PyPI, so there is no packaging conflict today —
+    but "Paladin" as a *project name* in infrastructure software is no longer
+    unclaimed, and search results will not separate us.
+  - **npm `paladin` is taken but abandoned** — v0.0.3, "a simple api
+    framework", created 2014, last touched 2022, no repository, no licence,
+    maintainer `mcfog`. Not a live conflict; also not available.
+  - **The `@paladin` npm scope is free** (404), which is the obvious escape
+    hatch if we ever publish JS.
+  - **At least three unrelated 2026 packages use the name**:
+    `@momidala/paladin` (v3.0.0, TypeScript MCP server), `paladin-mcp`,
+    `paladin-verify`. The word is in active, uncoordinated use.
+  - **pkg.go.dev has nothing** for `github.com/oleg-tkachuk/paladin` — the
+    module is not resolvable while the repository is private, so the Go
+    namespace is uncontested by default rather than by right.
+- **Not checked:** trademark registers. The USPTO search API needs a key,
+  and this is a legal question rather than a lookup — it wants a person, not
+  a script. It is also the only one of these that applies whether or not we
+  publish, because a public repository is use.
+- **Definition of Done:** get the trademark question answered by someone
+  qualified, then pick one and write it down here:
+  1. **Keep `paladin` bare.** Lowest effort, permanent ambiguity with NVIDIA
+     in every search.
+  2. **Qualify it** — `paladin-cp`, `paladinctl`, or scope the JS side to
+     `@paladin/*`. Cheap now, expensive after the repository is linked
+     publicly.
+  3. **Rename.** Only worth it if the trademark answer forces it.
+  The cost of deciding late is in other people's bookmarks, not in this tree.
+- **Blockers:** none technically. This gates *publishing*, not development —
+  see the CI item, which wants the repository public.
 
 ---
 
