@@ -126,6 +126,27 @@ test.describe("US6 — Object lifecycle", () => {
     );
     await expectKeyVisible(page, obj.key);
   });
+
+  test("the row menu soft-deletes the object", async ({ page }) => {
+    await loginAsAdmin(page);
+    const { tenantSlug, tenantId, collection } = await seedScope();
+    const obj = await seedObject({ tenantId, collection });
+
+    await page.goto(objectsURL(tenantSlug, collection));
+    await expectKeyVisible(page, obj.key);
+
+    // The trigger is icon-only, so its accessible name is the only thing
+    // identifying which row's menu this is — "Actions for <key>". Before
+    // this was added the control announced as a bare "button", which left a
+    // screen-reader user with no way to tell two rows' menus apart, and no
+    // way to write this assertion either.
+    await objectRow(page, obj.key)
+      .getByRole("button", { name: `Actions for ${obj.key}` })
+      .click();
+    await page.getByText("Soft Delete", { exact: true }).click();
+
+    await expect(objectRow(page, obj.key)).toHaveCount(0, { timeout: 10_000 });
+  });
 });
 
 /** Keys contain `/` and `.`; escape before building a row-name regex. */

@@ -130,6 +130,13 @@ interface DropdownTriggerProps {
   className?: string;
   activeClassName?: string;
   disabled?: boolean;
+  /**
+   * Accessible name. Required in practice whenever the trigger's content is
+   * an icon: without it the control announces as a bare "button", giving a
+   * screen-reader user no way to know what menu it opens. Triggers whose
+   * children are text can leave it unset — the text is the name.
+   */
+  ariaLabel?: string;
 }
 
 Dropdown.Trigger = function DropdownTrigger({
@@ -137,6 +144,7 @@ Dropdown.Trigger = function DropdownTrigger({
   className,
   activeClassName,
   disabled,
+  ariaLabel,
 }: DropdownTriggerProps) {
   const { open, setOpen } = useDropdownContext();
 
@@ -144,6 +152,7 @@ Dropdown.Trigger = function DropdownTrigger({
     <div
       role="button"
       tabIndex={disabled ? -1 : 0}
+      aria-label={ariaLabel}
       aria-haspopup="menu"
       aria-expanded={open}
       aria-disabled={disabled || undefined}

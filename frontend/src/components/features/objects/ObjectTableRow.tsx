@@ -321,6 +321,9 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
           <div className="flex justify-end items-center">
             <Dropdown align="right" width="w-56">
               <Dropdown.Trigger
+                // Icon-only: without a name this announces as "button" and
+                // gives no clue which row it belongs to.
+                ariaLabel={`Actions for ${obj.key}`}
                 className={cn(
                   "p-1.5 rounded-lg transition-all flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent",
                 )}

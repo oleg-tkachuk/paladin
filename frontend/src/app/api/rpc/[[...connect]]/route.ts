@@ -41,6 +41,7 @@ import { OperationService as DataOperationService } from "@/gen/paladin/data/v1/
 
 // iam plane services
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
+import { HealthService } from "@/gen/paladin/iam/v1/health_service_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { UserSettingsService } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 
@@ -90,7 +91,7 @@ const planeServices: Record<Plane, DescService[]> = {
     PresignService,
     DataOperationService,
   ],
-  iam: [AuthService, UserService, UserSettingsService],
+  iam: [AuthService, UserService, UserSettingsService, HealthService],
 };
 
 // ContextKey must be constructed via createContextKey — a bare Symbol has
