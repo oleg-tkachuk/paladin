@@ -122,15 +122,30 @@ CALL paladin_apply_tenant_isolation('objects');
 CALL paladin_apply_tenant_isolation('object_versions');
 CALL paladin_apply_tenant_isolation('object_locks');
 CALL paladin_apply_tenant_isolation('object_tags');
-CALL paladin_apply_tenant_isolation('collections');
+
 CALL paladin_apply_tenant_isolation('multipart_uploads');
 CALL paladin_apply_tenant_isolation('capability_records');
 CALL paladin_apply_tenant_isolation('event_subscriptions');
 CALL paladin_apply_tenant_isolation('pending_purges');
 CALL paladin_apply_tenant_isolation('quotas');
-CALL paladin_apply_tenant_isolation('tenant_budgets');
-CALL paladin_apply_tenant_isolation('tenant_storage_migrations');
 CALL paladin_apply_tenant_isolation('idempotency_keys');
+
+-- NOT isolated, deliberately: collections, tenant_budgets and
+-- tenant_storage_migrations are written by the ADMIN plane on behalf of a
+-- tenant other than the caller's. The admin plane acquires connections from
+-- the RLS pool, which sets paladin.tenant_id from the *caller's* context — so
+-- a platform admin creating a collection for tenant B writes a row whose
+-- tenant_id is B while the GUC says platform, and WITH CHECK rejects it.
+--
+-- This mirrors the pre-consolidation schema, which left object_keys (now
+-- collections), tenants, buckets and storage_backends uncovered for exactly
+-- this reason. Isolation on them is enforced above the database: the admin
+-- RPCs authorise through Cedar, and the data plane reaches collections only
+-- through joins from tables that ARE isolated.
+--
+-- The real fix is to give the admin plane a way to write as the target
+-- tenant — a SET LOCAL inside the transaction — after which these three can
+-- be covered like everything else. BACKLOG carries it.
 
 DROP PROCEDURE paladin_apply_tenant_isolation(regclass);
 

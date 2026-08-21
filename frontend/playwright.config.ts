@@ -52,7 +52,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: process.env.PALADIN_E2E_BASE_URL ?? "http://localhost:3000",
     // Failure artifacts per FR-006. Local-only — no upload hook
     // wired in v1.
     screenshot: "only-on-failure",
@@ -74,13 +74,17 @@ export default defineConfig({
   // Bring up the test stack before any test runs. Reuses an
   // already-running stack for faster local iteration via
   // `pnpm run test:e2e:stack` in a separate terminal.
-  webServer: {
-    command:
-      "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up --wait",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+  // Targeting an external stack (a cluster behind port-forwards) means there
+  // is nothing to bring up locally — starting compose would shadow it.
+  webServer: process.env.PALADIN_E2E_BASE_URL
+    ? undefined
+    : {
+        command:
+          "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up --wait",
+        url: "http://localhost:3000",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
 });

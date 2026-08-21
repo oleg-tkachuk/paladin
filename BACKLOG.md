@@ -482,6 +482,40 @@ open deliberately — each notes why._
 
 ---
 
+### The admin plane cannot write as a tenant, so three tables sit outside RLS
+
+- **Status:** Open. Surfaced 2026-08-21 by the first e2e run against the
+  cluster; the exclusion itself predates the identity refactor.
+- **Reason:** the admin plane acquires connections from the RLS pool, which
+  sets `paladin.tenant_id` from the *caller's* auth context
+  (`internal/store/postgres/rls.go`). A platform admin creating a resource
+  for tenant B therefore writes a row whose `tenant_id` is B while the GUC
+  says `platform`, and the policy's `WITH CHECK` rejects it — `new row
+  violates row-level security policy` (42501).
+  The consolidation put `collections`, `tenant_budgets` and
+  `tenant_storage_migrations` under `tenant_isolation`, which broke
+  CreateCollection in the cluster outright. Local suites did not catch it:
+  testcontainers run migrations and queries as a superuser, so RLS never
+  engages. They are excluded again, matching what the pre-consolidation
+  schema did with `object_keys` for the same reason.
+- **Why this matters beyond those three:** the exclusion is not a design,
+  it is an accommodation. Isolation on these tables currently rests entirely
+  on Cedar at the API boundary — which contradicts the position that RLS is
+  a *primary* control (backend ADR-0013, `docs/database.md`). Every table the
+  admin plane writes on a tenant's behalf is in the same position, so the set
+  can only grow as the admin surface does.
+- **Definition of Done:** give the admin plane a way to write as the target
+  tenant — most likely `SET LOCAL paladin.tenant_id` inside the handler's
+  transaction, taken from the request's resource name rather than the
+  caller's token, with the Cedar check that authorises the cross-tenant
+  action happening first. Then re-cover the three tables and confirm with an
+  adversarial test that a non-admin caller still cannot reach them.
+- **Blockers:** none technical. Needs care rather than effort: the mechanism
+  that lets an admin write as any tenant is also the mechanism that would let
+  a bug write as any tenant, so the Cedar gate ahead of it has to be exact.
+
+---
+
 ## Performance / Scale
 
 ### Per-table autovacuum tuning
