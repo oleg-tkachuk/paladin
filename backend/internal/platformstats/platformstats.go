@@ -103,7 +103,7 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 		       count(*) FILTER (WHERE deleted_at IS NULL AND storage_layout <> 'dedicated'),
 		       count(*) FILTER (WHERE deleted_at IS NULL AND storage_layout  = 'dedicated'),
 		       count(*) FILTER (WHERE deleted_at IS NULL AND NOT EXISTS (
-		           SELECT 1 FROM tenant_default_bindings b WHERE b.tenant_id = t.tenant_id))
+		           SELECT 1 FROM tenant_default_bindings b WHERE b.tenant_id = t.id))
 		FROM tenants t`,
 	).Scan(&out.Tenants.Total, &out.Tenants.Active, &out.Tenants.Trashed,
 		&out.Tenants.SharedLayout, &out.Tenants.DedicatedLayout,

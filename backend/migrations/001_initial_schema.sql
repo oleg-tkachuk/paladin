@@ -705,6 +705,10 @@ CREATE TABLE audit_log_default PARTITION OF audit_log DEFAULT;
 CREATE INDEX audit_log_at_idx ON audit_log (at DESC);
 CREATE INDEX audit_log_actor_tenant_idx ON audit_log (actor_tenant_id, at DESC);
 
+-- Partitioned by expires_at, NOT created_at: reclamation is a DROP PARTITION
+-- of everything already expired, which only works if the partition key is the
+-- expiry. It also makes the retry-after-TTL case land in a different partition
+-- than the lapsed row, so the unique key admits it instead of colliding.
 CREATE TABLE idempotency_keys (
     id           uuid NOT NULL DEFAULT gen_random_uuid(),
     tenant_id    uuid NOT NULL,
@@ -714,9 +718,9 @@ CREATE TABLE idempotency_keys (
     response_sha bytea NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
     expires_at   timestamptz NOT NULL,
-    PRIMARY KEY (id, created_at),
-    UNIQUE (tenant_id, method, key, created_at)
-) PARTITION BY RANGE (created_at);
+    PRIMARY KEY (id, expires_at),
+    UNIQUE (tenant_id, method, key, expires_at)
+) PARTITION BY RANGE (expires_at);
 
 CREATE TABLE idempotency_keys_default PARTITION OF idempotency_keys DEFAULT;
 
