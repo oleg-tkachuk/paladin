@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { parseBucketResourceName } from "@/lib/resources/bucket-name";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,13 @@ const STATE_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
 //   - a `shared` tenant with no migration → a trigger to start one;
 //   - a `dedicated` tenant with no migration → nothing (the identity card's
 //     layout badge already says it's dedicated).
+/** "storageBackends/x/buckets/y" → "x/y" for the migration summary line;
+ *  anything that does not parse is shown as sent. */
+function shortBucket(name: string): string {
+  const ref = parseBucketResourceName(name);
+  return ref ? `${ref.backendId}/${ref.bucketId}` : name;
+}
+
 export function StorageMigrationCard({
   tenantId,
   storageLayout,
@@ -157,9 +165,9 @@ export function StorageMigrationCard({
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <div className="text-muted-foreground">
-          {mig.sourceBackendId}/{mig.sourceBucketName}
+          {shortBucket(mig.sourceBucket)}
           {" → "}
-          {mig.targetBackendId}/{mig.targetBucketName}
+          {shortBucket(mig.targetBucket)}
         </div>
         {total > 0 && (
           <div className="space-y-1">

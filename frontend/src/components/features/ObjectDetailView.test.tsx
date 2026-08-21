@@ -37,7 +37,7 @@ vi.mock("@/hooks/useObject", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: h.push }),
-  usePathname: () => "/tenants/t1/object-keys/ok1/objects/o1",
+  usePathname: () => "/tenants/t1/collections/ok1/objects/o1",
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -71,7 +71,7 @@ import { ObjectDetailView } from "./ObjectDetailView";
 const makeObject = () => ({
   objectId: "obj-uuid-1",
   key: "path/to/report.pdf",
-  objectKey: "ok1",
+  collection: "ok1",
   contentType: "application/pdf",
   sizeBytes: 2048n,
   state: ObjectState.AVAILABLE,
@@ -95,7 +95,7 @@ beforeEach(() => {
 
 describe("ObjectDetailView", () => {
   it("renders the filename, specs, and tags", () => {
-    render(<ObjectDetailView objectKey="o1" />);
+    render(<ObjectDetailView collection="o1" />);
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     // Specs sidebar facts.
     expect(screen.getByText("Object UUID")).toBeInTheDocument();
@@ -108,13 +108,13 @@ describe("ObjectDetailView", () => {
   });
 
   it("renders the Object and Versions tabs", () => {
-    render(<ObjectDetailView objectKey="o1" />);
+    render(<ObjectDetailView collection="o1" />);
     expect(screen.getByRole("tab", { name: "Object" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Versions" })).toBeInTheDocument();
   });
 
   it("edits and saves tags", async () => {
-    render(<ObjectDetailView objectKey="o1" />);
+    render(<ObjectDetailView collection="o1" />);
     // The Tags card "Edit" button (not the header "Edit Metadata").
     await userEvent.click(screen.getByRole("button", { name: "Edit" }));
     // The key input upper-cases as you type, so "owner" lands as "OWNER".
@@ -128,7 +128,7 @@ describe("ObjectDetailView", () => {
   });
 
   it("soft-deletes through the trash confirm dialog", async () => {
-    render(<ObjectDetailView objectKey="o1" />);
+    render(<ObjectDetailView collection="o1" />);
     await userEvent.click(
       screen.getByRole("button", { name: "Object actions" }),
     );

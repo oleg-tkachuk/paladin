@@ -7,14 +7,17 @@ import { ConnectError } from "@connectrpc/connect";
 
 import { backendClient } from "@/lib/connect/client";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
-import { StorageBackendSchema, StorageKind } from "@/gen/paladin/admin/v1/types_pb";
+import {
+  StorageBackendSchema,
+  StorageKind,
+} from "@/gen/paladin/admin/v1/types_pb";
 import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { useBumpRefresh, useRefreshSignal } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 // useBackends — list rows from the `backends` table via
 // admin/v1.BackendService.ListBackends. Use this for any UI that needs
-// the set of bind-targets (bucket creation, ObjectKey provisioning, etc.).
+// the set of bind-targets (bucket creation, Collection provisioning, etc.).
 // Do NOT parse `storage.backends` from yaml config: bucket FK points at
 // this table, so config-only entries can't actually receive Buckets and
 // will trip `buckets_backend_id_fkey` on insert.

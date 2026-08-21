@@ -58,7 +58,7 @@ describe("transport interceptors", () => {
     const { bucketClient } = await import("@/lib/connect/client");
     const res = await bucketClient.createBucket({
       parent: "storageBackends/x",
-      bucketName: "b",
+      bucketId: "b",
     });
     expect(res).toBeDefined(); // resolved — the retry succeeded
     expect(rpcCalls).toBe(2); // original + one retry
@@ -90,7 +90,7 @@ describe("transport interceptors", () => {
     await expect(
       bucketClient.createBucket({
         parent: "storageBackends/x",
-        bucketName: "b",
+        bucketId: "b",
       }),
     ).rejects.toThrow();
     expect(rpcCalls).toBe(2); // original + exactly one retry, then it stops

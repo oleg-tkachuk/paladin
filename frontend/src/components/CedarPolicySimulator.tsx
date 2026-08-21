@@ -31,7 +31,7 @@ import { T } from "@/lib/ui/typography";
 export interface SimulateRequest {
   principal: string; // e.g. User::"alice"
   action: string; // e.g. Action::"GetObject"
-  resource: string; // e.g. ObjectKey::"tenants/x/objectKeys/y"
+  resource: string; // e.g. Collection::"tenants/x/collections/y"
 }
 
 export interface SimulateResult {
@@ -56,7 +56,7 @@ export function CedarPolicySimulator({
   const [principal, setPrincipal] = useState('User::"alice"');
   const [action, setAction] = useState('Action::"GetObject"');
   const [resource, setResource] = useState(
-    'ObjectKey::"tenants/example/objectKeys/data"',
+    'Collection::"tenants/example/collections/data"',
   );
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<SimulateResult | null>(null);
@@ -107,7 +107,7 @@ export function CedarPolicySimulator({
             label="Resource"
             value={resource}
             onChange={setResource}
-            placeholder='ObjectKey::"tenants/x/objectKeys/y"'
+            placeholder='Collection::"tenants/x/collections/y"'
           />
         </div>
         <Button

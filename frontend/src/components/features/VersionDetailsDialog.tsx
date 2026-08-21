@@ -89,7 +89,7 @@ export function VersionDetailsDialog({
               </span>
             </DlRow>
             <DlRow label="S3 Key">
-              <span className={T.codeSmall}>{version.s3Key || "—"}</span>
+              <span className={T.codeSmall}>{version.storagePath || "—"}</span>
             </DlRow>
             <DlRow label="Delete Marker">
               <span className={T.codeSmall}>

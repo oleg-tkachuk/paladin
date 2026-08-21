@@ -38,7 +38,7 @@ import TenantBucketsPage from "./page";
 
 const makeBucket = (name: string) => ({
   backendId: "be-1",
-  bucketName: name,
+  bucketId: name,
   displayName: "",
   region: "us-east-1",
   provisionState: "PROVISION_STATE_READY",

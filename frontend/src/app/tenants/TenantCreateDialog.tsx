@@ -97,9 +97,7 @@ export function TenantCreateDialog({
   }
   if (
     newBucket &&
-    !buckets.some(
-      (b) => b.backendId === newBackend && b.bucketName === newBucket,
-    )
+    !buckets.some((b) => b.backendId === newBackend && b.bucketId === newBucket)
   ) {
     setNewBucket("");
   }
@@ -344,8 +342,8 @@ export function TenantCreateDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {bucketsForBackend.map((b) => (
-                        <SelectItem key={b.bucketName} value={b.bucketName}>
-                          {b.bucketName}
+                        <SelectItem key={b.bucketId} value={b.bucketId}>
+                          {b.bucketId}
                         </SelectItem>
                       ))}
                     </SelectContent>

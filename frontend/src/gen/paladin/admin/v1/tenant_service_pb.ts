@@ -30,7 +30,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiRsZWdhdGUvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSJxChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIvCgZ0ZW5hbnQYAiABKAsyFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqgBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARInCgZ0ZW5hbnQYBCABKAsyFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIoABChJMaXN0VGVuYW50c1JlcXVlc3QSKwoEcGFnZRgBIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibQoTTGlzdFRlbmFudHNSZXNwb25zZRIoCgd0ZW5hbnRzGAEgAygLMhcubGVnYXRlLmFkbWluLnYxLlRlbmFudBIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJIi0KFFJlc3RvcmVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiKwoSUHVyZ2VUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiFQoTUHVyZ2VUZW5hbnRSZXNwb25zZSJlChdSZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSGQoIbmV3X3NsdWcYAyABKAlCB7pIBHICEAEiNgoZUmVzb2x2ZVJlbmFtZWRTbHVnUmVxdWVzdBIZCghvbGRfc2x1ZxgBIAEoCUIHukgEcgIQASJeChpSZXNvbHZlUmVuYW1lZFNsdWdSZXNwb25zZRIQCghuZXdfc2x1ZxgBIAEoCRIuCgpyZW5hbWVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ4CiFNaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIZChF0YXJnZXRfYmFja2VuZF9pZBgCIAEoCRIhChljbGVhbnVwX3JldGVudGlvbl9zZWNvbmRzGAMgASgDIjkKIEdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEi4wEKFlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMSDgoGdGVuYW50GAEgASgJEg0KBXN0YXRlGAIgASgJEhUKDW9iamVjdHNfdG90YWwYAyABKAMSFgoOb2JqZWN0c19jb3BpZWQYBCABKAMSGQoRc291cmNlX2JhY2tlbmRfaWQYBSABKAkSGgoSc291cmNlX2J1Y2tldF9uYW1lGAYgASgJEhkKEXRhcmdldF9iYWNrZW5kX2lkGAcgASgJEhoKEnRhcmdldF9idWNrZXRfbmFtZRgIIAEoCRINCgVlcnJvchgJIAEoCSKJAQoUVGVuYW50RGVmYXVsdEJpbmRpbmcSDAoEbmFtZRgBIAEoCRISCgpiYWNrZW5kX2lkGAIgASgJEhMKC2J1Y2tldF9uYW1lGAMgASgJEioKBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGc2V0X2J5GAUgASgJIjcKHkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABInIKHlNldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhsKCmJhY2tlbmRfaWQYAiABKAlCB7pIBHICEAESHAoLYnVja2V0X25hbWUYAyABKAlCB7pIBHICEAEiOQogQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIjCiFDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVzcG9uc2Uy2AsKDVRlbmFudFNlcnZpY2USTQoMQ3JlYXRlVGVuYW50EiQubGVnYXRlLmFkbWluLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50EkcKCUdldFRlbmFudBIhLmxlZ2F0ZS5hZG1pbi52MS5HZXRUZW5hbnRSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLlRlbmFudBJNCgxVcGRhdGVUZW5hbnQSJC5sZWdhdGUuYWRtaW4udjEuVXBkYXRlVGVuYW50UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5UZW5hbnQSWwoMRGVsZXRlVGVuYW50EiQubGVnYXRlLmFkbWluLnYxLkRlbGV0ZVRlbmFudFJlcXVlc3QaJS5sZWdhdGUuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVzcG9uc2USWAoLTGlzdFRlbmFudHMSIy5sZWdhdGUuYWRtaW4udjEuTGlzdFRlbmFudHNSZXF1ZXN0GiQubGVnYXRlLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVzcG9uc2USWQoSU2V0SW5oZXJpdGVkUG9saWN5EioubGVnYXRlLmFkbWluLnYxLlNldEluaGVyaXRlZFBvbGljeVJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50Ek8KDVJlc3RvcmVUZW5hbnQSJS5sZWdhdGUuYWRtaW4udjEuUmVzdG9yZVRlbmFudFJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50ElgKC1B1cmdlVGVuYW50EiMubGVnYXRlLmFkbWluLnYxLlB1cmdlVGVuYW50UmVxdWVzdBokLmxlZ2F0ZS5hZG1pbi52MS5QdXJnZVRlbmFudFJlc3BvbnNlElUKEFJlbmFtZVRlbmFudFNsdWcSKC5sZWdhdGUuYWRtaW4udjEuUmVuYW1lVGVuYW50U2x1Z1JlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50EnkKGk1pZ3JhdGVUZW5hbnRTdG9yYWdlTGF5b3V0EjIubGVnYXRlLmFkbWluLnYxLk1pZ3JhdGVUZW5hbnRTdG9yYWdlTGF5b3V0UmVxdWVzdBonLmxlZ2F0ZS5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzEncKGUdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb24SMS5sZWdhdGUuYWRtaW4udjEuR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvblJlcXVlc3QaJy5sZWdhdGUuYWRtaW4udjEuU3RvcmFnZU1pZ3JhdGlvblN0YXR1cxJtChJSZXNvbHZlUmVuYW1lZFNsdWcSKi5sZWdhdGUuYWRtaW4udjEuUmVzb2x2ZVJlbmFtZWRTbHVnUmVxdWVzdBorLmxlZ2F0ZS5hZG1pbi52MS5SZXNvbHZlUmVuYW1lZFNsdWdSZXNwb25zZRJxChdHZXRUZW5hbnREZWZhdWx0QmluZGluZxIvLmxlZ2F0ZS5hZG1pbi52MS5HZXRUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaJS5sZWdhdGUuYWRtaW4udjEuVGVuYW50RGVmYXVsdEJpbmRpbmcScQoXU2V0VGVuYW50RGVmYXVsdEJpbmRpbmcSLy5sZWdhdGUuYWRtaW4udjEuU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiUubGVnYXRlLmFkbWluLnYxLlRlbmFudERlZmF1bHRCaW5kaW5nEoIBChlDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nEjEubGVnYXRlLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GjIubGVnYXRlLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXNwb25zZUJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
+    "CiRsZWdhdGUvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSJxChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIvCgZ0ZW5hbnQYAiABKAsyFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqgBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARInCgZ0ZW5hbnQYBCABKAsyFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIoABChJMaXN0VGVuYW50c1JlcXVlc3QSKwoEcGFnZRgBIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibQoTTGlzdFRlbmFudHNSZXNwb25zZRIoCgd0ZW5hbnRzGAEgAygLMhcubGVnYXRlLmFkbWluLnYxLlRlbmFudBIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJIi0KFFJlc3RvcmVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiKwoSUHVyZ2VUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiFQoTUHVyZ2VUZW5hbnRSZXNwb25zZSJlChdSZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSGQoIbmV3X3NsdWcYAyABKAlCB7pIBHICEAEiNgoZUmVzb2x2ZVJlbmFtZWRTbHVnUmVxdWVzdBIZCghvbGRfc2x1ZxgBIAEoCUIHukgEcgIQASJeChpSZXNvbHZlUmVuYW1lZFNsdWdSZXNwb25zZRIQCghuZXdfc2x1ZxgBIAEoCRIuCgpyZW5hbWVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ4CiFNaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIZChF0YXJnZXRfYmFja2VuZF9pZBgCIAEoCRIhChljbGVhbnVwX3JldGVudGlvbl9zZWNvbmRzGAMgASgDIjkKIEdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEirwEKFlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMSDgoGdGVuYW50GAEgASgJEg0KBXN0YXRlGAIgASgJEhUKDW9iamVjdHNfdG90YWwYAyABKAMSFgoOb2JqZWN0c19jb3BpZWQYBCABKAMSFQoNc291cmNlX2J1Y2tldBgFIAEoCRIVCg10YXJnZXRfYnVja2V0GAYgASgJEg0KBWVycm9yGAkgASgJSgQIBxAISgQICBAJInAKFFRlbmFudERlZmF1bHRCaW5kaW5nEgwKBG5hbWUYASABKAkSDgoGYnVja2V0GAIgASgJEioKBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGc2V0X2J5GAUgASgJIjcKHkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlAKHlNldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhcKBmJ1Y2tldBgCIAEoCUIHukgEcgIQASI5CiBDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIiMKIUNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXNwb25zZTLYCwoNVGVuYW50U2VydmljZRJNCgxDcmVhdGVUZW5hbnQSJC5sZWdhdGUuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5UZW5hbnQSRwoJR2V0VGVuYW50EiEubGVnYXRlLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuVGVuYW50Ek0KDFVwZGF0ZVRlbmFudBIkLmxlZ2F0ZS5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLlRlbmFudBJbCgxEZWxldGVUZW5hbnQSJC5sZWdhdGUuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBolLmxlZ2F0ZS5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJYCgtMaXN0VGVuYW50cxIjLmxlZ2F0ZS5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaJC5sZWdhdGUuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJZChJTZXRJbmhlcml0ZWRQb2xpY3kSKi5sZWdhdGUuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5UZW5hbnQSTwoNUmVzdG9yZVRlbmFudBIlLmxlZ2F0ZS5hZG1pbi52MS5SZXN0b3JlVGVuYW50UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5UZW5hbnQSWAoLUHVyZ2VUZW5hbnQSIy5sZWdhdGUuYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXF1ZXN0GiQubGVnYXRlLmFkbWluLnYxLlB1cmdlVGVuYW50UmVzcG9uc2USVQoQUmVuYW1lVGVuYW50U2x1ZxIoLmxlZ2F0ZS5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5UZW5hbnQSeQoaTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXQSMi5sZWdhdGUuYWRtaW4udjEuTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0GicubGVnYXRlLmFkbWluLnYxLlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMSdwoZR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvbhIxLmxlZ2F0ZS5hZG1pbi52MS5HZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBonLmxlZ2F0ZS5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzEm0KElJlc29sdmVSZW5hbWVkU2x1ZxIqLmxlZ2F0ZS5hZG1pbi52MS5SZXNvbHZlUmVuYW1lZFNsdWdSZXF1ZXN0GisubGVnYXRlLmFkbWluLnYxLlJlc29sdmVSZW5hbWVkU2x1Z1Jlc3BvbnNlEnEKF0dldFRlbmFudERlZmF1bHRCaW5kaW5nEi8ubGVnYXRlLmFkbWluLnYxLkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBolLmxlZ2F0ZS5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZxJxChdTZXRUZW5hbnREZWZhdWx0QmluZGluZxIvLmxlZ2F0ZS5hZG1pbi52MS5TZXRUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaJS5sZWdhdGUuYWRtaW4udjEuVGVuYW50RGVmYXVsdEJpbmRpbmcSggEKGUNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmcSMS5sZWdhdGUuYWRtaW4udjEuQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaMi5sZWdhdGUuYWRtaW4udjEuQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlQkdaRWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7bGVnYXRlYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -68,7 +68,7 @@ export type CreateTenantRequest =
     /**
      * default_bucket — resource name of the (backend, bucket) where this
      * tenant's objects will live by default. Format:
-     * "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+     * "storageBackends/{backend_id}/buckets/{bucket_id}". Optional —
      * when empty the tenant has no default binding (legacy shape); when
      * set, the server inserts a matching tenant_default_bindings row in
      * the same tx as the tenant insert.
@@ -154,7 +154,7 @@ export type DeleteTenantRequest =
     resourceVersion: string;
 
     /**
-     * Refuse delete when object_keys/users/api_keys still reference the tenant.
+     * Refuse delete when collections/users/api_keys still reference the tenant.
      *
      * @generated from field: bool force = 3;
      */
@@ -517,24 +517,17 @@ export type StorageMigrationStatus =
     objectsCopied: bigint;
 
     /**
-     * @generated from field: string source_backend_id = 5;
+     * Bucket references as resource names, consistent with
+     * TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+     *
+     * @generated from field: string source_bucket = 5;
      */
-    sourceBackendId: string;
+    sourceBucket: string;
 
     /**
-     * @generated from field: string source_bucket_name = 6;
+     * @generated from field: string target_bucket = 6;
      */
-    sourceBucketName: string;
-
-    /**
-     * @generated from field: string target_backend_id = 7;
-     */
-    targetBackendId: string;
-
-    /**
-     * @generated from field: string target_bucket_name = 8;
-     */
-    targetBucketName: string;
+    targetBucket: string;
 
     /**
      * error — non-empty only in the `failed` state.
@@ -554,7 +547,7 @@ export const StorageMigrationStatusSchema: GenMessage<StorageMigrationStatus> =
 
 /**
  * TenantDefaultBinding is a tenant's default (backend, bucket) route for the
- * bare object_key name shape (ADR-0010 Phase 3 / migration 034).
+ * bare collection name shape (ADR-0010 Phase 3 / migration 034).
  *
  * @generated from message paladin.admin.v1.TenantDefaultBinding
  */
@@ -568,14 +561,13 @@ export type TenantDefaultBinding =
     name: string;
 
     /**
-     * @generated from field: string backend_id = 2;
+     * Reference to the bucket, as a resource name:
+     * "storageBackends/{backend_id}/buckets/{bucket_id}". One field, because a
+     * reference to another resource is its name (AIP-122), not its parts.
+     *
+     * @generated from field: string bucket = 2;
      */
-    backendId: string;
-
-    /**
-     * @generated from field: string bucket_name = 3;
-     */
-    bucketName: string;
+    bucket: string;
 
     /**
      * set_at / set_by — audit of the last change.
@@ -632,14 +624,11 @@ export type SetTenantDefaultBindingRequest =
     name: string;
 
     /**
-     * @generated from field: string backend_id = 2;
+     * "storageBackends/{backend_id}/buckets/{bucket_id}".
+     *
+     * @generated from field: string bucket = 2;
      */
-    backendId: string;
-
-    /**
-     * @generated from field: string bucket_name = 3;
-     */
-    bucketName: string;
+    bucket: string;
   };
 
 /**
@@ -775,7 +764,7 @@ export const TenantService: GenService<{
   /**
    * RenameTenantSlug rewrites the tenant's `slug` and rewrites every
    * `Tenant::"<old_slug>"` reference in the tenant's
-   * inherited_cedar_policy AND in every object_key's cedar_policy to
+   * inherited_cedar_policy AND in every collection's cedar_policy to
    * `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
    * the supplied resource_version. Returns the renamed Tenant.
    *
@@ -790,7 +779,7 @@ export const TenantService: GenService<{
    * MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
    * (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
    * async copy job that server-side-copies every object into it, then rebinds
-   * the object_keys and flips the layout. Returns the initial migration status;
+   * the collections and flips the layout. Returns the initial migration status;
    * poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
    * tenant is not currently `shared` or a migration is already in flight.
    *
@@ -831,7 +820,7 @@ export const TenantService: GenService<{
   };
   /**
    * GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-   * route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+   * route used to complete the bare collection name shape (ADR-0010 Phase 3).
    * NOT_FOUND when the tenant has no binding set.
    *
    * @generated from rpc paladin.admin.v1.TenantService.GetTenantDefaultBinding
@@ -854,7 +843,7 @@ export const TenantService: GenService<{
   };
   /**
    * ClearTenantDefaultBinding removes the tenant's default route; bare
-   * object_key names for that tenant then fail with FAILED_PRECONDITION.
+   * collection names for that tenant then fail with FAILED_PRECONDITION.
    *
    * @generated from rpc paladin.admin.v1.TenantService.ClearTenantDefaultBinding
    */

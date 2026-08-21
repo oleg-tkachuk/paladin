@@ -34,7 +34,7 @@ import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
-import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
+import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import {
   CapabilityService,
   PrincipalKind,
@@ -158,8 +158,8 @@ export async function seedDisabledBackend(opts?: {
   return { backendId, resourceVersion: disabled.resourceVersion };
 }
 
-function objectKeyAdminClient() {
-  return createClient(ObjectKeyService, adminTransport());
+function collectionAdminClient() {
+  return createClient(CollectionService, adminTransport());
 }
 
 /**
@@ -260,7 +260,7 @@ export interface SeededBucket {
   /** Backend ID this bucket lives in (e.g. "primary"). */
   backendId: string;
   /** Physical bucket name. UUID-suffixed via uniqueSlug. */
-  bucketName: string;
+  bucketId: string;
   /** Human-facing display name. UUID-suffixed. */
   displayName: string;
 }
@@ -277,21 +277,21 @@ export interface SeededBucket {
  */
 export async function seedBucket(opts?: {
   backendId?: string;
-  bucketNamePrefix?: string;
+  bucketIdPrefix?: string;
   displayNamePrefix?: string;
 }): Promise<SeededBucket> {
   const backendId = opts?.backendId ?? "primary";
-  const bucketName = uniqueSlug(opts?.bucketNamePrefix ?? "e2e-bucket");
+  const bucketId = uniqueSlug(opts?.bucketIdPrefix ?? "e2e-bucket");
   const displayName = uniqueDisplayName(
     opts?.displayNamePrefix ?? "E2E Bucket",
   );
   const client = bucketAdminClient();
   await client.createBucket({
     parent: `storageBackends/${backendId}`,
-    bucketName,
+    bucketId,
     bucket: {
       backendId,
-      bucketName,
+      bucketId,
       displayName,
       region: "",
       labels: {},
@@ -299,42 +299,42 @@ export async function seedBucket(opts?: {
     },
     provisionOnBackend: false,
   });
-  return { backendId, bucketName, displayName };
+  return { backendId, bucketId, displayName };
 }
 
 // ─── object_key seeding ────────────────────────────────────
 
-export interface SeededObjectKey {
+export interface SeededCollection {
   tenantId: string;
   /** Bucket resource name: `storageBackends/{backend}/buckets/{name}`. */
   bucket: string;
-  /** ObjectKey identifier — `e2e/<8-hex>`. */
-  objectKey: string;
+  /** Collection identifier — `e2e/<8-hex>`. */
+  collection: string;
   displayName: string;
 }
 
 /**
- * Create an ObjectKey under the given (tenant, bucket) via
- * ObjectKeyService.CreateObjectKey. The key path is
+ * Create an Collection under the given (tenant, bucket) via
+ * CollectionService.CreateCollection. The key path is
  * `e2e/<8-hex>` so concurrent tests don't collide on the
  * (tenant_id, object_key) UNIQUE constraint.
  */
-export async function seedObjectKey(opts: {
+export async function seedCollection(opts: {
   tenantId: string;
   bucket: SeededBucket;
-  objectKeyPrefix?: string;
-}): Promise<SeededObjectKey> {
-  const objectKey = `e2e/${uniqueSlug(opts.objectKeyPrefix ?? "key").replace(/^[^-]+-/, "")}`;
+  collectionPrefix?: string;
+}): Promise<SeededCollection> {
+  const collection = `e2e/${uniqueSlug(opts.collectionPrefix ?? "key").replace(/^[^-]+-/, "")}`;
   const displayName = uniqueDisplayName("E2E Key");
-  const bucketResourceName = `storageBackends/${opts.bucket.backendId}/buckets/${opts.bucket.bucketName}`;
-  const client = objectKeyAdminClient();
-  await client.createObjectKey({
+  const bucketResourceName = `storageBackends/${opts.bucket.backendId}/buckets/${opts.bucket.bucketId}`;
+  const client = collectionAdminClient();
+  await client.createCollection({
     parent: `tenants/${opts.tenantId}`,
-    objectKey,
-    objectKeyResource: {
+    collection,
+    collectionResource: {
       name: "",
       tenantId: opts.tenantId,
-      objectKey,
+      collection,
       displayName,
       bucket: bucketResourceName,
       cedarPolicy: "",
@@ -343,7 +343,7 @@ export async function seedObjectKey(opts: {
   return {
     tenantId: opts.tenantId,
     bucket: bucketResourceName,
-    objectKey,
+    collection,
     displayName,
   };
 }

@@ -212,7 +212,7 @@ export const GetEffectivePolicyRequestSchema: GenMessage<GetEffectivePolicyReque
 export type GetEffectivePolicyResponse =
   Message<"paladin.admin.v1.GetEffectivePolicyResponse"> & {
     /**
-     * Concatenated cedar text in evaluation order: tenant → bucket → object_key.
+     * Concatenated cedar text in evaluation order: tenant → bucket → collection.
      *
      * @generated from field: string merged_cedar_policy = 1;
      */
@@ -289,7 +289,7 @@ export const PolicyService: GenService<{
   };
   /**
    * GetEffectivePolicy returns the merged policy stack for a target
-   * (tenant + bucket + object_key inheritance), useful for debugging.
+   * (tenant + bucket + collection inheritance), useful for debugging.
    *
    * @generated from rpc paladin.admin.v1.PolicyService.GetEffectivePolicy
    */

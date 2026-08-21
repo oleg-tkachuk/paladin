@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 export interface UploadDropzoneProps {
   /** Human-readable destination shown in the overlay banner — e.g.
-   *  `tenants/acme/object-keys/invoices/q1/`. */
+   *  `tenants/acme/collections/invoices/q1/`. */
   destinationLabel: string;
   /** Called when the user releases the drag on the overlay. */
   onFiles: (files: File[]) => void;

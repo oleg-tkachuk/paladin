@@ -85,7 +85,7 @@ export function useUpload() {
   const uploadFile = useCallback(
     async (
       file: File,
-      parentObjectKey: string,
+      parentCollection: string,
       tags: Record<string, string> = {},
     ): Promise<void> => {
       const id = `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -106,7 +106,7 @@ export function useUpload() {
 
       try {
         update(id, { status: "uploading" });
-        const parent = `tenants/${tenantId}/objectKeys/${parentObjectKey}`;
+        const parent = `tenants/${tenantId}/collections/${parentCollection}`;
 
         const allocated = await objectClient.uploadObject({
           parent,

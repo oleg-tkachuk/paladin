@@ -37,7 +37,7 @@ interface ObjectTableRowProps {
   onInspect: (key: string) => void;
   onStartInlineEdit: (obj: {
     objectId: string;
-    objectKey: string;
+    collection: string;
     key: string;
   }) => void;
   onSaveInlineLabels: (id: string) => void;
@@ -49,19 +49,19 @@ interface ObjectTableRowProps {
   ) => void;
   onSoftDelete: (obj: {
     objectId: string;
-    objectKey: string;
+    collection: string;
     key: string;
   }) => void;
   onHardDelete: (obj: {
     objectId: string;
-    objectKey: string;
+    collection: string;
     key: string;
   }) => void;
-  onCopy: (obj: { key: string; objectKey: string }) => void;
-  onMove: (obj: { key: string; objectKey: string }) => void;
+  onCopy: (obj: { key: string; collection: string }) => void;
+  onMove: (obj: { key: string; collection: string }) => void;
   onGenerateDownloadUrl: (
     key: string,
-    objectKey: string,
+    collection: string,
   ) => Promise<{ url: string } | undefined>;
 }
 
@@ -103,7 +103,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
   onGenerateDownloadUrl,
 }: ObjectTableRowProps) {
   // Detail link is `<current-pathname>/<key>` — the row is rendered
-  // inside the OK Objects tab (/tenants/<id>/object-keys/<ok>/
+  // inside the OK Objects tab (/tenants/<id>/collections/<ok>/
   // objects) since Phase 5, so detail = same path + storage key.
   // Falls back to the storage key alone for any future host that
   // mounts the row outside the Objects tab; that won't 404 silently
@@ -186,7 +186,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
               "inline-flex items-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 px-2 py-0.5",
             )}
           >
-            {obj.objectKey || "—"}
+            {obj.collection || "—"}
           </span>
         </td>
       )}
@@ -371,7 +371,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                   onClick={() => {
                     const urlPromise = onGenerateDownloadUrl(
                       obj.key,
-                      obj.objectKey,
+                      obj.collection,
                     ).then((url) => {
                       if (!url?.url) throw new Error("Link generation failed");
                       return url.url;
@@ -388,7 +388,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                 <Dropdown.Item
                   className="p-0"
                   onClick={() =>
-                    onCopy({ key: obj.key, objectKey: obj.objectKey })
+                    onCopy({ key: obj.key, collection: obj.collection })
                   }
                 >
                   <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
@@ -399,7 +399,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                 <Dropdown.Item
                   className="p-0"
                   onClick={() =>
-                    onMove({ key: obj.key, objectKey: obj.objectKey })
+                    onMove({ key: obj.key, collection: obj.collection })
                   }
                 >
                   <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">

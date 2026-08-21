@@ -16,7 +16,7 @@ import { API_LIMIT_DEFAULT } from "@/constants";
  * useObjects — wrapper around data/v1.ObjectService + BatchService.
  *
  * Resource layout:
- *   parent ObjectKey  → "tenants/{tenant}/objectKeys/{ok}"
+ *   parent Collection  → "tenants/{tenant}/collections/{ok}"
  *   Object name       → opaque (returned by ListObjects, used for delete /
  *                        copy / presign)
  *
@@ -27,13 +27,13 @@ import { API_LIMIT_DEFAULT } from "@/constants";
  * reset-to-page-1 behaviour the old setState-in-effect had, without the
  * effect.
  *
- * Bulk operations group by destination ObjectKey because BatchService
+ * Bulk operations group by destination Collection because BatchService
  * requires a single `parent` per call.
  */
 
 export interface UseObjectsOptions {
-  /** ObjectKey id (slug or uuid) — assembled with the user's tenant. */
-  objectKey?: string;
+  /** Collection id (slug or uuid) — assembled with the user's tenant. */
+  collection?: string;
   /** CEL filter passed straight through to ListObjects.filter. */
   filter?: string;
   /** Field name to order by (e.g. "created_at"). */
@@ -56,14 +56,14 @@ function toSortOrder(d: UseObjectsOptions["sortDirection"]): SortOrder {
   return SortOrder.UNSPECIFIED;
 }
 
-type BulkItem = { name: string; objectKey: string };
+type BulkItem = { name: string; collection: string };
 
-function groupByObjectKey(items: BulkItem[]): Map<string, string[]> {
+function groupByCollection(items: BulkItem[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const it of items) {
-    const arr = out.get(it.objectKey) ?? [];
+    const arr = out.get(it.collection) ?? [];
     arr.push(it.name);
-    out.set(it.objectKey, arr);
+    out.set(it.collection, arr);
   }
   return out;
 }
@@ -71,13 +71,13 @@ function groupByObjectKey(items: BulkItem[]): Map<string, string[]> {
 export function useObjects(options: UseObjectsOptions = {}) {
   const { user } = useAuth();
   const tenantId = user?.tenantId ?? "";
-  const objectKey = options.objectKey ?? DEFAULT_OBJECT_KEY;
+  const collection = options.collection ?? DEFAULT_OBJECT_KEY;
   const parent = useMemo(
-    () => (tenantId ? `tenants/${tenantId}/objectKeys/${objectKey}` : ""),
-    [tenantId, objectKey],
+    () => (tenantId ? `tenants/${tenantId}/collections/${collection}` : ""),
+    [tenantId, collection],
   );
   const parentFor = useCallback(
-    (ok: string) => (tenantId ? `tenants/${tenantId}/objectKeys/${ok}` : ""),
+    (ok: string) => (tenantId ? `tenants/${tenantId}/collections/${ok}` : ""),
     [tenantId],
   );
 
@@ -174,11 +174,11 @@ export function useObjects(options: UseObjectsOptions = {}) {
     async (
       sourceName: string,
       destinationKey: string,
-      destinationObjectKey: string,
+      destinationCollection: string,
     ): Promise<void> => {
       await objectClient.copyObject({
         sourceName,
-        destinationObjectKey: parentFor(destinationObjectKey),
+        destinationCollection: parentFor(destinationCollection),
         destinationKey,
       });
       bumpRefresh("objects");
@@ -207,7 +207,7 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   const bulkDeleteObjects = useCallback(
     async (items: BulkItem[], opts: { permanent?: boolean } = {}) => {
-      const groups = groupByObjectKey(items);
+      const groups = groupByCollection(items);
       await Promise.all(
         Array.from(groups.entries()).map(([ok, names]) =>
           batchClient.batchDeleteObjects({
@@ -224,7 +224,7 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   const bulkRestoreObjects = useCallback(
     async (items: BulkItem[]) => {
-      const groups = groupByObjectKey(items);
+      const groups = groupByCollection(items);
       await Promise.all(
         Array.from(groups.entries()).map(([ok, names]) =>
           batchClient.batchRestoreObjects({
@@ -241,15 +241,15 @@ export function useObjects(options: UseObjectsOptions = {}) {
   const bulkPatchObjects = useCallback(
     async (items: { objectId: string; tags: Record<string, string> }[]) => {
       // The page calls this with one tag-map for all items, so we batch them
-      // per ObjectKey under the same selector.
+      // per Collection under the same selector.
       const tags = items[0]?.tags ?? {};
       const namesByOk = new Map<string, string[]>();
       for (const it of items) {
         const obj = objects.find((o) => o.objectId === it.objectId);
         if (!obj) continue;
-        const arr = namesByOk.get(obj.objectKey) ?? [];
+        const arr = namesByOk.get(obj.collection) ?? [];
         arr.push(obj.name);
-        namesByOk.set(obj.objectKey, arr);
+        namesByOk.set(obj.collection, arr);
       }
       await Promise.all(
         Array.from(namesByOk.entries()).map(([ok, names]) =>

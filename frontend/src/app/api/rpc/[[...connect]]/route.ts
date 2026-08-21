@@ -14,7 +14,7 @@ import { RPC_API_PREFIX, RPC_PLANE_PREFIXES, type Plane } from "@/constants";
 import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
 
 // admin plane services
-import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
+import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { PolicyService } from "@/gen/paladin/admin/v1/policy_service_pb";
@@ -23,7 +23,7 @@ import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
 import { AuditLogService } from "@/gen/paladin/admin/v1/audit_service_pb";
 import { EventSubscriptionService } from "@/gen/paladin/admin/v1/event_subscription_service_pb";
-import { OperationService as AdminOperationService } from "@/gen/paladin/admin/v1/operation_service_pb";
+import { PlatformOperationService } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { SystemService as AdminSystemService } from "@/gen/paladin/admin/v1/system_service_pb";
 import { APITokenService } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { CapabilityService } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -43,7 +43,6 @@ import { OperationService as DataOperationService } from "@/gen/paladin/data/v1/
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { UserSettingsService } from "@/gen/paladin/iam/v1/user_settings_service_pb";
-import { SystemService } from "@/gen/paladin/iam/v1/system_service_pb";
 
 /**
  * BFF that proxies browser RPCs to the three backend planes.
@@ -66,7 +65,7 @@ const planeBackendUrls: Record<Plane, string> = {
 
 const planeServices: Record<Plane, DescService[]> = {
   admin: [
-    ObjectKeyService,
+    CollectionService,
     BucketService,
     TenantService,
     PolicyService,
@@ -75,7 +74,7 @@ const planeServices: Record<Plane, DescService[]> = {
     QuotaService,
     AuditLogService,
     EventSubscriptionService,
-    AdminOperationService,
+    PlatformOperationService,
     AdminSystemService,
     APITokenService,
     CapabilityService,
@@ -91,7 +90,7 @@ const planeServices: Record<Plane, DescService[]> = {
     PresignService,
     DataOperationService,
   ],
-  iam: [AuthService, UserService, UserSettingsService, SystemService],
+  iam: [AuthService, UserService, UserSettingsService],
 };
 
 // ContextKey must be constructed via createContextKey — a bare Symbol has

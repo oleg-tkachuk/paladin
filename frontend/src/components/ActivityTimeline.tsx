@@ -7,8 +7,8 @@
 //
 // Phase 1 of canonical-resource-names ensures `resource_name` on
 // audit_log rows is the A-shape
-// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}`.
-// The C-shape `tenants/{tid}/objectKeys/{ok}` still works as a
+// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}`.
+// The C-shape `tenants/{tid}/collections/{ok}` still works as a
 // substring match thanks to migration 035's backfill rewriting all
 // historical rows to canonical.
 //

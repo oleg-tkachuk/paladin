@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_types: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChpsZWdhdGUvZGF0YS92MS90eXBlcy5wcm90bxIObGVnYXRlLmRhdGEudjEi3gYKBk9iamVjdBIMCgRuYW1lGAEgASgJEhEKCW9iamVjdF9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSEgoKb2JqZWN0X2tleRgEIAEoCRILCgNrZXkYBSABKAkSKgoFc3RhdGUYBiABKA4yGy5sZWdhdGUuZGF0YS52MS5PYmplY3RTdGF0ZRIUCgxjb250ZW50X3R5cGUYByABKAkSEgoKc2l6ZV9ieXRlcxgIIAEoAxIMCgRldGFnGAkgASgJEjAKCGNoZWNrc3VtGAogASgLMh4ubGVnYXRlLmRhdGEudjEuQ2hlY2tzdW1EaWdlc3QSEQoJc2VxdWVuY2VyGAsgASgJEjYKCG1ldGFkYXRhGAwgAygLMiQubGVnYXRlLmRhdGEudjEuT2JqZWN0Lk1ldGFkYXRhRW50cnkSLgoEdGFncxgNIAMoCzIgLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdC5UYWdzRW50cnkSFAoMZXh0ZXJuYWxfcmVmGA4gASgJEhgKEHJlc291cmNlX3ZlcnNpb24YDyABKAkSLgoKY3JlYXRlZF9hdBgQIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GBIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg10ZXJtaW5hdGVkX2F0GBMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJwcmVzaWduX2V4cGlyZXNfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KBGxvY2sYFSABKAsyHy5sZWdhdGUuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSNAoJcGxhY2VtZW50GBYgASgLMiEubGVnYXRlLmRhdGEudjEuUGh5c2ljYWxQbGFjZW1lbnQaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjIKDkNoZWNrc3VtRGlnZXN0EhEKCWFsZ29yaXRobRgBIAEoCRINCgV2YWx1ZRgCIAEoCSJlCg9PYmplY3RMb2NrU3RhdGUSDAoEbW9kZRgBIAEoCRIwCgxyZXRhaW5fdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxlZ2FsX2hvbGQYAyABKAgiTAoRUGh5c2ljYWxQbGFjZW1lbnQSEgoKYmFja2VuZF9pZBgBIAEoCRITCgtidWNrZXRfbmFtZRgCIAEoCRIOCgZzM19rZXkYAyABKAkiSgoNQ29tcGxldGVkUGFydBITCgtwYXJ0X251bWJlchgBIAEoBRIMCgRldGFnGAIgASgJEhYKDmNoZWNrc3VtX3ZhbHVlGAMgASgJInIKCFBhcnRJbmZvEhMKC3BhcnRfbnVtYmVyGAEgASgFEhIKCnNpemVfYnl0ZXMYAiABKAMSDAoEZXRhZxgDIAEoCRIvCgt1cGxvYWRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqlAEKC09iamVjdFN0YXRlEhwKGE9CSkVDVF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFE9CSkVDVF9TVEFURV9QRU5ESU5HEAESGgoWT0JKRUNUX1NUQVRFX0FWQUlMQUJMRRACEhcKE09CSkVDVF9TVEFURV9GQUlMRUQQAxIYChRPQkpFQ1RfU1RBVEVfREVMRVRFRBAEQkVaQ2dpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtsZWdhdGVkYXRhdjFiBnByb3RvMw",
+    "ChpsZWdhdGUvZGF0YS92MS90eXBlcy5wcm90bxIObGVnYXRlLmRhdGEudjEi3gYKBk9iamVjdBIMCgRuYW1lGAEgASgJEhEKCW9iamVjdF9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSEgoKY29sbGVjdGlvbhgEIAEoCRILCgNrZXkYBSABKAkSKgoFc3RhdGUYBiABKA4yGy5sZWdhdGUuZGF0YS52MS5PYmplY3RTdGF0ZRIUCgxjb250ZW50X3R5cGUYByABKAkSEgoKc2l6ZV9ieXRlcxgIIAEoAxIMCgRldGFnGAkgASgJEjAKCGNoZWNrc3VtGAogASgLMh4ubGVnYXRlLmRhdGEudjEuQ2hlY2tzdW1EaWdlc3QSEQoJc2VxdWVuY2VyGAsgASgJEjYKCG1ldGFkYXRhGAwgAygLMiQubGVnYXRlLmRhdGEudjEuT2JqZWN0Lk1ldGFkYXRhRW50cnkSLgoEdGFncxgNIAMoCzIgLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdC5UYWdzRW50cnkSFAoMZXh0ZXJuYWxfcmVmGA4gASgJEhgKEHJlc291cmNlX3ZlcnNpb24YDyABKAkSLgoKY3JlYXRlZF9hdBgQIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GBIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg10ZXJtaW5hdGVkX2F0GBMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJwcmVzaWduX2V4cGlyZXNfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KBGxvY2sYFSABKAsyHy5sZWdhdGUuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSNAoJcGxhY2VtZW50GBYgASgLMiEubGVnYXRlLmRhdGEudjEuUGh5c2ljYWxQbGFjZW1lbnQaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjIKDkNoZWNrc3VtRGlnZXN0EhEKCWFsZ29yaXRobRgBIAEoCRINCgV2YWx1ZRgCIAEoCSJlCg9PYmplY3RMb2NrU3RhdGUSDAoEbW9kZRgBIAEoCRIwCgxyZXRhaW5fdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxlZ2FsX2hvbGQYAyABKAgiUAoRUGh5c2ljYWxQbGFjZW1lbnQSEgoKYmFja2VuZF9pZBgBIAEoCRIRCglidWNrZXRfaWQYAiABKAkSFAoMc3RvcmFnZV9wYXRoGAMgASgJIkoKDUNvbXBsZXRlZFBhcnQSEwoLcGFydF9udW1iZXIYASABKAUSDAoEZXRhZxgCIAEoCRIWCg5jaGVja3N1bV92YWx1ZRgDIAEoCSJyCghQYXJ0SW5mbxITCgtwYXJ0X251bWJlchgBIAEoBRISCgpzaXplX2J5dGVzGAIgASgDEgwKBGV0YWcYAyABKAkSLwoLdXBsb2FkZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wKpQBCgtPYmplY3RTdGF0ZRIcChhPQkpFQ1RfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRPQkpFQ1RfU1RBVEVfUEVORElORxABEhoKFk9CSkVDVF9TVEFURV9BVkFJTEFCTEUQAhIXChNPQkpFQ1RfU1RBVEVfRkFJTEVEEAMSGAoUT0JKRUNUX1NUQVRFX0RFTEVURUQQBEJFWkNnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7bGVnYXRlZGF0YXYxYgZwcm90bzM",
     [file_google_protobuf_timestamp],
   );
 
@@ -31,7 +31,7 @@ export const file_paladin_data_v1_types: GenFile =
  */
 export type Object$ = Message<"paladin.data.v1.Object"> & {
   /**
-   * Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}/objects/{object_id}".
+   * Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}/objects/{object_id}".
    *
    * @generated from field: string name = 1;
    */
@@ -48,12 +48,12 @@ export type Object$ = Message<"paladin.data.v1.Object"> & {
   tenantId: string;
 
   /**
-   * @generated from field: string object_key = 4;
+   * @generated from field: string collection = 4;
    */
-  objectKey: string;
+  collection: string;
 
   /**
-   * Storage path inside the object_key.
+   * Storage path inside the collection.
    *
    * @generated from field: string key = 5;
    */
@@ -226,16 +226,16 @@ export type PhysicalPlacement = Message<"paladin.data.v1.PhysicalPlacement"> & {
   backendId: string;
 
   /**
-   * @generated from field: string bucket_name = 2;
+   * @generated from field: string bucket_id = 2;
    */
-  bucketName: string;
+  bucketId: string;
 
   /**
-   * composed: "<tenant>/<object_key>/<key>"
+   * composed: "<tenant>/<collection>/<key>"
    *
-   * @generated from field: string s3_key = 3;
+   * @generated from field: string storage_path = 3;
    */
-  s3Key: string;
+  storagePath: string;
 };
 
 /**

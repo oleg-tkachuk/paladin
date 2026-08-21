@@ -53,7 +53,7 @@ export const file_paladin_data_v1_multipart_service: GenFile =
 export type InitiateMultipartUploadRequest =
   Message<"paladin.data.v1.InitiateMultipartUploadRequest"> & {
     /**
-     * ObjectKey
+     * Collection
      *
      * @generated from field: string parent = 1;
      */

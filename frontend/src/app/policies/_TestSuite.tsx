@@ -495,7 +495,7 @@ function CaseRow({
                 <Input
                   value={tc.resourceName}
                   onChange={(e) => onUpdate({ resourceName: e.target.value })}
-                  placeholder="tenants/{id}/objectKeys/{key}"
+                  placeholder="tenants/{id}/collections/{key}"
                   className="font-mono text-xs"
                 />
               </Field>

@@ -7,24 +7,24 @@ import { useAuth } from "@/context/AuthContext";
 import { objectTagClient } from "@/lib/connect/client";
 
 /**
- * useDistinctTags fetches the whole-ObjectKey distinct tag key→values that back
+ * useDistinctTags fetches the whole-Collection distinct tag key→values that back
  * the tag-facet filter, via ObjectTagService.ListDistinctTags. It returns a
  * sorted `"key=value"` option list — the shape ObjectsFilterBar expects.
  *
  * The list is authoritative across the tenant's objects (not just the loaded
- * page). On error, or while the tenant / objectKey is unresolved, it returns an
+ * page). On error, or while the tenant / collection is unresolved, it returns an
  * empty list and the page falls back to client-side accumulation from the
  * objects already loaded — so the dropdown degrades gracefully.
  */
-export function useDistinctTags(objectKey: string): string[] {
+export function useDistinctTags(collection: string): string[] {
   const { user } = useAuth();
   const tenantId = user?.tenantId ?? "";
 
   const { data } = useQuery({
-    queryKey: ["distinctTags", tenantId, objectKey],
-    enabled: !!tenantId && !!objectKey,
+    queryKey: ["distinctTags", tenantId, collection],
+    enabled: !!tenantId && !!collection,
     queryFn: async () => {
-      const parent = `tenants/${tenantId}/objectKeys/${objectKey}`;
+      const parent = `tenants/${tenantId}/collections/${collection}`;
       try {
         const res = await objectTagClient.listDistinctTags({ parent });
         const pairs: string[] = [];

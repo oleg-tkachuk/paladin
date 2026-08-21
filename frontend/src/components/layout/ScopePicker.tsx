@@ -70,7 +70,7 @@ export const ScopePicker: React.FC = () => {
     tenantId,
     tenant,
     backendId,
-    bucketName,
+    bucketId,
     setBackend,
     setBucket,
     setScope,
@@ -122,7 +122,7 @@ export const ScopePicker: React.FC = () => {
   const { backends: backendRows } = useBackends();
 
   // Backends come from BackendService.ListBackends — same source the
-  // /buckets and /object-keys pickers use, so the picker stays
+  // /buckets and /collections pickers use, so the picker stays
   // consistent with what's actually FK-valid.
   const backends = useMemo(
     () => backendRows.map((b) => b.backendId),
@@ -151,8 +151,8 @@ export const ScopePicker: React.FC = () => {
   // 1:1 mode, so this just controls what the row displays + lets the
   // operator confirm "this bucket is owned by N".
   const selectedBucket = useMemo(
-    () => visibleBuckets.find((b) => b.bucketName === bucketName) ?? null,
-    [visibleBuckets, bucketName],
+    () => visibleBuckets.find((b) => b.bucketId === bucketId) ?? null,
+    [visibleBuckets, bucketId],
   );
   const scopedOwnerTenantId =
     selectedBucket && selectedBucket.ownerTenantId
@@ -293,7 +293,7 @@ export const ScopePicker: React.FC = () => {
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Scope picker — backend ${backendId ?? "any"}, bucket ${bucketName ?? "any"}, tenant ${tenantLabel}`}
+          aria-label={`Scope picker — backend ${backendId ?? "any"}, bucket ${bucketId ?? "any"}, tenant ${tenantLabel}`}
           className={cn(
             "group inline-flex h-9 max-w-[420px] items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left transition-colors",
             "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -321,10 +321,10 @@ export const ScopePicker: React.FC = () => {
               className={cn(
                 T.codeSmall,
                 "max-w-[120px] truncate",
-                !bucketName && "italic text-muted-foreground",
+                !bucketId && "italic text-muted-foreground",
               )}
             >
-              {bucketName ?? "any"}
+              {bucketId ?? "any"}
             </span>
             <span className={cn(T.hint, "shrink-0")}>·</span>
             <span className={cn(T.body, "max-w-[140px] truncate font-medium")}>
@@ -430,7 +430,7 @@ export const ScopePicker: React.FC = () => {
           <ScopeRow
             label="Bucket"
             icon={ArchiveBoxIcon}
-            primary={bucketName ?? "Any bucket"}
+            primary={bucketId ?? "Any bucket"}
             secondary={
               visibleBuckets.length === 0
                 ? backendId
@@ -440,7 +440,7 @@ export const ScopePicker: React.FC = () => {
                     backendId ? ` in ${backendId}` : ""
                   }`
             }
-            muted={!bucketName}
+            muted={!bucketId}
             loading={bucketsLoading && visibleBuckets.length === 0}
             searchPlaceholder="Search buckets…"
             emptyMessage="No buckets match."
@@ -449,7 +449,7 @@ export const ScopePicker: React.FC = () => {
               {
                 key: "__any__",
                 searchValue: "any all buckets",
-                isActive: !bucketName,
+                isActive: !bucketId,
                 onSelect: () => setBucket(null),
                 render: () => (
                   <>
@@ -461,16 +461,16 @@ export const ScopePicker: React.FC = () => {
                 ),
               },
               ...visibleBuckets.map((b) => ({
-                key: `${b.backendId}/${b.bucketName}`,
-                searchValue: `${b.bucketName} ${b.displayName || ""} ${b.backendId}`,
-                isActive: bucketName === b.bucketName,
-                onSelect: () => setScope(b.backendId, b.bucketName),
+                key: `${b.backendId}/${b.bucketId}`,
+                searchValue: `${b.bucketId} ${b.displayName || ""} ${b.backendId}`,
+                isActive: bucketId === b.bucketId,
+                onSelect: () => setScope(b.backendId, b.bucketId),
                 render: () => (
                   <>
                     <ArchiveBoxIcon className="size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-mono text-sm">
-                        {b.bucketName}
+                        {b.bucketId}
                       </div>
                       <div className="truncate text-[10px] text-muted-foreground">
                         {b.backendId}

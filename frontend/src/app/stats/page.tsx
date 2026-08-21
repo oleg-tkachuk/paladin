@@ -445,8 +445,8 @@ export default function StatsPage() {
               />
               <Metric
                 label="Object keys"
-                value={num(data.objectKeys?.total)}
-                sub={`${num(data.objectKeys?.unbound)} unbound`}
+                value={num(data.collections?.total)}
+                sub={`${num(data.collections?.unbound)} unbound`}
                 icon={CircleStackIcon}
               />
               <Metric
@@ -571,12 +571,12 @@ export default function StatsPage() {
             </BreakdownCard>
 
             <BreakdownCard title="Object keys" icon={CircleStackIcon}>
-              <Row label="Total" value={num(data.objectKeys?.total)} />
+              <Row label="Total" value={num(data.collections?.total)} />
               <Row
                 label="Unbound (no bucket)"
-                value={num(data.objectKeys?.unbound)}
+                value={num(data.collections?.unbound)}
                 accent={
-                  (data.objectKeys?.unbound ?? 0n) > 0n
+                  (data.collections?.unbound ?? 0n) > 0n
                     ? "text-chart-3"
                     : undefined
                 }
@@ -584,7 +584,7 @@ export default function StatsPage() {
               <Separator className="my-2" />
               <div className={cn(T.label, "pb-1")}>By backend</div>
               <MapRows
-                map={data.objectKeys?.byBackend ?? {}}
+                map={data.collections?.byBackend ?? {}}
                 empty="No object keys."
               />
             </BreakdownCard>

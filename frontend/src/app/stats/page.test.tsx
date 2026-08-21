@@ -53,7 +53,7 @@ function response(overrides: Record<string, unknown> = {}) {
       objectLockEnabled: 0n,
       replicationEnabled: 0n,
     },
-    objectKeys: { total: 7n, byBackend: { primary: 7n }, unbound: 2n },
+    collections: { total: 7n, byBackend: { primary: 7n }, unbound: 2n },
     users: { total: 9n, disabled: 1n },
     rls: rlsStats(),
     collectedAt: undefined,

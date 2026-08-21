@@ -24,20 +24,20 @@ import { ObjectSpecsPanel } from "@/components/features/ObjectSpecsPanel";
 import { T } from "@/lib/ui/typography";
 
 interface ObjectDetailViewProps {
-  objectKey: string;
-  parentObjectKey?: string;
+  collection: string;
+  parentCollection?: string;
 }
 
 export function ObjectDetailView({
-  objectKey,
-  parentObjectKey = DEFAULT_OBJECT_KEY,
+  collection,
+  parentCollection = DEFAULT_OBJECT_KEY,
 }: ObjectDetailViewProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { showNotification } = useNotification();
 
   // Back-link target. The ObjectDetailView is now mounted under
-  // /tenants/<id>/object-keys/<name>/objects/<objectId>; "back" should
+  // /tenants/<id>/collections/<name>/objects/<objectId>; "back" should
   // land on the Objects tab one level up. Derive from the current
   // pathname rather than threading a prop through (the parent route is
   // implicit in the URL — propagating it would just duplicate it).
@@ -46,7 +46,7 @@ export function ObjectDetailView({
   // OK subtree (no current callsite, but safe default).
   const backHref = (() => {
     const m = pathname?.match(
-      /^(\/tenants\/[^/]+\/object-keys\/[^/]+\/objects)(\/|$)/,
+      /^(\/tenants\/[^/]+\/collections\/[^/]+\/objects)(\/|$)/,
     );
     return m ? m[1] : "/tenants";
   })();
@@ -59,7 +59,7 @@ export function ObjectDetailView({
     softDeleteObject,
     restoreObject,
     purgeObject,
-  } = useObject(objectKey, parentObjectKey);
+  } = useObject(collection, parentCollection);
 
   // Active tab (Object | Versions). Persisted in URL hash so a deep link
   // from the audit log (`#versions`) lands on the right view, and so the
@@ -258,7 +258,7 @@ export function ObjectDetailView({
 
         <ObjectSpecsPanel
           object={object}
-          objectKey={objectKey}
+          collection={collection}
           onCopy={handleCopy}
         />
       </div>

@@ -18,14 +18,14 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
  * `name + resource_version + update_mask + bucket(resource)`; Delete uses
  * `delete_on_backend` (renamed from the old `delete_remote`).
  *
- * Page-level callers pass legacy positional args (backendId, bucketName, …)
+ * Page-level callers pass legacy positional args (backendId, bucketId, …)
  * — the wrapper translates them into the nested request shapes so pages
  * don't need to know about the new schema.
  */
 
 const backendParent = (backendId: string) => `storageBackends/${backendId}`;
-const bucketResourceName = (backendId: string, bucketName: string) =>
-  `storageBackends/${backendId}/buckets/${bucketName}`;
+const bucketResourceName = (backendId: string, bucketId: string) =>
+  `storageBackends/${backendId}/buckets/${bucketId}`;
 
 export function useBuckets() {
   const bumpRefresh = useBumpRefresh();
@@ -76,7 +76,7 @@ export function useBuckets() {
   const createBucket = useCallback(
     async (
       backendId: string,
-      bucketName: string,
+      bucketId: string,
       displayName: string = "",
       region: string = "",
       provisionOnBackend: boolean = true,
@@ -84,9 +84,9 @@ export function useBuckets() {
       try {
         setError(null);
         const bucket = create(BucketSchema, {
-          name: bucketResourceName(backendId, bucketName),
+          name: bucketResourceName(backendId, bucketId),
           backendId,
-          bucketName,
+          bucketId,
           displayName,
           region,
           ownerTenantId: "",
@@ -97,7 +97,7 @@ export function useBuckets() {
         });
         const created = await bucketClient.createBucket({
           parent: backendParent(backendId),
-          bucketName,
+          bucketId,
           bucket,
           provisionOnBackend,
         });
@@ -115,20 +115,20 @@ export function useBuckets() {
   const deleteBucket = useCallback(
     async (
       backendId: string,
-      bucketName: string,
+      bucketId: string,
       resourceVersion: string = "",
       deleteOnBackend: boolean = false,
     ): Promise<void> => {
       try {
         setError(null);
         await bucketClient.deleteBucket({
-          name: bucketResourceName(backendId, bucketName),
+          name: bucketResourceName(backendId, bucketId),
           resourceVersion,
           deleteOnBackend,
         });
         setBuckets((prev) =>
           prev.filter(
-            (b) => !(b.backendId === backendId && b.bucketName === bucketName),
+            (b) => !(b.backendId === backendId && b.bucketId === bucketId),
           ),
         );
         bumpRefresh("buckets");

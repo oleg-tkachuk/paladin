@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 
 /**
  * Shared table-sort state — the three-state column cycle that every list page
- * (buckets, object-keys, …) had hand-rolled as a local `SortDirection` /
+ * (buckets, collections, …) had hand-rolled as a local `SortDirection` /
  * `SortState` / `nextSort` triple. Extracted so the cycle lives in one
  * unit-tested place instead of drifting per page.
  *

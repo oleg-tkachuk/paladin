@@ -34,13 +34,13 @@ import { T } from "@/lib/ui/typography";
 
 import {
   bucketClient,
-  objectKeyClient,
+  collectionClient,
   policyClient,
   tenantClient,
 } from "@/lib/connect/client";
 import { useTenants } from "@/hooks/useTenants";
 import { useBuckets } from "@/hooks/useBuckets";
-import { useObjectKeys } from "@/hooks/useObjectKeys";
+import { useCollections } from "@/hooks/useCollections";
 import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
@@ -92,7 +92,7 @@ forbid (
     cedar: `permit (
   principal in Role::"agent",
   action in [Action::"GetObject", Action::"PresignDownload", Action::"ListObjects"],
-  resource in ObjectKey::"tenants/{tenant_id}/objectKeys/{object_key}"
+  resource in Collection::"tenants/{tenant_id}/collections/{object_key}"
 );`,
   },
   {
@@ -119,7 +119,7 @@ unless {
 // + save. A separate Simulate panel calls PolicyService.SimulateAuthz to
 // answer "is principal X allowed to do Y on Z?" without actually doing it.
 
-type Scope = "tenant" | "bucket" | "objectKey";
+type Scope = "tenant" | "bucket" | "collection";
 
 const SCOPES: { value: Scope; label: string; help: string }[] = [
   {
@@ -133,22 +133,22 @@ const SCOPES: { value: Scope; label: string; help: string }[] = [
     help: "cedar_policy on a single bucket — layered on top of tenant policy",
   },
   {
-    value: "objectKey",
+    value: "collection",
     label: "Object Key",
     help: "cedar_policy at the object_key layer — most-specific resource policy",
   },
 ];
 
-function bucketResourceName(backendId: string, bucketName: string) {
-  return `storageBackends/${backendId}/buckets/${bucketName}`;
+function bucketResourceName(backendId: string, bucketId: string) {
+  return `storageBackends/${backendId}/buckets/${bucketId}`;
 }
 
 function tenantResourceName(tenantId: string) {
   return `tenants/${tenantId}`;
 }
 
-function objectKeyResourceName(tenantId: string, objectKey: string) {
-  return `tenants/${tenantId}/objectKeys/${objectKey}`;
+function collectionResourceName(tenantId: string, collection: string) {
+  return `tenants/${tenantId}/collections/${collection}`;
 }
 
 export default function PoliciesPage() {
@@ -161,18 +161,18 @@ export default function PoliciesPage() {
   const { tenants, fetchTenants, loading: tenantsLoading } = useTenants();
   const { buckets, fetchBuckets, loading: bucketsLoading } = useBuckets();
   const {
-    objectKeys,
-    fetchObjectKeys,
-    loading: objectKeysLoading,
-  } = useObjectKeys();
+    collections,
+    fetchCollections,
+    loading: collectionsLoading,
+  } = useCollections();
 
   useEffect(() => {
     void fetchTenants();
   }, [fetchTenants]);
   useEffect(() => {
     if (scope === "bucket") void fetchBuckets();
-    if (scope === "objectKey") void fetchObjectKeys();
-  }, [scope, fetchBuckets, fetchObjectKeys]);
+    if (scope === "collection") void fetchCollections();
+  }, [scope, fetchBuckets, fetchCollections]);
 
   // Reset the selected target whenever the scope changes — render-phase
   // adjust-on-change (not set-state-in-effect).
@@ -191,15 +191,15 @@ export default function PoliciesPage() {
     }
     if (scope === "bucket") {
       return buckets.map((b) => ({
-        value: bucketResourceName(b.backendId, b.bucketName),
-        label: `${b.backendId}/${b.bucketName}`,
+        value: bucketResourceName(b.backendId, b.bucketId),
+        label: `${b.backendId}/${b.bucketId}`,
       }));
     }
-    return objectKeys.map((k) => ({
-      value: objectKeyResourceName(k.tenantId, k.objectKey),
-      label: `${k.tenantId.slice(0, 8)}…/${k.objectKey}`,
+    return collections.map((k) => ({
+      value: collectionResourceName(k.tenantId, k.collection),
+      label: `${k.tenantId.slice(0, 8)}…/${k.collection}`,
     }));
-  }, [scope, tenants, buckets, objectKeys]);
+  }, [scope, tenants, buckets, collections]);
 
   // ─── policy state ────────────────────────────────────────────────────────
   const [policyText, setPolicyText] = useState("");
@@ -245,7 +245,7 @@ export default function PoliciesPage() {
           const b = await bucketClient.getBucket({ name: target }, { signal });
           return { policy: b.cedarPolicy, resourceVersion: b.resourceVersion };
         }
-        const k = await objectKeyClient.getObjectKey(
+        const k = await collectionClient.getCollection(
           { name: target },
           { signal },
         );
@@ -404,7 +404,7 @@ export default function PoliciesPage() {
         });
         setResourceVersion(updated.resourceVersion);
       } else {
-        const updated = await objectKeyClient.setObjectKeyPolicy({
+        const updated = await collectionClient.setCollectionPolicy({
           name: target,
           resourceVersion,
           cedarPolicy: policyText,
@@ -432,7 +432,7 @@ export default function PoliciesPage() {
   const targetLoading =
     (scope === "tenant" && tenantsLoading) ||
     (scope === "bucket" && bucketsLoading) ||
-    (scope === "objectKey" && objectKeysLoading);
+    (scope === "collection" && collectionsLoading);
 
   return (
     <div className="space-y-6">

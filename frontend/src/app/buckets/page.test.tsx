@@ -52,7 +52,7 @@ describe("BucketsPage", () => {
     h.buckets.buckets = [
       {
         backendId: "primary",
-        bucketName: "acme-logs",
+        bucketId: "acme-logs",
         displayName: "Acme Logs",
         region: "us-east-1",
         provisionState: "active",

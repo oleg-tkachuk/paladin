@@ -15,7 +15,7 @@ import "buf/validate/validate.proto";
 message Scope {
   ScopeType type = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
   // Either a literal value or `*` for "all of this type". For OBJECT_KEY a
-  // glob form `bucket/objectKey/*` is accepted; matching is server-side.
+  // glob form `bucket/collection/*` is accepted; matching is server-side.
   string value = 2 [(buf.validate.field).string.min_len = 1];
 }
 

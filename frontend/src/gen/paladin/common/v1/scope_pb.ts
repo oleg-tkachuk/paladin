@@ -39,7 +39,7 @@ export type Scope = Message<"paladin.common.v1.Scope"> & {
 
   /**
    * Either a literal value or `*` for "all of this type". For OBJECT_KEY a
-   * glob form `bucket/objectKey/*` is accepted; matching is server-side.
+   * glob form `bucket/collection/*` is accepted; matching is server-side.
    *
    * @generated from field: string value = 2;
    */

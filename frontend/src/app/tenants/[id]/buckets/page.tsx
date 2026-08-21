@@ -184,7 +184,7 @@ export default function TenantBucketsPage() {
     if (q) {
       list = list.filter(
         (b) =>
-          b.bucketName.toLowerCase().includes(q) ||
+          b.bucketId.toLowerCase().includes(q) ||
           (b.displayName || "").toLowerCase().includes(q),
       );
     }
@@ -195,13 +195,13 @@ export default function TenantBucketsPage() {
           sort.column === "backend"
             ? a.backendId
             : sort.column === "name"
-              ? a.bucketName
+              ? a.bucketId
               : a.region || "";
         const vb =
           sort.column === "backend"
             ? b.backendId
             : sort.column === "name"
-              ? b.bucketName
+              ? b.bucketId
               : b.region || "";
         return va < vb ? -dir : va > vb ? dir : 0;
       });
@@ -245,14 +245,14 @@ export default function TenantBucketsPage() {
     try {
       await deleteBucket(
         deleteTarget.backendId,
-        deleteTarget.bucketName,
+        deleteTarget.bucketId,
         deleteTarget.resourceVersion,
         deleteRemote,
       );
       showNotification({
         type: "success",
         title: "Bucket deleted",
-        message: `${deleteTarget.bucketName}${deleteRemote ? " (incl. S3)" : ""}`,
+        message: `${deleteTarget.bucketId}${deleteRemote ? " (incl. S3)" : ""}`,
       });
       setDeleteTarget(null);
       setDeleteRemote(false);
@@ -268,7 +268,7 @@ export default function TenantBucketsPage() {
   const detailHref = (b: Bucket) =>
     `/tenants/${tenant.slug}/buckets/${encodeURIComponent(
       b.backendId,
-    )}/${encodeURIComponent(b.bucketName)}`;
+    )}/${encodeURIComponent(b.bucketId)}`;
 
   return (
     <div className="space-y-4">
@@ -399,7 +399,7 @@ export default function TenantBucketsPage() {
             ) : (
               filtered.map((b) => (
                 <TableRow
-                  key={`${b.backendId}/${b.bucketName}`}
+                  key={`${b.backendId}/${b.bucketId}`}
                   className="group"
                 >
                   <TableCell>
@@ -418,7 +418,7 @@ export default function TenantBucketsPage() {
                       <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
                         <ArchiveBoxIcon className="size-4" />
                       </div>
-                      <span className="font-mono text-xs">{b.bucketName}</span>
+                      <span className="font-mono text-xs">{b.bucketId}</span>
                     </Link>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell font-medium">
@@ -439,7 +439,7 @@ export default function TenantBucketsPage() {
                           variant="ghost"
                           size="icon"
                           className="size-8 opacity-60 group-hover:opacity-100"
-                          aria-label={`Actions for ${b.bucketName}`}
+                          aria-label={`Actions for ${b.bucketId}`}
                         >
                           <EllipsisHorizontalIcon className="size-4" />
                         </Button>
@@ -581,13 +581,13 @@ export default function TenantBucketsPage() {
             <AlertDialogDescription>
               Removing{" "}
               <span className="font-mono text-foreground">
-                {deleteTarget?.bucketName}
+                {deleteTarget?.bucketId}
               </span>{" "}
               from backend{" "}
               <span className="font-mono text-foreground">
                 {deleteTarget?.backendId}
               </span>
-              . Any ObjectKey still bound to it must be removed first.
+              . Any Collection still bound to it must be removed first.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <label className="flex cursor-pointer items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">

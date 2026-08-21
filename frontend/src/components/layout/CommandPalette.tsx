@@ -25,7 +25,7 @@ import { useScope } from "@/context/ScopeContext";
 import {
   tenantClient,
   bucketClient,
-  objectKeyClient,
+  collectionClient,
   backendClient,
 } from "@/lib/connect/client";
 import { ArchiveBoxIcon, TagIcon } from "@heroicons/react/24/outline";
@@ -49,7 +49,7 @@ export function CommandPalette() {
 
   const router = useRouter();
   const { actions } = useActions();
-  const { tenant: scopedTenant, objectKey: scopedObjectKey } = useScope();
+  const { tenant: scopedTenant, collection: scopedCollection } = useScope();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Resolve the URL handle for the active scoped tenant. Prefer
@@ -82,13 +82,13 @@ export function CommandPalette() {
         onSelect: () => router.push(`${base}/buckets`),
       },
       {
-        id: "nav-tenant-object-keys",
+        id: "nav-tenant-collections",
         type: "nav",
         title: `Object Keys in ${label}`,
         subtitle: "Tenant-scoped namespaces routed to a bucket",
         icon: ServerStackIcon,
         shortcut: "G K",
-        onSelect: () => router.push(`${base}/object-keys`),
+        onSelect: () => router.push(`${base}/collections`),
       },
       {
         id: "nav-tenant-policies",
@@ -131,8 +131,8 @@ export function CommandPalette() {
       },
       // Cross-tenant Object Explorer is gone — flat /objects page
       // was deleted in Phase 5. Object listing now requires an
-      // ObjectKey scope (lives under /tenants/<id>/object-keys/
-      // <name>/objects). The cross-tenant /buckets and /object-keys
+      // Collection scope (lives under /tenants/<id>/collections/
+      // <name>/objects). The cross-tenant /buckets and /collections
       // entries below stay because their RPCs accept empty parents.
       {
         id: "nav-buckets",
@@ -143,12 +143,12 @@ export function CommandPalette() {
         onSelect: () => router.push("/buckets"),
       },
       {
-        id: "nav-object-keys",
+        id: "nav-collections",
         type: "nav",
         title: "Object Keys (cross-tenant)",
-        subtitle: "Platform-admin index of every ObjectKey",
+        subtitle: "Platform-admin index of every Collection",
         icon: ServerStackIcon,
-        onSelect: () => router.push("/object-keys"),
+        onSelect: () => router.push("/collections"),
       },
       {
         id: "nav-upload",
@@ -160,7 +160,7 @@ export function CommandPalette() {
         onSelect: () => router.push("/upload"),
       },
       // /trash and /object-tags removed in Phase 5. Trash is now
-      // a per-ObjectKey tab (/tenants/.../object-keys/<name>/trash).
+      // a per-Collection tab (/tenants/.../collections/<name>/trash).
       // Object Tags drop entirely — they were a holdover taxonomy
       // surface; per the BACKLOG they'll come back as a label
       // filter on the Objects tab once the cross-bucket index lands.
@@ -266,13 +266,13 @@ export function CommandPalette() {
               ownerTenantId: "",
             })
             .catch(() => ({ buckets: [] })),
-          objectKeyClient
-            .listObjectKeys({
+          collectionClient
+            .listCollections({
               parent: "",
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
               filter: "",
             })
-            .catch(() => ({ objectKeys: [] })),
+            .catch(() => ({ collections: [] })),
           backendClient
             .listBackends({
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
@@ -335,47 +335,47 @@ export function CommandPalette() {
           .filter(
             (b) =>
               !q ||
-              matches(b.bucketName) ||
+              matches(b.bucketId) ||
               matches(b.displayName || "") ||
               matches(b.backendId),
           )
           .slice(0, 5)
           .map((b) => ({
-            id: `bucket-${b.backendId}-${b.bucketName}`,
+            id: `bucket-${b.backendId}-${b.bucketId}`,
             type: "nav",
-            title: b.displayName || b.bucketName,
-            subtitle: `Bucket · ${b.backendId}/${b.bucketName}`,
+            title: b.displayName || b.bucketId,
+            subtitle: `Bucket · ${b.backendId}/${b.bucketId}`,
             icon: ArchiveBoxIcon,
             onSelect: () =>
               router.push(
-                `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketName)}`,
+                `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketId)}`,
               ),
           }));
 
-        const okResults: SearchResult[] = okRes.objectKeys
+        const okResults: SearchResult[] = okRes.collections
           .filter(
-            (o) => !q || matches(o.objectKey) || matches(o.displayName || ""),
+            (o) => !q || matches(o.collection) || matches(o.displayName || ""),
           )
           .slice(0, 5)
           .map((o) => {
             const tslug = tenantSlugByID.get(o.tenantId) || o.tenantId;
             return {
-              id: `ok-${o.tenantId}-${o.objectKey}`,
+              id: `ok-${o.tenantId}-${o.collection}`,
               type: "nav",
-              title: o.displayName || o.objectKey,
-              subtitle: `Object key · ${tslug}/${o.objectKey}`,
+              title: o.displayName || o.collection,
+              subtitle: `Object key · ${tslug}/${o.collection}`,
               icon: TagIcon,
               onSelect: () =>
                 router.push(
-                  `/tenants/${encodeURIComponent(tslug)}/object-keys/${encodeURIComponent(o.objectKey)}/objects`,
+                  `/tenants/${encodeURIComponent(tslug)}/collections/${encodeURIComponent(o.collection)}/objects`,
                 ),
             };
           });
 
-        // scopedObjectKey retained for dep-array re-fire when scope
+        // scopedCollection retained for dep-array re-fire when scope
         // changes; once ListObjects offers cross-tenant search,
         // surface object hits here too.
-        void scopedObjectKey;
+        void scopedCollection;
 
         const combined = [
           ...tenantResults,
@@ -392,7 +392,7 @@ export function CommandPalette() {
         setIsSearching(false);
       }
     },
-    [actions, staticNavs, tenantScopedNavs, router, scopedObjectKey],
+    [actions, staticNavs, tenantScopedNavs, router, scopedCollection],
   );
 
   // Debounced search

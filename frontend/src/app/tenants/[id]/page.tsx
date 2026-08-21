@@ -4,7 +4,7 @@
 //
 // Composition:
 //   - Identity (slug + tenant_id + display).
-//   - Counts row: buckets owned, object-keys provisioned. Each tile
+//   - Counts row: buckets owned, collections provisioned. Each tile
 //     links into the matching tab so the number doubles as a CTA.
 //   - Budget tile: cap + current-period spend (or "no budget set").
 //   - Recent audit: top 5 entries scoped to this tenant, link out to
@@ -13,7 +13,7 @@
 // Each block fetches independently and renders best-effort — a budget
 // RPC failure shouldn't blank the audit feed and vice versa. Counts
 // and audit reuse cross-tenant List RPCs with a tenant filter applied
-// client-side (buckets) or server-side (object-keys via parent,
+// client-side (buckets) or server-side (collections via parent,
 // audit via filter expression).
 
 import { useEffect, useState } from "react";
@@ -43,7 +43,7 @@ import { T } from "@/lib/ui/typography";
 
 import {
   bucketClient,
-  objectKeyClient,
+  collectionClient,
   auditClient,
   tenantBudgetClient,
 } from "@/lib/connect/client";
@@ -70,7 +70,7 @@ const QUICK_LINKS: Array<{
   },
   {
     label: "Object Keys",
-    href: (s) => `/tenants/${s}/object-keys`,
+    href: (s) => `/tenants/${s}/collections`,
     description: "Tenant-scoped namespaces routed to a bucket.",
     icon: TagIcon,
   },
@@ -160,7 +160,7 @@ function IdentityCard({
 export default function TenantOverviewPage() {
   const tenant = useTenant();
 
-  // ── counts (buckets, object-keys) ──────────────────────────────
+  // ── counts (buckets, collections) ──────────────────────────────
   const [bucketCount, setBucketCount] = useState<number | null>(null);
   const [okCount, setOkCount] = useState<number | null>(null);
 
@@ -192,13 +192,13 @@ export default function TenantOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await objectKeyClient.listObjectKeys({
+        const res = await collectionClient.listCollections({
           parent: `tenants/${tenant.tenantId}`,
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
           filter: "",
         });
         if (cancelled) return;
-        setOkCount(res.objectKeys.length);
+        setOkCount(res.collections.length);
       } catch {
         if (!cancelled) setOkCount(0);
       }
@@ -303,7 +303,7 @@ export default function TenantOverviewPage() {
           subtitle="owned by this tenant"
         />
         <CountTile
-          href={`/tenants/${tenant.slug}/object-keys`}
+          href={`/tenants/${tenant.slug}/collections`}
           label="Object Keys"
           value={okCount}
           icon={ServerStackIcon}

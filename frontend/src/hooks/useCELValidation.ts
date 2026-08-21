@@ -22,10 +22,7 @@ import { ConnectError } from "@connectrpc/connect";
 import { celClient } from "@/lib/connect/client";
 
 export type CELSchema =
-  | "Object"
-  | "ObjectKey"
-  | "AuditLogEntry"
-  | "EventEnvelope";
+  "Object" | "Collection" | "AuditLogEntry" | "EventEnvelope";
 
 export type CELState =
   | { status: "idle" }

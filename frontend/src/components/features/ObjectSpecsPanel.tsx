@@ -57,11 +57,11 @@ function stateColorClasses(state: ObjectState): { text: string; dot: string } {
  */
 export function ObjectSpecsPanel({
   object,
-  objectKey,
+  collection,
   onCopy,
 }: {
   object: Object$;
-  objectKey: string;
+  collection: string;
   onCopy: (text: string, label: string) => void;
 }) {
   const stateColors = stateColorClasses(object.state);
@@ -72,10 +72,10 @@ export function ObjectSpecsPanel({
         <dl className="space-y-3">
           <SpecRow label="Object UUID">
             <span className="break-all font-mono text-xs">
-              {object.objectId || objectKey}
+              {object.objectId || collection}
             </span>
             <IdentifierCopy
-              value={object.objectId || objectKey}
+              value={object.objectId || collection}
               label="Object UUID"
               iconOnly
             />
@@ -97,10 +97,10 @@ export function ObjectSpecsPanel({
 
           <SpecRow label="Object Key">
             <Link
-              href={`/object-keys/${object.objectKey}`}
+              href={`/collections/${object.collection}`}
               className="break-all font-mono text-xs text-primary hover:underline"
             >
-              {object.objectKey}
+              {object.collection}
             </Link>
           </SpecRow>
 

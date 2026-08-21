@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_auth_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiBsZWdhdGUvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxINbGVnYXRlLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJcCg1Mb2dpblJlc3BvbnNlEigKBnRva2VucxgBIAEoCzIYLmxlZ2F0ZS5pYW0udjEuVG9rZW5QYWlyEiEKBHVzZXIYAiABKAsyEy5sZWdhdGUuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSJAChRSZWZyZXNoVG9rZW5SZXNwb25zZRIoCgZ0b2tlbnMYASABKAsyGC5sZWdhdGUuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIikKDVdob0FtSVJlcXVlc3QSGAoQcm91dGVfcGFnZV90b2tlbhgBIAEoCSK8AQoOV2hvQW1JUmVzcG9uc2USIQoEdXNlchgBIAEoCzITLmxlZ2F0ZS5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCRItCgZyb3V0ZXMYBCADKAsyHS5sZWdhdGUuaWFtLnYxLk9iamVjdEtleVJvdXRlEhgKEHJvdXRlc190cnVuY2F0ZWQYBSABKAgSFwoPbmV4dF9wYWdlX3Rva2VuGAYgASgJIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAkiGgoYTGlzdE15TWVtYmVyc2hpcHNSZXF1ZXN0ImYKCk1lbWJlcnNoaXASEQoJdGVuYW50X2lkGAEgASgJEhMKC3RlbmFudF9zbHVnGAIgASgJEg0KBXJvbGVzGAMgAygJEhAKCGRpc2FibGVkGAQgASgIEg8KB2N1cnJlbnQYBSABKAgiSwoZTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRIuCgttZW1iZXJzaGlwcxgBIAMoCzIZLmxlZ2F0ZS5pYW0udjEuTWVtYmVyc2hpcCJUChNTd2l0Y2hUZW5hbnRSZXF1ZXN0EiEKEHRhcmdldF90ZW5hbnRfaWQYASABKAlCB7pIBHICEAESGgoScmVxdWVzdGVkX2F1ZGllbmNlGAIgASgJImMKFFN3aXRjaFRlbmFudFJlc3BvbnNlEigKBnRva2VucxgBIAEoCzIYLmxlZ2F0ZS5pYW0udjEuVG9rZW5QYWlyEiEKBHVzZXIYAiABKAsyEy5sZWdhdGUuaWFtLnYxLlVzZXIyvQUKC0F1dGhTZXJ2aWNlEkIKBUxvZ2luEhsubGVnYXRlLmlhbS52MS5Mb2dpblJlcXVlc3QaHC5sZWdhdGUuaWFtLnYxLkxvZ2luUmVzcG9uc2USVwoMUmVmcmVzaFRva2VuEiIubGVnYXRlLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiMubGVnYXRlLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRJFCgZSZXZva2USHC5sZWdhdGUuaWFtLnYxLlJldm9rZVJlcXVlc3QaHS5sZWdhdGUuaWFtLnYxLlJldm9rZVJlc3BvbnNlEkUKBldob0FtSRIcLmxlZ2F0ZS5pYW0udjEuV2hvQW1JUmVxdWVzdBodLmxlZ2F0ZS5pYW0udjEuV2hvQW1JUmVzcG9uc2USXQoOQ2hhbmdlUGFzc3dvcmQSJC5sZWdhdGUuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBolLmxlZ2F0ZS5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJjChBFeGNoYW5nZUF1ZGllbmNlEiYubGVnYXRlLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBonLmxlZ2F0ZS5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEmYKEUxpc3RNeU1lbWJlcnNoaXBzEicubGVnYXRlLmlhbS52MS5MaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QaKC5sZWdhdGUuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVzcG9uc2USVwoMU3dpdGNoVGVuYW50EiIubGVnYXRlLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXF1ZXN0GiMubGVnYXRlLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXNwb25zZUJDWkFnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtsZWdhdGVpYW12MWIGcHJvdG8z",
+    "CiBsZWdhdGUvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxINbGVnYXRlLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJcCg1Mb2dpblJlc3BvbnNlEigKBnRva2VucxgBIAEoCzIYLmxlZ2F0ZS5pYW0udjEuVG9rZW5QYWlyEiEKBHVzZXIYAiABKAsyEy5sZWdhdGUuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSJAChRSZWZyZXNoVG9rZW5SZXNwb25zZRIoCgZ0b2tlbnMYASABKAsyGC5sZWdhdGUuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIikKDVdob0FtSVJlcXVlc3QSGAoQcm91dGVfcGFnZV90b2tlbhgBIAEoCSK9AQoOV2hvQW1JUmVzcG9uc2USIQoEdXNlchgBIAEoCzITLmxlZ2F0ZS5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCRIuCgZyb3V0ZXMYBCADKAsyHi5sZWdhdGUuaWFtLnYxLkNvbGxlY3Rpb25Sb3V0ZRIYChByb3V0ZXNfdHJ1bmNhdGVkGAUgASgIEhcKD25leHRfcGFnZV90b2tlbhgGIAEoCSJuCg9Db2xsZWN0aW9uUm91dGUSEQoJY2Fub25pY2FsGAEgASgJEhMKC3RlbmFudF9wYXRoGAIgASgJEhIKCmJhcmVfYWxpYXMYAyABKAkSDwoHYmFja2VuZBgEIAEoCRIOCgZidWNrZXQYBSABKAkiVQoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0Eh0KDG9sZF9wYXNzd29yZBgBIAEoCUIHukgEcgIQARIdCgxuZXdfcGFzc3dvcmQYAiABKAlCB7pIBHICEAwiGAoWQ2hhbmdlUGFzc3dvcmRSZXNwb25zZSJbChdFeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEiAKD3RhcmdldF9hdWRpZW5jZRgCIAEoCUIHukgEcgIQASJnChhFeGNoYW5nZUF1ZGllbmNlUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEiEKGWFjY2Vzc19leHBpcmVzX2luX3NlY29uZHMYAiABKAUSEgoKdG9rZW5fdHlwZRgDIAEoCSIaChhMaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QiZgoKTWVtYmVyc2hpcBIRCgl0ZW5hbnRfaWQYASABKAkSEwoLdGVuYW50X3NsdWcYAiABKAkSDQoFcm9sZXMYAyADKAkSEAoIZGlzYWJsZWQYBCABKAgSDwoHY3VycmVudBgFIAEoCCJLChlMaXN0TXlNZW1iZXJzaGlwc1Jlc3BvbnNlEi4KC21lbWJlcnNoaXBzGAEgAygLMhkubGVnYXRlLmlhbS52MS5NZW1iZXJzaGlwIlQKE1N3aXRjaFRlbmFudFJlcXVlc3QSIQoQdGFyZ2V0X3RlbmFudF9pZBgBIAEoCUIHukgEcgIQARIaChJyZXF1ZXN0ZWRfYXVkaWVuY2UYAiABKAkiYwoUU3dpdGNoVGVuYW50UmVzcG9uc2USKAoGdG9rZW5zGAEgASgLMhgubGVnYXRlLmlhbS52MS5Ub2tlblBhaXISIQoEdXNlchgCIAEoCzITLmxlZ2F0ZS5pYW0udjEuVXNlcjK9BQoLQXV0aFNlcnZpY2USQgoFTG9naW4SGy5sZWdhdGUuaWFtLnYxLkxvZ2luUmVxdWVzdBocLmxlZ2F0ZS5pYW0udjEuTG9naW5SZXNwb25zZRJXCgxSZWZyZXNoVG9rZW4SIi5sZWdhdGUuaWFtLnYxLlJlZnJlc2hUb2tlblJlcXVlc3QaIy5sZWdhdGUuaWFtLnYxLlJlZnJlc2hUb2tlblJlc3BvbnNlEkUKBlJldm9rZRIcLmxlZ2F0ZS5pYW0udjEuUmV2b2tlUmVxdWVzdBodLmxlZ2F0ZS5pYW0udjEuUmV2b2tlUmVzcG9uc2USRQoGV2hvQW1JEhwubGVnYXRlLmlhbS52MS5XaG9BbUlSZXF1ZXN0Gh0ubGVnYXRlLmlhbS52MS5XaG9BbUlSZXNwb25zZRJdCg5DaGFuZ2VQYXNzd29yZBIkLmxlZ2F0ZS5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0GiUubGVnYXRlLmlhbS52MS5DaGFuZ2VQYXNzd29yZFJlc3BvbnNlEmMKEEV4Y2hhbmdlQXVkaWVuY2USJi5sZWdhdGUuaWFtLnYxLkV4Y2hhbmdlQXVkaWVuY2VSZXF1ZXN0GicubGVnYXRlLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVzcG9uc2USZgoRTGlzdE15TWVtYmVyc2hpcHMSJy5sZWdhdGUuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVxdWVzdBooLmxlZ2F0ZS5pYW0udjEuTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRJXCgxTd2l0Y2hUZW5hbnQSIi5sZWdhdGUuaWFtLnYxLlN3aXRjaFRlbmFudFJlcXVlc3QaIy5sZWdhdGUuaWFtLnYxLlN3aXRjaFRlbmFudFJlc3BvbnNlQkNaQWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO2xlZ2F0ZWlhbXYxYgZwcm90bzM",
     [file_buf_validate_validate, file_paladin_iam_v1_types],
   );
 
@@ -178,7 +178,7 @@ export const RevokeResponseSchema: GenMessage<RevokeResponse> =
  */
 export type WhoAmIRequest = Message<"paladin.iam.v1.WhoAmIRequest"> & {
   /**
-   * route_page_token pages the ObjectKey route table (ADR-0010 Phase 4). Empty
+   * route_page_token pages the Collection route table (ADR-0010 Phase 4). Empty
    * = first page; pass back the previous response's `next_page_token` to fetch
    * the next page. Only the route table is paged — identity fields are always
    * returned in full.
@@ -224,22 +224,22 @@ export type WhoAmIResponse = Message<"paladin.iam.v1.WhoAmIResponse"> & {
   tenantSlug: string;
 
   /**
-   * routes is ONE PAGE of the caller's ObjectKey route table (ADR-0010 Phase
-   * 4): the ObjectKeys the caller can read, in all three name shapes, so
+   * routes is ONE PAGE of the caller's Collection route table (ADR-0010 Phase
+   * 4): the Collections the caller can read, in all three name shapes, so
    * clients and SDKs normalize to canonical (A) before sending rather than
    * constructing it themselves. Empty when the server has no route source wired
-   * or the caller has no readable ObjectKeys. Page through with
+   * or the caller has no readable Collections. Page through with
    * `next_page_token`.
    *
-   * @generated from field: repeated paladin.iam.v1.ObjectKeyRoute routes = 4;
+   * @generated from field: repeated paladin.iam.v1.CollectionRoute routes = 4;
    */
-  routes: ObjectKeyRoute[];
+  routes: CollectionRoute[];
 
   /**
-   * routes_truncated is true when more readable ObjectKeys remain beyond this
+   * routes_truncated is true when more readable Collections remain beyond this
    * page (equivalent to next_page_token != ""). Kept for clients that don't
    * page: such a client must not treat the table as exhaustive — fall back to
-   * resolving any name it can't find via ListObjectKeys.
+   * resolving any name it can't find via ListCollections.
    *
    * @generated from field: bool routes_truncated = 5;
    */
@@ -264,30 +264,30 @@ export const WhoAmIResponseSchema: GenMessage<WhoAmIResponse> =
   messageDesc(file_paladin_iam_v1_auth_service, 7);
 
 /**
- * ObjectKeyRoute is one addressable ObjectKey expressed in all three
+ * CollectionRoute is one addressable Collection expressed in all three
  * ADR-0010 name shapes plus its (backend, bucket) binding. A client that
  * holds this table can accept any shape from the end user and normalize to
  * canonical (A) on the wire.
  *
- * @generated from message paladin.iam.v1.ObjectKeyRoute
+ * @generated from message paladin.iam.v1.CollectionRoute
  */
-export type ObjectKeyRoute = Message<"paladin.iam.v1.ObjectKeyRoute"> & {
+export type CollectionRoute = Message<"paladin.iam.v1.CollectionRoute"> & {
   /**
-   * canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}.
+   * canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}.
    *
    * @generated from field: string canonical = 1;
    */
   canonical: string;
 
   /**
-   * tenant_path (C): tenants/{tid}/objectKeys/{ok}.
+   * tenant_path (C): tenants/{tid}/collections/{ok}.
    *
    * @generated from field: string tenant_path = 2;
    */
   tenantPath: string;
 
   /**
-   * bare_alias (B): the bare object_key. Populated ONLY when this ObjectKey
+   * bare_alias (B): the bare collection. Populated ONLY when this Collection
    * sits in the tenant's default binding — a bare name resolves through that
    * binding, so it round-trips to canonical only for the default route.
    * Empty otherwise.
@@ -308,10 +308,10 @@ export type ObjectKeyRoute = Message<"paladin.iam.v1.ObjectKeyRoute"> & {
 };
 
 /**
- * Describes the message paladin.iam.v1.ObjectKeyRoute.
- * Use `create(ObjectKeyRouteSchema)` to create a new message.
+ * Describes the message paladin.iam.v1.CollectionRoute.
+ * Use `create(CollectionRouteSchema)` to create a new message.
  */
-export const ObjectKeyRouteSchema: GenMessage<ObjectKeyRoute> =
+export const CollectionRouteSchema: GenMessage<CollectionRoute> =
   /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 8);
 

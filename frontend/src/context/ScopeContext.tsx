@@ -28,15 +28,15 @@ import { useAuth } from "@/context/AuthContext";
  *               only via useAuth().switchTenant (AuthService.SwitchTenant),
  *               which re-mints the session for another tenant the subject
  *               is a member of; when it changes, the soft scope below is
- *               reset (backend/bucket/objectKey are tenant-specific).
+ *               reset (backend/bucket/collection are tenant-specific).
  *   tenant    → full record fetched once via TenantService.GetTenant.
  *
  * Soft scope (user-selectable, persisted to localStorage):
  *   backendId → which storage backend the user is focused on
- *   bucketName→ which physical bucket the user is focused on (cleared
+ *   bucketId→ which physical bucket the user is focused on (cleared
  *               when backendId changes — a bucket only makes sense in
  *               the context of one backend)
- *   objectKey → which ObjectKey namespace the user is browsing.
+ *   collection → which Collection namespace the user is browsing.
  *               Single source of truth so the OK Objects/Trash tabs,
  *               sidebar counts, CommandPalette searches, and
  *               ObjectInspector always agree.
@@ -57,18 +57,18 @@ interface ScopeContextType {
 
   // Soft scope (localStorage-persisted)
   backendId: string | null;
-  bucketName: string | null;
-  objectKey: string;
+  bucketId: string | null;
+  collection: string;
   setBackend: (id: string | null) => void;
   setBucket: (name: string | null) => void;
-  setObjectKey: (key: string) => void;
+  setCollection: (key: string) => void;
   // setScope writes the backend + bucket pair atomically. Picking a
   // bucket from the picker needs this — `setBackend` clears the
   // bucket as a safety net, so calling setBackend(b.backendId) then
-  // setBucket(b.bucketName) leaves you with only the bucket in
+  // setBucket(b.bucketId) leaves you with only the bucket in
   // localStorage. Use setScope when you already know the canonical
   // (backend, bucket) pair.
-  setScope: (backendId: string | null, bucketName: string | null) => void;
+  setScope: (backendId: string | null, bucketId: string | null) => void;
 
   // UI bus — shared <ScopePicker> open state
   isPickerOpen: boolean;
@@ -126,15 +126,15 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     await refetchTenant();
   }, [refetchTenant]);
 
-  // ── Soft scope: backend / bucket / objectKey ───────────────────────────
+  // ── Soft scope: backend / bucket / collection ───────────────────────────
   const [backendId, setBackendIdState] = useState<string | null>(() =>
     safeRead(STORAGE_KEYS.scopeBackend),
   );
-  const [bucketName, setBucketNameState] = useState<string | null>(() =>
+  const [bucketId, setBucketIdState] = useState<string | null>(() =>
     safeRead(STORAGE_KEYS.scopeBucket),
   );
-  const [objectKey, setObjectKeyState] = useState<string>(
-    () => safeRead(STORAGE_KEYS.scopeObjectKey) || DEFAULT_OBJECT_KEY,
+  const [collection, setCollectionState] = useState<string>(
+    () => safeRead(STORAGE_KEYS.scopeCollection) || DEFAULT_OBJECT_KEY,
   );
 
   const setBackend = useCallback((id: string | null) => {
@@ -143,12 +143,12 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem(STORAGE_KEYS.scopeBackend);
     // Changing the backend implicitly invalidates the bucket selection
     // (a bucket only makes sense in the context of one backend).
-    setBucketNameState(null);
+    setBucketIdState(null);
     localStorage.removeItem(STORAGE_KEYS.scopeBucket);
   }, []);
 
   const setBucket = useCallback((name: string | null) => {
-    setBucketNameState(name);
+    setBucketIdState(name);
     if (name) localStorage.setItem(STORAGE_KEYS.scopeBucket, name);
     else localStorage.removeItem(STORAGE_KEYS.scopeBucket);
   }, []);
@@ -157,19 +157,19 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setBackendIdState(id);
     if (id) localStorage.setItem(STORAGE_KEYS.scopeBackend, id);
     else localStorage.removeItem(STORAGE_KEYS.scopeBackend);
-    setBucketNameState(name);
+    setBucketIdState(name);
     if (name) localStorage.setItem(STORAGE_KEYS.scopeBucket, name);
     else localStorage.removeItem(STORAGE_KEYS.scopeBucket);
   }, []);
 
-  const setObjectKey = useCallback((key: string) => {
+  const setCollection = useCallback((key: string) => {
     const normalized = key?.trim() || DEFAULT_OBJECT_KEY;
-    setObjectKeyState(normalized);
-    localStorage.setItem(STORAGE_KEYS.scopeObjectKey, normalized);
+    setCollectionState(normalized);
+    localStorage.setItem(STORAGE_KEYS.scopeCollection, normalized);
   }, []);
 
   // Reset the soft scope when the tenant changes under us (SwitchTenant).
-  // backend / bucket / objectKey are tenant-specific, so carrying them across
+  // backend / bucket / collection are tenant-specific, so carrying them across
   // a switch would point the UI at resources that live in the previous tenant.
   // Fires only on a genuine change (prev + next both set and different) — not
   // on the initial mount or on logout (tenantId → null).
@@ -180,10 +180,10 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     if (prev && tenantId && prev !== tenantId) {
       setBackendIdState(null);
       localStorage.removeItem(STORAGE_KEYS.scopeBackend);
-      setBucketNameState(null);
+      setBucketIdState(null);
       localStorage.removeItem(STORAGE_KEYS.scopeBucket);
-      setObjectKeyState(DEFAULT_OBJECT_KEY);
-      localStorage.removeItem(STORAGE_KEYS.scopeObjectKey);
+      setCollectionState(DEFAULT_OBJECT_KEY);
+      localStorage.removeItem(STORAGE_KEYS.scopeCollection);
     }
   }, [tenantId]);
 
@@ -203,11 +203,11 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
       isTenantLoading,
       refreshTenant,
       backendId,
-      bucketName,
-      objectKey,
+      bucketId,
+      collection,
       setBackend,
       setBucket,
-      setObjectKey,
+      setCollection,
       setScope,
       isPickerOpen,
       openScopePicker,
@@ -220,11 +220,11 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
       isTenantLoading,
       refreshTenant,
       backendId,
-      bucketName,
-      objectKey,
+      bucketId,
+      collection,
       setBackend,
       setBucket,
-      setObjectKey,
+      setCollection,
       setScope,
       isPickerOpen,
       openScopePicker,

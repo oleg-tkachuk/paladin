@@ -17,7 +17,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useUpload, UploadTask } from "@/hooks/useUpload";
-import { useObjectKeys } from "@/hooks/useObjectKeys";
+import { useCollections } from "@/hooks/useCollections";
 import { formatBytes, cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -146,21 +146,21 @@ function TagPill({
 export default function UploadPage() {
   const { queue, uploadFile, clearQueue } = useUpload();
   const router = useRouter();
-  const { objectKeys, fetchObjectKeys } = useObjectKeys();
-  const [selectedObjectKey, setSelectedObjectKey] = useState<string>("");
+  const { collections, fetchCollections } = useCollections();
+  const [selectedCollection, setSelectedCollection] = useState<string>("");
   // Sentinel routed through SelectRoot.onValueChange to mean "the user
-  // clicked the footer affordance, not an actual ObjectKey row". We
+  // clicked the footer affordance, not an actual Collection row". We
   // can't bind an onClick to a SelectItem because Radix swallows it
   // for the value selection — sentinel value is the documented seam.
   const NEW_OBJECT_KEY_SENTINEL = "__new__";
-  const handleObjectKeyChange = (value: string) => {
+  const handleCollectionChange = (value: string) => {
     if (value === NEW_OBJECT_KEY_SENTINEL) {
-      router.push("/object-keys");
+      router.push("/collections");
       return;
     }
-    setSelectedObjectKey(value);
+    setSelectedCollection(value);
   };
-  const isLocked = !selectedObjectKey.trim();
+  const isLocked = !selectedCollection.trim();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -168,16 +168,20 @@ export default function UploadPage() {
   const [tagInput, setTagInput] = useState("");
 
   useEffect(() => {
-    void fetchObjectKeys().then((res) => {
-      if (res?.objectKeys && res.objectKeys.length > 0 && !selectedObjectKey) {
-        setSelectedObjectKey(res.objectKeys[0].objectKey);
+    void fetchCollections().then((res) => {
+      if (
+        res?.collections &&
+        res.collections.length > 0 &&
+        !selectedCollection
+      ) {
+        setSelectedCollection(res.collections[0].collection);
       }
     });
     // Intent: fetch once on mount, auto-select if nothing is chosen.
-    // selectedObjectKey is read inside only as a guard — keeping it in
+    // selectedCollection is read inside only as a guard — keeping it in
     // the deps re-fired this fetch on every dropdown selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchObjectKeys]);
+  }, [fetchCollections]);
 
   const handleAddTag = useCallback(() => {
     if (!tagInput.includes(":")) return;
@@ -200,10 +204,10 @@ export default function UploadPage() {
     (files: FileList | null) => {
       if (isLocked || !files) return;
       Array.from(files).forEach((file) => {
-        void uploadFile(file, selectedObjectKey.trim(), globalTags);
+        void uploadFile(file, selectedCollection.trim(), globalTags);
       });
     },
-    [isLocked, selectedObjectKey, globalTags, uploadFile],
+    [isLocked, selectedCollection, globalTags, uploadFile],
   );
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,7 +231,7 @@ export default function UploadPage() {
     <div className="space-y-6">
       <PageHeader
         title="Upload"
-        description="Stream files into a tenant ObjectKey, optionally tagged."
+        description="Stream files into a tenant Collection, optionally tagged."
         showDefaultActions={false}
       />
 
@@ -241,38 +245,40 @@ export default function UploadPage() {
                 <FolderIcon className="size-5" />
               </div>
               <div className="flex-1 space-y-0.5">
-                <CardTitle className="text-sm">Destination ObjectKey</CardTitle>
+                <CardTitle className="text-sm">
+                  Destination Collection
+                </CardTitle>
                 <CardDescription className="text-xs">
-                  Required — picks the ObjectKey the file will live under.
+                  Required — picks the Collection the file will live under.
                 </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="px-5">
               <SelectRoot
-                value={selectedObjectKey}
-                onValueChange={handleObjectKeyChange}
+                value={selectedCollection}
+                onValueChange={handleCollectionChange}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select ObjectKey…" />
+                  <SelectValue placeholder="Select Collection…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {objectKeys.map((ok) => (
-                    <SelectItem key={ok.objectKey} value={ok.objectKey}>
-                      {ok.displayName || ok.objectKey}
+                  {collections.map((ok) => (
+                    <SelectItem key={ok.collection} value={ok.collection}>
+                      {ok.displayName || ok.collection}
                     </SelectItem>
                   ))}
                   {/* Footer affordance — same pattern as the bucket
                       switcher's "Manage buckets…" entry. Picking this
-                      row jumps to /object-keys (which owns the
+                      row jumps to /collections (which owns the
                       provisioning dialog) instead of selecting a value;
-                      see handleObjectKeyChange's sentinel. */}
+                      see handleCollectionChange's sentinel. */}
                   <SelectSeparator />
                   <SelectItem
                     value={NEW_OBJECT_KEY_SENTINEL}
                     className="text-primary"
                   >
                     <PlusIcon className="size-4" />
-                    New ObjectKey
+                    New Collection
                   </SelectItem>
                 </SelectContent>
               </SelectRoot>
@@ -386,7 +392,7 @@ export default function UploadPage() {
                 Select a destination first
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Choose an ObjectKey above before uploading files.
+                Choose an Collection above before uploading files.
               </p>
             </>
           ) : isDragging ? (
@@ -397,7 +403,7 @@ export default function UploadPage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 Files will be uploaded to{" "}
                 <span className="font-mono text-foreground">
-                  {selectedObjectKey}
+                  {selectedCollection}
                 </span>
               </p>
             </>

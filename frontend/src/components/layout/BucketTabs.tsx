@@ -12,7 +12,7 @@
 //   4. Replication   — cross-region / cross-backend mirror config.
 //   5. Versioning    — object-versioning toggle + retention.
 //   6. Object Lock   — WORM default-retention (governance/compliance).
-//   7. Object Keys   — ObjectKeys routed to this bucket.
+//   7. Object Keys   — Collections routed to this bucket.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -32,22 +32,22 @@ const TABS: TabSpec[] = [
   { slug: "replication", label: "Replication" },
   { slug: "versioning", label: "Versioning" },
   { slug: "object-lock", label: "Object Lock" },
-  { slug: "object-keys", label: "Object Keys" },
+  { slug: "collections", label: "Object Keys" },
 ];
 
 export function BucketTabs({
   tenantId,
   backendId,
-  bucketName,
+  bucketId,
 }: {
   tenantId: string;
   backendId: string;
-  bucketName: string;
+  bucketId: string;
 }) {
   const pathname = usePathname();
   const base = `/tenants/${tenantId}/buckets/${encodeURIComponent(
     backendId,
-  )}/${encodeURIComponent(bucketName)}`;
+  )}/${encodeURIComponent(bucketId)}`;
 
   return (
     <div

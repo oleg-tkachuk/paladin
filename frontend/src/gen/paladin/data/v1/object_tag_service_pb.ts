@@ -31,9 +31,9 @@ export const file_paladin_data_v1_object_tag_service: GenFile =
 export type ListDistinctTagsRequest =
   Message<"paladin.data.v1.ListDistinctTagsRequest"> & {
     /**
-     * Parent ObjectKey scope: "tenants/{tenant_id}/objectKeys/{object_key}".
+     * Parent Collection scope: "tenants/{tenant_id}/collections/{collection}".
      * The tenant is enforced from the auth context; this narrows the distinct
-     * scan to one ObjectKey's objects.
+     * scan to one Collection's objects.
      *
      * @generated from field: string parent = 1;
      */
@@ -260,7 +260,7 @@ export const ObjectTagService: GenService<{
   };
   /**
    * ListDistinctTags enumerates the distinct tag key→values present across an
-   * ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+   * Collection's live objects, so a UI can populate a tag-facet filter from the
    * whole tenant scope rather than only the objects on the current page.
    *
    * @generated from rpc paladin.data.v1.ObjectTagService.ListDistinctTags

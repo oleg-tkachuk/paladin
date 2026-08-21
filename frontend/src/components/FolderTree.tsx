@@ -16,7 +16,7 @@
 // huge object counts, the parent should server-side-paginate; the
 // tree shows whatever's present in the current page.
 //
-// Multi-segment ObjectKey paths land here too: a key like
+// Multi-segment Collection paths land here too: a key like
 // `2026/q1/january/report.pdf` produces three nested folders.
 
 import React, { useMemo, useState } from "react";

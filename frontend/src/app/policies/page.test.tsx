@@ -10,7 +10,7 @@ import { render, screen } from "@/test/utils";
 const h = vi.hoisted(() => ({
   fetchTenants: vi.fn(),
   fetchBuckets: vi.fn(),
-  fetchObjectKeys: vi.fn(),
+  fetchCollections: vi.fn(),
   showNotification: vi.fn(),
 }));
 
@@ -28,10 +28,10 @@ vi.mock("@/hooks/useBuckets", () => ({
     loading: false,
   }),
 }));
-vi.mock("@/hooks/useObjectKeys", () => ({
-  useObjectKeys: () => ({
-    objectKeys: [],
-    fetchObjectKeys: h.fetchObjectKeys,
+vi.mock("@/hooks/useCollections", () => ({
+  useCollections: () => ({
+    collections: [],
+    fetchCollections: h.fetchCollections,
     loading: false,
   }),
 }));
@@ -41,7 +41,7 @@ vi.mock("@/hooks/useCedarValidation", () => ({
 }));
 vi.mock("@/lib/connect/client", () => ({
   bucketClient: { getBucket: vi.fn() },
-  objectKeyClient: { getObjectKey: vi.fn() },
+  collectionClient: { getCollection: vi.fn() },
   policyClient: { getEffectivePolicy: vi.fn(), validatePolicy: vi.fn() },
   tenantClient: { getTenant: vi.fn() },
 }));
@@ -61,7 +61,7 @@ import PoliciesPage from "./page";
 beforeEach(() => {
   h.fetchTenants.mockClear();
   h.fetchBuckets.mockClear();
-  h.fetchObjectKeys.mockClear();
+  h.fetchCollections.mockClear();
   h.showNotification.mockClear();
 });
 

@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   clear: vi.fn(),
   fetchBuckets: vi.fn(),
   showNotification: vi.fn(),
-  buckets: [] as Array<{ backendId: string; bucketName: string }>,
+  buckets: [] as Array<{ backendId: string; bucketId: string }>,
 }));
 
 vi.mock("@/lib/connect/client", () => ({
@@ -44,8 +44,8 @@ beforeEach(() => {
   h.fetchBuckets.mockReset();
   h.showNotification.mockReset();
   h.buckets = [
-    { backendId: "primary", bucketName: "paladin-a" },
-    { backendId: "primary", bucketName: "paladin-b" },
+    { backendId: "primary", bucketId: "paladin-a" },
+    { backendId: "primary", bucketId: "paladin-b" },
   ];
 });
 
@@ -66,8 +66,7 @@ describe("DefaultBindingPage", () => {
 
   it("renders the current binding when one exists", async () => {
     h.get.mockResolvedValue({
-      backendId: "primary",
-      bucketName: "paladin-b",
+      bucket: "storageBackends/primary/buckets/paladin-b",
       setBy: "admin@local",
     });
     render(<DefaultBindingPage />);
@@ -80,13 +79,11 @@ describe("DefaultBindingPage", () => {
   it("sets the binding from the selected bucket", async () => {
     // First load has no binding; the post-set refetch returns the new one.
     h.get.mockRejectedValueOnce(notFound()).mockResolvedValue({
-      backendId: "primary",
-      bucketName: "paladin-b",
+      bucket: "storageBackends/primary/buckets/paladin-b",
       setBy: "admin@local",
     });
     h.set.mockResolvedValue({
-      backendId: "primary",
-      bucketName: "paladin-b",
+      bucket: "storageBackends/primary/buckets/paladin-b",
       setBy: "admin@local",
     });
     render(<DefaultBindingPage />);
@@ -101,8 +98,7 @@ describe("DefaultBindingPage", () => {
     await waitFor(() =>
       expect(h.set).toHaveBeenCalledWith({
         name: "tenants/acme",
-        backendId: "primary",
-        bucketName: "paladin-b",
+        bucket: "storageBackends/primary/buckets/paladin-b",
       }),
     );
     // The just-set binding is reflected in the UI.
@@ -113,8 +109,7 @@ describe("DefaultBindingPage", () => {
     // First load has a binding; the post-clear refetch reports NotFound.
     h.get
       .mockResolvedValueOnce({
-        backendId: "primary",
-        bucketName: "paladin-b",
+        bucket: "storageBackends/primary/buckets/paladin-b",
         setBy: "admin@local",
       })
       .mockRejectedValue(notFound());

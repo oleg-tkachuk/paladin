@@ -32,7 +32,7 @@ export type ValidateCELRequest =
   Message<"paladin.admin.v1.ValidateCELRequest"> & {
     /**
      * Schema the expression is validated against. One of:
-     *   "Object" | "ObjectKey" | "AuditLogEntry" | "EventEnvelope"
+     *   "Object" | "Collection" | "AuditLogEntry" | "EventEnvelope"
      * Unknown names return InvalidArgument.
      *
      * @generated from field: string schema = 1;

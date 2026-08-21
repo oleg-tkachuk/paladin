@@ -88,7 +88,7 @@ type Scope struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Type  ScopeType              `protobuf:"varint,1,opt,name=type,proto3,enum=paladin.common.v1.ScopeType" json:"type,omitempty"`
 	// Either a literal value or `*` for "all of this type". For OBJECT_KEY a
-	// glob form `bucket/objectKey/*` is accepted; matching is server-side.
+	// glob form `bucket/collection/*` is accepted; matching is server-side.
 	Value         string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

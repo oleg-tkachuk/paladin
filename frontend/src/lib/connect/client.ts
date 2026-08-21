@@ -3,7 +3,7 @@ import { createClient } from "@connectrpc/connect";
 import { dataTransport, iamTransport, adminTransport } from "./transport";
 
 // admin plane
-import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
+import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { PolicyService } from "@/gen/paladin/admin/v1/policy_service_pb";
@@ -12,7 +12,7 @@ import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
 import { AuditLogService } from "@/gen/paladin/admin/v1/audit_service_pb";
 import { EventSubscriptionService } from "@/gen/paladin/admin/v1/event_subscription_service_pb";
-import { OperationService as AdminOperationService } from "@/gen/paladin/admin/v1/operation_service_pb";
+import { PlatformOperationService } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { SystemService as AdminSystemService } from "@/gen/paladin/admin/v1/system_service_pb";
 import { APITokenService } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { CapabilityService } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -34,7 +34,7 @@ import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { UserSettingsService } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 
 // admin
-export const objectKeyClient = createClient(ObjectKeyService, adminTransport);
+export const collectionClient = createClient(CollectionService, adminTransport);
 export const bucketClient = createClient(BucketService, adminTransport);
 export const tenantClient = createClient(TenantService, adminTransport);
 export const policyClient = createClient(PolicyService, adminTransport);
@@ -47,7 +47,7 @@ export const eventSubscriptionClient = createClient(
   adminTransport,
 );
 export const adminOperationClient = createClient(
-  AdminOperationService,
+  PlatformOperationService,
   adminTransport,
 );
 export const adminSystemClient = createClient(
@@ -78,7 +78,7 @@ export const operationClient = createClient(
 );
 
 // iam
-import { SystemService } from "@/gen/paladin/iam/v1/system_service_pb";
+import { HealthService } from "@/gen/paladin/iam/v1/health_service_pb";
 
 export const authClient = createClient(AuthService, iamTransport);
 export const userClient = createClient(UserService, iamTransport);
@@ -86,4 +86,7 @@ export const userSettingsClient = createClient(
   UserSettingsService,
   iamTransport,
 );
-export const systemClient = createClient(SystemService, iamTransport);
+// GetVersion/GetHealth live on iam's HealthService — admin/v1 SystemService
+// is a different service (config, dispatcher and platform stats), reached
+// through adminSystemClient above.
+export const systemClient = createClient(HealthService, iamTransport);

@@ -19,28 +19,28 @@ import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 interface ObjectInspectorProps {
-  objectKey: string | null;
-  parentObjectKey?: string;
+  collection: string | null;
+  parentCollection?: string;
   onClose: () => void;
 }
 
 export function ObjectInspector({
-  objectKey,
-  parentObjectKey,
+  collection,
+  parentCollection,
   onClose,
 }: ObjectInspectorProps) {
   const router = useRouter();
-  // Fall back to the user's currently-selected ObjectKey scope when the
+  // Fall back to the user's currently-selected Collection scope when the
   // caller doesn't pass one explicitly. The /objects page browses inside
   // a single scope at a time, so this keeps the lookup honest — without
-  // this, the Inspector always queries `objectKey: "default"` and any
+  // this, the Inspector always queries `collection: "default"` and any
   // object outside the bootstrap default returns `not_found`.
-  const { objectKey: scopedObjectKey, tenantId, tenant } = useScope();
-  const effectiveParent = parentObjectKey || scopedObjectKey;
+  const { collection: scopedCollection, tenantId, tenant } = useScope();
+  const effectiveParent = parentCollection || scopedCollection;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
-    useObject(objectKey || undefined, effectiveParent);
+    useObject(collection || undefined, effectiveParent);
 
-  if (!objectKey) return null;
+  if (!collection) return null;
 
   const isImage = object?.contentType?.startsWith("image/");
 
@@ -229,13 +229,13 @@ export function ObjectInspector({
                   size="sm"
                   onClick={() => {
                     // Object detail moved under the tenant subtree
-                    // in Phase 5: /tenants/<id>/object-keys/<ok>/
+                    // in Phase 5: /tenants/<id>/collections/<ok>/
                     // objects/<key>. Prefer slug; fall back to UUID
                     // (resolver canonicalises on landing).
                     const handle = tenant?.slug || tenantId || "";
                     if (!handle) return;
                     router.push(
-                      `/tenants/${encodeURIComponent(handle)}/object-keys/${encodeURIComponent(object.objectKey)}/objects/${encodeURIComponent(object.key)}`,
+                      `/tenants/${encodeURIComponent(handle)}/collections/${encodeURIComponent(object.collection)}/objects/${encodeURIComponent(object.key)}`,
                     );
                   }}
                 >

@@ -18,7 +18,7 @@ import { DEFAULT_OBJECT_KEY } from "@/constants";
 
 /**
  * useObject — singular variant for the inspector / detail page. Loads one
- * object via LookupObject (key + parent ObjectKey) and, when AVAILABLE, its
+ * object via LookupObject (key + parent Collection) and, when AVAILABLE, its
  * presigned download URL — both in one TanStack query. Exposes per-object
  * mutators (soft-delete / restore / purge / patch-tags) that refetch the
  * query and bump the shared "objects" signal so list views stay in sync.
@@ -31,12 +31,12 @@ interface ObjectQueryResult {
 
 export function useObject(
   key: string | undefined,
-  parentObjectKey: string = DEFAULT_OBJECT_KEY,
+  parentCollection: string = DEFAULT_OBJECT_KEY,
 ) {
   const { user } = useAuth();
   const tenantId = user?.tenantId ?? "";
   const parent = tenantId
-    ? `tenants/${tenantId}/objectKeys/${parentObjectKey}`
+    ? `tenants/${tenantId}/collections/${parentCollection}`
     : "";
 
   const { showNotification } = useNotification();

@@ -34,15 +34,15 @@ import { seedBucket, seedTenantMembership } from "./fixtures/seed";
 // directly — you open the bucket sub-row first.
 async function selectBucket(
   page: import("@playwright/test").Page,
-  bucketName: string,
+  bucketId: string,
 ) {
   await page.getByRole("button", { name: /^Scope picker —/ }).click();
   await page.getByRole("button", { name: /^Switch bucket/ }).click();
   // Filter the cmdk list down to the seeded bucket — the list accumulates
   // buckets across runs, so searching keeps the option reliably rendered.
-  await page.getByPlaceholder("Search buckets…").fill(bucketName);
+  await page.getByPlaceholder("Search buckets…").fill(bucketId);
   await page
-    .getByRole("option", { name: new RegExp(bucketName) })
+    .getByRole("option", { name: new RegExp(bucketId) })
     .first()
     .click();
 }
@@ -79,26 +79,26 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
     const bucket = await seedBucket();
     await loginAsAdmin(page);
 
-    await selectBucket(page, bucket.bucketName);
+    await selectBucket(page, bucket.bucketId);
 
     // Selecting closes the nested row popover; the main trigger's
     // aria-label now embeds the chosen bucket (ScopePicker.tsx:130 —
-    // "… bucket <bucketName>, tenant <tenantLabel>").
+    // "… bucket <bucketId>, tenant <tenantLabel>").
     await expect(
       page.getByRole("button", { name: /^Scope picker —/ }),
-    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
+    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketId}`));
   });
 
   test("reload preserves the selected scope", async ({ page }) => {
     const bucket = await seedBucket();
     await loginAsAdmin(page);
 
-    await selectBucket(page, bucket.bucketName);
+    await selectBucket(page, bucket.bucketId);
 
     // Pre-reload sanity: scope is set.
     await expect(
       page.getByRole("button", { name: /^Scope picker —/ }),
-    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
+    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketId}`));
 
     // The localStorage write happens synchronously in
     // setBucket / setScope; reload must round-trip it.
@@ -110,7 +110,7 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
     // to "bucket any" and the assertion fails.
     await expect(
       page.getByRole("button", { name: /^Scope picker —/ }),
-    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
+    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketId}`));
   });
 
   test("switching to a second tenant re-scopes the session", async ({

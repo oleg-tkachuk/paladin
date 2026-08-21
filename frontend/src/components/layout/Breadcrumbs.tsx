@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 const ENTITY_PARENTS = new Set([
   "tenants",
   "buckets",
-  "object-keys",
+  "collections",
   "objects",
   "object-tags",
 ]);

@@ -66,8 +66,8 @@ const navigationGroups: Array<{
 }> = [
   {
     // The flat Objects entry was removed in Phase 5 — object
-    // listing now requires a tenant + ObjectKey scope (lives at
-    // /tenants/<id>/object-keys/<name>/objects, reached via
+    // listing now requires a tenant + Collection scope (lives at
+    // /tenants/<id>/collections/<name>/objects, reached via
     // Resources). Upload stays in Core because it doesn't need a
     // pre-selected OK and is the most-used Core entry-point.
     title: "Core",
@@ -81,7 +81,7 @@ const navigationGroups: Array<{
     // of the URL refactor. /tenants is the gateway; drilldown into
     // Buckets / Object Keys / Quotas / Capabilities / Budget / Audit /
     // Events lives under /tenants/<id>/<tab>. The cross-tenant flat
-    // indexes (/buckets, /object-keys) still exist for platform-admin
+    // indexes (/buckets, /collections) still exist for platform-admin
     // oversight — reachable via Cmd+K — but they're not in the sidebar
     // anymore so the primary path is unambiguous.
     //

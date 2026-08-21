@@ -6,6 +6,10 @@
 // TenantDefaultBinding.
 
 import { useEffect, useState } from "react";
+import {
+  bucketResourceName,
+  parseBucketResourceName,
+} from "@/lib/resources/bucket-name";
 import { useQuery } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -17,6 +21,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
+
+/** Renders a bucket reference as backend / bucket, falling back to the raw
+ *  resource name when it does not parse. */
+function BucketBadges({ bucket }: { bucket: string }) {
+  const ref = parseBucketResourceName(bucket);
+  if (!ref) return <Badge>{bucket}</Badge>;
+  return (
+    <>
+      <Badge>{ref.backendId}</Badge>
+      <span className="text-muted-foreground">/</span>
+      <Badge>{ref.bucketId}</Badge>
+    </>
+  );
+}
 
 export default function DefaultBindingPage() {
   const { tenantId, slug } = useTenant();
@@ -66,14 +84,13 @@ export default function DefaultBindingPage() {
     try {
       const res = await tenantClient.setTenantDefaultBinding({
         name,
-        backendId: b.backendId,
-        bucketName: b.bucketName,
+        bucket: bucketResourceName(b.backendId, b.bucketId),
       });
       await bindingQuery.refetch();
       showNotification({
         type: "success",
         title: "Default binding set",
-        message: `${res.backendId} / ${res.bucketName}`,
+        message: res.bucket,
       });
     } catch (e) {
       showNotification({
@@ -120,9 +137,7 @@ export default function DefaultBindingPage() {
           <Skeleton className="h-8 w-64" />
         ) : binding ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge>{binding.backendId}</Badge>
-            <span className="text-muted-foreground">/</span>
-            <Badge>{binding.bucketName}</Badge>
+            <BucketBadges bucket={binding.bucket} />
             {binding.setBy && (
               <span className="text-xs text-muted-foreground">
                 set by {binding.setBy}
@@ -146,8 +161,8 @@ export default function DefaultBindingPage() {
             >
               <option value={-1}>Select a bucket…</option>
               {buckets.map((b, i) => (
-                <option key={`${b.backendId}/${b.bucketName}`} value={i}>
-                  {b.backendId} / {b.bucketName}
+                <option key={`${b.backendId}/${b.bucketId}`} value={i}>
+                  {b.backendId} / {b.bucketId}
                 </option>
               ))}
             </select>

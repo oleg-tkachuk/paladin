@@ -48,7 +48,7 @@ describe("Breadcrumbs", () => {
   it("decodes an entity-id segment to its short name (child of an entity parent)", () => {
     // "objects/<key>" — the key is decoded + last-segment-shortened.
     pathname =
-      "/tenants/t1/object-keys/k1/objects/" +
+      "/tenants/t1/collections/k1/objects/" +
       encodeURIComponent("a/b/file.txt");
     render(<Breadcrumbs />);
     expect(screen.getByText("file.txt")).toBeInTheDocument();

@@ -2,8 +2,8 @@
 
 // /storage-backends/[backendId] — Backend detail. Identity card + list
 // of Buckets registered on this backend. Each bucket row drills into
-// /storage-backends/{backendId}/buckets/{bucketName}, where the operator
-// can see which tenants store data here and walk down to objectKeys
+// /storage-backends/{backendId}/buckets/{bucketId}, where the operator
+// can see which tenants store data here and walk down to collections
 // and files. This is the "physical layout" half of the IA — the
 // tenant-first half is at /tenants/[id]/.../objects.
 
@@ -197,9 +197,9 @@ export default function StorageBackendDetailPage() {
               </TableRow>
             ) : (
               bucketsHere.map((b) => {
-                const href = `/storage-backends/${encodeURIComponent(backendId)}/buckets/${encodeURIComponent(b.bucketName)}`;
+                const href = `/storage-backends/${encodeURIComponent(backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
                 return (
-                  <TableRow key={b.bucketName} className="group">
+                  <TableRow key={b.bucketId} className="group">
                     <TableCell>
                       <Link
                         href={href}
@@ -209,7 +209,7 @@ export default function StorageBackendDetailPage() {
                           <ArchiveBoxIcon className="size-4" />
                         </div>
                         <span className="font-medium group-hover:underline">
-                          {b.bucketName}
+                          {b.bucketId}
                         </span>
                       </Link>
                     </TableCell>

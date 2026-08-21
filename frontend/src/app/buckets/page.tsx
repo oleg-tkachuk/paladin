@@ -164,7 +164,7 @@ export default function BucketsPage() {
     if (q) {
       list = list.filter(
         (b) =>
-          b.bucketName.toLowerCase().includes(q) ||
+          b.bucketId.toLowerCase().includes(q) ||
           (b.displayName || "").toLowerCase().includes(q),
       );
     }
@@ -175,13 +175,13 @@ export default function BucketsPage() {
           sort.column === "backend"
             ? a.backendId
             : sort.column === "name"
-              ? a.bucketName
+              ? a.bucketId
               : a.region || "";
         const vb =
           sort.column === "backend"
             ? b.backendId
             : sort.column === "name"
-              ? b.bucketName
+              ? b.bucketId
               : b.region || "";
         return va < vb ? -dir : va > vb ? dir : 0;
       });
@@ -220,14 +220,14 @@ export default function BucketsPage() {
     try {
       await deleteBucket(
         deleteTarget.backendId,
-        deleteTarget.bucketName,
+        deleteTarget.bucketId,
         deleteTarget.resourceVersion,
         deleteRemote,
       );
       showNotification({
         type: "success",
         title: "Bucket deleted",
-        message: `${deleteTarget.bucketName}${deleteRemote ? " (incl. S3)" : ""}`,
+        message: `${deleteTarget.bucketId}${deleteRemote ? " (incl. S3)" : ""}`,
       });
       setDeleteTarget(null);
       setDeleteRemote(false);
@@ -363,15 +363,15 @@ export default function BucketsPage() {
               filtered.map((b) => {
                 // Drill into the storage-first browser: backend → bucket →
                 // tenants → folders → files. The tenant-scoped path
-                // (/tenants/.../buckets/.../object-keys) is for the
+                // (/tenants/.../buckets/.../collections) is for the
                 // operator who already knows which tenant they care about;
                 // /storage-backends/.../buckets/... is the "show me
                 // what's physically here" view that scales naturally to
                 // shared buckets with multiple tenant prefixes.
-                const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketName)}`;
+                const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
                 return (
                   <TableRow
-                    key={`${b.backendId}/${b.bucketName}`}
+                    key={`${b.backendId}/${b.bucketId}`}
                     className="group"
                   >
                     <TableCell>
@@ -394,7 +394,7 @@ export default function BucketsPage() {
                           <ArchiveBoxIcon className="size-4" />
                         </div>
                         <span className="font-mono text-xs group-hover:underline">
-                          {b.bucketName}
+                          {b.bucketId}
                         </span>
                       </Link>
                     </TableCell>
@@ -420,7 +420,7 @@ export default function BucketsPage() {
                             variant="ghost"
                             size="icon"
                             className="size-8 opacity-60 group-hover:opacity-100"
-                            aria-label={`Actions for ${b.bucketName}`}
+                            aria-label={`Actions for ${b.bucketId}`}
                           >
                             <EllipsisHorizontalIcon className="size-4" />
                           </Button>
@@ -434,7 +434,7 @@ export default function BucketsPage() {
                           {b.ownerTenantId && (
                             <DropdownMenuItem asChild>
                               <Link
-                                href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketName)}/lifecycle`}
+                                href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketId)}/lifecycle`}
                               >
                                 <ClockIcon className="size-4" />
                                 Lifecycle rules
@@ -569,13 +569,13 @@ export default function BucketsPage() {
             <AlertDialogDescription>
               Removing{" "}
               <span className="font-mono text-foreground">
-                {deleteTarget?.bucketName}
+                {deleteTarget?.bucketId}
               </span>{" "}
               from backend{" "}
               <span className="font-mono text-foreground">
                 {deleteTarget?.backendId}
               </span>
-              . Any ObjectKey still bound to it must be removed first.
+              . Any Collection still bound to it must be removed first.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <label className="flex cursor-pointer items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">

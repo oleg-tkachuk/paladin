@@ -10,9 +10,9 @@ export {
   type ComponentHealth,
   type HealthInfo,
   type VersionInfo,
-} from "@/gen/paladin/iam/v1/system_service_pb";
+} from "@/gen/paladin/iam/v1/health_service_pb";
 
-import { ComponentStatus } from "@/gen/paladin/iam/v1/system_service_pb";
+import { ComponentStatus } from "@/gen/paladin/iam/v1/health_service_pb";
 
 /**
  * componentStatusLabel maps the proto enum to the upper-case string the

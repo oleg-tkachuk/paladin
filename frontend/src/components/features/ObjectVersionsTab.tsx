@@ -125,7 +125,7 @@ export function ObjectVersionsTab({
         <ClockIcon className="size-10 text-muted-foreground" />
         <div className="text-sm font-medium">No historical versions yet</div>
         <p className={cn(T.helper, "max-w-md")}>
-          Versioning records every successful upload when the parent ObjectKey
+          Versioning records every successful upload when the parent Collection
           has versioning enabled.
         </p>
       </Card>

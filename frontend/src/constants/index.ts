@@ -42,9 +42,9 @@ export const AUDIENCES = {
 export type Audience = (typeof AUDIENCES)[Plane];
 
 /**
- * Bootstrap-provisioned ObjectKey. Used as the last-resort fallback when
+ * Bootstrap-provisioned Collection. Used as the last-resort fallback when
  * no scope has been chosen yet (fresh tenant, first-ever page load).
- * dev-bootstrap.sh creates an ObjectKey with this slug; production
+ * dev-bootstrap.sh creates an Collection with this slug; production
  * tenants must opt out of this default by selecting a different key.
  */
 export const DEFAULT_OBJECT_KEY = "default";
@@ -71,8 +71,8 @@ export const STORAGE_KEYS = {
   scopeBackend: "paladin_scope_backend",
   /** Active bucket name for soft-scope filters. */
   scopeBucket: "paladin_scope_bucket",
-  /** Active ObjectKey scope for /objects + sidebar counts + CommandPalette. */
-  scopeObjectKey: "paladin_scope_object_key",
+  /** Active Collection scope for /objects + sidebar counts + CommandPalette. */
+  scopeCollection: "paladin_scope_object_key",
   /** Saved filter views on /objects. */
   savedViews: "paladin_saved_views",
 } as const;

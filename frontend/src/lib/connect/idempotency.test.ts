@@ -37,7 +37,7 @@ describe("idempotencyInterceptor", () => {
   it("injects an Idempotency-Key header on a Create* RPC", async () => {
     const { bucketClient } = await import("@/lib/connect/client");
     await bucketClient
-      .createBucket({ parent: "storageBackends/x", bucketName: "b" })
+      .createBucket({ parent: "storageBackends/x", bucketId: "b" })
       .catch(() => {});
     expect(rpcHeaders, "RPC fetch was never made").not.toBeNull();
     expect(rpcHeaders?.get("Idempotency-Key")).toBeTruthy();

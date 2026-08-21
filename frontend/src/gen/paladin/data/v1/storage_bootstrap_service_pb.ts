@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_storage_bootstrap_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ci5sZWdhdGUvZGF0YS92MS9zdG9yYWdlX2Jvb3RzdHJhcF9zZXJ2aWNlLnByb3RvEg5sZWdhdGUuZGF0YS52MSJpChpFbnN1cmVUZW5hbnRTdG9yYWdlUmVxdWVzdBIbCgpiYWNrZW5kX2lkGAEgASgJQge6SARyAhABEhkKBmJ1Y2tldBgCIAEoCUIJukgGcgQQAxg/EhMKC29iamVjdF9rZXlzGAMgAygJInAKG0Vuc3VyZVRlbmFudFN0b3JhZ2VSZXNwb25zZRIWCg5idWNrZXRfY3JlYXRlZBgBIAEoCBIbChNvYmplY3Rfa2V5c19jcmVhdGVkGAIgAygJEhwKFG9iamVjdF9rZXlzX2V4aXN0aW5nGAMgAygJMokBChdTdG9yYWdlQm9vdHN0cmFwU2VydmljZRJuChNFbnN1cmVUZW5hbnRTdG9yYWdlEioubGVnYXRlLmRhdGEudjEuRW5zdXJlVGVuYW50U3RvcmFnZVJlcXVlc3QaKy5sZWdhdGUuZGF0YS52MS5FbnN1cmVUZW5hbnRTdG9yYWdlUmVzcG9uc2VCRVpDZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO2xlZ2F0ZWRhdGF2MWIGcHJvdG8z",
+    "Ci5sZWdhdGUvZGF0YS92MS9zdG9yYWdlX2Jvb3RzdHJhcF9zZXJ2aWNlLnByb3RvEg5sZWdhdGUuZGF0YS52MSJpChpFbnN1cmVUZW5hbnRTdG9yYWdlUmVxdWVzdBIbCgpiYWNrZW5kX2lkGAEgASgJQge6SARyAhABEhkKBmJ1Y2tldBgCIAEoCUIJukgGcgQQAxg/EhMKC2NvbGxlY3Rpb25zGAMgAygJInAKG0Vuc3VyZVRlbmFudFN0b3JhZ2VSZXNwb25zZRIWCg5idWNrZXRfY3JlYXRlZBgBIAEoCBIbChNjb2xsZWN0aW9uc19jcmVhdGVkGAIgAygJEhwKFGNvbGxlY3Rpb25zX2V4aXN0aW5nGAMgAygJMokBChdTdG9yYWdlQm9vdHN0cmFwU2VydmljZRJuChNFbnN1cmVUZW5hbnRTdG9yYWdlEioubGVnYXRlLmRhdGEudjEuRW5zdXJlVGVuYW50U3RvcmFnZVJlcXVlc3QaKy5sZWdhdGUuZGF0YS52MS5FbnN1cmVUZW5hbnRTdG9yYWdlUmVzcG9uc2VCRVpDZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO2xlZ2F0ZWRhdGF2MWIGcHJvdG8z",
     [file_buf_validate_validate],
   );
 
@@ -47,12 +47,12 @@ export type EnsureTenantStorageRequest =
     bucket: string;
 
     /**
-     * object_keys are the logical namespaces to ensure under this tenant/bucket.
+     * collections are the logical namespaces to ensure under this tenant/bucket.
      * May be empty to ensure only the bucket.
      *
-     * @generated from field: repeated string object_keys = 3;
+     * @generated from field: repeated string collections = 3;
      */
-    objectKeys: string[];
+    collections: string[];
   };
 
 /**
@@ -77,18 +77,18 @@ export type EnsureTenantStorageResponse =
     bucketCreated: boolean;
 
     /**
-     * object_keys_created lists the object-keys this call created.
+     * collections_created lists the object-keys this call created.
      *
-     * @generated from field: repeated string object_keys_created = 2;
+     * @generated from field: repeated string collections_created = 2;
      */
-    objectKeysCreated: string[];
+    collectionsCreated: string[];
 
     /**
-     * object_keys_existing lists the requested object-keys that already existed.
+     * collections_existing lists the requested object-keys that already existed.
      *
-     * @generated from field: repeated string object_keys_existing = 3;
+     * @generated from field: repeated string collections_existing = 3;
      */
-    objectKeysExisting: string[];
+    collectionsExisting: string[];
   };
 
 /**
