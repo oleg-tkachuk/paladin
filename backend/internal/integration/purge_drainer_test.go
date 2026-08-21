@@ -45,10 +45,9 @@ func seedPurgeDebt(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixt
 	mustExec(t, ctx, pool, `
 		INSERT INTO pending_purges
 		  (id, tenant_id, object_id, bucket_id, collection_name, path)
-		SELECT $1, $2, $3, b.id, $4, 'k-orphan'
-		  FROM buckets b
-		  JOIN storage_backends sb ON sb.id = b.backend_id
-		 WHERE sb.name = 'primary' AND b.name = 'bkt-1'`,
+		SELECT $1, $2, $3, c.bucket_id, c.name, 'k-orphan'
+		  FROM collections c
+		 WHERE c.tenant_id = $2 AND c.name = $4`,
 		id, f.tenantID, uuid.New(), f.collection)
 	return id
 }

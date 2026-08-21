@@ -93,16 +93,21 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 
 	var backendID, bucketName string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id, bucket_name FROM collections
-		  WHERE tenant_id = $1 AND collection = $2`,
+		`SELECT sb.name, b.name
+		   FROM collections c
+		   JOIN buckets b           ON b.id = c.bucket_id
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE c.tenant_id = $1 AND c.name = $2`,
 		f.tenantID, f.collection).Scan(&backendID, &bucketName); err != nil {
 		t.Fatalf("lookup binding: %v", err)
 	}
 
 	bucketQuota := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes)
-		 VALUES ($1, $2, $3, 100000)`, bucketQuota, backendID, bucketName)
+		`INSERT INTO quotas (id, bucket_id, max_total_bytes)
+		 VALUES ($1, (SELECT b.id FROM buckets b
+		          JOIN storage_backends sb ON sb.id = b.backend_id
+		         WHERE sb.name = $2 AND b.name = $3), 100000)`, bucketQuota, backendID, bucketName)
 	// An unrelated bucket with a quota and no objects must land on 0, not
 	// inherit the other bucket's rollup.
 	emptyQuota := uuid.New()
@@ -111,8 +116,10 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 		`INSERT INTO buckets (backend_id, name)
 		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, "bkt-e-"+hex)
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes)
-		 VALUES ($1, $2, $3, 100000)`, emptyQuota, backendID, "bkt-e-"+hex)
+		`INSERT INTO quotas (id, bucket_id, max_total_bytes)
+		 VALUES ($1, (SELECT b.id FROM buckets b
+		          JOIN storage_backends sb ON sb.id = b.backend_id
+		         WHERE sb.name = $2 AND b.name = $3), 100000)`, emptyQuota, backendID, "bkt-e-"+hex)
 
 	if _, err := adapters.NewQuotaReconcileRepo(pool).ReconcileUsage(ctx); err != nil {
 		t.Fatalf("ReconcileUsage: %v", err)

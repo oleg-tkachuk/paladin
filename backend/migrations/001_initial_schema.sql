@@ -374,9 +374,8 @@ CREATE TABLE objects (
 );
 CREATE INDEX objects_tenant_state_idx ON objects (tenant_id, state);
 CREATE INDEX objects_collection_idx ON objects (collection_id);
-CREATE INDEX objects_list_keyset_idx
-    ON objects (collection_id, path, id) WHERE state <> 'DELETED';
-CREATE INDEX objects_hard_delete_idx
+CREATE INDEX idx_objects_keyset ON objects (tenant_id, collection_id, id);
+CREATE INDEX idx_objects_hard_deletable
     ON objects (terminated_at) WHERE state = 'DELETED';
 CREATE INDEX objects_presign_expiry_idx
     ON objects (presign_expires_at) WHERE state = 'PENDING';
@@ -475,7 +474,7 @@ CREATE TABLE multipart_uploads (
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX multipart_uploads_object_idx ON multipart_uploads (object_id);
-CREATE INDEX multipart_uploads_reaper_idx ON multipart_uploads (created_at);
+CREATE INDEX idx_multipart_uploads_created ON multipart_uploads (created_at);
 
 CREATE TABLE multipart_parts (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -513,10 +512,15 @@ CREATE TABLE quotas (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id           uuid REFERENCES tenants(id) ON DELETE CASCADE,
     bucket_id           uuid REFERENCES buckets(id) ON DELETE CASCADE,
-    max_total_bytes     bigint,
-    max_object_count    bigint,
-    max_bytes_per_day   bigint,
-    max_objects_per_day bigint,
+    -- 0 means "no cap" — the convention the whole codebase reads these with
+    -- (`max_x > 0 AND usage_x >= max_x`). Nullable would poison those
+    -- three-valued: NULL > 0 is NULL, so a row with one unset cap makes the
+    -- whole OR-chain NULL and silently drops out of every NOT-filtered
+    -- aggregate. It reads as "not at limit" and counts as neither.
+    max_total_bytes     bigint NOT NULL DEFAULT 0,
+    max_object_count    bigint NOT NULL DEFAULT 0,
+    max_bytes_per_day   bigint NOT NULL DEFAULT 0,
+    max_objects_per_day bigint NOT NULL DEFAULT 0,
     usage_total_bytes   bigint NOT NULL DEFAULT 0,
     usage_object_count  bigint NOT NULL DEFAULT 0,
     usage_bytes_today   bigint NOT NULL DEFAULT 0,
@@ -644,8 +648,13 @@ CREATE TABLE event_deliveries (
 );
 CREATE INDEX event_deliveries_due_idx
     ON event_deliveries (next_attempt_at) WHERE status = 'pending';
-CREATE INDEX event_deliveries_depth_idx
+CREATE INDEX event_deliveries_subscription_idx
     ON event_deliveries (subscription_id, status);
+-- The outbox-depth gauge groups pending rows by tenant. Partial and
+-- tenant-leading so the grouping is an index-only scan over the pending
+-- minority instead of a heap visit per row.
+CREATE INDEX event_deliveries_pending_tenant_idx
+    ON event_deliveries (tenant_id) WHERE status = 'pending';
 
 -- Dedup for inbound storage events. `event_id` is the SOURCE's id, so it is
 -- text and it is the natural key, not our identity.
@@ -675,8 +684,12 @@ CREATE TABLE operations (
     updated_at    timestamptz NOT NULL DEFAULT now(),
     done_at       timestamptz
 );
-CREATE INDEX operations_list_keyset_idx
-    ON operations (tenant_id, created_at DESC, id);
+CREATE INDEX idx_operations_tenant_keyset ON operations (tenant_id, id);
+-- The purge worker sweeps terminal rows by done_at; partial so the live
+-- PENDING/RUNNING tail stays out of the index entirely.
+CREATE INDEX idx_operations_terminal_done_at ON operations (done_at)
+    WHERE state IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND done_at IS NOT NULL;
+CREATE INDEX idx_operations_tenant_state ON operations (tenant_id, state);
 
 -- ─── Audit, idempotency, leases ─────────────────────────────────────────────
 
@@ -702,8 +715,12 @@ CREATE TABLE audit_log (
 ) PARTITION BY RANGE (at);
 
 CREATE TABLE audit_log_default PARTITION OF audit_log DEFAULT;
-CREATE INDEX audit_log_at_idx ON audit_log (at DESC);
-CREATE INDEX audit_log_actor_tenant_idx ON audit_log (actor_tenant_id, at DESC);
+CREATE INDEX idx_audit_log_at ON audit_log (at DESC);
+CREATE INDEX idx_audit_log_tenant_at ON audit_log (actor_tenant_id, at DESC);
+-- Action lookups: exact-match and prefix-range both served by (action, at).
+CREATE INDEX idx_audit_log_action_at ON audit_log (action, at DESC);
+CREATE INDEX idx_audit_log_capability ON audit_log (capability_id, at DESC)
+    WHERE capability_id IS NOT NULL;
 
 -- Partitioned by expires_at, NOT created_at: reclamation is a DROP PARTITION
 -- of everything already expired, which only works if the partition key is the
@@ -711,7 +728,7 @@ CREATE INDEX audit_log_actor_tenant_idx ON audit_log (actor_tenant_id, at DESC);
 -- than the lapsed row, so the unique key admits it instead of colliding.
 CREATE TABLE idempotency_keys (
     id           uuid NOT NULL DEFAULT gen_random_uuid(),
-    tenant_id    uuid NOT NULL,
+    tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     method       text NOT NULL,
     key          text NOT NULL,
     response     bytea NOT NULL,
@@ -723,6 +740,7 @@ CREATE TABLE idempotency_keys (
 ) PARTITION BY RANGE (expires_at);
 
 CREATE TABLE idempotency_keys_default PARTITION OF idempotency_keys DEFAULT;
+CREATE INDEX idx_idempotency_keys_expiry ON idempotency_keys (expires_at);
 
 CREATE TABLE worker_leases (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -138,7 +138,7 @@ ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
     updated_at          = now()
 `
 
-func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error {
+func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error {
 	_, err := q.db.Exec(ctx, upsertBucketQuota,
 		iD,
 		name,
@@ -162,7 +162,7 @@ ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
     updated_at          = now()
 `
 
-func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64) error {
+func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error {
 	_, err := q.db.Exec(ctx, upsertTenantQuota,
 		iD,
 		tenantID,

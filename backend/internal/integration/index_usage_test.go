@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -68,11 +67,17 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 	}
 	analyze(t, ctx, pool, "objects")
 
+	var probeCollectionID uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`SELECT id FROM collections WHERE tenant_id = $1 AND name = $2`,
+		f.tenantID, keys[0]).Scan(&probeCollectionID); err != nil {
+		t.Fatalf("resolve probe collection: %v", err)
+	}
 	plan := explain(t, ctx, pool, `
 		SELECT id FROM objects
 		 WHERE tenant_id = $1 AND collection_id = $2 AND id > $3
 		 ORDER BY id
-		 LIMIT 50`, f.tenantID, keys[0], uuid.Nil)
+		 LIMIT 50`, f.tenantID, probeCollectionID, uuid.Nil)
 
 	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects keyset page")
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects keyset page")
@@ -82,7 +87,13 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 
 	// An empty Collection is the size-independent case: there is nothing for a
 	// PK scan's LIMIT to stop on, so it reads to the end of the table.
-	empty := seedCollections(t, ctx, pool, f, 1)[0]
+	emptyName := seedCollections(t, ctx, pool, f, 1)[0]
+	var empty uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`SELECT id FROM collections WHERE tenant_id = $1 AND name = $2`,
+		f.tenantID, emptyName).Scan(&empty); err != nil {
+		t.Fatalf("resolve empty collection: %v", err)
+	}
 	plan = explain(t, ctx, pool, `
 		SELECT id FROM objects
 		 WHERE tenant_id = $1 AND collection_id = $2 AND id > $3
@@ -112,7 +123,6 @@ func TestIndexUsage_ObjectsHardDeletable(t *testing.T) {
 	plan := explain(t, ctx, pool, `
 		SELECT id FROM objects
 		 WHERE state = 'DELETED' AND terminated_at IS NOT NULL AND terminated_at < now()
-		   AND NOT legal_hold
 		 ORDER BY terminated_at
 		 LIMIT 100`)
 
@@ -136,12 +146,12 @@ func TestIndexUsage_MultipartReaper(t *testing.T) {
 			        'test', 'user', now() - make_interval(hours => $3)
 			   FROM objects o JOIN collections c ON c.id = o.collection_id
 			  WHERE o.id = $2`,
-			fmt.Sprintf("up-%d", i), oid, i%200)
+			uuid.Must(uuid.NewV7()), oid, i%200)
 	}
 	analyze(t, ctx, pool, "multipart_uploads")
 
 	plan := explain(t, ctx, pool, `
-		SELECT upload_id FROM multipart_uploads
+		SELECT id FROM multipart_uploads
 		 WHERE created_at < now() - interval '72 hours'
 		 ORDER BY created_at
 		 LIMIT 100`)
@@ -212,7 +222,13 @@ func TestIndexUsage_OutboxDepthGauge(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
+	// event_deliveries.subscription_id is a real FK, so the parent row has to
+	// exist before the outbox rows do.
 	subID := uuid.New()
+	mustExec(t, ctx, pool,
+		`INSERT INTO event_subscriptions (id, tenant_id, sink_kind, sink_config)
+		 VALUES ($1, $2, 'http', '{"url": "https://example.invalid/hook"}'::jsonb)`,
+		subID, f.tenantID)
 	for i := 0; i < 3000; i++ {
 		status := "delivered"
 		if i%4 == 0 { // a realistic minority still pending

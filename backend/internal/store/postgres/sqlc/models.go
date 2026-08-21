@@ -627,10 +627,10 @@ type Quota struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
 	BucketID          pgtype.UUID        `json:"bucket_id"`
-	MaxTotalBytes     *int64             `json:"max_total_bytes"`
-	MaxObjectCount    *int64             `json:"max_object_count"`
-	MaxBytesPerDay    *int64             `json:"max_bytes_per_day"`
-	MaxObjectsPerDay  *int64             `json:"max_objects_per_day"`
+	MaxTotalBytes     int64              `json:"max_total_bytes"`
+	MaxObjectCount    int64              `json:"max_object_count"`
+	MaxBytesPerDay    int64              `json:"max_bytes_per_day"`
+	MaxObjectsPerDay  int64              `json:"max_objects_per_day"`
 	UsageTotalBytes   int64              `json:"usage_total_bytes"`
 	UsageObjectCount  int64              `json:"usage_object_count"`
 	UsageBytesToday   int64              `json:"usage_bytes_today"`

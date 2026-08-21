@@ -59,7 +59,7 @@ func TestPolicyChangedNotify(t *testing.T) {
 
 	// collection policy UPDATE → "uuid:collection" payload.
 	mustExec(t, ctx, pool,
-		`UPDATE collections SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND collection = $2`,
+		`UPDATE collections SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND name = $2`,
 		f.tenantID, f.collection)
 	if ev := next("collection policy update"); ev.TenantID != f.tenantID || ev.Collection != f.collection {
 		t.Fatalf("collection policy update event = %+v, want {%s %q}", ev, f.tenantID, f.collection)
@@ -90,14 +90,16 @@ func TestPolicyChangedNotify(t *testing.T) {
 	}
 	newKey := f.collection + "-b"
 	mustExec(t, ctx, pool,
-		`INSERT INTO collections (tenant_id, name, backend_id, bucket_name, cedar_policy)
-		 VALUES ($1, $2, $3, $4, 'permit(principal, action, resource);')`,
+		`INSERT INTO collections (tenant_id, name, bucket_id, cedar_policy)
+		 VALUES ($1, $2, (SELECT b.id FROM buckets b
+		          JOIN storage_backends sb ON sb.id = b.backend_id
+		         WHERE sb.name = $3 AND b.name = $4), 'permit(principal, action, resource);')`,
 		f.tenantID, newKey, backendID, bucketName)
 	if ev := next("collection insert with policy"); ev.TenantID != f.tenantID || ev.Collection != newKey {
 		t.Fatalf("insert event = %+v, want {%s %q}", ev, f.tenantID, newKey)
 	}
 	mustExec(t, ctx, pool,
-		`DELETE FROM collections WHERE tenant_id = $1 AND collection = $2`, f.tenantID, newKey)
+		`DELETE FROM collections WHERE tenant_id = $1 AND name = $2`, f.tenantID, newKey)
 	if ev := next("collection delete with policy"); ev.TenantID != f.tenantID || ev.Collection != newKey {
 		t.Fatalf("delete event = %+v, want {%s %q}", ev, f.tenantID, newKey)
 	}

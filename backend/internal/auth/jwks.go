@@ -294,11 +294,26 @@ func jwkToPublicKey(k jwk) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("jwks: EC Y: %w", err)
 		}
-		return &ecdsa.PublicKey{
-			Curve: curve,
-			X:     new(big.Int).SetBytes(xb),
-			Y:     new(big.Int).SetBytes(yb),
-		}, nil
+		// ParseUncompressedPublicKey rather than setting X/Y directly: those
+		// fields are deprecated as of Go 1.26 and assembling a key from raw
+		// coordinates skips the on-curve check, so a malformed JWKS response
+		// would yield a PublicKey that fails deep inside Verify instead of
+		// here. It takes SEC 1 uncompressed form (0x04 || X || Y), with both
+		// coordinates left-padded to the curve's byte size — JWK stores them
+		// unpadded when the leading byte is zero.
+		size := (curve.Params().BitSize + 7) / 8
+		if len(xb) > size || len(yb) > size {
+			return nil, fmt.Errorf("jwks: EC coordinate too wide for %s", k.Crv)
+		}
+		point := make([]byte, 1+2*size)
+		point[0] = 4
+		copy(point[1+size-len(xb):1+size], xb)
+		copy(point[1+2*size-len(yb):], yb)
+		pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+		if err != nil {
+			return nil, fmt.Errorf("jwks: EC point: %w", err)
+		}
+		return pub, nil
 	default:
 		return nil, fmt.Errorf("jwks: unsupported kty %q", k.Kty)
 	}

@@ -115,27 +115,89 @@ CREATE TRIGGER object_locks_enforce_retention
 -- until its TTL, never correctness, because every authorisation decision
 -- re-reads the policy hash.
 
-CREATE OR REPLACE FUNCTION paladin_notify_policy_changed() RETURNS trigger
+-- ─── Dedicated-bucket tenancy ───────────────────────────────────────────────
+--
+-- A dedicated bucket belongs to exactly one tenant (buckets.owner_tenant_id).
+-- Binding a collection to a bucket someone else owns would hand that tenant a
+-- write path into the owner's storage — RLS cannot catch it, because the row
+-- being inserted carries the ATTACKER's tenant_id and so passes the policy
+-- cleanly. The check has to compare the two tenants, which is what this does.
+--
+-- Shared buckets (owner_tenant_id IS NULL) are bindable by anyone: that is
+-- what makes them shared.
+CREATE OR REPLACE FUNCTION collections_enforce_bucket_tenancy() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    owner uuid;
+BEGIN
+    SELECT owner_tenant_id INTO owner FROM buckets WHERE id = NEW.bucket_id;
+    IF owner IS NOT NULL AND owner <> NEW.tenant_id THEN
+        RAISE EXCEPTION
+            'collection for tenant % may not bind to bucket % owned by tenant %',
+            NEW.tenant_id, NEW.bucket_id, owner
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+CREATE TRIGGER collections_enforce_bucket_tenancy
+    BEFORE INSERT OR UPDATE OF bucket_id, tenant_id ON collections
+    FOR EACH ROW EXECUTE FUNCTION collections_enforce_bucket_tenancy();
+
+-- ─── Policy invalidation ────────────────────────────────────────────────────
+--
+-- The Cedar engine caches policies per scope and listens on channel
+-- `policy_changed` (internal/policy/cedar/store.go). Both the channel name and
+-- the payload shape are a contract with that listener:
+--
+--     "<tenant_uuid>"              → invalidate the tenant's inherited policy
+--     "<tenant_uuid>:<collection>" → invalidate one collection
+--
+-- The guard compares the policy TEXT, not the hash: the hash is computed by
+-- the application after the write, so a hash-based guard stays silent on the
+-- statement that actually changed the policy.
+CREATE OR REPLACE FUNCTION paladin_notify_collection_policy_changed() RETURNS trigger
     LANGUAGE plpgsql SET search_path TO 'pg_catalog', 'public' AS $$
 BEGIN
-    IF NEW.cedar_policy_hash IS DISTINCT FROM OLD.cedar_policy_hash THEN
-        PERFORM pg_notify('paladin_policy_changed',
-                          TG_TABLE_NAME || ':' || NEW.id::text);
+    -- DELETE has no NEW: the row is going away, so the cached policy for it
+    -- must go too, and OLD carries the scope to name.
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.cedar_policy <> '' THEN
+            PERFORM pg_notify('policy_changed',
+                              OLD.tenant_id::text || ':' || OLD.name);
+        END IF;
+        RETURN OLD;
+    END IF;
+    -- INSERT has no OLD, and TG_OP='INSERT' means the scope did not exist a
+    -- moment ago — the engine caches empty Fetch results, so creation must
+    -- invalidate just as an edit does.
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.cedar_policy <> '' THEN
+            PERFORM pg_notify('policy_changed',
+                              NEW.tenant_id::text || ':' || NEW.name);
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW.cedar_policy IS DISTINCT FROM OLD.cedar_policy THEN
+        PERFORM pg_notify('policy_changed',
+                          NEW.tenant_id::text || ':' || NEW.name);
     END IF;
     RETURN NEW;
 END
 $$;
 
 -- tenants spells the same thing differently: its policy is inherited by
--- children, so the column is inherited_policy_hash. A shared trigger function
--- referencing NEW.cedar_policy_hash raises "record new has no field" on every
+-- children, so the column is inherited_cedar_policy. A shared trigger function
+-- referencing NEW.cedar_policy raises "record new has no field" on every
 -- tenant UPDATE — a plpgsql runtime error, not a compile-time one, so it only
--- appears when a tenant is actually written.
+-- appears when a tenant is actually written. The payload is a bare uuid: the
+-- tenant IS the scope, so there is no collection segment to append.
 CREATE OR REPLACE FUNCTION paladin_notify_tenant_policy_changed() RETURNS trigger
     LANGUAGE plpgsql SET search_path TO 'pg_catalog', 'public' AS $$
 BEGIN
-    IF NEW.inherited_policy_hash IS DISTINCT FROM OLD.inherited_policy_hash THEN
-        PERFORM pg_notify('paladin_policy_changed', 'tenants:' || NEW.id::text);
+    IF NEW.inherited_cedar_policy IS DISTINCT FROM OLD.inherited_cedar_policy THEN
+        PERFORM pg_notify('policy_changed', NEW.id::text);
     END IF;
     RETURN NEW;
 END
@@ -145,14 +207,14 @@ CREATE TRIGGER tenants_notify_policy_changed
     AFTER UPDATE ON tenants
     FOR EACH ROW EXECUTE FUNCTION paladin_notify_tenant_policy_changed();
 CREATE TRIGGER collections_notify_policy_changed
-    AFTER UPDATE ON collections
-    FOR EACH ROW EXECUTE FUNCTION paladin_notify_policy_changed();
-CREATE TRIGGER buckets_notify_policy_changed
-    AFTER UPDATE ON buckets
-    FOR EACH ROW EXECUTE FUNCTION paladin_notify_policy_changed();
-CREATE TRIGGER storage_backends_notify_policy_changed
-    AFTER UPDATE ON storage_backends
-    FOR EACH ROW EXECUTE FUNCTION paladin_notify_policy_changed();
+    AFTER INSERT OR UPDATE OR DELETE ON collections
+    FOR EACH ROW EXECUTE FUNCTION paladin_notify_collection_policy_changed();
+
+-- buckets and storage_backends carry policies too, but neither is
+-- tenant-scoped, so neither can name a scope in the payload format above.
+-- Their invalidation is the engine's ResyncAll path, driven by the admin
+-- plane on write rather than by a trigger — a bucket policy change affects
+-- every tenant bound to it, which is a flush, not a targeted eviction.
 
 -- +goose StatementEnd
 -- +goose Down

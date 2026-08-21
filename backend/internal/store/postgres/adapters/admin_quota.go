@@ -58,10 +58,10 @@ func upsertTenantQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 	return qq.UpsertTenantQuota(ctx,
 		pgUUID(q.QuotaID),
 		pgUUID(q.TenantID),
-		nilIfZero(q.MaxTotalBytes),
-		nilIfZero(q.MaxObjectCount),
-		nilIfZero(q.MaxBytesPerDay),
-		nilIfZero(q.MaxObjectsPerDay),
+		q.MaxTotalBytes,
+		q.MaxObjectCount,
+		q.MaxBytesPerDay,
+		q.MaxObjectsPerDay,
 	)
 }
 
@@ -82,10 +82,10 @@ func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 		pgUUID(q.QuotaID),
 		q.BackendID,
 		q.BucketName,
-		nilIfZero(q.MaxTotalBytes),
-		nilIfZero(q.MaxObjectCount),
-		nilIfZero(q.MaxBytesPerDay),
-		nilIfZero(q.MaxObjectsPerDay),
+		q.MaxTotalBytes,
+		q.MaxObjectCount,
+		q.MaxBytesPerDay,
+		q.MaxObjectsPerDay,
 	)
 }
 
@@ -150,10 +150,10 @@ func quotaFromSQLC(q sqlc.Quota, backendName, bucketName string) admindomain.Quo
 		TenantID:          uuidFrom(q.TenantID),
 		BackendID:         backendName,
 		BucketName:        bucketName,
-		MaxTotalBytes:     zeroIfNil(q.MaxTotalBytes),
-		MaxObjectCount:    zeroIfNil(q.MaxObjectCount),
-		MaxBytesPerDay:    zeroIfNil(q.MaxBytesPerDay),
-		MaxObjectsPerDay:  zeroIfNil(q.MaxObjectsPerDay),
+		MaxTotalBytes:     q.MaxTotalBytes,
+		MaxObjectCount:    q.MaxObjectCount,
+		MaxBytesPerDay:    q.MaxBytesPerDay,
+		MaxObjectsPerDay:  q.MaxObjectsPerDay,
 		UsageTotalBytes:   q.UsageTotalBytes,
 		UsageObjectCount:  q.UsageObjectCount,
 		UsageBytesToday:   q.UsageBytesToday,
@@ -162,23 +162,4 @@ func quotaFromSQLC(q sqlc.Quota, backendName, bucketName string) admindomain.Quo
 		ResourceVersion:   q.ResourceVersion,
 		UpdatedAt:         timeFrom(q.UpdatedAt),
 	}
-}
-
-// A quota limit is NULL when unset — "no limit" — while the domain spells that
-// as zero. Keeping NULL out of the domain would make "unlimited" and "zero
-// bytes allowed" the same value.
-func nilIfZero(v int64) *int64 {
-	if v == 0 {
-		return nil
-	}
-	return &v
-}
-
-// Mirror of nilIfZero on the way out: NULL means "no limit", which the domain
-// spells as zero.
-func zeroIfNil(v *int64) int64 {
-	if v == nil {
-		return 0
-	}
-	return *v
 }

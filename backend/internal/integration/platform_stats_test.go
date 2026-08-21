@@ -178,9 +178,10 @@ func TestCollectRLSSiblings(t *testing.T) {
 		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`,
 		backendOf(t, ctx, pool, f), "bkt-q-"+hex)
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, backend_id, bucket_name, max_total_bytes,
-		                     usage_total_bytes)
-		 VALUES ($1, $2, $3, 1000, 950)`,
+		`INSERT INTO quotas (id, bucket_id, max_total_bytes, usage_total_bytes)
+		 VALUES ($1, (SELECT b.id FROM buckets b
+		          JOIN storage_backends sb ON sb.id = b.backend_id
+		         WHERE sb.name = $2 AND b.name = $3), 1000, 950)`,
 		uuid.New(), backendOf(t, ctx, pool, f), "bkt-q-"+hex)
 
 	// ─── capabilities ───────────────────────────────────────────────────
@@ -192,9 +193,9 @@ func TestCollectRLSSiblings(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO capability_records
 			   (id, tenant_id, issuer, principal_kind, principal_subject,
-			    audience, caveats, parent_id, expires_at)
+			    audience, caveats, parent_id, created_by, expires_at)
 			 VALUES ($1, $2, 'paladin', $3, 'sub', '{a}', '{}'::jsonb, $4,
-			         now() + $5::interval)`,
+			         'fixture-issuer', now() + $5::interval)`,
 			id, f.tenantID, kind, parent, expiresIn)
 	}
 	insertCap(active, "service_account", "48 hours", nil)
@@ -215,8 +216,9 @@ func TestCollectRLSSiblings(t *testing.T) {
 		hmac := id[:] // 16 distinct bytes per row
 		mustExec(t, ctx, pool,
 			`INSERT INTO api_tokens (id, tenant_id, name, prefix, token_hmac,
-			                         audience, expires_at, revoked_at, last_used_at)
-			 VALUES ($1, $2, $3, 'pfx', $4, '{admin}',
+			                         audience, created_by, expires_at,
+			                         revoked_at, last_used_at)
+			 VALUES ($1, $2, $3, 'pfx', $4, '{admin}', 'fixture-issuer',
 			         now() + $5::interval, $6, $7)`,
 			id, f.tenantID, "tok-"+uuid.NewString()[:8], hmac, expiresIn,
 			revokedAt, lastUsed)
@@ -318,7 +320,11 @@ func backendOf(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture)
 	t.Helper()
 	var id string
 	if err := pool.QueryRow(ctx,
-		`SELECT backend_id FROM collections WHERE tenant_id = $1 AND collection = $2`,
+		`SELECT sb.name
+		   FROM collections c
+		   JOIN buckets b           ON b.id = c.bucket_id
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE c.tenant_id = $1 AND c.name = $2`,
 		f.tenantID, f.collection).Scan(&id); err != nil {
 		t.Fatalf("lookup backend: %v", err)
 	}

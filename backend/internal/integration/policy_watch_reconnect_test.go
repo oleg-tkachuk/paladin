@@ -71,7 +71,7 @@ func TestPolicyWatchReconnect(t *testing.T) {
 	// The NEW LISTEN is live: a subsequent policy write still invalidates,
 	// with the correct targeted payload.
 	mustExec(t, ctx, pool,
-		`UPDATE collections SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND collection = $2`,
+		`UPDATE collections SET cedar_policy = 'forbid(principal, action, resource);' WHERE tenant_id = $1 AND name = $2`,
 		f.tenantID, f.collection)
 	if ev := next("post-reconnect update", 10*time.Second); ev.ResyncAll || ev.TenantID != f.tenantID || ev.Collection != f.collection {
 		t.Fatalf("post-reconnect event = %+v, want {%s %q false}", ev, f.tenantID, f.collection)
