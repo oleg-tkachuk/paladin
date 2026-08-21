@@ -16,22 +16,25 @@ vars:
   # Defaults to the local OrbStack cluster; override with `K8S_CONTEXT=<ctx>`.
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
 
-  # OCI Registry — image pushes land at
-  # OCI_REGISTRY/IMAGE_NAMESPACE/PROJECT_NAME:TAG; Helm chart pushes
-  # land at CHART_REPO/PROJECT_NAME:CHART_VERSION (separate /charts
-  # path under the same registry, so they don't collide).
+  # OCI registry. GLOBAL_REGISTRY is the single source of truth — set in the
+  # root Taskfile and threaded here by the deploy fan-out, defaulting to
+  # registry.local for a standalone `cd frontend && task deploy`. The two
+  # derived vars below reference it rather than repeating its default, which
+  # is what they used to do: the same `default "registry.local"` appeared
+  # three times, so pointing the repo at another registry meant finding all
+  # three and changing them together.
   #
-  # IMAGE_NAMESPACE is the registry sub-path under which all Paladin
-  # images live; the Helm chart's values.yaml and the ArgoCD overlay
-  # both pin this prefix, so the push path here MUST match or Pods
-  # ImagePullBackOff with a 404.
-  # OCI Registry — derived from GLOBAL_REGISTRY (single source of truth
-  # in the root Taskfile; threaded via the deploy fan-out, or defaulting
-  # to registry.local for a standalone `cd frontend && task deploy`).
+  # Image pushes land at OCI_REGISTRY/IMAGE_NAMESPACE/PROJECT_NAME:TAG; chart
+  # pushes at CHART_REPO/PROJECT_NAME:CHART_VERSION — a separate /charts path
+  # under the same registry, so the two never collide.
+  #
+  # IMAGE_NAMESPACE is pinned by the chart's values.yaml AND the ArgoCD
+  # overlay, so the push path here MUST match both or Pods ImagePullBackOff
+  # with a 404.
   GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
-  OCI_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  OCI_REGISTRY: '{{.GLOBAL_REGISTRY}}'
   IMAGE_NAMESPACE: paladin
-  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY | default "registry.local"}}/charts'
+  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY}}/charts'
 
 # Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
 # pins `dir: .` so relative paths inside the sub-Taskfiles resolve from

@@ -2,8 +2,8 @@
 #
 # Paladin container image — three stages:
 #
-#   1. tools   — installs codegen binaries (buf, sqlc, protoc-gen-*)
-#                on BUILDPLATFORM. Pinned versions + cache mounts.
+#   1. tools   — installs codegen binaries (buf, sqlc, protoc-gen-*) on
+#                BUILDPLATFORM, resolved from go.mod + cache mounts.
 #   2. builder — runs codegen + go build for TARGETPLATFORM.
 #   3. runtime — distroless static; ENTRYPOINTs the binary.
 #
@@ -20,6 +20,7 @@ ARG GO_VERSION=1.26
 ARG TARGETOS
 ARG TARGETARCH
 ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 
 # -----------------------------------------------------------------------------
 # Shared Go base — same toolchain + workspace layout for tools and builder.
@@ -44,30 +45,45 @@ RUN apk add --no-cache git && \
     mkdir -p /go_workspace/tmp /go_workspace/bin
 
 # -----------------------------------------------------------------------------
-# Tools stage — code-generation binaries built for BUILDPLATFORM. Pinned
-# versions are required for reproducible images; cache mounts make repeat
-# builds fast.
+# Tools stage — code-generation binaries built for BUILDPLATFORM. Versions
+# come from this module's own go.mod, so the image cannot generate against a
+# different toolchain than a developer does; cache mounts make repeats fast.
 # -----------------------------------------------------------------------------
 FROM gobase AS tools
 
-# The two protoc plugins MUST match the library versions backend/go.mod pins
-# (google.golang.org/protobuf, connectrpc.com/connect). The builder stage
-# below REGENERATES the stubs rather than using the committed ones, so a
-# mismatch here silently compiles the binary against stubs that differ from
-# the ones in the repository. Bump these and go.mod together.
-ARG PROTOC_GEN_GO_VERSION=v1.36.12
-ARG PROTOC_GEN_CONNECT_GO_VERSION=v1.20.0
-# sqlc's output IS committed and is NOT regenerated in this image, so this pin
-# only has to stay resolvable. Bumping it means regenerating and committing
-# the diff, not editing this line alone.
-ARG SQLC_VERSION=v1.30.0
+# buf is the only generator with a version of its own, because it is the only
+# one this module does not already depend on.
 ARG BUF_VERSION=v1.72.0
+
+WORKDIR /app
+
+# go.mod, go.sum and tools.go are all `go install` needs to resolve the
+# generators. Keeping the copy this small means editing source does not
+# invalidate the stage.
+COPY --link backend/go.mod backend/go.sum backend/tools.go ./
+
+# Installed WITHOUT an @version, so each generator resolves to the version this
+# module already selects — the code generated inside the image is then the code
+# a developer generates locally.
+#
+# These used to be four ARG pins maintained by hand beside go.mod's, with a
+# comment saying they MUST match. They did match, today. That is the whole
+# problem with the arrangement: nothing enforced it, the failure mode is
+# silent, and the builder stage REGENERATES the stubs rather than using the
+# committed ones — so a drifted plugin compiles the binary against protobuf
+# code that differs from what is in the repository, and the diff shows up
+# somewhere else entirely.
+#
+# GOOS/GOARCH stay unset: these run during the build, on the build platform.
+RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    go install \
+      google.golang.org/protobuf/cmd/protoc-gen-go \
+      connectrpc.com/connect/cmd/protoc-gen-connect-go \
+      github.com/sqlc-dev/sqlc/cmd/sqlc
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
-    go install connectrpc.com/connect/cmd/protoc-gen-connect-go@${PROTOC_GEN_CONNECT_GO_VERSION} && \
-    go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION} && \
     go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 
 # -----------------------------------------------------------------------------
@@ -137,7 +153,7 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 # -----------------------------------------------------------------------------
 # Digest-pinned (Renovate-managed, see renovate.json). `:nonroot` is a
 # floating tag that moves often, so the digest is the real reproducibility pin.
-FROM gcr.io/distroless/static:nonroot@sha256:963fa6c544fe5ce420f1f54fb88b6fb01479f054c8056d0f74cc2c6000df5240
+FROM gcr.io/distroless/static:nonroot@sha256:963fa6c544fe5ce420f1f54fb88b6fb01479f054c8056d0f74cc2c6000df5240 AS runtime
 
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined

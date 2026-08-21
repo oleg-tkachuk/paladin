@@ -7,7 +7,7 @@
 #                don't change.
 #   2. builder — runs `next build` against the standalone output target
 #                so the runner image carries only the trimmed server.
-#   3. runner  — node:alpine with the standalone bundle, dropping perms
+#   3. runtime — node:alpine with the standalone bundle, dropping perms
 #                to a non-root nextjs user.
 #
 # The Helm chart mounts the runtime config at /app/configs via
@@ -76,10 +76,10 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------
-# Stage 3 — runner. Distroless-style minimal layout: only what the
-# standalone bundle needs, dropped to UID 1001 for non-root execution.
+# Stage 3 — runtime. Minimal layout: only what the standalone bundle
+# needs, dropped to UID 1001 for non-root execution.
 # -----------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS runner
+FROM node:${NODE_VERSION}-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production \
@@ -91,27 +91,42 @@ ENV NODE_ENV=production \
 # `runAsUser` / `runAsGroup` so bind-mounted volumes share owner with
 # the in-cluster pod.
 #
+# --ingroup nodejs, so nextjs is actually a member of it. Without it busybox
+# gives the user a private `nextjs` group — verified on the shipped image:
+# `id nextjs` reported gid=65533(nogroup) and `nodejs` had no members at all.
+# Every `--chown=nextjs:nodejs` below was then granting to a group the user was
+# not in, and the files stayed reachable only through their owner bits. It
+# happened to work; it was not what any of these lines say.
+#
+# In-cluster it worked for a second accidental reason: the chart sets
+# runAsGroup: 1001, which supplies at run time the membership the image failed
+# to build in. An image that only behaves under one chart's securityContext is
+# a dependency nobody wrote down.
+#
 # Also drop the global npm/npx CLI the node base image bundles: the Next.js
 # standalone runtime runs `node server.js` and never invokes it, but npm ships
 # with its own transitive deps (brace-expansion/tar/undici) that Trivy flags as
 # HIGH/CRITICAL. Removing it keeps those CVEs out of the shipped image without
 # affecting the runtime (the build stages keep their own npm).
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser  --system --uid 1001 nextjs && \
+    adduser  --system --uid 1001 --ingroup nodejs nextjs && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 COPY --from=builder /app/public ./public
 
-# Prerender cache directory — created up-front with correct ownership so
-# the runtime doesn't need write perms on /app itself.
-RUN mkdir .next && chown nextjs:nodejs .next
+# Prerender cache — created up-front with correct ownership so the runtime
+# needs no write permission on /app itself. `.next/cache` explicitly, not just
+# `.next`: Next creates it on the first ISR write, which succeeds only because
+# the parent happens to be owned by the app user. Making it here means the
+# runtime never depends on that.
+RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
 
 # Standalone output (https://nextjs.org/docs/advanced-features/output-file-tracing)
 # trims the runtime to only the modules `next build` actually traced.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-USER nextjs
+USER nextjs:nodejs
 
 EXPOSE 3000
 

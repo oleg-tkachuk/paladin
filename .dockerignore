@@ -104,6 +104,9 @@ backend/tasks/
 # public Connect SDK to external consumers, policies/ ships Cedar fixtures
 # used by tests and docs. If a future Dockerfile starts to COPY one, drop
 # the matching line.
+#
+# backend/tools.go used to be here. The tools stage now copies it, so that
+# `go install` resolves the generators from this module's own dependency
+# graph instead of from a second set of version pins maintained by hand.
 backend/pkg/
 backend/policies/
-backend/tools.go

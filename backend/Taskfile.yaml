@@ -31,10 +31,14 @@ vars:
   # live; the Helm chart's values.yaml and the ArgoCD overlay both pin
   # this prefix, so the push path here MUST match or Pods
   # ImagePullBackOff with a 404.
+  # The two derived vars reference GLOBAL_REGISTRY rather than repeating its
+  # default, which is what they used to do: the same `default "registry.local"`
+  # appeared three times, so re-pointing the repo at another registry meant
+  # finding all three and changing them together.
   GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
-  OCI_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  OCI_REGISTRY: '{{.GLOBAL_REGISTRY}}'
   IMAGE_NAMESPACE: paladin
-  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY | default "registry.local"}}/charts'
+  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY}}/charts'
 
 # Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
 # pins `dir: .` so relative paths inside the sub-Taskfiles resolve from
