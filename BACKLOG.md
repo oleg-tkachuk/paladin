@@ -504,6 +504,17 @@ open deliberately — each notes why._
   a *primary* control (backend ADR-0013, `docs/database.md`). Every table the
   admin plane writes on a tenant's behalf is in the same position, so the set
   can only grow as the admin surface does.
+- **And it already bites on READS, on a table that predates the refactor.**
+  The same e2e run showed `/tenants/<id>/capabilities` rendering empty with
+  four capability rows in the table. `capability_records` has carried
+  `tenant_isolation` since before consolidation; the admin plane reads it
+  with the GUC set to the caller's tenant (`platform`), so it sees zero rows
+  for every other tenant. No error — RLS filters — so the console shows an
+  empty list rather than a failure. `event_subscriptions` and `quotas` are
+  in the same position and were not exercised here.
+  This is the strongest argument for fixing the mechanism rather than
+  widening the exclusion list: the exclusions at least fail loudly when
+  removed, whereas the covered-but-unreadable tables fail silently today.
 - **Definition of Done:** give the admin plane a way to write as the target
   tenant — most likely `SET LOCAL paladin.tenant_id` inside the handler's
   transaction, taken from the request's resource name rather than the
