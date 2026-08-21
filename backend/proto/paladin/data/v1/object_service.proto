@@ -52,6 +52,32 @@ service ObjectService {
   // RestoreObjectVersion makes the named version `current` again. The
   // current version becomes a non-current entry preserving lock state.
   rpc RestoreObjectVersion(RestoreObjectVersionRequest) returns (Object);
+
+  // ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
+  //
+  // Retention and legal hold are separate operations because their rules
+  // differ, which is also how S3 splits them. A legal hold can be lifted by
+  // anyone authorised to set it; a retention window can only ever be extended
+  // unless the mode is GOVERNANCE and the caller holds the bypass role.
+  //
+  // Locks attach to a VERSION, not to an object. On an unversioned bucket the
+  // object has exactly one version, so the distinction is invisible; on a
+  // versioned one it is the difference between protecting a document and
+  // protecting today's copy of it.
+
+  // SetObjectRetention applies or extends a retention window on an object's
+  // current version. Requires the parent bucket to have object lock enabled.
+  rpc SetObjectRetention(SetObjectRetentionRequest) returns (ObjectLockState);
+
+  // SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
+  // for as long as it is on, independently of any retention window, and is
+  // not subject to the GOVERNANCE bypass.
+  rpc SetObjectLegalHold(SetObjectLegalHoldRequest) returns (ObjectLockState);
+
+  // GetObjectLock reads the current lock state. Returns an empty state — not
+  // NOT_FOUND — for an object with no lock, so callers can render "unlocked"
+  // without special-casing an error.
+  rpc GetObjectLock(GetObjectLockRequest) returns (ObjectLockState);
 }
 
 // ─── Versioning ─────────────────────────────────────────────────────────────
@@ -182,16 +208,55 @@ message DeleteObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
   bool permanent = 3;
-  // Only honored on bucket-locked objects when caller has GOVERNANCE bypass
-  // (role `lock.governance.bypass` or `platform.admin`). The server sets
-  // a `SET LOCAL paladin.governance_bypass = true` GUC inside the deletion
-  // transaction; the DB trigger on object_versions checks for it before
-  // refusing to drop locked rows.
+  // Only honored when the caller has GOVERNANCE bypass (role
+  // `lock.governance.bypass` or `platform.admin`), and only against a
+  // GOVERNANCE window — legal hold and COMPLIANCE are absolute. The server
+  // sets `paladin.bypass_governance_retention` for the deletion transaction;
+  // the trigger on object_locks reads it before refusing to drop a locked
+  // row.
   bool bypass_governance_retention = 4;
 }
 
 message DeleteObjectResponse {
   Object object = 1;
+}
+
+// ─── Object Lock ────────────────────────────────────────────────────────────
+
+message SetObjectRetentionRequest {
+  // Object resource name: "tenants/{tenant}/collections/{ok}/objects/{id}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+
+  // GOVERNANCE | COMPLIANCE. Required.
+  //
+  // COMPLIANCE cannot be downgraded to GOVERNANCE and its window cannot be
+  // shortened by anyone, including a platform admin — that is what makes it
+  // usable as a regulatory control rather than a strong suggestion.
+  string mode = 2 [(buf.validate.field).string = {
+    in: [
+      "GOVERNANCE",
+      "COMPLIANCE"
+    ]
+  }];
+
+  // When the retention expires. Must be in the future, and must not be
+  // earlier than an existing window unless the current mode is GOVERNANCE
+  // and bypass_governance_retention is set.
+  google.protobuf.Timestamp retain_until = 3 [(buf.validate.field).required = true];
+
+  // Permits shortening or clearing an active GOVERNANCE window. Requires role
+  // `lock.governance.bypass` or `platform.admin`. Ignored when the existing
+  // window is COMPLIANCE, which no role can shorten.
+  bool bypass_governance_retention = 4;
+}
+
+message SetObjectLegalHoldRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  bool legal_hold = 2;
+}
+
+message GetObjectLockRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message RestoreObjectRequest {

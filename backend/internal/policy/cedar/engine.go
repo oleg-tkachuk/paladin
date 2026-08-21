@@ -40,6 +40,15 @@ const (
 	ActionUpdateObject  = "UpdateObject"
 	ActionCopyObject    = "CopyObject"
 
+	// Object Lock (ADR-0013). Separate from UpdateObject: a COMPLIANCE
+	// retention window cannot be shortened by anyone, so this action lets its
+	// holder make an object permanently undeletable. Write access to a
+	// collection must not imply it. Legal hold is split off again because it
+	// is reversible and so safe to delegate more widely.
+	ActionSetObjectRetention = "SetObjectRetention"
+	ActionSetObjectLegalHold = "SetObjectLegalHold"
+	ActionReadObjectLock     = "ReadObjectLock"
+
 	// Collection-scoped actions (admin plane).
 	ActionManageCollection       = "ManageCollection"
 	ActionBindCollectionToBucket = "BindCollectionToBucket"

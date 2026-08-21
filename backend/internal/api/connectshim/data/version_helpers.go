@@ -50,3 +50,14 @@ func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersio
 	}
 	return out
 }
+
+// lockStateToProto renders an object-lock state. An unlocked version is an
+// ObjectLockState with everything zero rather than a nil message: the RPC
+// answers "what is the lock here", and "none" is an answer.
+func lockStateToProto(l object.ObjectLock) *pb.ObjectLockState {
+	return &pb.ObjectLockState{
+		Mode:        l.Mode,
+		RetainUntil: tsPtrProto(l.RetainUntil),
+		LegalHold:   l.LegalHold,
+	}
+}

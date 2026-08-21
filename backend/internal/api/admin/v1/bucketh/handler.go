@@ -457,6 +457,20 @@ func (h *Handler) SetObjectLock(ctx context.Context, backendID, bucketName strin
 	if err := h.authorize(ctx, cedar.ActionConfigureLock, backendID, bucketName, uuid.Nil); err != nil {
 		return nil, err
 	}
+	// Object lock attaches retention to a VERSION, so a bucket without
+	// versioning has nothing to attach it to: every SetObjectRetention would
+	// fail on "no current version" while the bucket reported object lock as
+	// enabled. S3 has the same precondition, for the same reason.
+	if lock.Enabled {
+		current, err := h.repo.Get(ctx, backendID, bucketName)
+		if err != nil {
+			return nil, mapVersion(err)
+		}
+		if !current.Versioning.Enabled {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("object lock requires versioning; enable versioning on the bucket first"))
+		}
+	}
 	if err := h.repo.SetObjectLock(ctx, backendID, bucketName, lock, expectedVersion); err != nil {
 		return nil, mapVersion(err)
 	}
@@ -470,6 +484,22 @@ func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName strin
 	}
 	if err := h.authorize(ctx, cedar.ActionConfigureVersioning, backendID, bucketName, uuid.Nil); err != nil {
 		return nil, err
+	}
+	// The other half of the same precondition. Turning versioning off under a
+	// lock-enabled bucket would strand every existing retention: the rows
+	// stay, the trigger keeps enforcing them, and nothing can create the
+	// version a future lock would need. Refusing here means the operator has
+	// to disable object lock first, which is the decision they are actually
+	// making.
+	if !v.Enabled {
+		current, err := h.repo.Get(ctx, backendID, bucketName)
+		if err != nil {
+			return nil, mapVersion(err)
+		}
+		if current.ObjectLock.Enabled {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("cannot disable versioning while object lock is enabled; disable object lock first"))
+		}
 	}
 	if err := h.repo.SetVersioning(ctx, backendID, bucketName, v, expectedVersion); err != nil {
 		return nil, mapVersion(err)

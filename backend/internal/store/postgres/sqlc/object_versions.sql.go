@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyBucketDefaultLock = `-- name: ApplyBucketDefaultLock :exec
+INSERT INTO object_locks (tenant_id, version_id, mode, retain_until, legal_hold)
+VALUES ($1, $2, $3::object_lock_mode,
+        now() + make_interval(secs => $4::bigint), false)
+ON CONFLICT (version_id) DO NOTHING
+`
+
+// Puts a freshly promoted version under the parent bucket's default retention
+// (ADR-0013). Skipped entirely when the bucket has no default, and never
+// overwrites an existing row — an explicit SetObjectRetention that arrived
+// first outranks a default.
+func (q *Queries) ApplyBucketDefaultLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retentionSeconds int64) error {
+	_, err := q.db.Exec(ctx, applyBucketDefaultLock,
+		tenantID,
+		versionID,
+		mode,
+		retentionSeconds,
+	)
+	return err
+}
+
 const getCurrentVersionID = `-- name: GetCurrentVersionID :one
 SELECT current_version_id
 FROM objects
@@ -23,6 +44,25 @@ func (q *Queries) GetCurrentVersionID(ctx context.Context, id pgtype.UUID) (pgty
 	var current_version_id pgtype.UUID
 	err := row.Scan(&current_version_id)
 	return current_version_id, err
+}
+
+const getObjectLockByVersion = `-- name: GetObjectLockByVersion :one
+SELECT mode, retain_until, legal_hold
+FROM object_locks
+WHERE version_id = $1
+`
+
+type GetObjectLockByVersionRow struct {
+	Mode        NullObjectLockMode `json:"mode"`
+	RetainUntil pgtype.Timestamptz `json:"retain_until"`
+	LegalHold   bool               `json:"legal_hold"`
+}
+
+func (q *Queries) GetObjectLockByVersion(ctx context.Context, versionID pgtype.UUID) (GetObjectLockByVersionRow, error) {
+	row := q.db.QueryRow(ctx, getObjectLockByVersion, versionID)
+	var i GetObjectLockByVersionRow
+	err := row.Scan(&i.Mode, &i.RetainUntil, &i.LegalHold)
+	return i, err
 }
 
 const getObjectVersion = `-- name: GetObjectVersion :one
@@ -175,26 +215,94 @@ func (q *Queries) SetCurrentVersionID(ctx context.Context, iD pgtype.UUID, curre
 	return err
 }
 
-const upsertObjectLock = `-- name: UpsertObjectLock :exec
-INSERT INTO object_locks (tenant_id, version_id, mode, retain_until, legal_hold)
-VALUES ($1, $2, $3, $4, $5)
+const setObjectLegalHold = `-- name: SetObjectLegalHold :one
+INSERT INTO object_locks AS ol (tenant_id, version_id, mode, retain_until, legal_hold)
+VALUES ($1, $2, NULL, NULL, $3::boolean)
+ON CONFLICT (version_id) DO UPDATE SET
+    legal_hold = EXCLUDED.legal_hold,
+    updated_at = now()
+RETURNING mode, retain_until, legal_hold
+`
+
+type SetObjectLegalHoldRow struct {
+	Mode        NullObjectLockMode `json:"mode"`
+	RetainUntil pgtype.Timestamptz `json:"retain_until"`
+	LegalHold   bool               `json:"legal_hold"`
+}
+
+// A legal hold is independent of retention: it can be turned on and off
+// freely by anyone the handler authorises, and while on it blocks deletion
+// regardless of any window. It is deliberately NOT subject to the GOVERNANCE
+// bypass — a hold exists to survive exactly the person with the strongest
+// role.
+//
+// Turning a hold off leaves the row in place with legal_hold = false. It used
+// to have to delete the row when no retention remained, because a row
+// asserting nothing violated a CHECK — but the delete then hit the retention
+// trigger, which refuses to drop a row under hold, so a bare hold could never
+// be lifted at all. 007 drops that CHECK: a released lock is a valid row, and
+// its timestamps are the record of when the hold was placed and lifted.
+func (q *Queries) SetObjectLegalHold(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, legalHold bool) (SetObjectLegalHoldRow, error) {
+	row := q.db.QueryRow(ctx, setObjectLegalHold, tenantID, versionID, legalHold)
+	var i SetObjectLegalHoldRow
+	err := row.Scan(&i.Mode, &i.RetainUntil, &i.LegalHold)
+	return i, err
+}
+
+const setObjectRetention = `-- name: SetObjectRetention :one
+INSERT INTO object_locks AS ol (tenant_id, version_id, mode, retain_until, legal_hold)
+VALUES ($1, $2, $3::object_lock_mode, $4::timestamptz, false)
 ON CONFLICT (version_id) DO UPDATE SET
     mode         = EXCLUDED.mode,
     retain_until = EXCLUDED.retain_until,
-    legal_hold   = EXCLUDED.legal_hold,
     updated_at   = now()
+WHERE ol.retain_until IS NULL
+   OR ol.retain_until <= now()
+   OR (EXCLUDED.retain_until >= ol.retain_until
+       AND NOT (ol.mode = 'COMPLIANCE' AND EXCLUDED.mode <> 'COMPLIANCE'))
+   OR (ol.mode = 'GOVERNANCE'
+       AND $5::boolean)
+RETURNING mode, retain_until, legal_hold
 `
 
-// Object Lock is its own row (ADR-0013). Retention is set after the version
-// exists, and the DELETE trigger on object_locks is what refuses to release it
-// early — so this is the only write path that can put a version under lock.
-func (q *Queries) UpsertObjectLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode NullObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) error {
-	_, err := q.db.Exec(ctx, upsertObjectLock,
+type SetObjectRetentionRow struct {
+	Mode        NullObjectLockMode `json:"mode"`
+	RetainUntil pgtype.Timestamptz `json:"retain_until"`
+	LegalHold   bool               `json:"legal_hold"`
+}
+
+// Applies or extends a retention window on a version (ADR-0013).
+//
+// The rules live in the WHERE clause rather than in Go, because a read in the
+// handler followed by a write here is a race: two concurrent calls could each
+// read a two-year COMPLIANCE window and each decide their one-year write is
+// fine. Expressed as a conditional upsert, the second one loses.
+//
+// What the clause says, in order:
+//
+//   - a first lock on this version is always allowed;
+//   - extending is allowed, provided the mode does not weaken with it —
+//     a longer GOVERNANCE window is not an acceptable replacement for a
+//     shorter COMPLIANCE one, which is the hole the first version of this
+//     clause had;
+//   - GOVERNANCE → COMPLIANCE is a tightening and needs no extension;
+//   - COMPLIANCE never weakens — not shorter, not downgraded, not by a
+//     platform admin. That is the property the mode exists for;
+//   - an active GOVERNANCE window weakens only when the caller passes the
+//     bypass flag, which the handler grants on a role.
+//
+// An expired window is not "active": once retain_until has passed the row
+// holds nothing, so any new window may replace it. Returns zero rows when the
+// write is refused, which the adapter maps to ErrRetentionShortened.
+func (q *Queries) SetObjectRetention(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retainUntil pgtype.Timestamptz, bypassGovernance bool) (SetObjectRetentionRow, error) {
+	row := q.db.QueryRow(ctx, setObjectRetention,
 		tenantID,
 		versionID,
 		mode,
 		retainUntil,
-		legalHold,
+		bypassGovernance,
 	)
-	return err
+	var i SetObjectRetentionRow
+	err := row.Scan(&i.Mode, &i.RetainUntil, &i.LegalHold)
+	return i, err
 }

@@ -57,7 +57,7 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // Fix: wrap the INSERT in a transaction that `SET LOCAL paladin.tenant_id`
 // to the row's tenant_id. This is safe for every caller because the
 // GUC value matches the row being inserted by construction. Mirrors
-// the `SET LOCAL paladin.governance_bypass = true` pattern used in the
+// the `SET LOCAL paladin.bypass_governance_retention = 'on'` pattern used in the
 // object hard-delete adapter (see store/postgres/adapters/object.go).
 //
 // The SET LOCAL scope dies with the transaction, so the connection's

@@ -13,6 +13,11 @@ import (
 type Querier interface {
 	// Records copy progress + the resume cursor after a batch.
 	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorPath string) (int64, error)
+	// Puts a freshly promoted version under the parent bucket's default retention
+	// (ADR-0013). Skipped entirely when the bucket has no default, and never
+	// overwrites an existing row — an explicit SetObjectRetention that arrived
+	// first outranks a default.
+	ApplyBucketDefaultLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retentionSeconds int64) error
 	// Atomically rebinds a collection to a different bucket. Tenancy is enforced
 	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
 	// name cannot be moved under a bucket that would orphan them.
@@ -133,6 +138,7 @@ type Querier interface {
 	// freshest live row wins; the loser ages out with its partition.
 	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (GetIdempotencyKeyRow, error)
 	GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error)
+	GetObjectLockByVersion(ctx context.Context, versionID pgtype.UUID) (GetObjectLockByVersionRow, error)
 	// Lock state for one object, so the delete handler can return a clear
 	// "locked" error instead of a bare version-mismatch when the SQL guard
 	// on HardDeleteObject zeroes the rowcount.
@@ -173,7 +179,7 @@ type Querier interface {
 	// object_versions (the trigger only covers that table, NOT objects).
 	// legal_hold and active COMPLIANCE locks are absolute; an active
 	// GOVERNANCE lock is honoured unless the session sets
-	// paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
+	// paladin.bypass_governance_retention='on' (HardDeleteWithBypassTx does, the plain RPC
 	// path does not). A locked row matches 0 rows here, so the caller must
 	// pre-check to distinguish "locked" from "version mismatch".
 	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)
@@ -481,6 +487,43 @@ type Querier interface {
 	SetBucketReplication(ctx context.Context, name string, name_2 string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
 	SetBucketVersioning(ctx context.Context, name string, name_2 string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, iD pgtype.UUID, currentVersionID pgtype.UUID) error
+	// A legal hold is independent of retention: it can be turned on and off
+	// freely by anyone the handler authorises, and while on it blocks deletion
+	// regardless of any window. It is deliberately NOT subject to the GOVERNANCE
+	// bypass — a hold exists to survive exactly the person with the strongest
+	// role.
+	//
+	// Turning a hold off leaves the row in place with legal_hold = false. It used
+	// to have to delete the row when no retention remained, because a row
+	// asserting nothing violated a CHECK — but the delete then hit the retention
+	// trigger, which refuses to drop a row under hold, so a bare hold could never
+	// be lifted at all. 007 drops that CHECK: a released lock is a valid row, and
+	// its timestamps are the record of when the hold was placed and lifted.
+	SetObjectLegalHold(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, legalHold bool) (SetObjectLegalHoldRow, error)
+	// Applies or extends a retention window on a version (ADR-0013).
+	//
+	// The rules live in the WHERE clause rather than in Go, because a read in the
+	// handler followed by a write here is a race: two concurrent calls could each
+	// read a two-year COMPLIANCE window and each decide their one-year write is
+	// fine. Expressed as a conditional upsert, the second one loses.
+	//
+	// What the clause says, in order:
+	//
+	//   * a first lock on this version is always allowed;
+	//   * extending is allowed, provided the mode does not weaken with it —
+	//     a longer GOVERNANCE window is not an acceptable replacement for a
+	//     shorter COMPLIANCE one, which is the hole the first version of this
+	//     clause had;
+	//   * GOVERNANCE → COMPLIANCE is a tightening and needs no extension;
+	//   * COMPLIANCE never weakens — not shorter, not downgraded, not by a
+	//     platform admin. That is the property the mode exists for;
+	//   * an active GOVERNANCE window weakens only when the caller passes the
+	//     bypass flag, which the handler grants on a role.
+	//
+	// An expired window is not "active": once retain_until has passed the row
+	// holds nothing, so any new window may replace it. Returns zero rows when the
+	// write is refused, which the adapter maps to ErrRetentionShortened.
+	SetObjectRetention(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retainUntil pgtype.Timestamptz, bypassGovernance bool) (SetObjectRetentionRow, error)
 	// Flip the enable/disable state. OCC via resource_version (the
 	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
@@ -550,10 +593,6 @@ type Querier interface {
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
 	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
-	// Object Lock is its own row (ADR-0013). Retention is set after the version
-	// exists, and the DELETE trigger on object_locks is what refuses to release it
-	// early — so this is the only write path that can put a version under lock.
-	UpsertObjectLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode NullObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) error
 	// Monotonic upsert: never moves the watermark backwards. Concurrent
 	// replicas may try to advance with stale values; the GREATEST() guard
 	// preserves the highest seen committed_at.

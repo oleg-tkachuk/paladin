@@ -229,32 +229,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Object Lock is wired everywhere except the part that sets it
-
-- **Status:** Blocked (needs a product decision: finish it or remove it).
-- **Reason:** ADR-0013's object-lock machinery is all present — the
-  `object_locks` table, the `object_locks_enforce_retention` DELETE trigger
-  that refuses early release, `ObjectLockState` on the data-plane `Object`
-  message, the LEFT JOINs that read a lock into every Get/List response, and
-  the admin `SetObjectLock` RPC that stores a bucket-level default mode and
-  retention. What is missing is the one path that puts a version under lock:
-  `UpsertObjectLock` is the only write to the table and nothing calls it.
-  So `object_locks` is always empty, every response reports no lock, the trigger
-  never fires, and the bucket default is stored and never applied. The feature
-  reads as implemented from the proto, the schema and the console.
-  Found by enumerating unreferenced sqlc queries; kept rather than deleted,
-  because deleting the only writer would close the door on the half that
-  exists.
-- **Definition of Done:** either
-  - a data-plane RPC that sets retention / legal hold on a version, calling
-    `UpsertObjectLock`, plus applying the bucket default at promote time so
-    `SetObjectLock` means something; with an integration test that a
-    COMPLIANCE-locked version cannot be deleted and a GOVERNANCE-locked one
-    can be only through the bypass path; or
-  - removal of the table, trigger, proto field and admin RPC together, so the
-    API stops advertising a control it does not have.
-- **Blockers:** which of the two — this is a product call, not a cleanup.
-
 ### Tables carrying `tenant_id` with no RLS policy
 
 - **Status:** Blocked (needs the pre-auth read path designed, like `api_tokens` has).

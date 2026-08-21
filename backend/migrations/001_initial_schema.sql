@@ -432,9 +432,9 @@ CREATE TABLE object_locks (
     legal_hold   boolean NOT NULL DEFAULT false,
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
-    -- A lock row that asserts nothing is a bug, not a valid state.
-    CONSTRAINT object_locks_asserts_something
-        CHECK (mode IS NOT NULL OR legal_hold),
+    -- A row asserting nothing is a RELEASED lock, not a bug: clearing a legal
+    -- hold has to leave something behind, and the row's timestamps are the
+    -- record of when the hold was placed and lifted.
     CONSTRAINT object_locks_retention_needs_mode
         CHECK ((mode IS NULL) = (retain_until IS NULL))
 );

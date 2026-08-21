@@ -107,6 +107,10 @@ type Object struct {
 	TerminatedAt     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=terminated_at,json=terminatedAt,proto3" json:"terminated_at,omitempty"`
 	PresignExpiresAt *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=presign_expires_at,json=presignExpiresAt,proto3" json:"presign_expires_at,omitempty"`
 	// Object-lock retention; populated when the parent bucket has lock enabled.
+	// Object-lock state of the current version (ADR-0013). Populated by
+	// GetObject and LookupObject. Left empty by ListObjects, where reading a
+	// lock per row would add a join to the pagination hot path for a field most
+	// deployments never set — use GetObjectLock for a specific object.
 	Lock *ObjectLockState `protobuf:"bytes,21,opt,name=lock,proto3" json:"lock,omitempty"`
 	// Optional — physical placement; populated only for privileged callers.
 	Placement     *PhysicalPlacement `protobuf:"bytes,22,opt,name=placement,proto3" json:"placement,omitempty"`

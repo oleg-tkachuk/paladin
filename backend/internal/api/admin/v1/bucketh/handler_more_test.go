@@ -332,7 +332,12 @@ func TestSetObjectLock_RoleGate(t *testing.T) {
 }
 
 func TestSetObjectLock_ForwardsArgs(t *testing.T) {
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
+	// Versioning on: object lock attaches retention to a version, so enabling
+	// it without versioning is refused (see the next test).
+	repo := &fakeRepo{getBucket: admindomain.Bucket{
+		BucketName: "acme",
+		Versioning: admindomain.BucketVersioning{Enabled: true},
+	}}
 	h := NewHandler(repo, nil, allowAuthorizer{})
 	lock := admindomain.ObjectLockConfig{Enabled: true, DefaultMode: "COMPLIANCE"}
 	if _, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", lock, 1); err != nil {
@@ -340,6 +345,53 @@ func TestSetObjectLock_ForwardsArgs(t *testing.T) {
 	}
 	if repo.gotLockArg != lock {
 		t.Errorf("forwarded lock = %+v, want %+v", repo.gotLockArg, lock)
+	}
+}
+
+// TestSetObjectLock_RequiresVersioning pins the precondition that keeps the
+// feature coherent: a lock is attached to a version, so a bucket without
+// versioning has nothing to attach one to. Without this check the bucket
+// reports object lock as enabled while every SetObjectRetention against it
+// fails on "no current version".
+func TestSetObjectLock_RequiresVersioning(t *testing.T) {
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}} // versioning off
+	h := NewHandler(repo, nil, allowAuthorizer{})
+	_, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme",
+		admindomain.ObjectLockConfig{Enabled: true}, 1)
+	if code(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition", code(err))
+	}
+	if repo.gotLockArg.Enabled {
+		t.Error("the refused call still reached the repository")
+	}
+}
+
+// TestSetObjectLock_DisableNeedsNoVersioning pins the asymmetry: turning
+// object lock OFF must work on any bucket, including one whose versioning was
+// somehow already off — otherwise a misconfigured bucket has no way back.
+func TestSetObjectLock_DisableNeedsNoVersioning(t *testing.T) {
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
+	h := NewHandler(repo, nil, allowAuthorizer{})
+	if _, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme",
+		admindomain.ObjectLockConfig{Enabled: false}, 1); err != nil {
+		t.Fatalf("disabling object lock was refused: %v", err)
+	}
+}
+
+// TestSetVersioning_RefusedWhileObjectLockOn pins the other half. Turning
+// versioning off under a lock-enabled bucket would strand every existing
+// retention row: the trigger keeps enforcing them and nothing can create the
+// version a future lock needs.
+func TestSetVersioning_RefusedWhileObjectLockOn(t *testing.T) {
+	repo := &fakeRepo{getBucket: admindomain.Bucket{
+		BucketName: "acme",
+		ObjectLock: admindomain.ObjectLockConfig{Enabled: true},
+	}}
+	h := NewHandler(repo, nil, allowAuthorizer{})
+	_, err := h.SetVersioning(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme",
+		admindomain.BucketVersioning{Enabled: false}, 1)
+	if code(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition", code(err))
 	}
 }
 

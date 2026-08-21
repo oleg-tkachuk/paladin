@@ -218,6 +218,17 @@ func objectToProto(o *object.Object) *pb.Object {
 			Value:     o.Checksum,
 		}
 	}
+	// Lock is set only where the handler populated it (GetObject /
+	// LookupObject). The nil check keeps ListObjects rows from carrying an
+	// all-zero ObjectLockState, which a client would read as "definitely
+	// unlocked" rather than "not reported here".
+	if o.Lock.Mode != "" || o.Lock.LegalHold || o.Lock.RetainUntil != nil {
+		out.Lock = &pb.ObjectLockState{
+			Mode:        o.Lock.Mode,
+			RetainUntil: tsPtrProto(o.Lock.RetainUntil),
+			LegalHold:   o.Lock.LegalHold,
+		}
+	}
 	// PhysicalPlacement only surfaced for privileged callers — slice 4 wires
 	// the role check; for now we leave it unset.
 	return out

@@ -15,10 +15,19 @@ type ObjectServer struct {
 	paladindatav1connect.UnimplementedObjectServiceHandler
 	H        *object.Handler
 	Versions *object.VersionHandler // optional; nil → versioning RPCs return Unimplemented
+	Locks    *object.LockHandler    // optional; nil → object-lock RPCs return Unimplemented
 }
 
 func NewObjectServer(h *object.Handler, versions *object.VersionHandler) *ObjectServer {
 	return &ObjectServer{H: h, Versions: versions}
+}
+
+// WithLocks wires the object-lock handler. Separate from the constructor
+// because object lock is opt-in per deployment and every existing caller of
+// NewObjectServer predates it.
+func (s *ObjectServer) WithLocks(locks *object.LockHandler) *ObjectServer {
+	s.Locks = locks
+	return s
 }
 
 func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb.UploadObjectRequest]) (*connect.Response[pb.UploadObjectResponse], error) {
@@ -291,6 +300,63 @@ func (s *ObjectServer) RestoreObjectVersion(ctx context.Context, req *connect.Re
 		return nil, err
 	}
 	return connect.NewResponse(objectToProto(out)), nil
+}
+
+// ─── Object Lock (ADR-0013) ─────────────────────────────────────────────────
+
+func (s *ObjectServer) SetObjectRetention(ctx context.Context, req *connect.Request[pb.SetObjectRetentionRequest]) (*connect.Response[pb.ObjectLockState], error) {
+	if s.Locks == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object lock not wired"))
+	}
+	m := req.Msg
+	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	if err != nil {
+		return nil, badName(err)
+	}
+	if m.GetRetainUntil() == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("retain_until is required"))
+	}
+	out, err := s.Locks.SetRetention(ctx, object.SetRetentionInput{
+		Collection:       collection,
+		ObjectID:         objectID,
+		Mode:             m.GetMode(),
+		RetainUntil:      m.GetRetainUntil().AsTime(),
+		BypassGovernance: m.GetBypassGovernanceRetention(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(lockStateToProto(out)), nil
+}
+
+func (s *ObjectServer) SetObjectLegalHold(ctx context.Context, req *connect.Request[pb.SetObjectLegalHoldRequest]) (*connect.Response[pb.ObjectLockState], error) {
+	if s.Locks == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object lock not wired"))
+	}
+	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, badName(err)
+	}
+	out, err := s.Locks.SetLegalHold(ctx, collection, objectID, req.Msg.GetLegalHold())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(lockStateToProto(out)), nil
+}
+
+func (s *ObjectServer) GetObjectLock(ctx context.Context, req *connect.Request[pb.GetObjectLockRequest]) (*connect.Response[pb.ObjectLockState], error) {
+	if s.Locks == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object lock not wired"))
+	}
+	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, badName(err)
+	}
+	out, err := s.Locks.GetLock(ctx, collection, objectID)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(lockStateToProto(out)), nil
 }
 
 var _ paladindatav1connect.ObjectServiceHandler = (*ObjectServer)(nil)

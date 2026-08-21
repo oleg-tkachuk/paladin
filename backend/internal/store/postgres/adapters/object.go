@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -397,6 +398,8 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		SELECT sb.name, bk.name,
 		       bk.versioning_enabled,
 		       bk.object_lock_enabled,
+		       bk.object_lock_default_mode,
+		       bk.object_lock_default_retention_seconds,
 		       c.constraints, sb.enabled, sb.read_only, sb.events_enabled,
 		       bk.provision_state
 		FROM collections c
@@ -405,14 +408,17 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		WHERE c.tenant_id = $1 AND c.name = $2
 	`
 	var (
-		meta            object.BucketMeta
-		constraintsJSON []byte
-		enabled         bool
-		readOnly        bool
-		provisionState  string
+		meta             object.BucketMeta
+		constraintsJSON  []byte
+		enabled          bool
+		readOnly         bool
+		provisionState   string
+		defaultMode      *string
+		retentionSeconds int64
 	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
+		&defaultMode, &retentionSeconds,
 		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState,
 	); err != nil {
 		if isNoRows(err) {
@@ -434,6 +440,12 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "object_lock_enabled"); ok {
 		meta.ObjectLockEnabled = v
+	}
+	if defaultMode != nil {
+		meta.ObjectLockDefaultMode = *defaultMode
+	}
+	if retentionSeconds > 0 {
+		meta.ObjectLockDefaultRetention = time.Duration(retentionSeconds) * time.Second
 	}
 	return meta, nil
 }
@@ -459,7 +471,7 @@ func readBoolOverride(raw []byte, key string) (bool, bool) {
 }
 
 // HardDeleteWithBypass mirrors HardDelete but wraps the call in a
-// transaction with `SET LOCAL paladin.governance_bypass = true`. The
+// transaction with `SET LOCAL paladin.bypass_governance_retention = 'on'`. The
 // enforce_object_version_lock trigger on object_versions reads this GUC.
 //
 // Compliance-mode rows still raise — by design.
@@ -484,7 +496,7 @@ func (r *ObjectRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, t
 // trigger permits removal of GOVERNANCE-locked rows). Used by the permanent-
 // delete handler to enqueue paladin.object.deleted atomically (ADR-0003).
 func (r *ObjectRepo) HardDeleteWithBypassTx(ctx context.Context, tx pgx.Tx, tenantID, objectID uuid.UUID, expectedVersion int64) error {
-	if _, err := tx.Exec(ctx, "SET LOCAL paladin.governance_bypass = 'true'"); err != nil {
+	if _, err := tx.Exec(ctx, "SET LOCAL paladin.bypass_governance_retention = 'on'"); err != nil {
 		return fmt.Errorf("set bypass GUC: %w", err)
 	}
 	if err := hardDeleteObject(ctx, r.q.WithTx(tx), tenantID, objectID, expectedVersion); err != nil {

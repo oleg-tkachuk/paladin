@@ -34,6 +34,10 @@ message Object {
   google.protobuf.Timestamp terminated_at = 19;
   google.protobuf.Timestamp presign_expires_at = 20;
   // Object-lock retention; populated when the parent bucket has lock enabled.
+  // Object-lock state of the current version (ADR-0013). Populated by
+  // GetObject and LookupObject. Left empty by ListObjects, where reading a
+  // lock per row would add a join to the pagination hot path for a field most
+  // deployments never set — use GetObjectLock for a specific object.
   ObjectLockState lock = 21;
   // Optional — physical placement; populated only for privileged callers.
   PhysicalPlacement placement = 22;

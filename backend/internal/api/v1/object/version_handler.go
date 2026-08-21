@@ -20,11 +20,21 @@ import (
 type VersionHandler struct {
 	objects  Repository        // for parent Object lookups + collision checks
 	versions VersionRepository // history + current pointer
+	// locks is optional. When wired, a version promoted into a bucket with a
+	// default retention inherits it — which is what makes the admin plane's
+	// SetObjectLock mean anything. Without it the default is stored and never
+	// applied, which is the state this field was added to end.
+	locks LockRepository
 }
 
 func NewVersionHandler(objects Repository, versions VersionRepository) *VersionHandler {
 	return &VersionHandler{objects: objects, versions: versions}
 }
+
+// SetLockRepository wires the object-lock port after construction, matching
+// how the object handler takes its optional collaborators. Nil is valid and
+// means "this deployment does not do object lock".
+func (h *VersionHandler) SetLockRepository(locks LockRepository) { h.locks = locks }
 
 // ─── List ───────────────────────────────────────────────────────────────────
 
@@ -165,8 +175,9 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	if !meta.VersioningEnabled {
 		return nil
 	}
-	return h.RecordPromotion(ctx, ObjectVersion{
-		VersionID:    uuid.Must(uuid.NewV7()),
+	versionID := uuid.Must(uuid.NewV7())
+	if err := h.RecordPromotion(ctx, ObjectVersion{
+		VersionID:    versionID,
 		ObjectID:     obj.ObjectID,
 		StoragePath:  obj.Key,
 		SizeBytes:    obj.SizeBytes,
@@ -176,7 +187,26 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 		ContentType:  obj.ContentType,
 		Metadata:     obj.Metadata,
 		Tags:         obj.Tags,
-	})
+	}); err != nil {
+		return err
+	}
+
+	// A bucket-level default retention applies to every version written into
+	// the bucket, which is the only thing that makes it a default rather than
+	// a note. ApplyBucketDefault never overwrites an existing row, so an
+	// explicit SetObjectRetention that raced ahead of this still wins.
+	//
+	// The failure is deliberately not fatal to the promotion: the object is
+	// already AVAILABLE in storage and in the objects row by the time this
+	// runs, and refusing to acknowledge that would be a lie. The caller logs
+	// what comes back.
+	if h.locks != nil && meta.ObjectLockEnabled && meta.ObjectLockDefaultMode != "" {
+		if err := h.locks.ApplyBucketDefault(ctx, obj.TenantID, versionID,
+			meta.ObjectLockDefaultMode, meta.ObjectLockDefaultRetention); err != nil {
+			return fmt.Errorf("apply bucket default lock: %w", err)
+		}
+	}
+	return nil
 }
 
 // UnsetDeleteMarkerCurrent walks the version history newest-first; if the

@@ -20,6 +20,7 @@ import {
   ObjectNotFound,
 } from "@/components/features/ObjectDetailStates";
 import { ObjectTagsCard } from "@/components/features/ObjectTagsCard";
+import { ObjectLockCard } from "@/components/features/ObjectLockCard";
 import { ObjectSpecsPanel } from "@/components/features/ObjectSpecsPanel";
 import { T } from "@/lib/ui/typography";
 
@@ -244,6 +245,12 @@ export function ObjectDetailView({
                 onEditToggle={setIsEditing}
                 onSave={patchObjectMeta}
               />
+
+              {/* Object Lock sits below tags rather than in the Specs panel:
+                  it is an action surface, not a read-only fact, and putting a
+                  COMPLIANCE control in a column of metadata invites clicking
+                  it the way one edits a label. */}
+              <ObjectLockCard objectName={object.name} />
             </TabsContent>
 
             <TabsContent value="versions">

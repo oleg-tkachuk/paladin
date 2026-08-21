@@ -60,6 +60,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM)
 	versionH := wire.ProvideVersionHandler(repos)
+	lockH := wire.ProvideLockHandler(repos, polEngine)
 	quotaUpdater := adapters.NewQuotaRepoV2(deps.DB.Queries, deps.Pool)
 	objH.SetVersionHandler(versionH)
 	objH.SetQuotaUpdater(quotaUpdater)
@@ -301,7 +302,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 	dataMux = http.NewServeMux()
 	healthH.Register(dataMux)
-	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(connectdata.NewObjectServer(objH, versionH), dataOpts))
+	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(
+		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewPresignServiceHandler(connectdata.NewPresignServer(presignH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewObjectTagServiceHandler(connectdata.NewObjectTagServer(objH), dataOpts))

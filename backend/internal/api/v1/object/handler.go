@@ -77,6 +77,12 @@ type BucketMeta struct {
 	BucketName        string
 	VersioningEnabled bool
 	ObjectLockEnabled bool
+	// ObjectLockDefaultMode / DefaultRetention are the bucket-level default
+	// the admin plane's SetObjectLock stores. Applied to a version at promote
+	// time; empty mode or zero retention means "no default", which is the
+	// state of every bucket that has not opted in.
+	ObjectLockDefaultMode      string
+	ObjectLockDefaultRetention time.Duration
 	// EventsEnabled mirrors storage_backends.events_enabled; drives the
 	// upload CompletionMode (implicit via bucket events vs explicit
 	// CompleteUpload call) without a second lookup on the upload path.
@@ -322,6 +328,13 @@ type Object struct {
 	CommittedAt      *time.Time
 	TerminatedAt     *time.Time
 	PresignExpiresAt *time.Time
+
+	// Lock is the object-lock state of the current version (ADR-0013).
+	// Populated on the single-object reads — GetObject, LookupObject — and
+	// left zero on ListObjects, where a per-row lock read would add a join to
+	// the hot pagination path for a field most deployments never set. Callers
+	// that need it for a list read it per object, or use GetObjectLock.
+	Lock ObjectLock
 }
 
 type CreateObjectArgs struct {
@@ -1033,7 +1046,25 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*
 	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
+	h.attachLock(ctx, tenantID, &obj)
 	return &obj, nil
+}
+
+// attachLock fills Object.Lock for a single-object read. Best-effort by
+// design: the lock is descriptive here, not an authorisation input — the
+// delete path reads it again through its own pre-check, and the SQL guard and
+// the object_locks trigger enforce it regardless of what this returns. A
+// failure here must not turn a successful GetObject into an error.
+func (h *Handler) attachLock(ctx context.Context, tenantID uuid.UUID, obj *Object) {
+	lock, err := h.repo.ObjectLock(ctx, tenantID, obj.ObjectID)
+	if err != nil {
+		if h.log != nil {
+			h.log.Warn("object lock read failed; reporting object without lock state",
+				zap.String("object_id", obj.ObjectID.String()), zap.Error(err))
+		}
+		return
+	}
+	obj.Lock = lock
 }
 
 // LookupObject resolves an object by (collection, key) instead of object_id —
@@ -1065,6 +1096,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Ob
 	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
+	h.attachLock(ctx, tenantID, &obj)
 	return &obj, nil
 }
 

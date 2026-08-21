@@ -129,6 +129,18 @@ func call(t *testing.T, base, path, token string) (int, string) {
 	return resp.StatusCode, env.Code
 }
 
+// unknownToStack distinguishes "this method refused me" from "this stack has
+// never heard of this method". The tests run against a deployed process, so a
+// locally added RPC is absent there until a redeploy — and reporting that as
+// "does not reject anonymous callers" sends the reader looking for a security
+// hole that is really a version skew.
+//
+// connect-go answers an unrouted path with a plain 404 and no JSON envelope,
+// which is the pair this checks for.
+func unknownToStack(status int, code string) bool {
+	return status == http.StatusNotFound && code == ""
+}
+
 // login mints a token for the given audience against the running stack.
 // Returns "" when the stack is unreachable, which the tests treat as a skip.
 func login(t *testing.T, iamURL, audience string) string {
@@ -199,7 +211,11 @@ func TestRPCSurface_RejectsAnonymous(t *testing.T) {
 				continue
 			}
 			t.Run(strings.TrimPrefix(path, "/"), func(t *testing.T) {
-				_, code := call(t, p.baseURL, path, "")
+				status, code := call(t, p.baseURL, path, "")
+				if unknownToStack(status, code) {
+					t.Skipf("the running stack does not serve this method (HTTP %d) — "+
+						"it predates this build; redeploy to check it", status)
+				}
 				if code != "unauthenticated" {
 					t.Errorf("anonymous call returned %q, want unauthenticated", code)
 				}
@@ -246,7 +262,11 @@ func TestRPCSurface_RejectsWrongAudience(t *testing.T) {
 				continue
 			}
 			t.Run(strings.TrimPrefix(path, "/"), func(t *testing.T) {
-				_, code := call(t, p.baseURL, path, token)
+				status, code := call(t, p.baseURL, path, token)
+				if unknownToStack(status, code) {
+					t.Skipf("the running stack does not serve this method (HTTP %d) — "+
+						"it predates this build; redeploy to check it", status)
+				}
 				switch code {
 				case "unauthenticated", "permission_denied":
 					// correct
@@ -281,7 +301,11 @@ func TestRPCSurface_EmptyRequestIsNeverInternal(t *testing.T) {
 		for _, m := range methodsFor(p) {
 			path := rpcPath(m)
 			t.Run(strings.TrimPrefix(path, "/"), func(t *testing.T) {
-				_, code := call(t, p.baseURL, path, token)
+				status, code := call(t, p.baseURL, path, token)
+				if unknownToStack(status, code) {
+					t.Skipf("the running stack does not serve this method (HTTP %d) — "+
+						"it predates this build; redeploy to check it", status)
+				}
 				if code == "internal" || code == "unknown" {
 					t.Errorf("empty request produced %q — the query reached the "+
 						"database and it disagreed; expected a typed refusal", code)

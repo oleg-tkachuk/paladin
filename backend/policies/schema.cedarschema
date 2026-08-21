@@ -182,6 +182,21 @@ action "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
   context: { now: Long, ip: String, audience: String }
 };
 
+// Object Lock (ADR-0013). Separate from UpdateObject because setting a
+// retention window is not an ordinary edit: a COMPLIANCE lock cannot be
+// shortened by anyone, so whoever holds this action can make an object — and
+// the storage it occupies — permanently undeletable. Granting write access to
+// a collection should not carry that.
+//
+// SetObjectLegalHold is split from SetObjectRetention for the same reason in
+// the other direction: a hold is reversible, so it can be delegated more
+// freely to whoever answers a legal request.
+action "SetObjectRetention", "SetObjectLegalHold", "ReadObjectLock" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Object],
+  context: { now: Long, ip: String, audience: String }
+};
+
 // IAM — user + api key management. Resources span both target types so a
 // policy can pin "tenant.admin manages users in own tenant" with one rule.
 action "ManageUser", "ReadUser", "ResetPassword", "GrantScopes" appliesTo {

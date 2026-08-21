@@ -59,6 +59,11 @@ vi.mock("@/components/layout/PageHeader", () => ({
 vi.mock("@/components/features/ObjectVersionsTab", () => ({
   ObjectVersionsTab: () => <div data-testid="versions-tab" />,
 }));
+// The lock card owns its own query and auth context; this suite is about the
+// detail view's own composition, so it stands in as a marker.
+vi.mock("@/components/features/ObjectLockCard", () => ({
+  ObjectLockCard: () => <div data-testid="object-lock-card" />,
+}));
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => {
     // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text

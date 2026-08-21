@@ -22,6 +22,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0010](0010-capability-as-establishing-credential.md) | A capability may establish identity on the data plane | Accepted |
 | [0011](0011-narrow-role-for-tenant-provisioning.md) | A narrow role for tenant provisioning | Accepted |
 | [0012](0012-machine-principals-may-delete-their-own-objects.md) | Cedar knows the credential kind; machines may delete their own objects | Accepted |
+| [0013](0013-object-lock-retention-and-legal-hold.md) | Object Lock — retention a mode of Paladin cannot lift | Accepted |
 
 ## Backend-scoped ADRs
 

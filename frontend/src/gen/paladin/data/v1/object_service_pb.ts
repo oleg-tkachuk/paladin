@@ -37,6 +37,7 @@ import type {
   ChecksumDigest,
   Object$,
   ObjectLockState,
+  ObjectLockStateSchema,
   ObjectSchema,
 } from "./types_pb";
 import { file_paladin_data_v1_types } from "./types_pb";
@@ -48,7 +49,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_object_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiNsZWdhdGUvZGF0YS92MS9vYmplY3Rfc2VydmljZS5wcm90bxIObGVnYXRlLmRhdGEudjEipQQKDU9iamVjdFZlcnNpb24SDAoEbmFtZRgBIAEoCRISCgp2ZXJzaW9uX2lkGAIgASgJEhEKCW9iamVjdF9pZBgDIAEoCRIYChBpc19kZWxldGVfbWFya2VyGAQgASgIEhQKDHN0b3JhZ2VfcGF0aBgFIAEoCRISCgpzaXplX2J5dGVzGAYgASgDEgwKBGV0YWcYByABKAkSMAoIY2hlY2tzdW0YCCABKAsyHi5sZWdhdGUuZGF0YS52MS5DaGVja3N1bURpZ2VzdBIUCgxjb250ZW50X3R5cGUYCSABKAkSPQoIbWV0YWRhdGEYCiADKAsyKy5sZWdhdGUuZGF0YS52MS5PYmplY3RWZXJzaW9uLk1ldGFkYXRhRW50cnkSNQoEdGFncxgLIAMoCzInLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdFZlcnNpb24uVGFnc0VudHJ5Ei0KBGxvY2sYDCABKAsyHy5sZWdhdGUuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSLgoKY3JlYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfY3VycmVudBgOIAEoCBovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiYQoZTGlzdE9iamVjdFZlcnNpb25zUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QiewoaTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USLwoIdmVyc2lvbnMYASADKAsyHS5sZWdhdGUuZGF0YS52MS5PYmplY3RWZXJzaW9uEiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIwChdHZXRPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIk4KG1Jlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkiggQKE1VwbG9hZE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEgsKA2tleRgCIAEoCRIdCgxjb250ZW50X3R5cGUYAyABKAlCB7pIBHICEAESFwoPc2l6ZV9oaW50X2J5dGVzGAQgASgDEkkKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIjLmxlZ2F0ZS5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCLpIBYIBAhABEkMKCG1ldGFkYXRhGAYgAygLMjEubGVnYXRlLmRhdGEudjEuVXBsb2FkT2JqZWN0UmVxdWVzdC5NZXRhZGF0YUVudHJ5EjsKBHRhZ3MYByADKAsyLS5sZWdhdGUuZGF0YS52MS5VcGxvYWRPYmplY3RSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSMwoJdHJhbnNwb3J0GAkgASgOMiAubGVnYXRlLmRhdGEudjEuUHJlc2lnblRyYW5zcG9ydBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIq0BChRVcGxvYWRPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSMgoKdXBsb2FkX3VybBgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUHJlc2lnbmVkVXJsEjkKD2NvbXBsZXRpb25fbW9kZRgDIAEoDjIgLmxlZ2F0ZS5jb21tb24udjEuQ29tcGxldGlvbk1vZGUicwoVRG93bmxvYWRPYmplY3RSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkidgoWRG93bmxvYWRPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSNAoMZG93bmxvYWRfdXJsGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QcmVzaWduZWRVcmwiKQoQR2V0T2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIkQKE0xvb2t1cE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASKUAwoTVXBkYXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESQwoIbWV0YWRhdGEYBCADKAsyMS5sZWdhdGUuZGF0YS52MS5VcGRhdGVPYmplY3RSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSOwoEdGFncxgFIAMoCzItLmxlZ2F0ZS5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QuVGFnc0VudHJ5EhQKDGNvbnRlbnRfdHlwZRgGIAEoCRIUCgxleHRlcm5hbF9yZWYYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlQKFUNvbXBsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkifgoTRGVsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSEQoJcGVybWFuZW50GAMgASgIEiMKG2J5cGFzc19nb3Zlcm5hbmNlX3JldGVudGlvbhgEIAEoCCI+ChREZWxldGVPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QiRwoUUmVzdG9yZU9iamVjdFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJIqACChFDb3B5T2JqZWN0UmVxdWVzdBIcCgtzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARInChZkZXN0aW5hdGlvbl9jb2xsZWN0aW9uGAIgASgJQge6SARyAhABEiAKD2Rlc3RpbmF0aW9uX2tleRgDIAEoCUIHukgEcgIQARJAChFtZXRhZGF0YV9vdmVycmlkZRgEIAEoCzIgLmxlZ2F0ZS5kYXRhLnYxLk1ldGFkYXRhT3ZlcnJpZGVIAIgBARI4Cg10YWdzX292ZXJyaWRlGAUgASgLMhwubGVnYXRlLmRhdGEudjEuVGFnc092ZXJyaWRlSAGIAQFCFAoSX21ldGFkYXRhX292ZXJyaWRlQhAKDl90YWdzX292ZXJyaWRlIoUBChBNZXRhZGF0YU92ZXJyaWRlEkAKCG1ldGFkYXRhGAEgAygLMi4ubGVnYXRlLmRhdGEudjEuTWV0YWRhdGFPdmVycmlkZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJxCgxUYWdzT3ZlcnJpZGUSNAoEdGFncxgBIAMoCzImLmxlZ2F0ZS5kYXRhLnYxLlRhZ3NPdmVycmlkZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEirQEKEkxpc3RPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhAKCG9yZGVyX2J5GAQgASgJEi8KCnNvcnRfb3JkZXIYBSABKA4yGy5sZWdhdGUuY29tbW9uLnYxLlNvcnRPcmRlciJsChNMaXN0T2JqZWN0c1Jlc3BvbnNlEicKB29iamVjdHMYASADKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSLAoEcGFnZRgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlc3BvbnNlIj4KE0NvdW50T2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEg4KBmZpbHRlchgCIAEoCSJAChRDb3VudE9iamVjdHNSZXNwb25zZRIZChFhcHByb3hpbWF0ZV9jb3VudBgBIAEoAxINCgVleGFjdBgCIAEoCCpsChBQcmVzaWduVHJhbnNwb3J0EiEKHVBSRVNJR05fVFJBTlNQT1JUX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0lHTl9UUkFOU1BPUlRfUFVUEAESGgoWUFJFU0lHTl9UUkFOU1BPUlRfUE9TVBACMskJCg1PYmplY3RTZXJ2aWNlElkKDFVwbG9hZE9iamVjdBIjLmxlZ2F0ZS5kYXRhLnYxLlVwbG9hZE9iamVjdFJlcXVlc3QaJC5sZWdhdGUuZGF0YS52MS5VcGxvYWRPYmplY3RSZXNwb25zZRJfCg5Eb3dubG9hZE9iamVjdBIlLmxlZ2F0ZS5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVxdWVzdBomLmxlZ2F0ZS5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVzcG9uc2USRQoJR2V0T2JqZWN0EiAubGVnYXRlLmRhdGEudjEuR2V0T2JqZWN0UmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJLCgxMb29rdXBPYmplY3QSIy5sZWdhdGUuZGF0YS52MS5Mb29rdXBPYmplY3RSZXF1ZXN0GhYubGVnYXRlLmRhdGEudjEuT2JqZWN0EksKDFVwZGF0ZU9iamVjdBIjLmxlZ2F0ZS5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSTwoOQ29tcGxldGVPYmplY3QSJS5sZWdhdGUuZGF0YS52MS5Db21wbGV0ZU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSWQoMRGVsZXRlT2JqZWN0EiMubGVnYXRlLmRhdGEudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBokLmxlZ2F0ZS5kYXRhLnYxLkRlbGV0ZU9iamVjdFJlc3BvbnNlEk0KDVJlc3RvcmVPYmplY3QSJC5sZWdhdGUuZGF0YS52MS5SZXN0b3JlT2JqZWN0UmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJHCgpDb3B5T2JqZWN0EiEubGVnYXRlLmRhdGEudjEuQ29weU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSVgoLTGlzdE9iamVjdHMSIi5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0c1JlcXVlc3QaIy5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlElkKDENvdW50T2JqZWN0cxIjLmxlZ2F0ZS5kYXRhLnYxLkNvdW50T2JqZWN0c1JlcXVlc3QaJC5sZWdhdGUuZGF0YS52MS5Db3VudE9iamVjdHNSZXNwb25zZRJrChJMaXN0T2JqZWN0VmVyc2lvbnMSKS5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0VmVyc2lvbnNSZXF1ZXN0GioubGVnYXRlLmRhdGEudjEuTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USWgoQR2V0T2JqZWN0VmVyc2lvbhInLmxlZ2F0ZS5kYXRhLnYxLkdldE9iamVjdFZlcnNpb25SZXF1ZXN0Gh0ubGVnYXRlLmRhdGEudjEuT2JqZWN0VmVyc2lvbhJbChRSZXN0b3JlT2JqZWN0VmVyc2lvbhIrLmxlZ2F0ZS5kYXRhLnYxLlJlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdEJFWkNnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7bGVnYXRlZGF0YXYxYgZwcm90bzM",
+    "CiNsZWdhdGUvZGF0YS92MS9vYmplY3Rfc2VydmljZS5wcm90bxIObGVnYXRlLmRhdGEudjEipQQKDU9iamVjdFZlcnNpb24SDAoEbmFtZRgBIAEoCRISCgp2ZXJzaW9uX2lkGAIgASgJEhEKCW9iamVjdF9pZBgDIAEoCRIYChBpc19kZWxldGVfbWFya2VyGAQgASgIEhQKDHN0b3JhZ2VfcGF0aBgFIAEoCRISCgpzaXplX2J5dGVzGAYgASgDEgwKBGV0YWcYByABKAkSMAoIY2hlY2tzdW0YCCABKAsyHi5sZWdhdGUuZGF0YS52MS5DaGVja3N1bURpZ2VzdBIUCgxjb250ZW50X3R5cGUYCSABKAkSPQoIbWV0YWRhdGEYCiADKAsyKy5sZWdhdGUuZGF0YS52MS5PYmplY3RWZXJzaW9uLk1ldGFkYXRhRW50cnkSNQoEdGFncxgLIAMoCzInLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdFZlcnNpb24uVGFnc0VudHJ5Ei0KBGxvY2sYDCABKAsyHy5sZWdhdGUuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSLgoKY3JlYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfY3VycmVudBgOIAEoCBovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiYQoZTGlzdE9iamVjdFZlcnNpb25zUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QiewoaTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USLwoIdmVyc2lvbnMYASADKAsyHS5sZWdhdGUuZGF0YS52MS5PYmplY3RWZXJzaW9uEiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIwChdHZXRPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIk4KG1Jlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkiggQKE1VwbG9hZE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEgsKA2tleRgCIAEoCRIdCgxjb250ZW50X3R5cGUYAyABKAlCB7pIBHICEAESFwoPc2l6ZV9oaW50X2J5dGVzGAQgASgDEkkKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIjLmxlZ2F0ZS5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCLpIBYIBAhABEkMKCG1ldGFkYXRhGAYgAygLMjEubGVnYXRlLmRhdGEudjEuVXBsb2FkT2JqZWN0UmVxdWVzdC5NZXRhZGF0YUVudHJ5EjsKBHRhZ3MYByADKAsyLS5sZWdhdGUuZGF0YS52MS5VcGxvYWRPYmplY3RSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSMwoJdHJhbnNwb3J0GAkgASgOMiAubGVnYXRlLmRhdGEudjEuUHJlc2lnblRyYW5zcG9ydBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIq0BChRVcGxvYWRPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSMgoKdXBsb2FkX3VybBgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUHJlc2lnbmVkVXJsEjkKD2NvbXBsZXRpb25fbW9kZRgDIAEoDjIgLmxlZ2F0ZS5jb21tb24udjEuQ29tcGxldGlvbk1vZGUicwoVRG93bmxvYWRPYmplY3RSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkidgoWRG93bmxvYWRPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSNAoMZG93bmxvYWRfdXJsGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QcmVzaWduZWRVcmwiKQoQR2V0T2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIkQKE0xvb2t1cE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASKUAwoTVXBkYXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESQwoIbWV0YWRhdGEYBCADKAsyMS5sZWdhdGUuZGF0YS52MS5VcGRhdGVPYmplY3RSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSOwoEdGFncxgFIAMoCzItLmxlZ2F0ZS5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QuVGFnc0VudHJ5EhQKDGNvbnRlbnRfdHlwZRgGIAEoCRIUCgxleHRlcm5hbF9yZWYYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlQKFUNvbXBsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkifgoTRGVsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSEQoJcGVybWFuZW50GAMgASgIEiMKG2J5cGFzc19nb3Zlcm5hbmNlX3JldGVudGlvbhgEIAEoCCI+ChREZWxldGVPYmplY3RSZXNwb25zZRImCgZvYmplY3QYASABKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QivgEKGVNldE9iamVjdFJldGVudGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIrCgRtb2RlGAIgASgJQh26SBpyGFIKR09WRVJOQU5DRVIKQ09NUExJQU5DRRI4CgxyZXRhaW5fdW50aWwYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESIwobYnlwYXNzX2dvdmVybmFuY2VfcmV0ZW50aW9uGAQgASgIIkYKGVNldE9iamVjdExlZ2FsSG9sZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARISCgpsZWdhbF9ob2xkGAIgASgIIi0KFEdldE9iamVjdExvY2tSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiRwoUUmVzdG9yZU9iamVjdFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJIqACChFDb3B5T2JqZWN0UmVxdWVzdBIcCgtzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARInChZkZXN0aW5hdGlvbl9jb2xsZWN0aW9uGAIgASgJQge6SARyAhABEiAKD2Rlc3RpbmF0aW9uX2tleRgDIAEoCUIHukgEcgIQARJAChFtZXRhZGF0YV9vdmVycmlkZRgEIAEoCzIgLmxlZ2F0ZS5kYXRhLnYxLk1ldGFkYXRhT3ZlcnJpZGVIAIgBARI4Cg10YWdzX292ZXJyaWRlGAUgASgLMhwubGVnYXRlLmRhdGEudjEuVGFnc092ZXJyaWRlSAGIAQFCFAoSX21ldGFkYXRhX292ZXJyaWRlQhAKDl90YWdzX292ZXJyaWRlIoUBChBNZXRhZGF0YU92ZXJyaWRlEkAKCG1ldGFkYXRhGAEgAygLMi4ubGVnYXRlLmRhdGEudjEuTWV0YWRhdGFPdmVycmlkZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJxCgxUYWdzT3ZlcnJpZGUSNAoEdGFncxgBIAMoCzImLmxlZ2F0ZS5kYXRhLnYxLlRhZ3NPdmVycmlkZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEirQEKEkxpc3RPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhAKCG9yZGVyX2J5GAQgASgJEi8KCnNvcnRfb3JkZXIYBSABKA4yGy5sZWdhdGUuY29tbW9uLnYxLlNvcnRPcmRlciJsChNMaXN0T2JqZWN0c1Jlc3BvbnNlEicKB29iamVjdHMYASADKAsyFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSLAoEcGFnZRgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlc3BvbnNlIj4KE0NvdW50T2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEg4KBmZpbHRlchgCIAEoCSJAChRDb3VudE9iamVjdHNSZXNwb25zZRIZChFhcHByb3hpbWF0ZV9jb3VudBgBIAEoAxINCgVleGFjdBgCIAEoCCpsChBQcmVzaWduVHJhbnNwb3J0EiEKHVBSRVNJR05fVFJBTlNQT1JUX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0lHTl9UUkFOU1BPUlRfUFVUEAESGgoWUFJFU0lHTl9UUkFOU1BPUlRfUE9TVBACMuULCg1PYmplY3RTZXJ2aWNlElkKDFVwbG9hZE9iamVjdBIjLmxlZ2F0ZS5kYXRhLnYxLlVwbG9hZE9iamVjdFJlcXVlc3QaJC5sZWdhdGUuZGF0YS52MS5VcGxvYWRPYmplY3RSZXNwb25zZRJfCg5Eb3dubG9hZE9iamVjdBIlLmxlZ2F0ZS5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVxdWVzdBomLmxlZ2F0ZS5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVzcG9uc2USRQoJR2V0T2JqZWN0EiAubGVnYXRlLmRhdGEudjEuR2V0T2JqZWN0UmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJLCgxMb29rdXBPYmplY3QSIy5sZWdhdGUuZGF0YS52MS5Mb29rdXBPYmplY3RSZXF1ZXN0GhYubGVnYXRlLmRhdGEudjEuT2JqZWN0EksKDFVwZGF0ZU9iamVjdBIjLmxlZ2F0ZS5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSTwoOQ29tcGxldGVPYmplY3QSJS5sZWdhdGUuZGF0YS52MS5Db21wbGV0ZU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSWQoMRGVsZXRlT2JqZWN0EiMubGVnYXRlLmRhdGEudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBokLmxlZ2F0ZS5kYXRhLnYxLkRlbGV0ZU9iamVjdFJlc3BvbnNlEk0KDVJlc3RvcmVPYmplY3QSJC5sZWdhdGUuZGF0YS52MS5SZXN0b3JlT2JqZWN0UmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJHCgpDb3B5T2JqZWN0EiEubGVnYXRlLmRhdGEudjEuQ29weU9iamVjdFJlcXVlc3QaFi5sZWdhdGUuZGF0YS52MS5PYmplY3QSVgoLTGlzdE9iamVjdHMSIi5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0c1JlcXVlc3QaIy5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlElkKDENvdW50T2JqZWN0cxIjLmxlZ2F0ZS5kYXRhLnYxLkNvdW50T2JqZWN0c1JlcXVlc3QaJC5sZWdhdGUuZGF0YS52MS5Db3VudE9iamVjdHNSZXNwb25zZRJrChJMaXN0T2JqZWN0VmVyc2lvbnMSKS5sZWdhdGUuZGF0YS52MS5MaXN0T2JqZWN0VmVyc2lvbnNSZXF1ZXN0GioubGVnYXRlLmRhdGEudjEuTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USWgoQR2V0T2JqZWN0VmVyc2lvbhInLmxlZ2F0ZS5kYXRhLnYxLkdldE9iamVjdFZlcnNpb25SZXF1ZXN0Gh0ubGVnYXRlLmRhdGEudjEuT2JqZWN0VmVyc2lvbhJbChRSZXN0b3JlT2JqZWN0VmVyc2lvbhIrLmxlZ2F0ZS5kYXRhLnYxLlJlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBoWLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdBJgChJTZXRPYmplY3RSZXRlbnRpb24SKS5sZWdhdGUuZGF0YS52MS5TZXRPYmplY3RSZXRlbnRpb25SZXF1ZXN0Gh8ubGVnYXRlLmRhdGEudjEuT2JqZWN0TG9ja1N0YXRlEmAKElNldE9iamVjdExlZ2FsSG9sZBIpLmxlZ2F0ZS5kYXRhLnYxLlNldE9iamVjdExlZ2FsSG9sZFJlcXVlc3QaHy5sZWdhdGUuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSVgoNR2V0T2JqZWN0TG9jaxIkLmxlZ2F0ZS5kYXRhLnYxLkdldE9iamVjdExvY2tSZXF1ZXN0Gh8ubGVnYXRlLmRhdGEudjEuT2JqZWN0TG9ja1N0YXRlQkVaQ2dpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtsZWdhdGVkYXRhdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_duration,
@@ -542,11 +543,12 @@ export type DeleteObjectRequest =
     permanent: boolean;
 
     /**
-     * Only honored on bucket-locked objects when caller has GOVERNANCE bypass
-     * (role `lock.governance.bypass` or `platform.admin`). The server sets
-     * a `SET LOCAL paladin.governance_bypass = true` GUC inside the deletion
-     * transaction; the DB trigger on object_versions checks for it before
-     * refusing to drop locked rows.
+     * Only honored when the caller has GOVERNANCE bypass (role
+     * `lock.governance.bypass` or `platform.admin`), and only against a
+     * GOVERNANCE window — legal hold and COMPLIANCE are absolute. The server
+     * sets `paladin.bypass_governance_retention` for the deletion transaction;
+     * the trigger on object_locks reads it before refusing to drop a locked
+     * row.
      *
      * @generated from field: bool bypass_governance_retention = 4;
      */
@@ -581,6 +583,99 @@ export const DeleteObjectResponseSchema: GenMessage<DeleteObjectResponse> =
   messageDesc(file_paladin_data_v1_object_service, 14);
 
 /**
+ * @generated from message paladin.data.v1.SetObjectRetentionRequest
+ */
+export type SetObjectRetentionRequest =
+  Message<"paladin.data.v1.SetObjectRetentionRequest"> & {
+    /**
+     * Object resource name: "tenants/{tenant}/collections/{ok}/objects/{id}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * GOVERNANCE | COMPLIANCE. Required.
+     *
+     * COMPLIANCE cannot be downgraded to GOVERNANCE and its window cannot be
+     * shortened by anyone, including a platform admin — that is what makes it
+     * usable as a regulatory control rather than a strong suggestion.
+     *
+     * @generated from field: string mode = 2;
+     */
+    mode: string;
+
+    /**
+     * When the retention expires. Must be in the future, and must not be
+     * earlier than an existing window unless the current mode is GOVERNANCE
+     * and bypass_governance_retention is set.
+     *
+     * @generated from field: google.protobuf.Timestamp retain_until = 3;
+     */
+    retainUntil?: Timestamp | undefined;
+
+    /**
+     * Permits shortening or clearing an active GOVERNANCE window. Requires role
+     * `lock.governance.bypass` or `platform.admin`. Ignored when the existing
+     * window is COMPLIANCE, which no role can shorten.
+     *
+     * @generated from field: bool bypass_governance_retention = 4;
+     */
+    bypassGovernanceRetention: boolean;
+  };
+
+/**
+ * Describes the message paladin.data.v1.SetObjectRetentionRequest.
+ * Use `create(SetObjectRetentionRequestSchema)` to create a new message.
+ */
+export const SetObjectRetentionRequestSchema: GenMessage<SetObjectRetentionRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_service, 15);
+
+/**
+ * @generated from message paladin.data.v1.SetObjectLegalHoldRequest
+ */
+export type SetObjectLegalHoldRequest =
+  Message<"paladin.data.v1.SetObjectLegalHoldRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * @generated from field: bool legal_hold = 2;
+     */
+    legalHold: boolean;
+  };
+
+/**
+ * Describes the message paladin.data.v1.SetObjectLegalHoldRequest.
+ * Use `create(SetObjectLegalHoldRequestSchema)` to create a new message.
+ */
+export const SetObjectLegalHoldRequestSchema: GenMessage<SetObjectLegalHoldRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_service, 16);
+
+/**
+ * @generated from message paladin.data.v1.GetObjectLockRequest
+ */
+export type GetObjectLockRequest =
+  Message<"paladin.data.v1.GetObjectLockRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.data.v1.GetObjectLockRequest.
+ * Use `create(GetObjectLockRequestSchema)` to create a new message.
+ */
+export const GetObjectLockRequestSchema: GenMessage<GetObjectLockRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_service, 17);
+
+/**
  * @generated from message paladin.data.v1.RestoreObjectRequest
  */
 export type RestoreObjectRequest =
@@ -605,7 +700,7 @@ export type RestoreObjectRequest =
  */
 export const RestoreObjectRequestSchema: GenMessage<RestoreObjectRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 15);
+  messageDesc(file_paladin_data_v1_object_service, 18);
 
 /**
  * @generated from message paladin.data.v1.CopyObjectRequest
@@ -645,7 +740,7 @@ export type CopyObjectRequest = Message<"paladin.data.v1.CopyObjectRequest"> & {
  */
 export const CopyObjectRequestSchema: GenMessage<CopyObjectRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 16);
+  messageDesc(file_paladin_data_v1_object_service, 19);
 
 /**
  * @generated from message paladin.data.v1.MetadataOverride
@@ -663,7 +758,7 @@ export type MetadataOverride = Message<"paladin.data.v1.MetadataOverride"> & {
  */
 export const MetadataOverrideSchema: GenMessage<MetadataOverride> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 17);
+  messageDesc(file_paladin_data_v1_object_service, 20);
 
 /**
  * @generated from message paladin.data.v1.TagsOverride
@@ -681,7 +776,7 @@ export type TagsOverride = Message<"paladin.data.v1.TagsOverride"> & {
  */
 export const TagsOverrideSchema: GenMessage<TagsOverride> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 18);
+  messageDesc(file_paladin_data_v1_object_service, 21);
 
 /**
  * @generated from message paladin.data.v1.ListObjectsRequest
@@ -722,7 +817,7 @@ export type ListObjectsRequest =
  */
 export const ListObjectsRequestSchema: GenMessage<ListObjectsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 19);
+  messageDesc(file_paladin_data_v1_object_service, 22);
 
 /**
  * @generated from message paladin.data.v1.ListObjectsResponse
@@ -746,7 +841,7 @@ export type ListObjectsResponse =
  */
 export const ListObjectsResponseSchema: GenMessage<ListObjectsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 20);
+  messageDesc(file_paladin_data_v1_object_service, 23);
 
 /**
  * @generated from message paladin.data.v1.CountObjectsRequest
@@ -770,7 +865,7 @@ export type CountObjectsRequest =
  */
 export const CountObjectsRequestSchema: GenMessage<CountObjectsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 21);
+  messageDesc(file_paladin_data_v1_object_service, 24);
 
 /**
  * @generated from message paladin.data.v1.CountObjectsResponse
@@ -794,7 +889,7 @@ export type CountObjectsResponse =
  */
 export const CountObjectsResponseSchema: GenMessage<CountObjectsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_service, 22);
+  messageDesc(file_paladin_data_v1_object_service, 25);
 
 /**
  * @generated from enum paladin.data.v1.PresignTransport
@@ -956,5 +1051,40 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof RestoreObjectVersionRequestSchema;
     output: typeof ObjectSchema;
+  };
+  /**
+   * SetObjectRetention applies or extends a retention window on an object's
+   * current version. Requires the parent bucket to have object lock enabled.
+   *
+   * @generated from rpc paladin.data.v1.ObjectService.SetObjectRetention
+   */
+  setObjectRetention: {
+    methodKind: "unary";
+    input: typeof SetObjectRetentionRequestSchema;
+    output: typeof ObjectLockStateSchema;
+  };
+  /**
+   * SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
+   * for as long as it is on, independently of any retention window, and is
+   * not subject to the GOVERNANCE bypass.
+   *
+   * @generated from rpc paladin.data.v1.ObjectService.SetObjectLegalHold
+   */
+  setObjectLegalHold: {
+    methodKind: "unary";
+    input: typeof SetObjectLegalHoldRequestSchema;
+    output: typeof ObjectLockStateSchema;
+  };
+  /**
+   * GetObjectLock reads the current lock state. Returns an empty state — not
+   * NOT_FOUND — for an object with no lock, so callers can render "unlocked"
+   * without special-casing an error.
+   *
+   * @generated from rpc paladin.data.v1.ObjectService.GetObjectLock
+   */
+  getObjectLock: {
+    methodKind: "unary";
+    input: typeof GetObjectLockRequestSchema;
+    output: typeof ObjectLockStateSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_object_service, 0);

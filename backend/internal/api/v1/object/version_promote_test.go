@@ -49,7 +49,10 @@ func (*fakeObjectRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]Obj
 	panic("not used")
 }
 func (*fakeObjectRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (ObjectLock, error) {
-	panic("not used")
+	// GetObject / LookupObject read this to populate Object.Lock, so it is no
+	// longer an unreached method. Unlocked is the state every test that does
+	// not say otherwise intends.
+	return ObjectLock{}, nil
 }
 func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
 	panic("not used")

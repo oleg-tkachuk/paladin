@@ -225,7 +225,7 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
               OR (l.mode = 'COMPLIANCE' AND l.retain_until > now())
               OR (l.mode = 'GOVERNANCE' AND l.retain_until > now()
                   AND NOT COALESCE(
-                      current_setting('paladin.governance_bypass', true)::boolean,
+                      current_setting('paladin.bypass_governance_retention', true) = 'on',
                       false))))
 `
 
@@ -237,7 +237,7 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
 // object_versions (the trigger only covers that table, NOT objects).
 // legal_hold and active COMPLIANCE locks are absolute; an active
 // GOVERNANCE lock is honoured unless the session sets
-// paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
+// paladin.bypass_governance_retention='on' (HardDeleteWithBypassTx does, the plain RPC
 // path does not). A locked row matches 0 rows here, so the caller must
 // pre-check to distinguish "locked" from "version mismatch".
 func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error) {

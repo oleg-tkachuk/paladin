@@ -138,6 +138,10 @@ export type Object$ = Message<"paladin.data.v1.Object"> & {
 
   /**
    * Object-lock retention; populated when the parent bucket has lock enabled.
+   * Object-lock state of the current version (ADR-0013). Populated by
+   * GetObject and LookupObject. Left empty by ListObjects, where reading a
+   * lock per row would add a join to the pagination hot path for a field most
+   * deployments never set — use GetObjectLock for a specific object.
    *
    * @generated from field: paladin.data.v1.ObjectLockState lock = 21;
    */

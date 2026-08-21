@@ -75,6 +75,15 @@ const (
 	// ObjectServiceRestoreObjectVersionProcedure is the fully-qualified name of the ObjectService's
 	// RestoreObjectVersion RPC.
 	ObjectServiceRestoreObjectVersionProcedure = "/paladin.data.v1.ObjectService/RestoreObjectVersion"
+	// ObjectServiceSetObjectRetentionProcedure is the fully-qualified name of the ObjectService's
+	// SetObjectRetention RPC.
+	ObjectServiceSetObjectRetentionProcedure = "/paladin.data.v1.ObjectService/SetObjectRetention"
+	// ObjectServiceSetObjectLegalHoldProcedure is the fully-qualified name of the ObjectService's
+	// SetObjectLegalHold RPC.
+	ObjectServiceSetObjectLegalHoldProcedure = "/paladin.data.v1.ObjectService/SetObjectLegalHold"
+	// ObjectServiceGetObjectLockProcedure is the fully-qualified name of the ObjectService's
+	// GetObjectLock RPC.
+	ObjectServiceGetObjectLockProcedure = "/paladin.data.v1.ObjectService/GetObjectLock"
 )
 
 // ObjectServiceClient is a client for the paladin.data.v1.ObjectService service.
@@ -102,6 +111,17 @@ type ObjectServiceClient interface {
 	// RestoreObjectVersion makes the named version `current` again. The
 	// current version becomes a non-current entry preserving lock state.
 	RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error)
+	// SetObjectRetention applies or extends a retention window on an object's
+	// current version. Requires the parent bucket to have object lock enabled.
+	SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error)
+	// SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
+	// for as long as it is on, independently of any retention window, and is
+	// not subject to the GOVERNANCE bypass.
+	SetObjectLegalHold(context.Context, *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error)
+	// GetObjectLock reads the current lock state. Returns an empty state — not
+	// NOT_FOUND — for an object with no lock, so callers can render "unlocked"
+	// without special-casing an error.
+	GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error)
 }
 
 // NewObjectServiceClient constructs a client for the paladin.data.v1.ObjectService service. By
@@ -199,6 +219,24 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(objectServiceMethods.ByName("RestoreObjectVersion")),
 			connect.WithClientOptions(opts...),
 		),
+		setObjectRetention: connect.NewClient[v1.SetObjectRetentionRequest, v1.ObjectLockState](
+			httpClient,
+			baseURL+ObjectServiceSetObjectRetentionProcedure,
+			connect.WithSchema(objectServiceMethods.ByName("SetObjectRetention")),
+			connect.WithClientOptions(opts...),
+		),
+		setObjectLegalHold: connect.NewClient[v1.SetObjectLegalHoldRequest, v1.ObjectLockState](
+			httpClient,
+			baseURL+ObjectServiceSetObjectLegalHoldProcedure,
+			connect.WithSchema(objectServiceMethods.ByName("SetObjectLegalHold")),
+			connect.WithClientOptions(opts...),
+		),
+		getObjectLock: connect.NewClient[v1.GetObjectLockRequest, v1.ObjectLockState](
+			httpClient,
+			baseURL+ObjectServiceGetObjectLockProcedure,
+			connect.WithSchema(objectServiceMethods.ByName("GetObjectLock")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -218,6 +256,9 @@ type objectServiceClient struct {
 	listObjectVersions   *connect.Client[v1.ListObjectVersionsRequest, v1.ListObjectVersionsResponse]
 	getObjectVersion     *connect.Client[v1.GetObjectVersionRequest, v1.ObjectVersion]
 	restoreObjectVersion *connect.Client[v1.RestoreObjectVersionRequest, v1.Object]
+	setObjectRetention   *connect.Client[v1.SetObjectRetentionRequest, v1.ObjectLockState]
+	setObjectLegalHold   *connect.Client[v1.SetObjectLegalHoldRequest, v1.ObjectLockState]
+	getObjectLock        *connect.Client[v1.GetObjectLockRequest, v1.ObjectLockState]
 }
 
 // UploadObject calls paladin.data.v1.ObjectService.UploadObject.
@@ -290,6 +331,21 @@ func (c *objectServiceClient) RestoreObjectVersion(ctx context.Context, req *con
 	return c.restoreObjectVersion.CallUnary(ctx, req)
 }
 
+// SetObjectRetention calls paladin.data.v1.ObjectService.SetObjectRetention.
+func (c *objectServiceClient) SetObjectRetention(ctx context.Context, req *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error) {
+	return c.setObjectRetention.CallUnary(ctx, req)
+}
+
+// SetObjectLegalHold calls paladin.data.v1.ObjectService.SetObjectLegalHold.
+func (c *objectServiceClient) SetObjectLegalHold(ctx context.Context, req *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error) {
+	return c.setObjectLegalHold.CallUnary(ctx, req)
+}
+
+// GetObjectLock calls paladin.data.v1.ObjectService.GetObjectLock.
+func (c *objectServiceClient) GetObjectLock(ctx context.Context, req *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error) {
+	return c.getObjectLock.CallUnary(ctx, req)
+}
+
 // ObjectServiceHandler is an implementation of the paladin.data.v1.ObjectService service.
 type ObjectServiceHandler interface {
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
@@ -315,6 +371,17 @@ type ObjectServiceHandler interface {
 	// RestoreObjectVersion makes the named version `current` again. The
 	// current version becomes a non-current entry preserving lock state.
 	RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error)
+	// SetObjectRetention applies or extends a retention window on an object's
+	// current version. Requires the parent bucket to have object lock enabled.
+	SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error)
+	// SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
+	// for as long as it is on, independently of any retention window, and is
+	// not subject to the GOVERNANCE bypass.
+	SetObjectLegalHold(context.Context, *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error)
+	// GetObjectLock reads the current lock state. Returns an empty state — not
+	// NOT_FOUND — for an object with no lock, so callers can render "unlocked"
+	// without special-casing an error.
+	GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error)
 }
 
 // NewObjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -408,6 +475,24 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(objectServiceMethods.ByName("RestoreObjectVersion")),
 		connect.WithHandlerOptions(opts...),
 	)
+	objectServiceSetObjectRetentionHandler := connect.NewUnaryHandler(
+		ObjectServiceSetObjectRetentionProcedure,
+		svc.SetObjectRetention,
+		connect.WithSchema(objectServiceMethods.ByName("SetObjectRetention")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectServiceSetObjectLegalHoldHandler := connect.NewUnaryHandler(
+		ObjectServiceSetObjectLegalHoldProcedure,
+		svc.SetObjectLegalHold,
+		connect.WithSchema(objectServiceMethods.ByName("SetObjectLegalHold")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectServiceGetObjectLockHandler := connect.NewUnaryHandler(
+		ObjectServiceGetObjectLockProcedure,
+		svc.GetObjectLock,
+		connect.WithSchema(objectServiceMethods.ByName("GetObjectLock")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.data.v1.ObjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObjectServiceUploadObjectProcedure:
@@ -438,6 +523,12 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 			objectServiceGetObjectVersionHandler.ServeHTTP(w, r)
 		case ObjectServiceRestoreObjectVersionProcedure:
 			objectServiceRestoreObjectVersionHandler.ServeHTTP(w, r)
+		case ObjectServiceSetObjectRetentionProcedure:
+			objectServiceSetObjectRetentionHandler.ServeHTTP(w, r)
+		case ObjectServiceSetObjectLegalHoldProcedure:
+			objectServiceSetObjectLegalHoldHandler.ServeHTTP(w, r)
+		case ObjectServiceGetObjectLockProcedure:
+			objectServiceGetObjectLockHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -501,4 +592,16 @@ func (UnimplementedObjectServiceHandler) GetObjectVersion(context.Context, *conn
 
 func (UnimplementedObjectServiceHandler) RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.RestoreObjectVersion is not implemented"))
+}
+
+func (UnimplementedObjectServiceHandler) SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.SetObjectRetention is not implemented"))
+}
+
+func (UnimplementedObjectServiceHandler) SetObjectLegalHold(context.Context, *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.SetObjectLegalHold is not implemented"))
+}
+
+func (UnimplementedObjectServiceHandler) GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.GetObjectLock is not implemented"))
 }
