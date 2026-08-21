@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/health"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
@@ -329,6 +330,13 @@ func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, natsPoo
 	})
 	mux := http.NewServeMux()
 	healthH.Register(mux)
+
+	// /metrics beside the health endpoints: this ops listener is already plain
+	// HTTP and cluster-internal, which is what the scraper needs.
+	if h := metricsHandler(deps); h != nil {
+		mux.Handle(middleware.PathMetrics, h)
+	}
+
 	// Backwards-compat alias for chart probe paths that historically
 	// hit /healthz on worker-class pods.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

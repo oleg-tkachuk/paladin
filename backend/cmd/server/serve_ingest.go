@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
@@ -265,6 +266,13 @@ func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, 
 
 	mux := http.NewServeMux()
 	healthH.Register(mux)
+
+	// /metrics beside the health endpoints: this ops listener is already plain
+	// HTTP and cluster-internal, which is what the scraper needs.
+	if h := metricsHandler(deps); h != nil {
+		mux.Handle(middleware.PathMetrics, h)
+	}
+
 	// Backwards-compat alias — chart probes hit `/healthz` (the
 	// historical Kubernetes path), but health.Handler.Register
 	// mounts `/livez` (the current convention). Same patch the

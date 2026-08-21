@@ -397,6 +397,13 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	}
 	healthH.WithRole("mcp")
 	healthH.Register(mux)
+
+	// No /metrics here. runHTTP does not build SharedDeps — the MCP bridge
+	// holds no repositories and emits no paladin_* instruments of its own; it
+	// proxies to the planes, which are scraped. Wiring deps through purely to
+	// expose go_* would be a lot of plumbing for runtime stats already
+	// visible per-pod through kube-state-metrics.
+
 	// Backwards-compatible alias for the chart's existing /healthz path.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		r2 := r.Clone(r.Context())
