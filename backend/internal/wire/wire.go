@@ -48,7 +48,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
@@ -260,11 +259,11 @@ func ProvideVersionHandler(repos Repos) *object.VersionHandler {
 // ProvideLockHandler builds the object-lock RPC handler. Requires both
 // version and lock repositories: a lock has to attach to a version, so
 // object lock without versioning is not a configuration this can serve.
-func ProvideLockHandler(repos Repos, policy cedar.Authorizer) *object.LockHandler {
+func ProvideLockHandler(repos Repos, pe policy.Authorizer) *object.LockHandler {
 	if repos.ObjectVersion == nil || repos.ObjectLock == nil {
 		return nil
 	}
-	return object.NewLockHandler(repos.Object, repos.ObjectVersion, repos.ObjectLock, policy)
+	return object.NewLockHandler(repos.Object, repos.ObjectVersion, repos.ObjectLock, pe)
 }
 
 // bucketProvisionerAdapter bridges the v1 bucket.Provisioner interface to
