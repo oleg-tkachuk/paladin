@@ -40,13 +40,13 @@ WHERE id = (SELECT b2.id FROM buckets b2
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: ListBuckets :many
-SELECT sqlc.embed(buckets),
-       (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name
-FROM buckets
-WHERE (sqlc.narg('backend_id')::text IS NULL OR backend_id = sqlc.narg('backend_id')::text)
+SELECT sqlc.embed(b), sb.name AS backend_name
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE (sqlc.narg('backend_id')::text IS NULL OR sb.name = sqlc.narg('backend_id')::text)
   AND (sqlc.narg('after_name')::text IS NULL
-       OR (backend_id, name) > (sqlc.narg('after_backend_id')::text, sqlc.narg('after_name')::text))
-ORDER BY backend_id, name
+       OR (sb.name, b.name) > (sqlc.narg('after_backend_id')::text, sqlc.narg('after_name')::text))
+ORDER BY sb.name, b.name
 LIMIT sqlc.arg('page_size');
 
 -- name: CountCollectionsReferencingBucket :one

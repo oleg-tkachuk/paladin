@@ -130,19 +130,20 @@ func (q *Queries) GetBucketV2(ctx context.Context, name string, name_2 string) (
 }
 
 const listAccessibleBuckets = `-- name: ListAccessibleBuckets :many
-SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
-       name, display_name, region, labels,
-       owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
-       lifecycle_rules,
-       object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
-       versioning_enabled, versioning_keep_deletes_forever,
-       replication_enabled, replication_destination, replication_filter,
-       provision_state,
-       resource_version, created_at, updated_at
-FROM buckets
-WHERE (owner_tenant_id IS NULL OR owner_tenant_id = $1)
-  AND (backend_id, name) > ($2::text, $3::text)
-ORDER BY backend_id, name
+SELECT sb.name AS backend_name,
+       b.name, b.display_name, b.region, b.labels,
+       b.owner_tenant_id, b.cedar_policy, b.cedar_policy_hash, b.constraints,
+       b.lifecycle_rules,
+       b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds,
+       b.versioning_enabled, b.versioning_keep_deletes_forever,
+       b.replication_enabled, b.replication_destination, b.replication_filter,
+       b.provision_state,
+       b.resource_version, b.created_at, b.updated_at
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE (b.owner_tenant_id IS NULL OR b.owner_tenant_id = $1)
+  AND (sb.name, b.name) > ($2::text, $3::text)
+ORDER BY sb.name, b.name
 LIMIT $4
 `
 
@@ -221,21 +222,21 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 }
 
 const listBucketsV2 = `-- name: ListBucketsV2 :many
-SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
-       name, display_name, region, labels,
-       owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
-       lifecycle_rules,
-       object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
-       versioning_enabled, versioning_keep_deletes_forever,
-       replication_enabled, replication_destination, replication_filter,
-       provision_state,
-       resource_version, created_at, updated_at
-FROM buckets
-WHERE ($1::text IS NULL
-       OR backend_id = (SELECT id FROM storage_backends WHERE name = $1::text))
-  AND ($2::uuid IS NULL OR owner_tenant_id = $2::uuid)
-  AND (backend_id, name) > ($3::text, $4::text)
-ORDER BY backend_id, name
+SELECT sb.name AS backend_name,
+       b.name, b.display_name, b.region, b.labels,
+       b.owner_tenant_id, b.cedar_policy, b.cedar_policy_hash, b.constraints,
+       b.lifecycle_rules,
+       b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds,
+       b.versioning_enabled, b.versioning_keep_deletes_forever,
+       b.replication_enabled, b.replication_destination, b.replication_filter,
+       b.provision_state,
+       b.resource_version, b.created_at, b.updated_at
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE ($1::text IS NULL OR sb.name = $1::text)
+  AND ($2::uuid IS NULL OR b.owner_tenant_id = $2::uuid)
+  AND (sb.name, b.name) > ($3::text, $4::text)
+ORDER BY sb.name, b.name
 LIMIT $5
 `
 

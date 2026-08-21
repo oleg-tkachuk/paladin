@@ -310,11 +310,17 @@ type Querier interface {
 	// which addresses buckets by name, and the collection name is a segment of the
 	// object's storage path.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
-	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
-	// an empty/NULL cursor on the first page, and a bare `id > NULL`
-	// evaluates to NULL → zero rows (the same trap that bit
-	// ListUsersByTenant). Keep the `sqlc.narg(after_id) IS NULL OR …`
-	// shape on every cursor query in this package.
+	// Cursor pagination on the backend NAME, which is what the domain calls
+	// BackendID and what the caller round-trips as the page token. The surrogate
+	// `id` uuid is not usable here: its ordering is meaningless to a reader, and
+	// comparing it to the text cursor is a type error — Postgres rejects
+	// `uuid > text` outright. `id` is also ambiguous once the health table is
+	// joined, so every column here is qualified.
+	//
+	// The IS-NULL guard is mandatory: callers may pass an empty/NULL cursor on
+	// the first page, and a bare `name > NULL` evaluates to NULL → zero rows
+	// (the same trap that bit ListUsersByTenant). Keep the
+	// `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
 	ListStorageBackends(ctx context.Context, afterID *string, pageSize int32) ([]ListStorageBackendsRow, error)
 	// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
 	// display_name so the dashboard's BudgetAlerts widget doesn't need a

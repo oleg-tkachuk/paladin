@@ -45,11 +45,17 @@ LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE storage_backends.name = $1;
 
 -- name: ListStorageBackends :many
--- Cursor pagination. The IS-NULL guard is mandatory: callers may pass
--- an empty/NULL cursor on the first page, and a bare `id > NULL`
--- evaluates to NULL → zero rows (the same trap that bit
--- ListUsersByTenant). Keep the `sqlc.narg(after_id) IS NULL OR …`
--- shape on every cursor query in this package.
+-- Cursor pagination on the backend NAME, which is what the domain calls
+-- BackendID and what the caller round-trips as the page token. The surrogate
+-- `id` uuid is not usable here: its ordering is meaningless to a reader, and
+-- comparing it to the text cursor is a type error — Postgres rejects
+-- `uuid > text` outright. `id` is also ambiguous once the health table is
+-- joined, so every column here is qualified.
+--
+-- The IS-NULL guard is mandatory: callers may pass an empty/NULL cursor on
+-- the first page, and a bare `name > NULL` evaluates to NULL → zero rows
+-- (the same trap that bit ListUsersByTenant). Keep the
+-- `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
 SELECT storage_backends.id, storage_backends.name, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
@@ -63,8 +69,8 @@ SELECT storage_backends.id, storage_backends.name, kind, endpoint, region, event
 FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE (sqlc.narg('after_id')::text IS NULL
-       OR id > sqlc.narg('after_id')::text)
-ORDER BY storage_backends.id ASC
+       OR storage_backends.name > sqlc.narg('after_id')::text)
+ORDER BY storage_backends.name ASC
 LIMIT sqlc.arg('page_size')::int;
 
 -- name: UpdateStorageBackend :execrows
