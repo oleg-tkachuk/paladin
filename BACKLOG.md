@@ -431,6 +431,37 @@ open deliberately — each notes why._
 
 ---
 
+## Dependencies
+
+### cel-go moved to `cel.dev/cel-go` — pinned at v0.31.0 until protovalidate follows
+
+- **Status:** Blocked on an upstream dependency. Noted 2026-08-21.
+- **Reason:** cel-go v0.32.0 declares `module cel.dev/cel-go`, so
+  `go get github.com/google/cel-go@v0.32.0` fails with "module declares its
+  path as: cel.dev/cel-go" and restores v0.31.0. The failure reads like a
+  broken dependency; it is a module rename. v0.31.0 is the last release under
+  the old path, and it is what we are on. (The upstream repository is also
+  moving to `github.com/cel-expr/cel-go` in June 2026 — a third address for
+  the same code, which is why the import path, not the repo URL, is what to
+  track.)
+- **Why not just switch the import path now:** `buf.build/go/protovalidate`
+  — currently v1.3.0, the latest — still requires
+  `github.com/google/cel-go@v0.30.0`. Go treats the two paths as unrelated
+  modules, so switching ours would compile *two* copies of CEL into every
+  binary. Nothing we need is in v0.32.0, so the cost buys nothing today. Our
+  own `internal/filter/cel` and protovalidate do not exchange CEL types, so
+  the duplication would be wasteful rather than incorrect — but it is still
+  waste.
+- **Definition of Done:** when protovalidate requires `cel.dev/cel-go`,
+  rewrite the four imports under `internal/filter/cel/`, run
+  `go get cel.dev/cel-go@latest && go mod tidy`, and drop the Renovate pin in
+  `renovate.json`. Confirm `go mod graph | grep cel-go` shows one module.
+- **Blockers:** protovalidate's own migration. Renovate is pinned to
+  `<=0.31.0` so the monthly batch does not keep proposing an update that
+  cannot resolve.
+
+---
+
 ## Performance / Scale
 
 ### Per-table autovacuum tuning
