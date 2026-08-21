@@ -286,7 +286,6 @@ type Querier interface {
 	// planner returns; unbounded because a membership the UI does not show is a
 	// tenant the user cannot reach.
 	ListMembershipsBySubject(ctx context.Context, subject string) ([]User, error)
-	ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]ListMultipartPartsRow, error)
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// Newest first. Cursor: (created_at, id).
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
@@ -445,7 +444,6 @@ type Querier interface {
 	// the daily DROP PARTITION reclaims it — so the old expired-overwrite
 	// DO UPDATE is no longer needed.
 	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
-	RecordMultipartPart(ctx context.Context, uploadID pgtype.UUID, partNumber int32, sizeBytes int64, etag string, checksum *string) error
 	// Symmetric refund on the per-capability counter. Same floor rule.
 	RefundCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric) error
 	// Subtracts amount; floors at 0 so a refund larger than current

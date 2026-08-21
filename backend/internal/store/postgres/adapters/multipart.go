@@ -157,57 +157,8 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	return s, nil
 }
 
-func (r *MultipartRepo) RecordPart(ctx context.Context, uploadID string, part multipart.PartETag, sizeBytes int64, checksum string) error {
-	return r.q.RecordMultipartPart(ctx,
-		pgUUIDFromString(uploadID),
-		part.PartNumber,
-		sizeBytes,
-		part.ETag,
-		strPtr(checksum),
-	)
-}
-
 func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) error {
 	return r.q.DeleteMultipartUpload(ctx, pgUUIDFromString(uploadID))
-}
-
-// ListParts returns recorded parts in part_number order. The sqlc query
-// returns the full set; pagination is applied in-memory because the parts
-// table is small (<= 10_000 rows per upload by S3 contract).
-func (r *MultipartRepo) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]multipart.Part, string, error) {
-	rows, err := r.q.ListMultipartParts(ctx, pgUUIDFromString(uploadID))
-	if err != nil {
-		return nil, "", fmt.Errorf("list parts: %w", err)
-	}
-	var after int32
-	if pageToken != "" {
-		var n int
-		if _, perr := fmt.Sscanf(pageToken, "%d", &n); perr != nil {
-			return nil, "", fmt.Errorf("parse page_token: %w", perr)
-		}
-		after = int32(n)
-	}
-	out := make([]multipart.Part, 0, len(rows))
-	for _, r := range rows {
-		if r.PartNumber <= after {
-			continue
-		}
-		out = append(out, multipart.Part{
-			PartNumber: r.PartNumber,
-			SizeBytes:  r.SizeBytes,
-			ETag:       r.Etag,
-			Checksum:   derefStr(r.Checksum),
-			UploadedAt: timeFrom(r.UploadedAt),
-		})
-		if int32(len(out)) >= pageSize {
-			break
-		}
-	}
-	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
-		next = fmt.Sprintf("%d", out[len(out)-1].PartNumber)
-	}
-	return out, next, nil
 }
 
 // LookupBucket reads the physical S3 bucket bound to a Collection via

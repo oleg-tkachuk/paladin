@@ -82,49 +82,6 @@ func (q *Queries) GetMultipartUpload(ctx context.Context, id pgtype.UUID) (GetMu
 	return i, err
 }
 
-const listMultipartParts = `-- name: ListMultipartParts :many
-SELECT upload_id, part_number, size_bytes, etag, checksum, uploaded_at
-FROM multipart_parts
-WHERE id = $1
-ORDER BY part_number
-`
-
-type ListMultipartPartsRow struct {
-	UploadID   pgtype.UUID        `json:"upload_id"`
-	PartNumber int32              `json:"part_number"`
-	SizeBytes  int64              `json:"size_bytes"`
-	Etag       string             `json:"etag"`
-	Checksum   *string            `json:"checksum"`
-	UploadedAt pgtype.Timestamptz `json:"uploaded_at"`
-}
-
-func (q *Queries) ListMultipartParts(ctx context.Context, id pgtype.UUID) ([]ListMultipartPartsRow, error) {
-	rows, err := q.db.Query(ctx, listMultipartParts, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListMultipartPartsRow
-	for rows.Next() {
-		var i ListMultipartPartsRow
-		if err := rows.Scan(
-			&i.UploadID,
-			&i.PartNumber,
-			&i.SizeBytes,
-			&i.Etag,
-			&i.Checksum,
-			&i.UploadedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listStaleMultipartUploads = `-- name: ListStaleMultipartUploads :many
 SELECT m.id, m.storage_upload_id,
        sb.name AS backend_name,
@@ -191,25 +148,4 @@ func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtyp
 		return nil, err
 	}
 	return items, nil
-}
-
-const recordMultipartPart = `-- name: RecordMultipartPart :exec
-INSERT INTO multipart_parts (upload_id, part_number, size_bytes, etag, checksum)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (upload_id, part_number) DO UPDATE
-SET size_bytes = EXCLUDED.size_bytes,
-    etag       = EXCLUDED.etag,
-    checksum   = EXCLUDED.checksum,
-    uploaded_at = now()
-`
-
-func (q *Queries) RecordMultipartPart(ctx context.Context, uploadID pgtype.UUID, partNumber int32, sizeBytes int64, etag string, checksum *string) error {
-	_, err := q.db.Exec(ctx, recordMultipartPart,
-		uploadID,
-		partNumber,
-		sizeBytes,
-		etag,
-		checksum,
-	)
-	return err
 }

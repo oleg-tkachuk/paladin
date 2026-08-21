@@ -26,7 +26,6 @@ type fakeRepo struct {
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
 	deleteSessionFn   func(ctx context.Context, uploadID string) error
 	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
-	listPartsFn       func(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
 
 	lastInitiate struct {
 		args            InitiateArgs
@@ -39,11 +38,6 @@ type fakeRepo struct {
 		tenantID   uuid.UUID
 		collection string
 		write      bool
-	}
-	lastList struct {
-		uploadID  string
-		pageSize  int32
-		pageToken string
 	}
 	deleteCalled bool
 }
@@ -76,10 +70,6 @@ func (f *fakeRepo) GetSession(ctx context.Context, uploadID string) (Session, er
 	return Session{}, nil
 }
 
-func (f *fakeRepo) RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error {
-	return nil
-}
-
 func (f *fakeRepo) DeleteSession(ctx context.Context, uploadID string) error {
 	f.deleteCalled = true
 	if f.deleteSessionFn != nil {
@@ -98,24 +88,15 @@ func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collect
 	return "backend-x", "bucket-x", nil
 }
 
-func (f *fakeRepo) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error) {
-	f.lastList.uploadID = uploadID
-	f.lastList.pageSize = pageSize
-	f.lastList.pageToken = pageToken
-	if f.listPartsFn != nil {
-		return f.listPartsFn(ctx, uploadID, pageSize, pageToken)
-	}
-	return nil, "", nil
-}
-
 // fakeStorage is a configurable Storage. Captured fields verify that the
 // handler routes calls to the (backend, bucket) it resolved and forwards
 // the storage upload id / parts / part-number / ttl unchanged.
 type fakeStorage struct {
-	initiateFn func() (string, error)
-	completeFn func(parts []PartETag) (string, int64, error)
-	abortFn    func() error
-	presignFn  func() (string, map[string]string, time.Time, error)
+	initiateFn  func() (string, error)
+	completeFn  func(parts []PartETag) (string, int64, error)
+	abortFn     func() error
+	presignFn   func() (string, map[string]string, time.Time, error)
+	listPartsFn func(maxParts, after int32) ([]Part, int32, error)
 
 	lastInitiate struct {
 		backendID, bucket string
@@ -138,7 +119,24 @@ type fakeStorage struct {
 		partNumber        int32
 		ttl               time.Duration
 	}
+	lastListParts struct {
+		backendID, bucket string
+		storageUploadID   string
+		maxParts, after   int32
+	}
 	abortCalled bool
+}
+
+func (f *fakeStorage) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, after int32) ([]Part, int32, error) {
+	f.lastListParts.backendID = backendID
+	f.lastListParts.bucket = bucket
+	f.lastListParts.storageUploadID = storageUploadID
+	f.lastListParts.maxParts = maxParts
+	f.lastListParts.after = after
+	if f.listPartsFn != nil {
+		return f.listPartsFn(maxParts, after)
+	}
+	return nil, 0, nil
 }
 
 func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (string, error) {
@@ -702,57 +700,88 @@ func TestListParts(t *testing.T) {
 		}
 	})
 
-	t.Run("repo error → internal", func(t *testing.T) {
-		repo := okSession(func(r *fakeRepo) {
-			r.listPartsFn = func(context.Context, string, int32, string) ([]Part, string, error) {
-				return nil, "", errors.New("query failed")
-			}
-		})
-		_, _, err := newHandler(repo, &fakeStorage{}, allow()).
+	t.Run("backend error → internal", func(t *testing.T) {
+		storage := &fakeStorage{listPartsFn: func(int32, int32) ([]Part, int32, error) {
+			return nil, 0, errors.New("list failed")
+		}}
+		_, _, err := newHandler(okSession(nil), storage, allow()).
 			ListParts(authedCtx(tid), "up-1", 10, "")
 		wantCode(t, err, connect.CodeInternal)
 	})
 
-	t.Run("ok passes through result and forwards paging", func(t *testing.T) {
-		repo := okSession(func(r *fakeRepo) {
-			r.listPartsFn = func(_ context.Context, _ string, _ int32, _ string) ([]Part, string, error) {
-				return []Part{{PartNumber: 1, ETag: "e1"}}, "cursor-next", nil
-			}
-		})
-		parts, next, err := newHandler(repo, &fakeStorage{}, allow()).
-			ListParts(authedCtx(tid), "up-1", 25, "cursor-in")
+	t.Run("ok passes through result and routes to the session's backend", func(t *testing.T) {
+		storage := &fakeStorage{listPartsFn: func(int32, int32) ([]Part, int32, error) {
+			return []Part{{PartNumber: 1, ETag: "e1"}}, 7, nil
+		}}
+		parts, next, err := newHandler(okSession(nil), storage, allow()).
+			ListParts(authedCtx(tid), "up-1", 25, "3")
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if len(parts) != 1 || parts[0].ETag != "e1" || next != "cursor-next" {
-			t.Fatalf("passthrough failed: parts=%+v next=%q", parts, next)
+		if len(parts) != 1 || parts[0].ETag != "e1" {
+			t.Fatalf("passthrough failed: parts=%+v", parts)
 		}
-		if repo.lastList.pageSize != 25 || repo.lastList.pageToken != "cursor-in" {
-			t.Fatalf("paging not forwarded: size=%d token=%q", repo.lastList.pageSize, repo.lastList.pageToken)
+		// The next token is the backend's last part number, not an opaque
+		// cursor — a resuming client can read it as "everything up to N".
+		if next != "7" {
+			t.Fatalf("next token: got %q want %q", next, "7")
+		}
+		if storage.lastListParts.maxParts != 25 || storage.lastListParts.after != 3 {
+			t.Fatalf("paging not forwarded: max=%d after=%d",
+				storage.lastListParts.maxParts, storage.lastListParts.after)
+		}
+		// Listing must go to the backend the session was opened against,
+		// never to a default — a session on backend B listed against A would
+		// report an upload that does not exist there.
+		sess := sessionForTenant(tid)
+		if storage.lastListParts.backendID != sess.BackendID ||
+			storage.lastListParts.bucket != sess.Bucket ||
+			storage.lastListParts.storageUploadID != sess.StorageUploadID {
+			t.Fatalf("not routed to the session's backend: %+v", storage.lastListParts)
+		}
+	})
+
+	t.Run("no next token when the backend has no more parts", func(t *testing.T) {
+		storage := &fakeStorage{listPartsFn: func(int32, int32) ([]Part, int32, error) {
+			return []Part{{PartNumber: 1}}, 0, nil
+		}}
+		_, next, err := newHandler(okSession(nil), storage, allow()).
+			ListParts(authedCtx(tid), "up-1", 10, "")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if next != "" {
+			t.Fatalf("next token %q on an untruncated listing", next)
+		}
+	})
+
+	t.Run("malformed page token → invalid argument", func(t *testing.T) {
+		for _, tok := range []string{"cursor-in", "-1", "1.5", "99999999999999999999"} {
+			_, _, err := newHandler(okSession(nil), &fakeStorage{}, allow()).
+				ListParts(authedCtx(tid), "up-1", 10, tok)
+			wantCode(t, err, connect.CodeInvalidArgument)
 		}
 	})
 
 	t.Run("page size clamped when non-positive", func(t *testing.T) {
-		repo := okSession(nil)
-		_, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			ListParts(authedCtx(tid), "up-1", 0, "")
-		if err != nil {
+		storage := &fakeStorage{}
+		if _, _, err := newHandler(okSession(nil), storage, allow()).
+			ListParts(authedCtx(tid), "up-1", 0, ""); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if repo.lastList.pageSize != 100 {
-			t.Fatalf("page size clamp: got %d want 100", repo.lastList.pageSize)
+		if storage.lastListParts.maxParts != 100 {
+			t.Fatalf("page size clamp: got %d want 100", storage.lastListParts.maxParts)
 		}
 	})
 
 	t.Run("page size clamped when over max", func(t *testing.T) {
-		repo := okSession(nil)
-		_, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			ListParts(authedCtx(tid), "up-1", 5000, "")
-		if err != nil {
+		storage := &fakeStorage{}
+		if _, _, err := newHandler(okSession(nil), storage, allow()).
+			ListParts(authedCtx(tid), "up-1", 5000, ""); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if repo.lastList.pageSize != 100 {
-			t.Fatalf("page size clamp: got %d want 100", repo.lastList.pageSize)
+		if storage.lastListParts.maxParts != 100 {
+			t.Fatalf("page size clamp: got %d want 100", storage.lastListParts.maxParts)
 		}
 	})
 }

@@ -48,18 +48,3 @@ JOIN collections k       ON k.id = o.collection_id
 WHERE m.created_at < $1
 ORDER BY m.created_at
 LIMIT sqlc.arg('batch_size');
-
--- name: RecordMultipartPart :exec
-INSERT INTO multipart_parts (upload_id, part_number, size_bytes, etag, checksum)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (upload_id, part_number) DO UPDATE
-SET size_bytes = EXCLUDED.size_bytes,
-    etag       = EXCLUDED.etag,
-    checksum   = EXCLUDED.checksum,
-    uploaded_at = now();
-
--- name: ListMultipartParts :many
-SELECT upload_id, part_number, size_bytes, etag, checksum, uploaded_at
-FROM multipart_parts
-WHERE id = $1
-ORDER BY part_number;

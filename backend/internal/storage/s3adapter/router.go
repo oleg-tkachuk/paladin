@@ -173,6 +173,14 @@ func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, buck
 	return c.CompleteMultipart(ctx, bucket, tenantID, storageUploadID, collection, key, parts)
 }
 
+func (r *MultipartRouter) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, afterPartNumber int32) ([]multipart.Part, int32, error) {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return c.ListMultipartParts(ctx, bucket, tenantID, storageUploadID, collection, key, maxParts, afterPartNumber)
+}
+
 func (r *MultipartRouter) AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {

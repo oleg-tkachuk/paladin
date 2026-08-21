@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -26,6 +27,11 @@ type Storage interface {
 	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (storageUploadID string, err error)
 	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
 	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error
+	// ListMultipartParts asks the backend which parts have actually landed.
+	// It has to be the backend: clients PUT parts straight to the object
+	// store through presigned URLs, so no part upload passes through Paladin
+	// and no table here can know what arrived.
+	ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, afterPartNumber int32) ([]Part, int32, error)
 	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
@@ -83,16 +89,12 @@ type CompleteArgs struct {
 type Repository interface {
 	InitiateSession(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
 	GetSession(ctx context.Context, uploadID string) (Session, error)
-	RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error
 	DeleteSession(ctx context.Context, uploadID string) error
 	// LookupBucket returns the storage backend id and the physical S3 bucket
 	// bound to the Collection. Used to route storage calls to the right
 	// (backend, bucket); callers that don't route on backend yet may discard
 	// backendID (docs/backend-registry.md).
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
-	// ListParts returns recorded parts for an upload, ordered by part_number.
-	// Pagination is keyset on part_number; pageToken is the last seen number.
-	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
 }
 
 // VersionRecorder is the optional hook that records a versions-row when the
@@ -372,8 +374,18 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, partNumber, ttl)
 }
 
-// ListParts returns the parts already recorded for an upload session. Used
-// during resumption to figure out which part numbers still need uploading.
+// ListParts reports which parts of an in-flight upload have actually landed
+// in the object store, so a client resuming an interrupted upload knows what
+// it still has to send.
+//
+// The answer comes from the backend, not from a table here. Parts are PUT
+// directly to the object store through presigned URLs — Paladin hands out the
+// URL and never sees the transfer — so a local journal could only record what
+// was authorised, never what arrived, and those differ in exactly the case
+// this endpoint exists to serve.
+//
+// The page token is the last part number seen, matching the S3 contract the
+// call is a thin wrapper over.
 func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -397,11 +409,27 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if pageSize <= 0 || pageSize > 1000 {
 		pageSize = 100
 	}
-	parts, next, err := h.repo.ListParts(ctx, uploadID, pageSize, pageToken)
+	var after int32
+	if pageToken != "" {
+		n, perr := strconv.ParseInt(pageToken, 10, 32)
+		if perr != nil || n < 0 {
+			return nil, "", connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("page_token must be a part number: %q", pageToken))
+		}
+		after = int32(n)
+	}
+
+	parts, next, err := h.storage.ListMultipartParts(ctx,
+		sess.BackendID, sess.Bucket, tenantID, sess.StorageUploadID,
+		sess.Collection, sess.Key, pageSize, after)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
-	return parts, next, nil
+	var nextToken string
+	if next > 0 {
+		nextToken = strconv.FormatInt(int64(next), 10)
+	}
+	return parts, nextToken, nil
 }
 
 // authorize runs the Cedar check for a multipart action. backendID/bucket

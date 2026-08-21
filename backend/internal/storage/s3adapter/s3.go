@@ -533,6 +533,69 @@ func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID 
 	return etag, size, nil
 }
 
+// ListMultipartParts asks the backend which parts have actually landed.
+//
+// The control plane cannot answer this from its own tables: clients PUT parts
+// straight to the object store through presigned URLs, so no part upload ever
+// passes through Paladin. A multipart_parts journal could only ever record
+// what we handed out a URL for, not what the client managed to store — which
+// is precisely the difference a resuming client needs to know.
+//
+// Pagination is the S3 contract's: part_number_marker is the last part number
+// seen, and the caller pages while IsTruncated holds.
+func (c *Client) ListMultipartParts(
+	ctx context.Context,
+	bucket string,
+	tenantID uuid.UUID,
+	storageUploadID, collection, key string,
+	maxParts int32,
+	afterPartNumber int32,
+) ([]multipart.Part, int32, error) {
+	in := &s3.ListPartsInput{
+		Bucket:   aws.String(c.resolveBucket(bucket)),
+		Key:      aws.String(composeKey(tenantID, collection, key)),
+		UploadId: aws.String(storageUploadID),
+	}
+	if maxParts > 0 {
+		in.MaxParts = aws.Int32(maxParts)
+	}
+	if afterPartNumber > 0 {
+		in.PartNumberMarker = aws.String(strconv.FormatInt(int64(afterPartNumber), 10))
+	}
+	out, err := c.s3.ListParts(ctx, in)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list multipart parts: %w", err)
+	}
+	parts := make([]multipart.Part, 0, len(out.Parts))
+	for _, p := range out.Parts {
+		part := multipart.Part{
+			PartNumber: aws.ToInt32(p.PartNumber),
+			ETag:       strings.Trim(aws.ToString(p.ETag), `"`),
+		}
+		if p.Size != nil {
+			part.SizeBytes = *p.Size
+		}
+		if p.LastModified != nil {
+			part.UploadedAt = *p.LastModified
+		}
+		// Whichever checksum the bucket is configured for; empty when none.
+		switch {
+		case p.ChecksumSHA256 != nil:
+			part.Checksum = *p.ChecksumSHA256
+		case p.ChecksumCRC32C != nil:
+			part.Checksum = *p.ChecksumCRC32C
+		case p.ChecksumCRC32 != nil:
+			part.Checksum = *p.ChecksumCRC32
+		}
+		parts = append(parts, part)
+	}
+	var next int32
+	if aws.ToBool(out.IsTruncated) && len(parts) > 0 {
+		next = parts[len(parts)-1].PartNumber
+	}
+	return parts, next, nil
+}
+
 func (c *Client) AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error {
 	_, err := c.s3.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(c.resolveBucket(bucket)),
