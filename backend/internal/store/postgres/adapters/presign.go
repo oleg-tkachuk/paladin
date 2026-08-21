@@ -41,10 +41,11 @@ func (r *PresignRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID
 
 func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, collection, key string, err error) {
 	const q = `
-		SELECT mu.storage_upload_id, o.collection, o.key
+		SELECT mu.storage_upload_id, c.name, o.path
 		FROM multipart_uploads mu
-		JOIN objects o ON o.object_id = mu.object_id
-		WHERE mu.upload_id = $1
+		JOIN objects o     ON o.id = mu.object_id
+		JOIN collections c ON c.id = o.collection_id
+		WHERE mu.id = $1
 	`
 	err = r.pool.QueryRow(ctx, q, uploadID).Scan(&storageUploadID, &collection, &key)
 	if err != nil {

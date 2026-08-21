@@ -59,40 +59,37 @@ func NewQuotaReconcileRepo(pool *pgxpool.Pool) *QuotaReconcileRepo {
 const reconcileUsageSQL = `
 WITH live AS (
     -- Tenant-scoped quota: every object the tenant owns, across buckets.
-    SELECT q.quota_id,
+    SELECT q.id AS quota_id,
            COALESCE(sum(o.size_bytes), 0)::bigint AS bytes,
-           count(o.object_id)::bigint             AS cnt
+           count(o.id)::bigint                    AS cnt
       FROM quotas q
       LEFT JOIN objects o
              ON o.tenant_id = q.tenant_id
             AND o.state = 'AVAILABLE'
      WHERE q.tenant_id IS NOT NULL
-     GROUP BY q.quota_id
+     GROUP BY q.id
 
     UNION ALL
 
-    -- Bucket-scoped quota: objects reach a bucket only through their
-    -- Collection's (backend_id, bucket_name) binding, so the rollup has to
-    -- hop through collections.
-    SELECT q.quota_id,
+    -- Bucket-scoped quota: objects reach a bucket through their collection's
+    -- bucket_id, so the rollup hops through collections.
+    SELECT q.id AS quota_id,
            COALESCE(sum(o.size_bytes), 0)::bigint AS bytes,
-           count(o.object_id)::bigint             AS cnt
+           count(o.id)::bigint                    AS cnt
       FROM quotas q
-      LEFT JOIN collections ok
-             ON ok.backend_id  = q.backend_id
-            AND ok.bucket_name = q.bucket_name
+      LEFT JOIN collections c
+             ON c.bucket_id = q.bucket_id
       LEFT JOIN objects o
-             ON o.tenant_id  = ok.tenant_id
-            AND o.collection = ok.collection
+             ON o.collection_id = c.id
             AND o.state = 'AVAILABLE'
-     WHERE q.backend_id IS NOT NULL
-     GROUP BY q.quota_id
+     WHERE q.bucket_id IS NOT NULL
+     GROUP BY q.id
 )
 UPDATE quotas q
    SET usage_total_bytes  = live.bytes,
        usage_object_count = live.cnt
   FROM live
- WHERE q.quota_id = live.quota_id
+ WHERE q.id = live.quota_id
    AND (q.usage_total_bytes  IS DISTINCT FROM live.bytes
      OR q.usage_object_count IS DISTINCT FROM live.cnt)`
 

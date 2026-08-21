@@ -29,7 +29,14 @@ func TestMultipartSessionAnchorsBackend(t *testing.T) {
 	// Anchor values deliberately distinct from the fixture's collection
 	// binding, so a match on read can only come from the stored session, not
 	// a re-resolution of the current binding.
+	//
+	// They must nonetheless be a REAL bucket: multipart_uploads.bucket_id is a
+	// foreign key now, so anchoring to a bucket that does not exist is no
+	// longer expressible — which is the point of the constraint.
 	const anchorBackend, anchorBucket = "be-anchored", "bkt-anchored"
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, anchorBackend)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
+		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, anchorBackend, anchorBucket)
 	objectID := uuid.Must(uuid.NewV7())
 	sess, err := repo.InitiateSession(ctx, multipart.InitiateArgs{
 		TenantID:      f.tenantID,

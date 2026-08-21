@@ -147,7 +147,7 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 		return nil, fmt.Errorf("census: buckets by provision state: %w", err)
 	}
 	if err := scanCounts(ctx, pool,
-		`SELECT backend_id, count(*) FROM buckets GROUP BY backend_id`,
+		`SELECT sb.name, count(*) FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id GROUP BY sb.name`,
 		out.Buckets.ByBackend); err != nil {
 		return nil, fmt.Errorf("census: buckets by backend: %w", err)
 	}
@@ -158,7 +158,9 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 		return nil, fmt.Errorf("census: object keys: %w", err)
 	}
 	if err := scanCounts(ctx, pool,
-		`SELECT backend_id, count(*) FROM collections GROUP BY backend_id`,
+		`SELECT sb.name, count(*) FROM collections c
+		   JOIN buckets b ON b.id = c.bucket_id
+		   JOIN storage_backends sb ON sb.id = b.backend_id GROUP BY sb.name`,
 		out.Collections.ByBackend); err != nil {
 		return nil, fmt.Errorf("census: object keys by backend: %w", err)
 	}

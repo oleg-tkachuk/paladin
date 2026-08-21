@@ -103,13 +103,16 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 
 func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multipart.Session, error) {
 	const q = `
-		SELECT mu.upload_id, mu.object_id, mu.storage_upload_id,
+				SELECT mu.id, mu.object_id, mu.storage_upload_id,
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
-		       mu.backend_id, mu.bucket_name,
-		       o.tenant_id, o.collection, o.key
+		       sb.name, bk.name,
+		       o.tenant_id, c.name, o.path
 		FROM multipart_uploads mu
-		JOIN objects o ON o.object_id = mu.object_id
-		WHERE mu.upload_id = $1
+		JOIN objects o           ON o.id = mu.object_id
+		JOIN collections c       ON c.id = o.collection_id
+		JOIN buckets bk          ON bk.id = mu.bucket_id
+		JOIN storage_backends sb ON sb.id = bk.backend_id
+		WHERE mu.id = $1
 	`
 	var (
 		s          multipart.Session
