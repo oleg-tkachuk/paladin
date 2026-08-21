@@ -202,3 +202,27 @@ func EffectiveTenant(ctx context.Context) (uuid.UUID, error) {
 	}
 	return TenantFromContext(ctx)
 }
+
+type crossTenantReadKey struct{}
+
+// WithCrossTenantRead marks the request as a platform-wide READ. The RLS
+// pool sets `paladin.cross_tenant` from it, which the policies admit in
+// USING and never in WITH CHECK — so it can widen what a query sees and
+// cannot let it write outside one tenant.
+//
+// Same rule as WithActingTenant: call it only after the check that
+// establishes the caller may read across tenants (today, the
+// platform.admin gate). It is the mechanism RLS otherwise denies.
+//
+// Prefer WithActingTenant when the request names one tenant. This is for
+// the surfaces that genuinely span them — the storage browser listing every
+// collection bound to a bucket, whoever owns it.
+func WithCrossTenantRead(ctx context.Context) context.Context {
+	return context.WithValue(ctx, crossTenantReadKey{}, true)
+}
+
+// CrossTenantRead reports whether this request was marked platform-wide.
+func CrossTenantRead(ctx context.Context) bool {
+	v, _ := ctx.Value(crossTenantReadKey{}).(bool)
+	return v
+}

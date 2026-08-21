@@ -68,14 +68,27 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 			if _, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', '', false)`); err != nil {
 				return false, err
 			}
+			if err := setCrossTenant(ctx, conn, auth.CrossTenantRead(ctx)); err != nil {
+				return false, err
+			}
 			return true, nil
 		}
 		if _, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, false)`, tenantID.String()); err != nil {
 			return false, err
 		}
+		if err := setCrossTenant(ctx, conn, auth.CrossTenantRead(ctx)); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 	cfg.AfterRelease = func(conn *pgx.Conn) bool {
+		// Clear the cross-tenant flag with the tenant: a connection going
+		// back to the pool must not carry a widened view into the next
+		// request. Failing closed here is the point.
+		if _, err := conn.Exec(context.Background(),
+			`SELECT set_config('paladin.cross_tenant', '', false)`); err != nil {
+			return false
+		}
 		// Wipe the GUC on release so a connection returning to the
 		// pool doesn't carry tenant context for a request that
 		// somehow skipped PrepareConn. Pool keeps the connection
@@ -86,4 +99,16 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 		return err == nil
 	}
 	return cfg
+}
+
+// setCrossTenant flips `paladin.cross_tenant` for this connection. Always
+// written, never merely set-when-true: a connection reused from the pool
+// would otherwise keep the previous request's widened view.
+func setCrossTenant(ctx context.Context, conn *pgx.Conn, on bool) error {
+	v := ""
+	if on {
+		v = "on"
+	}
+	_, err := conn.Exec(ctx, `SELECT set_config('paladin.cross_tenant', $1, false)`, v)
+	return err
 }

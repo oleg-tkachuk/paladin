@@ -101,6 +101,23 @@ CREATE OR REPLACE FUNCTION paladin_session_tenant_id() RETURNS uuid
     SELECT NULLIF(current_setting('paladin.tenant_id', true), '')::uuid
 $$;
 
+-- Cross-tenant READ escape hatch for the admin plane.
+--
+-- Some admin surfaces are legitimately platform-wide: the storage browser
+-- lists every collection on a bucket regardless of who owns it. Scoping the
+-- connection to one tenant cannot express that, and the admin plane has no
+-- BYPASSRLS pool — so a request that has already passed a platform.admin
+-- gate sets `paladin.cross_tenant` for the duration of that query.
+--
+-- It widens SELECT only. WITH CHECK never consults it, so a write is still
+-- pinned to exactly one tenant no matter what the flag says: the worst a
+-- misplaced flag can do is show too much, never cross-write.
+CREATE OR REPLACE FUNCTION paladin_session_cross_tenant() RETURNS boolean
+    LANGUAGE sql STABLE PARALLEL SAFE
+    AS $$
+    SELECT COALESCE(current_setting('paladin.cross_tenant', true), '') = 'on'
+$$;
+
 -- ─── Policies ───────────────────────────────────────────────────────────────
 --
 -- FORCE, not just ENABLE: without FORCE the table owner bypasses its own
@@ -111,9 +128,12 @@ CREATE OR REPLACE PROCEDURE paladin_apply_tenant_isolation(tbl regclass)
 BEGIN
     EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', tbl);
     EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', tbl);
+    -- USING admits the cross-tenant read flag; WITH CHECK deliberately does
+    -- not, so writes stay pinned to one tenant.
     EXECUTE format(
         'CREATE POLICY tenant_isolation ON %s FOR ALL '
-        'USING (tenant_id = paladin_session_tenant_id()) '
+        'USING (tenant_id = paladin_session_tenant_id() '
+        '       OR paladin_session_cross_tenant()) '
         'WITH CHECK (tenant_id = paladin_session_tenant_id())', tbl);
 END
 $$;

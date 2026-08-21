@@ -424,6 +424,7 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	// dominate pagination cost so we don't repeat it for every collection.
 	// For cross-tenant listing we authorize against the caller's tenant
 	// (the principal-tenant invariant the Cedar engine encodes).
+	crossTenant := args.TenantID == uuid.Nil
 	authzTenant := args.TenantID
 	if authzTenant == uuid.Nil {
 		authzTenant = callerTenantID
@@ -431,7 +432,16 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageCollection); err != nil {
 		return nil, "", err
 	}
-	ctx = auth.WithActingTenant(ctx, authzTenant)
+	if crossTenant {
+		// The platform.admin gate above already passed; this is the
+		// storage-first browser enumerating every collection on a bucket.
+		// Scoping to one tenant cannot express that — it returned only the
+		// admin's own collections, so a bucket full of other tenants' data
+		// read as empty.
+		ctx = auth.WithCrossTenantRead(ctx)
+	} else {
+		ctx = auth.WithActingTenant(ctx, authzTenant)
+	}
 	return h.repo.List(ctx, args)
 }
 

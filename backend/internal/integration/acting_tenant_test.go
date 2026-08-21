@@ -135,3 +135,55 @@ func seedCollectionFor(t *testing.T, ctx context.Context, pool *pgxpool.Pool, te
 		`INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, b.id FROM buckets b LIMIT 1`, tenant, name)
 }
+
+// TestCrossTenantReadWidensSelectOnly pins the asymmetry that makes the
+// escape hatch safe: the flag admits a platform-wide SELECT and has no
+// effect on writes, because the policies consult it in USING and never in
+// WITH CHECK. A misplaced flag can therefore show too much — never
+// cross-write, which is the failure that would actually corrupt data.
+func TestCrossTenantReadWidensSelectOnly(t *testing.T) {
+	ctx := context.Background()
+	admin := startPostgres(t)
+
+	tenantA, _ := mkTenant(t, ctx, admin, "shared")
+	tenantB, _ := mkTenant(t, ctx, admin, "shared")
+	seedBucketRow(t, ctx, admin)
+	seedCollectionFor(t, ctx, admin, tenantA, "docs-a")
+	seedCollectionFor(t, ctx, admin, tenantB, "docs-b")
+
+	pool := rlsPool(t, ctx, admin)
+	base := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantA})
+
+	count := func(c context.Context) int {
+		t.Helper()
+		var n int
+		if err := pool.QueryRow(c, `SELECT count(*) FROM collections`).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		return n
+	}
+
+	if got := count(base); got != 1 {
+		t.Errorf("without the flag the caller sees %d collections, want 1", got)
+	}
+	crossed := auth.WithCrossTenantRead(base)
+	if got := count(crossed); got != 2 {
+		t.Errorf("with the flag the caller sees %d collections, want both", got)
+	}
+
+	// The write side is unmoved: WITH CHECK still pins the row to the
+	// connection's tenant, flag or no flag.
+	_, err := pool.Exec(crossed, `
+		INSERT INTO collections (tenant_id, name, bucket_id)
+		SELECT $1, 'smuggled', b.id FROM buckets b LIMIT 1`, tenantB)
+	if err == nil {
+		t.Error("SECURITY: the cross-tenant READ flag also permitted a write")
+	}
+
+	// And it does not survive the connection going back to the pool: a
+	// later request without the flag must see its own tenant again.
+	if got := count(base); got != 1 {
+		t.Errorf("after a flagged query the plain scope sees %d, want 1 — "+
+			"the flag leaked across a checkout", got)
+	}
+}
