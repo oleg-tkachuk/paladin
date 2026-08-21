@@ -219,9 +219,9 @@ func (h *Handler) fetchRLSCensus(ctx context.Context) (*platformstats.RLSCensus,
 // operator chasing usage needs to see whose they are.
 func (h *Handler) tenantNames(ctx context.Context, ids []string) (map[string]TenantName, error) {
 	rows, err := h.pool.Query(ctx, `
-		SELECT tenant_id::text, COALESCE(slug, ''), COALESCE(display_name, '')
+		SELECT id::text, COALESCE(slug, ''), COALESCE(display_name, '')
 		FROM tenants
-		WHERE tenant_id::text = ANY($1)`, ids)
+		WHERE id::text = ANY($1)`, ids)
 	if err != nil {
 		return nil, fmt.Errorf("tenant names: %w", err)
 	}

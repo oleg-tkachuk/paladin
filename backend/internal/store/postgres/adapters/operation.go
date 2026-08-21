@@ -47,14 +47,14 @@ func (r *OperationRepo) ClaimNext(ctx context.Context) (operation.Operation, err
 	const stmt = `
 UPDATE operations
 SET    state = 'RUNNING', updated_at = NOW()
-WHERE  operation_id = (
-    SELECT operation_id FROM operations
+WHERE  id = (
+    SELECT id FROM operations
     WHERE  state = 'PENDING'
     ORDER  BY created_at ASC
     LIMIT  1
     FOR    UPDATE SKIP LOCKED
 )
-RETURNING operation_id, tenant_id, type, state, metadata, response,
+RETURNING id, tenant_id, type, state, metadata, response,
           error_code, error_message, created_at, updated_at, done_at;
 `
 	var (

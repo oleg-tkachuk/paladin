@@ -263,12 +263,13 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 func (r *CollectionRepo) Stats(ctx context.Context, tenantID uuid.UUID, collection string) (objectkey.CollectionStats, error) {
 	const q = `
 		SELECT
-			COALESCE(SUM(CASE WHEN state = 'AVAILABLE' THEN 1 ELSE 0 END), 0) AS available,
-			COALESCE(SUM(CASE WHEN state = 'PENDING'   THEN 1 ELSE 0 END), 0) AS pending,
-			COALESCE(SUM(CASE WHEN state = 'DELETED'   THEN 1 ELSE 0 END), 0) AS deleted,
-			COALESCE(SUM(CASE WHEN state = 'AVAILABLE' THEN size_bytes ELSE 0 END), 0) AS size_bytes
-		FROM objects
-		WHERE tenant_id = $1 AND collection = $2
+			COALESCE(SUM(CASE WHEN o.state = 'AVAILABLE' THEN 1 ELSE 0 END), 0) AS available,
+			COALESCE(SUM(CASE WHEN o.state = 'PENDING'   THEN 1 ELSE 0 END), 0) AS pending,
+			COALESCE(SUM(CASE WHEN o.state = 'DELETED'   THEN 1 ELSE 0 END), 0) AS deleted,
+			COALESCE(SUM(CASE WHEN o.state = 'AVAILABLE' THEN o.size_bytes ELSE 0 END), 0) AS size_bytes
+		FROM objects o
+		JOIN collections c ON c.id = o.collection_id
+		WHERE o.tenant_id = $1 AND c.name = $2
 	`
 	var s objectkey.CollectionStats
 	err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(

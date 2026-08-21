@@ -618,8 +618,8 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 			        cedar_policy_hash = $4,
 			        resource_version  = resource_version + 1,
 			        updated_at        = NOW()
-			  WHERE tenant_id  = $1
-			    AND collection = $2`,
+			  WHERE tenant_id = $1
+			    AND name      = $2`,
 			pgUUID(args.TenantID), w.key, w.newPolicy, w.newHash,
 		); err != nil {
 			return tenant.Tenant{}, fmt.Errorf("rename tenant: update collection %q: %w", w.key, err)

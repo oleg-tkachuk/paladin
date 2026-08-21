@@ -113,52 +113,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### Hand-written SQL has no schema gate — add PREPARE, don't port to sqlc
-
-- **Status:** Open. Investigated 2026-08-20 during the identity refactor;
-  the recommendation below is the finding, not a guess.
-- **Reason:** 77 query calls in the tree are raw SQL in backtick constants
-  passed to `pool.Query` / `Exec`. Nothing validates them: sqlc reads only its
-  own `queries/*.sql`, and the Go compiler does not read string literals. The
-  identity rename broke four of them silently, and each was found by a
-  different accident rather than by a check:
-  - `cedar/store.go` resolved a tenant's effective policy through stale
-    columns. It would not error — it would return "no policy", and Cedar's
-    deny-by-default turns that into an unexplained `forbidden`.
-  - `platformstats` counted collections by a dropped column, failing an
-    operator dashboard at runtime.
-  - `ListDistinctTags` and the duplicated `LookupBucket` in two adapters.
-  Two more surfaced on 2026-08-21 once the second integration suite could
-  run, and neither is a rename artefact — both were simply never checked
-  against the schema:
-  - `ClaimIngestedEvent` said `ON CONFLICT (event_id)` while the table is
-    `UNIQUE (source, event_id)`. Postgres rejects a conflict target with no
-    matching constraint (42P10), so *every* ingested event failed at the
-    dedup claim, not just duplicates. A `PREPARE` catches this exactly.
-  - the `charges` ledger INSERT omitted `tenant_slug`, which is `NOT NULL`.
-    Every charge would have failed at runtime.
-- **Why not just port everything to sqlc:**
-  - 6 of the 77 cannot be ported at all: `partition_maintainer.go` issues
-    `CREATE TABLE … PARTITION OF` with a runtime-computed name, and sqlc
-    supports neither DDL nor dynamic table names.
-  - `internal/capability/postgres` is hand-written on purpose (see its package
-    comment): the JSON claim payload is awkward through sqlc's typed mapping.
-  - sqlc is a weaker gate than it looks. During this same refactor it
-    generated `ListHardDeletable` referencing FOUR non-existent columns
-    without complaint, and it reports syntax errors at the position of the
-    first query in the file rather than the failing one — which cost three
-    wrong fixes before bisection found the real cause.
-- **Definition of Done:** an integration test that starts a Postgres
-  container, applies the migrations, extracts every backtick SQL constant in
-  the tree, and `PREPARE`s each one. Postgres is the authority on its own
-  columns, unlike a third-party parser, so this catches the whole class —
-  including the queries sqlc can never cover. Failure output must name the
-  file. Port individual queries to sqlc opportunistically when they are being
-  edited anyway; do not schedule a 72-call migration for its own sake.
-- **Blockers:** none — the identity refactor has landed, so the gate would
-  now be written against a settled schema.
-
----
 
 ## MCP bridge
 
