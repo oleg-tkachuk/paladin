@@ -179,9 +179,9 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 	analyze(t, ctx, pool, "operations")
 
 	plan := explain(t, ctx, pool, `
-		SELECT operation_id FROM operations
+		SELECT id FROM operations
 		 WHERE tenant_id = $1 AND operation_id > $2
-		 ORDER BY operation_id
+		 ORDER BY id
 		 LIMIT 50`, f.tenantID, uuid.Nil)
 
 	assertPlanUses(t, plan, "idx_operations_tenant_keyset", "ListOperations keyset page")
@@ -192,9 +192,9 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 	analyze(t, ctx, pool, "operations")
 
 	plan = explain(t, ctx, pool, `
-		SELECT operation_id FROM operations
+		SELECT id FROM operations
 		 WHERE tenant_id = $1 AND operation_id > $2
-		 ORDER BY operation_id
+		 ORDER BY id
 		 LIMIT 50`, quiet, uuid.Nil)
 
 	assertPlanUses(t, plan, "idx_operations_tenant_keyset", "ListOperations for a quiet tenant")

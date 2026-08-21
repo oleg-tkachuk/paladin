@@ -192,7 +192,9 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 		t.Fatalf("read-path meta lookup on pending bucket: %v, want success", err)
 	}
 	// After ready, writes resolve.
-	mustExec(t, ctx, pool, `UPDATE buckets SET provision_state='ready' WHERE backend_id=$1 AND bucket_name=$2`, backendID, bucket)
+	mustExec(t, ctx, pool, `UPDATE buckets SET provision_state='ready' WHERE id = (SELECT b.id FROM buckets b
+			  JOIN storage_backends sb ON sb.id = b.backend_id
+			 WHERE sb.name = $1 AND b.name = $2)`, backendID, bucket)
 	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", true); err != nil {
 		t.Fatalf("upload-path meta lookup after ready: %v, want success", err)
 	}

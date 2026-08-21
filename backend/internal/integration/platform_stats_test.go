@@ -42,8 +42,8 @@ func TestCollectControlPlane(t *testing.T) {
 		"be-off-"+hex)
 	// A tenant-owned bucket that never finished provisioning.
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, bucket_name, owner_tenant_id, provision_state, versioning_enabled)
-		 VALUES ($1, $2, $3, 'failed', true)`,
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id, provision_state, versioning_enabled)
+		 SELECT sb.id, $2, $3, 'failed', true FROM storage_backends sb WHERE sb.name = $1`,
 		"be-off-"+hex, "bkt-own-"+hex, f.tenantID)
 
 	got, err := platformstats.CollectControlPlane(ctx, pool)

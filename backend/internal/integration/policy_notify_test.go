@@ -51,7 +51,7 @@ func TestPolicyChangedNotify(t *testing.T) {
 
 	// Tenant-level policy UPDATE → bare-uuid payload (Collection empty).
 	mustExec(t, ctx, pool,
-		`UPDATE tenants SET inherited_cedar_policy = 'permit(principal, action, resource);' WHERE tenant_id = $1`,
+		`UPDATE tenants SET inherited_cedar_policy = 'permit(principal, action, resource);' WHERE id = $1`,
 		f.tenantID)
 	if ev := next("tenant policy update"); ev.TenantID != f.tenantID || ev.Collection != "" {
 		t.Fatalf("tenant policy update event = %+v, want {%s \"\"}", ev, f.tenantID)
@@ -68,9 +68,9 @@ func TestPolicyChangedNotify(t *testing.T) {
 	// Same-value policy write (IS DISTINCT FROM guard) and a non-policy
 	// column write must both stay silent.
 	mustExec(t, ctx, pool,
-		`UPDATE tenants SET inherited_cedar_policy = inherited_cedar_policy WHERE tenant_id = $1`, f.tenantID)
+		`UPDATE tenants SET inherited_cedar_policy = inherited_cedar_policy WHERE id = $1`, f.tenantID)
 	mustExec(t, ctx, pool,
-		`UPDATE tenants SET display_name = display_name || '+' WHERE tenant_id = $1`, f.tenantID)
+		`UPDATE tenants SET display_name = display_name || '+' WHERE id = $1`, f.tenantID)
 	quiet("no-op policy write + non-policy update")
 
 	// INSERT carrying a policy notifies — the engine caches empty Fetch

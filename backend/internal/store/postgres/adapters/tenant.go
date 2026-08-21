@@ -493,7 +493,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	err = tx.QueryRow(ctx,
 		`SELECT slug, inherited_cedar_policy, resource_version
 		   FROM tenants
-		  WHERE tenant_id = $1
+		  WHERE id = $1
 		    FOR UPDATE`,
 		pgUUID(args.TenantID),
 	).Scan(&oldSlug, &oldPolicy, &rv)
@@ -528,7 +528,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		        inherited_policy_hash  = $4,
 		        resource_version       = resource_version + 1,
 		        updated_at             = NOW()
-		  WHERE tenant_id        = $1
+		  WHERE id               = $1
 		    AND resource_version = $5`,
 		pgUUID(args.TenantID),
 		args.NewSlug,
@@ -554,7 +554,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	// nullable in some collections rows; use COALESCE so empty
 	// policies don't produce phantom hashes.
 	rows, err := tx.Query(ctx,
-		`SELECT collection, cedar_policy
+		`SELECT name, cedar_policy
 		   FROM collections
 		  WHERE tenant_id = $1
 		    AND cedar_policy IS NOT NULL

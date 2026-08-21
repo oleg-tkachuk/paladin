@@ -49,7 +49,7 @@ func TestPolicyWatchReconnect(t *testing.T) {
 
 	// Baseline: the live LISTEN delivers a targeted tenant-level event.
 	mustExec(t, ctx, pool,
-		`UPDATE tenants SET inherited_cedar_policy = 'permit(principal, action, resource);' WHERE tenant_id = $1`,
+		`UPDATE tenants SET inherited_cedar_policy = 'permit(principal, action, resource);' WHERE id = $1`,
 		f.tenantID)
 	if ev := next("baseline update", 10*time.Second); ev.ResyncAll || ev.TenantID != f.tenantID || ev.Collection != "" {
 		t.Fatalf("baseline event = %+v, want {%s \"\" false}", ev, f.tenantID)

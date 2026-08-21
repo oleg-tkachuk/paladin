@@ -34,7 +34,7 @@ func TestRenameRecordsSlugHistory(t *testing.T) {
 		t.Helper()
 		var rv int64
 		if err := pool.QueryRow(ctx,
-			`SELECT resource_version FROM tenants WHERE tenant_id = $1`, id,
+			`SELECT resource_version FROM tenants WHERE id = $1`, id,
 		).Scan(&rv); err != nil {
 			t.Fatalf("read resource_version: %v", err)
 		}

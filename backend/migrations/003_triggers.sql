@@ -126,9 +126,24 @@ BEGIN
 END
 $$;
 
+-- tenants spells the same thing differently: its policy is inherited by
+-- children, so the column is inherited_policy_hash. A shared trigger function
+-- referencing NEW.cedar_policy_hash raises "record new has no field" on every
+-- tenant UPDATE — a plpgsql runtime error, not a compile-time one, so it only
+-- appears when a tenant is actually written.
+CREATE OR REPLACE FUNCTION paladin_notify_tenant_policy_changed() RETURNS trigger
+    LANGUAGE plpgsql SET search_path TO 'pg_catalog', 'public' AS $$
+BEGIN
+    IF NEW.inherited_policy_hash IS DISTINCT FROM OLD.inherited_policy_hash THEN
+        PERFORM pg_notify('paladin_policy_changed', 'tenants:' || NEW.id::text);
+    END IF;
+    RETURN NEW;
+END
+$$;
+
 CREATE TRIGGER tenants_notify_policy_changed
     AFTER UPDATE ON tenants
-    FOR EACH ROW EXECUTE FUNCTION paladin_notify_policy_changed();
+    FOR EACH ROW EXECUTE FUNCTION paladin_notify_tenant_policy_changed();
 CREATE TRIGGER collections_notify_policy_changed
     AFTER UPDATE ON collections
     FOR EACH ROW EXECUTE FUNCTION paladin_notify_policy_changed();
