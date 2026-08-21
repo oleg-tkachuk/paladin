@@ -245,17 +245,15 @@ LIMIT  $%d;
 	out := make([]api_token.Token, 0, limit)
 	for rows.Next() {
 		var t api_token.Token
-		var hash string
 		var revokedAt, lastUsedAt *time.Time
 		err := rows.Scan(
-			&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
+			&t.ID, &t.TenantID, &t.Name, &t.Prefix,
 			&t.Scopes, &t.Roles, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
 			&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf("api_token/postgres: scan: %w", err)
 		}
-		_ = hash // not surfaced to admin tooling
 		t.RevokedAt = revokedAt
 		t.LastUsedAt = lastUsedAt
 		out = append(out, t)
@@ -266,8 +264,11 @@ LIMIT  $%d;
 
 	nextCursor := ""
 	if int32(len(out)) > limit {
-		nextCursor = out[limit].ID.String()
 		out = out[:limit]
+		// Seek past the last row RETURNED, not past the overflow row we
+		// fetched to detect the next page — the overflow row belongs to
+		// the next page and seeking past it drops it entirely.
+		nextCursor = out[len(out)-1].ID.String()
 	}
 	return out, nextCursor, nil
 }

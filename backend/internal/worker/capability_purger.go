@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // CapabilityPurger periodically calls Store.PurgeExpired and, when
@@ -45,6 +46,15 @@ func (p *CapabilityPurger) Run(ctx context.Context) error {
 		p.ExpiredFor = 24 * time.Hour
 	}
 	return RunTicker(ctx, "capability_purger", p.Interval, func(ctx context.Context) error {
+		// The purger runs on a timer, not on a request, so it carries no
+		// principal and the RLS pool has no session tenant to install.
+		// Both tables it sweeps are tenant-scoped, which without this flag
+		// means every statement matches zero rows and the job reports
+		// success while the tables grow without bound. The flag widens
+		// USING only — a purger can remove rows across tenants, and still
+		// cannot write into one.
+		ctx = auth.WithCrossTenantRead(ctx)
+
 		n, err := p.Store.PurgeExpired(ctx, p.ExpiredFor)
 		if err != nil {
 			p.log().Warn("failed to purge capability revocations", zap.Error(err))

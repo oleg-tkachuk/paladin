@@ -250,7 +250,8 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	}), nil
 }
 
-// Revoke adds the capability ID to the revocation list. Idempotent.
+// Revoke adds the capability ID to the revocation list. Idempotent for a
+// capability the caller can see; NotFound for one it cannot.
 func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceRevokeRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeResponse], error) {
 	caller, err := h.authorize(ctx, "revoke")
 	if err != nil {
@@ -267,6 +268,13 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 		Actor:           caller.Subject,
 		CascadeChildren: req.Msg.GetCascadeChildren(),
 	}); err != nil {
+		// The store scopes the revoke to capabilities the caller can see, so
+		// a not-found here covers both "no such id" and "belongs to another
+		// tenant". Both answer NotFound: telling the caller which one it was
+		// would turn this endpoint into an id oracle.
+		if errors.Is(err, capability.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&adminv1.CapabilityServiceRevokeResponse{}), nil

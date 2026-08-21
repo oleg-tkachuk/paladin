@@ -166,6 +166,18 @@ func (s *Store) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
 // delegation tree via a recursive CTE and inserts a revocation row for
 // every descendant in one transaction, so the tree is denied atomically.
 //
+// Both paths source their ids from capability_records rather than trusting
+// the argument, so a caller that cannot see the capability cannot revoke it.
+// That mattered because capability_revocations carries no tenant_id of its
+// own: before 004 the table had no policy at all, and an INSERT keyed on a
+// caller-supplied uuid let one tenant deny another's credentials. The SELECT
+// is the boundary; the RLS policy added in 004 is the backstop.
+//
+// A capability the caller cannot see is ErrNotFound, not a silent success —
+// otherwise the admin RPC answers "revoked" for an id that was never touched.
+// Revoking an already-revoked capability stays a no-op, because the row's
+// visibility, not the INSERT's row count, is what the result is read from.
+//
 // The recursive CTE bounds depth via WHERE NOT in the cycle — capability
 // records are a forest (parent_id is nullable, no cycles by construction
 // because the FK is set NULL on parent delete), but a depth limit is
@@ -190,22 +202,41 @@ WITH RECURSIVE descendants(id, depth) AS (
     FROM   capability_records r
     JOIN   descendants d ON r.parent_id = d.id
     WHERE  d.depth < 64
+),
+inserted AS (
+    INSERT INTO capability_revocations (id, reason, actor, cascade)
+    SELECT id, $2, $3, true FROM descendants
+    ON CONFLICT (id) DO NOTHING
+    RETURNING 1
 )
-INSERT INTO capability_revocations (id, reason, actor, cascade)
-SELECT id, $2, $3, true FROM descendants
-ON CONFLICT (id) DO NOTHING;
+SELECT count(*) FROM descendants;
 `
-		if _, err := tx.Exec(ctx, cascade, args.ID, args.Reason, args.Actor); err != nil {
+		var visible int64
+		if err := tx.QueryRow(ctx, cascade, args.ID, args.Reason, args.Actor).Scan(&visible); err != nil {
 			return fmt.Errorf("capability/postgres: revoke cascade: %w", err)
+		}
+		if visible == 0 {
+			return ErrNotFound
 		}
 	} else {
 		const single = `
-INSERT INTO capability_revocations (id, reason, actor, cascade)
-VALUES ($1, $2, $3, false)
-ON CONFLICT (id) DO NOTHING;
+WITH target AS (
+    SELECT id FROM capability_records WHERE id = $1
+),
+inserted AS (
+    INSERT INTO capability_revocations (id, reason, actor, cascade)
+    SELECT id, $2, $3, false FROM target
+    ON CONFLICT (id) DO NOTHING
+    RETURNING 1
+)
+SELECT count(*) FROM target;
 `
-		if _, err := tx.Exec(ctx, single, args.ID, args.Reason, args.Actor); err != nil {
+		var visible int64
+		if err := tx.QueryRow(ctx, single, args.ID, args.Reason, args.Actor).Scan(&visible); err != nil {
 			return fmt.Errorf("capability/postgres: revoke: %w", err)
+		}
+		if visible == 0 {
+			return ErrNotFound
 		}
 	}
 
@@ -297,8 +328,11 @@ LIMIT  $%d;
 
 	nextCursor := ""
 	if int32(len(out)) > limit {
-		nextCursor = out[limit].ID.String()
 		out = out[:limit]
+		// Seek past the last row RETURNED, not past the overflow row we
+		// fetched to detect the next page — the overflow row belongs to
+		// the next page and seeking past it drops it entirely.
+		nextCursor = out[len(out)-1].ID.String()
 	}
 	return out, nextCursor, nil
 }
