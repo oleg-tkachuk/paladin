@@ -90,7 +90,7 @@ SELECT
       ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
     END)::numeric AS utilisation_pct
   FROM tenant_budgets AS tb
-  JOIN tenants AS t ON t.tenant_id = tb.tenant_id
+  JOIN tenants AS t ON t.id = tb.tenant_id
  WHERE (NOT sqlc.arg('exclude_inactive')::bool OR t.deleted_at IS NULL)
    AND (
      (sqlc.arg('unlimited_only')::bool AND tb.max_budget_usd = 0)

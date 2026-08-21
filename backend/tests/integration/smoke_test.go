@@ -29,11 +29,16 @@ type probe struct {
 	url  string
 }
 
+// The four planes the e2e compose stack actually runs. `mcp` is absent
+// deliberately — that file brings up postgres, migrate, bootstrap, api,
+// admin and ui, and leaves the worker / mcp / ingest / dispatcher planes
+// out because the Playwright suite never exercises background jobs. Probing
+// a plane the stack does not start made this test fail the moment a stack
+// was up, which is the one situation it exists for.
 var probes = []probe{
 	{"data", "http://127.0.0.1:8080/readyz"},
 	{"iam", "http://127.0.0.1:8085/readyz"},
 	{"admin", "http://127.0.0.1:8090/readyz"},
-	{"mcp", "http://127.0.0.1:8095/healthz"},
 }
 
 // TestSmokeStackReady waits up to 60s for every plane to report ready.

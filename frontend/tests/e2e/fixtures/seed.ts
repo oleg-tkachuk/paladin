@@ -20,7 +20,7 @@
  * keyed by audience so a single seedTenant() call doesn't
  * burn two logins.
  */
-import { createClient } from "@connectrpc/connect";
+import { createClient, ConnectError, Code } from "@connectrpc/connect";
 // connect-NODE (not -web): this runs in Playwright's Node worker. The web
 // transport's fetch path mis-handles a large (gzip-compressed) unary response
 // in that worker — CreateTenant's multi-KB Cedar-policy body threw
@@ -29,6 +29,7 @@ import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
+import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
@@ -46,6 +47,7 @@ import { uniqueSlug, uniqueDisplayName } from "./unique";
 // ─── plane base URLs (test stack) ──────────────────────────
 const IAM_URL = process.env.PALADIN_E2E_IAM_URL ?? "http://localhost:8085";
 const ADMIN_URL = process.env.PALADIN_E2E_ADMIN_URL ?? "http://localhost:8090";
+const DATA_URL = process.env.PALADIN_E2E_DATA_URL ?? "http://localhost:8080";
 
 // ─── token cache: audience → access JWT ────────────────────
 // Lifetime: process-scoped. Playwright spawns one Node worker
@@ -86,6 +88,51 @@ async function getAdminToken(): Promise<string> {
 // Shared admin transport: one createConnectTransport call per
 // helper would force a new fetch pool on every seed call. We
 // build it once and reuse across TenantService / BucketService.
+async function getDataToken(): Promise<string> {
+  const cached = tokenCache.get("paladin-data");
+  if (cached) return cached;
+  const client = createClient(
+    AuthService,
+    createConnectTransport({
+      baseUrl: IAM_URL,
+      httpVersion: "1.1",
+      useBinaryFormat: false,
+    }),
+  );
+  const res = await client.login({
+    subject: SEEDED_ADMIN.subject,
+    password: SEEDED_ADMIN.password,
+    requestedAudience: "paladin-data",
+  });
+  const access = res.tokens?.accessToken;
+  if (!access) {
+    throw new Error(
+      "seed.ts: Login(audience=paladin-data) returned no access_token",
+    );
+  }
+  tokenCache.set("paladin-data", access);
+  return access;
+}
+
+// dataTransport mirrors adminTransport for the data plane: same JSON codec,
+// same idempotency-key injection, different audience.
+function dataTransport() {
+  return createConnectTransport({
+    baseUrl: DATA_URL,
+    httpVersion: "1.1",
+    useBinaryFormat: false,
+    interceptors: [
+      (next) => async (req) => {
+        req.header.set("Authorization", `Bearer ${await getDataToken()}`);
+        if (!req.header.has("Idempotency-Key")) {
+          req.header.set("Idempotency-Key", crypto.randomUUID());
+        }
+        return next(req);
+      },
+    ],
+  });
+}
+
 function adminTransport() {
   return createConnectTransport({
     baseUrl: ADMIN_URL,
@@ -270,15 +317,20 @@ export interface SeededBucket {
  * given backend. Defaults to the chart-default `primary`
  * backend the bootstrap container provisions.
  *
- * Note `provisionOnBackend: false` — for the e2e suite we
- * don't actually need the bucket to exist on the Garage
- * side. Every scope-picker test asserts metadata, not S3
- * I/O. Skipping provision shaves ~1s per seedBucket call.
+ * `provisionOnBackend` defaults to false: the metadata tests —
+ * scope picker, bucket lists, collection binding — assert rows,
+ * not S3 I/O, and skipping provision shaves ~1s per call.
+ *
+ * Pass `provision: true` when the test will actually move bytes.
+ * A presigned PUT against an unprovisioned bucket fails with
+ * NoSuchBucket, which reads as a broken URL rather than a bucket
+ * that was never created.
  */
 export async function seedBucket(opts?: {
   backendId?: string;
   bucketIdPrefix?: string;
   displayNamePrefix?: string;
+  provision?: boolean;
 }): Promise<SeededBucket> {
   const backendId = opts?.backendId ?? "primary";
   const bucketId = uniqueSlug(opts?.bucketIdPrefix ?? "e2e-bucket");
@@ -297,12 +349,45 @@ export async function seedBucket(opts?: {
       labels: {},
       cedarPolicy: "",
     },
-    provisionOnBackend: false,
+    provisionOnBackend: opts?.provision ?? false,
   });
   return { backendId, bucketId, displayName };
 }
 
-// ─── object_key seeding ────────────────────────────────────
+/**
+ * The bucket that physically exists in the test stack's MinIO, registered in
+ * Paladin so objects can actually be written to it.
+ *
+ * seedBucket({provision: true}) is not an option here: provisioning is
+ * asynchronous and completed by the worker plane, which this stack leaves
+ * out on purpose (see docker-compose.test.yaml). The bucket the minio-setup
+ * container creates is the one real place bytes can land.
+ *
+ * Idempotent — every object test shares it.
+ */
+export async function seedPhysicalBucket(): Promise<SeededBucket> {
+  const backendId = "primary";
+  const bucketId = process.env.PALADIN_E2E_S3_BUCKET ?? "paladin-e2e";
+  try {
+    await bucketAdminClient().createBucket({
+      parent: `storageBackends/${backendId}`,
+      bucketId,
+      bucket: { backendId, bucketId, displayName: "E2E physical bucket" },
+      provisionOnBackend: false,
+    });
+  } catch (e) {
+    // Already registered by an earlier test in this run. The conflict
+    // surfaces as FailedPrecondition rather than AlreadyExists — the admin
+    // plane reports it as a state conflict — so both are tolerated.
+    const conflict =
+      e instanceof ConnectError &&
+      (e.code === Code.AlreadyExists || e.code === Code.FailedPrecondition);
+    if (!conflict) throw e;
+  }
+  return { backendId, bucketId, displayName: "E2E physical bucket" };
+}
+
+// ─── collection seeding ────────────────────────────────────
 
 export interface SeededCollection {
   tenantId: string;
@@ -495,4 +580,85 @@ export async function seedTenantMembership(): Promise<SeededMembership> {
     slug: tenant.slug,
     displayName: tenant.displayName,
   };
+}
+
+// ─── objects (data plane) ──────────────────────────────────
+
+/**
+ * The tenant the seeded admin belongs to. Objects must be seeded into a
+ * collection this tenant owns: the data plane scopes every request to the
+ * caller's tenant, so a platform token cannot upload into someone else's
+ * namespace — which is the isolation working, not a limitation to route
+ * around.
+ */
+export async function seedAdminTenantID(): Promise<string> {
+  const client = createClient(TenantService, adminTransport());
+  const res = await client.getTenant({ name: "tenants/platform" });
+  return res.tenantId;
+}
+
+export interface SeededObject {
+  objectId: string;
+  key: string;
+  collection: string;
+  tenantId: string;
+  /** Canonical resource name as the server minted it — the only form the
+   *  data-plane RPCs accept. Object names address the object_id, not the
+   *  key, which may itself contain slashes. */
+  name: string;
+}
+
+/**
+ * Create an object through the real two-step upload: UploadObject reserves
+ * the row and hands back a presigned PUT, CompleteObject promotes it to
+ * AVAILABLE. The bytes go straight to the backend, which is the whole point
+ * of the design — Paladin never sees them.
+ */
+export async function seedObject(opts: {
+  tenantId: string;
+  collection: string;
+  key?: string;
+  body?: string;
+}): Promise<SeededObject> {
+  const key = opts.key ?? `e2e/${uniqueSlug("obj")}.txt`;
+  const body = opts.body ?? "paladin e2e payload\n";
+  const client = createClient(ObjectService, dataTransport());
+
+  const up = await client.uploadObject({
+    parent: `tenants/${opts.tenantId}/collections/${opts.collection}`,
+    key,
+    contentType: "text/plain",
+    sizeHintBytes: BigInt(Buffer.byteLength(body)),
+  });
+  const presigned = up.uploadUrl;
+  if (!presigned?.url) {
+    throw new Error(`seed.ts: UploadObject returned no upload_url for ${key}`);
+  }
+  // required_headers are part of the signature — dropping one makes the
+  // backend reject the PUT with a signature mismatch, which reads as a
+  // credentials problem rather than a missing header.
+  const put = await fetch(presigned.url, {
+    method: presigned.method || "PUT",
+    headers: { "Content-Type": "text/plain", ...presigned.requiredHeaders },
+    body,
+  });
+  if (!put.ok) {
+    throw new Error(
+      `seed.ts: presigned PUT failed: ${put.status} ${await put.text()}`,
+    );
+  }
+  const name = up.object?.name ?? "";
+  const done = await client.completeObject({ name });
+  return {
+    objectId: done.objectId,
+    key,
+    collection: opts.collection,
+    tenantId: opts.tenantId,
+    name: done.name || name,
+  };
+}
+
+/** Soft-delete an object through the data plane, by its canonical name. */
+export async function softDeleteObject(name: string): Promise<void> {
+  await createClient(ObjectService, dataTransport()).deleteObject({ name });
 }

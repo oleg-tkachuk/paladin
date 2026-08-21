@@ -71,9 +71,15 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 		return Config{}, err
 	}
 
-	// Load environment variables prefixed with PALADIN_ and replace _ with .
-	if err := k.Load(env.Provider(EnvPrefix, ".", func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, EnvPrefix)), "_", ".")
+	// Load environment variables prefixed with PALADIN_. The variable name is
+	// resolved against the schema rather than transliterated — see
+	// EnvKeyMapper for why a blind `_` → `.` silently drops every setting
+	// whose own name contains an underscore.
+	envKeys := EnvKeyMapper(KnownConfigPaths())
+	envVals := EnvValueParser(KnownConfigKinds())
+	if err := k.Load(env.ProviderWithValue(EnvPrefix, ".", func(key, val string) (string, any) {
+		path := envKeys(key)
+		return path, envVals(path, val)
 	}), nil); err != nil {
 		return Config{}, fmt.Errorf("failed to load env vars: %w", err)
 	}
