@@ -171,18 +171,6 @@ func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) erro
 	return r.q.DeleteMultipartUpload(ctx, pgUUIDFromString(uploadID))
 }
 
-func (r *MultipartRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUID) (collection, key string, err error) {
-	const q = `SELECT collection, key FROM objects WHERE object_id = $1`
-	err = r.pool.QueryRow(ctx, q, pgUUID(objectID)).Scan(&collection, &key)
-	if err != nil {
-		if isNoRows(err) {
-			return "", "", fmt.Errorf("object %s not found", objectID)
-		}
-		return "", "", fmt.Errorf("object location: %w", err)
-	}
-	return collection, key, nil
-}
-
 // ListParts returns recorded parts in part_number order. The sqlc query
 // returns the full set; pagination is applied in-memory because the parts
 // table is small (<= 10_000 rows per upload by S3 contract).

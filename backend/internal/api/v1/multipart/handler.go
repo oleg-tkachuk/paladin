@@ -85,7 +85,6 @@ type Repository interface {
 	GetSession(ctx context.Context, uploadID string) (Session, error)
 	RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error
 	DeleteSession(ctx context.Context, uploadID string) error
-	GetObjectLocation(ctx context.Context, objectID uuid.UUID) (collection, key string, err error)
 	// LookupBucket returns the storage backend id and the physical S3 bucket
 	// bound to the Collection. Used to route storage calls to the right
 	// (backend, bucket); callers that don't route on backend yet may discard

@@ -88,10 +88,6 @@ func (f *fakeRepo) DeleteSession(ctx context.Context, uploadID string) error {
 	return nil
 }
 
-func (f *fakeRepo) GetObjectLocation(ctx context.Context, objectID uuid.UUID) (string, string, error) {
-	return "", "", nil
-}
-
 func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
 	f.lastLookup.tenantID = tenantID
 	f.lastLookup.collection = collection

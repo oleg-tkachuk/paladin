@@ -82,27 +82,34 @@ func extractSQL(t *testing.T, root string) []sqlSite {
 		if perr != nil {
 			return nil // unparseable file is the compiler's problem, not ours
 		}
-		consts := constStrings(f)
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) < 2 {
-				return true
+		fileConsts := constStrings(f)
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
 			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !queryMethods[sel.Sel.Name] {
+			consts := constsInFunc(fn, fileConsts)
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok || len(call.Args) < 2 {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || !queryMethods[sel.Sel.Name] {
+					return true
+				}
+				sql, ok := resolveString(call.Args[1], consts)
+				if !ok || !looksLikeSQL(sql) {
+					return true
+				}
+				out = append(out, sqlSite{
+					file: path,
+					line: fset.Position(call.Pos()).Line,
+					sql:  sql,
+				})
 				return true
-			}
-			sql, ok := resolveString(call.Args[1], consts)
-			if !ok || !looksLikeSQL(sql) {
-				return true
-			}
-			out = append(out, sqlSite{
-				file: path,
-				line: fset.Position(call.Pos()).Line,
-				sql:  sql,
 			})
-			return true
-		})
+		}
 		return nil
 	})
 	if err != nil {
@@ -113,24 +120,64 @@ func extractSQL(t *testing.T, root string) []sqlSite {
 
 // constStrings collects file-level and function-level string constants so a
 // `const q = ...` one line above the call still resolves.
+// constStrings collects only FILE-level string constants. Function-local ones
+// are layered on per function by constsInFunc.
+//
+// Collecting both into one map — which this did originally — silently
+// mispairs every query in a file where more than one function declares
+// `const q`: the last declaration wins and every call site resolves to it.
+// In the PREPARE gate that surfaced as SQLSTATE 42P05 (duplicate prepared
+// statement), which the tolerated list swallows, so the gate reported success
+// while checking one query several times and others not at all.
 func constStrings(f *ast.File) map[string]string {
 	out := map[string]string{}
-	ast.Inspect(f, func(n ast.Node) bool {
-		vs, ok := n.(*ast.ValueSpec)
-		if !ok {
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || (gd.Tok != token.CONST && gd.Tok != token.VAR) {
+			continue
+		}
+		collectValueSpecs(gd.Specs, out)
+	}
+	return out
+}
+
+// constsInFunc returns the file-level constants overlaid with the ones
+// declared inside fn, so `const q = …` one line above a call resolves to that
+// query and not to a namesake in a sibling function.
+func constsInFunc(fn *ast.FuncDecl, fileConsts map[string]string) map[string]string {
+	out := make(map[string]string, len(fileConsts)+4)
+	for k, v := range fileConsts {
+		out[k] = v
+	}
+	if fn.Body == nil {
+		return out
+	}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		gd, ok := n.(*ast.GenDecl)
+		if !ok || (gd.Tok != token.CONST && gd.Tok != token.VAR) {
 			return true
+		}
+		collectValueSpecs(gd.Specs, out)
+		return true
+	})
+	return out
+}
+
+func collectValueSpecs(specs []ast.Spec, into map[string]string) {
+	for _, spec := range specs {
+		vs, ok := spec.(*ast.ValueSpec)
+		if !ok {
+			continue
 		}
 		for i, name := range vs.Names {
 			if i >= len(vs.Values) {
 				continue
 			}
-			if s, ok := resolveString(vs.Values[i], out); ok {
-				out[name.Name] = s
+			if s, ok := resolveString(vs.Values[i], into); ok {
+				into[name.Name] = s
 			}
 		}
-		return true
-	})
-	return out
+	}
 }
 
 // resolveString evaluates a string expression made of literals, named

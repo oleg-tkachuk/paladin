@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -469,8 +470,19 @@ func (s *UsageStore) PurgeOrphans(ctx context.Context) (int64, error) {
 // numericFromFloat converts a float64 amount into pgtype.Numeric.
 // pgtype takes the value as a string parse of the textual form;
 // strconv.FormatFloat with 'f' / -1 / 64 gives a tight representation
-// without surprises on edge values (NaN/Inf rejected upstream).
+// without surprises on edge values.
+//
+// NaN and ±Inf are refused here rather than "rejected upstream", which the
+// comment used to claim and no code did. Both encode cleanly into a numeric,
+// and both are silently wrong once stored: Postgres orders NaN above every
+// other numeric, so a NaN cap makes `spent + amount <= cap` always true — a
+// spend ceiling that reads as a number in the console and enforces nothing.
+// The API cannot deliver one (buf.validate pins gte = 0, which NaN fails), so
+// this guards the paths that do not go through it.
 func numericFromFloat(v float64) (pgtype.Numeric, error) {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return pgtype.Numeric{}, fmt.Errorf("capability/postgres: amount must be finite, got %v", v)
+	}
 	var n pgtype.Numeric
 	s := strconv.FormatFloat(v, 'f', -1, 64)
 	if err := n.Scan(s); err != nil {

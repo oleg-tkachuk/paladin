@@ -558,3 +558,69 @@ func TestUsageGetDeleteAndPurgeOrphans(t *testing.T) {
 		t.Errorf("usage row survived Delete: %v", err)
 	}
 }
+
+// TestTenantBudgetCapCannotBeNullOrNaN pins the two values that used to sit in
+// max_budget_usd and satisfy neither `= 0` nor `> 0`. Every budget predicate is
+// written as one of those two comparisons, so a NULL cap put the tenant in
+// neither branch: ChargeTenantBudget matched no row and returned "budget
+// exceeded" for every charge, while the summary query listed the tenant as
+// neither capped nor unlimited. Unable to spend, and invisible to the operator
+// who would have to notice.
+//
+// NaN was the same hole from the other side — Postgres orders NaN above every
+// numeric, so `spent + amount <= NaN` always held and the cap enforced
+// nothing.
+//
+// 005 makes the column NOT NULL DEFAULT 0 and rejects NaN, so both are now
+// unrepresentable rather than merely unlikely.
+func TestTenantBudgetCapCannotBeNullOrNaN(t *testing.T) {
+	ctx, f := newUsageFixture(t)
+
+	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+		TenantID: f.tenant, MaxBudgetAmount: 100, UnitCode: "USD",
+	}); err != nil {
+		t.Fatalf("set budget: %v", err)
+	}
+
+	t.Run("the column refuses NULL", func(t *testing.T) {
+		_, err := f.pool.Exec(ctx,
+			`UPDATE tenant_budgets SET max_budget_usd = NULL WHERE tenant_id = $1`, f.tenant)
+		if err == nil {
+			t.Fatal("a NULL cap was accepted — a tenant in this state can neither spend nor be listed")
+		}
+	})
+
+	t.Run("the column refuses NaN", func(t *testing.T) {
+		_, err := f.pool.Exec(ctx,
+			`UPDATE tenant_budgets SET max_budget_usd = 'NaN'::numeric WHERE tenant_id = $1`, f.tenant)
+		if err == nil {
+			t.Fatal("a NaN cap was accepted — it reads as a limit and enforces nothing")
+		}
+	})
+
+	t.Run("the encoder refuses a non-finite amount", func(t *testing.T) {
+		for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+			if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+				TenantID: f.tenant, MaxBudgetAmount: bad,
+			}); err == nil {
+				t.Errorf("SetTenantBudget accepted %v as a cap", bad)
+			}
+		}
+		if _, err := f.usage.Charge(ctx, f.capID, math.NaN(), 0, "USD", f.tenant, "op", "actor", nil); err == nil {
+			t.Error("Charge accepted a NaN amount")
+		}
+	})
+
+	t.Run("a spend still works after all of that", func(t *testing.T) {
+		if _, err := f.usage.Charge(ctx, f.capID, 5, 0, "USD", f.tenant, "op", "actor", nil); err != nil {
+			t.Fatalf("charge: %v", err)
+		}
+		got, err := f.usage.GetTenantBudget(ctx, f.tenant)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if !closeEnough(got.SpentAmount, 5) {
+			t.Errorf("spent %v, want 5", got.SpentAmount)
+		}
+	})
+}

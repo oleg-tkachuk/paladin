@@ -613,7 +613,7 @@ CREATE INDEX charges_capability_idx ON charges (capability_id);
 CREATE TABLE tenant_budgets (
     id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id      uuid NOT NULL UNIQUE REFERENCES tenants(id) ON DELETE CASCADE,
-    max_budget_usd numeric(14,6),
+    max_budget_usd numeric(14,6) NOT NULL DEFAULT 0,
     spent_usd      numeric(14,6) NOT NULL DEFAULT 0,
     unit_code      text NOT NULL DEFAULT 'USD',
     period_start   timestamptz,
