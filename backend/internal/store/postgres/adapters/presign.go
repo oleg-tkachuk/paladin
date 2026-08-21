@@ -57,7 +57,7 @@ func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID strin
 	return storageUploadID, collection, key, nil
 }
 
-// LookupBucket reads the physical S3 bucket bound to an Collection via
+// LookupBucket reads the physical S3 bucket bound to a Collection via
 // idx_collections_bucket_routing. bucket_name is NOT NULL after
 // migration 005 so a successful lookup always returns a non-empty value.
 // `write` splits the read-only-drain gate (migration 047): presign-GET is a

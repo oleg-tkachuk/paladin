@@ -229,7 +229,7 @@ export function ObjectInspector({
                   size="sm"
                   onClick={() => {
                     // Object detail moved under the tenant subtree
-                    // in Phase 5: /tenants/<id>/collections/<ok>/
+                    // in Phase 5: /tenants/<id>/collections/<collection>/
                     // objects/<key>. Prefer slug; fall back to UUID
                     // (resolver canonicalises on landing).
                     const handle = tenant?.slug || tenantId || "";

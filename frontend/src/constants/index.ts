@@ -9,7 +9,7 @@ export const API_LIMIT_DEFAULT = 20;
 /** Maximum page size accepted by the backend `*.List*` validators. */
 export const API_PAGE_SIZE_MAX = 500;
 
-/** Hierarchy separator used in object keys / path display. */
+/** Hierarchy separator used in collections / path display. */
 export const CATEGORY_SEPARATOR = "/";
 
 /** Prefix where the Next.js Connect-RPC bridge handles backend traffic. */
@@ -44,7 +44,7 @@ export type Audience = (typeof AUDIENCES)[Plane];
 /**
  * Bootstrap-provisioned Collection. Used as the last-resort fallback when
  * no scope has been chosen yet (fresh tenant, first-ever page load).
- * dev-bootstrap.sh creates an Collection with this slug; production
+ * dev-bootstrap.sh creates a Collection with this slug; production
  * tenants must opt out of this default by selecting a different key.
  */
 export const DEFAULT_OBJECT_KEY = "default";

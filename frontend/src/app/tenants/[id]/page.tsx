@@ -69,7 +69,7 @@ const QUICK_LINKS: Array<{
     icon: ArchiveBoxIcon,
   },
   {
-    label: "Object Keys",
+    label: "Collections",
     href: (s) => `/tenants/${s}/collections`,
     description: "Tenant-scoped namespaces routed to a bucket.",
     icon: TagIcon,
@@ -304,7 +304,7 @@ export default function TenantOverviewPage() {
         />
         <CountTile
           href={`/tenants/${tenant.slug}/collections`}
-          label="Object Keys"
+          label="Collections"
           value={okCount}
           icon={ServerStackIcon}
           accent="text-chart-4/85"

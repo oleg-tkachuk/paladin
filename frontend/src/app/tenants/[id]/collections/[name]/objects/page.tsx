@@ -35,9 +35,9 @@ import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { ObjectsTable } from "./ObjectsTable";
 
 function CollectionObjectsContent() {
-  const { collection: ok } = useCollection();
+  const { collection: collectionResource } = useCollection();
   // The "scope" of this listing — fixed by URL, supplied by context.
-  const collection = ok.collection;
+  const collection = collectionResource.collection;
 
   // URL-synced filter + sort state and the derived CEL `filter` live in a
   // dedicated hook. Selection and tag-option accumulation stay here because
@@ -526,9 +526,9 @@ function CollectionObjectsContent() {
             <Badge variant="info" className={T.code}>
               {collection}
             </Badge>
-            {ok.bucket && (
+            {collectionResource.bucket && (
               <span className="text-xs text-muted-foreground font-mono">
-                → {ok.bucket}
+                → {collectionResource.bucket}
               </span>
             )}
           </div>

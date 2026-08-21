@@ -62,11 +62,11 @@ tests/e2e/
 │   ├── credentials.ts     # seeded admin user (NEVER-in-prod marker)
 │   ├── unique.ts          # uniqueSlug() — UUID-suffixed identifiers
 │   ├── auth.ts            # loginAsAdmin(), logout() — UI-driven
-│   └── seed.ts            # seedTenant, seedBucket, seedObjectKey,
+│   └── seed.ts            # seedTenant, seedBucket, seedCollection,
 │                          # seedCapability — Connect-RPC direct
 ├── auth.spec.ts           # US1 — login + AuthGate redirect (4 tests)
 ├── scope.spec.ts          # US2 — scope picker behavior (3 tests)
-├── buckets.spec.ts        # US3 — bucket → ObjectKey navigation (3 tests)
+├── buckets.spec.ts        # US3 — bucket → Collection navigation (3 tests)
 ├── capabilities.spec.ts   # US4 — capability lifecycle + FR-008 (3 tests)
 ├── trash.spec.ts          # US5 — tenant restore from trash (2 tests)
 └── docker-compose.test.yaml   # 6 services: postgres, migrate,
@@ -105,12 +105,12 @@ pnpm exec playwright show-trace tests/e2e/test-results/<failed-test-dir>/trace.z
 
 ## Troubleshooting
 
-| Symptom                                          | Likely cause                | Fix                                                        |
-| ------------------------------------------------ | --------------------------- | ---------------------------------------------------------- |
+| Symptom                                          | Likely cause                   | Fix                                                        |
+| ------------------------------------------------ | ------------------------------ | ---------------------------------------------------------- |
 | `webServer` times out                            | Paladin backend image not built | `task -d backend build:image`                              |
-| `required variable PALADIN_E2E_S3_ACCESS_KEY`        | Garage creds not exported   | Re-run the two `export` commands in Quick start            |
-| Backend logs `dial tcp 3900: connection refused` | port-forward not running    | `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
-| Tests pass once, fail on second run              | Stale postgres data         | `pnpm run test:e2e:stack:down` then `:stack`               |
+| `required variable PALADIN_E2E_S3_ACCESS_KEY`     | Garage creds not exported      | Re-run the two `export` commands in Quick start            |
+| Backend logs `dial tcp 3900: connection refused` | port-forward not running       | `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
+| Tests pass once, fail on second run              | Stale postgres data            | `pnpm run test:e2e:stack:down` then `:stack`               |
 
 For the full troubleshooting table + SDD context, see
 [`specs/001-frontend-playwright-e2e/quickstart.md`](../../../specs/001-frontend-playwright-e2e/quickstart.md).

@@ -236,7 +236,7 @@ export default function CollectionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Object Keys"
+        title="Collections"
         description="Tenant-scoped namespaces routed to a physical bucket."
         showDefaultActions={false}
         actions={
@@ -253,7 +253,7 @@ export default function CollectionsPage() {
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search Object Keys by prefix…"
+            placeholder="Search Collections by prefix…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -319,8 +319,8 @@ export default function CollectionsPage() {
                     <ServerStackIcon className="size-10 opacity-40" />
                     <p className="text-sm">
                       {search
-                        ? "No Object Keys match your search."
-                        : "No Object Keys yet."}
+                        ? "No Collections match your search."
+                        : "No Collections yet."}
                     </p>
                     {!search && (
                       <Button

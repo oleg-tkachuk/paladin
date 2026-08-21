@@ -55,8 +55,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useCollection } from "../collection-context";
 
 export default function CollectionTrashPage() {
-  const { collection: ok } = useCollection();
-  const collection = ok.collection;
+  const { collection: collectionResource } = useCollection();
+  const collection = collectionResource.collection;
 
   const {
     objects,
@@ -163,7 +163,7 @@ export default function CollectionTrashPage() {
           Objects tab so operators see the same anchor either way. */}
       <div className="flex items-center justify-between rounded-lg border bg-card/40 p-3">
         <div className="space-y-0.5">
-          <Label className={T.label}>Object Key</Label>
+          <Label className={T.label}>Collection</Label>
           <div className="flex items-center gap-2">
             <Badge variant="info" className={T.code}>
               {collection}

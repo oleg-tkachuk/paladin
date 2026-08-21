@@ -84,7 +84,7 @@ export function CommandPalette() {
       {
         id: "nav-tenant-collections",
         type: "nav",
-        title: `Object Keys in ${label}`,
+        title: `Collections in ${label}`,
         subtitle: "Tenant-scoped namespaces routed to a bucket",
         icon: ServerStackIcon,
         shortcut: "G K",
@@ -145,7 +145,7 @@ export function CommandPalette() {
       {
         id: "nav-collections",
         type: "nav",
-        title: "Object Keys (cross-tenant)",
+        title: "Collections (cross-tenant)",
         subtitle: "Platform-admin index of every Collection",
         icon: ServerStackIcon,
         onSelect: () => router.push("/collections"),
@@ -360,10 +360,10 @@ export function CommandPalette() {
           .map((o) => {
             const tslug = tenantSlugByID.get(o.tenantId) || o.tenantId;
             return {
-              id: `ok-${o.tenantId}-${o.collection}`,
+              id: `collection-${o.tenantId}-${o.collection}`,
               type: "nav",
               title: o.displayName || o.collection,
-              subtitle: `Object key · ${tslug}/${o.collection}`,
+              subtitle: `Collection · ${tslug}/${o.collection}`,
               icon: TagIcon,
               onSelect: () =>
                 router.push(

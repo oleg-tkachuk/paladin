@@ -6,7 +6,7 @@
 //
 // Tab order pinned by mental model, not alphabetical:
 //   1. Overview — what the tenant IS (counts, recent activity).
-//   2. Resources operators care about most often: Buckets, Object Keys.
+//   2. Resources operators care about most often: Buckets, Collections.
 //   3. Authorisation surfaces: Policies (effective Cedar graph),
 //      Quotas, Capabilities, M2M Tokens, Event Subscriptions.
 //   4. Observability: Audit, Budget / Billing.
@@ -33,7 +33,7 @@ type TabSpec = {
 const TABS: TabSpec[] = [
   { slug: "", label: "Overview", exact: true },
   { slug: "buckets", label: "Buckets" },
-  { slug: "collections", label: "Object Keys" },
+  { slug: "collections", label: "Collections" },
   { slug: "default-binding", label: "Default Route" },
   { slug: "policies", label: "Policies" },
   { slug: "quotas", label: "Quotas" },

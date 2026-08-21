@@ -26,10 +26,10 @@ import { cn } from "@/lib/utils";
 import { useCollection } from "../collection-context";
 
 export default function CollectionPolicyPage() {
-  const { collection: ok, setCollection } = useCollection();
+  const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
 
-  const [policyText, setPolicyText] = useState(ok.cedarPolicy);
+  const [policyText, setPolicyText] = useState(collection.cedarPolicy);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [diagnostics, setDiagnostics] = useState<PolicyDiagnostic[] | null>(
@@ -38,12 +38,12 @@ export default function CollectionPolicyPage() {
 
   // Pull fresh editor state when the context Collection changes (another
   // session bumped the resource and we refetched). Render-phase adjust-on-
-  // change (not set-state-in-effect) — `ok` identity is stable between
+  // change (not set-state-in-effect) — `collection` identity is stable between
   // renders via TanStack structural sharing. Diagnostics clear on re-seed.
-  const [seededOk, setSeededOk] = useState(ok);
-  if (ok !== seededOk) {
-    setSeededOk(ok);
-    setPolicyText(ok.cedarPolicy);
+  const [seededCollection, setSeededCollection] = useState(collection);
+  if (collection !== seededCollection) {
+    setSeededCollection(collection);
+    setPolicyText(collection.cedarPolicy);
     setDiagnostics(null);
   }
 
@@ -76,15 +76,15 @@ export default function CollectionPolicyPage() {
     setSaving(true);
     try {
       const updated = await collectionClient.setCollectionPolicy({
-        name: ok.name,
-        resourceVersion: ok.resourceVersion,
+        name: collection.name,
+        resourceVersion: collection.resourceVersion,
         cedarPolicy: policyText,
       });
       setCollection(updated);
       showNotification({
         type: "success",
         title: "Policy saved",
-        message: ok.collection,
+        message: collection.collection,
       });
     } catch (err) {
       const msg = err instanceof ConnectError ? err.rawMessage : "Save failed";
@@ -92,7 +92,7 @@ export default function CollectionPolicyPage() {
     } finally {
       setSaving(false);
     }
-  }, [ok, policyText, setCollection, showNotification]);
+  }, [collection, policyText, setCollection, showNotification]);
 
   return (
     <Card className="space-y-3 p-4">
@@ -120,7 +120,7 @@ export default function CollectionPolicyPage() {
           </Button>
         </div>
       </div>
-      {ok.resourceVersion === "" ? (
+      {collection.resourceVersion === "" ? (
         <Skeleton className="h-48 w-full" />
       ) : (
         <Textarea

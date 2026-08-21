@@ -40,7 +40,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 	}
 	bucket := "paladin-" + tid.String()
 
-	// Bind an collection to the tenant's (still pending) dedicated bucket.
+	// Bind a collection to the tenant's (still pending) dedicated bucket.
 	collection := "ok-" + hex
 	mustExec(t, ctx, pool,
 		`INSERT INTO collections (tenant_id, name, bucket_id)

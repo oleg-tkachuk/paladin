@@ -76,7 +76,7 @@ export function TenantDeleteDialog({
                 </p>
                 <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
                   <li>Default backend/bucket binding</li>
-                  <li>All Object Keys + their cedar policies</li>
+                  <li>All Collections + their cedar policies</li>
                   <li>Audit log entries (after retention TTL)</li>
                   <li>API tokens, M2M tokens, capabilities</li>
                 </ul>

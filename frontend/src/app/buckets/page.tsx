@@ -244,7 +244,7 @@ export default function BucketsPage() {
     <div className="space-y-6">
       <PageHeader
         title="S3 Buckets"
-        description="Physical storage backends bound by Object Keys."
+        description="Physical storage backends bound by Collections."
         showDefaultActions={false}
         actions={
           <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -467,7 +467,7 @@ export default function BucketsPage() {
               <DialogTitle>New S3 bucket</DialogTitle>
               <DialogDescription>
                 Calls the underlying backend&apos;s CreateBucket API. The bucket
-                becomes available as a target for new Object Keys — layout is{" "}
+                becomes available as a target for new Collections — layout is{" "}
                 <code className="font-mono text-foreground">
                   s3://&lt;bucket&gt;/&lt;tenant&gt;/&lt;object_key&gt;/&lt;key&gt;
                 </code>

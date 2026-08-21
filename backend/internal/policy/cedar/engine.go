@@ -483,7 +483,7 @@ var constantResourceAttrs = map[string]bool{
 	"collection": true,
 	// scope_keys is the Go-precomputed set of scope-strings that admit the
 	// resource (see resourceScopeKeys / the scope-enforcement built-in). Within
-	// a single Collection scope it is CONSTANT — an Collection binds to one bucket
+	// a single Collection scope it is CONSTANT — a Collection binds to one bucket
 	// under one backend in one tenant, so tenant:/backend:/bucket:/collection:
 	// are all fixed across a ListObjects page. Marking it constant keeps the
 	// scope-enforcement forbid (present in every compiled set) from forcing
@@ -516,7 +516,7 @@ func policyReadsPerObjectResourceAttr(set *cedar.PolicySet) bool {
 
 // walkReadsPerObjectResourceAttr recursively scans a decoded Cedar JSON
 // expression tree for an attribute access (`.`) or presence test (`has`) rooted
-// directly at the `resource` variable whose attribute is not an collection-scope
+// directly at the `resource` variable whose attribute is not a collection-scope
 // constant. Cedar JSON encodes `resource.tags` as
 // {".": {"left": {"Var": "resource"}, "attr": "tags"}}.
 func walkReadsPerObjectResourceAttr(n any) bool {

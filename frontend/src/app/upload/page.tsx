@@ -392,7 +392,7 @@ export default function UploadPage() {
                 Select a destination first
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Choose an Collection above before uploading files.
+                Choose a Collection above before uploading files.
               </p>
             </>
           ) : isDragging ? (

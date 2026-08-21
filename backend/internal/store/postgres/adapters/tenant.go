@@ -459,7 +459,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 // collections rows — the rewrite is a derived consequence of the
 // tenant slug rotation, not an independent edit; bumping each
 // collection's RV would invalidate every in-flight client that holds
-// an collection resource_version mid-transaction). Operators that
+// a collection resource_version mid-transaction). Operators that
 // need a per-collection audit row can list the affected rows from the
 // audit_log entry's after_json.
 //
@@ -575,7 +575,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		var key, pol string
 		if err := rows.Scan(&key, &pol); err != nil {
 			rows.Close()
-			return tenant.Tenant{}, fmt.Errorf("rename tenant: scan collection: %w", err)
+			return tenant.Tenant{}, fmt.Errorf("rename tenant: sca collection: %w", err)
 		}
 		rewritten := rewriteTenantSlugRefs(pol, oldSlug, args.NewSlug)
 		if rewritten == pol {

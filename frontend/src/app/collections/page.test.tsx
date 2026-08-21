@@ -68,14 +68,14 @@ describe("CollectionsPage", () => {
   it("renders the header and a create action", () => {
     render(<CollectionsPage />);
     expect(
-      screen.getByRole("heading", { name: "Object Keys" }),
+      screen.getByRole("heading", { name: "Collections" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /New Collection/i }),
     ).toBeInTheDocument();
   });
 
-  it("fetches object keys on mount", () => {
+  it("fetches collections on mount", () => {
     render(<CollectionsPage />);
     expect(h.fetchCollections).toHaveBeenCalled();
   });

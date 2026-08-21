@@ -46,7 +46,7 @@ type Storage interface {
 type Repository interface {
 	LookupObjectByName(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (resolvedCollection, key, state string, err error)
 	LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, collection, key string, err error)
-	// LookupBucket returns the physical S3 bucket bound to an Collection.
+	// LookupBucket returns the physical S3 bucket bound to a Collection.
 	// Used to route presign URLs to the correct bucket.
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 }

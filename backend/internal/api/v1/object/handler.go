@@ -575,7 +575,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	// 2. Derive the object id + key BEFORE authz so the Cedar resource is an
 	//    Object entity carrying `key`. The default per-tenant policy reads
 	//    resource.key (the .exe/.dll extension blocklist); an ABSENT key makes
-	//    the resource an Collection entity → "does not have the attribute key"
+	//    the resource a Collection entity → "does not have the attribute key"
 	//    eval error → fail-closed deny. A client-omitted key authorizes the
 	//    generated object id, which CreateObject persists below (same value).
 	objectID := uuid.Must(uuid.NewV7())

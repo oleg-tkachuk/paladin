@@ -107,7 +107,7 @@ export default function BucketDetailLayout({
     // No second PageHeader — TenantLayout already owns the page
     // chrome. Bucket header is a focused band with back-link +
     // identity badges + refresh action; the parent already drew the
-    // separator. Same pattern as the OK detail layout.
+    // separator. Same pattern as the Collection detail layout.
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1 min-w-0">

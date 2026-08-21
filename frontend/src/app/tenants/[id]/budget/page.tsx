@@ -10,7 +10,7 @@
 //     useScope() (auth-bound), so platform-admins can edit any
 //     tenant's budget by navigating into it.
 //   - No PageHeader: the parent TenantLayout already drew the
-//     page chrome. We render a focused header band like the OK /
+//     page chrome. We render a focused header band like the Collection /
 //     Bucket detail layouts.
 //   - No "Pick a tenant from the top bar" empty-state — the URL
 //     pins the tenant.

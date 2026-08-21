@@ -11,7 +11,7 @@
 //
 // Why a layout (not just a wrapper component on each page): Next's
 // app-router preserves layouts across navigations, so swapping
-// between the Buckets and Object Keys tabs DOESN'T re-fetch the
+// between the Buckets and Collections tabs DOESN'T re-fetch the
 // tenant — the layout stays mounted. Each tab page renders its
 // own content area underneath.
 

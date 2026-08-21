@@ -95,7 +95,7 @@ export function ObjectSpecsPanel({
             </Button>
           </SpecRow>
 
-          <SpecRow label="Object Key">
+          <SpecRow label="Collection">
             <Link
               href={`/collections/${object.collection}`}
               className="break-all font-mono text-xs text-primary hover:underline"

@@ -64,7 +64,7 @@ export function useCollections() {
         setError(
           err instanceof ConnectError
             ? err.rawMessage
-            : "Failed to fetch object keys",
+            : "Failed to fetch collections",
         );
         return { collections: [], nextPageToken: "" };
       } finally {
@@ -130,7 +130,7 @@ export function useCollections() {
         setCollections((prev) =>
           prev.filter((b) => b.collection !== collection),
         );
-        // Deleting an Collection may have removed (or trashed) every object
+        // Deleting a Collection may have removed (or trashed) every object
         // beneath it — fan out to "objects" so any open list refetches.
         bumpRefresh(["collections", "objects"]);
       } catch (err) {
@@ -199,7 +199,7 @@ export function useCollections() {
   );
 
   // Stats RPC was removed during the proto refactor. Surface a stable shape
-  // returning zeros so consumers (object-key detail page) keep compiling;
+  // returning zeros so consumers (collection detail page) keep compiling;
   // the dashboard tile that used it is now blank rather than wrong.
   const getCollectionStats = useCallback(
     async (

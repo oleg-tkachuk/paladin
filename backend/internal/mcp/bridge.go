@@ -284,7 +284,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_query_objects",
-		Description: "List objects within an collection, optionally filtered by CEL.",
+		Description: "List objects within a collection, optionally filtered by CEL.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in queryObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
 		parent := fmt.Sprintf("tenants/%s/collections/%s", in.TenantID, in.Collection)
 		return jsonResult(c.Object.ListObjects(ctx, connect.NewRequest(&datav1.ListObjectsRequest{
@@ -396,7 +396,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_lookup_object",
-		Description: "Resolve an object by its human key within an collection (the inverse of having the object_id). Returns the same metadata as paladin_get_object.",
+		Description: "Resolve an object by its human key within a collection (the inverse of having the object_id). Returns the same metadata as paladin_get_object.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in lookupObjectArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
 			Parent: in.Parent,
@@ -406,7 +406,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_count_objects",
-		Description: "Count objects under an collection, optionally narrowed by a CEL filter. Cheaper than paging paladin_query_objects when only the total is needed.",
+		Description: "Count objects under a collection, optionally narrowed by a CEL filter. Cheaper than paging paladin_query_objects when only the total is needed.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in countObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.CountObjects(ctx, connect.NewRequest(&datav1.CountObjectsRequest{
 			Parent: in.Parent,
@@ -475,7 +475,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_distinct_tags",
-		Description: "List the distinct tag keys/values currently in use under an collection — useful before filtering or tagging.",
+		Description: "List the distinct tag keys/values currently in use under a collection — useful before filtering or tagging.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listChildrenArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, connect.NewRequest(&datav1.ListDistinctTagsRequest{Parent: in.Parent})))
 	})

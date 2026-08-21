@@ -103,7 +103,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
   onGenerateDownloadUrl,
 }: ObjectTableRowProps) {
   // Detail link is `<current-pathname>/<key>` — the row is rendered
-  // inside the OK Objects tab (/tenants/<id>/collections/<ok>/
+  // inside the Collection Objects tab (/tenants/<id>/collections/<collection>/
   // objects) since Phase 5, so detail = same path + storage key.
   // Falls back to the storage key alone for any future host that
   // mounts the row outside the Objects tab; that won't 404 silently
@@ -177,7 +177,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         </td>
       )}
 
-      {/* Object Key — namespace badge */}
+      {/* Collection — namespace badge */}
       {visibleColumns.has("object_key") && (
         <td className="hidden md:table-cell px-6 py-4">
           <span

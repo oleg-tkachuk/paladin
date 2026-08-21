@@ -1,9 +1,9 @@
 "use client";
 
 // CollectionTabs — second-level sub-nav rendered inside the
-// Collection detail layout (`/tenants/<id>/collections/<ok>/...`).
+// Collection detail layout (`/tenants/<id>/collections/<collection>/...`).
 //
-// Tab order reflects how operators reason about an Collection:
+// Tab order reflects how operators reason about a Collection:
 //   1. Overview   — identity, completion mode, bucket binding.
 //   2. Objects    — live object list (move from /objects).
 //   3. Trash      — soft-deleted objects awaiting purge.

@@ -4,8 +4,8 @@
 // (server-side filter via parent=tenants/<id>) and narrows to the
 // ones bound to THIS bucket (client-side filter on bucket field).
 //
-// Why client-side for the bucket-narrow: the tenant Object Keys
-// listing is already small (1-100 OKs typical), and pushing a CEL
+// Why client-side for the bucket-narrow: the tenant Collections
+// listing is already small (1-100 collections typical), and pushing a CEL
 // filter to ListCollections would require either a `filter` field
 // the backend doesn't accept yet or a per-bucket index that doesn't
 // exist. Tracked in BACKLOG if it ever becomes a hot path.
@@ -68,7 +68,7 @@ export default function BucketCollectionsPage() {
         const msg =
           err instanceof ConnectError
             ? err.rawMessage
-            : "Failed to fetch object keys";
+            : "Failed to fetch collections";
         showNotification({ type: "error", title: "Load failed", message: msg });
       })
       .finally(() => {
@@ -79,19 +79,20 @@ export default function BucketCollectionsPage() {
     };
   }, [tenant.tenantId, showNotification]);
 
-  // Filter to OKs bound to THIS bucket. Bucket field on the OK is
+  // Filter to Collections bound to THIS bucket. Bucket field on the
+  // Collection is
   // the full resource_name (storageBackends/<b>/buckets/<n>) — the
   // same string format we get from useBucket().bucket.name.
-  const bound = list.filter((ok) => ok.bucket === bucket.name);
+  const bound = list.filter((c) => c.bucket === bucket.name);
 
-  const detailHref = (ok: Collection) =>
-    `/tenants/${tenant.slug}/collections/${encodeURIComponent(ok.collection)}`;
+  const detailHref = (c: Collection) =>
+    `/tenants/${tenant.slug}/collections/${encodeURIComponent(c.collection)}`;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Object Keys</h2>
+          <h2 className="text-lg font-semibold">Collections</h2>
           <p className={cn(T.helper, "max-w-prose")}>
             Collections routed to this bucket. Tenant-scoped listing filtered
             client-side by{" "}
@@ -129,7 +130,7 @@ export default function BucketCollectionsPage() {
                 const msg =
                   err instanceof ConnectError
                     ? err.rawMessage
-                    : "Failed to fetch object keys";
+                    : "Failed to fetch collections";
                 showNotification({
                   type: "error",
                   title: "Load failed",
@@ -181,7 +182,7 @@ export default function BucketCollectionsPage() {
                         href={`/tenants/${tenant.slug}/collections`}
                         className="text-primary hover:underline"
                       >
-                        the Object Keys tab
+                        the Collections tab
                       </Link>{" "}
                       and bind it to{" "}
                       <span className={T.code}>{bucket.bucketId}</span>.
@@ -190,21 +191,21 @@ export default function BucketCollectionsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              bound.map((ok) => (
-                <TableRow key={ok.collection} className="group">
+              bound.map((c) => (
+                <TableRow key={c.collection} className="group">
                   <TableCell>
                     <Link
-                      href={detailHref(ok)}
+                      href={detailHref(c)}
                       className="flex items-center gap-3 hover:text-primary"
                     >
                       <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
                         <ServerStackIcon className="size-4" />
                       </div>
-                      <span className="font-mono text-xs">{ok.collection}</span>
+                      <span className="font-mono text-xs">{c.collection}</span>
                     </Link>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
-                    {ok.displayName || (
+                    {c.displayName || (
                       <span className="text-muted-foreground italic">—</span>
                     )}
                   </TableCell>
@@ -215,7 +216,7 @@ export default function BucketCollectionsPage() {
                       "text-muted-foreground",
                     )}
                   >
-                    {ok.resourceVersion || "—"}
+                    {c.resourceVersion || "—"}
                   </TableCell>
                 </TableRow>
               ))

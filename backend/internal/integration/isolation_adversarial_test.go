@@ -33,7 +33,7 @@ func mkTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, layout stri
 
 // TestAdversarial_CrossTenantDedicatedBucketBindRejected proves the DB trigger
 // enforce_collection_bucket_tenancy is a hard isolation boundary: tenant B
-// cannot bind an collection to tenant A's OWNED (dedicated) bucket, even by a
+// cannot bind a collection to tenant A's OWNED (dedicated) bucket, even by a
 // direct INSERT that bypasses the application layer. Without this, a bug or a
 // compromised app role could route B's writes into A's dedicated bucket.
 func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
@@ -55,7 +55,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	}
 	victimBucket := "paladin-" + victimA.String()
 
-	// Tenant B (attacker) exists and tries to bind an collection to A's bucket.
+	// Tenant B (attacker) exists and tries to bind a collection to A's bucket.
 	attackerB, _ := mkTenant(t, ctx, pool, "shared")
 	_, err := pool.Exec(ctx,
 		`INSERT INTO collections (tenant_id, name, bucket_id)
@@ -64,7 +64,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 		  WHERE sb.name = $3 AND b.name = $4`,
 		attackerB, "steal", backendID, victimBucket)
 	if err == nil {
-		t.Fatal("SECURITY: tenant B bound an collection to tenant A's dedicated bucket — tenancy trigger bypassed")
+		t.Fatal("SECURITY: tenant B bound a collection to tenant A's dedicated bucket — tenancy trigger bypassed")
 	}
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "23514" { // check_violation raised by the trigger

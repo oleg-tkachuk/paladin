@@ -79,7 +79,7 @@ const navigationGroups: Array<{
   {
     // Management — collapsed to a single "Resources" entry per Phase 4
     // of the URL refactor. /tenants is the gateway; drilldown into
-    // Buckets / Object Keys / Quotas / Capabilities / Budget / Audit /
+    // Buckets / Collections / Quotas / Capabilities / Budget / Audit /
     // Events lives under /tenants/<id>/<tab>. The cross-tenant flat
     // indexes (/buckets, /collections) still exist for platform-admin
     // oversight — reachable via Cmd+K — but they're not in the sidebar
@@ -148,7 +148,7 @@ const navigationGroups: Array<{
     title: "System",
     items: [
       // Platform Statistics — cross-tenant census (tenants / backends /
-      // buckets / object keys / users + objects by state). Sits above
+      // buckets / collections / users + objects by state). Sits above
       // Health because "what do we hold" is the question operators open
       // the System group for; Health answers "is it up".
       { name: "Platform Stats", path: "/stats", icon: ChartBarSquareIcon },

@@ -37,7 +37,7 @@ import { useAuth } from "@/context/AuthContext";
  *               when backendId changes — a bucket only makes sense in
  *               the context of one backend)
  *   collection → which Collection namespace the user is browsing.
- *               Single source of truth so the OK Objects/Trash tabs,
+ *               Single source of truth so the Collection Objects/Trash tabs,
  *               sidebar counts, CommandPalette searches, and
  *               ObjectInspector always agree.
  *

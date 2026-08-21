@@ -35,7 +35,7 @@ type ObjectLookup interface {
 		tenantID pgtype.UUID,
 		tail string,
 	) (string, error)
-	// GetCollection resolves an collection row (for its backend_id +
+	// GetCollection resolves a collection row (for its backend_id +
 	// bucket_name binding) so the emitted event carries the canonical
 	// resource name (ADR-0010 Phase 1).
 	GetCollection(

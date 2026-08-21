@@ -60,7 +60,7 @@ export default function BucketDetailPage() {
 
   // Server-side narrow via the new `bucket` field on
   // ListCollectionsRequest (platform.admin gated; checked by the
-  // handler). Returns only the OKs bound to this (backend, bucket)
+  // handler). Returns only the collections bound to this (backend, bucket)
   // pair so we don't pull every OK platform-wide just to filter a
   // handful client-side.
   const bucketRef = `storageBackends/${backendId}/buckets/${bucketId}`;
@@ -83,7 +83,7 @@ export default function BucketDetailPage() {
     () => collectionsQuery.data ?? [],
     [collectionsQuery.data],
   );
-  const loadingOKs = collectionsQuery.isFetching;
+  const loadingCollections = collectionsQuery.isFetching;
   const okError = collectionsQuery.error
     ? collectionsQuery.error instanceof ConnectError
       ? collectionsQuery.error.rawMessage
@@ -127,7 +127,7 @@ export default function BucketDetailPage() {
 
   // Server already narrowed by (backend, bucket) — `collections` IS
   // the in-bucket set. No client-side filter needed.
-  const oksHere = collections;
+  const collectionsHere = collections;
 
   // Group Collections by tenant — operator's mental model of bucket
   // browsing is "which tenant stored what here?". Tenant slug is
@@ -138,7 +138,7 @@ export default function BucketDetailPage() {
       string,
       { tenantId: string; slug: string; displayName: string; oks: Collection[] }
     >();
-    for (const ok of oksHere) {
+    for (const ok of collectionsHere) {
       const t = tenantByID.get(ok.tenantId);
       const slug = t?.slug || ok.tenantId;
       const displayName = t?.displayName || slug;
@@ -155,7 +155,7 @@ export default function BucketDetailPage() {
     return [...groups.values()].sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
-  }, [oksHere, tenants]);
+  }, [collectionsHere, tenants]);
 
   const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -177,7 +177,7 @@ export default function BucketDetailPage() {
       );
   }, [groupedByTenant, search]);
 
-  const totalOKs = oksHere.length;
+  const totalCollections = collectionsHere.length;
   const totalTenants = groupedByTenant.length;
 
   return (
@@ -249,8 +249,8 @@ export default function BucketDetailPage() {
                 tenant{totalTenants === 1 ? "" : "s"}
               </span>
               <span>
-                <strong className="text-foreground">{totalOKs}</strong> object
-                key{totalOKs === 1 ? "" : "s"}
+                <strong className="text-foreground">{totalCollections}</strong>{" "}
+                object key{totalCollections === 1 ? "" : "s"}
               </span>
             </div>
           </CardContent>
@@ -274,7 +274,7 @@ export default function BucketDetailPage() {
         <h2 className="text-sm font-semibold tracking-tight">
           What&apos;s stored here
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            Tenants → Object Keys → files
+            Tenants → Collections → files
           </span>
         </h2>
         <Button
@@ -284,7 +284,7 @@ export default function BucketDetailPage() {
           aria-label="Refresh"
         >
           <ArrowPathIcon
-            className={cn("size-4", loadingOKs && "animate-spin")}
+            className={cn("size-4", loadingCollections && "animate-spin")}
           />
         </Button>
       </div>
@@ -308,7 +308,7 @@ export default function BucketDetailPage() {
             {okError}
           </CardContent>
         </Card>
-      ) : loadingOKs && collections.length === 0 ? (
+      ) : loadingCollections && collections.length === 0 ? (
         <div className="space-y-3">
           {[0, 1].map((i) => (
             <Skeleton key={i} className="h-32 w-full" />
@@ -325,7 +325,7 @@ export default function BucketDetailPage() {
                   : "No data stored in this bucket yet."}
               </p>
               <p className="text-xs">
-                Tenants land here when an Collection is bound to this bucket or
+                Tenants land here when a Collection is bound to this bucket or
                 when they pick it as their default at creation.
               </p>
             </div>

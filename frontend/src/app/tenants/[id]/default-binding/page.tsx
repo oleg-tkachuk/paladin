@@ -1,7 +1,7 @@
 "use client";
 
 // Default Route — ADR-0010 Phase 3. Manages the tenant's default
-// (backend, bucket) binding: where a bare object-key name (created without
+// (backend, bucket) binding: where a bare collection name (created without
 // naming a bucket) lands. Backed by TenantService.{Get,Set,Clear}
 // TenantDefaultBinding.
 
@@ -127,8 +127,8 @@ export default function DefaultBindingPage() {
         <div>
           <h2 className="text-base font-semibold">Default route</h2>
           <p className="text-sm text-muted-foreground">
-            Where a bare object-key name (created without naming a bucket) lands
-            for this tenant. Creating an object key with no bucket and no
+            Where a bare collection name (created without naming a bucket) lands
+            for this tenant. Creating an collection with no bucket and no
             default route is rejected.
           </p>
         </div>

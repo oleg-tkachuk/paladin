@@ -21,7 +21,7 @@ type QuotaReader interface {
 	GetBucket(ctx context.Context, backendID, bucketName string) (admindomain.Quota, error)
 }
 
-// BucketBindingLookup resolves an Collection to the physical bucket it writes
+// BucketBindingLookup resolves a Collection to the physical bucket it writes
 // through, so a bucket-scoped quota can be found for an upload that names
 // only its Collection. Satisfied by the object repository's LookupBucket.
 //
@@ -95,7 +95,7 @@ func NewQuotaSoftCheck(reader QuotaReader) *QuotaSoftCheck {
 }
 
 // WithBucketScope enables bucket-scoped enforcement by giving the
-// interceptor a way to resolve an Collection to its (backend, bucket).
+// interceptor a way to resolve a Collection to its (backend, bucket).
 // Without it, bucket quota rows are maintained and displayed but reject
 // nothing.
 func (q *QuotaSoftCheck) WithBucketScope(bindings BucketBindingLookup) *QuotaSoftCheck {
@@ -120,7 +120,7 @@ func (q *QuotaSoftCheck) WrapStreamingHandler(next connect.StreamingHandlerFunc)
 	return next
 }
 
-// regenerateUploadURLProc re-binds a presigned PUT to an Collection's
+// regenerateUploadURLProc re-binds a presigned PUT to a Collection's
 // EXISTING pending row. It creates nothing, so it must not consume a slot
 // against either object-count cap — and it carries no size, so the byte
 // caps see 0 and pass. Singled out by name because the request message has

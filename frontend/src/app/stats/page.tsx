@@ -444,7 +444,7 @@ export default function StatsPage() {
                 icon={ArchiveBoxIcon}
               />
               <Metric
-                label="Object keys"
+                label="Collections"
                 value={num(data.collections?.total)}
                 sub={`${num(data.collections?.unbound)} unbound`}
                 icon={CircleStackIcon}
@@ -570,7 +570,7 @@ export default function StatsPage() {
               />
             </BreakdownCard>
 
-            <BreakdownCard title="Object keys" icon={CircleStackIcon}>
+            <BreakdownCard title="Collections" icon={CircleStackIcon}>
               <Row label="Total" value={num(data.collections?.total)} />
               <Row
                 label="Unbound (no bucket)"
@@ -585,7 +585,7 @@ export default function StatsPage() {
               <div className={cn(T.label, "pb-1")}>By backend</div>
               <MapRows
                 map={data.collections?.byBackend ?? {}}
-                empty="No object keys."
+                empty="No collections."
               />
             </BreakdownCard>
           </div>

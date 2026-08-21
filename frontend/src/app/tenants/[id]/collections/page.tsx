@@ -163,7 +163,7 @@ export default function TenantCollectionsPage() {
           message:
             err instanceof ConnectError
               ? err.rawMessage
-              : "Failed to fetch object keys",
+              : "Failed to fetch collections",
         });
         throw err;
       }
@@ -284,7 +284,7 @@ export default function TenantCollectionsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Object Keys</h2>
+          <h2 className="text-lg font-semibold">Collections</h2>
           <p className={cn(T.helper, "max-w-prose")}>
             Tenant-scoped namespaces routed to a physical bucket. Cross-tenant
             index lives at{" "}
@@ -311,7 +311,7 @@ export default function TenantCollectionsPage() {
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search Object Keys by prefix…"
+            placeholder="Search Collections by prefix…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -376,8 +376,8 @@ export default function TenantCollectionsPage() {
                     <ServerStackIcon className="size-10 opacity-40" />
                     <p className="text-sm">
                       {search
-                        ? "No Object Keys match your search."
-                        : "No Object Keys yet."}
+                        ? "No Collections match your search."
+                        : "No Collections yet."}
                     </p>
                     {!search && isOwnTenant && (
                       <Button

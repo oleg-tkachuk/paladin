@@ -30,7 +30,7 @@ func NewCollectionRepo(q *sqlc.Queries, pool *pgxpool.Pool) *CollectionRepo {
 var _ objectkey.Repository = (*CollectionRepo)(nil)
 
 // RunInTx runs fn in one transaction on the repo's pool — the ADR-0003 seam
-// the handler uses to write an collection mutation and its outbox rows
+// the handler uses to write a collection mutation and its outbox rows
 // atomically. The *Tx mutation methods run on the same tx.
 func (r *CollectionRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)

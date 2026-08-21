@@ -75,7 +75,7 @@ function buildTree(keys: string[]): TreeNode {
 }
 
 export interface FolderTreeProps {
-  /** Flat list of object keys (without bucket prefix). */
+  /** Flat list of collections (without bucket prefix). */
   keys: string[];
   /** Currently-selected folder path (no leading slash). Empty = root. */
   activePrefix?: string;

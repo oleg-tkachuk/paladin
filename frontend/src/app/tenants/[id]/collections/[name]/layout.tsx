@@ -32,7 +32,7 @@ import { T } from "@/lib/ui/typography";
 import { useTenant } from "../../tenant-context";
 import { CollectionProvider } from "./collection-context";
 
-const okResourceName = (tenantId: string, collection: string) =>
+const collectionResourceName = (tenantId: string, collection: string) =>
   `tenants/${tenantId}/collections/${collection}`;
 
 export default function CollectionDetailLayout({
@@ -50,33 +50,37 @@ export default function CollectionDetailLayout({
   const collectionName = decodeURIComponent(rawName);
 
   const queryClient = useQueryClient();
-  const okKey = ["collection", tenant.tenantId, collectionName] as const;
-  const okQuery = useQuery({
-    queryKey: okKey,
+  const collectionCacheKey = [
+    "collection",
+    tenant.tenantId,
+    collectionName,
+  ] as const;
+  const collectionQuery = useQuery({
+    queryKey: collectionCacheKey,
     retry: false, // NotFound short-circuits to notFound(); a retry won't help.
     queryFn: ({ signal }) =>
       collectionClient.getCollection(
-        { name: okResourceName(tenant.tenantId, collectionName) },
+        { name: collectionResourceName(tenant.tenantId, collectionName) },
         { signal },
       ),
   });
-  const ok = okQuery.data ?? null;
-  const loading = okQuery.isFetching;
+  const collection = collectionQuery.data ?? null;
+  const loading = collectionQuery.isFetching;
   const notFoundFlag =
-    okQuery.error instanceof ConnectError &&
-    okQuery.error.code === Code.NotFound;
+    collectionQuery.error instanceof ConnectError &&
+    collectionQuery.error.code === Code.NotFound;
   const error =
-    okQuery.error && !notFoundFlag
-      ? okQuery.error instanceof ConnectError
-        ? okQuery.error.rawMessage
+    collectionQuery.error && !notFoundFlag
+      ? collectionQuery.error instanceof ConnectError
+        ? collectionQuery.error.rawMessage
         : "Failed to load object key."
       : null;
   const refetch = async () => {
-    await okQuery.refetch();
+    await collectionQuery.refetch();
   };
   // setCollection for child tabs (push a server-updated Collection into cache).
-  const setOk: Dispatch<SetStateAction<Collection | null>> = (next) =>
-    queryClient.setQueryData<Collection>(okKey, (curr) => {
+  const setCollection: Dispatch<SetStateAction<Collection | null>> = (next) =>
+    queryClient.setQueryData<Collection>(collectionCacheKey, (curr) => {
       const resolved = typeof next === "function" ? next(curr ?? null) : next;
       return resolved ?? undefined;
     });
@@ -85,15 +89,15 @@ export default function CollectionDetailLayout({
   // owner — if a paste linked the wrong tenant slug, bounce. Hooks
   // before notFound() to keep the count stable.
   useEffect(() => {
-    if (!ok) return;
-    if (ok.tenantId && ok.tenantId !== tenant.tenantId) {
+    if (!collection) return;
+    if (collection.tenantId && collection.tenantId !== tenant.tenantId) {
       router.replace(
-        `/tenants/${ok.tenantId}/collections/${encodeURIComponent(
+        `/tenants/${collection.tenantId}/collections/${encodeURIComponent(
           collectionName,
         )}`,
       );
     }
-  }, [ok, tenant.tenantId, collectionName, router]);
+  }, [collection, tenant.tenantId, collectionName, router]);
 
   if (notFoundFlag) {
     notFound();
@@ -119,8 +123,8 @@ export default function CollectionDetailLayout({
             <KeyIcon className="size-5 text-primary" />
             <span className="truncate font-mono">{collectionName}</span>
           </h2>
-          {ok?.displayName && (
-            <p className={cn(T.helper, "truncate")}>{ok.displayName}</p>
+          {collection?.displayName && (
+            <p className={cn(T.helper, "truncate")}>{collection.displayName}</p>
           )}
         </div>
         <Button
@@ -137,19 +141,17 @@ export default function CollectionDetailLayout({
 
       <CollectionTabs tenantId={tenant.slug} collection={collectionName} />
 
-      {error && !ok ? (
+      {error && !collection ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           {error}
         </div>
-      ) : loading && !ok ? (
+      ) : loading && !collection ? (
         <div className="space-y-3">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
         </div>
-      ) : ok ? (
-        <CollectionProvider
-          value={{ collection: ok, setCollection: setOk, refetch }}
-        >
+      ) : collection ? (
+        <CollectionProvider value={{ collection, setCollection, refetch }}>
           {children}
         </CollectionProvider>
       ) : null}

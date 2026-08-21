@@ -314,7 +314,7 @@ export interface SeededCollection {
 }
 
 /**
- * Create an Collection under the given (tenant, bucket) via
+ * Create a Collection under the given (tenant, bucket) via
  * CollectionService.CreateCollection. The key path is
  * `e2e/<8-hex>` so concurrent tests don't collide on the
  * (tenant_id, object_key) UNIQUE constraint.

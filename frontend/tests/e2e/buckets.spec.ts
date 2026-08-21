@@ -1,5 +1,5 @@
 /**
- * US3 — Bucket list & object key open.
+ * US3 — Bucket list & collection open.
  *
  * Spec: specs/001-frontend-playwright-e2e/spec.md §"User Story 3".
  * The most common day-1 operator path: navigate /buckets →
@@ -63,7 +63,7 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
     const ok = await seedCollection({ tenantId: tenant.tenantId, bucket });
 
     // Direct nav — the bucket-detail "Browse" link goes to the
-    // /objects browser, not the OK detail page (the Cedar
+    // /objects browser, not the Collection detail page (the Cedar
     // policy editor sits on a sibling /policy route). For
     // this test we drive straight to the detail page since
     // the spec asserts on Identity + canonical name, both of

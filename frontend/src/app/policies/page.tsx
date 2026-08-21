@@ -134,7 +134,7 @@ const SCOPES: { value: Scope; label: string; help: string }[] = [
   },
   {
     value: "collection",
-    label: "Object Key",
+    label: "Collection",
     help: "cedar_policy at the object_key layer — most-specific resource policy",
   },
 ];
@@ -438,7 +438,7 @@ export default function PoliciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Policies"
-        description="Cedar policies attached to tenants, buckets, and object keys."
+        description="Cedar policies attached to tenants, buckets, and collections."
       />
 
       <Card className="space-y-4 p-4">

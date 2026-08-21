@@ -62,25 +62,25 @@ function formatTimestamp(ts: { seconds: bigint } | undefined): string {
 }
 
 export default function CollectionOverviewPage() {
-  const { collection: ok, setCollection } = useCollection();
+  const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
   const { buckets, fetchBuckets } = useBuckets();
 
-  const [displayName, setDisplayName] = useState(ok.displayName);
+  const [displayName, setDisplayName] = useState(collection.displayName);
   const [savingMeta, setSavingMeta] = useState(false);
 
-  const [bucketSelection, setBucketSelection] = useState(ok.bucket);
+  const [bucketSelection, setBucketSelection] = useState(collection.bucket);
   const [binding, setBinding] = useState(false);
 
   // Re-sync editor state when the context Collection changes (another tab
   // wrote and refreshed the cache, or refetch fired). Render-phase adjust-on-
-  // change (not set-state-in-effect) — `ok` identity is stable between
+  // change (not set-state-in-effect) — `collection` identity is stable between
   // renders via TanStack structural sharing.
-  const [seededOk, setSeededOk] = useState(ok);
-  if (ok !== seededOk) {
-    setSeededOk(ok);
-    setDisplayName(ok.displayName);
-    setBucketSelection(ok.bucket);
+  const [seededCollection, setSeededCollection] = useState(collection);
+  if (collection !== seededCollection) {
+    setSeededCollection(collection);
+    setDisplayName(collection.displayName);
+    setBucketSelection(collection.bucket);
   }
 
   useEffect(() => {
@@ -91,17 +91,17 @@ export default function CollectionOverviewPage() {
     setSavingMeta(true);
     try {
       const collectionResource = create(CollectionSchema, {
-        name: ok.name,
-        tenantId: ok.tenantId,
-        collection: ok.collection,
+        name: collection.name,
+        tenantId: collection.tenantId,
+        collection: collection.collection,
         displayName,
-        bucket: ok.bucket,
-        cedarPolicy: ok.cedarPolicy,
-        resourceVersion: ok.resourceVersion,
+        bucket: collection.bucket,
+        cedarPolicy: collection.cedarPolicy,
+        resourceVersion: collection.resourceVersion,
       });
       const updated = await collectionClient.updateCollection({
-        name: ok.name,
-        resourceVersion: ok.resourceVersion,
+        name: collection.name,
+        resourceVersion: collection.resourceVersion,
         updateMask: create(FieldMaskSchema, { paths: ["display_name"] }),
         collectionResource,
       });
@@ -118,15 +118,15 @@ export default function CollectionOverviewPage() {
     } finally {
       setSavingMeta(false);
     }
-  }, [ok, displayName, setCollection, showNotification]);
+  }, [collection, displayName, setCollection, showNotification]);
 
   const handleBind = useCallback(async () => {
-    if (!bucketSelection || bucketSelection === ok.bucket) return;
+    if (!bucketSelection || bucketSelection === collection.bucket) return;
     setBinding(true);
     try {
       const updated = await collectionClient.bindCollectionToBucket({
-        name: ok.name,
-        resourceVersion: ok.resourceVersion,
+        name: collection.name,
+        resourceVersion: collection.resourceVersion,
         bucket: bucketSelection,
       });
       setCollection(updated);
@@ -141,7 +141,7 @@ export default function CollectionOverviewPage() {
     } finally {
       setBinding(false);
     }
-  }, [ok, bucketSelection, setCollection, showNotification]);
+  }, [collection, bucketSelection, setCollection, showNotification]);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -150,36 +150,42 @@ export default function CollectionOverviewPage() {
         <h2 className="text-sm font-semibold">Identity</h2>
         <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-muted-foreground">Resource name</dt>
-          <dd className="break-all font-mono text-xs">{ok.name}</dd>
+          <dd className="break-all font-mono text-xs">{collection.name}</dd>
 
           <dt className="text-muted-foreground">Tenant ID</dt>
-          <dd className="break-all font-mono text-xs">{ok.tenantId}</dd>
+          <dd className="break-all font-mono text-xs">{collection.tenantId}</dd>
 
-          <dt className="text-muted-foreground">Object key</dt>
-          <dd className="font-mono text-xs">{ok.collection}</dd>
+          <dt className="text-muted-foreground">Collection</dt>
+          <dd className="font-mono text-xs">{collection.collection}</dd>
 
           <dt className="text-muted-foreground">Completion mode</dt>
           <dd>
             <Badge variant="outline" className={T.code}>
-              {completionModeLabel(ok.completionMode)}
+              {completionModeLabel(collection.completionMode)}
             </Badge>
           </dd>
 
           <dt className="text-muted-foreground">Resource version</dt>
-          <dd className="font-mono text-xs">{ok.resourceVersion || "—"}</dd>
+          <dd className="font-mono text-xs">
+            {collection.resourceVersion || "—"}
+          </dd>
 
           <dt className="text-muted-foreground">Created</dt>
-          <dd className="font-mono text-xs">{formatTimestamp(ok.createdAt)}</dd>
+          <dd className="font-mono text-xs">
+            {formatTimestamp(collection.createdAt)}
+          </dd>
 
           <dt className="text-muted-foreground">Updated</dt>
-          <dd className="font-mono text-xs">{formatTimestamp(ok.updatedAt)}</dd>
+          <dd className="font-mono text-xs">
+            {formatTimestamp(collection.updatedAt)}
+          </dd>
         </dl>
 
         <div className="space-y-1.5 pt-2">
-          <Label htmlFor="ok-display-name">Display name</Label>
+          <Label htmlFor="collection-display-name">Display name</Label>
           <div className="flex gap-2">
             <Input
-              id="ok-display-name"
+              id="collection-display-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Production assets"
@@ -187,7 +193,7 @@ export default function CollectionOverviewPage() {
             <Button
               size="sm"
               onClick={handleSaveDisplayName}
-              disabled={savingMeta || displayName === ok.displayName}
+              disabled={savingMeta || displayName === collection.displayName}
             >
               {savingMeta ? "Saving…" : "Save"}
             </Button>
@@ -208,18 +214,18 @@ export default function CollectionOverviewPage() {
         <div className="space-y-1">
           <Label className="text-xs">Current</Label>
           <p className="break-all font-mono text-xs">
-            {ok.bucket || (
+            {collection.bucket || (
               <span className="italic text-muted-foreground">(unbound)</span>
             )}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ok-bucket-binding">Bind to bucket</Label>
+          <Label htmlFor="collection-bucket-binding">Bind to bucket</Label>
           <SelectRoot
             value={bucketSelection}
             onValueChange={setBucketSelection}
           >
-            <SelectTrigger id="ok-bucket-binding" className="w-full">
+            <SelectTrigger id="collection-bucket-binding" className="w-full">
               <SelectValue placeholder="Pick a bucket…" />
             </SelectTrigger>
             <SelectContent>
@@ -247,7 +253,9 @@ export default function CollectionOverviewPage() {
             size="sm"
             onClick={handleBind}
             disabled={
-              binding || !bucketSelection || bucketSelection === ok.bucket
+              binding ||
+              !bucketSelection ||
+              bucketSelection === collection.bucket
             }
           >
             {binding ? "Binding…" : "Re-bind"}
