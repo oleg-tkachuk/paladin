@@ -660,9 +660,17 @@ export async function seedObject(opts: {
   };
 }
 
-/** Soft-delete an object through the data plane, by its canonical name. */
+/**
+ * Soft-delete an object through the data plane, by its canonical name.
+ *
+ * DeleteObject requires the OCC guard, so the current version is read first.
+ * That is the same two-step the console does; passing no version used to be
+ * accepted and skipped the concurrency check entirely.
+ */
 export async function softDeleteObject(name: string): Promise<void> {
-  await createClient(ObjectService, dataTransport()).deleteObject({ name });
+  const client = createClient(ObjectService, dataTransport());
+  const current = await client.getObject({ name });
+  await client.deleteObject({ name, resourceVersion: current.resourceVersion });
 }
 
 /**
