@@ -533,6 +533,9 @@ type grantUserScopesArgs struct {
 }
 type restoreVersionArgs struct {
 	VersionName string `json:"version_name" jsonschema:".../objects/{id}/versions/{ver}"`
+	// OCC guard on the PARENT object, not on the version being restored —
+	// restoring repoints the parent's current-version pointer.
+	ResourceVersion string `json:"resource_version" jsonschema:"OCC guard; required — the PARENT object's resource_version, from a prior get/list"`
 }
 type createUserArgs struct {
 	TenantID        string   `json:"tenant_id" jsonschema:"tenant UUID or slug"`
@@ -648,7 +651,8 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Make the named version `current` again (versioning must be enabled on the parent bucket).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in restoreVersionArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.RestoreObjectVersion(ctx, connect.NewRequest(&datav1.RestoreObjectVersionRequest{
-			Name: in.VersionName,
+			Name:            in.VersionName,
+			ResourceVersion: in.ResourceVersion,
 		})))
 	})
 

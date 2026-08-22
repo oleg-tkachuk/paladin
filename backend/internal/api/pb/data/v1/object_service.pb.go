@@ -376,9 +376,15 @@ func (x *GetObjectVersionRequest) GetName() string {
 }
 
 type RestoreObjectVersionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: expected_version=0 disables the check in SQL, so an
+	//
+	//	absent guard would restore over a concurrent change instead of
+	//	failing. This is the CURRENT object's version, not the version being
+	//	restored — the console takes it from the object the versions tab is
+	//	showing.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1274,8 +1280,11 @@ func (x *GetObjectLockRequest) GetName() string {
 type RestoreObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// OCC guard. Empty disables the check (legacy callers); v2 SDKs are
-	// expected to read it from a prior GetObject and pass it back unchanged.
+	// OCC, required: expected_version=0 disables the check in SQL, so an
+	//
+	//	absent guard would restore over a concurrent change instead of
+	//	failing. The console reads the version from the trash listing,
+	//	which shows it in a Version column.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -1761,10 +1770,10 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\bversions\x18\x01 \x03(\v2\x1d.paladin.data.v1.ObjectVersionR\bversions\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"6\n" +
 	"\x17GetObjectVersionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"e\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"n\n" +
 	"\x1bRestoreObjectVersionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\x8e\x05\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x8e\x05\n" +
 	"\x13UploadObjectRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
@@ -1838,10 +1847,10 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\n" +
 	"legal_hold\x18\x02 \x01(\bR\tlegalHold\"3\n" +
 	"\x14GetObjectLockRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"^\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"g\n" +
 	"\x14RestoreObjectRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\xf3\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\xf3\x02\n" +
 	"\x11CopyObjectRequest\x12(\n" +
 	"\vsource_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"sourceName\x12>\n" +

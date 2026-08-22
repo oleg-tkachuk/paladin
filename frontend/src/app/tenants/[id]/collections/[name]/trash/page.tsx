@@ -218,6 +218,20 @@ export default function CollectionTrashPage() {
                   <ClockIcon className="size-3" />
                 </button>
               </TableHead>
+              <TableHead className="hidden lg:table-cell text-right">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
+                      Version
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    The OCC guard sent with Restore. If it has moved on since
+                    this list loaded, the restore is refused rather than
+                    overwriting a concurrent change.
+                  </TooltipContent>
+                </Tooltip>
+              </TableHead>
               <TableHead className="text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -227,14 +241,14 @@ export default function CollectionTrashPage() {
             {loading && objects.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={7} className="py-3">
+                  <TableCell colSpan={8} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-48 text-center">
+                <TableCell colSpan={8} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <TrashIcon className="size-10 opacity-40" />
                     <p className="text-sm">Trash is empty.</p>
@@ -295,6 +309,9 @@ export default function CollectionTrashPage() {
                         ? formatDate(timestampToDate(obj.terminatedAt))
                         : timestampToDate(obj.terminatedAt).toLocaleString()
                       : "—"}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
+                    {obj.resourceVersion || "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">

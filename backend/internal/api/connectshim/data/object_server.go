@@ -296,7 +296,7 @@ func (s *ObjectServer) RestoreObjectVersion(ctx context.Context, req *connect.Re
 	if s.Versions == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
 	}
-	out, err := s.Versions.RestoreVersion(ctx, req.Msg.GetName())
+	out, err := s.Versions.RestoreVersion(ctx, req.Msg.GetName(), req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, err
 	}

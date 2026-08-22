@@ -103,7 +103,25 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 // RestoreVersion makes the named version the current one. If the named
 // version is a delete marker, the operation fails — clients should use
 // RestoreObject in that case (which clears the most recent delete marker).
-func (h *VersionHandler) RestoreVersion(ctx context.Context, name string) (*Object, error) {
+//
+// resourceVersion is the OCC guard on the PARENT object, not on the version
+// being restored: restoring repoints the parent's current-version pointer, so
+// that is the row a concurrent writer would be racing for. It is mandatory.
+// The field existed on the request for a while but was never read here, so a
+// console that dutifully sent it got no protection from it.
+func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersion string) (*Object, error) {
+	// Shape of the request first: this needs no identity and no lookup, and
+	// checking it here rather than trusting protovalidate means callers that
+	// reach the handler by another route get the same guarantee.
+	if resourceVersion == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("resource_version is required"))
+	}
+	expected, err := parseInt64(resourceVersion)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
@@ -115,6 +133,11 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name string) (*Obje
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if expected != parent.ResourceVersion {
+		return nil, connect.NewError(connect.CodeAborted,
+			fmt.Errorf("resource_version mismatch: expected %d, current %d",
+				expected, parent.ResourceVersion))
 	}
 	v, err := h.versions.Get(ctx, parsed.versionID)
 	if err != nil {

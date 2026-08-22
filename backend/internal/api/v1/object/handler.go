@@ -1468,10 +1468,23 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 // ─── RestoreObject ──────────────────────────────────────────────────────────
 
 // RestoreObject brings a soft-deleted object back. resourceVersion enforces
-// OCC against the row read here — empty skips the check.
+// OCC against the row read here and is mandatory; an empty one is rejected
+// rather than skipping the check.
 // Versioning-aware: when bucket has versioning_enabled, also drops the most
 // recent delete-marker before flipping state.
 func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*Object, error) {
+	// Shape of the request first — no identity, no lookup needed. Same order
+	// as VersionHandler.RestoreVersion, and it means the refusal cannot be
+	// mistaken for an authentication failure.
+	if resourceVersion == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("resource_version is required"))
+	}
+	expected, err := parseInt64(resourceVersion)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1509,20 +1522,14 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("cannot restore from state %s", obj.State))
 	}
-	// OCC: when caller provided a resource_version, it must match the row
-	// we just loaded. TOCTOU-safe enough for restore — concurrent updates
-	// on a DELETED row are vanishingly rare (the only mutation paths are
-	// sm.Restore itself and HardDelete; both serialize via state guards).
-	if resourceVersion != "" {
-		expected, err := parseInt64(resourceVersion)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("invalid resource_version: %w", err))
-		}
-		if expected != obj.ResourceVersion {
-			return nil, connect.NewError(connect.CodeAborted,
-				fmt.Errorf("resource_version mismatch: expected %d, current %d", expected, obj.ResourceVersion))
-		}
+	// OCC against the row just loaded. The guard is mandatory (validated at
+	// the top); the old form skipped the check on an empty string, arguing a
+	// concurrent mutation of a DELETED row was vanishingly rare. "Rare" is
+	// not "impossible", and HardDelete is the other mutation path on that
+	// row — restoring over one is exactly the race worth refusing.
+	if expected != obj.ResourceVersion {
+		return nil, connect.NewError(connect.CodeAborted,
+			fmt.Errorf("resource_version mismatch: expected %d, current %d", expected, obj.ResourceVersion))
 	}
 	collision, err := h.repo.LiveCollision(ctx, tenantID, collection, obj.Key)
 	if err != nil {

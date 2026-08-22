@@ -118,7 +118,12 @@ message GetObjectVersionRequest {
 
 message RestoreObjectVersionRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: expected_version=0 disables the check in SQL, so an
+  //   absent guard would restore over a concurrent change instead of
+  //   failing. This is the CURRENT object's version, not the version being
+  //   restored — the console takes it from the object the versions tab is
+  //   showing.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 // ─── Upload ─────────────────────────────────────────────────────────────────
@@ -265,9 +270,11 @@ message GetObjectLockRequest {
 
 message RestoreObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // OCC guard. Empty disables the check (legacy callers); v2 SDKs are
-  // expected to read it from a prior GetObject and pass it back unchanged.
-  string resource_version = 2;
+  // OCC, required: expected_version=0 disables the check in SQL, so an
+  //   absent guard would restore over a concurrent change instead of
+  //   failing. The console reads the version from the trash listing,
+  //   which shows it in a Version column.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 // ─── Copy ───────────────────────────────────────────────────────────────────
