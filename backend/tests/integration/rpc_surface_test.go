@@ -355,14 +355,33 @@ func TestRPCSurface_RejectsUnknownRequestField(t *testing.T) {
 		}
 	}
 
-	status, code := call(t, iam, "/paladin.iam.v1.AuthService/Login",
-		`{"subject":"nobody","password":"nothing","audience":"paladin-admin"}`)
-	if unknownToStack(status, code) {
-		t.Skipf("the running stack does not serve Login (HTTP %d)", status)
+	// Not the shared `call` helper: it always posts `{}` — its third argument
+	// is a bearer token, not a body — and this test is precisely about the
+	// body's contents.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		iam+"/paladin.iam.v1.AuthService/Login",
+		bytes.NewReader([]byte(`{"subject":"nobody","password":"nothing","audience":"paladin-admin"}`)))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
 	}
-	if code != "invalid_argument" {
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient(10 * time.Second).Do(req)
+	if err != nil {
+		t.Skipf("stack unreachable: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Skipf("the running stack does not serve Login (HTTP %d)", resp.StatusCode)
+	}
+	var env struct {
+		Code string `json:"code"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	_ = json.Unmarshal(body, &env)
+	if env.Code != "invalid_argument" {
 		t.Errorf("unknown request field returned %q (HTTP %d), want invalid_argument — "+
-			"the strict codec is not installed on this build", code, status)
+			"the strict codec is not installed on this build. body: %s",
+			env.Code, resp.StatusCode, body)
 	}
 }
 

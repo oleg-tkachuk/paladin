@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
+
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // Restore used to accept an empty resource_version and skip the OCC check
@@ -65,4 +68,54 @@ func requireCode(t *testing.T, err error, want connect.Code, contains string) {
 	if !strings.Contains(err.Error(), contains) {
 		t.Fatalf("error = %q, want it to contain %q", err, contains)
 	}
+}
+
+// restoreParentStub serves one parent Object at a known resource_version, so
+// the comparison itself can be exercised — not just the shape checks above.
+type restoreParentStub struct {
+	fakeObjectRepo
+	obj Object
+}
+
+func (s *restoreParentStub) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
+	return s.obj, nil
+}
+
+// TestRestoreVersionComparesAgainstParent is the assertion the shape checks
+// cannot make: that the guard is actually compared, and compared against the
+// PARENT object. Before this change the shim called RestoreVersion(ctx, name)
+// and the field was never read at all — a test that only proved "empty is
+// rejected" would have passed against that too, since protovalidate would
+// have caught the empty one.
+func TestRestoreVersionComparesAgainstParent(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	objectID := uuid.Must(uuid.NewV7())
+	h := &VersionHandler{
+		objects: &restoreParentStub{
+			obj: Object{ObjectID: objectID, TenantID: tenantID, Collection: "docs", ResourceVersion: 7},
+		},
+	}
+	ctx := auth.WithPrincipal(context.Background(),
+		&auth.Principal{Subject: "u1", TenantID: tenantID})
+	name := "tenants/" + tenantID.String() + "/collections/docs/objects/" +
+		objectID.String() + "/versions/" + uuid.Must(uuid.NewV7()).String()
+
+	t.Run("stale guard is aborted", func(t *testing.T) {
+		_, err := h.RestoreVersion(ctx, name, "6")
+		requireCode(t, err, connect.CodeAborted, "expected 6, current 7")
+	})
+
+	t.Run("matching guard gets past the check", func(t *testing.T) {
+		// versions is nil, so a matching guard panics on the next line rather
+		// than returning — which is exactly the proof wanted here: the guard
+		// did not short-circuit, execution continued past it.
+		defer func() {
+			if recover() == nil {
+				t.Error("a matching guard did not reach the version lookup")
+			}
+		}()
+		_, _ = h.RestoreVersion(ctx, name, "7")
+	})
 }
