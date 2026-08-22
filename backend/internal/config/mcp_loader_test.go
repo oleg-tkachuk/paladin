@@ -38,6 +38,8 @@ func TestLoadMCPYAMLOverrides(t *testing.T) {
 mcp:
   upstreams:
     admin_url: "https://admin.example.com"
+    tls:
+      ca_path: /etc/paladin-mtls/ca.crt
   stdio:
     enabled: false
   http:
@@ -52,6 +54,9 @@ mcp:
 	}
 	if cfg.Stdio.Enabled {
 		t.Error("stdio should be disabled by yaml")
+	}
+	if cfg.Upstreams.TLS.CaPath != "/etc/paladin-mtls/ca.crt" {
+		t.Errorf("upstream tls ca_path = %q, want the yaml value", cfg.Upstreams.TLS.CaPath)
 	}
 	if cfg.HTTP.Addr != ":9000" {
 		t.Errorf("addr: got %q want :9000", cfg.HTTP.Addr)

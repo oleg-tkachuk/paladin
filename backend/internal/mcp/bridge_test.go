@@ -72,9 +72,14 @@ func TestServerRegistersDefaultCatalog(t *testing.T) {
 func recordingPlane(paths *[]string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*paths = append(*paths, r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
+		// application/proto with an empty body: an empty protobuf message, so
+		// the Connect client decodes a zero-value response. Answering
+		// application/json here instead would fail the client's content-type
+		// check — invisibly, because a transport failure inside tools/call
+		// comes back as CallToolResult.IsError with a nil Go error. The
+		// IsError assertions at the call sites depend on this being right.
+		w.Header().Set("Content-Type", "application/proto")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("{}"))
 	})
 }
 
@@ -158,12 +163,18 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 			}, "tok")
 			cs := dialInProcess(t, clients)
 
-			_, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+			res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 				Name:      tc.tool,
 				Arguments: tc.args,
 			})
 			if err != nil {
 				t.Fatalf("CallTool %s: %v", tc.tool, err)
+			}
+			// A transport-level failure does not surface as a Go error here —
+			// it becomes an error *result*. Without this check the dispatch
+			// assertion below would still pass on a call that never worked.
+			if res.IsError {
+				t.Fatalf("CallTool %s returned an error result: %+v", tc.tool, res.Content)
 			}
 			if len(paths) != 1 {
 				t.Fatalf("%s: recorded %d data-plane calls, want 1 (%v)", tc.tool, len(paths), paths)
@@ -216,11 +227,15 @@ func TestCoverageToolsDispatch(t *testing.T) {
 			}
 			cs := dialInProcess(t, NewInlineClients(h, "tok"))
 
-			if _, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+			res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 				Name:      tc.tool,
 				Arguments: tc.args,
-			}); err != nil {
+			})
+			if err != nil {
 				t.Fatalf("CallTool %s: %v", tc.tool, err)
+			}
+			if res.IsError {
+				t.Fatalf("CallTool %s returned an error result: %+v", tc.tool, res.Content)
 			}
 			if len(paths) != 1 {
 				t.Fatalf("%s: recorded %d %s-plane calls, want 1 (%v)", tc.tool, len(paths), tc.plane, paths)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	goyaml "gopkg.in/yaml.v3"
@@ -97,8 +98,74 @@ func LoadMCP(path string) (MCP, error) {
 		}
 		cfg.HTTP.SessionTimeout = d
 	}
+	if v := os.Getenv("PALADIN_MCP_UPSTREAM_CA"); v != "" {
+		cfg.Upstreams.TLS.CaPath = v
+	}
+	if v := os.Getenv("PALADIN_MCP_UPSTREAM_CERT"); v != "" {
+		cfg.Upstreams.TLS.CertPath = v
+	}
+	if v := os.Getenv("PALADIN_MCP_UPSTREAM_KEY"); v != "" {
+		cfg.Upstreams.TLS.KeyPath = v
+	}
 
+	for _, up := range []struct{ name, url string }{
+		{"admin_url", cfg.Upstreams.AdminURL},
+		{"data_url", cfg.Upstreams.DataURL},
+		{"iam_url", cfg.Upstreams.IAMURL},
+	} {
+		if up.url == "" {
+			return MCP{}, fmt.Errorf("mcp.upstreams.%s is required", up.name)
+		}
+	}
+	if err := cfg.Upstreams.Validate(); err != nil {
+		return MCP{}, err
+	}
 	return cfg, nil
+}
+
+// Validate rejects upstream settings that would leave the bridge unable to
+// reach the planes. The failure this guards against is silent at startup and
+// only shows up as an opaque error on every tools/call, so it is worth
+// catching at load time.
+func (u MCPUpstreams) Validate() error {
+	anyTLS := false
+	for _, up := range []struct{ name, url string }{
+		{"admin_url", u.AdminURL},
+		{"data_url", u.DataURL},
+		{"iam_url", u.IAMURL},
+	} {
+		if up.url == "" {
+			// Not an error here: Config.Validate runs for every role, and
+			// roles that never build a bridge legitimately carry no mcp
+			// section. LoadMCP — the bridge's own path — requires them.
+			continue
+		}
+		// Scheme only, by prefix rather than url.Parse: these values reach
+		// Validate straight out of Helm values with the host still an
+		// unrendered {{ template }}, which is not a parseable URL but is a
+		// perfectly good thing to scheme-check.
+		scheme, _, ok := strings.Cut(up.url, "://")
+		if !ok {
+			return fmt.Errorf("mcp.upstreams.%s %q: missing scheme", up.name, up.url)
+		}
+		switch scheme {
+		case "http":
+		case "https":
+			anyTLS = true
+		default:
+			return fmt.Errorf("mcp.upstreams.%s %q: scheme must be http or https", up.name, up.url)
+		}
+	}
+	if anyTLS && u.TLS.CaPath == "" && !u.TLS.InsecureSkipVerify {
+		return fmt.Errorf(
+			"mcp.upstreams: an https:// upstream requires tls.ca_path (the internal " +
+				"mTLS CA bundle the planes serve from; the system roots do not " +
+				"contain it) unless tls.insecure_skip_verify is set")
+	}
+	if (u.TLS.CertPath == "") != (u.TLS.KeyPath == "") {
+		return fmt.Errorf("mcp.upstreams.tls: cert_path and key_path must be set together")
+	}
+	return nil
 }
 
 func envBool(key string) (bool, bool) {

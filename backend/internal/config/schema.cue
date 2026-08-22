@@ -429,6 +429,18 @@ mcp: {
     admin_url: string | *"http://localhost:8090"
     data_url:  string | *"http://localhost:8080"
     iam_url:   string | *"http://localhost:8085"
+    // Trust material for whichever URLs above are https://. There is no
+    // "enabled" switch on purpose — the URL scheme decides whether a dial is
+    // encrypted, so the two cannot disagree. A cluster deployment uses
+    // https:// URLs plus ca_path pointing at the mounted internal-mTLS CA
+    // bundle; config.MCPUpstreams.Validate rejects https:// without it.
+    tls: {
+      cert_path:            string | *""
+      key_path:             string | *""
+      ca_path:              string | *""
+      server_name:          string | *""
+      insecure_skip_verify: bool   | *false
+    }
   }
   stdio: {
     enabled: bool | *true

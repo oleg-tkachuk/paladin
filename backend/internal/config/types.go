@@ -946,6 +946,30 @@ type MCPUpstreams struct {
 	AdminURL string `yaml:"admin_url" json:"admin_url"`
 	DataURL  string `yaml:"data_url" json:"data_url"`
 	IAMURL   string `yaml:"iam_url" json:"iam_url"`
+	// TLS carries the trust material for whichever of the URLs above are
+	// https://. It deliberately has no "enabled" switch: the URL scheme is
+	// the single source of truth for whether a dial is encrypted, so the two
+	// cannot disagree, and the three planes may legitimately differ.
+	//
+	// It matters because the planes serve TLS from the internal mTLS CA,
+	// which the system roots do not contain. A bridge pointed at https://
+	// with no CaPath fails verification on every call; a bridge left on the
+	// plaintext default against a TLS plane gets the Go TLS listener's
+	// "400 Bad Request" instead — which reaches the MCP client as an opaque
+	// "internal: 400 Bad Request" on every tools/call.
+	TLS MCPUpstreamTLS `yaml:"tls" json:"tls"`
+}
+
+// MCPUpstreamTLS is the client half of config.TLS: no Enabled (the URL scheme
+// decides) and no ClientAuth (a server-side listener knob). CertPath/KeyPath
+// are the client certificate to present to planes whose client_auth is
+// stricter than "permissive".
+type MCPUpstreamTLS struct {
+	CertPath           string `yaml:"cert_path" json:"cert_path"`
+	KeyPath            string `yaml:"key_path" json:"key_path"`
+	CaPath             string `yaml:"ca_path" json:"ca_path"`
+	ServerName         string `yaml:"server_name" json:"server_name"`
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify" json:"insecure_skip_verify"`
 }
 
 // MCPStdio configures the local stdio bridge (Claude Desktop / Cursor /

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // Flags scoped to `serve mcp`. Cobra binds them in init().
@@ -122,7 +124,13 @@ type mcpRunner struct {
 // provideMCPBridgeRunner is the network-mode constructor. No DB; speaks Connect
 // over HTTP against the upstream URLs in cfg.MCP.Upstreams.
 func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
-	httpc := &http.Client{Timeout: 30 * time.Second}
+	httpc, err := upstreamHTTPClient(cfg.MCP.Upstreams)
+	if err != nil {
+		// A bridge that cannot dial its planes has nothing to serve: every
+		// tools/call would fail with an opaque transport error. Fail loudly
+		// at construction instead.
+		l.Fatal("mcp bridge: build upstream client", zap.Error(err))
+	}
 	makeClients := func(bearer, capToken string) *mcp.Clients {
 		return mcp.NewClientsWithCapability(
 			httpc,
@@ -289,8 +297,9 @@ func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mc
 }
 
 // runHTTP runs the streamable-HTTP MCP transport. The clientsFor closure
-// is invoked per-session; it returns nil to refuse the session (which
-// the SDK surfaces as 400 Bad Request to the LLM client).
+// is invoked per-session; it returns nil to refuse the session (which the SDK
+// surfaces as 400 Bad Request). Credential-less requests are turned away with
+// 401 before reaching it — see RequireToken / RequireBearer below.
 func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clientsFor func(*http.Request) *mcp.Clients) error {
 	profile := pickProfile(mcpProfile, cfg.MCP.HTTP.Profile)
 	filter := mcp.NewToolFilter(cfg.MCP, profile)
@@ -324,7 +333,8 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// endpoint advertises where to authenticate (RFC 9728 / RFC 8414) and
 	// challenges unauthenticated requests with 401 + WWW-Authenticate so a
 	// standard MCP client can run discovery. Disabled → the legacy
-	// X-Paladin-Token path is unchanged (missing token → 400 from getServer).
+	// X-Paladin-Token path still answers a credential-less request with 401
+	// (RequireToken), just without a resource_metadata pointer.
 	mcpHandler := http.Handler(tracked)
 	if cfg.MCP.OAuth.Enabled {
 		mux.Handle(mcp.WellKnownProtectedResource, mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth))
@@ -339,7 +349,12 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 			mcpHandler = mcp.RequireBearer(tracked, v, oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL))
 		} else {
 			l.Warn("mcp oauth: bearer challenge disabled — no usable JWT verifier (set auth.signing_key or auth.jwks_url)")
+			mcpHandler = mcp.RequireToken(mcpHandler)
 		}
+	} else {
+		// Legacy X-Paladin-Token path: no discovery metadata to advertise, but
+		// a request with no credential is still 401, not the SDK's 400.
+		mcpHandler = mcp.RequireToken(mcpHandler)
 	}
 	mux.Handle("/mcp", mcpHandler)
 
@@ -507,4 +522,33 @@ func oauthResourceMetadataURL(resourceURL string) string {
 		return mcp.WellKnownProtectedResource
 	}
 	return u.Scheme + "://" + u.Host + mcp.WellKnownProtectedResource
+}
+
+// upstreamHTTPClient builds the transport the bridge uses to reach the admin /
+// data / iam planes. The planes' certificates chain to the internal mTLS CA,
+// which the system roots do not contain, so an https:// upstream needs that
+// bundle installed here or verification fails. CertPath/KeyPath are forwarded
+// too, so the client can present a certificate to planes running client_auth
+// stricter than "permissive". Installing the transport is harmless for
+// plaintext upstreams — it is simply never consulted.
+func upstreamHTTPClient(up config.MCPUpstreams) (*http.Client, error) {
+	c := &http.Client{Timeout: 30 * time.Second}
+	// No trust material configured → nothing to install. Plaintext upstreams
+	// take this path; so does an https:// upstream with insecure_skip_verify
+	// left off, which config validation has already rejected.
+	if up.TLS.CaPath == "" && up.TLS.CertPath == "" && !up.TLS.InsecureSkipVerify {
+		return c, nil
+	}
+	tlsCfg, err := utils.NewTLSConfig(
+		up.TLS.CertPath, up.TLS.KeyPath, up.TLS.CaPath,
+		up.TLS.ServerName, up.TLS.InsecureSkipVerify,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("mcp upstream tls: %w", err)
+	}
+	tlsCfg.MinVersion = tls.VersionTLS12
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = tlsCfg
+	c.Transport = tr
+	return c, nil
 }

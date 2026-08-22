@@ -380,6 +380,25 @@ deployments:
         - name: mcp
           port: 8095
           targetPort: mcp
+    # The bridge dials the admin / data / iam planes, and all three serve TLS
+    # from the internal CA. Mount the same paladin-api-mtls Secret those planes
+    # use so config.mcp.upstreams.tls.ca_path resolves — without it every
+    # tools/call fails, because the planes' Go TLS listeners answer the
+    # plaintext dial with "400 Bad Request" rather than a usable error.
+    # tls.crt/tls.key ride along so the bridge can present a client cert if
+    # the planes ever move past client_auth: permissive.
+    volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: paladin-api-mtls
+        secret:
+          secretName: paladin-api-mtls
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+      - name: paladin-api-mtls
+        mountPath: /etc/paladin-mtls
+        readOnly: true
 
   # Dispatcher plane — durable webhook fan-out. Consumes the
   # event_deliveries outbox (migration 028). Producer (admin pod)
@@ -892,9 +911,18 @@ config:
       # Service names track chart.fullname automatically — override only
       # for cross-release setups (sidecar MCP pointing at a different
       # Paladin install) or when terminating TLS in front of those Services.
-      admin_url: 'http://{{ include "chart.fullname" . }}-admin:8090'
-      data_url: 'http://{{ include "chart.fullname" . }}-api:8080'
-      iam_url: 'http://{{ include "chart.fullname" . }}-api:8085'
+      admin_url: 'https://{{ include "chart.fullname" . }}-admin:8090'
+      data_url: 'https://{{ include "chart.fullname" . }}-api:8080'
+      iam_url: 'https://{{ include "chart.fullname" . }}-api:8085'
+      # https:// above is not optional: admin.server.tls, api.server.data.tls
+      # and api.server.iam.tls are all enabled, so these Services speak TLS.
+      # ca_path is the CA those certificates chain to; the system roots do not
+      # contain it. No server_name override is needed: the certificate's SANs
+      # already cover the bare Service names used above.
+      tls:
+        ca_path: /etc/paladin-mtls/ca.crt
+        cert_path: /etc/paladin-mtls/tls.crt
+        key_path: /etc/paladin-mtls/tls.key
     stdio:
       enabled: false
       profile: read_only

@@ -141,15 +141,43 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 	})
 }
 
+// RequireToken is the challenge for deployments that have not enabled the
+// OAuth Resource-Server posture. It only checks that *some* credential is
+// present — verification stays downstream, where the planes check audience and
+// scope — but it makes the refusal honest: without it, a request with no token
+// reaches the SDK's session factory, which returns nil and surfaces as
+// "400 Bad Request". A missing credential is 401, not a malformed request, and
+// clients (and humans reading logs) act on that difference.
+//
+// No resource_metadata parameter is emitted: with OAuth disabled there is no
+// metadata document to point a client at. Use RequireBearer when there is.
+func RequireToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if BearerToken(r) == "" {
+			writeChallenge(w, "", "", "")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // writeChallenge emits the 401 + WWW-Authenticate per RFC 9728 §5.1 (the
 // resource_metadata parameter) and RFC 6750 (error / error_description).
+// An empty resourceMetadataURL omits that parameter entirely — an empty
+// resource_metadata="" would be a promise of a document that isn't served.
 func writeChallenge(w http.ResponseWriter, resourceMetadataURL, errCode, errDesc string) {
 	var b strings.Builder
-	b.WriteString(`Bearer resource_metadata="`)
-	b.WriteString(resourceMetadataURL)
-	b.WriteString(`"`)
+	b.WriteString("Bearer")
+	if resourceMetadataURL != "" {
+		b.WriteString(` resource_metadata="`)
+		b.WriteString(resourceMetadataURL)
+		b.WriteString(`"`)
+	}
 	if errCode != "" {
-		b.WriteString(`, error="`)
+		if resourceMetadataURL != "" {
+			b.WriteString(",")
+		}
+		b.WriteString(` error="`)
 		b.WriteString(errCode)
 		b.WriteString(`", error_description="`)
 		b.WriteString(errDesc)

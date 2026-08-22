@@ -128,7 +128,17 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 // catalog wired up. The ToolFilter selects which tools are registered;
 // see internal/mcp/profile.go for the YAML-driven gating model.
 func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Server {
-	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: name, Version: version}, nil)
+	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: name, Version: version}, &mcpsdk.ServerOptions{
+		// An empty (non-nil) ServerCapabilities suppresses the SDK's nil
+		// default of {"logging":{}}, which it advertises "for historical
+		// reasons". We implement no logging handler, and the feature is
+		// deprecated as of protocol version 2026-07-28 (SEP-2577) along with
+		// roots and sampling — so advertising it told clients we support a
+		// dying feature we never had. Tools / resources / prompts are still
+		// inferred from the registrations below; only the unset fields are
+		// inferred, so leaving them nil here is what we want.
+		Capabilities: &mcpsdk.ServerCapabilities{},
+	})
 	registerReadTools(srv, c, filter)
 	registerWriteTools(srv, c, filter)
 	registerResources(srv, c)

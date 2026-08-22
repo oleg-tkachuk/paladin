@@ -379,6 +379,19 @@ mcp:
     admin_url: "http://localhost:8090"
     data_url: "http://localhost:8080"
     iam_url: "http://localhost:8085"
+    # Trust material for whichever URLs above are https://. There is no
+    # "enabled" flag: the scheme decides whether a dial is encrypted, so the
+    # two cannot drift apart. Local defaults are plaintext, so this is empty;
+    # in-cluster the planes serve TLS from the internal mTLS CA and the chart
+    # sets ca_path to the mounted bundle. An https:// upstream with no
+    # ca_path is rejected at load time — the system roots do not contain
+    # that CA, so it would fail on first use instead.
+    tls:
+      cert_path: ""
+      key_path: ""
+      ca_path: ""
+      server_name: ""
+      insecure_skip_verify: false
   stdio:
     enabled: true                       # set false to ship a build with no local LLM bridge
     profile: read_only                  # read-only inspection by default

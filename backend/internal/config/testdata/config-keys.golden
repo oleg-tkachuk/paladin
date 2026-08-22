@@ -298,6 +298,12 @@ mcp.upstreams
 mcp.upstreams.admin_url
 mcp.upstreams.data_url
 mcp.upstreams.iam_url
+mcp.upstreams.tls
+mcp.upstreams.tls.ca_path
+mcp.upstreams.tls.cert_path
+mcp.upstreams.tls.insecure_skip_verify
+mcp.upstreams.tls.key_path
+mcp.upstreams.tls.server_name
 middleware
 middleware.cache
 middleware.cache.enabled

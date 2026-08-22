@@ -198,6 +198,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if err := c.MCP.Upstreams.Validate(); err != nil {
+		return err
+	}
+
 	for name, b := range c.Storage.Backends {
 		if b.Auth.AccessKey != "" && b.Auth.AccessKeySecret != nil {
 			return fmt.Errorf("storage.backends.%s.auth: cannot specify both access_key and access_key_secret", name)
