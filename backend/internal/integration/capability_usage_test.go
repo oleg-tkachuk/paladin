@@ -624,3 +624,43 @@ func TestTenantBudgetCapCannotBeNullOrNaN(t *testing.T) {
 		}
 	})
 }
+
+// TestChargeAlwaysWritesTheLedger pins that one UsageStore has one contract.
+//
+// The type used to accept a nil pool, which selected a second path: the same
+// Charge call ran the counters and skipped both the charges ledger and the
+// outbox fan-out. Two behaviours behind one method, chosen at construction,
+// with no way for a caller to tell which instance it held — a spend that
+// committed without its ledger row looks identical to one that did not, until
+// somebody tries to bill for it.
+//
+// Nothing ever selected that path, in production or in tests, so it was a
+// promise no call site could rely on and no test covered. This asserts what
+// remains: every successful charge leaves a ledger row behind, and a store
+// cannot be built without the pool that makes that possible.
+func TestChargeAlwaysWritesTheLedger(t *testing.T) {
+	ctx, f := newUsageFixture(t)
+
+	for i, amount := range []float64{1, 2.5, 0.001} {
+		if _, err := f.usage.Charge(ctx, f.capID, amount, 0, "USD", f.tenant, "op", "actor", nil); err != nil {
+			t.Fatalf("charge %d: %v", i, err)
+		}
+	}
+	if n := f.ledgerRows(t, ctx); n != 3 {
+		t.Errorf("ledger has %d rows after 3 charges, want 3", n)
+	}
+}
+
+// TestUsageStoreRefusesANilPool pins the requirement at the boundary where it
+// can still be fixed. A nil pool used to be accepted and silently downgrade
+// every charge that followed; failing at wiring time turns a quiet
+// data-integrity change into a startup crash, which is the right trade for a
+// dependency the type cannot work correctly without.
+func TestUsageStoreRefusesANilPool(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("NewUsageStore accepted a nil pool")
+		}
+	}()
+	capstore.NewUsageStore(nil, nil, zap.NewNop())
+}

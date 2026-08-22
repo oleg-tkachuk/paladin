@@ -39,20 +39,32 @@ import (
 //     the row just tracks accumulated usage.
 type UsageStore struct {
 	q    *sqlc.Queries
-	pool *pgxpool.Pool // optional; nil disables charges-ledger writes
+	pool *pgxpool.Pool // required — see NewUsageStore
 	log  *zap.Logger   // never nil — defaults to zap.NewNop in NewUsageStore
 }
 
 // NewUsageStore wires the sqlc-generated queries to the
-// capability.UsageStore[pgx.Tx] interface. pool is optional — when nil, the
-// charges-ledger row insert is skipped (useful for tests that want
-// to exercise the in-memory bookkeeping without a real DB). In
-// production it must be non-nil so the BillingService surface has
-// a time-series source of truth. log is optional — when nil, a
-// no-op logger is installed so the store never crashes on a missing
-// dependency. Production wires the named logger so ledger-write
-// failures surface in operator log streams.
+// capability.UsageStore[pgx.Tx] interface.
+//
+// pool is REQUIRED. It used to be optional, with a nil value selecting a
+// "test stub path" that ran the counters and skipped the charges ledger and
+// the outbox fan-out. That made one type carry two contracts: the same Charge
+// call either committed a spend with its ledger row and its event, or
+// committed the spend alone — and the caller had no way to tell which
+// instance it held. A weaker guarantee reachable by construction is worse
+// than no guarantee, because the strong one is what every call site was
+// written against.
+//
+// Nothing selected it. Not production, not a single test. So the branch is
+// gone and the requirement is explicit: a nil pool panics here, at wiring
+// time, rather than silently downgrading every charge that follows.
+//
+// log is genuinely optional — nil installs a no-op, and a missing logger
+// costs visibility, not correctness.
 func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool, log *zap.Logger) *UsageStore {
+	if pool == nil {
+		panic("capability/postgres: NewUsageStore requires a non-nil pool")
+	}
 	if log == nil {
 		log = zap.NewNop()
 	}
@@ -107,10 +119,6 @@ func (s *UsageStore) BumpRequest(
 // retry after the running totals had already committed. Folding the
 // ledger into the same tx removes the hazard at the root: a failure
 // now rolls the counters back too, so a retry is always safe.
-//
-// Pool nil ⇒ test stub path: no transaction, no ledger, no fan-out —
-// the counters run on the plain query set so in-memory tests still
-// exercise the bookkeeping.
 func (s *UsageStore) Charge(
 	ctx context.Context,
 	capID uuid.UUID,
@@ -135,13 +143,6 @@ func (s *UsageStore) Charge(
 	maxBudgetNumeric, err := numericFromFloat(maxBudget)
 	if err != nil {
 		return 0, err
-	}
-
-	// Test stub path: no pool ⇒ no transaction. Only the counter
-	// bookkeeping runs (charges-ledger + fan-out both require a real
-	// tx). onCharged is ignored — fakes never wire an emitter.
-	if s.pool == nil {
-		return s.chargeNoTx(ctx, capID, amountNumeric, resolvedUnit, maxBudgetNumeric, tenantID)
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -228,51 +229,6 @@ func (s *UsageStore) Charge(
 
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("capability/postgres: charge commit: %w", err)
-	}
-	return floatFromNumeric(spent), nil
-}
-
-// chargeNoTx is the pool-less test-stub path: counter bookkeeping only,
-// no ledger row and no fan-out (both need a real transaction).
-func (s *UsageStore) chargeNoTx(
-	ctx context.Context,
-	capID uuid.UUID,
-	amountNumeric pgtype.Numeric,
-	resolvedUnit string,
-	maxBudgetNumeric pgtype.Numeric,
-	tenantID uuid.UUID,
-) (float64, error) {
-	spent, err := s.q.ChargeCapability(
-		ctx,
-		pgtype.UUID{Bytes: capID, Valid: true},
-		amountNumeric,
-		resolvedUnit,
-		maxBudgetNumeric,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, capability.ErrBudgetExceeded
-		}
-		return 0, fmt.Errorf("capability/postgres: charge: %w", err)
-	}
-	if tenantID == uuid.Nil {
-		return floatFromNumeric(spent), nil
-	}
-	if _, tErr := s.q.ChargeTenantBudget(
-		ctx,
-		pgtype.UUID{Bytes: tenantID, Valid: true},
-		amountNumeric,
-		resolvedUnit,
-	); tErr != nil {
-		_ = s.q.RefundCapabilityUsage(
-			ctx,
-			pgtype.UUID{Bytes: capID, Valid: true},
-			amountNumeric,
-		)
-		if errors.Is(tErr, pgx.ErrNoRows) {
-			return 0, capability.ErrTenantBudgetExceeded
-		}
-		return 0, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
 	}
 	return floatFromNumeric(spent), nil
 }
