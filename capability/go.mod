@@ -11,7 +11,7 @@
 // specs/003-capability-module-extraction/contracts/module-api.md.
 module github.com/oleg-tkachuk/paladin/capability
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/google/uuid v1.6.0

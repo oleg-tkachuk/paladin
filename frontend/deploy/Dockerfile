@@ -30,7 +30,7 @@ ARG PNPM_VERSION=11.21.0
 # re-fetch the pnpm content-addressable store per arch (the resulting
 # node_modules are pure JS).
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS deps
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS deps
 ARG PNPM_VERSION
 
 # libc6-compat keeps prebuilt addons (sharp, swc) loadable on Alpine's
@@ -54,7 +54,7 @@ RUN pnpm install --frozen-lockfile
 # Stage 2 — builder. Runs `next build` with build-time metadata baked in
 # via NEXT_PUBLIC_-prefixed env vars (Next inlines them into the bundle).
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS builder
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS builder
 ARG PNPM_VERSION
 
 WORKDIR /app
@@ -79,7 +79,7 @@ RUN pnpm run build
 # Stage 3 — runtime. Minimal layout: only what the standalone bundle
 # needs, dropped to UID 1001 for non-root execution.
 # -----------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS runtime
+FROM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production \

@@ -14,7 +14,7 @@
 # GO_VERSION is the human-readable tag; the @sha256 digest on the FROM is the
 # authoritative pin (a tag is mutable, a digest is not). Renovate keeps both
 # in lockstep — see renovate.json. Bump the tag and digest together.
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 
 # BuildKit auto-fills these for multi-arch builds.
 ARG TARGETOS
@@ -26,7 +26,7 @@ ARG TARGETPLATFORM
 # Shared Go base — same toolchain + workspace layout for tools and builder.
 # Everything below extends this stage so we don't duplicate ENV blocks.
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS gobase
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS gobase
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
@@ -99,8 +99,15 @@ ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
 
-# protoc is the only extra apk dep beyond gobase — buf shells out to it.
-RUN apk add --no-cache protobuf
+# No protoc. The line here used to install it, with a comment saying buf
+# shells out to it — buf has had a compiler of its own for years and does not.
+# Verified rather than assumed: building this stage with the package removed
+# produces a byte-identical binary (sha256 b378de11…, 60686496 bytes), so the
+# only thing it contributed was ~10MB and the CVE surface of a C++ toolchain
+# nothing invoked.
+#
+# This is also why "update protoc to 36.0" has no target in this image: Alpine
+# ships 31.1 and the image needs neither.
 
 COPY --from=tools /go_workspace/bin/ /go_workspace/bin/
 
@@ -153,7 +160,7 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 # -----------------------------------------------------------------------------
 # Digest-pinned (Renovate-managed, see renovate.json). `:nonroot` is a
 # floating tag that moves often, so the digest is the real reproducibility pin.
-FROM gcr.io/distroless/static:nonroot@sha256:963fa6c544fe5ce420f1f54fb88b6fb01479f054c8056d0f74cc2c6000df5240 AS runtime
+FROM gcr.io/distroless/static:nonroot@sha256:1c2c046bc09ed40fad370b599a0b1ae7987f55b01e247cf27a7c27cd97e5bbc7 AS runtime
 
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
