@@ -136,16 +136,28 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
       .click();
 
     // The switch swaps the token cache + user record (AuthContext), which
-    // re-labels the topbar trigger with the TARGET tenant. Assert on the
-    // tenant-id prefix, not displayName: the label falls back to
-    // `<uuid8>…` until GetTenant resolves the record, and for a fresh
-    // tenant.admin membership that lookup may be Cedar-denied — the id
-    // prefix is the invariant that proves the session re-scoped.
+    // re-labels the topbar trigger with the TARGET tenant.
+    //
+    // The label shows one of two things, and which one is a race: it falls
+    // back to `<uuid8>…` until GetTenant resolves the record, then becomes the
+    // display name. This used to assert the id prefix alone, with a comment
+    // reasoning that the lookup "may be Cedar-denied" for a fresh
+    // tenant.admin membership — so the fallback would stick. It does not:
+    // GetTenant answers, the label becomes the display name, and the
+    // assertion fails against a switch that worked perfectly. It passed only
+    // while the lookup happened to lose the race.
+    //
+    // Both forms identify the same tenant, and either one proves the session
+    // re-scoped — which is what this test is about. Asserting on the pair
+    // removes the dependency on which one wins.
+    const idPrefix = membership.tenantId.slice(0, 8);
     await expect(
       page.getByRole("button", { name: /^Scope picker —/ }),
     ).toHaveAttribute(
       "aria-label",
-      new RegExp(`tenant .*${membership.tenantId.slice(0, 8)}`),
+      new RegExp(
+        `tenant .*(${idPrefix}|${escapeRegExp(membership.displayName)})`,
+      ),
       { timeout: 10_000 },
     );
 
@@ -156,3 +168,10 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
     ).toHaveAttribute("aria-label", /backend any, bucket any/);
   });
 });
+
+// Display names carry generated suffixes and are interpolated into a pattern,
+// so they have to be escaped — an unescaped one would silently turn into a
+// pattern that matches something else.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

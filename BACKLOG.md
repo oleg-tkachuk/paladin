@@ -267,6 +267,31 @@ the same commit. Treat this file like a runtime invariant.
   checks the existing three.
 - **Blockers:** none; ordering is by whichever incident asks first.
 
+### e2e leaves its fixtures behind, and the suite degrades as they pile up
+
+- **Status:** Deferred (needs a teardown story, not a one-off cleanup).
+- **Reason:** Every run seeds tenants, collections, objects and memberships and
+  removes none of them. Against the dev cluster that reached 103 tenants, 102 of
+  them fixtures — and at that size the suite stopped passing. The failures did
+  not look like a data problem: a scope assertion failed because the wrong
+  "Switch Target" tenant matched, then a trash test timed out clicking a row
+  that had not rendered, then the list itself stopped showing a freshly seeded
+  tenant within ten seconds. Each fix moved the failure one step earlier, which
+  is the signature of a single cause behind several symptoms.
+  Deleting the fixtures returned the suite to 3/3 green on the tests that had
+  been failing.
+- **Definition of Done:**
+  - Fixtures clean up after themselves — a Playwright fixture teardown, or a
+    per-run tenant prefix the suite deletes at the end. Deleting by prefix is
+    the cheap version and needs the RESTRICT edges walked in order (charges,
+    object_locks, object_versions, objects, collections, user_settings, users,
+    then tenants; buckets.owner_tenant_id nulled).
+  - A guard that fails loudly when fixture count crosses a threshold, so the
+    next person sees "the environment is full" instead of debugging a
+    scope-picker assertion.
+- **Blockers:** none. The cleanup is understood; what is missing is deciding
+  where it belongs (fixture teardown vs a `task e2e:clean`).
+
 ### Tables carrying `tenant_id` with no RLS policy
 
 - **Status:** Blocked (needs the pre-auth read path designed, like `api_tokens` has).
