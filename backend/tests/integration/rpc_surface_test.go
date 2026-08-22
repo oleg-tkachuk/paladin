@@ -334,3 +334,97 @@ func TestRPCSurface_EmptyRequestIsNeverInternal(t *testing.T) {
 		}
 	}
 }
+
+// TestRPCSurface_RejectsUnknownRequestField pins the strict JSON codec against
+// the running stack. Connect's default codec discards unknown fields, which
+// turned a client typo into a silent behaviour change — the incident that
+// motivated this: Login with "audience" (the field is requested_audience)
+// returned 200 and a token for the DEFAULT audience, and every admin call made
+// with it then failed as "jwt: audience mismatch", four hops from the cause.
+//
+// Login is the probe because it is anonymous-allowed: the decode happens
+// before authentication, so the assertion is about the codec and nothing else.
+func TestRPCSurface_RejectsUnknownRequestField(t *testing.T) {
+	ps := planes()
+	requireStack(t, ps)
+
+	var iam string
+	for _, p := range ps {
+		if p.pkgPrefix == "paladin.iam.v1." {
+			iam = p.baseURL
+		}
+	}
+
+	status, code := call(t, iam, "/paladin.iam.v1.AuthService/Login",
+		`{"subject":"nobody","password":"nothing","audience":"paladin-admin"}`)
+	if unknownToStack(status, code) {
+		t.Skipf("the running stack does not serve Login (HTTP %d)", status)
+	}
+	if code != "invalid_argument" {
+		t.Errorf("unknown request field returned %q (HTTP %d), want invalid_argument — "+
+			"the strict codec is not installed on this build", code, status)
+	}
+}
+
+// TestRPCSurface_LoginEchoesAudience is the other half of that fix. Rejecting
+// typos catches "I named the field wrong"; it cannot catch "I sent no field at
+// all", where the server silently defaults. Echoing the minted audience lets a
+// caller detect that without decoding the JWT.
+func TestRPCSurface_LoginEchoesAudience(t *testing.T) {
+	ps := planes()
+	requireStack(t, ps)
+
+	var iam string
+	for _, p := range ps {
+		if p.pkgPrefix == "paladin.iam.v1." {
+			iam = p.baseURL
+		}
+	}
+
+	subject := envOr("PALADIN_RPC_ADMIN_SUBJECT", "e2e-admin@local")
+	password := envOr("PALADIN_RPC_ADMIN_PASSWORD", "e2e-not-a-secret-2026")
+
+	for _, tc := range []struct{ requested, want string }{
+		{"paladin-admin", "paladin-admin"},
+		{"paladin-data", "paladin-data"},
+		{"", "paladin-data"}, // documented server-side default
+	} {
+		name := tc.requested
+		if name == "" {
+			name = "unset-defaults-to-data"
+		}
+		t.Run(name, func(t *testing.T) {
+			payload := map[string]string{"subject": subject, "password": password}
+			if tc.requested != "" {
+				payload["requestedAudience"] = tc.requested
+			}
+			body, _ := json.Marshal(payload)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+				iam+"/paladin.iam.v1.AuthService/Login", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("build login: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := httpClient(10 * time.Second).Do(req)
+			if err != nil {
+				t.Skipf("stack unreachable: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				t.Skipf("login unavailable (HTTP %d) — seed the e2e admin to run this",
+					resp.StatusCode)
+			}
+			var out struct {
+				Tokens struct {
+					Audience string `json:"audience"`
+				} `json:"tokens"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatalf("decode login response: %v", err)
+			}
+			if out.Tokens.Audience != tc.want {
+				t.Errorf("tokens.audience = %q, want %q", out.Tokens.Audience, tc.want)
+			}
+		})
+	}
+}

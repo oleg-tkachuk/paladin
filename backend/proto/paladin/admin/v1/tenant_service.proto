@@ -107,7 +107,10 @@ message GetTenantRequest {
 
 message UpdateTenantRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   Tenant tenant = 4;
 }
@@ -142,7 +145,10 @@ message ListTenantsResponse {
 
 message SetInheritedPolicyRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   string cedar_policy = 3;
 }
 
@@ -165,7 +171,10 @@ message RenameTenantSlugRequest {
   // name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.
   string name = 1 [(buf.validate.field).string.min_len = 1];
   // resource_version — current tenant version, OCC-guarded.
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   // new_slug — kebab-case, validated by the same rules as
   // CreateTenantRequest.slug. Uniqueness enforced by the database.
   string new_slug = 3 [(buf.validate.field).string.min_len = 1];

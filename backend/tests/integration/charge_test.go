@@ -32,9 +32,12 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	// Use the BYPASSRLS migrate pool so we don't have to thread
 	// tenant context for capability_records seeding.
 	q := sqlc.New(h.PoolMigrate)
-	// nil pool → ledger insert disabled; this test exercises the
-	// running-total compensation path, not the ledger surface.
-	store := capabilitypg.NewUsageStore(q, nil, nil)
+	// Real pool: the store requires one (a nil pool used to mean "ledger
+	// insert disabled", which made Charge behave differently depending on how
+	// the store was built — the LSP violation that removed the option). The
+	// ledger rows it writes are incidental here; this test is about the
+	// running-total compensation path.
+	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-charge")
 	capID := uuid.New()
@@ -93,9 +96,12 @@ func TestCharge_RefundFloorsAtZero(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
 	q := sqlc.New(h.PoolMigrate)
-	// nil pool → ledger insert disabled; this test exercises the
-	// running-total compensation path, not the ledger surface.
-	store := capabilitypg.NewUsageStore(q, nil, nil)
+	// Real pool: the store requires one (a nil pool used to mean "ledger
+	// insert disabled", which made Charge behave differently depending on how
+	// the store was built — the LSP violation that removed the option). The
+	// ledger rows it writes are incidental here; this test is about the
+	// running-total compensation path.
+	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
@@ -134,9 +140,12 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
 	q := sqlc.New(h.PoolMigrate)
-	// nil pool → ledger insert disabled; this test exercises the
-	// running-total compensation path, not the ledger surface.
-	store := capabilitypg.NewUsageStore(q, nil, nil)
+	// Real pool: the store requires one (a nil pool used to mean "ledger
+	// insert disabled", which made Charge behave differently depending on how
+	// the store was built — the LSP violation that removed the option). The
+	// ledger rows it writes are incidental here; this test is about the
+	// running-total compensation path.
+	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-period")
 

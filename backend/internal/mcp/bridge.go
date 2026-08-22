@@ -549,7 +549,7 @@ type lifecycleRuleArg struct {
 }
 type setLifecycleRulesArgs struct {
 	BucketName      string             `json:"bucket_name" jsonschema:"Bucket resource name (storageBackends/{b}/buckets/{n})"`
-	ResourceVersion string             `json:"resource_version,omitempty" jsonschema:"OCC guard from prior GetBucket"`
+	ResourceVersion string             `json:"resource_version" jsonschema:"OCC guard; required — take it from a prior GetBucket"`
 	Rules           []lifecycleRuleArg `json:"rules,omitempty" jsonschema:"rule list; pass empty to clear all rules"`
 }
 
@@ -589,12 +589,12 @@ type createSubscriptionArgs struct {
 type updateSubscriptionArgs struct {
 	createSubscriptionArgs
 	Name            string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"`
-	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"OCC guard; from a prior list/get"`
+	ResourceVersion string `json:"resource_version" jsonschema:"OCC guard; required — take it from a prior list/get"`
 }
 
 type deleteSubscriptionArgs struct {
 	Name            string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"`
-	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"OCC guard; from a prior list/get"`
+	ResourceVersion string `json:"resource_version" jsonschema:"OCC guard; required — take it from a prior list/get"`
 }
 
 type setQuotaArgs struct {
@@ -1068,7 +1068,7 @@ type setObjectTagsArgs struct {
 }
 type deleteObjectArgs struct {
 	Name            string `json:"name" jsonschema:"object resource name"`
-	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"optimistic-concurrency token; empty skips the check"`
+	ResourceVersion string `json:"resource_version" jsonschema:"optimistic-concurrency token; required — take it from a prior list/get"`
 	Permanent       bool   `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
 }
 type copyObjectArgs struct {
@@ -1107,7 +1107,7 @@ type countObjectsArgs struct {
 
 type updateObjectArgs struct {
 	Name            string            `json:"name" jsonschema:"object resource name"`
-	ResourceVersion string            `json:"resource_version,omitempty" jsonschema:"OCC guard; empty skips the check"`
+	ResourceVersion string            `json:"resource_version" jsonschema:"OCC guard; required — take it from a prior list/get"`
 	UpdateMask      []string          `json:"update_mask,omitempty" jsonschema:"field paths to change (metadata, tags, content_type, external_ref); empty = replace all of them"`
 	Metadata        map[string]string `json:"metadata,omitempty" jsonschema:"replacement user metadata"`
 	Tags            map[string]string `json:"tags,omitempty" jsonschema:"replacement tag map"`
@@ -1116,7 +1116,7 @@ type updateObjectArgs struct {
 }
 type deleteObjectTagsArgs struct {
 	Name            string   `json:"name" jsonschema:"object resource name"`
-	ResourceVersion string   `json:"resource_version,omitempty" jsonschema:"OCC guard; empty skips the check"`
+	ResourceVersion string   `json:"resource_version" jsonschema:"OCC guard; required — take it from a prior list/get"`
 	Keys            []string `json:"keys" jsonschema:"tag keys to remove; others are left intact"`
 }
 type batchUpdateTagsArgs struct {

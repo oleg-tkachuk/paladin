@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_types: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChlsZWdhdGUvaWFtL3YxL3R5cGVzLnByb3RvEg1sZWdhdGUuaWFtLnYxItYCCgRVc2VyEgwKBG5hbWUYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSDwoHc3ViamVjdBgEIAEoCRIUCgxkaXNwbGF5X25hbWUYBSABKAkSDQoFcm9sZXMYBiADKAkSJwoGc2NvcGVzGAcgAygLMhcubGVnYXRlLmNvbW1vbi52MS5TY29wZRIQCghkaXNhYmxlZBgIIAEoCBIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKDWxhc3RfbG9naW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpMBCglUb2tlblBhaXISFAoMYWNjZXNzX3Rva2VuGAEgASgJEiEKGWFjY2Vzc19leHBpcmVzX2luX3NlY29uZHMYAiABKAUSFQoNcmVmcmVzaF90b2tlbhgDIAEoCRIiChpyZWZyZXNoX2V4cGlyZXNfaW5fc2Vjb25kcxgEIAEoBRISCgp0b2tlbl90eXBlGAUgASgJQkNaQWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO2xlZ2F0ZWlhbXYxYgZwcm90bzM",
+    "ChlsZWdhdGUvaWFtL3YxL3R5cGVzLnByb3RvEg1sZWdhdGUuaWFtLnYxItYCCgRVc2VyEgwKBG5hbWUYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSDwoHc3ViamVjdBgEIAEoCRIUCgxkaXNwbGF5X25hbWUYBSABKAkSDQoFcm9sZXMYBiADKAkSJwoGc2NvcGVzGAcgAygLMhcubGVnYXRlLmNvbW1vbi52MS5TY29wZRIQCghkaXNhYmxlZBgIIAEoCBIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKDWxhc3RfbG9naW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqUBCglUb2tlblBhaXISFAoMYWNjZXNzX3Rva2VuGAEgASgJEiEKGWFjY2Vzc19leHBpcmVzX2luX3NlY29uZHMYAiABKAUSFQoNcmVmcmVzaF90b2tlbhgDIAEoCRIiChpyZWZyZXNoX2V4cGlyZXNfaW5fc2Vjb25kcxgEIAEoBRISCgp0b2tlbl90eXBlGAUgASgJEhAKCGF1ZGllbmNlGAYgASgJQkNaQWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO2xlZ2F0ZWlhbXYxYgZwcm90bzM",
     [file_google_protobuf_timestamp, file_paladin_common_v1_scope],
   );
 
@@ -136,6 +136,19 @@ export type TokenPair = Message<"paladin.iam.v1.TokenPair"> & {
    * @generated from field: string token_type = 5;
    */
   tokenType: string;
+
+  /**
+   * The audience actually minted into access_token.
+   *
+   * requested_audience is a request, not a guarantee: it defaults when unset
+   * and the server may refuse to widen it. Echoing the result means a caller
+   * can detect the difference here, rather than four hops later when the
+   * plane rejects the token as "jwt: audience mismatch" — which is where this
+   * field came from.
+   *
+   * @generated from field: string audience = 6;
+   */
+  audience: string;
 };
 
 /**

@@ -973,10 +973,15 @@ func (x *CompleteObjectRequest) GetChecksumValue() string {
 }
 
 type DeleteObjectRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	Permanent       bool                   `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind delete
+	//
+	//	(expected_version=0 disables the check in SQL). permanent and
+	//	bypass_governance_retention widen what is destroyed; neither is an
+	//	opt-out of the concurrency check.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	Permanent       bool   `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	// Only honored when the caller has GOVERNANCE bypass (role
 	// `lock.governance.bypass` or `platform.admin`), and only against a
 	// GOVERNANCE window — legal hold and COMPLIANCE are absolute. The server
@@ -1813,10 +1818,10 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x15CompleteObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x12\n" +
 	"\x04etag\x18\x02 \x01(\tR\x04etag\x12%\n" +
-	"\x0echecksum_value\x18\x03 \x01(\tR\rchecksumValue\"\xbb\x01\n" +
+	"\x0echecksum_value\x18\x03 \x01(\tR\rchecksumValue\"\xc4\x01\n" +
 	"\x13DeleteObjectRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\x1c\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x1c\n" +
 	"\tpermanent\x18\x03 \x01(\bR\tpermanent\x12>\n" +
 	"\x1bbypass_governance_retention\x18\x04 \x01(\bR\x19bypassGovernanceRetention\"F\n" +
 	"\x14DeleteObjectResponse\x12.\n" +

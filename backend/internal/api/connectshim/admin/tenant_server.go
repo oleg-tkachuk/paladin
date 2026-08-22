@@ -140,7 +140,8 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	args := tenant.UpdateTenantArgs{TenantID: id, ExpectedVersion: rv}
 	mask := m.GetUpdateMask().GetPaths()
@@ -188,7 +189,8 @@ func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// Require either an OCC guard or an explicit `force` opt-out. Without
 	// this, a race-delete is silent: caller A reads version 7, caller B
@@ -280,7 +282,11 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(m.GetResourceVersion())
+	rv, err := parseRV(m.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	policy := m.GetCedarPolicy()
 	t, err := s.H.UpdateTenant(ctx, tenant.UpdateTenantArgs{
 		TenantID:             id,
@@ -307,7 +313,8 @@ func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Reques
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	t, err := s.H.RenameTenantSlug(ctx, tenant.RenameTenantSlugArgs{
 		TenantID:        id,

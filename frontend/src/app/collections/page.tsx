@@ -217,7 +217,11 @@ export default function CollectionsPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteCollection(deleteTarget);
+      // OCC guard: DeleteCollection requires the version we last read, so a
+      // concurrent rename/update turns this into a 409 instead of a silent
+      // delete of something the user never saw.
+      const target = collections.find((c) => c.collection === deleteTarget);
+      await deleteCollection(deleteTarget, target?.resourceVersion ?? "");
       showNotification({
         type: "success",
         title: "Collection deleted",

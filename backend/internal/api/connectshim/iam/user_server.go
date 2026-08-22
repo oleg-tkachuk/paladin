@@ -61,7 +61,8 @@ func (s *UserServer) UpdateUser(ctx context.Context, req *connect.Request[pb.Upd
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	out, err := s.H.UpdateUser(ctx, userh.UpdateUserInput{
 		UserID:          id,
@@ -84,7 +85,8 @@ func (s *UserServer) DeleteUser(ctx context.Context, req *connect.Request[pb.Del
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := s.H.DeleteUser(ctx, id, rv); err != nil {
 		return nil, err

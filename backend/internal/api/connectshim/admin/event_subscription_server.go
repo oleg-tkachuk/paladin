@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -102,7 +103,11 @@ func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, err
 	}
-	rv, _ := parseRV(m.GetResourceVersion())
+	rv, err := parseRV(m.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	src := m.GetSubscription()
 	kind, cfg := sinkToConfig(src.GetSink())
 	out, err := s.H.Update(ctx, tenantID, admindomain.EventSubscription{
@@ -123,7 +128,11 @@ func (s *EventSubscriptionServer) DeleteSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, err
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	if err := s.H.Delete(ctx, tenantID, id, rv); err != nil {
 		return nil, err
 	}

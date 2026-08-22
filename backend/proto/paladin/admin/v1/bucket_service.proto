@@ -49,16 +49,28 @@ message GetBucketRequest {
 
 message UpdateBucketRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   Bucket bucket = 4;
 }
 
 message DeleteBucketRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
+  // OCC guard. Required unless force=true — see the note on force.
   string resource_version = 2;
   // When true, also removes the physical bucket (and is a destructive op).
   bool delete_on_backend = 3;
+  // Explicit opt-out of the OCC guard, matching DeleteTenant / DeleteBackend.
+  //
+  // This used to be spelled `delete_on_backend`, which inverted the intended
+  // risk gradient: the single most destructive form of this call — the one
+  // that also erases the physical bucket — was the only one that skipped the
+  // concurrency check. The two decisions are unrelated and now have separate
+  // flags.
+  bool force = 4;
 }
 
 message DeleteBucketResponse {}
@@ -84,31 +96,46 @@ message ListBucketsResponse {
 
 message SetBucketPolicyRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   string cedar_policy = 3;
 }
 
 message SetLifecycleRulesRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   repeated LifecycleRule rules = 3;
 }
 
 message SetObjectLockRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   ObjectLockConfig config = 3 [(buf.validate.field).required = true];
 }
 
 message SetVersioningRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   BucketVersioning versioning = 3 [(buf.validate.field).required = true];
 }
 
 message SetReplicationRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   BucketReplication replication = 3 [(buf.validate.field).required = true];
 }
 

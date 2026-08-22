@@ -110,7 +110,8 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, badName(err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
 		Collection:      collection,

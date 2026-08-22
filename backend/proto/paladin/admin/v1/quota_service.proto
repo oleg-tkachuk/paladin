@@ -23,7 +23,10 @@ message GetQuotaRequest {
 
 message SetQuotaRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind overwrite
+  //   (expected_version=0 disables the check in SQL). Read the current version
+  //   first; there is no bypass on this RPC by design.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   Quota quota = 4 [(buf.validate.field).required = true];
 }

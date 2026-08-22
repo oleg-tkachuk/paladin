@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/internal/api/codec"
 	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
@@ -211,64 +212,76 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
 
-	dataOpts := connect.WithInterceptors(
-		otelInt,
-		// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
-		// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
-		// establishes the principal. Both paths land a principal before RequireAudience.
-		// Also steps aside for a capability: since ADR-0010 one may be the whole
-		// credential, and it rides in its own header — so a capability-only
-		// request has no Authorization at all and this gate used to refuse it
-		// as "missing Authorization header" before it could be authenticated.
-		auth.InterceptorSkipTokensAndCapabilities(verifierData),
-		apiTokData,
-		// capData BEFORE RequireAudience for the same reason apiTokData is: the
-		// audience check reads the principal, so a credential that establishes
-		// one has to run first.
-		capData,
-		auth.RequireAudience(auth.AudienceData),
-		// After otel (span exists) and after auth (principal known), so the
-		// request logger carries trace_id, span_id, request_id and tenant_id
-		// for every line the handlers write through logger.FromContext.
-		middleware.LogContextStreaming(l),
-		// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
-		// resolves the upload's Collection to its (backend, bucket) so a
-		// bucket quota row can be found. Without WithBucketScope those rows
-		// are maintained by the reconciler and shown on /stats but reject
-		// nothing. Both scopes cost a point lookup on the upload path —
-		// collections by PK, then quotas by its unique index.
-		middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
-		connect.UnaryInterceptorFunc(validateInterceptor),
-		idempotencyInterceptor,
+	// Every plane decodes JSON with the strict codec: an unknown request field
+	// is a 400, not a silent discard. See internal/api/codec for why the
+	// forward-compatibility the default buys is not worth its cost here.
+	dataOpts := connect.WithOptions(
+		connect.WithCodec(codec.StrictJSON{}),
+		connect.WithInterceptors(
+			otelInt,
+			// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
+			// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
+			// establishes the principal. Both paths land a principal before RequireAudience.
+			// Also steps aside for a capability: since ADR-0010 one may be the whole
+			// credential, and it rides in its own header — so a capability-only
+			// request has no Authorization at all and this gate used to refuse it
+			// as "missing Authorization header" before it could be authenticated.
+			auth.InterceptorSkipTokensAndCapabilities(verifierData),
+			apiTokData,
+			// capData BEFORE RequireAudience for the same reason apiTokData is: the
+			// audience check reads the principal, so a credential that establishes
+			// one has to run first.
+			capData,
+			auth.RequireAudience(auth.AudienceData),
+			// After otel (span exists) and after auth (principal known), so the
+			// request logger carries trace_id, span_id, request_id and tenant_id
+			// for every line the handlers write through logger.FromContext.
+			middleware.LogContextStreaming(l),
+			// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
+			// resolves the upload's Collection to its (backend, bucket) so a
+			// bucket quota row can be found. Without WithBucketScope those rows
+			// are maintained by the reconciler and shown on /stats but reject
+			// nothing. Both scopes cost a point lookup on the upload path —
+			// collections by PK, then quotas by its unique index.
+			middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
+			connect.UnaryInterceptorFunc(validateInterceptor),
+			idempotencyInterceptor,
+		),
 	)
-	iamOpts := connect.WithInterceptors(
-		otelInt,
-		auth.NewPermissiveInterceptor(verifierIAM,
-			"Login",
-			"RefreshToken",
-			"ExchangeAudience",
+	// Every plane decodes JSON with the strict codec: an unknown request field
+	// is a 400, not a silent discard. See internal/api/codec for why the
+	// forward-compatibility the default buys is not worth its cost here.
+	iamOpts := connect.WithOptions(
+		connect.WithCodec(codec.StrictJSON{}),
+		connect.WithInterceptors(
+			otelInt,
+			auth.NewPermissiveInterceptor(verifierIAM,
+				"Login",
+				"RefreshToken",
+				"ExchangeAudience",
+			),
+			apiTokIAM,
+			middleware.NewLoginRateLimiter(
+				cfg.API.Server.IAM.RealIPHeader,
+				cfg.Auth.LoginRateLimitPerSubjectPerMinute,
+				cfg.Auth.LoginRateLimitPerIPPerMinute,
+			),
+			// Audit IAM mutations (Login, CreateUser, RefreshToken, …).
+			// Placed after the permissive interceptor so
+			// anonymous/failed Login attempts are still recorded — a
+			// credential-misuse breach must leave a server-side trail
+			// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
+			// Synchronous + crash-durable (ADR-0004): the row commits before
+			// the RPC returns, so a kill can't drop a credential-misuse trail.
+			middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
+			// See the data plane: after otel and after auth. On IAM the principal
+			// is often absent (Login, RefreshToken are permissive), so these lines
+			// carry trace and request id without a tenant — which is correct, not
+			// a gap. An anonymous failed login is exactly the line worth finding.
+			middleware.LogContextStreaming(l),
+			connect.UnaryInterceptorFunc(validateInterceptor),
+			idempotencyInterceptor,
 		),
-		apiTokIAM,
-		middleware.NewLoginRateLimiter(
-			cfg.API.Server.IAM.RealIPHeader,
-			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
-			cfg.Auth.LoginRateLimitPerIPPerMinute,
-		),
-		// Audit IAM mutations (Login, CreateUser, RefreshToken, …).
-		// Placed after the permissive interceptor so
-		// anonymous/failed Login attempts are still recorded — a
-		// credential-misuse breach must leave a server-side trail
-		// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
-		// Synchronous + crash-durable (ADR-0004): the row commits before
-		// the RPC returns, so a kill can't drop a credential-misuse trail.
-		middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
-		// See the data plane: after otel and after auth. On IAM the principal
-		// is often absent (Login, RefreshToken are permissive), so these lines
-		// carry trace and request id without a tenant — which is correct, not
-		// a gap. An anonymous failed login is exactly the line worth finding.
-		middleware.LogContextStreaming(l),
-		connect.UnaryInterceptorFunc(validateInterceptor),
-		idempotencyInterceptor,
 	)
 
 	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")

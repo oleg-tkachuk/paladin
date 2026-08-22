@@ -98,7 +98,7 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 	}{
 		{
 			tool: "paladin_delete_object",
-			args: map[string]any{"name": "objects/o1", "permanent": false},
+			args: map[string]any{"name": "objects/o1", "permanent": false, "resource_version": "7"},
 			want: "/paladin.data.v1.ObjectService/DeleteObject",
 		},
 		{
@@ -199,8 +199,8 @@ func TestCoverageToolsDispatch(t *testing.T) {
 		args  map[string]any
 		want  string
 	}{
-		{"paladin_update_object", "data", map[string]any{"name": "objects/o1", "update_mask": []string{"tags"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.ObjectService/UpdateObject"},
-		{"paladin_delete_object_tags", "data", map[string]any{"name": "objects/o1", "keys": []string{"k"}}, "/paladin.data.v1.ObjectTagService/DeleteObjectTags"},
+		{"paladin_update_object", "data", map[string]any{"name": "objects/o1", "resource_version": "7", "update_mask": []string{"tags"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.ObjectService/UpdateObject"},
+		{"paladin_delete_object_tags", "data", map[string]any{"name": "objects/o1", "resource_version": "7", "keys": []string{"k"}}, "/paladin.data.v1.ObjectTagService/DeleteObjectTags"},
 		{"paladin_list_distinct_tags", "data", map[string]any{"parent": "tenants/t1/collections/ok1"}, "/paladin.data.v1.ObjectTagService/ListDistinctTags"},
 		{"paladin_batch_update_tags", "data", map[string]any{"parent": "tenants/t1/collections/ok1", "names": []string{"objects/o1"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.BatchService/BatchUpdateTags"},
 		{"paladin_regenerate_upload_url", "data", map[string]any{"name": "objects/o1"}, "/paladin.data.v1.PresignService/RegenerateUploadUrl"},

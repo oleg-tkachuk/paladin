@@ -93,7 +93,8 @@ func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Re
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	src := m.GetCollectionResource()
 	args := objectkey.UpdateCollectionArgs{
@@ -122,7 +123,19 @@ func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	// Same OCC contract as DeleteTenant / DeleteBackend: require a guard
+	// unless the caller explicitly opts out. Without this the request had a
+	// force flag but no guard to force past — an omitted resource_version
+	// simply skipped the check (expected_version=0 disables it in SQL).
+	if rv == 0 && !req.Msg.GetForce() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version is required; pass force=true to bypass"))
+	}
 	if err := s.H.DeleteCollection(ctx, ref.Collection, rv); err != nil {
 		return nil, err
 	}
@@ -165,7 +178,11 @@ func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *connect
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	policy := req.Msg.GetCedarPolicy()
 	out, err := s.H.UpdateCollection(ctx, objectkey.UpdateCollectionArgs{
 		TenantID:        ref.TenantID,
@@ -185,7 +202,11 @@ func (s *CollectionServer) BindCollectionToBucket(ctx context.Context, req *conn
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(m.GetResourceVersion())
+	rv, err := parseRV(m.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	out, err := s.H.BindCollectionToBucket(ctx, ref.Collection, m.GetBucket(), rv)
 	if err != nil {
 		return nil, err

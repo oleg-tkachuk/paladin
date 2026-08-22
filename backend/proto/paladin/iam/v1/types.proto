@@ -35,4 +35,12 @@ message TokenPair {
   string refresh_token = 3;
   int32 refresh_expires_in_seconds = 4;
   string token_type = 5; // "Bearer"
+  // The audience actually minted into access_token.
+  //
+  // requested_audience is a request, not a guarantee: it defaults when unset
+  // and the server may refuse to widen it. Echoing the result means a caller
+  // can detect the difference here, rather than four hops later when the
+  // plane rejects the token as "jwt: audience mismatch" — which is where this
+  // field came from.
+  string audience = 6;
 }

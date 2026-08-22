@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -40,7 +41,8 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, badName(err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
 		Collection:      collection,
@@ -63,7 +65,8 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, badName(err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	current, err := s.H.GetObject(ctx, collection, objectID)
 	if err != nil {

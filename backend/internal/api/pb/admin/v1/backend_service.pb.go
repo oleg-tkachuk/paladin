@@ -122,8 +122,12 @@ func (x *GetBackendRequest) GetName() string {
 }
 
 type UpdateBackendRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Backend         *StorageBackend        `protobuf:"bytes,4,opt,name=backend,proto3" json:"backend,omitempty"`
@@ -745,10 +749,10 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"backend_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbackendId\x12A\n" +
 	"\abackend\x18\x02 \x01(\v2\x1f.paladin.admin.v1.StorageBackendB\x06\xbaH\x03\xc8\x01\x01R\abackend\"0\n" +
 	"\x11GetBackendRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xde\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe7\x01\n" +
 	"\x14UpdateBackendRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12C\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x129\n" +
 	"\abackend\x18\x04 \x01(\v2\x1f.paladin.admin.v1.StorageBackendR\abackend\"t\n" +

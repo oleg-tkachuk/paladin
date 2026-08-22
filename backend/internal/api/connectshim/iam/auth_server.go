@@ -52,6 +52,7 @@ func (s *AuthServer) Login(ctx context.Context, req *connect.Request[pb.LoginReq
 			RefreshToken:            out.RefreshToken,
 			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(now).Seconds()),
 			TokenType:               "Bearer",
+			Audience:                out.Audience,
 		},
 		User: userToProto(&out.User),
 	}), nil
@@ -73,6 +74,7 @@ func (s *AuthServer) RefreshToken(ctx context.Context, req *connect.Request[pb.R
 			RefreshToken:            out.RefreshToken,
 			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(now).Seconds()),
 			TokenType:               "Bearer",
+			Audience:                out.Audience,
 		},
 	}), nil
 }
@@ -187,6 +189,7 @@ func (s *AuthServer) SwitchTenant(ctx context.Context, req *connect.Request[pb.S
 			RefreshToken:            out.RefreshToken,
 			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(now).Seconds()),
 			TokenType:               "Bearer",
+			Audience:                out.Audience,
 		},
 		User: userToProto(&out.User),
 	}), nil

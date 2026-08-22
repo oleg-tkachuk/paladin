@@ -131,7 +131,8 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	b := admindomain.Bucket{
 		BackendID:   backend,
@@ -162,15 +163,20 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	// Same OCC contract as DeleteTenant: require non-zero rv unless the
-	// caller explicitly opts into force-delete via the `delete_on_backend`
-	// flag (which already implies "I know what I'm doing, the physical
-	// bucket is going too"). Empty rv + delete_on_backend=false → reject.
-	if rv == 0 && !req.Msg.GetDeleteOnBackend() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version required; pass delete_on_backend=true to bypass"))
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	// Same OCC contract as DeleteTenant / DeleteBackend: require a guard
+	// unless the caller explicitly opts out via `force`.
+	//
+	// The opt-out used to be `delete_on_backend`, which had the risk gradient
+	// backwards — the one form of this call that also erases the physical
+	// bucket was the only one exempt from the concurrency check. Whether the
+	// physical bucket goes and whether the caller holds a current version are
+	// independent decisions.
+	if rv == 0 && !req.Msg.GetForce() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version is required; pass force=true to bypass"))
 	}
 	if err := s.H.DeleteBucket(ctx, bucketh.DeleteBucketInput{
 		BackendID:       backend,
@@ -188,7 +194,11 @@ func (s *BucketServer) SetBucketPolicy(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	out, err := s.H.SetPolicy(ctx, backend, name, req.Msg.GetCedarPolicy(), rv)
 	if err != nil {
 		return nil, err
@@ -201,7 +211,11 @@ func (s *BucketServer) SetLifecycleRules(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	out, err := s.H.SetLifecycleRules(ctx, backend, name, lifecycleFromProto(req.Msg.GetRules()), rv)
 	if err != nil {
 		return nil, err
@@ -214,7 +228,11 @@ func (s *BucketServer) SetObjectLock(ctx context.Context, req *connect.Request[p
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	out, err := s.H.SetObjectLock(ctx, backend, name, lockFromProto(req.Msg.GetConfig()), rv)
 	if err != nil {
 		return nil, err
@@ -227,7 +245,11 @@ func (s *BucketServer) SetVersioning(ctx context.Context, req *connect.Request[p
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	out, err := s.H.SetVersioning(ctx, backend, name, versioningFromProto(req.Msg.GetVersioning()), rv)
 	if err != nil {
 		return nil, err
@@ -240,7 +262,11 @@ func (s *BucketServer) SetReplication(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	out, err := s.H.SetReplication(ctx, backend, name, replicationFromProto(req.Msg.GetReplication()), rv)
 	if err != nil {
 		return nil, err

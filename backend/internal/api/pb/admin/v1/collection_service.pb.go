@@ -131,8 +131,12 @@ func (x *GetCollectionRequest) GetName() string {
 }
 
 type UpdateCollectionRequest struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
 	ResourceVersion    string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask         *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	CollectionResource *Collection            `protobuf:"bytes,4,opt,name=collection_resource,json=collectionResource,proto3" json:"collection_resource,omitempty"`
@@ -422,10 +426,14 @@ func (x *ListCollectionsResponse) GetPage() *v1.PageResponse {
 }
 
 type SetCollectionPolicyRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	CedarPolicy     string                 `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	CedarPolicy     string `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -482,9 +490,13 @@ func (x *SetCollectionPolicyRequest) GetCedarPolicy() string {
 }
 
 type BindCollectionToBucketRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// Target bucket resource name.
 	Bucket        string `protobuf:"bytes,3,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -554,10 +566,10 @@ const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"collection\x12T\n" +
 	"\x13collection_resource\x18\x03 \x01(\v2\x1b.paladin.admin.v1.CollectionB\x06\xbaH\x03\xc8\x01\x01R\x12collectionResource\"3\n" +
 	"\x14GetCollectionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xf4\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfd\x01\n" +
 	"\x17UpdateCollectionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12C\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12L\n" +
 	"\x13collection_resource\x18\x04 \x01(\v2\x1b.paladin.admin.v1.CollectionR\x12collectionResource\"w\n" +
@@ -573,14 +585,14 @@ const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x04 \x01(\tR\x06bucket\"\x8c\x01\n" +
 	"\x17ListCollectionsResponse\x12=\n" +
 	"\vcollections\x18\x01 \x03(\v2\x1b.paladin.admin.v1.CollectionR\vcollections\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x87\x01\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x90\x01\n" +
 	"\x1aSetCollectionPolicyRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12!\n" +
-	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"\x88\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12!\n" +
+	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"\x91\x01\n" +
 	"\x1dBindCollectionToBucketRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\x1f\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x1f\n" +
 	"\x06bucket\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket2\xb5\x05\n" +
 	"\x11CollectionService\x12Y\n" +
 	"\x10CreateCollection\x12(.paladin.admin.v1.CreateCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\x12S\n" +

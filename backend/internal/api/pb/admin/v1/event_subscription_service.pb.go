@@ -122,8 +122,12 @@ func (x *GetSubscriptionRequest) GetName() string {
 }
 
 type UpdateSubscriptionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Subscription    *EventSubscription     `protobuf:"bytes,4,opt,name=subscription,proto3" json:"subscription,omitempty"`
@@ -190,9 +194,13 @@ func (x *UpdateSubscriptionRequest) GetSubscription() *EventSubscription {
 }
 
 type DeleteSubscriptionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -494,16 +502,16 @@ const file_paladin_admin_v1_event_subscription_service_proto_rawDesc = "" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12N\n" +
 	"\fsubscription\x18\x02 \x01(\v2\".paladin.admin.v1.EventSubscriptionB\x06\xbaH\x03\xc8\x01\x01R\fsubscription\"5\n" +
 	"\x16GetSubscriptionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xf0\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xf9\x01\n" +
 	"\x19UpdateSubscriptionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12C\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12F\n" +
-	"\fsubscription\x18\x04 \x01(\v2\".paladin.admin.v1.EventSubscriptionR\fsubscription\"c\n" +
+	"\fsubscription\x18\x04 \x01(\v2\".paladin.admin.v1.EventSubscriptionR\fsubscription\"l\n" +
 	"\x19DeleteSubscriptionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\x1c\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x1c\n" +
 	"\x1aDeleteSubscriptionResponse\"e\n" +
 	"\x18ListSubscriptionsRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +

@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
+	"github.com/oleg-tkachuk/paladin/internal/api/codec"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/auditstream"
@@ -156,45 +157,51 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
 
-	adminOpts := connect.WithInterceptors(
-		otelInt,
-		// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
-		// API-token interceptor below can authenticate them. Without this the
-		// JWT verifier rejects the bearer first with "jwt: malformed token" and
-		// a token carrying platform.capability-issuer never reaches the RPC it
-		// exists to call. Every other case is unchanged — a JWT is verified and
-		// a missing or invalid non-PAT bearer is still rejected, so auth stays
-		// mandatory; a roleless PAT gets no principal here and is denied
-		// downstream exactly as before.
-		auth.InterceptorSkipAPITokens(verifierAdmin),
-		// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
-		// check reads the principal, so with the API-token interceptor after it
-		// a PAT bearer was refused as "no authenticated principal" before it
-		// could be authenticated at all. Both paths — JWT and role-bearing PAT —
-		// must land a principal first.
-		apiTokAdmin,
-		auth.RequireAudience(auth.AudienceAdmin),
-		// See the data plane: after otel (span) and after auth (principal).
-		middleware.LogContextStreaming(l),
-		capAdmin,
-		connect.UnaryInterceptorFunc(validateInterceptor),
-		// Idempotency-Key gate. RequireOnCreate=true means every
-		// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
-		// header — the admin UI (frontend BFF) auto-injects a UUIDv7
-		// per submit, so a double-click or auto-retry collapses on
-		// the same key. The interceptor BOTH enforces the header AND
-		// memoizes the response (replay on a repeat key); the memoize
-		// store is scoped per (tenant, method, key).
-		middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
-			RequireOnCreate: true,
-		}),
-		// Audit writer: synchronous + crash-durable (ADR-0004). The
-		// interceptor inserts the row directly via repos.Audit before the
-		// RPC returns, so a process kill can no longer drop a queued entry
-		// (the compliance trail must survive a crash). Cost is one indexed
-		// append on the response path of each mutating admin RPC.
-		middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
-			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
+	// Every plane decodes JSON with the strict codec: an unknown request field
+	// is a 400, not a silent discard. See internal/api/codec for why the
+	// forward-compatibility the default buys is not worth its cost here.
+	adminOpts := connect.WithOptions(
+		connect.WithCodec(codec.StrictJSON{}),
+		connect.WithInterceptors(
+			otelInt,
+			// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
+			// API-token interceptor below can authenticate them. Without this the
+			// JWT verifier rejects the bearer first with "jwt: malformed token" and
+			// a token carrying platform.capability-issuer never reaches the RPC it
+			// exists to call. Every other case is unchanged — a JWT is verified and
+			// a missing or invalid non-PAT bearer is still rejected, so auth stays
+			// mandatory; a roleless PAT gets no principal here and is denied
+			// downstream exactly as before.
+			auth.InterceptorSkipAPITokens(verifierAdmin),
+			// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
+			// check reads the principal, so with the API-token interceptor after it
+			// a PAT bearer was refused as "no authenticated principal" before it
+			// could be authenticated at all. Both paths — JWT and role-bearing PAT —
+			// must land a principal first.
+			apiTokAdmin,
+			auth.RequireAudience(auth.AudienceAdmin),
+			// See the data plane: after otel (span) and after auth (principal).
+			middleware.LogContextStreaming(l),
+			capAdmin,
+			connect.UnaryInterceptorFunc(validateInterceptor),
+			// Idempotency-Key gate. RequireOnCreate=true means every
+			// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
+			// header — the admin UI (frontend BFF) auto-injects a UUIDv7
+			// per submit, so a double-click or auto-retry collapses on
+			// the same key. The interceptor BOTH enforces the header AND
+			// memoizes the response (replay on a repeat key); the memoize
+			// store is scoped per (tenant, method, key).
+			middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
+				RequireOnCreate: true,
+			}),
+			// Audit writer: synchronous + crash-durable (ADR-0004). The
+			// interceptor inserts the row directly via repos.Audit before the
+			// RPC returns, so a process kill can no longer drop a queued entry
+			// (the compliance trail must survive a crash). Cost is one indexed
+			// append on the response path of each mutating admin RPC.
+			middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
+				optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
+		),
 	)
 
 	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")

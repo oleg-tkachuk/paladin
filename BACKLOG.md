@@ -1919,22 +1919,19 @@ of the pipeline._
 - **Blockers:** none. A judgment call, currently made as "not yet".
 
 ---
-## Connect JSON silently accepts unknown request fields
+## RestoreObject / RestoreObjectVersion keep OCC optional
 
-- **Status:** Deferred (needs a call on forward-compat vs. fail-fast).
-- **Reason:** The JSON codec discards fields the message does not declare, so
-  a client typo is indistinguishable from omission. Found while probing MCP:
-  `Login` with `{"audience":"paladin-admin"}` — the field is actually
-  `requested_audience` — returned 200 with a `paladin-data` token, and every
-  admin call made with it failed downstream as `jwt: audience mismatch`. The
-  caller believes it holds an admin token. `Login` is the sharpest case
-  because the ignored field selects a privilege boundary, but the behaviour is
-  codec-wide.
-- **Definition of Done:** A decision, applied consistently: either reject
-  unknown fields on request decode (protojson `DiscardUnknown: false`, plus a
-  sweep for clients that currently send extras), or keep the lenient decode
-  and make the audience explicit in `LoginResponse` so a caller can detect the
-  mismatch without decoding the JWT.
-- **Blockers:** Rejecting unknown fields breaks forward compatibility for
-  older clients during a rolling deploy, which is presumably why the default
-  stands. Needs a look at whether any first-party client relies on it.
+- **Status:** Deferred (deliberate exception, recorded so it stays a decision).
+- **Reason:** Every other mutating RPC now requires `resource_version`
+  (`min_len = 1`), because an omitted guard silently became a blind write —
+  `expected_version=0` disables the check in SQL. The two restore RPCs are the
+  exception: the handler argues a concurrent mutation of a DELETED row is
+  vanishingly rare (the only paths are Restore itself and HardDelete, both
+  serialized by state guards), and the console calls them without a version
+  from the trash view, where no version is on screen to pass.
+- **Definition of Done:** Either the console carries the version into the trash
+  view and both RPCs join the required set, or the exemption gets a test that
+  pins *why* it is safe (concurrent Restore + HardDelete on one row) so the
+  argument is checked rather than asserted.
+- **Blockers:** None technical — it needs a decision on whether the trash view
+  should surface versions at all.

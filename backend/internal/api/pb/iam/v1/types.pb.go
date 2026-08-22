@@ -170,8 +170,16 @@ type TokenPair struct {
 	RefreshToken            string                 `protobuf:"bytes,3,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	RefreshExpiresInSeconds int32                  `protobuf:"varint,4,opt,name=refresh_expires_in_seconds,json=refreshExpiresInSeconds,proto3" json:"refresh_expires_in_seconds,omitempty"`
 	TokenType               string                 `protobuf:"bytes,5,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"` // "Bearer"
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// The audience actually minted into access_token.
+	//
+	// requested_audience is a request, not a guarantee: it defaults when unset
+	// and the server may refuse to widen it. Echoing the result means a caller
+	// can detect the difference here, rather than four hops later when the
+	// plane rejects the token as "jwt: audience mismatch" — which is where this
+	// field came from.
+	Audience      string `protobuf:"bytes,6,opt,name=audience,proto3" json:"audience,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TokenPair) Reset() {
@@ -239,6 +247,13 @@ func (x *TokenPair) GetTokenType() string {
 	return ""
 }
 
+func (x *TokenPair) GetAudience() string {
+	if x != nil {
+		return x.Audience
+	}
+	return ""
+}
+
 var File_paladin_iam_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_types_proto_rawDesc = "" +
@@ -259,14 +274,15 @@ const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12>\n" +
-	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\"\xea\x01\n" +
+	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\"\x86\x02\n" +
 	"\tTokenPair\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
 	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12#\n" +
 	"\rrefresh_token\x18\x03 \x01(\tR\frefreshToken\x12;\n" +
 	"\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05R\x17refreshExpiresInSeconds\x12\x1d\n" +
 	"\n" +
-	"token_type\x18\x05 \x01(\tR\ttokenTypeBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"token_type\x18\x05 \x01(\tR\ttokenType\x12\x1a\n" +
+	"\baudience\x18\x06 \x01(\tR\baudienceBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_types_proto_rawDescOnce sync.Once

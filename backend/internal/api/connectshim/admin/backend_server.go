@@ -65,7 +65,8 @@ func (s *BackendServer) UpdateBackend(ctx context.Context, req *connect.Request[
 	}
 	rv, err := parseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	b := backendFromProto(m.GetBackend())
 	b.BackendID = id
@@ -83,7 +84,8 @@ func (s *BackendServer) DeleteBackend(ctx context.Context, req *connect.Request[
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// OCC contract: rv=0 only allowed with explicit force=true.
 	if rv == 0 && !req.Msg.GetForce() {
@@ -103,7 +105,8 @@ func (s *BackendServer) SetBackendEnabled(ctx context.Context, req *connect.Requ
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// OCC contract: a state flip must carry the current version. Unlike
 	// DeleteBackend there is no force escape — rv=0 is rejected so the
@@ -126,7 +129,8 @@ func (s *BackendServer) SetBackendReadOnly(ctx context.Context, req *connect.Req
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// Same OCC contract as SetBackendEnabled: rv=0 is rejected so a drain
 	// flip can never clobber a concurrent change.
@@ -148,7 +152,8 @@ func (s *BackendServer) SetBackendMaintenance(ctx context.Context, req *connect.
 	}
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if rv == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,

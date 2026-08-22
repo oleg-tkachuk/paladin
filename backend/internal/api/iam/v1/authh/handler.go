@@ -155,6 +155,10 @@ type LoginOutput struct {
 	RefreshToken     string
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt time.Time
+	// Audience actually minted into AccessToken — the resolved value, not
+	// what was asked for. RequestedAudience defaults when empty, so the two
+	// differ routinely and the caller has no other way to tell.
+	Audience string
 }
 
 func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error) {
@@ -194,6 +198,7 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		RefreshToken:     refresh,
 		AccessExpiresAt:  accessExp,
 		RefreshExpiresAt: refreshExp,
+		Audience:         audience,
 	}, nil
 }
 
@@ -209,6 +214,8 @@ type RefreshOutput struct {
 	RefreshToken     string
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt time.Time
+	// Audience actually minted into AccessToken. See LoginOutput.Audience.
+	Audience string
 }
 
 func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOutput, error) {
@@ -267,6 +274,7 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		RefreshToken:     newRefresh,
 		AccessExpiresAt:  accessExp,
 		RefreshExpiresAt: refreshExp,
+		Audience:         audience,
 	}, nil
 }
 
@@ -478,6 +486,8 @@ type SwitchTenantOutput struct {
 	RefreshToken     string
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt time.Time
+	// Audience actually minted into AccessToken. See LoginOutput.Audience.
+	Audience string
 }
 
 // SwitchTenant mints a fresh access+refresh pair scoped to targetTenantID,
@@ -549,6 +559,7 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 		RefreshToken:     refresh,
 		AccessExpiresAt:  accessExp,
 		RefreshExpiresAt: refreshExp,
+		Audience:         audience,
 	}, nil
 }
 

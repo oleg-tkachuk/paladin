@@ -206,7 +206,11 @@ message CompleteObjectRequest {
 
 message DeleteObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
+  // OCC, required: an absent guard would silently become a blind delete
+  //   (expected_version=0 disables the check in SQL). permanent and
+  //   bypass_governance_retention widen what is destroyed; neither is an
+  //   opt-out of the concurrency check.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   bool permanent = 3;
   // Only honored when the caller has GOVERNANCE bypass (role
   // `lock.governance.bypass` or `platform.admin`), and only against a

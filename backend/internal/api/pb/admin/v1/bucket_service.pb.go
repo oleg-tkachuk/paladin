@@ -141,8 +141,12 @@ func (x *GetBucketRequest) GetName() string {
 }
 
 type UpdateBucketRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Bucket          *Bucket                `protobuf:"bytes,4,opt,name=bucket,proto3" json:"bucket,omitempty"`
@@ -209,13 +213,22 @@ func (x *UpdateBucketRequest) GetBucket() *Bucket {
 }
 
 type DeleteBucketRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC guard. Required unless force=true — see the note on force.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// When true, also removes the physical bucket (and is a destructive op).
 	DeleteOnBackend bool `protobuf:"varint,3,opt,name=delete_on_backend,json=deleteOnBackend,proto3" json:"delete_on_backend,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Explicit opt-out of the OCC guard, matching DeleteTenant / DeleteBackend.
+	//
+	// This used to be spelled `delete_on_backend`, which inverted the intended
+	// risk gradient: the single most destructive form of this call — the one
+	// that also erases the physical bucket — was the only one that skipped the
+	// concurrency check. The two decisions are unrelated and now have separate
+	// flags.
+	Force         bool `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteBucketRequest) Reset() {
@@ -265,6 +278,13 @@ func (x *DeleteBucketRequest) GetResourceVersion() string {
 func (x *DeleteBucketRequest) GetDeleteOnBackend() bool {
 	if x != nil {
 		return x.DeleteOnBackend
+	}
+	return false
+}
+
+func (x *DeleteBucketRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
 	}
 	return false
 }
@@ -433,10 +453,14 @@ func (x *ListBucketsResponse) GetPage() *v1.PageResponse {
 }
 
 type SetBucketPolicyRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	CedarPolicy     string                 `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	CedarPolicy     string `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -493,10 +517,14 @@ func (x *SetBucketPolicyRequest) GetCedarPolicy() string {
 }
 
 type SetLifecycleRulesRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	Rules           []*LifecycleRule       `protobuf:"bytes,3,rep,name=rules,proto3" json:"rules,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string           `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	Rules           []*LifecycleRule `protobuf:"bytes,3,rep,name=rules,proto3" json:"rules,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -553,10 +581,14 @@ func (x *SetLifecycleRulesRequest) GetRules() []*LifecycleRule {
 }
 
 type SetObjectLockRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	Config          *ObjectLockConfig      `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string            `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	Config          *ObjectLockConfig `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -613,10 +645,14 @@ func (x *SetObjectLockRequest) GetConfig() *ObjectLockConfig {
 }
 
 type SetVersioningRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	Versioning      *BucketVersioning      `protobuf:"bytes,3,opt,name=versioning,proto3" json:"versioning,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string            `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	Versioning      *BucketVersioning `protobuf:"bytes,3,opt,name=versioning,proto3" json:"versioning,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -673,10 +709,14 @@ func (x *SetVersioningRequest) GetVersioning() *BucketVersioning {
 }
 
 type SetReplicationRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	Replication     *BucketReplication     `protobuf:"bytes,3,opt,name=replication,proto3" json:"replication,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string             `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	Replication     *BucketReplication `protobuf:"bytes,3,opt,name=replication,proto3" json:"replication,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -796,17 +836,18 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x03 \x01(\v2\x17.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01R\x06bucket\x120\n" +
 	"\x14provision_on_backend\x18\x04 \x01(\bR\x12provisionOnBackend\"/\n" +
 	"\x10GetBucketRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xd3\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdc\x01\n" +
 	"\x13UpdateBucketRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12C\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12/\n" +
-	"\x06bucket\x18\x04 \x01(\v2\x17.paladin.admin.v1.BucketR\x06bucket\"\x89\x01\n" +
+	"\x06bucket\x18\x04 \x01(\v2\x17.paladin.admin.v1.BucketR\x06bucket\"\x9f\x01\n" +
 	"\x13DeleteBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12*\n" +
-	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\"\x16\n" +
+	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\x12\x14\n" +
+	"\x05force\x18\x04 \x01(\bR\x05force\"\x16\n" +
 	"\x14DeleteBucketResponse\"\x9f\x01\n" +
 	"\x12ListBucketsRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +
@@ -815,28 +856,28 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\x0fowner_tenant_id\x18\x04 \x01(\tR\rownerTenantId\"|\n" +
 	"\x13ListBucketsResponse\x121\n" +
 	"\abuckets\x18\x01 \x03(\v2\x17.paladin.admin.v1.BucketR\abuckets\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x83\x01\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x8c\x01\n" +
 	"\x16SetBucketPolicyRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12!\n" +
-	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"\x98\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12!\n" +
+	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"\xa1\x01\n" +
 	"\x18SetLifecycleRulesRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x124\n" +
-	"\x05rules\x18\x03 \x03(\v2\x1e.paladin.admin.v1.LifecycleRuleR\x05rules\"\xa1\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x124\n" +
+	"\x05rules\x18\x03 \x03(\v2\x1e.paladin.admin.v1.LifecycleRuleR\x05rules\"\xaa\x01\n" +
 	"\x14SetObjectLockRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12A\n" +
-	"\x06config\x18\x03 \x01(\v2!.paladin.admin.v1.ObjectLockConfigB\x06\xbaH\x03\xc8\x01\x01R\x06config\"\xa9\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12A\n" +
+	"\x06config\x18\x03 \x01(\v2!.paladin.admin.v1.ObjectLockConfigB\x06\xbaH\x03\xc8\x01\x01R\x06config\"\xb2\x01\n" +
 	"\x14SetVersioningRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12I\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12I\n" +
 	"\n" +
 	"versioning\x18\x03 \x01(\v2!.paladin.admin.v1.BucketVersioningB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"versioning\"\xad\x01\n" +
+	"versioning\"\xb6\x01\n" +
 	"\x15SetReplicationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12L\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12L\n" +
 	"\vreplication\x18\x03 \x01(\v2\".paladin.admin.v1.BucketReplicationB\x06\xbaH\x03\xc8\x01\x01R\vreplication\"r\n" +
 	"\x1cListAccessibleBucketsRequest\x12\x1f\n" +
 	"\x06tenant\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06tenant\x121\n" +

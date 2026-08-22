@@ -145,8 +145,12 @@ func (x *GetTenantRequest) GetName() string {
 }
 
 type UpdateTenantRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Tenant          *Tenant                `protobuf:"bytes,4,opt,name=tenant,proto3" json:"tenant,omitempty"`
@@ -437,10 +441,14 @@ func (x *ListTenantsResponse) GetPage() *v1.PageResponse {
 }
 
 type SetInheritedPolicyRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	CedarPolicy     string                 `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	CedarPolicy     string `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -630,6 +638,10 @@ type RenameTenantSlugRequest struct {
 	// name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// resource_version — current tenant version, OCC-guarded.
+	// OCC, required: an absent guard would silently become a blind overwrite
+	//
+	//	(expected_version=0 disables the check in SQL). Read the current version
+	//	first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// new_slug — kebab-case, validated by the same rules as
 	// CreateTenantRequest.slug. Uniqueness enforced by the database.
@@ -1265,10 +1277,10 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x06tenant\x18\x02 \x01(\v2\x17.paladin.admin.v1.TenantB\x06\xbaH\x03\xc8\x01\x01R\x06tenant\x12%\n" +
 	"\x0edefault_bucket\x18\x03 \x01(\tR\rdefaultBucket\"/\n" +
 	"\x10GetTenantRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xd3\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdc\x01\n" +
 	"\x13UpdateTenantRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12C\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12/\n" +
 	"\x06tenant\x18\x04 \x01(\v2\x17.paladin.admin.v1.TenantR\x06tenant\"s\n" +
@@ -1284,19 +1296,19 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\fonly_trashed\x18\x04 \x01(\bR\vonlyTrashed\"|\n" +
 	"\x13ListTenantsResponse\x121\n" +
 	"\atenants\x18\x01 \x03(\v2\x17.paladin.admin.v1.TenantR\atenants\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x86\x01\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x8f\x01\n" +
 	"\x19SetInheritedPolicyRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12!\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12!\n" +
 	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"3\n" +
 	"\x14RestoreTenantRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"1\n" +
 	"\x12PurgeTenantRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x15\n" +
-	"\x13PurgeTenantResponse\"\x85\x01\n" +
+	"\x13PurgeTenantResponse\"\x8e\x01\n" +
 	"\x17RenameTenantSlugRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\"\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\"\n" +
 	"\bnew_slug\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\anewSlug\"?\n" +
 	"\x19ResolveRenamedSlugRequest\x12\"\n" +
 	"\bold_slug\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aoldSlug\"r\n" +

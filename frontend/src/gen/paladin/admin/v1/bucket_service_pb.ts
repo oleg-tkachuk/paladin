@@ -34,7 +34,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_bucket_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiRsZWdhdGUvYWRtaW4vdjEvYnVja2V0X3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSKbAQoTQ3JlYXRlQnVja2V0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHAoJYnVja2V0X2lkGAIgASgJQgm6SAZyBBADGD8SLwoGYnVja2V0GAMgASgLMhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldEIGukgDyAEBEhwKFHByb3Zpc2lvbl9vbl9iYWNrZW5kGAQgASgIIikKEEdldEJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKoAQoTVXBkYXRlQnVja2V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESJwoGYnVja2V0GAQgASgLMhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldCJhChNEZWxldGVCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZChFkZWxldGVfb25fYmFja2VuZBgDIAEoCCIWChREZWxldGVCdWNrZXRSZXNwb25zZSJ6ChJMaXN0QnVja2V0c1JlcXVlc3QSDgoGcGFyZW50GAEgASgJEisKBHBhZ2UYAiABKAsyHS5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgDIAEoCRIXCg9vd25lcl90ZW5hbnRfaWQYBCABKAkibQoTTGlzdEJ1Y2tldHNSZXNwb25zZRIoCgdidWNrZXRzGAEgAygLMhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiXwoWU2V0QnVja2V0UG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJInoKGFNldExpZmVjeWNsZVJ1bGVzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSLQoFcnVsZXMYAyADKAsyHi5sZWdhdGUuYWRtaW4udjEuTGlmZWN5Y2xlUnVsZSKCAQoUU2V0T2JqZWN0TG9ja1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjkKBmNvbmZpZxgDIAEoCzIhLmxlZ2F0ZS5hZG1pbi52MS5PYmplY3RMb2NrQ29uZmlnQga6SAPIAQEihgEKFFNldFZlcnNpb25pbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI9Cgp2ZXJzaW9uaW5nGAMgASgLMiEubGVnYXRlLmFkbWluLnYxLkJ1Y2tldFZlcnNpb25pbmdCBrpIA8gBASKJAQoVU2V0UmVwbGljYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI/CgtyZXBsaWNhdGlvbhgDIAEoCzIiLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXRSZXBsaWNhdGlvbkIGukgDyAEBImQKHExpc3RBY2Nlc3NpYmxlQnVja2V0c1JlcXVlc3QSFwoGdGVuYW50GAEgASgJQge6SARyAhABEisKBHBhZ2UYAiABKAsyHS5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Mr4HCg1CdWNrZXRTZXJ2aWNlEk0KDENyZWF0ZUJ1Y2tldBIkLmxlZ2F0ZS5hZG1pbi52MS5DcmVhdGVCdWNrZXRSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJHCglHZXRCdWNrZXQSIS5sZWdhdGUuYWRtaW4udjEuR2V0QnVja2V0UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSTQoMVXBkYXRlQnVja2V0EiQubGVnYXRlLmFkbWluLnYxLlVwZGF0ZUJ1Y2tldFJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0ElsKDERlbGV0ZUJ1Y2tldBIkLmxlZ2F0ZS5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXF1ZXN0GiUubGVnYXRlLmFkbWluLnYxLkRlbGV0ZUJ1Y2tldFJlc3BvbnNlElgKC0xpc3RCdWNrZXRzEiMubGVnYXRlLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVxdWVzdBokLmxlZ2F0ZS5hZG1pbi52MS5MaXN0QnVja2V0c1Jlc3BvbnNlElMKD1NldEJ1Y2tldFBvbGljeRInLmxlZ2F0ZS5hZG1pbi52MS5TZXRCdWNrZXRQb2xpY3lSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJXChFTZXRMaWZlY3ljbGVSdWxlcxIpLmxlZ2F0ZS5hZG1pbi52MS5TZXRMaWZlY3ljbGVSdWxlc1JlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0Ek8KDVNldE9iamVjdExvY2sSJS5sZWdhdGUuYWRtaW4udjEuU2V0T2JqZWN0TG9ja1JlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0Ek8KDVNldFZlcnNpb25pbmcSJS5sZWdhdGUuYWRtaW4udjEuU2V0VmVyc2lvbmluZ1JlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0ElEKDlNldFJlcGxpY2F0aW9uEiYubGVnYXRlLmFkbWluLnYxLlNldFJlcGxpY2F0aW9uUmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSbAoVTGlzdEFjY2Vzc2libGVCdWNrZXRzEi0ubGVnYXRlLmFkbWluLnYxLkxpc3RBY2Nlc3NpYmxlQnVja2V0c1JlcXVlc3QaJC5sZWdhdGUuYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXNwb25zZUJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
+    "CiRsZWdhdGUvYWRtaW4vdjEvYnVja2V0X3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSKbAQoTQ3JlYXRlQnVja2V0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHAoJYnVja2V0X2lkGAIgASgJQgm6SAZyBBADGD8SLwoGYnVja2V0GAMgASgLMhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldEIGukgDyAEBEhwKFHByb3Zpc2lvbl9vbl9iYWNrZW5kGAQgASgIIikKEEdldEJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKxAQoTVXBkYXRlQnVja2V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESJwoGYnVja2V0GAQgASgLMhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldCJwChNEZWxldGVCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZChFkZWxldGVfb25fYmFja2VuZBgDIAEoCBINCgVmb3JjZRgEIAEoCCIWChREZWxldGVCdWNrZXRSZXNwb25zZSJ6ChJMaXN0QnVja2V0c1JlcXVlc3QSDgoGcGFyZW50GAEgASgJEisKBHBhZ2UYAiABKAsyHS5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgDIAEoCRIXCg9vd25lcl90ZW5hbnRfaWQYBCABKAkibQoTTGlzdEJ1Y2tldHNSZXNwb25zZRIoCgdidWNrZXRzGAEgAygLMhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiaAoWU2V0QnVja2V0UG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESFAoMY2VkYXJfcG9saWN5GAMgASgJIoMBChhTZXRMaWZlY3ljbGVSdWxlc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEi0KBXJ1bGVzGAMgAygLMh4ubGVnYXRlLmFkbWluLnYxLkxpZmVjeWNsZVJ1bGUiiwEKFFNldE9iamVjdExvY2tSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI5CgZjb25maWcYAyABKAsyIS5sZWdhdGUuYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZ0IGukgDyAEBIo8BChRTZXRWZXJzaW9uaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESPQoKdmVyc2lvbmluZxgDIAEoCzIhLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nQga6SAPIAQEikgEKFVNldFJlcGxpY2F0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESPwoLcmVwbGljYXRpb24YAyABKAsyIi5sZWdhdGUuYWRtaW4udjEuQnVja2V0UmVwbGljYXRpb25CBrpIA8gBASJkChxMaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0EhcKBnRlbmFudBgBIAEoCUIHukgEcgIQARIrCgRwYWdlGAIgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdDK+BwoNQnVja2V0U2VydmljZRJNCgxDcmVhdGVCdWNrZXQSJC5sZWdhdGUuYWRtaW4udjEuQ3JlYXRlQnVja2V0UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSRwoJR2V0QnVja2V0EiEubGVnYXRlLmFkbWluLnYxLkdldEJ1Y2tldFJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0Ek0KDFVwZGF0ZUJ1Y2tldBIkLmxlZ2F0ZS5hZG1pbi52MS5VcGRhdGVCdWNrZXRSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJbCgxEZWxldGVCdWNrZXQSJC5sZWdhdGUuYWRtaW4udjEuRGVsZXRlQnVja2V0UmVxdWVzdBolLmxlZ2F0ZS5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXNwb25zZRJYCgtMaXN0QnVja2V0cxIjLmxlZ2F0ZS5hZG1pbi52MS5MaXN0QnVja2V0c1JlcXVlc3QaJC5sZWdhdGUuYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXNwb25zZRJTCg9TZXRCdWNrZXRQb2xpY3kSJy5sZWdhdGUuYWRtaW4udjEuU2V0QnVja2V0UG9saWN5UmVxdWVzdBoXLmxlZ2F0ZS5hZG1pbi52MS5CdWNrZXQSVwoRU2V0TGlmZWN5Y2xlUnVsZXMSKS5sZWdhdGUuYWRtaW4udjEuU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJPCg1TZXRPYmplY3RMb2NrEiUubGVnYXRlLmFkbWluLnYxLlNldE9iamVjdExvY2tSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJPCg1TZXRWZXJzaW9uaW5nEiUubGVnYXRlLmFkbWluLnYxLlNldFZlcnNpb25pbmdSZXF1ZXN0GhcubGVnYXRlLmFkbWluLnYxLkJ1Y2tldBJRCg5TZXRSZXBsaWNhdGlvbhImLmxlZ2F0ZS5hZG1pbi52MS5TZXRSZXBsaWNhdGlvblJlcXVlc3QaFy5sZWdhdGUuYWRtaW4udjEuQnVja2V0EmwKFUxpc3RBY2Nlc3NpYmxlQnVja2V0cxItLmxlZ2F0ZS5hZG1pbi52MS5MaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0GiQubGVnYXRlLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVzcG9uc2VCR1pFZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtsZWdhdGVhZG1pbnYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -111,6 +111,10 @@ export type UpdateBucketRequest =
     name: string;
 
     /**
+     * OCC, required: an absent guard would silently become a blind overwrite
+     *   (expected_version=0 disables the check in SQL). Read the current version
+     *   first; there is no bypass on this RPC by design.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
@@ -145,6 +149,8 @@ export type DeleteBucketRequest =
     name: string;
 
     /**
+     * OCC guard. Required unless force=true — see the note on force.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
@@ -155,6 +161,19 @@ export type DeleteBucketRequest =
      * @generated from field: bool delete_on_backend = 3;
      */
     deleteOnBackend: boolean;
+
+    /**
+     * Explicit opt-out of the OCC guard, matching DeleteTenant / DeleteBackend.
+     *
+     * This used to be spelled `delete_on_backend`, which inverted the intended
+     * risk gradient: the single most destructive form of this call — the one
+     * that also erases the physical bucket — was the only one that skipped the
+     * concurrency check. The two decisions are unrelated and now have separate
+     * flags.
+     *
+     * @generated from field: bool force = 4;
+     */
+    force: boolean;
   };
 
 /**
@@ -259,6 +278,10 @@ export type SetBucketPolicyRequest =
     name: string;
 
     /**
+     * OCC, required: an absent guard would silently become a blind overwrite
+     *   (expected_version=0 disables the check in SQL). Read the current version
+     *   first; there is no bypass on this RPC by design.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
@@ -288,6 +311,10 @@ export type SetLifecycleRulesRequest =
     name: string;
 
     /**
+     * OCC, required: an absent guard would silently become a blind overwrite
+     *   (expected_version=0 disables the check in SQL). Read the current version
+     *   first; there is no bypass on this RPC by design.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
@@ -317,6 +344,10 @@ export type SetObjectLockRequest =
     name: string;
 
     /**
+     * OCC, required: an absent guard would silently become a blind overwrite
+     *   (expected_version=0 disables the check in SQL). Read the current version
+     *   first; there is no bypass on this RPC by design.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
@@ -346,6 +377,10 @@ export type SetVersioningRequest =
     name: string;
 
     /**
+     * OCC, required: an absent guard would silently become a blind overwrite
+     *   (expected_version=0 disables the check in SQL). Read the current version
+     *   first; there is no bypass on this RPC by design.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
@@ -375,6 +410,10 @@ export type SetReplicationRequest =
     name: string;
 
     /**
+     * OCC, required: an absent guard would silently become a blind overwrite
+     *   (expected_version=0 disables the check in SQL). Read the current version
+     *   first; there is no bypass on this RPC by design.
+     *
      * @generated from field: string resource_version = 2;
      */
     resourceVersion: string;
