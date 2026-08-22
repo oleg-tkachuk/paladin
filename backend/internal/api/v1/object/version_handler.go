@@ -315,25 +315,62 @@ type versionNameParts struct {
 
 // parseVersionName decodes the AIP-122 form
 // "tenants/{t}/collections/{ok}/objects/{id}/versions/{ver}".
+//
+// The collection body may contain slashes — "e2e/7f3fec78" is an ordinary
+// collection name, and every e2e fixture uses that shape. Splitting on "/" and
+// demanding six segments therefore rejected legitimate names, which made the
+// version RPCs unreachable for them. Locate the separators instead, and let
+// the collection be whatever sits between them; this mirrors objectNameParts
+// in connectshim/data, which parses the same form minus the version suffix.
 func parseVersionName(name string) (versionNameParts, error) {
-	const sep = "/versions/"
-	idx := strings.LastIndex(name, sep)
-	if idx <= 0 {
+	const (
+		prefix = "tenants/"
+		okSep  = "/collections/"
+		objSep = "/objects/"
+		verSep = "/versions/"
+	)
+	if !strings.HasPrefix(name, prefix) {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (must start with %q)", name, prefix)
+	}
+	// Last separator in each case, so the same token appearing inside the
+	// collection body cannot shadow the real suffix.
+	verIdx := strings.LastIndex(name, verSep)
+	if verIdx <= 0 {
 		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing /versions/{id})", name)
 	}
-	parentName := name[:idx]
-	verIDStr := name[idx+len(sep):]
+	verIDStr := name[verIdx+len(verSep):]
 	verID, err := uuid.Parse(verIDStr)
 	if err != nil {
 		return versionNameParts{}, fmt.Errorf("invalid version_id: %w", err)
 	}
-	parts := strings.Split(parentName, "/")
-	if len(parts) != 6 || parts[0] != "tenants" || parts[2] != "collections" || parts[4] != "objects" {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (parent must be tenants/{t}/collections/{ok}/objects/{id})", name)
+
+	rest := name[len(prefix):verIdx]
+	okIdx := strings.Index(rest, okSep)
+	if okIdx <= 0 {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing %q)", name, okSep)
 	}
-	objectID, err := uuid.Parse(parts[5])
+	if _, err := uuid.Parse(rest[:okIdx]); err != nil {
+		return versionNameParts{}, fmt.Errorf("invalid tenant_id in name: %w", err)
+	}
+
+	afterOK := rest[okIdx+len(okSep):]
+	objIdx := strings.LastIndex(afterOK, objSep)
+	if objIdx <= 0 {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing %q)", name, objSep)
+	}
+	collection := afterOK[:objIdx]
+	objIDStr := afterOK[objIdx+len(objSep):]
+	if collection == "" {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (empty collection)", name)
+	}
+	// The object id is one segment; a slash here means the caller's
+	// "/objects/" landed inside the collection body rather than before the id.
+	if strings.Contains(objIDStr, "/") {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (object_id must be one segment)", name)
+	}
+	objectID, err := uuid.Parse(objIDStr)
 	if err != nil {
 		return versionNameParts{}, fmt.Errorf("invalid object_id: %w", err)
 	}
-	return versionNameParts{collection: parts[3], objectID: objectID, versionID: verID}, nil
+	return versionNameParts{collection: collection, objectID: objectID, versionID: verID}, nil
 }
