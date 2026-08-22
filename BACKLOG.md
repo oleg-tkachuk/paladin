@@ -1917,3 +1917,24 @@ of the pipeline._
   - A deliberately network-touching test is shown to FAIL under it, so the
     control is proven rather than assumed.
 - **Blockers:** none. A judgment call, currently made as "not yet".
+
+---
+## Connect JSON silently accepts unknown request fields
+
+- **Status:** Deferred (needs a call on forward-compat vs. fail-fast).
+- **Reason:** The JSON codec discards fields the message does not declare, so
+  a client typo is indistinguishable from omission. Found while probing MCP:
+  `Login` with `{"audience":"paladin-admin"}` — the field is actually
+  `requested_audience` — returned 200 with a `paladin-data` token, and every
+  admin call made with it failed downstream as `jwt: audience mismatch`. The
+  caller believes it holds an admin token. `Login` is the sharpest case
+  because the ignored field selects a privilege boundary, but the behaviour is
+  codec-wide.
+- **Definition of Done:** A decision, applied consistently: either reject
+  unknown fields on request decode (protojson `DiscardUnknown: false`, plus a
+  sweep for clients that currently send extras), or keep the lenient decode
+  and make the audience explicit in `LoginResponse` so a caller can detect the
+  mismatch without decoding the JWT.
+- **Blockers:** Rejecting unknown fields breaks forward compatibility for
+  older clients during a rolling deploy, which is presumably why the default
+  stands. Needs a look at whether any first-party client relies on it.
