@@ -28,10 +28,11 @@ message GetQuotaRequest {
 
 message SetQuotaRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // OCC, required: an absent guard would silently become a blind overwrite
-  //   (expected_version=0 disables the check in SQL). Read the current version
-  //   first; there is no bypass on this RPC by design.
-  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  // NOT enforced yet: the quotas table carries a resource_version column, but
+  // SetQuota upserts without consulting it. Left optional rather than
+  // required, because demanding a guard the server ignores is worse than
+  // having none — the caller believes it is protected. Tracked in BACKLOG.
+  string resource_version = 2;
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   Quota quota = 4 [(buf.validate.field).required = true];
 }

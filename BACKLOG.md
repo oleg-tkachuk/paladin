@@ -1917,3 +1917,50 @@ of the pipeline._
   - A deliberately network-touching test is shown to FAIL under it, so the
     control is proven rather than assumed.
 - **Blockers:** none. A judgment call, currently made as "not yet".
+
+---
+## Request fields the server accepts and ignores
+
+- **Status:** Deferred (each is a real gap; listed so they stop being
+  invisible).
+- **Reason:** `tests/contract` now gates against declared-but-unread request
+  fields. The gate's `knownUnread` map is the debt it found on its first run —
+  fields a client must or may send that no handler reads:
+  - `filter` on ListTenants / ListBackends / ListBuckets / ListCollections /
+    ListOperations — there is no filter plumbing at all (`ListTenantsArgs` has
+    no such field), so a caller that filters silently receives everything.
+  - `SetQuotaRequest.resource_version` — `quotas.resource_version` exists in
+    the schema; SetQuota upserts without consulting it. The proto now
+    documents it as unenforced instead of demanding it.
+  - `BatchUpdateTagsRequest.replace` — the executor always merges.
+  - `object_name` on AbortMultipartUpload / ListParts / PresignPart — the
+    session is found by `upload_id` alone; the name is never checked against
+    it, so a mismatched pair is accepted.
+  - `InitiateMultipartUploadRequest.external_ref` / `.idempotency_key` —
+    accepted and dropped; a retried initiate opens a second session.
+  - `UploadObjectRequest.idempotency_key` — idempotency comes from the
+    `Idempotency-Key` header; the body field duplicates it and is ignored,
+    which invites a caller to set the one that does nothing.
+- **Definition of Done:** Each entry either implemented or removed from the
+  proto, and deleted from `knownUnread`. The list should only shrink — a new
+  entry means a defect was just introduced.
+- **Blockers:** Removing a field is a wire-breaking change, so the ones not
+  worth implementing should go out with a deprecation window once the API
+  carries a compatibility promise.
+
+---
+## BatchDeleteObjects cannot delete permanently
+
+- **Status:** Deferred (the dangerous half is fixed; the feature is not).
+- **Reason:** The request has a `permanent` flag and the executor always
+  soft-deletes. It used to accept `permanent=true` and soft-delete anyway,
+  which told a caller its erasure had succeeded while the objects sat in the
+  trash — the worst possible answer for a deletion-on-request workflow. It now
+  returns Unimplemented for that flag, so the refusal is honest, but the
+  capability is still missing: callers must fall back to per-object
+  DeleteObject(permanent=true).
+- **Definition of Done:** The executor performs hard deletion (storage bytes +
+  row) when asked, honouring object-lock rules per object exactly as
+  DeleteObject does, and the Unimplemented guard in the shim is removed.
+- **Blockers:** Hard delete currently lives in a TTL-driven housekeeping job
+  rather than an on-demand path; batch would need that logic factored out.

@@ -29,6 +29,15 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, badName(err)
 	}
+	// The executor soft-deletes, always. Accepting permanent=true and doing a
+	// soft delete anyway is the dangerous shape: the caller is told the data is
+	// gone while it sits in the trash — an erasure request that silently did
+	// not erase. Refuse until the executor can honour it.
+	if m.GetPermanent() {
+		return nil, connect.NewError(connect.CodeUnimplemented,
+			fmt.Errorf("permanent=true is not supported by BatchDeleteObjects; "+
+				"delete the objects individually with DeleteObject(permanent=true)"))
+	}
 	opID, err := s.H.BatchDelete(ctx, batch.BatchDeleteArgs{
 		Collection: collection,
 		ObjectIDs:  ids,

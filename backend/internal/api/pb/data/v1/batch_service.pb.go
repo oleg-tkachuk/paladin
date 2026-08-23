@@ -218,7 +218,7 @@ type BatchDeleteObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
 	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	Selector      *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
+	Selector      *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"` // NOT SUPPORTED: the batch executor soft-deletes. Setting this returns
 	Permanent     bool            `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

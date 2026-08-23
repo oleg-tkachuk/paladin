@@ -72,10 +72,10 @@ func (x *GetQuotaRequest) GetName() string {
 type SetQuotaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	// NOT enforced yet: the quotas table carries a resource_version column, but
+	// SetQuota upserts without consulting it. Left optional rather than
+	// required, because demanding a guard the server ignores is worse than
+	// having none — the caller believes it is protected. Tracked in BACKLOG.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Quota           *Quota                 `protobuf:"bytes,4,opt,name=quota,proto3" json:"quota,omitempty"`
@@ -193,10 +193,10 @@ const file_paladin_admin_v1_quota_service_proto_rawDesc = "" +
 	"\n" +
 	"#paladin/admin/v1/quota_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\".\n" +
 	"\x0fGetQuotaRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdd\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xd4\x01\n" +
 	"\x0fSetQuotaRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
+	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x124\n" +
 	"\x05quota\x18\x04 \x01(\v2\x16.paladin.admin.v1.QuotaB\x06\xbaH\x03\xc8\x01\x01R\x05quota\"0\n" +
