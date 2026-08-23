@@ -9,30 +9,38 @@ import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 import "paladin/common/v1/pagination.proto";
+import "google/api/field_behavior.proto";
 
 // OperationService exposes long-running operations on the admin plane.
 // Mirrors the data-plane OperationService (read access there is restricted
 // to operations the caller initiated; admin sees all).
 service PlatformOperationService {
+  // GetOperation returns the current state of a long-running operation. done
+  // distinguishes finished from in-flight; result carries either the response
+  // or the error.
   rpc GetOperation(GetOperationRequest) returns (Operation);
+  // ListOperations pages the caller's operations, most recent first.
   rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
+  // CancelOperation requests cancellation. It is best-effort: work already
+  // committed is not rolled back, and an operation that finished first stays
+  // finished.
   rpc CancelOperation(CancelOperationRequest) returns (Operation);
 }
 
 message Operation {
   // Resource name: "operations/{operation_id}".
-  string name = 1;
-  string type = 2;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string type = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Any metadata = 3;
-  bool done = 4;
+  bool done = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   oneof result {
     google.rpc.Status error = 5;
     google.protobuf.Any response = 6;
   }
-  string initiator_subject = 7;
+  string initiator_subject = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
   string initiator_tenant_id = 8;
-  google.protobuf.Timestamp created_at = 9;
-  google.protobuf.Timestamp updated_at = 10;
+  google.protobuf.Timestamp created_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message GetOperationRequest {

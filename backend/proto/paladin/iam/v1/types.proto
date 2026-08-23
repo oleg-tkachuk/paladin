@@ -6,14 +6,15 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;pala
 
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/scope.proto";
+import "google/api/field_behavior.proto";
 
 // User is an authenticated identity inside a tenant. Local-IdP form; for
 // federated IdPs the row is created on first successful upstream login.
 message User {
   // Resource name: "tenants/{tenant_id_or_slug}/users/{user_id}".
-  string name = 1;
-  string user_id = 2;
-  string tenant_id = 3;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string user_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string tenant_id = 3 [(google.api.field_behavior) = IMMUTABLE];
   string subject = 4;          // stable login identifier (email / external sub)
   string display_name = 5;
   // Roles drive Cedar evaluation. Reserved values: "platform.admin",
@@ -21,20 +22,20 @@ message User {
   repeated string roles = 6;
   repeated paladin.common.v1.Scope scopes = 7;
   bool disabled = 8;
-  string resource_version = 9;
-  google.protobuf.Timestamp created_at = 10;
-  google.protobuf.Timestamp updated_at = 11;
-  google.protobuf.Timestamp last_login_at = 12;
+  string resource_version = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp last_login_at = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // TokenPair is the OAuth-2-style result of Login / RefreshToken. Both tokens
 // are JWT with audience=`paladin-data` (access) / `paladin-iam` (refresh).
 message TokenPair {
-  string access_token = 1;
-  int32 access_expires_in_seconds = 2;
-  string refresh_token = 3;
-  int32 refresh_expires_in_seconds = 4;
-  string token_type = 5; // "Bearer"
+  string access_token = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 access_expires_in_seconds = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string refresh_token = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 refresh_expires_in_seconds = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string token_type = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
   // The audience actually minted into access_token.
   //
   // requested_audience is a request, not a guarantee: it defaults when unset
@@ -42,5 +43,5 @@ message TokenPair {
   // can detect the difference here, rather than four hops later when the
   // plane rejects the token as "jwt: audience mismatch" — which is where this
   // field came from.
-  string audience = 6;
+  string audience = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
 }

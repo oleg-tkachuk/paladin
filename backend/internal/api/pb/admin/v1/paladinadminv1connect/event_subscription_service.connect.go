@@ -57,10 +57,22 @@ const (
 // EventSubscriptionServiceClient is a client for the paladin.admin.v1.EventSubscriptionService
 // service.
 type EventSubscriptionServiceClient interface {
+	// CreateSubscription registers a delivery target for the tenant's events.
+	// Exactly one sink (http / kafka / sqs) must be configured. Delivery is
+	// at-least-once via the transactional outbox (ADR-0003).
 	CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	// GetSubscription returns the subscription including its sink configuration;
+	// secret references are returned as references, never resolved.
 	GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	// UpdateSubscription replaces the filter and sink. resource_version is
+	// required. In-flight deliveries already queued are not re-targeted.
 	UpdateSubscription(context.Context, *connect.Request[v1.UpdateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	// DeleteSubscription stops future deliveries. Events already in the outbox
+	// are dropped rather than delivered to a subscription that no longer
+	// exists.
 	DeleteSubscription(context.Context, *connect.Request[v1.DeleteSubscriptionRequest]) (*connect.Response[v1.DeleteSubscriptionResponse], error)
+	// ListSubscriptions returns the tenant's subscriptions, disabled ones
+	// included.
 	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	// TestSubscription delivers a synthetic event to the configured sink.
 	TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error)
@@ -159,10 +171,22 @@ func (c *eventSubscriptionServiceClient) TestSubscription(ctx context.Context, r
 // EventSubscriptionServiceHandler is an implementation of the
 // paladin.admin.v1.EventSubscriptionService service.
 type EventSubscriptionServiceHandler interface {
+	// CreateSubscription registers a delivery target for the tenant's events.
+	// Exactly one sink (http / kafka / sqs) must be configured. Delivery is
+	// at-least-once via the transactional outbox (ADR-0003).
 	CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	// GetSubscription returns the subscription including its sink configuration;
+	// secret references are returned as references, never resolved.
 	GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	// UpdateSubscription replaces the filter and sink. resource_version is
+	// required. In-flight deliveries already queued are not re-targeted.
 	UpdateSubscription(context.Context, *connect.Request[v1.UpdateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	// DeleteSubscription stops future deliveries. Events already in the outbox
+	// are dropped rather than delivered to a subscription that no longer
+	// exists.
 	DeleteSubscription(context.Context, *connect.Request[v1.DeleteSubscriptionRequest]) (*connect.Response[v1.DeleteSubscriptionResponse], error)
+	// ListSubscriptions returns the tenant's subscriptions, disabled ones
+	// included.
 	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	// TestSubscription delivers a synthetic event to the configured sink.
 	TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error)

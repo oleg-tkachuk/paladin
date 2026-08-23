@@ -22,6 +22,7 @@ import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
+import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -30,13 +31,14 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CidsZWdhdGUvYWRtaW4vdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSLOAgoJT3BlcmF0aW9uEgwKBG5hbWUYASABKAkSDAoEdHlwZRgCIAEoCRImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSDAoEZG9uZRgEIAEoCBIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASGQoRaW5pdGlhdG9yX3N1YmplY3QYByABKAkSGwoTaW5pdGlhdG9yX3RlbmFudF9pZBgIIAEoCRIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlQKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIrCgRwYWdlGAEgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkidgoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIuCgpvcGVyYXRpb25zGAEgAygLMhoubGVnYXRlLmFkbWluLnYxLk9wZXJhdGlvbhIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABMqcCChhQbGF0Zm9ybU9wZXJhdGlvblNlcnZpY2USUAoMR2V0T3BlcmF0aW9uEiQubGVnYXRlLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGi5sZWdhdGUuYWRtaW4udjEuT3BlcmF0aW9uEmEKDkxpc3RPcGVyYXRpb25zEiYubGVnYXRlLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBonLmxlZ2F0ZS5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlElYKD0NhbmNlbE9wZXJhdGlvbhInLmxlZ2F0ZS5hZG1pbi52MS5DYW5jZWxPcGVyYXRpb25SZXF1ZXN0GhoubGVnYXRlLmFkbWluLnYxLk9wZXJhdGlvbkJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
+    "CidsZWdhdGUvYWRtaW4vdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSLsAgoJT3BlcmF0aW9uEhEKBG5hbWUYASABKAlCA+BBCBIRCgR0eXBlGAIgASgJQgPgQQMSJgoIbWV0YWRhdGEYAyABKAsyFC5nb29nbGUucHJvdG9idWYuQW55EhEKBGRvbmUYBCABKAhCA+BBAxIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASHgoRaW5pdGlhdG9yX3N1YmplY3QYByABKAlCA+BBAxIbChNpbml0aWF0b3JfdGVuYW50X2lkGAggASgJEjMKCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBA0IICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlQKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIrCgRwYWdlGAEgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkidgoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIuCgpvcGVyYXRpb25zGAEgAygLMhoubGVnYXRlLmFkbWluLnYxLk9wZXJhdGlvbhIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABMqcCChhQbGF0Zm9ybU9wZXJhdGlvblNlcnZpY2USUAoMR2V0T3BlcmF0aW9uEiQubGVnYXRlLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGi5sZWdhdGUuYWRtaW4udjEuT3BlcmF0aW9uEmEKDkxpc3RPcGVyYXRpb25zEiYubGVnYXRlLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBonLmxlZ2F0ZS5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlElYKD0NhbmNlbE9wZXJhdGlvbhInLmxlZ2F0ZS5hZG1pbi52MS5DYW5jZWxPcGVyYXRpb25SZXF1ZXN0GhoubGVnYXRlLmFkbWluLnYxLk9wZXJhdGlvbkJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
       file_google_protobuf_timestamp,
       file_google_rpc_status,
       file_paladin_common_v1_pagination,
+      file_google_api_field_behavior,
     ],
   );
 
@@ -210,6 +212,10 @@ export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> =
  */
 export const PlatformOperationService: GenService<{
   /**
+   * GetOperation returns the current state of a long-running operation. done
+   * distinguishes finished from in-flight; result carries either the response
+   * or the error.
+   *
    * @generated from rpc paladin.admin.v1.PlatformOperationService.GetOperation
    */
   getOperation: {
@@ -218,6 +224,8 @@ export const PlatformOperationService: GenService<{
     output: typeof OperationSchema;
   };
   /**
+   * ListOperations pages the caller's operations, most recent first.
+   *
    * @generated from rpc paladin.admin.v1.PlatformOperationService.ListOperations
    */
   listOperations: {
@@ -226,6 +234,10 @@ export const PlatformOperationService: GenService<{
     output: typeof ListOperationsResponseSchema;
   };
   /**
+   * CancelOperation requests cancellation. It is best-effort: work already
+   * committed is not rolled back, and an operation that finished first stays
+   * finished.
+   *
    * @generated from rpc paladin.admin.v1.PlatformOperationService.CancelOperation
    */
   cancelOperation: {

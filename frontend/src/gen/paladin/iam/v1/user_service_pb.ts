@@ -351,6 +351,9 @@ export const ResetPasswordResponseSchema: GenMessage<ResetPasswordResponse> =
  */
 export const UserService: GenService<{
   /**
+   * CreateUser adds a user to a tenant. The initial password is returned once
+   * and never again — it is not recoverable from any later read.
+   *
    * @generated from rpc paladin.iam.v1.UserService.CreateUser
    */
   createUser: {
@@ -359,6 +362,8 @@ export const UserService: GenService<{
     output: typeof UserSchema;
   };
   /**
+   * GetUser returns the user. The password hash is never included.
+   *
    * @generated from rpc paladin.iam.v1.UserService.GetUser
    */
   getUser: {
@@ -367,6 +372,9 @@ export const UserService: GenService<{
     output: typeof UserSchema;
   };
   /**
+   * UpdateUser applies update_mask to display_name, roles, scopes and disabled.
+   * tenant_id is immutable; the password has its own RPC.
+   *
    * @generated from rpc paladin.iam.v1.UserService.UpdateUser
    */
   updateUser: {
@@ -375,6 +383,9 @@ export const UserService: GenService<{
     output: typeof UserSchema;
   };
   /**
+   * DeleteUser removes the user's membership in one tenant. A subject that
+   * belongs to several tenants keeps the others.
+   *
    * @generated from rpc paladin.iam.v1.UserService.DeleteUser
    */
   deleteUser: {
@@ -383,6 +394,8 @@ export const UserService: GenService<{
     output: typeof DeleteUserResponseSchema;
   };
   /**
+   * ListUsers pages the users in a tenant.
+   *
    * @generated from rpc paladin.iam.v1.UserService.ListUsers
    */
   listUsers: {
@@ -402,6 +415,10 @@ export const UserService: GenService<{
     output: typeof UserSchema;
   };
   /**
+   * RevokeScopes removes the named scopes from the user. Tokens already issued
+   * keep their scopes until they expire — this changes what the next token
+   * will carry.
+   *
    * @generated from rpc paladin.iam.v1.UserService.RevokeScopes
    */
   revokeScopes: {

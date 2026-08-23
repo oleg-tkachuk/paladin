@@ -141,6 +141,9 @@ export const ExportAuditLogRequestSchema: GenMessage<ExportAuditLogRequest> =
  */
 export const AuditLogService: GenService<{
   /**
+   * ListAuditLog returns audit entries newest-first. The log is append-only:
+   * there is no RPC that mutates or deletes an entry.
+   *
    * @generated from rpc paladin.admin.v1.AuditLogService.ListAuditLog
    */
   listAuditLog: {
@@ -149,6 +152,9 @@ export const AuditLogService: GenService<{
     output: typeof ListAuditLogResponseSchema;
   };
   /**
+   * GetAuditLogEntry returns a single entry by id, including the full request
+   * context recorded at the time.
+   *
    * @generated from rpc paladin.admin.v1.AuditLogService.GetAuditLogEntry
    */
   getAuditLogEntry: {

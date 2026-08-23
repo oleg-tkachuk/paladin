@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -1736,9 +1737,9 @@ var File_paladin_data_v1_object_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/data/v1/object_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1flegate/common/v1/resource.proto\x1a\x1alegate/data/v1/types.proto\"\xc9\x05\n" +
-	"\rObjectVersion\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
+	"#paladin/data/v1/object_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1flegate/common/v1/resource.proto\x1a\x1alegate/data/v1/types.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd3\x05\n" +
+	"\rObjectVersion\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
 	"\n" +
 	"version_id\x18\x02 \x01(\tR\tversionId\x12\x1b\n" +
 	"\tobject_id\x18\x03 \x01(\tR\bobjectId\x12(\n" +
@@ -1752,9 +1753,9 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\bmetadata\x18\n" +
 	" \x03(\v2+.paladin.data.v1.ObjectVersion.MetadataEntryR\bmetadata\x12;\n" +
 	"\x04tags\x18\v \x03(\v2'.paladin.data.v1.ObjectVersion.TagsEntryR\x04tags\x123\n" +
-	"\x04lock\x18\f \x01(\v2\x1f.paladin.data.v1.ObjectLockStateR\x04lock\x129\n" +
+	"\x04lock\x18\f \x01(\v2\x1f.paladin.data.v1.ObjectLockStateR\x04lock\x12>\n" +
 	"\n" +
-	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1d\n" +
+	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"is_current\x18\x0e \x01(\bR\tisCurrent\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +

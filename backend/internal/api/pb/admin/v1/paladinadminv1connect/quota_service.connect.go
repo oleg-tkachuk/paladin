@@ -44,8 +44,13 @@ const (
 
 // QuotaServiceClient is a client for the paladin.admin.v1.QuotaService service.
 type QuotaServiceClient interface {
+	// GetQuota returns the tenant's limits and its current usage counters.
 	GetQuota(context.Context, *connect.Request[v1.GetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	// SetQuota replaces the tenant's limits. Lowering a limit below current usage
+	// is allowed — it blocks further growth rather than deleting anything.
 	SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	// ResetUsage zeroes the usage counters without touching the limits. For
+	// recovering from a drifted counter, not for granting capacity.
 	ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error)
 }
 
@@ -105,8 +110,13 @@ func (c *quotaServiceClient) ResetUsage(ctx context.Context, req *connect.Reques
 
 // QuotaServiceHandler is an implementation of the paladin.admin.v1.QuotaService service.
 type QuotaServiceHandler interface {
+	// GetQuota returns the tenant's limits and its current usage counters.
 	GetQuota(context.Context, *connect.Request[v1.GetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	// SetQuota replaces the tenant's limits. Lowering a limit below current usage
+	// is allowed — it blocks further growth rather than deleting anything.
 	SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	// ResetUsage zeroes the usage counters without touching the limits. For
+	// recovering from a drifted counter, not for granting capacity.
 	ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error)
 }
 

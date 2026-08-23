@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/pagination.proto";
+import "google/api/field_behavior.proto";
 
 // MCPInspectService — read-only operator visibility into the MCP
 // (Model Context Protocol) bridge. The MCP plane sits between agentic
@@ -23,6 +24,8 @@ import "paladin/common/v1/pagination.proto";
 // Authorisation: platform-admin only — same gate as the rest of
 // admin/v1 services.
 service MCPInspectService {
+  // Inspect reports the MCP server's effective configuration: the active
+  // profile, the tool catalog it exposes, and the upstream planes it dials.
   rpc Inspect(MCPInspectRequest) returns (MCPInspectResponse);
 
   // ListSessions returns the live MCP streamable-HTTP sessions tracked by the
@@ -55,12 +58,12 @@ message ListSessionsResponse {
 // session. agent_subject is best-effort (blank until the MCP server verifies
 // the per-request JWT subject); counts are cumulative over the session life.
 message MCPSession {
-  string id = 1;
-  string agent_subject = 2;
-  google.protobuf.Timestamp started_at = 3;
-  google.protobuf.Timestamp last_seen = 4;
-  int64 tool_call_count = 5;
-  int64 request_count = 6;
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string agent_subject = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp started_at = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp last_seen = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 tool_call_count = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 request_count = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message MCPInspectResponse {
@@ -89,7 +92,7 @@ message MCPInspectResponse {
 }
 
 message MCPProfile {
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   // Tools is the resolved allow-list with patterns expanded — every
   // tool name actually visible under this profile after the catalog
   // is filtered. Patterns themselves (with wildcards) are exposed
@@ -107,7 +110,7 @@ message MCPProfile {
 }
 
 message MCPTool {
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   // Audience: "admin" | "data" | "iam" — which Paladin plane the
   // underlying Connect call lands on.
   string audience = 2;

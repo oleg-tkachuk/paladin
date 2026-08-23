@@ -14,6 +14,9 @@ import {
 } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
+import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
+import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -22,8 +25,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_mcp_inspect_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CilsZWdhdGUvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IhUKE0xpc3RTZXNzaW9uc1JlcXVlc3QiRQoUTGlzdFNlc3Npb25zUmVzcG9uc2USLQoIc2Vzc2lvbnMYASADKAsyGy5sZWdhdGUuYWRtaW4udjEuTUNQU2Vzc2lvbiK+AQoKTUNQU2Vzc2lvbhIKCgJpZBgBIAEoCRIVCg1hZ2VudF9zdWJqZWN0GAIgASgJEi4KCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWxhc3Rfc2VlbhgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoPdG9vbF9jYWxsX2NvdW50GAUgASgDEhUKDXJlcXVlc3RfY291bnQYBiABKAMi7gEKEk1DUEluc3BlY3RSZXNwb25zZRItCghwcm9maWxlcxgBIAMoCzIbLmxlZ2F0ZS5hZG1pbi52MS5NQ1BQcm9maWxlEhMKC2Fsd2F5c19kZW55GAIgAygJEi4KDHRvb2xfY2F0YWxvZxgDIAMoCzIYLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUb29sEjAKCXVwc3RyZWFtcxgEIAEoCzIdLmxlZ2F0ZS5hZG1pbi52MS5NQ1BVcHN0cmVhbXMSMgoKdHJhbnNwb3J0cxgFIAEoCzIeLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUcmFuc3BvcnRzIl0KCk1DUFByb2ZpbGUSDAoEbmFtZRgBIAEoCRINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkiZgoHTUNQVG9vbBIMCgRuYW1lGAEgASgJEhAKCGF1ZGllbmNlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWNhcGFiaWxpdHlfb3AYBCABKAkSDwoHbXV0YXRlcxgFIAEoCCJECgxNQ1BVcHN0cmVhbXMSEQoJYWRtaW5fdXJsGAEgASgJEhAKCGRhdGFfdXJsGAIgASgJEg8KB2lhbV91cmwYAyABKAkicwoNTUNQVHJhbnNwb3J0cxIxCgVzdGRpbxgBIAEoCzIiLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUcmFuc3BvcnRTdGRpbxIvCgRodHRwGAIgASgLMiEubGVnYXRlLmFkbWluLnYxLk1DUFRyYW5zcG9ydEhUVFAiNQoRTUNQVHJhbnNwb3J0U3RkaW8SDwoHZW5hYmxlZBgBIAEoCBIPCgdwcm9maWxlGAIgASgJImMKEE1DUFRyYW5zcG9ydEhUVFASDwoHZW5hYmxlZBgBIAEoCBIMCgRhZGRyGAIgASgJEg8KB3Byb2ZpbGUYAyABKAkSHwoXc2Vzc2lvbl90aW1lb3V0X3NlY29uZHMYBCABKAMyxAEKEU1DUEluc3BlY3RTZXJ2aWNlElIKB0luc3BlY3QSIi5sZWdhdGUuYWRtaW4udjEuTUNQSW5zcGVjdFJlcXVlc3QaIy5sZWdhdGUuYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlElsKDExpc3RTZXNzaW9ucxIkLmxlZ2F0ZS5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiUubGVnYXRlLmFkbWluLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlQkdaRWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7bGVnYXRlYWRtaW52MWIGcHJvdG8z",
-    [file_google_protobuf_timestamp],
+    "CilsZWdhdGUvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IkIKE0xpc3RTZXNzaW9uc1JlcXVlc3QSKwoEcGFnZRgBIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QicwoUTGlzdFNlc3Npb25zUmVzcG9uc2USLQoIc2Vzc2lvbnMYASADKAsyGy5sZWdhdGUuYWRtaW4udjEuTUNQU2Vzc2lvbhIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2Ui3AEKCk1DUFNlc3Npb24SDwoCaWQYASABKAlCA+BBAxIaCg1hZ2VudF9zdWJqZWN0GAIgASgJQgPgQQMSMwoKc3RhcnRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIyCglsYXN0X3NlZW4YBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSHAoPdG9vbF9jYWxsX2NvdW50GAUgASgDQgPgQQMSGgoNcmVxdWVzdF9jb3VudBgGIAEoA0ID4EEDIu4BChJNQ1BJbnNwZWN0UmVzcG9uc2USLQoIcHJvZmlsZXMYASADKAsyGy5sZWdhdGUuYWRtaW4udjEuTUNQUHJvZmlsZRITCgthbHdheXNfZGVueRgCIAMoCRIuCgx0b29sX2NhdGFsb2cYAyADKAsyGC5sZWdhdGUuYWRtaW4udjEuTUNQVG9vbBIwCgl1cHN0cmVhbXMYBCABKAsyHS5sZWdhdGUuYWRtaW4udjEuTUNQVXBzdHJlYW1zEjIKCnRyYW5zcG9ydHMYBSABKAsyHi5sZWdhdGUuYWRtaW4udjEuTUNQVHJhbnNwb3J0cyJiCgpNQ1BQcm9maWxlEhEKBG5hbWUYASABKAlCA+BBCBINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkiawoHTUNQVG9vbBIRCgRuYW1lGAEgASgJQgPgQQgSEAoIYXVkaWVuY2UYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSFQoNY2FwYWJpbGl0eV9vcBgEIAEoCRIPCgdtdXRhdGVzGAUgASgIIkQKDE1DUFVwc3RyZWFtcxIRCglhZG1pbl91cmwYASABKAkSEAoIZGF0YV91cmwYAiABKAkSDwoHaWFtX3VybBgDIAEoCSJzCg1NQ1BUcmFuc3BvcnRzEjEKBXN0ZGlvGAEgASgLMiIubGVnYXRlLmFkbWluLnYxLk1DUFRyYW5zcG9ydFN0ZGlvEi8KBGh0dHAYAiABKAsyIS5sZWdhdGUuYWRtaW4udjEuTUNQVHJhbnNwb3J0SFRUUCI1ChFNQ1BUcmFuc3BvcnRTdGRpbxIPCgdlbmFibGVkGAEgASgIEg8KB3Byb2ZpbGUYAiABKAkiYwoQTUNQVHJhbnNwb3J0SFRUUBIPCgdlbmFibGVkGAEgASgIEgwKBGFkZHIYAiABKAkSDwoHcHJvZmlsZRgDIAEoCRIfChdzZXNzaW9uX3RpbWVvdXRfc2Vjb25kcxgEIAEoAzLEAQoRTUNQSW5zcGVjdFNlcnZpY2USUgoHSW5zcGVjdBIiLmxlZ2F0ZS5hZG1pbi52MS5NQ1BJbnNwZWN0UmVxdWVzdBojLmxlZ2F0ZS5hZG1pbi52MS5NQ1BJbnNwZWN0UmVzcG9uc2USWwoMTGlzdFNlc3Npb25zEiQubGVnYXRlLmFkbWluLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaJS5sZWdhdGUuYWRtaW4udjEuTGlzdFNlc3Npb25zUmVzcG9uc2VCR1pFZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtsZWdhdGVhZG1pbnYxYgZwcm90bzM",
+    [
+      file_google_protobuf_timestamp,
+      file_paladin_common_v1_pagination,
+      file_google_api_field_behavior,
+    ],
   );
 
 /**
@@ -44,7 +51,17 @@ export const MCPInspectRequestSchema: GenMessage<MCPInspectRequest> =
  * @generated from message paladin.admin.v1.ListSessionsRequest
  */
 export type ListSessionsRequest =
-  Message<"paladin.admin.v1.ListSessionsRequest"> & {};
+  Message<"paladin.admin.v1.ListSessionsRequest"> & {
+    /**
+     * Pages over live MCP sessions, ordered by session start (ties broken by
+     * session id). page_token is the previous page's last session id. The
+     * registry is bounded only by the idle reaper — nothing the caller controls
+     * — so the page is what keeps this response bounded.
+     *
+     * @generated from field: paladin.common.v1.PageRequest page = 1;
+     */
+    page?: PageRequest | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListSessionsRequest.
@@ -63,6 +80,14 @@ export type ListSessionsResponse =
      * @generated from field: repeated paladin.admin.v1.MCPSession sessions = 1;
      */
     sessions: MCPSession[];
+
+    /**
+     * next_page_token is the last session id of this page; empty when
+     * exhausted. total_size is not populated.
+     *
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
   };
 
 /**
@@ -407,6 +432,9 @@ export const MCPTransportHTTPSchema: GenMessage<MCPTransportHTTP> =
  */
 export const MCPInspectService: GenService<{
   /**
+   * Inspect reports the MCP server's effective configuration: the active
+   * profile, the tool catalog it exposes, and the upstream planes it dials.
+   *
    * @generated from rpc paladin.admin.v1.MCPInspectService.Inspect
    */
   inspect: {

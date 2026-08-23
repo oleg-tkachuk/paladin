@@ -112,6 +112,10 @@ export const ValidateCELResponseSchema: GenMessage<ValidateCELResponse> =
  */
 export const CELService: GenService<{
   /**
+   * Validate compiles a CEL expression against the EventEnvelope schema and
+   * reports errors without storing anything. Used by the console before a
+   * subscription filter is saved.
+   *
    * @generated from rpc paladin.admin.v1.CELService.Validate
    */
   validate: {

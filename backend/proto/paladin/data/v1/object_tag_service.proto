@@ -11,8 +11,13 @@ import "paladin/common/v1/pagination.proto";
 // "TagObject" without "UpdateObject" — common pattern for downstream
 // classification systems.
 service ObjectTagService {
+  // GetObjectTags returns the object's tag map.
   rpc GetObjectTags(GetObjectTagsRequest) returns (GetObjectTagsResponse);
+  // PutObjectTags merges the supplied keys into the object's tags; keys absent
+  // from the request are left alone. resource_version is required.
   rpc PutObjectTags(PutObjectTagsRequest) returns (PutObjectTagsResponse);
+  // DeleteObjectTags removes the named keys. Deleting a key that is not set is
+  // not an error. resource_version is required.
   rpc DeleteObjectTags(DeleteObjectTagsRequest) returns (DeleteObjectTagsResponse);
   // ListDistinctTags enumerates the distinct tag key→values present across an
   // Collection's live objects, so a UI can populate a tag-facet filter from the

@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -370,21 +371,21 @@ var File_paladin_admin_v1_operation_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
-	"'paladin/admin/v1/operation_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a!paladin/common/v1/pagination.proto\"\xb6\x03\n" +
-	"\tOperation\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x120\n" +
-	"\bmetadata\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\bmetadata\x12\x12\n" +
-	"\x04done\x18\x04 \x01(\bR\x04done\x12*\n" +
+	"'paladin/admin/v1/operation_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd4\x03\n" +
+	"\tOperation\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x17\n" +
+	"\x04type\x18\x02 \x01(\tB\x03\xe0A\x03R\x04type\x120\n" +
+	"\bmetadata\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\bmetadata\x12\x17\n" +
+	"\x04done\x18\x04 \x01(\bB\x03\xe0A\x03R\x04done\x12*\n" +
 	"\x05error\x18\x05 \x01(\v2\x12.google.rpc.StatusH\x00R\x05error\x122\n" +
-	"\bresponse\x18\x06 \x01(\v2\x14.google.protobuf.AnyH\x00R\bresponse\x12+\n" +
-	"\x11initiator_subject\x18\a \x01(\tR\x10initiatorSubject\x12.\n" +
-	"\x13initiator_tenant_id\x18\b \x01(\tR\x11initiatorTenantId\x129\n" +
+	"\bresponse\x18\x06 \x01(\v2\x14.google.protobuf.AnyH\x00R\bresponse\x120\n" +
+	"\x11initiator_subject\x18\a \x01(\tB\x03\xe0A\x03R\x10initiatorSubject\x12.\n" +
+	"\x13initiator_tenant_id\x18\b \x01(\tR\x11initiatorTenantId\x12>\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\b\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAtB\b\n" +
 	"\x06result\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"b\n" +

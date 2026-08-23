@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -607,35 +608,35 @@ var File_paladin_data_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1alegate/data/v1/types.proto\x12\x0elegate.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\b\n" +
-	"\x06Object\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x1b\n" +
-	"\ttenant_id\x18\x03 \x01(\tR\btenantId\x12\x1e\n" +
+	"\x1alegate/data/v1/types.proto\x12\x0elegate.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xb2\t\n" +
+	"\x06Object\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
+	"\tobject_id\x18\x02 \x01(\tB\x03\xe0A\x03R\bobjectId\x12 \n" +
+	"\ttenant_id\x18\x03 \x01(\tB\x03\xe0A\x03R\btenantId\x12#\n" +
 	"\n" +
-	"collection\x18\x04 \x01(\tR\n" +
-	"collection\x12\x10\n" +
-	"\x03key\x18\x05 \x01(\tR\x03key\x121\n" +
-	"\x05state\x18\x06 \x01(\x0e2\x1b.paladin.data.v1.ObjectStateR\x05state\x12!\n" +
-	"\fcontent_type\x18\a \x01(\tR\vcontentType\x12\x1d\n" +
+	"collection\x18\x04 \x01(\tB\x03\xe0A\x03R\n" +
+	"collection\x12\x15\n" +
+	"\x03key\x18\x05 \x01(\tB\x03\xe0A\x03R\x03key\x126\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x1b.paladin.data.v1.ObjectStateB\x03\xe0A\x03R\x05state\x12!\n" +
+	"\fcontent_type\x18\a \x01(\tR\vcontentType\x12\"\n" +
 	"\n" +
-	"size_bytes\x18\b \x01(\x03R\tsizeBytes\x12\x12\n" +
-	"\x04etag\x18\t \x01(\tR\x04etag\x12:\n" +
+	"size_bytes\x18\b \x01(\x03B\x03\xe0A\x03R\tsizeBytes\x12\x17\n" +
+	"\x04etag\x18\t \x01(\tB\x03\xe0A\x03R\x04etag\x12?\n" +
 	"\bchecksum\x18\n" +
-	" \x01(\v2\x1e.paladin.data.v1.ChecksumDigestR\bchecksum\x12\x1c\n" +
-	"\tsequencer\x18\v \x01(\tR\tsequencer\x12@\n" +
+	" \x01(\v2\x1e.paladin.data.v1.ChecksumDigestB\x03\xe0A\x03R\bchecksum\x12!\n" +
+	"\tsequencer\x18\v \x01(\tB\x03\xe0A\x03R\tsequencer\x12@\n" +
 	"\bmetadata\x18\f \x03(\v2$.paladin.data.v1.Object.MetadataEntryR\bmetadata\x124\n" +
 	"\x04tags\x18\r \x03(\v2 .paladin.data.v1.Object.TagsEntryR\x04tags\x12!\n" +
-	"\fexternal_ref\x18\x0e \x01(\tR\vexternalRef\x12)\n" +
-	"\x10resource_version\x18\x0f \x01(\tR\x0fresourceVersion\x129\n" +
+	"\fexternal_ref\x18\x0e \x01(\tR\vexternalRef\x12.\n" +
+	"\x10resource_version\x18\x0f \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
-	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
-	"\fcommitted_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\vcommittedAt\x12?\n" +
-	"\rterminated_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\fterminatedAt\x12H\n" +
-	"\x12presign_expires_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\x10presignExpiresAt\x123\n" +
-	"\x04lock\x18\x15 \x01(\v2\x1f.paladin.data.v1.ObjectLockStateR\x04lock\x12?\n" +
+	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12B\n" +
+	"\fcommitted_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vcommittedAt\x12D\n" +
+	"\rterminated_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\fterminatedAt\x12M\n" +
+	"\x12presign_expires_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x10presignExpiresAt\x128\n" +
+	"\x04lock\x18\x15 \x01(\v2\x1f.paladin.data.v1.ObjectLockStateB\x03\xe0A\x03R\x04lock\x12?\n" +
 	"\tplacement\x18\x16 \x01(\v2!.paladin.data.v1.PhysicalPlacementR\tplacement\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -645,10 +646,10 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"D\n" +
 	"\x0eChecksumDigest\x12\x1c\n" +
 	"\talgorithm\x18\x01 \x01(\tR\talgorithm\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\x83\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\x88\x01\n" +
 	"\x0fObjectLockState\x12\x12\n" +
-	"\x04mode\x18\x01 \x01(\tR\x04mode\x12=\n" +
-	"\fretain_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vretainUntil\x12\x1d\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12B\n" +
+	"\fretain_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vretainUntil\x12\x1d\n" +
 	"\n" +
 	"legal_hold\x18\x03 \x01(\bR\tlegalHold\"r\n" +
 	"\x11PhysicalPlacement\x12\x1d\n" +
@@ -660,14 +661,14 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x12\n" +
 	"\x04etag\x18\x02 \x01(\tR\x04etag\x12%\n" +
-	"\x0echecksum_value\x18\x03 \x01(\tR\rchecksumValue\"\x9b\x01\n" +
+	"\x0echecksum_value\x18\x03 \x01(\tR\rchecksumValue\"\xa0\x01\n" +
 	"\bPartInfo\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes\x12\x12\n" +
-	"\x04etag\x18\x03 \x01(\tR\x04etag\x12;\n" +
-	"\vuploaded_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"\x04etag\x18\x03 \x01(\tR\x04etag\x12@\n" +
+	"\vuploaded_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +
 	"uploadedAt*\x94\x01\n" +
 	"\vObjectState\x12\x1c\n" +
 	"\x18OBJECT_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +

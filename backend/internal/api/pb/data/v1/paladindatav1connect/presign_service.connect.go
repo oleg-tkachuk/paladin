@@ -44,7 +44,11 @@ const (
 
 // PresignServiceClient is a client for the paladin.data.v1.PresignService service.
 type PresignServiceClient interface {
+	// RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
+	// for when the first URL expired before the client finished.
 	RegenerateUploadUrl(context.Context, *connect.Request[v1.RegenerateUploadUrlRequest]) (*connect.Response[v1.RegenerateUploadUrlResponse], error)
+	// PresignDownload issues a time-limited GET URL. TTL is capped by
+	// limits.presign.max_ttl; asking for longer is InvalidArgument.
 	PresignDownload(context.Context, *connect.Request[v1.PresignDownloadRequest]) (*connect.Response[v1.PresignDownloadResponse], error)
 }
 
@@ -92,7 +96,11 @@ func (c *presignServiceClient) PresignDownload(ctx context.Context, req *connect
 
 // PresignServiceHandler is an implementation of the paladin.data.v1.PresignService service.
 type PresignServiceHandler interface {
+	// RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
+	// for when the first URL expired before the client finished.
 	RegenerateUploadUrl(context.Context, *connect.Request[v1.RegenerateUploadUrlRequest]) (*connect.Response[v1.RegenerateUploadUrlResponse], error)
+	// PresignDownload issues a time-limited GET URL. TTL is capped by
+	// limits.presign.max_ttl; asking for longer is InvalidArgument.
 	PresignDownload(context.Context, *connect.Request[v1.PresignDownloadRequest]) (*connect.Response[v1.PresignDownloadResponse], error)
 }
 

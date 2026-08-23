@@ -5,40 +5,41 @@ package paladin.data.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
 
 import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 // Object is the data-plane representation. Hides backend internals;
 // `bucket` and `backend_id` surface only when the caller has the
 // `view.physical_storage` role (set in JWT claims).
 message Object {
   // Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}/objects/{object_id}".
-  string name = 1;
-  string object_id = 2;
-  string tenant_id = 3;
-  string collection = 4;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string object_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string tenant_id = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string collection = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Storage path inside the collection.
-  string key = 5;
-  ObjectState state = 6;
+  string key = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  ObjectState state = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
   string content_type = 7;
-  int64 size_bytes = 8;
-  string etag = 9;
-  ChecksumDigest checksum = 10;
-  string sequencer = 11;
+  int64 size_bytes = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string etag = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  ChecksumDigest checksum = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string sequencer = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
   map<string, string> metadata = 12;
   map<string, string> tags = 13;
   string external_ref = 14;
   // Resource version for optimistic concurrency control.
-  string resource_version = 15;
-  google.protobuf.Timestamp created_at = 16;
-  google.protobuf.Timestamp updated_at = 17;
-  google.protobuf.Timestamp committed_at = 18;
-  google.protobuf.Timestamp terminated_at = 19;
-  google.protobuf.Timestamp presign_expires_at = 20;
+  string resource_version = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 16 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 17 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp committed_at = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp terminated_at = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp presign_expires_at = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Object-lock retention; populated when the parent bucket has lock enabled.
   // Object-lock state of the current version (ADR-0013). Populated by
   // GetObject and LookupObject. Left empty by ListObjects, where reading a
   // lock per row would add a join to the pagination hot path for a field most
   // deployments never set — use GetObjectLock for a specific object.
-  ObjectLockState lock = 21;
+  ObjectLockState lock = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Optional — physical placement; populated only for privileged callers.
   PhysicalPlacement placement = 22;
 }
@@ -58,7 +59,7 @@ message ChecksumDigest {
 
 message ObjectLockState {
   string mode = 1; // GOVERNANCE | COMPLIANCE
-  google.protobuf.Timestamp retain_until = 2;
+  google.protobuf.Timestamp retain_until = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
   bool legal_hold = 3;
 }
 
@@ -79,5 +80,5 @@ message PartInfo {
   int32 part_number = 1;
   int64 size_bytes = 2;
   string etag = 3;
-  google.protobuf.Timestamp uploaded_at = 4;
+  google.protobuf.Timestamp uploaded_at = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
 }

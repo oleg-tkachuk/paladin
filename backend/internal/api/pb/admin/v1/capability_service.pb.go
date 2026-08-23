@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1012,7 +1013,7 @@ var File_paladin_admin_v1_capability_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/capability_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd7\x02\n" +
+	"(paladin/admin/v1/capability_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd7\x02\n" +
 	"\x13CapabilityPrincipal\x12>\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1e.paladin.admin.v1.PrincipalKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12%\n" +
@@ -1036,19 +1037,19 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x12allow_tainted_read\x18\x06 \x01(\bR\x10allowTaintedRead\x128\n" +
 	"\x18idempotency_key_required\x18\a \x01(\bR\x16idempotencyKeyRequired\x12$\n" +
 	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12\x1b\n" +
-	"\tunit_code\x18\t \x01(\tR\bunitCode\"\xba\x03\n" +
+	"\tunit_code\x18\t \x01(\tR\bunitCode\"\xd3\x03\n" +
 	"\n" +
-	"Capability\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
-	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x12>\n" +
+	"Capability\x12\x13\n" +
+	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12\x1b\n" +
+	"\x06issuer\x18\x02 \x01(\tB\x03\xe0A\x03R\x06issuer\x12>\n" +
 	"\asubject\x18\x03 \x01(\v2$.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +
 	"\baudience\x18\x04 \x03(\tR\baudience\x12<\n" +
-	"\acaveats\x18\x05 \x01(\v2\".paladin.admin.v1.CapabilityCaveatsR\acaveats\x127\n" +
-	"\tissued_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\x129\n" +
+	"\acaveats\x18\x05 \x01(\v2\".paladin.admin.v1.CapabilityCaveatsR\acaveats\x12<\n" +
+	"\tissued_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\bissuedAt\x12>\n" +
 	"\n" +
-	"not_before\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x129\n" +
+	"not_before\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tnotBefore\x12>\n" +
 	"\n" +
-	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1b\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\texpiresAt\x12\x1b\n" +
 	"\tparent_id\x18\t \x01(\tR\bparentId\x12\x1e\n" +
 	"\n" +
 	"generation\x18\n" +

@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -62,9 +63,10 @@ func (*MCPInspectRequest) Descriptor() ([]byte, []int) {
 
 type ListSessionsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Pages over live MCP sessions, ordered by session id. The registry is
-	// bounded by the idle reaper rather than by anything the caller controls,
-	// so the page is what keeps this response bounded.
+	// Pages over live MCP sessions, ordered by session start (ties broken by
+	// session id). page_token is the previous page's last session id. The
+	// registry is bounded only by the idle reaper — nothing the caller controls
+	// — so the page is what keeps this response bounded.
 	Page          *v1.PageRequest `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -743,22 +745,22 @@ var File_paladin_admin_v1_mcp_inspect_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\n" +
-	")paladin/admin/v1/mcp_inspect_service.proto\x12\x0flegate.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\"\x13\n" +
+	")paladin/admin/v1/mcp_inspect_service.proto\x12\x0flegate.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x13\n" +
 	"\x11MCPInspectRequest\"H\n" +
 	"\x13ListSessionsRequest\x121\n" +
 	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\x83\x01\n" +
 	"\x14ListSessionsResponse\x127\n" +
 	"\bsessions\x18\x01 \x03(\v2\x1b.paladin.admin.v1.MCPSessionR\bsessions\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x82\x02\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\xa0\x02\n" +
 	"\n" +
-	"MCPSession\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
-	"\ragent_subject\x18\x02 \x01(\tR\fagentSubject\x129\n" +
+	"MCPSession\x12\x13\n" +
+	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12(\n" +
+	"\ragent_subject\x18\x02 \x01(\tB\x03\xe0A\x03R\fagentSubject\x12>\n" +
 	"\n" +
-	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x127\n" +
-	"\tlast_seen\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen\x12&\n" +
-	"\x0ftool_call_count\x18\x05 \x01(\x03R\rtoolCallCount\x12#\n" +
-	"\rrequest_count\x18\x06 \x01(\x03R\frequestCount\"\xa8\x02\n" +
+	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tstartedAt\x12<\n" +
+	"\tlast_seen\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\blastSeen\x12+\n" +
+	"\x0ftool_call_count\x18\x05 \x01(\x03B\x03\xe0A\x03R\rtoolCallCount\x12(\n" +
+	"\rrequest_count\x18\x06 \x01(\x03B\x03\xe0A\x03R\frequestCount\"\xa8\x02\n" +
 	"\x12MCPInspectResponse\x127\n" +
 	"\bprofiles\x18\x01 \x03(\v2\x1b.paladin.admin.v1.MCPProfileR\bprofiles\x12\x1f\n" +
 	"\valways_deny\x18\x02 \x03(\tR\n" +
@@ -767,16 +769,16 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\tupstreams\x18\x04 \x01(\v2\x1d.paladin.admin.v1.MCPUpstreamsR\tupstreams\x12>\n" +
 	"\n" +
 	"transports\x18\x05 \x01(\v2\x1e.paladin.admin.v1.MCPTransportsR\n" +
-	"transports\"\x85\x01\n" +
+	"transports\"\x8a\x01\n" +
 	"\n" +
-	"MCPProfile\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"MCPProfile\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x14\n" +
 	"\x05tools\x18\x02 \x03(\tR\x05tools\x12!\n" +
 	"\fraw_patterns\x18\x03 \x03(\tR\vrawPatterns\x12\x12\n" +
 	"\x04deny\x18\x04 \x03(\tR\x04deny\x12\x16\n" +
-	"\x06source\x18\x05 \x01(\tR\x06source\"\x9a\x01\n" +
-	"\aMCPTool\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\"\x9f\x01\n" +
+	"\aMCPTool\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12#\n" +
 	"\rcapability_op\x18\x04 \x01(\tR\fcapabilityOp\x12\x18\n" +

@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 // BillingService surfaces per-tenant capability spend over the
 // charges ledger (migration 027). Distinct from TenantBudgetService —
@@ -69,7 +70,7 @@ message GetTenantTimeSeriesResponse {
 }
 
 message TimeBucket {
-  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp start = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
   double amount = 2;
   int64 charge_count = 3;
 }

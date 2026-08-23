@@ -13,10 +13,22 @@ import "paladin/data/v1/types.proto";
 // MultipartUploadService — for objects too large for a single PUT.
 // CompletionMode is always EXPLICIT here regardless of bucket events.
 service MultipartUploadService {
+  // InitiateMultipartUpload opens an upload session and returns its id. Sessions
+  // left incomplete are reaped by the housekeeping job after
+  // worker.jobs.housekeeping.multipart_ttl.
   rpc InitiateMultipartUpload(InitiateMultipartUploadRequest) returns (InitiateMultipartUploadResponse);
+  // PresignPart issues a PUT URL for one part. Parts may be uploaded in any
+  // order and in parallel.
   rpc PresignPart(PresignPartRequest) returns (PresignPartResponse);
+  // CompleteMultipartUpload assembles the parts into one object. The part list
+  // must carry every etag the client received; a mismatch is
+  // FailedPrecondition and the object is not created.
   rpc CompleteMultipartUpload(CompleteMultipartUploadRequest) returns (Object);
+  // AbortMultipartUpload discards the session and the parts already uploaded.
+  // Safe to call on an already-aborted session.
   rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse);
+  // ListParts returns the parts recorded for an open session, for a client
+  // reconciling after a crash.
   rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
 }
 

@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -470,18 +471,18 @@ var File_paladin_data_v1_batch_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\n" +
-	"\"paladin/data/v1/batch_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xd9\x02\n" +
-	"\tOperation\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\"paladin/data/v1/batch_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe8\x02\n" +
+	"\tOperation\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x120\n" +
 	"\bmetadata\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\bmetadata\x12\x12\n" +
 	"\x04done\x18\x04 \x01(\bR\x04done\x12*\n" +
 	"\x05error\x18\x05 \x01(\v2\x12.google.rpc.StatusH\x00R\x05error\x122\n" +
-	"\bresponse\x18\x06 \x01(\v2\x14.google.protobuf.AnyH\x00R\bresponse\x129\n" +
+	"\bresponse\x18\x06 \x01(\v2\x14.google.protobuf.AnyH\x00R\bresponse\x12>\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\b\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAtB\b\n" +
 	"\x06result\"H\n" +
 	"\x0eObjectSelector\x12\x1e\n" +
 	"\x05names\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10dR\x05names\x12\x16\n" +

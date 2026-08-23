@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1271,7 +1272,7 @@ var File_paladin_admin_v1_tenant_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/tenant_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\x92\x01\n" +
+	"$paladin/admin/v1/tenant_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x92\x01\n" +
 	"\x13CreateTenantRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x127\n" +
 	"\x06tenant\x18\x02 \x01(\v2\x17.paladin.admin.v1.TenantB\x06\xbaH\x03\xc8\x01\x01R\x06tenant\x12%\n" +
@@ -1329,11 +1330,11 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x0eobjects_copied\x18\x04 \x01(\x03R\robjectsCopied\x12#\n" +
 	"\rsource_bucket\x18\x05 \x01(\tR\fsourceBucket\x12#\n" +
 	"\rtarget_bucket\x18\x06 \x01(\tR\ftargetBucket\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05errorJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"\x8c\x01\n" +
-	"\x14TenantDefaultBinding\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x121\n" +
-	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt\x12\x15\n" +
+	"\x05error\x18\t \x01(\tR\x05errorJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"\x96\x01\n" +
+	"\x14TenantDefaultBinding\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x126\n" +
+	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05setAt\x12\x15\n" +
 	"\x06set_by\x18\x05 \x01(\tR\x05setBy\"=\n" +
 	"\x1eGetTenantDefaultBindingRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"^\n" +

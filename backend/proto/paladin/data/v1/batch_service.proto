@@ -8,20 +8,31 @@ import "buf/validate/validate.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
+import "google/api/field_behavior.proto";
 
 // BatchService — async bulk operations. All RPCs return an Operation; clients
 // poll OperationService.GetOperation for status.
 service BatchService {
+  // BatchDeleteObjects starts an asynchronous operation and returns it
+  // immediately — poll OperationService.GetOperation for progress. Partial
+  // failure is reported per object in the operation result, not as an RPC
+  // error.
   rpc BatchDeleteObjects(BatchDeleteObjectsRequest) returns (Operation);
+  // BatchCopyObjects starts an asynchronous copy. Compensating deletes run for
+  // objects already copied if the operation is cancelled part-way.
   rpc BatchCopyObjects(BatchCopyObjectsRequest) returns (Operation);
+  // BatchRestoreObjects starts an asynchronous restore of soft-deleted objects.
+  // Objects that are not in the trash are reported as skipped, not failed.
   rpc BatchRestoreObjects(BatchRestoreObjectsRequest) returns (Operation);
+  // BatchUpdateTags starts an asynchronous tag merge across the named objects.
+  // Same merge semantics as PutObjectTags, applied per object.
   rpc BatchUpdateTags(BatchUpdateTagsRequest) returns (Operation);
 }
 
 // Operation mirrors the admin-plane definition; copied here so the data
 // plane is self-contained for client codegen.
 message Operation {
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string type = 2;
   google.protobuf.Any metadata = 3;
   bool done = 4;
@@ -29,8 +40,8 @@ message Operation {
     google.rpc.Status error = 5;
     google.protobuf.Any response = 6;
   }
-  google.protobuf.Timestamp created_at = 7;
-  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp created_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectSelector {

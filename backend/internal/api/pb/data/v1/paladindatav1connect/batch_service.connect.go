@@ -50,9 +50,19 @@ const (
 
 // BatchServiceClient is a client for the paladin.data.v1.BatchService service.
 type BatchServiceClient interface {
+	// BatchDeleteObjects starts an asynchronous operation and returns it
+	// immediately — poll OperationService.GetOperation for progress. Partial
+	// failure is reported per object in the operation result, not as an RPC
+	// error.
 	BatchDeleteObjects(context.Context, *connect.Request[v1.BatchDeleteObjectsRequest]) (*connect.Response[v1.Operation], error)
+	// BatchCopyObjects starts an asynchronous copy. Compensating deletes run for
+	// objects already copied if the operation is cancelled part-way.
 	BatchCopyObjects(context.Context, *connect.Request[v1.BatchCopyObjectsRequest]) (*connect.Response[v1.Operation], error)
+	// BatchRestoreObjects starts an asynchronous restore of soft-deleted objects.
+	// Objects that are not in the trash are reported as skipped, not failed.
 	BatchRestoreObjects(context.Context, *connect.Request[v1.BatchRestoreObjectsRequest]) (*connect.Response[v1.Operation], error)
+	// BatchUpdateTags starts an asynchronous tag merge across the named objects.
+	// Same merge semantics as PutObjectTags, applied per object.
 	BatchUpdateTags(context.Context, *connect.Request[v1.BatchUpdateTagsRequest]) (*connect.Response[v1.Operation], error)
 }
 
@@ -124,9 +134,19 @@ func (c *batchServiceClient) BatchUpdateTags(ctx context.Context, req *connect.R
 
 // BatchServiceHandler is an implementation of the paladin.data.v1.BatchService service.
 type BatchServiceHandler interface {
+	// BatchDeleteObjects starts an asynchronous operation and returns it
+	// immediately — poll OperationService.GetOperation for progress. Partial
+	// failure is reported per object in the operation result, not as an RPC
+	// error.
 	BatchDeleteObjects(context.Context, *connect.Request[v1.BatchDeleteObjectsRequest]) (*connect.Response[v1.Operation], error)
+	// BatchCopyObjects starts an asynchronous copy. Compensating deletes run for
+	// objects already copied if the operation is cancelled part-way.
 	BatchCopyObjects(context.Context, *connect.Request[v1.BatchCopyObjectsRequest]) (*connect.Response[v1.Operation], error)
+	// BatchRestoreObjects starts an asynchronous restore of soft-deleted objects.
+	// Objects that are not in the trash are reported as skipped, not failed.
 	BatchRestoreObjects(context.Context, *connect.Request[v1.BatchRestoreObjectsRequest]) (*connect.Response[v1.Operation], error)
+	// BatchUpdateTags starts an asynchronous tag merge across the named objects.
+	// Same merge semantics as PutObjectTags, applied per object.
 	BatchUpdateTags(context.Context, *connect.Request[v1.BatchUpdateTagsRequest]) (*connect.Response[v1.Operation], error)
 }
 

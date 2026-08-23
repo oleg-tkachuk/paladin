@@ -48,8 +48,15 @@ const (
 // PlatformOperationServiceClient is a client for the paladin.admin.v1.PlatformOperationService
 // service.
 type PlatformOperationServiceClient interface {
+	// GetOperation returns the current state of a long-running operation. done
+	// distinguishes finished from in-flight; result carries either the response
+	// or the error.
 	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
+	// ListOperations pages the caller's operations, most recent first.
 	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
+	// CancelOperation requests cancellation. It is best-effort: work already
+	// committed is not rolled back, and an operation that finished first stays
+	// finished.
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 
@@ -110,8 +117,15 @@ func (c *platformOperationServiceClient) CancelOperation(ctx context.Context, re
 // PlatformOperationServiceHandler is an implementation of the
 // paladin.admin.v1.PlatformOperationService service.
 type PlatformOperationServiceHandler interface {
+	// GetOperation returns the current state of a long-running operation. done
+	// distinguishes finished from in-flight; result carries either the response
+	// or the error.
 	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
+	// ListOperations pages the caller's operations, most recent first.
 	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
+	// CancelOperation requests cancellation. It is best-effort: work already
+	// committed is not rolled back, and an operation that finished first stays
+	// finished.
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 

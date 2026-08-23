@@ -399,6 +399,9 @@ export const SetBackendMaintenanceRequestSchema: GenMessage<SetBackendMaintenanc
  */
 export const BackendService: GenService<{
   /**
+   * CreateBackend registers an S3-compatible endpoint. Credentials are stored
+   * via SecretRef, never inline in the resource.
+   *
    * @generated from rpc paladin.admin.v1.BackendService.CreateBackend
    */
   createBackend: {
@@ -407,6 +410,8 @@ export const BackendService: GenService<{
     output: typeof StorageBackendSchema;
   };
   /**
+   * GetBackend returns the backend by id. Credentials are never echoed back.
+   *
    * @generated from rpc paladin.admin.v1.BackendService.GetBackend
    */
   getBackend: {
@@ -415,6 +420,10 @@ export const BackendService: GenService<{
     output: typeof StorageBackendSchema;
   };
   /**
+   * UpdateBackend applies update_mask; resource_version is required. Changing
+   * the endpoint of a backend with live buckets does not migrate anything —
+   * the objects stay where they are.
+   *
    * @generated from rpc paladin.admin.v1.BackendService.UpdateBackend
    */
   updateBackend: {
@@ -423,6 +432,10 @@ export const BackendService: GenService<{
     output: typeof StorageBackendSchema;
   };
   /**
+   * DeleteBackend refuses while buckets still reference it, unless force=true.
+   * force also waives the OCC guard, which is why it is a separate flag from
+   * resource_version.
+   *
    * @generated from rpc paladin.admin.v1.BackendService.DeleteBackend
    */
   deleteBackend: {
@@ -431,6 +444,9 @@ export const BackendService: GenService<{
     output: typeof DeleteBackendResponseSchema;
   };
   /**
+   * ListBackends returns every registered backend for the platform; backends
+   * are not tenant-scoped.
+   *
    * @generated from rpc paladin.admin.v1.BackendService.ListBackends
    */
   listBackends: {

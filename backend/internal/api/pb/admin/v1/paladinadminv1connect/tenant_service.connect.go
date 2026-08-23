@@ -82,15 +82,31 @@ const (
 
 // TenantServiceClient is a client for the paladin.admin.v1.TenantService service.
 type TenantServiceClient interface {
+	// CreateTenant provisions a tenant and, unless the request opts out, its
+	// default storage binding. storage_layout="dedicated" also provisions a
+	// physical bucket owned by the tenant (ADR-0011). AlreadyExists when the
+	// slug is taken.
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// GetTenant accepts either the UUID or the slug in the resource name.
+	// Soft-deleted tenants are returned — check deleted_at — so the trash view
+	// can show them.
 	GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// UpdateTenant applies update_mask to display_name, labels and
+	// inherited_cedar_policy. tenant_id and slug are immutable (use
+	// RenameTenantSlug for the latter); resource_version is required and a stale
+	// one is Aborted.
 	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
 	// DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
 	// remains recoverable via RestoreTenant within the retention window.
 	// Pass `force=true` to skip the trash and hard-delete immediately —
 	// used by automated test cleanups + emergency-purge flows.
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
+	// ListTenants excludes soft-deleted tenants unless include_trashed or
+	// only_trashed is set.
 	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
+	// SetInheritedPolicy replaces the Cedar policy every collection and bucket
+	// under the tenant inherits. Validated before it is stored — an unparseable
+	// policy is InvalidArgument, not a tenant that denies everything.
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
 	// it to the active set. Slug + display_name UNIQUE constraints still
@@ -341,15 +357,31 @@ func (c *tenantServiceClient) ClearTenantDefaultBinding(ctx context.Context, req
 
 // TenantServiceHandler is an implementation of the paladin.admin.v1.TenantService service.
 type TenantServiceHandler interface {
+	// CreateTenant provisions a tenant and, unless the request opts out, its
+	// default storage binding. storage_layout="dedicated" also provisions a
+	// physical bucket owned by the tenant (ADR-0011). AlreadyExists when the
+	// slug is taken.
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// GetTenant accepts either the UUID or the slug in the resource name.
+	// Soft-deleted tenants are returned — check deleted_at — so the trash view
+	// can show them.
 	GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// UpdateTenant applies update_mask to display_name, labels and
+	// inherited_cedar_policy. tenant_id and slug are immutable (use
+	// RenameTenantSlug for the latter); resource_version is required and a stale
+	// one is Aborted.
 	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
 	// DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
 	// remains recoverable via RestoreTenant within the retention window.
 	// Pass `force=true` to skip the trash and hard-delete immediately —
 	// used by automated test cleanups + emergency-purge flows.
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
+	// ListTenants excludes soft-deleted tenants unless include_trashed or
+	// only_trashed is set.
 	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
+	// SetInheritedPolicy replaces the Cedar policy every collection and bucket
+	// under the tenant inherits. Validated before it is stored — an unparseable
+	// policy is InvalidArgument, not a tenant that denies everything.
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
 	// it to the active set. Slug + display_name UNIQUE constraints still

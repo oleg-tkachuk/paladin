@@ -70,18 +70,38 @@ const (
 
 // BucketServiceClient is a client for the paladin.admin.v1.BucketService service.
 type BucketServiceClient interface {
+	// CreateBucket registers a bucket on a backend. It does not create the
+	// physical bucket — see StorageBootstrapService for that.
 	CreateBucket(context.Context, *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	// GetBucket returns the bucket, including its versioning, replication and
+	// object-lock configuration.
 	GetBucket(context.Context, *connect.Request[v1.GetBucketRequest]) (*connect.Response[v1.Bucket], error)
+	// UpdateBucket applies update_mask; resource_version is required. Versioning,
+	// replication and object lock have their own RPCs — they are not settable
+	// through this one.
 	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	// DeleteBucket removes the registration. delete_on_backend=true also erases
+	// the physical bucket and its contents, which is irreversible. force waives
+	// the OCC guard and is independent of delete_on_backend.
 	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
+	// ListBuckets returns buckets across every backend, optionally filtered to
+	// one.
 	ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
 	// SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
 	SetBucketPolicy(context.Context, *connect.Request[v1.SetBucketPolicyRequest]) (*connect.Response[v1.Bucket], error)
 	// SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
 	// single-purpose RPCs to keep audit log entries focused.
 	SetLifecycleRules(context.Context, *connect.Request[v1.SetLifecycleRulesRequest]) (*connect.Response[v1.Bucket], error)
+	// SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
+	// it is one-way: a bucket with object lock on cannot have it turned off,
+	// because objects already written under it rely on the guarantee.
 	SetObjectLock(context.Context, *connect.Request[v1.SetObjectLockRequest]) (*connect.Response[v1.Bucket], error)
+	// SetVersioning turns object versioning on or off. Turning it off keeps the
+	// versions already recorded — it stops new ones being written.
 	SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error)
+	// SetReplication configures asynchronous copy to a second backend. Existing
+	// objects are not backfilled; replication applies from the moment it is
+	// enabled.
 	SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error)
 	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
 	// the caller's principal/scopes are allowed to bind Collections to.
@@ -240,18 +260,38 @@ func (c *bucketServiceClient) ListAccessibleBuckets(ctx context.Context, req *co
 
 // BucketServiceHandler is an implementation of the paladin.admin.v1.BucketService service.
 type BucketServiceHandler interface {
+	// CreateBucket registers a bucket on a backend. It does not create the
+	// physical bucket — see StorageBootstrapService for that.
 	CreateBucket(context.Context, *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	// GetBucket returns the bucket, including its versioning, replication and
+	// object-lock configuration.
 	GetBucket(context.Context, *connect.Request[v1.GetBucketRequest]) (*connect.Response[v1.Bucket], error)
+	// UpdateBucket applies update_mask; resource_version is required. Versioning,
+	// replication and object lock have their own RPCs — they are not settable
+	// through this one.
 	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	// DeleteBucket removes the registration. delete_on_backend=true also erases
+	// the physical bucket and its contents, which is irreversible. force waives
+	// the OCC guard and is independent of delete_on_backend.
 	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
+	// ListBuckets returns buckets across every backend, optionally filtered to
+	// one.
 	ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
 	// SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
 	SetBucketPolicy(context.Context, *connect.Request[v1.SetBucketPolicyRequest]) (*connect.Response[v1.Bucket], error)
 	// SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
 	// single-purpose RPCs to keep audit log entries focused.
 	SetLifecycleRules(context.Context, *connect.Request[v1.SetLifecycleRulesRequest]) (*connect.Response[v1.Bucket], error)
+	// SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
+	// it is one-way: a bucket with object lock on cannot have it turned off,
+	// because objects already written under it rely on the guarantee.
 	SetObjectLock(context.Context, *connect.Request[v1.SetObjectLockRequest]) (*connect.Response[v1.Bucket], error)
+	// SetVersioning turns object versioning on or off. Turning it off keeps the
+	// versions already recorded — it stops new ones being written.
 	SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error)
+	// SetReplication configures asynchronous copy to a second backend. Existing
+	// objects are not backfilled; replication applies from the moment it is
+	// enabled.
 	SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error)
 	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
 	// the caller's principal/scopes are allowed to bind Collections to.

@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -430,7 +431,7 @@ var File_paladin_admin_v1_billing_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/billing_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xba\x01\n" +
+	"%paladin/admin/v1/billing_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xba\x01\n" +
 	"\x17GetTenantSummaryRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
@@ -457,10 +458,10 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"q\n" +
 	"\x1bGetTenantTimeSeriesResponse\x125\n" +
 	"\abuckets\x18\x01 \x03(\v2\x1b.paladin.admin.v1.TimeBucketR\abuckets\x12\x1b\n" +
-	"\tunit_code\x18\x02 \x01(\tR\bunitCode\"y\n" +
+	"\tunit_code\x18\x02 \x01(\tR\bunitCode\"~\n" +
 	"\n" +
-	"TimeBucket\x120\n" +
-	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12\x16\n" +
+	"TimeBucket\x125\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\x01R\x06amount\x12!\n" +
 	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount2\xeb\x01\n" +
 	"\x0eBillingService\x12g\n" +

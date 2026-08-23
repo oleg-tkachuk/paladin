@@ -12,10 +12,22 @@ import "paladin/common/v1/pagination.proto";
 // BucketService manages physical S3 buckets. Bucket admins create buckets
 // and bind them to backends; tenant admins consume them via Collection.
 service BucketService {
+  // CreateBucket registers a bucket on a backend. It does not create the
+  // physical bucket — see StorageBootstrapService for that.
   rpc CreateBucket(CreateBucketRequest) returns (Bucket);
+  // GetBucket returns the bucket, including its versioning, replication and
+  // object-lock configuration.
   rpc GetBucket(GetBucketRequest) returns (Bucket);
+  // UpdateBucket applies update_mask; resource_version is required. Versioning,
+  // replication and object lock have their own RPCs — they are not settable
+  // through this one.
   rpc UpdateBucket(UpdateBucketRequest) returns (Bucket);
+  // DeleteBucket removes the registration. delete_on_backend=true also erases
+  // the physical bucket and its contents, which is irreversible. force waives
+  // the OCC guard and is independent of delete_on_backend.
   rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
+  // ListBuckets returns buckets across every backend, optionally filtered to
+  // one.
   rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse);
 
   // SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
@@ -24,8 +36,16 @@ service BucketService {
   // SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
   // single-purpose RPCs to keep audit log entries focused.
   rpc SetLifecycleRules(SetLifecycleRulesRequest) returns (Bucket);
+  // SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
+  // it is one-way: a bucket with object lock on cannot have it turned off,
+  // because objects already written under it rely on the guarantee.
   rpc SetObjectLock(SetObjectLockRequest) returns (Bucket);
+  // SetVersioning turns object versioning on or off. Turning it off keeps the
+  // versions already recorded — it stops new ones being written.
   rpc SetVersioning(SetVersioningRequest) returns (Bucket);
+  // SetReplication configures asynchronous copy to a second backend. Existing
+  // objects are not backfilled; replication applies from the moment it is
+  // enabled.
   rpc SetReplication(SetReplicationRequest) returns (Bucket);
 
   // ListAccessibleBuckets is callable by tenant admins. Returns only buckets

@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 // TenantBudgetService manages the per-tenant aggregate USD spend cap
 // for the capability subsystem (cfg.Capability.* + migration 025
@@ -55,10 +56,10 @@ message TenantBudget {
   // Field number unchanged (wire-compatible with previous spent_usd).
   double spent_amount = 3;
 
-  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_start = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   // period_end is optional — NULL means open-ended.
-  google.protobuf.Timestamp period_end = 5;
-  google.protobuf.Timestamp updated_at = 6;
+  google.protobuf.Timestamp period_end = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
   // unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
   // (non-currency metering). One per TenantBudget message.
   string unit_code = 7;

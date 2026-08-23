@@ -9,6 +9,7 @@ import "google/protobuf/field_mask.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/pagination.proto";
+import "google/api/field_behavior.proto";
 
 // UserSettingsService persists per-user web-UI preferences plus the
 // timezone/locale/theme triple the platform reasons about server-side.
@@ -19,16 +20,27 @@ import "paladin/common/v1/pagination.proto";
 // Admin paths (GetForUser / ListByTenant / DeleteForUser) are gated by the
 // ReadUserSettings / ManageUserSettings Cedar actions.
 service UserSettingsService {
+  // GetMine returns the calling user's settings, creating nothing: a user who
+  // has never saved settings gets the zero value with an empty
+  // resource_version.
   rpc GetMine(GetMineRequest) returns (UserSettings);
+  // UpdateMine writes the calling user's settings. An empty resource_version
+  // means "create"; a non-empty one must match, or the write is Aborted.
   rpc UpdateMine(UpdateMineRequest) returns (UserSettings);
+  // GetForUser reads another user's settings. Tenant-admin only — the
+  // self-service path is GetMine.
   rpc GetForUser(GetForUserRequest) returns (UserSettings);
+  // ListByTenant returns every settings row in the tenant, for an operator
+  // auditing what users have configured.
   rpc ListByTenant(ListByTenantRequest) returns (ListByTenantResponse);
+  // DeleteForUser removes another user's settings row, resetting them to
+  // defaults on next read.
   rpc DeleteForUser(DeleteForUserRequest) returns (DeleteForUserResponse);
 }
 
 message UserSettings {
   // Resource name: "users/{user_id}/settings".
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string user_id = 2;
   string tenant_id = 3;
   string timezone = 4;  // IANA tz database name, e.g. "Europe/Kyiv".
@@ -36,9 +48,9 @@ message UserSettings {
   string theme = 6;     // "light" | "dark" | "system".
   // Free-form UI state. Server treats as opaque; bounded at 16 KiB on write.
   google.protobuf.Struct preferences = 7;
-  string resource_version = 8;
-  google.protobuf.Timestamp created_at = 9;
-  google.protobuf.Timestamp updated_at = 10;
+  string resource_version = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message GetMineRequest {}

@@ -11,7 +11,11 @@ import "paladin/common/v1/resource.proto";
 // PresignService regenerates URLs for already-registered objects.
 // Initial URL is bundled with UploadObject; this service handles refresh.
 service PresignService {
+  // RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
+  // for when the first URL expired before the client finished.
   rpc RegenerateUploadUrl(RegenerateUploadUrlRequest) returns (RegenerateUploadUrlResponse);
+  // PresignDownload issues a time-limited GET URL. TTL is capped by
+  // limits.presign.max_ttl; asking for longer is InvalidArgument.
   rpc PresignDownload(PresignDownloadRequest) returns (PresignDownloadResponse);
 }
 

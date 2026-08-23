@@ -13,6 +13,8 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
+import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -21,8 +23,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_object_tag_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CidsZWdhdGUvZGF0YS92MS9vYmplY3RfdGFnX3NlcnZpY2UucHJvdG8SDmxlZ2F0ZS5kYXRhLnYxIjIKF0xpc3REaXN0aW5jdFRhZ3NSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQASKkAQoYTGlzdERpc3RpbmN0VGFnc1Jlc3BvbnNlEkAKBHRhZ3MYASADKAsyMi5sZWdhdGUuZGF0YS52MS5MaXN0RGlzdGluY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GkYKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSKAoFdmFsdWUYAiABKAsyGS5sZWdhdGUuZGF0YS52MS5UYWdWYWx1ZXM6AjgBIhsKCVRhZ1ZhbHVlcxIOCgZ2YWx1ZXMYASADKAkiLQoUR2V0T2JqZWN0VGFnc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKDAQoVR2V0T2JqZWN0VGFnc1Jlc3BvbnNlEj0KBHRhZ3MYASADKAsyLy5sZWdhdGUuZGF0YS52MS5HZXRPYmplY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIrsBChRQdXRPYmplY3RUYWdzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESPAoEdGFncxgDIAMoCzIuLmxlZ2F0ZS5kYXRhLnYxLlB1dE9iamVjdFRhZ3NSZXF1ZXN0LlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKDAQoVUHV0T2JqZWN0VGFnc1Jlc3BvbnNlEj0KBHRhZ3MYASADKAsyLy5sZWdhdGUuZGF0YS52MS5QdXRPYmplY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBImEKF0RlbGV0ZU9iamVjdFRhZ3NSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIMCgRrZXlzGAMgAygJIokBChhEZWxldGVPYmplY3RUYWdzUmVzcG9uc2USQAoEdGFncxgBIAMoCzIyLmxlZ2F0ZS5kYXRhLnYxLkRlbGV0ZU9iamVjdFRhZ3NSZXNwb25zZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEynAMKEE9iamVjdFRhZ1NlcnZpY2USXAoNR2V0T2JqZWN0VGFncxIkLmxlZ2F0ZS5kYXRhLnYxLkdldE9iamVjdFRhZ3NSZXF1ZXN0GiUubGVnYXRlLmRhdGEudjEuR2V0T2JqZWN0VGFnc1Jlc3BvbnNlElwKDVB1dE9iamVjdFRhZ3MSJC5sZWdhdGUuZGF0YS52MS5QdXRPYmplY3RUYWdzUmVxdWVzdBolLmxlZ2F0ZS5kYXRhLnYxLlB1dE9iamVjdFRhZ3NSZXNwb25zZRJlChBEZWxldGVPYmplY3RUYWdzEicubGVnYXRlLmRhdGEudjEuRGVsZXRlT2JqZWN0VGFnc1JlcXVlc3QaKC5sZWdhdGUuZGF0YS52MS5EZWxldGVPYmplY3RUYWdzUmVzcG9uc2USZQoQTGlzdERpc3RpbmN0VGFncxInLmxlZ2F0ZS5kYXRhLnYxLkxpc3REaXN0aW5jdFRhZ3NSZXF1ZXN0GigubGVnYXRlLmRhdGEudjEuTGlzdERpc3RpbmN0VGFnc1Jlc3BvbnNlQkVaQ2dpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtsZWdhdGVkYXRhdjFiBnByb3RvMw",
-    [file_buf_validate_validate],
+    "CidsZWdhdGUvZGF0YS92MS9vYmplY3RfdGFnX3NlcnZpY2UucHJvdG8SDmxlZ2F0ZS5kYXRhLnYxIl8KF0xpc3REaXN0aW5jdFRhZ3NSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARIrCgRwYWdlGAIgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdCLSAQoYTGlzdERpc3RpbmN0VGFnc1Jlc3BvbnNlEkAKBHRhZ3MYASADKAsyMi5sZWdhdGUuZGF0YS52MS5MaXN0RGlzdGluY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5EiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZRpGCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEigKBXZhbHVlGAIgASgLMhkubGVnYXRlLmRhdGEudjEuVGFnVmFsdWVzOgI4ASIuCglUYWdWYWx1ZXMSDgoGdmFsdWVzGAEgAygJEhEKCXRydW5jYXRlZBgCIAEoCCItChRHZXRPYmplY3RUYWdzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIoMBChVHZXRPYmplY3RUYWdzUmVzcG9uc2USPQoEdGFncxgBIAMoCzIvLmxlZ2F0ZS5kYXRhLnYxLkdldE9iamVjdFRhZ3NSZXNwb25zZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiuwEKFFB1dE9iamVjdFRhZ3NSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI8CgR0YWdzGAMgAygLMi4ubGVnYXRlLmRhdGEudjEuUHV0T2JqZWN0VGFnc1JlcXVlc3QuVGFnc0VudHJ5GisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIoMBChVQdXRPYmplY3RUYWdzUmVzcG9uc2USPQoEdGFncxgBIAMoCzIvLmxlZ2F0ZS5kYXRhLnYxLlB1dE9iamVjdFRhZ3NSZXNwb25zZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiYQoXRGVsZXRlT2JqZWN0VGFnc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEgwKBGtleXMYAyADKAkiiQEKGERlbGV0ZU9iamVjdFRhZ3NSZXNwb25zZRJACgR0YWdzGAEgAygLMjIubGVnYXRlLmRhdGEudjEuRGVsZXRlT2JqZWN0VGFnc1Jlc3BvbnNlLlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ATKcAwoQT2JqZWN0VGFnU2VydmljZRJcCg1HZXRPYmplY3RUYWdzEiQubGVnYXRlLmRhdGEudjEuR2V0T2JqZWN0VGFnc1JlcXVlc3QaJS5sZWdhdGUuZGF0YS52MS5HZXRPYmplY3RUYWdzUmVzcG9uc2USXAoNUHV0T2JqZWN0VGFncxIkLmxlZ2F0ZS5kYXRhLnYxLlB1dE9iamVjdFRhZ3NSZXF1ZXN0GiUubGVnYXRlLmRhdGEudjEuUHV0T2JqZWN0VGFnc1Jlc3BvbnNlEmUKEERlbGV0ZU9iamVjdFRhZ3MSJy5sZWdhdGUuZGF0YS52MS5EZWxldGVPYmplY3RUYWdzUmVxdWVzdBooLmxlZ2F0ZS5kYXRhLnYxLkRlbGV0ZU9iamVjdFRhZ3NSZXNwb25zZRJlChBMaXN0RGlzdGluY3RUYWdzEicubGVnYXRlLmRhdGEudjEuTGlzdERpc3RpbmN0VGFnc1JlcXVlc3QaKC5sZWdhdGUuZGF0YS52MS5MaXN0RGlzdGluY3RUYWdzUmVzcG9uc2VCRVpDZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO2xlZ2F0ZWRhdGF2MWIGcHJvdG8z",
+    [file_buf_validate_validate, file_paladin_common_v1_pagination],
   );
 
 /**
@@ -38,6 +40,20 @@ export type ListDistinctTagsRequest =
      * @generated from field: string parent = 1;
      */
     parent: string;
+
+    /**
+     * Pages over tag KEYS, ordered ascending; page_token is the last key of the
+     * previous page. Values within a key are capped separately — see
+     * TagValues.truncated — because a single key can hold far more values than
+     * a page of keys.
+     *
+     * This RPC was unbounded before: it returned every key and every value in
+     * one response, and nothing in the schema said the caller should expect
+     * otherwise.
+     *
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
   };
 
 /**
@@ -60,6 +76,15 @@ export type ListDistinctTagsResponse =
      * @generated from field: map<string, paladin.data.v1.TagValues> tags = 1;
      */
     tags: { [key: string]: TagValues };
+
+    /**
+     * next_page_token carries the last key of this page; empty means the keys
+     * are exhausted. total_size is not populated — counting distinct keys costs
+     * the same scan as returning them.
+     *
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
   };
 
 /**
@@ -78,6 +103,16 @@ export type TagValues = Message<"paladin.data.v1.TagValues"> & {
    * @generated from field: repeated string values = 1;
    */
   values: string[];
+
+  /**
+   * The value list was capped by the server and more values exist for this
+   * key. There is no cursor for values: a facet UI that hits this should
+   * filter rather than page, and a caller that needs them all should query
+   * the objects directly.
+   *
+   * @generated from field: bool truncated = 2;
+   */
+  truncated: boolean;
 };
 
 /**
@@ -243,6 +278,8 @@ export const DeleteObjectTagsResponseSchema: GenMessage<DeleteObjectTagsResponse
  */
 export const ObjectTagService: GenService<{
   /**
+   * GetObjectTags returns the object's tag map.
+   *
    * @generated from rpc paladin.data.v1.ObjectTagService.GetObjectTags
    */
   getObjectTags: {
@@ -251,6 +288,9 @@ export const ObjectTagService: GenService<{
     output: typeof GetObjectTagsResponseSchema;
   };
   /**
+   * PutObjectTags merges the supplied keys into the object's tags; keys absent
+   * from the request are left alone. resource_version is required.
+   *
    * @generated from rpc paladin.data.v1.ObjectTagService.PutObjectTags
    */
   putObjectTags: {
@@ -259,6 +299,9 @@ export const ObjectTagService: GenService<{
     output: typeof PutObjectTagsResponseSchema;
   };
   /**
+   * DeleteObjectTags removes the named keys. Deleting a key that is not set is
+   * not an error. resource_version is required.
+   *
    * @generated from rpc paladin.data.v1.ObjectTagService.DeleteObjectTags
    */
   deleteObjectTags: {

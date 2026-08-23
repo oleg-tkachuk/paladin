@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 // CapabilityService manages capability tokens — short-lived, signed,
 // delegable, individually revocable authorisation primitives for agent
@@ -101,14 +102,14 @@ message CapabilityCaveats {
 // capability. Returned by every RPC; the compact JWT is delivered
 // separately as `token` so handlers can choose whether to surface it.
 message Capability {
-  string id = 1;
-  string issuer = 2;
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string issuer = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
   CapabilityPrincipal subject = 3;
   repeated string audience = 4;
   CapabilityCaveats caveats = 5;
-  google.protobuf.Timestamp issued_at = 6;
-  google.protobuf.Timestamp not_before = 7;
-  google.protobuf.Timestamp expires_at = 8;
+  google.protobuf.Timestamp issued_at = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp not_before = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp expires_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
   string parent_id = 9;
   int64 generation = 10;
 }

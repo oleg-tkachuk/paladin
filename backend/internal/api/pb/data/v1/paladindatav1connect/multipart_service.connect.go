@@ -53,10 +53,22 @@ const (
 
 // MultipartUploadServiceClient is a client for the paladin.data.v1.MultipartUploadService service.
 type MultipartUploadServiceClient interface {
+	// InitiateMultipartUpload opens an upload session and returns its id. Sessions
+	// left incomplete are reaped by the housekeeping job after
+	// worker.jobs.housekeeping.multipart_ttl.
 	InitiateMultipartUpload(context.Context, *connect.Request[v1.InitiateMultipartUploadRequest]) (*connect.Response[v1.InitiateMultipartUploadResponse], error)
+	// PresignPart issues a PUT URL for one part. Parts may be uploaded in any
+	// order and in parallel.
 	PresignPart(context.Context, *connect.Request[v1.PresignPartRequest]) (*connect.Response[v1.PresignPartResponse], error)
+	// CompleteMultipartUpload assembles the parts into one object. The part list
+	// must carry every etag the client received; a mismatch is
+	// FailedPrecondition and the object is not created.
 	CompleteMultipartUpload(context.Context, *connect.Request[v1.CompleteMultipartUploadRequest]) (*connect.Response[v1.Object], error)
+	// AbortMultipartUpload discards the session and the parts already uploaded.
+	// Safe to call on an already-aborted session.
 	AbortMultipartUpload(context.Context, *connect.Request[v1.AbortMultipartUploadRequest]) (*connect.Response[v1.AbortMultipartUploadResponse], error)
+	// ListParts returns the parts recorded for an open session, for a client
+	// reconciling after a crash.
 	ListParts(context.Context, *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error)
 }
 
@@ -141,10 +153,22 @@ func (c *multipartUploadServiceClient) ListParts(ctx context.Context, req *conne
 // MultipartUploadServiceHandler is an implementation of the paladin.data.v1.MultipartUploadService
 // service.
 type MultipartUploadServiceHandler interface {
+	// InitiateMultipartUpload opens an upload session and returns its id. Sessions
+	// left incomplete are reaped by the housekeeping job after
+	// worker.jobs.housekeeping.multipart_ttl.
 	InitiateMultipartUpload(context.Context, *connect.Request[v1.InitiateMultipartUploadRequest]) (*connect.Response[v1.InitiateMultipartUploadResponse], error)
+	// PresignPart issues a PUT URL for one part. Parts may be uploaded in any
+	// order and in parallel.
 	PresignPart(context.Context, *connect.Request[v1.PresignPartRequest]) (*connect.Response[v1.PresignPartResponse], error)
+	// CompleteMultipartUpload assembles the parts into one object. The part list
+	// must carry every etag the client received; a mismatch is
+	// FailedPrecondition and the object is not created.
 	CompleteMultipartUpload(context.Context, *connect.Request[v1.CompleteMultipartUploadRequest]) (*connect.Response[v1.Object], error)
+	// AbortMultipartUpload discards the session and the parts already uploaded.
+	// Safe to call on an already-aborted session.
 	AbortMultipartUpload(context.Context, *connect.Request[v1.AbortMultipartUploadRequest]) (*connect.Response[v1.AbortMultipartUploadResponse], error)
+	// ListParts returns the parts recorded for an open session, for a client
+	// reconciling after a crash.
 	ListParts(context.Context, *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error)
 }
 

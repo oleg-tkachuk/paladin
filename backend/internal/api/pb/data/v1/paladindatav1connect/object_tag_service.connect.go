@@ -50,8 +50,13 @@ const (
 
 // ObjectTagServiceClient is a client for the paladin.data.v1.ObjectTagService service.
 type ObjectTagServiceClient interface {
+	// GetObjectTags returns the object's tag map.
 	GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error)
+	// PutObjectTags merges the supplied keys into the object's tags; keys absent
+	// from the request are left alone. resource_version is required.
 	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
+	// DeleteObjectTags removes the named keys. Deleting a key that is not set is
+	// not an error. resource_version is required.
 	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
 	// ListDistinctTags enumerates the distinct tag key→values present across an
 	// Collection's live objects, so a UI can populate a tag-facet filter from the
@@ -127,8 +132,13 @@ func (c *objectTagServiceClient) ListDistinctTags(ctx context.Context, req *conn
 
 // ObjectTagServiceHandler is an implementation of the paladin.data.v1.ObjectTagService service.
 type ObjectTagServiceHandler interface {
+	// GetObjectTags returns the object's tag map.
 	GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error)
+	// PutObjectTags merges the supplied keys into the object's tags; keys absent
+	// from the request are left alone. resource_version is required.
 	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
+	// DeleteObjectTags removes the named keys. Deleting a key that is not set is
+	// not an error. resource_version is required.
 	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
 	// ListDistinctTags enumerates the distinct tag key→values present across an
 	// Collection's live objects, so a UI can populate a tag-facet filter from the

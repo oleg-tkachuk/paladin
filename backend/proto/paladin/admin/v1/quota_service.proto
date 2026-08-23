@@ -11,8 +11,13 @@ import "paladin/admin/v1/types.proto";
 // QuotaService manages per-tenant / per-bucket usage caps. Quota is set by
 // platform/bucket admins; usage is read by tenant admins and end-users.
 service QuotaService {
+  // GetQuota returns the tenant's limits and its current usage counters.
   rpc GetQuota(GetQuotaRequest) returns (Quota);
+  // SetQuota replaces the tenant's limits. Lowering a limit below current usage
+  // is allowed — it blocks further growth rather than deleting anything.
   rpc SetQuota(SetQuotaRequest) returns (Quota);
+  // ResetUsage zeroes the usage counters without touching the limits. For
+  // recovering from a drifted counter, not for granting capacity.
   rpc ResetUsage(ResetUsageRequest) returns (Quota);
 }
 

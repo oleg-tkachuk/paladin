@@ -13,15 +13,26 @@ import "paladin/iam/v1/types.proto";
 // UserService is the admin-only side of IAM. CRUD users, grant scopes/roles,
 // reset passwords. Requires role `iam.admin` or `platform.admin`.
 service UserService {
+  // CreateUser adds a user to a tenant. The initial password is returned once
+  // and never again — it is not recoverable from any later read.
   rpc CreateUser(CreateUserRequest) returns (User);
+  // GetUser returns the user. The password hash is never included.
   rpc GetUser(GetUserRequest) returns (User);
+  // UpdateUser applies update_mask to display_name, roles, scopes and disabled.
+  // tenant_id is immutable; the password has its own RPC.
   rpc UpdateUser(UpdateUserRequest) returns (User);
+  // DeleteUser removes the user's membership in one tenant. A subject that
+  // belongs to several tenants keeps the others.
   rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  // ListUsers pages the users in a tenant.
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
 
   // GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
   // than UpdateUser with a scopes field).
   rpc GrantScopes(GrantScopesRequest) returns (User);
+  // RevokeScopes removes the named scopes from the user. Tokens already issued
+  // keep their scopes until they expire — this changes what the next token
+  // will carry.
   rpc RevokeScopes(RevokeScopesRequest) returns (User);
 
   // ResetPassword forces a password change on next login. Local IdP only.

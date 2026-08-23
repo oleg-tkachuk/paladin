@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -494,21 +495,21 @@ var File_paladin_iam_v1_user_settings_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_user_settings_service_proto_rawDesc = "" +
 	"\n" +
-	")paladin/iam/v1/user_settings_service.proto\x12\rlegate.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\"\xfe\x02\n" +
-	"\fUserSettings\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
+	")paladin/iam/v1/user_settings_service.proto\x12\rlegate.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x92\x03\n" +
+	"\fUserSettings\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1b\n" +
 	"\ttenant_id\x18\x03 \x01(\tR\btenantId\x12\x1a\n" +
 	"\btimezone\x18\x04 \x01(\tR\btimezone\x12\x16\n" +
 	"\x06locale\x18\x05 \x01(\tR\x06locale\x12\x14\n" +
 	"\x05theme\x18\x06 \x01(\tR\x05theme\x129\n" +
-	"\vpreferences\x18\a \x01(\v2\x17.google.protobuf.StructR\vpreferences\x12)\n" +
-	"\x10resource_version\x18\b \x01(\tR\x0fresourceVersion\x129\n" +
+	"\vpreferences\x18\a \x01(\v2\x17.google.protobuf.StructR\vpreferences\x12.\n" +
+	"\x10resource_version\x18\b \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x10\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\x10\n" +
 	"\x0eGetMineRequest\"\xd5\x01\n" +
 	"\x11UpdateMineRequest\x12;\n" +
 	"\vupdate_mask\x18\x01 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +

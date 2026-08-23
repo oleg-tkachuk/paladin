@@ -17,6 +17,9 @@ import "buf/validate/validate.proto";
 // and list-RPC query strings — surfacing failures at edit-time instead
 // of at apply-time-from-a-background-worker.
 service CELService {
+  // Validate compiles a CEL expression against the EventEnvelope schema and
+  // reports errors without storing anything. Used by the console before a
+  // subscription filter is saved.
   rpc Validate(ValidateCELRequest) returns (ValidateCELResponse);
 }
 

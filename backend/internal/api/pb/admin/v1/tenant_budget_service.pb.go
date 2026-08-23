@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -551,16 +552,16 @@ var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescripto
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\n" +
-	"+paladin/admin/v1/tenant_budget_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x02\n" +
+	"+paladin/admin/v1/tenant_budget_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf5\x02\n" +
 	"\fTenantBudget\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12:\n" +
 	"\x11max_budget_amount\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\x0fmaxBudgetAmount\x12!\n" +
-	"\fspent_amount\x18\x03 \x01(\x01R\vspentAmount\x12=\n" +
-	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\fspent_amount\x18\x03 \x01(\x01R\vspentAmount\x12B\n" +
+	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vperiodStart\x12>\n" +
 	"\n" +
-	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x129\n" +
+	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tperiodEnd\x12>\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1b\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12\x1b\n" +
 	"\tunit_code\x18\a \x01(\tR\bunitCode\"F\n" +
 	"\x1dTenantBudgetServiceGetRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"W\n" +

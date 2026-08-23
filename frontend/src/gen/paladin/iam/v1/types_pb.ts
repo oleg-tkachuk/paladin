@@ -8,6 +8,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Scope } from "../../common/v1/scope_pb";
 import { file_paladin_common_v1_scope } from "../../common/v1/scope_pb";
+import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -16,8 +17,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_types: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChlsZWdhdGUvaWFtL3YxL3R5cGVzLnByb3RvEg1sZWdhdGUuaWFtLnYxItYCCgRVc2VyEgwKBG5hbWUYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSDwoHc3ViamVjdBgEIAEoCRIUCgxkaXNwbGF5X25hbWUYBSABKAkSDQoFcm9sZXMYBiADKAkSJwoGc2NvcGVzGAcgAygLMhcubGVnYXRlLmNvbW1vbi52MS5TY29wZRIQCghkaXNhYmxlZBgIIAEoCBIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKDWxhc3RfbG9naW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqUBCglUb2tlblBhaXISFAoMYWNjZXNzX3Rva2VuGAEgASgJEiEKGWFjY2Vzc19leHBpcmVzX2luX3NlY29uZHMYAiABKAUSFQoNcmVmcmVzaF90b2tlbhgDIAEoCRIiChpyZWZyZXNoX2V4cGlyZXNfaW5fc2Vjb25kcxgEIAEoBRISCgp0b2tlbl90eXBlGAUgASgJEhAKCGF1ZGllbmNlGAYgASgJQkNaQWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO2xlZ2F0ZWlhbXYxYgZwcm90bzM",
-    [file_google_protobuf_timestamp, file_paladin_common_v1_scope],
+    "ChlsZWdhdGUvaWFtL3YxL3R5cGVzLnByb3RvEg1sZWdhdGUuaWFtLnYxIvkCCgRVc2VyEhEKBG5hbWUYASABKAlCA+BBCBIUCgd1c2VyX2lkGAIgASgJQgPgQQMSFgoJdGVuYW50X2lkGAMgASgJQgPgQQUSDwoHc3ViamVjdBgEIAEoCRIUCgxkaXNwbGF5X25hbWUYBSABKAkSDQoFcm9sZXMYBiADKAkSJwoGc2NvcGVzGAcgAygLMhcubGVnYXRlLmNvbW1vbi52MS5TY29wZRIQCghkaXNhYmxlZBgIIAEoCBIdChByZXNvdXJjZV92ZXJzaW9uGAkgASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjYKDWxhc3RfbG9naW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMiwwEKCVRva2VuUGFpchIZCgxhY2Nlc3NfdG9rZW4YASABKAlCA+BBAxImChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFQgPgQQMSGgoNcmVmcmVzaF90b2tlbhgDIAEoCUID4EEDEicKGnJlZnJlc2hfZXhwaXJlc19pbl9zZWNvbmRzGAQgASgFQgPgQQMSFwoKdG9rZW5fdHlwZRgFIAEoCUID4EEDEhUKCGF1ZGllbmNlGAYgASgJQgPgQQNCQ1pBZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9pYW0vdjE7bGVnYXRlaWFtdjFiBnByb3RvMw",
+    [
+      file_google_protobuf_timestamp,
+      file_paladin_common_v1_scope,
+      file_google_api_field_behavior,
+    ],
   );
 
 /**
@@ -131,8 +136,6 @@ export type TokenPair = Message<"paladin.iam.v1.TokenPair"> & {
   refreshExpiresInSeconds: number;
 
   /**
-   * "Bearer"
-   *
    * @generated from field: string token_type = 5;
    */
   tokenType: string;

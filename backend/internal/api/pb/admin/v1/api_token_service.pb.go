@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -776,24 +777,24 @@ var File_paladin_admin_v1_api_token_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\n" +
-	"'paladin/admin/v1/api_token_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe1\x03\n" +
-	"\bAPIToken\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12\x16\n" +
-	"\x06prefix\x18\x04 \x01(\tR\x06prefix\x12\x16\n" +
+	"'paladin/admin/v1/api_token_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x89\x04\n" +
+	"\bAPIToken\x12\x13\n" +
+	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12 \n" +
+	"\ttenant_id\x18\x02 \x01(\tB\x03\xe0A\x05R\btenantId\x12\x17\n" +
+	"\x04name\x18\x03 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
+	"\x06prefix\x18\x04 \x01(\tB\x03\xe0A\x03R\x06prefix\x12\x16\n" +
 	"\x06scopes\x18\x05 \x03(\tR\x06scopes\x12\x1a\n" +
 	"\baudience\x18\x06 \x03(\tR\baudience\x12\x14\n" +
-	"\x05roles\x18\r \x03(\tR\x05roles\x129\n" +
+	"\x05roles\x18\r \x03(\tR\x05roles\x12>\n" +
 	"\n" +
-	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x129\n" +
+	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\texpiresAt\x12>\n" +
 	"\n" +
-	"revoked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\x12<\n" +
-	"\flast_used_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastUsedAt\x129\n" +
+	"revoked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\trevokedAt\x12A\n" +
+	"\flast_used_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +
+	"lastUsedAt\x12>\n" +
 	"\n" +
 	"created_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1d\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"created_by\x18\v \x01(\tR\tcreatedBy\x12$\n" +
 	"\x0erate_limit_rpm\x18\f \x01(\x05R\frateLimitRpm\"\x8f\x02\n" +

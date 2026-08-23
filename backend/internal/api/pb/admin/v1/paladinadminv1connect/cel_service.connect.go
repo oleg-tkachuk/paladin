@@ -40,6 +40,9 @@ const (
 
 // CELServiceClient is a client for the paladin.admin.v1.CELService service.
 type CELServiceClient interface {
+	// Validate compiles a CEL expression against the EventEnvelope schema and
+	// reports errors without storing anything. Used by the console before a
+	// subscription filter is saved.
 	Validate(context.Context, *connect.Request[v1.ValidateCELRequest]) (*connect.Response[v1.ValidateCELResponse], error)
 }
 
@@ -75,6 +78,9 @@ func (c *cELServiceClient) Validate(ctx context.Context, req *connect.Request[v1
 
 // CELServiceHandler is an implementation of the paladin.admin.v1.CELService service.
 type CELServiceHandler interface {
+	// Validate compiles a CEL expression against the EventEnvelope schema and
+	// reports errors without storing anything. Used by the console before a
+	// subscription filter is saved.
 	Validate(context.Context, *connect.Request[v1.ValidateCELRequest]) (*connect.Response[v1.ValidateCELResponse], error)
 }
 

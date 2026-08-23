@@ -68,10 +68,21 @@ const (
 
 // BackendServiceClient is a client for the paladin.admin.v1.BackendService service.
 type BackendServiceClient interface {
+	// CreateBackend registers an S3-compatible endpoint. Credentials are stored
+	// via SecretRef, never inline in the resource.
 	CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	// GetBackend returns the backend by id. Credentials are never echoed back.
 	GetBackend(context.Context, *connect.Request[v1.GetBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	// UpdateBackend applies update_mask; resource_version is required. Changing
+	// the endpoint of a backend with live buckets does not migrate anything —
+	// the objects stay where they are.
 	UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	// DeleteBackend refuses while buckets still reference it, unless force=true.
+	// force also waives the OCC guard, which is why it is a separate flag from
+	// resource_version.
 	DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error)
+	// ListBackends returns every registered backend for the platform; backends
+	// are not tenant-scoped.
 	ListBackends(context.Context, *connect.Request[v1.ListBackendsRequest]) (*connect.Response[v1.ListBackendsResponse], error)
 	// RotateCredentials swaps the credentials_secret_ref. The previous secret
 	// remains valid for `grace_period` so in-flight presigns don't break.
@@ -234,10 +245,21 @@ func (c *backendServiceClient) SetBackendMaintenance(ctx context.Context, req *c
 
 // BackendServiceHandler is an implementation of the paladin.admin.v1.BackendService service.
 type BackendServiceHandler interface {
+	// CreateBackend registers an S3-compatible endpoint. Credentials are stored
+	// via SecretRef, never inline in the resource.
 	CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	// GetBackend returns the backend by id. Credentials are never echoed back.
 	GetBackend(context.Context, *connect.Request[v1.GetBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	// UpdateBackend applies update_mask; resource_version is required. Changing
+	// the endpoint of a backend with live buckets does not migrate anything —
+	// the objects stay where they are.
 	UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	// DeleteBackend refuses while buckets still reference it, unless force=true.
+	// force also waives the OCC guard, which is why it is a separate flag from
+	// resource_version.
 	DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error)
+	// ListBackends returns every registered backend for the platform; backends
+	// are not tenant-scoped.
 	ListBackends(context.Context, *connect.Request[v1.ListBackendsRequest]) (*connect.Response[v1.ListBackendsResponse], error)
 	// RotateCredentials swaps the credentials_secret_ref. The previous secret
 	// remains valid for `grace_period` so in-flight presigns don't break.

@@ -9,19 +9,36 @@ import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/admin/v1/types.proto";
 import "paladin/common/v1/pagination.proto";
+import "google/api/field_behavior.proto";
 
 // TenantService manages tenants. Platform-admin only.
 service TenantService {
+  // CreateTenant provisions a tenant and, unless the request opts out, its
+  // default storage binding. storage_layout="dedicated" also provisions a
+  // physical bucket owned by the tenant (ADR-0011). AlreadyExists when the
+  // slug is taken.
   rpc CreateTenant(CreateTenantRequest) returns (Tenant);
+  // GetTenant accepts either the UUID or the slug in the resource name.
+  // Soft-deleted tenants are returned — check deleted_at — so the trash view
+  // can show them.
   rpc GetTenant(GetTenantRequest) returns (Tenant);
+  // UpdateTenant applies update_mask to display_name, labels and
+  // inherited_cedar_policy. tenant_id and slug are immutable (use
+  // RenameTenantSlug for the latter); resource_version is required and a stale
+  // one is Aborted.
   rpc UpdateTenant(UpdateTenantRequest) returns (Tenant);
   // DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
   // remains recoverable via RestoreTenant within the retention window.
   // Pass `force=true` to skip the trash and hard-delete immediately —
   // used by automated test cleanups + emergency-purge flows.
   rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
+  // ListTenants excludes soft-deleted tenants unless include_trashed or
+  // only_trashed is set.
   rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
 
+  // SetInheritedPolicy replaces the Cedar policy every collection and bucket
+  // under the tenant inherits. Validated before it is stored — an unparseable
+  // policy is InvalidArgument, not a tenant that denies everything.
   rpc SetInheritedPolicy(SetInheritedPolicyRequest) returns (Tenant);
 
   // RestoreTenant clears `deleted_at` on a soft-deleted row, returning
@@ -233,13 +250,13 @@ message StorageMigrationStatus {
 // bare collection name shape (ADR-0010 Phase 3 / migration 034).
 message TenantDefaultBinding {
   // name — "tenants/{tenant_id}/defaultBinding".
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   // Reference to the bucket, as a resource name:
   // "storageBackends/{backend_id}/buckets/{bucket_id}". One field, because a
   // reference to another resource is its name (AIP-122), not its parts.
   string bucket = 2;
   // set_at / set_by — audit of the last change.
-  google.protobuf.Timestamp set_at = 4;
+  google.protobuf.Timestamp set_at = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   string set_by = 5;
 }
 

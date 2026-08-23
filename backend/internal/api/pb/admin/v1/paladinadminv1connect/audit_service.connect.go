@@ -47,7 +47,11 @@ const (
 
 // AuditLogServiceClient is a client for the paladin.admin.v1.AuditLogService service.
 type AuditLogServiceClient interface {
+	// ListAuditLog returns audit entries newest-first. The log is append-only:
+	// there is no RPC that mutates or deletes an entry.
 	ListAuditLog(context.Context, *connect.Request[v1.ListAuditLogRequest]) (*connect.Response[v1.ListAuditLogResponse], error)
+	// GetAuditLogEntry returns a single entry by id, including the full request
+	// context recorded at the time.
 	GetAuditLogEntry(context.Context, *connect.Request[v1.GetAuditLogEntryRequest]) (*connect.Response[v1.AuditLogEntry], error)
 	// ExportAuditLog emits entries to a sink (S3 object, webhook batch).
 	// Returns an Operation whose response contains the export location.
@@ -110,7 +114,11 @@ func (c *auditLogServiceClient) ExportAuditLog(ctx context.Context, req *connect
 
 // AuditLogServiceHandler is an implementation of the paladin.admin.v1.AuditLogService service.
 type AuditLogServiceHandler interface {
+	// ListAuditLog returns audit entries newest-first. The log is append-only:
+	// there is no RPC that mutates or deletes an entry.
 	ListAuditLog(context.Context, *connect.Request[v1.ListAuditLogRequest]) (*connect.Response[v1.ListAuditLogResponse], error)
+	// GetAuditLogEntry returns a single entry by id, including the full request
+	// context recorded at the time.
 	GetAuditLogEntry(context.Context, *connect.Request[v1.GetAuditLogEntryRequest]) (*connect.Response[v1.AuditLogEntry], error)
 	// ExportAuditLog emits entries to a sink (S3 object, webhook batch).
 	// Returns an Operation whose response contains the export location.

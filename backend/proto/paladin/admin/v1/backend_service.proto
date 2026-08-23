@@ -12,10 +12,21 @@ import "paladin/common/v1/pagination.proto";
 // BackendService manages physical storage backends. Exclusive to platform
 // admins; bucket admins use ListBackends (read-only) to pick a target.
 service BackendService {
+  // CreateBackend registers an S3-compatible endpoint. Credentials are stored
+  // via SecretRef, never inline in the resource.
   rpc CreateBackend(CreateBackendRequest) returns (StorageBackend);
+  // GetBackend returns the backend by id. Credentials are never echoed back.
   rpc GetBackend(GetBackendRequest) returns (StorageBackend);
+  // UpdateBackend applies update_mask; resource_version is required. Changing
+  // the endpoint of a backend with live buckets does not migrate anything —
+  // the objects stay where they are.
   rpc UpdateBackend(UpdateBackendRequest) returns (StorageBackend);
+  // DeleteBackend refuses while buckets still reference it, unless force=true.
+  // force also waives the OCC guard, which is why it is a separate flag from
+  // resource_version.
   rpc DeleteBackend(DeleteBackendRequest) returns (DeleteBackendResponse);
+  // ListBackends returns every registered backend for the platform; backends
+  // are not tenant-scoped.
   rpc ListBackends(ListBackendsRequest) returns (ListBackendsResponse);
 
   // RotateCredentials swaps the credentials_secret_ref. The previous secret

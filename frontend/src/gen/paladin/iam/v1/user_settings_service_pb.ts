@@ -21,6 +21,7 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
+import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
@@ -29,13 +30,14 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_user_settings_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CilsZWdhdGUvaWFtL3YxL3VzZXJfc2V0dGluZ3Nfc2VydmljZS5wcm90bxINbGVnYXRlLmlhbS52MSKZAgoMVXNlclNldHRpbmdzEgwKBG5hbWUYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSEAoIdGltZXpvbmUYBCABKAkSDgoGbG9jYWxlGAUgASgJEg0KBXRoZW1lGAYgASgJEiwKC3ByZWZlcmVuY2VzGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChByZXNvdXJjZV92ZXJzaW9uGAggASgJEi4KCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIhAKDkdldE1pbmVSZXF1ZXN0IqMBChFVcGRhdGVNaW5lUmVxdWVzdBIvCgt1cGRhdGVfbWFzaxgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2sSEAoIdGltZXpvbmUYAiABKAkSDgoGbG9jYWxlGAMgASgJEg0KBXRoZW1lGAQgASgJEiwKC3ByZWZlcmVuY2VzGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCIqChFHZXRGb3JVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlsKE0xpc3RCeVRlbmFudFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEisKBHBhZ2UYAiABKAsyHS5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0InMKFExpc3RCeVRlbmFudFJlc3BvbnNlEi0KCHNldHRpbmdzGAEgAygLMhsubGVnYXRlLmlhbS52MS5Vc2VyU2V0dGluZ3MSLAoEcGFnZRgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlc3BvbnNlIi0KFERlbGV0ZUZvclVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiFwoVRGVsZXRlRm9yVXNlclJlc3BvbnNlMqsDChNVc2VyU2V0dGluZ3NTZXJ2aWNlEkUKB0dldE1pbmUSHS5sZWdhdGUuaWFtLnYxLkdldE1pbmVSZXF1ZXN0GhsubGVnYXRlLmlhbS52MS5Vc2VyU2V0dGluZ3MSSwoKVXBkYXRlTWluZRIgLmxlZ2F0ZS5pYW0udjEuVXBkYXRlTWluZVJlcXVlc3QaGy5sZWdhdGUuaWFtLnYxLlVzZXJTZXR0aW5ncxJLCgpHZXRGb3JVc2VyEiAubGVnYXRlLmlhbS52MS5HZXRGb3JVc2VyUmVxdWVzdBobLmxlZ2F0ZS5pYW0udjEuVXNlclNldHRpbmdzElcKDExpc3RCeVRlbmFudBIiLmxlZ2F0ZS5pYW0udjEuTGlzdEJ5VGVuYW50UmVxdWVzdBojLmxlZ2F0ZS5pYW0udjEuTGlzdEJ5VGVuYW50UmVzcG9uc2USWgoNRGVsZXRlRm9yVXNlchIjLmxlZ2F0ZS5pYW0udjEuRGVsZXRlRm9yVXNlclJlcXVlc3QaJC5sZWdhdGUuaWFtLnYxLkRlbGV0ZUZvclVzZXJSZXNwb25zZUJDWkFnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtsZWdhdGVpYW12MWIGcHJvdG8z",
+    "CilsZWdhdGUvaWFtL3YxL3VzZXJfc2V0dGluZ3Nfc2VydmljZS5wcm90bxINbGVnYXRlLmlhbS52MSKtAgoMVXNlclNldHRpbmdzEhEKBG5hbWUYASABKAlCA+BBCBIPCgd1c2VyX2lkGAIgASgJEhEKCXRlbmFudF9pZBgDIAEoCRIQCgh0aW1lem9uZRgEIAEoCRIOCgZsb2NhbGUYBSABKAkSDQoFdGhlbWUYBiABKAkSLAoLcHJlZmVyZW5jZXMYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eh0KEHJlc291cmNlX3ZlcnNpb24YCCABKAlCA+BBAxIzCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMiEAoOR2V0TWluZVJlcXVlc3QiowEKEVVwZGF0ZU1pbmVSZXF1ZXN0Ei8KC3VwZGF0ZV9tYXNrGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxIQCgh0aW1lem9uZRgCIAEoCRIOCgZsb2NhbGUYAyABKAkSDQoFdGhlbWUYBCABKAkSLAoLcHJlZmVyZW5jZXMYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IioKEUdldEZvclVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiWwoTTGlzdEJ5VGVuYW50UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKwoEcGFnZRgCIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QicwoUTGlzdEJ5VGVuYW50UmVzcG9uc2USLQoIc2V0dGluZ3MYASADKAsyGy5sZWdhdGUuaWFtLnYxLlVzZXJTZXR0aW5ncxIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLQoURGVsZXRlRm9yVXNlclJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIXChVEZWxldGVGb3JVc2VyUmVzcG9uc2UyqwMKE1VzZXJTZXR0aW5nc1NlcnZpY2USRQoHR2V0TWluZRIdLmxlZ2F0ZS5pYW0udjEuR2V0TWluZVJlcXVlc3QaGy5sZWdhdGUuaWFtLnYxLlVzZXJTZXR0aW5ncxJLCgpVcGRhdGVNaW5lEiAubGVnYXRlLmlhbS52MS5VcGRhdGVNaW5lUmVxdWVzdBobLmxlZ2F0ZS5pYW0udjEuVXNlclNldHRpbmdzEksKCkdldEZvclVzZXISIC5sZWdhdGUuaWFtLnYxLkdldEZvclVzZXJSZXF1ZXN0GhsubGVnYXRlLmlhbS52MS5Vc2VyU2V0dGluZ3MSVwoMTGlzdEJ5VGVuYW50EiIubGVnYXRlLmlhbS52MS5MaXN0QnlUZW5hbnRSZXF1ZXN0GiMubGVnYXRlLmlhbS52MS5MaXN0QnlUZW5hbnRSZXNwb25zZRJaCg1EZWxldGVGb3JVc2VyEiMubGVnYXRlLmlhbS52MS5EZWxldGVGb3JVc2VyUmVxdWVzdBokLmxlZ2F0ZS5pYW0udjEuRGVsZXRlRm9yVXNlclJlc3BvbnNlQkNaQWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO2xlZ2F0ZWlhbXYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
       file_google_protobuf_struct,
       file_google_protobuf_timestamp,
       file_paladin_common_v1_pagination,
+      file_google_api_field_behavior,
     ],
   );
 
@@ -284,6 +286,10 @@ export const DeleteForUserResponseSchema: GenMessage<DeleteForUserResponse> =
  */
 export const UserSettingsService: GenService<{
   /**
+   * GetMine returns the calling user's settings, creating nothing: a user who
+   * has never saved settings gets the zero value with an empty
+   * resource_version.
+   *
    * @generated from rpc paladin.iam.v1.UserSettingsService.GetMine
    */
   getMine: {
@@ -292,6 +298,9 @@ export const UserSettingsService: GenService<{
     output: typeof UserSettingsSchema;
   };
   /**
+   * UpdateMine writes the calling user's settings. An empty resource_version
+   * means "create"; a non-empty one must match, or the write is Aborted.
+   *
    * @generated from rpc paladin.iam.v1.UserSettingsService.UpdateMine
    */
   updateMine: {
@@ -300,6 +309,9 @@ export const UserSettingsService: GenService<{
     output: typeof UserSettingsSchema;
   };
   /**
+   * GetForUser reads another user's settings. Tenant-admin only — the
+   * self-service path is GetMine.
+   *
    * @generated from rpc paladin.iam.v1.UserSettingsService.GetForUser
    */
   getForUser: {
@@ -308,6 +320,9 @@ export const UserSettingsService: GenService<{
     output: typeof UserSettingsSchema;
   };
   /**
+   * ListByTenant returns every settings row in the tenant, for an operator
+   * auditing what users have configured.
+   *
    * @generated from rpc paladin.iam.v1.UserSettingsService.ListByTenant
    */
   listByTenant: {
@@ -316,6 +331,9 @@ export const UserSettingsService: GenService<{
     output: typeof ListByTenantResponseSchema;
   };
   /**
+   * DeleteForUser removes another user's settings row, resetting them to
+   * defaults on next read.
+   *
    * @generated from rpc paladin.iam.v1.UserSettingsService.DeleteForUser
    */
   deleteForUser: {

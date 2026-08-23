@@ -314,6 +314,10 @@ export const BindCollectionToBucketRequestSchema: GenMessage<BindCollectionToBuc
  */
 export const CollectionService: GenService<{
   /**
+   * CreateCollection creates a namespace for objects and binds it to a bucket.
+   * The collection name may contain slashes ("team/project" is one
+   * collection, not two).
+   *
    * @generated from rpc paladin.admin.v1.CollectionService.CreateCollection
    */
   createCollection: {
@@ -322,6 +326,8 @@ export const CollectionService: GenService<{
     output: typeof CollectionSchema;
   };
   /**
+   * GetCollection returns the collection and the bucket it is bound to.
+   *
    * @generated from rpc paladin.admin.v1.CollectionService.GetCollection
    */
   getCollection: {
@@ -330,6 +336,9 @@ export const CollectionService: GenService<{
     output: typeof CollectionSchema;
   };
   /**
+   * UpdateCollection applies update_mask; resource_version is required. The
+   * tenant and the collection name are immutable.
+   *
    * @generated from rpc paladin.admin.v1.CollectionService.UpdateCollection
    */
   updateCollection: {
@@ -338,6 +347,9 @@ export const CollectionService: GenService<{
     output: typeof CollectionSchema;
   };
   /**
+   * DeleteCollection refuses while the collection still holds objects, unless
+   * force=true. force also waives the OCC guard.
+   *
    * @generated from rpc paladin.admin.v1.CollectionService.DeleteCollection
    */
   deleteCollection: {
@@ -346,6 +358,9 @@ export const CollectionService: GenService<{
     output: typeof DeleteCollectionResponseSchema;
   };
   /**
+   * ListCollections returns the collections under a tenant, or across all
+   * tenants for a platform admin.
+   *
    * @generated from rpc paladin.admin.v1.CollectionService.ListCollections
    */
   listCollections: {
@@ -354,6 +369,10 @@ export const CollectionService: GenService<{
     output: typeof ListCollectionsResponseSchema;
   };
   /**
+   * SetCollectionPolicy replaces the collection's Cedar policy. It composes
+   * with — does not replace — the tenant's inherited policy: a request must
+   * pass both.
+   *
    * @generated from rpc paladin.admin.v1.CollectionService.SetCollectionPolicy
    */
   setCollectionPolicy: {

@@ -11,34 +11,59 @@ import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/pagination.proto";
 import "paladin/common/v1/resource.proto";
 import "paladin/data/v1/types.proto";
+import "google/api/field_behavior.proto";
 
 // ObjectService is the canonical data-plane API. Paladin never proxies bytes —
 // every upload/download happens directly between the client and the storage
 // backend via presigned URLs returned by these RPCs.
 service ObjectService {
+  // UploadObject is the presigned-URL handshake, not a byte pipe: it records
+  // the intent and returns a URL the client PUTs to directly. The control
+  // plane never sees object bytes. Finish with CompleteObject.
   rpc UploadObject(UploadObjectRequest) returns (UploadObjectResponse);
 
+  // DownloadObject returns a presigned GET URL. As with upload, the bytes move
+  // between the client and the storage backend, not through here.
   rpc DownloadObject(DownloadObjectRequest) returns (DownloadObjectResponse);
 
+  // GetObject returns metadata for one object. lock is populated here but left
+  // empty by ListObjects — reading it per row would add a join to the
+  // pagination hot path.
   rpc GetObject(GetObjectRequest) returns (Object);
 
   // LookupObject resolves an Object by (collection, key) instead of object_id.
   rpc LookupObject(LookupObjectRequest) returns (Object);
 
+  // UpdateObject applies update_mask to metadata, tags and content_type; every
+  // other field is server-owned. resource_version is required.
   rpc UpdateObject(UpdateObjectRequest) returns (Object);
 
   // CompleteObject is no-op for IMPLICIT completion mode and the event has
   // already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
   rpc CompleteObject(CompleteObjectRequest) returns (Object);
 
+  // DeleteObject soft-deletes by default — the object moves to the trash and
+  // RestoreObject brings it back. permanent=true purges it irrecoverably. A
+  // locked object refuses deletion unless the caller holds GOVERNANCE bypass
+  // and the window is GOVERNANCE, never COMPLIANCE or a legal hold.
   rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
 
+  // RestoreObject brings a soft-deleted object back to AVAILABLE. Requires the
+  // current resource_version: a stale one is Aborted rather than overwriting
+  // whatever happened to the row meanwhile.
   rpc RestoreObject(RestoreObjectRequest) returns (Object);
 
+  // CopyObject creates a new object from an existing one, within or across
+  // collections. Server-side where the backend supports it; the bytes do not
+  // travel through the control plane either way.
   rpc CopyObject(CopyObjectRequest) returns (Object);
 
+  // ListObjects pages a collection newest-first. Soft-deleted objects are
+  // excluded unless the request asks for them.
   rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
 
+  // CountObjects returns a count matching the same filters ListObjects
+  // accepts, without paging the rows.
   rpc CountObjects(CountObjectsRequest) returns (CountObjectsResponse);
 
   // ─── Versioning (opt-in per bucket) ──────────────────────────────────────
@@ -84,7 +109,7 @@ service ObjectService {
 
 message ObjectVersion {
   // Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string version_id = 2;
   string object_id = 3;
   bool is_delete_marker = 4;
@@ -96,7 +121,7 @@ message ObjectVersion {
   map<string, string> metadata = 10;
   map<string, string> tags = 11;
   ObjectLockState lock = 12;
-  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp created_at = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
   bool is_current = 14;
 }
 

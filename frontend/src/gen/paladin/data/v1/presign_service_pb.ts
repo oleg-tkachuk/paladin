@@ -137,6 +137,9 @@ export const PresignDownloadResponseSchema: GenMessage<PresignDownloadResponse> 
  */
 export const PresignService: GenService<{
   /**
+   * RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
+   * for when the first URL expired before the client finished.
+   *
    * @generated from rpc paladin.data.v1.PresignService.RegenerateUploadUrl
    */
   regenerateUploadUrl: {
@@ -145,6 +148,9 @@ export const PresignService: GenService<{
     output: typeof RegenerateUploadUrlResponseSchema;
   };
   /**
+   * PresignDownload issues a time-limited GET URL. TTL is capped by
+   * limits.presign.max_ttl; asking for longer is InvalidArgument.
+   *
    * @generated from rpc paladin.data.v1.PresignService.PresignDownload
    */
   presignDownload: {

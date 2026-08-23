@@ -5,6 +5,7 @@ package paladin.iam.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
 
 import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 // SystemService exposes process-level metadata (version, build info) and
 // dependency health to authenticated callers. The K8s probe endpoints
@@ -37,7 +38,7 @@ message VersionInfo {
   // Short git SHA. Empty in local builds.
   string commit = 2;
   // Build timestamp. Optional; absent in local builds.
-  google.protobuf.Timestamp build_time = 3;
+  google.protobuf.Timestamp build_time = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
   // `go version` of the toolchain that produced the binary, e.g. "go1.26.0".
   string go_version = 4;
 }
@@ -58,7 +59,7 @@ message ComponentHealth {
   // Stable identifier ("postgres", "policy-engine", "storage:primary",
   // "mcp:admin"). Used as the React key in the UI so don't rename
   // casually.
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   ComponentStatus status = 2;
   // Free-form context shown next to the status pill. Error message on
   // failure; empty on healthy.

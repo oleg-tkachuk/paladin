@@ -12,10 +12,22 @@ import "paladin/common/v1/pagination.proto";
 // EventSubscriptionService manages outbound event sinks. Subscriptions are
 // owned by a tenant and require tenant.admin (or above).
 service EventSubscriptionService {
+  // CreateSubscription registers a delivery target for the tenant's events.
+  // Exactly one sink (http / kafka / sqs) must be configured. Delivery is
+  // at-least-once via the transactional outbox (ADR-0003).
   rpc CreateSubscription(CreateSubscriptionRequest) returns (EventSubscription);
+  // GetSubscription returns the subscription including its sink configuration;
+  // secret references are returned as references, never resolved.
   rpc GetSubscription(GetSubscriptionRequest) returns (EventSubscription);
+  // UpdateSubscription replaces the filter and sink. resource_version is
+  // required. In-flight deliveries already queued are not re-targeted.
   rpc UpdateSubscription(UpdateSubscriptionRequest) returns (EventSubscription);
+  // DeleteSubscription stops future deliveries. Events already in the outbox
+  // are dropped rather than delivered to a subscription that no longer
+  // exists.
   rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse);
+  // ListSubscriptions returns the tenant's subscriptions, disabled ones
+  // included.
   rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
 
   // TestSubscription delivers a synthetic event to the configured sink.

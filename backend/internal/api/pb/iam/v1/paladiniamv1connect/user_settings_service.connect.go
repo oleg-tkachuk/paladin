@@ -53,10 +53,21 @@ const (
 
 // UserSettingsServiceClient is a client for the paladin.iam.v1.UserSettingsService service.
 type UserSettingsServiceClient interface {
+	// GetMine returns the calling user's settings, creating nothing: a user who
+	// has never saved settings gets the zero value with an empty
+	// resource_version.
 	GetMine(context.Context, *connect.Request[v1.GetMineRequest]) (*connect.Response[v1.UserSettings], error)
+	// UpdateMine writes the calling user's settings. An empty resource_version
+	// means "create"; a non-empty one must match, or the write is Aborted.
 	UpdateMine(context.Context, *connect.Request[v1.UpdateMineRequest]) (*connect.Response[v1.UserSettings], error)
+	// GetForUser reads another user's settings. Tenant-admin only — the
+	// self-service path is GetMine.
 	GetForUser(context.Context, *connect.Request[v1.GetForUserRequest]) (*connect.Response[v1.UserSettings], error)
+	// ListByTenant returns every settings row in the tenant, for an operator
+	// auditing what users have configured.
 	ListByTenant(context.Context, *connect.Request[v1.ListByTenantRequest]) (*connect.Response[v1.ListByTenantResponse], error)
+	// DeleteForUser removes another user's settings row, resetting them to
+	// defaults on next read.
 	DeleteForUser(context.Context, *connect.Request[v1.DeleteForUserRequest]) (*connect.Response[v1.DeleteForUserResponse], error)
 }
 
@@ -140,10 +151,21 @@ func (c *userSettingsServiceClient) DeleteForUser(ctx context.Context, req *conn
 
 // UserSettingsServiceHandler is an implementation of the paladin.iam.v1.UserSettingsService service.
 type UserSettingsServiceHandler interface {
+	// GetMine returns the calling user's settings, creating nothing: a user who
+	// has never saved settings gets the zero value with an empty
+	// resource_version.
 	GetMine(context.Context, *connect.Request[v1.GetMineRequest]) (*connect.Response[v1.UserSettings], error)
+	// UpdateMine writes the calling user's settings. An empty resource_version
+	// means "create"; a non-empty one must match, or the write is Aborted.
 	UpdateMine(context.Context, *connect.Request[v1.UpdateMineRequest]) (*connect.Response[v1.UserSettings], error)
+	// GetForUser reads another user's settings. Tenant-admin only — the
+	// self-service path is GetMine.
 	GetForUser(context.Context, *connect.Request[v1.GetForUserRequest]) (*connect.Response[v1.UserSettings], error)
+	// ListByTenant returns every settings row in the tenant, for an operator
+	// auditing what users have configured.
 	ListByTenant(context.Context, *connect.Request[v1.ListByTenantRequest]) (*connect.Response[v1.ListByTenantResponse], error)
+	// DeleteForUser removes another user's settings row, resetting them to
+	// defaults on next read.
 	DeleteForUser(context.Context, *connect.Request[v1.DeleteForUserRequest]) (*connect.Response[v1.DeleteForUserResponse], error)
 }
 

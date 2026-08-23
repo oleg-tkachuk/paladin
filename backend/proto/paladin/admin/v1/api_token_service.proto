@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 // APITokenService manages hashed-bearer M2M tokens (`paladin_pat_…`). Distinct
 // from capability tokens (CapabilityService) which serve agent-runtime
@@ -52,22 +53,22 @@ service APITokenService {
 // APIToken is the metadata view returned by every RPC. The plaintext
 // is delivered separately as `token` on Create and never elsewhere.
 message APIToken {
-  string id = 1;
-  string tenant_id = 2;
-  string name = 3;
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string tenant_id = 2 [(google.api.field_behavior) = IMMUTABLE];
+  string name = 3 [(google.api.field_behavior) = IDENTIFIER];
   // prefix is the 8-char display string (first chars of the body
   // after the `paladin_pat_` literal). Operators identify tokens by it.
-  string prefix = 4;
+  string prefix = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   repeated string scopes = 5;
   repeated string audience = 6;
   // roles the token's principal carries — see
   // APITokenServiceCreateRequest.roles. Returned so an operator listing tokens
   // can see which ones carry authority beyond their tenant.
   repeated string roles = 13;
-  google.protobuf.Timestamp expires_at = 7;
-  google.protobuf.Timestamp revoked_at = 8;
-  google.protobuf.Timestamp last_used_at = 9;
-  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp expires_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp revoked_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp last_used_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
   string created_by = 11;
   // rate_limit_rpm caps the bearer's request rate. 0 = unlimited.
   // Enforced by APITokenInterceptor via a sliding-window counter

@@ -56,14 +56,25 @@ const (
 
 // UserServiceClient is a client for the paladin.iam.v1.UserService service.
 type UserServiceClient interface {
+	// CreateUser adds a user to a tenant. The initial password is returned once
+	// and never again — it is not recoverable from any later read.
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.User], error)
+	// GetUser returns the user. The password hash is never included.
 	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.User], error)
+	// UpdateUser applies update_mask to display_name, roles, scopes and disabled.
+	// tenant_id is immutable; the password has its own RPC.
 	UpdateUser(context.Context, *connect.Request[v1.UpdateUserRequest]) (*connect.Response[v1.User], error)
+	// DeleteUser removes the user's membership in one tenant. A subject that
+	// belongs to several tenants keeps the others.
 	DeleteUser(context.Context, *connect.Request[v1.DeleteUserRequest]) (*connect.Response[v1.DeleteUserResponse], error)
+	// ListUsers pages the users in a tenant.
 	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
 	// GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
 	// than UpdateUser with a scopes field).
 	GrantScopes(context.Context, *connect.Request[v1.GrantScopesRequest]) (*connect.Response[v1.User], error)
+	// RevokeScopes removes the named scopes from the user. Tokens already issued
+	// keep their scopes until they expire — this changes what the next token
+	// will carry.
 	RevokeScopes(context.Context, *connect.Request[v1.RevokeScopesRequest]) (*connect.Response[v1.User], error)
 	// ResetPassword forces a password change on next login. Local IdP only.
 	ResetPassword(context.Context, *connect.Request[v1.ResetPasswordRequest]) (*connect.Response[v1.ResetPasswordResponse], error)
@@ -185,14 +196,25 @@ func (c *userServiceClient) ResetPassword(ctx context.Context, req *connect.Requ
 
 // UserServiceHandler is an implementation of the paladin.iam.v1.UserService service.
 type UserServiceHandler interface {
+	// CreateUser adds a user to a tenant. The initial password is returned once
+	// and never again — it is not recoverable from any later read.
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.User], error)
+	// GetUser returns the user. The password hash is never included.
 	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.User], error)
+	// UpdateUser applies update_mask to display_name, roles, scopes and disabled.
+	// tenant_id is immutable; the password has its own RPC.
 	UpdateUser(context.Context, *connect.Request[v1.UpdateUserRequest]) (*connect.Response[v1.User], error)
+	// DeleteUser removes the user's membership in one tenant. A subject that
+	// belongs to several tenants keeps the others.
 	DeleteUser(context.Context, *connect.Request[v1.DeleteUserRequest]) (*connect.Response[v1.DeleteUserResponse], error)
+	// ListUsers pages the users in a tenant.
 	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
 	// GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
 	// than UpdateUser with a scopes field).
 	GrantScopes(context.Context, *connect.Request[v1.GrantScopesRequest]) (*connect.Response[v1.User], error)
+	// RevokeScopes removes the named scopes from the user. Tokens already issued
+	// keep their scopes until they expire — this changes what the next token
+	// will carry.
 	RevokeScopes(context.Context, *connect.Request[v1.RevokeScopesRequest]) (*connect.Response[v1.User], error)
 	// ResetPassword forces a password change on next login. Local IdP only.
 	ResetPassword(context.Context, *connect.Request[v1.ResetPasswordRequest]) (*connect.Response[v1.ResetPasswordResponse], error)

@@ -466,6 +466,9 @@ export const ListAccessibleBucketsRequestSchema: GenMessage<ListAccessibleBucket
  */
 export const BucketService: GenService<{
   /**
+   * CreateBucket registers a bucket on a backend. It does not create the
+   * physical bucket — see StorageBootstrapService for that.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.CreateBucket
    */
   createBucket: {
@@ -474,6 +477,9 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
+   * GetBucket returns the bucket, including its versioning, replication and
+   * object-lock configuration.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.GetBucket
    */
   getBucket: {
@@ -482,6 +488,10 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
+   * UpdateBucket applies update_mask; resource_version is required. Versioning,
+   * replication and object lock have their own RPCs — they are not settable
+   * through this one.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.UpdateBucket
    */
   updateBucket: {
@@ -490,6 +500,10 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
+   * DeleteBucket removes the registration. delete_on_backend=true also erases
+   * the physical bucket and its contents, which is irreversible. force waives
+   * the OCC guard and is independent of delete_on_backend.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.DeleteBucket
    */
   deleteBucket: {
@@ -498,6 +512,9 @@ export const BucketService: GenService<{
     output: typeof DeleteBucketResponseSchema;
   };
   /**
+   * ListBuckets returns buckets across every backend, optionally filtered to
+   * one.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.ListBuckets
    */
   listBuckets: {
@@ -527,6 +544,10 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
+   * SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
+   * it is one-way: a bucket with object lock on cannot have it turned off,
+   * because objects already written under it rely on the guarantee.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.SetObjectLock
    */
   setObjectLock: {
@@ -535,6 +556,9 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
+   * SetVersioning turns object versioning on or off. Turning it off keeps the
+   * versions already recorded — it stops new ones being written.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.SetVersioning
    */
   setVersioning: {
@@ -543,6 +567,10 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
+   * SetReplication configures asynchronous copy to a second backend. Existing
+   * objects are not backfilled; replication applies from the moment it is
+   * enabled.
+   *
    * @generated from rpc paladin.admin.v1.BucketService.SetReplication
    */
   setReplication: {

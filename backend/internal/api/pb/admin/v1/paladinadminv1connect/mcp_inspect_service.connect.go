@@ -44,6 +44,8 @@ const (
 
 // MCPInspectServiceClient is a client for the paladin.admin.v1.MCPInspectService service.
 type MCPInspectServiceClient interface {
+	// Inspect reports the MCP server's effective configuration: the active
+	// profile, the tool catalog it exposes, and the upstream planes it dials.
 	Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error)
 	// ListSessions returns the live MCP streamable-HTTP sessions tracked by the
 	// bridge (id, agent, activity counts). Unlike Inspect (config-derived,
@@ -98,6 +100,8 @@ func (c *mCPInspectServiceClient) ListSessions(ctx context.Context, req *connect
 
 // MCPInspectServiceHandler is an implementation of the paladin.admin.v1.MCPInspectService service.
 type MCPInspectServiceHandler interface {
+	// Inspect reports the MCP server's effective configuration: the active
+	// profile, the tool catalog it exposes, and the upstream planes it dials.
 	Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error)
 	// ListSessions returns the live MCP streamable-HTTP sessions tracked by the
 	// bridge (id, agent, activity counts). Unlike Inspect (config-derived,

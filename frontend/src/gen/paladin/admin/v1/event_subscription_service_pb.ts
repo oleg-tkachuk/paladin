@@ -265,6 +265,10 @@ export const TestSubscriptionResponseSchema: GenMessage<TestSubscriptionResponse
  */
 export const EventSubscriptionService: GenService<{
   /**
+   * CreateSubscription registers a delivery target for the tenant's events.
+   * Exactly one sink (http / kafka / sqs) must be configured. Delivery is
+   * at-least-once via the transactional outbox (ADR-0003).
+   *
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.CreateSubscription
    */
   createSubscription: {
@@ -273,6 +277,9 @@ export const EventSubscriptionService: GenService<{
     output: typeof EventSubscriptionSchema;
   };
   /**
+   * GetSubscription returns the subscription including its sink configuration;
+   * secret references are returned as references, never resolved.
+   *
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.GetSubscription
    */
   getSubscription: {
@@ -281,6 +288,9 @@ export const EventSubscriptionService: GenService<{
     output: typeof EventSubscriptionSchema;
   };
   /**
+   * UpdateSubscription replaces the filter and sink. resource_version is
+   * required. In-flight deliveries already queued are not re-targeted.
+   *
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.UpdateSubscription
    */
   updateSubscription: {
@@ -289,6 +299,10 @@ export const EventSubscriptionService: GenService<{
     output: typeof EventSubscriptionSchema;
   };
   /**
+   * DeleteSubscription stops future deliveries. Events already in the outbox
+   * are dropped rather than delivered to a subscription that no longer
+   * exists.
+   *
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.DeleteSubscription
    */
   deleteSubscription: {
@@ -297,6 +311,9 @@ export const EventSubscriptionService: GenService<{
     output: typeof DeleteSubscriptionResponseSchema;
   };
   /**
+   * ListSubscriptions returns the tenant's subscriptions, disabled ones
+   * included.
+   *
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.ListSubscriptions
    */
   listSubscriptions: {

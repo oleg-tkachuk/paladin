@@ -7,6 +7,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/resource.proto";
+import "google/api/field_behavior.proto";
 
 // ─── Storage backend ────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ import "paladin/common/v1/resource.proto";
 // `credentials_secret_ref` (an opaque reference to the secret manager).
 message StorageBackend {
   // Resource name: "storageBackends/{backend_id}".
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string backend_id = 2;
   string display_name = 3;
   StorageKind kind = 4;
@@ -31,9 +32,9 @@ message StorageBackend {
   // Cedar policy attached to the backend itself — typically a forbid-rule
   // that pins which tenants may bind buckets here.
   string cedar_policy = 12;
-  string resource_version = 13;
-  google.protobuf.Timestamp created_at = 14;
-  google.protobuf.Timestamp updated_at = 15;
+  string resource_version = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Durable enable/disable state. true → backend serves Paladin requests.
   // false → every Paladin-mediated operation resolving to this backend is
   // refused (FailedPrecondition) before any object-store call. Operator
@@ -46,7 +47,7 @@ message StorageBackend {
   // once the window elapses or after a grace=0 (instant) rotation. Lets the UI
   // render "rotated — old key valid for another N".
   string previous_credentials_secret_ref = 17;
-  google.protobuf.Timestamp previous_credentials_valid_until = 18;
+  google.protobuf.Timestamp previous_credentials_valid_until = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Read-only "drain" state (migration 047). Only meaningful when enabled=true:
   // reads / presign-GET / HEAD / list still resolve, but mutations
   // (PUT / POST / multipart-init / copy-dest / update / delete / version
@@ -60,7 +61,7 @@ message StorageBackend {
   // instant of the last probe (unset until first probed).
   string health_status = 20;
   string health_message = 21;
-  google.protobuf.Timestamp health_checked_at = 22;
+  google.protobuf.Timestamp health_checked_at = 22 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Operator-set, advisory maintenance flag (migration 049): "under
   // maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
   // and operator-set (unlike the derived health_*). Managed via
@@ -111,9 +112,9 @@ enum EventTarget {
 
 message Bucket {
   // Resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
-  string name = 1;
-  string backend_id = 2;
-  string bucket_id = 3;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string backend_id = 2 [(google.api.field_behavior) = IMMUTABLE];
+  string bucket_id = 3 [(google.api.field_behavior) = IMMUTABLE];
   string display_name = 4;
   string region = 5;
   // Optional binding to a single tenant. Empty → shared bucket; tenants
@@ -132,9 +133,9 @@ message Bucket {
   // Replication policy (cross-backend). Optional.
   BucketReplication replication = 12;
   map<string, string> labels = 13;
-  string resource_version = 14;
-  google.protobuf.Timestamp created_at = 15;
-  google.protobuf.Timestamp updated_at = 16;
+  string resource_version = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 16 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Outbox status of the underlying physical bucket. One of:
   //   "ready"           — DB row + backend bucket are in sync.
   //   "pending"         — handler accepted CreateBucket; backend
@@ -217,46 +218,46 @@ message BucketReplication {
 
 message Tenant {
   // Resource name: "tenants/{tenant_id_or_slug}".
-  string name = 1;
-  string tenant_id = 2;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string tenant_id = 2 [(google.api.field_behavior) = IMMUTABLE];
   string display_name = 3;
   map<string, string> labels = 4;
   // Cedar policy inherited by all collections/buckets bound to this tenant.
   string inherited_cedar_policy = 5;
-  string resource_version = 6;
-  google.protobuf.Timestamp created_at = 7;
-  google.protobuf.Timestamp updated_at = 8;
+  string resource_version = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Human-readable kebab-case handle (e.g. "platform", "acme-prod").
   // Stable across the tenant's lifetime unless rotated via
   // RenameTenantSlug. Persisted as `tenants.slug` (UNIQUE), populated
   // by every read RPC. Front-end uses this to render slug-first URLs
   // (`/tenants/<slug>/...`) and canonicalises UUID URLs to it.
-  string slug = 9;
+  string slug = 9 [(google.api.field_behavior) = IMMUTABLE];
   // deleted_at — soft-delete marker. Zero (unset) for active tenants;
   // non-zero for trashed rows recoverable via RestoreTenant. Filtered
   // out of ListTenants by default (set include_trashed or only_trashed
   // to see them). Hard-delete (PurgeTenant / DeleteTenant force=true)
   // removes the row physically.
-  google.protobuf.Timestamp deleted_at = 10;
+  google.protobuf.Timestamp deleted_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
   // default_bucket — resource name of the (backend, bucket) this tenant is
   // bound to by default: "storageBackends/{backend_id}/buckets/{bucket_id}".
   // Sourced from the tenant_default_bindings row written at CreateTenant time;
   // empty when the tenant has no default binding (legacy / never set).
   // Read-only here — set the binding via CreateTenant.default_bucket.
-  string default_bucket = 11;
+  string default_bucket = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
   // storage_layout — "shared" (default) or "dedicated" (ADR-0011). A dedicated
   // tenant gets its own physical bucket (owner_tenant_id = the tenant),
   // provisioned at CreateTenant time. Settable only at create; read-only after.
-  string storage_layout = 12;
+  string storage_layout = 12 [(google.api.field_behavior) = IMMUTABLE];
 }
 
 // ─── Collection ──────────────────────────────────────────────────────────────
 
 message Collection {
   // Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
-  string name = 1;
-  string tenant_id = 2;
-  string collection = 3;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string tenant_id = 2 [(google.api.field_behavior) = IMMUTABLE];
+  string collection = 3 [(google.api.field_behavior) = IMMUTABLE];
   string display_name = 4;
   // Bucket the collection is bound to (resource name).
   string bucket = 5; // "storageBackends/{backend_id}/buckets/{bucket_id}"
@@ -266,9 +267,9 @@ message Collection {
   string cedar_policy = 7;
   // Per-collection constraints overlay on top of bucket constraints.
   BucketConstraints constraints = 8;
-  string resource_version = 9;
-  google.protobuf.Timestamp created_at = 10;
-  google.protobuf.Timestamp updated_at = 11;
+  string resource_version = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────
@@ -277,7 +278,7 @@ message Collection {
 message Quota {
   // Resource name: "tenants/{tenant_id_or_slug}/quota" or
   // "storageBackends/{backend_id}/buckets/{bucket_id}/quota".
-  string name = 1;
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   // Hard caps. 0 → no cap.
   int64 max_total_bytes = 2;
   int64 max_object_count = 3;
@@ -285,8 +286,8 @@ message Quota {
   int64 max_objects_per_day = 5;
   // Current usage (read-only; updated by accounting worker).
   QuotaUsage usage = 6;
-  string resource_version = 7;
-  google.protobuf.Timestamp updated_at = 8;
+  string resource_version = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message QuotaUsage {
@@ -294,7 +295,7 @@ message QuotaUsage {
   int64 object_count = 2;
   int64 bytes_today = 3;
   int64 objects_today = 4;
-  google.protobuf.Timestamp last_reset_at = 5;
+  google.protobuf.Timestamp last_reset_at = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────
@@ -302,7 +303,7 @@ message QuotaUsage {
 // AuditLogEntry is append-only. Every admin/iam mutation emits one row.
 message AuditLogEntry {
   string entry_id = 1;
-  google.protobuf.Timestamp at = 2;
+  google.protobuf.Timestamp at = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
   string actor_subject = 3;
   string actor_tenant_id = 4;
   string actor_audience = 5;
@@ -328,15 +329,15 @@ message AuditLogEntry {
 // EventSubscription describes a webhook / queue sink for Paladin events.
 // Replaces the need for clients to consume S3 events directly.
 message EventSubscription {
-  string name = 1; // "tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string tenant_id = 2;
   // CEL filter against EventEnvelope; empty → all events for the tenant.
   string filter = 3;
   EventSink sink = 4;
   bool disabled = 5;
-  string resource_version = 6;
-  google.protobuf.Timestamp created_at = 7;
-  google.protobuf.Timestamp updated_at = 8;
+  string resource_version = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp created_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp updated_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // EventSink is a tagged union of the supported delivery targets. Sink

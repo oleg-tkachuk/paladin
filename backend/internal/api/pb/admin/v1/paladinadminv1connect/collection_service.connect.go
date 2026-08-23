@@ -59,11 +59,24 @@ const (
 
 // CollectionServiceClient is a client for the paladin.admin.v1.CollectionService service.
 type CollectionServiceClient interface {
+	// CreateCollection creates a namespace for objects and binds it to a bucket.
+	// The collection name may contain slashes ("team/project" is one
+	// collection, not two).
 	CreateCollection(context.Context, *connect.Request[v1.CreateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	// GetCollection returns the collection and the bucket it is bound to.
 	GetCollection(context.Context, *connect.Request[v1.GetCollectionRequest]) (*connect.Response[v1.Collection], error)
+	// UpdateCollection applies update_mask; resource_version is required. The
+	// tenant and the collection name are immutable.
 	UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	// DeleteCollection refuses while the collection still holds objects, unless
+	// force=true. force also waives the OCC guard.
 	DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error)
+	// ListCollections returns the collections under a tenant, or across all
+	// tenants for a platform admin.
 	ListCollections(context.Context, *connect.Request[v1.ListCollectionsRequest]) (*connect.Response[v1.ListCollectionsResponse], error)
+	// SetCollectionPolicy replaces the collection's Cedar policy. It composes
+	// with — does not replace — the tenant's inherited policy: a request must
+	// pass both.
 	SetCollectionPolicy(context.Context, *connect.Request[v1.SetCollectionPolicyRequest]) (*connect.Response[v1.Collection], error)
 	// BindCollectionToBucket / RebindCollection is intentionally distinct from
 	// UpdateCollection — re-binding has data-locality implications worth a
@@ -175,11 +188,24 @@ func (c *collectionServiceClient) BindCollectionToBucket(ctx context.Context, re
 
 // CollectionServiceHandler is an implementation of the paladin.admin.v1.CollectionService service.
 type CollectionServiceHandler interface {
+	// CreateCollection creates a namespace for objects and binds it to a bucket.
+	// The collection name may contain slashes ("team/project" is one
+	// collection, not two).
 	CreateCollection(context.Context, *connect.Request[v1.CreateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	// GetCollection returns the collection and the bucket it is bound to.
 	GetCollection(context.Context, *connect.Request[v1.GetCollectionRequest]) (*connect.Response[v1.Collection], error)
+	// UpdateCollection applies update_mask; resource_version is required. The
+	// tenant and the collection name are immutable.
 	UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	// DeleteCollection refuses while the collection still holds objects, unless
+	// force=true. force also waives the OCC guard.
 	DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error)
+	// ListCollections returns the collections under a tenant, or across all
+	// tenants for a platform admin.
 	ListCollections(context.Context, *connect.Request[v1.ListCollectionsRequest]) (*connect.Response[v1.ListCollectionsResponse], error)
+	// SetCollectionPolicy replaces the collection's Cedar policy. It composes
+	// with — does not replace — the tenant's inherited policy: a request must
+	// pass both.
 	SetCollectionPolicy(context.Context, *connect.Request[v1.SetCollectionPolicyRequest]) (*connect.Response[v1.Collection], error)
 	// BindCollectionToBucket / RebindCollection is intentionally distinct from
 	// UpdateCollection — re-binding has data-locality implications worth a

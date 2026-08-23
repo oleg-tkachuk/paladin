@@ -11,8 +11,15 @@ import "paladin/data/v1/batch_service.proto";
 // OperationService is the data-plane mirror — caller sees only operations
 // they initiated (filtered by initiator_subject from JWT).
 service OperationService {
+  // GetOperation returns the current state of a long-running operation. done
+  // distinguishes finished from in-flight; result carries either the response
+  // or the error.
   rpc GetOperation(GetOperationRequest) returns (Operation);
+  // ListOperations pages the caller's operations, most recent first.
   rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
+  // CancelOperation requests cancellation. It is best-effort: work already
+  // committed is not rolled back, and an operation that finished first stays
+  // finished.
   rpc CancelOperation(CancelOperationRequest) returns (Operation);
 }
 

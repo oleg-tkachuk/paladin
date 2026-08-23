@@ -119,6 +119,8 @@ export const ResetUsageRequestSchema: GenMessage<ResetUsageRequest> =
  */
 export const QuotaService: GenService<{
   /**
+   * GetQuota returns the tenant's limits and its current usage counters.
+   *
    * @generated from rpc paladin.admin.v1.QuotaService.GetQuota
    */
   getQuota: {
@@ -127,6 +129,9 @@ export const QuotaService: GenService<{
     output: typeof QuotaSchema;
   };
   /**
+   * SetQuota replaces the tenant's limits. Lowering a limit below current usage
+   * is allowed — it blocks further growth rather than deleting anything.
+   *
    * @generated from rpc paladin.admin.v1.QuotaService.SetQuota
    */
   setQuota: {
@@ -135,6 +140,9 @@ export const QuotaService: GenService<{
     output: typeof QuotaSchema;
   };
   /**
+   * ResetUsage zeroes the usage counters without touching the limits. For
+   * recovering from a drifted counter, not for granting capacity.
+   *
    * @generated from rpc paladin.admin.v1.QuotaService.ResetUsage
    */
   resetUsage: {

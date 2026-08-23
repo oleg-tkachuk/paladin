@@ -127,6 +127,10 @@ export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> =
  */
 export const OperationService: GenService<{
   /**
+   * GetOperation returns the current state of a long-running operation. done
+   * distinguishes finished from in-flight; result carries either the response
+   * or the error.
+   *
    * @generated from rpc paladin.data.v1.OperationService.GetOperation
    */
   getOperation: {
@@ -135,6 +139,8 @@ export const OperationService: GenService<{
     output: typeof OperationSchema;
   };
   /**
+   * ListOperations pages the caller's operations, most recent first.
+   *
    * @generated from rpc paladin.data.v1.OperationService.ListOperations
    */
   listOperations: {
@@ -143,6 +149,10 @@ export const OperationService: GenService<{
     output: typeof ListOperationsResponseSchema;
   };
   /**
+   * CancelOperation requests cancellation. It is best-effort: work already
+   * committed is not rolled back, and an operation that finished first stays
+   * finished.
+   *
    * @generated from rpc paladin.data.v1.OperationService.CancelOperation
    */
   cancelOperation: {

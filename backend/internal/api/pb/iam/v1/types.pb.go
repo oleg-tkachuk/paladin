@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -169,7 +170,7 @@ type TokenPair struct {
 	AccessExpiresInSeconds  int32                  `protobuf:"varint,2,opt,name=access_expires_in_seconds,json=accessExpiresInSeconds,proto3" json:"access_expires_in_seconds,omitempty"`
 	RefreshToken            string                 `protobuf:"bytes,3,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	RefreshExpiresInSeconds int32                  `protobuf:"varint,4,opt,name=refresh_expires_in_seconds,json=refreshExpiresInSeconds,proto3" json:"refresh_expires_in_seconds,omitempty"`
-	TokenType               string                 `protobuf:"bytes,5,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"` // "Bearer"
+	TokenType               string                 `protobuf:"bytes,5,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
 	// The audience actually minted into access_token.
 	//
 	// requested_audience is a request, not a guarantee: it defaults when unset
@@ -258,31 +259,31 @@ var File_paladin_iam_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x19legate/iam/v1/types.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1clegate/common/v1/scope.proto\"\xd1\x03\n" +
-	"\x04User\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1b\n" +
-	"\ttenant_id\x18\x03 \x01(\tR\btenantId\x12\x18\n" +
+	"\x19legate/iam/v1/types.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1clegate/common/v1/scope.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf4\x03\n" +
+	"\x04User\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1c\n" +
+	"\auser_id\x18\x02 \x01(\tB\x03\xe0A\x03R\x06userId\x12 \n" +
+	"\ttenant_id\x18\x03 \x01(\tB\x03\xe0A\x05R\btenantId\x12\x18\n" +
 	"\asubject\x18\x04 \x01(\tR\asubject\x12!\n" +
 	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12\x14\n" +
 	"\x05roles\x18\x06 \x03(\tR\x05roles\x12/\n" +
 	"\x06scopes\x18\a \x03(\v2\x17.paladin.common.v1.ScopeR\x06scopes\x12\x1a\n" +
-	"\bdisabled\x18\b \x01(\bR\bdisabled\x12)\n" +
-	"\x10resource_version\x18\t \x01(\tR\x0fresourceVersion\x129\n" +
+	"\bdisabled\x18\b \x01(\bR\bdisabled\x12.\n" +
+	"\x10resource_version\x18\t \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
 	"created_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12>\n" +
-	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\"\x86\x02\n" +
-	"\tTokenPair\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
-	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12#\n" +
-	"\rrefresh_token\x18\x03 \x01(\tR\frefreshToken\x12;\n" +
-	"\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05R\x17refreshExpiresInSeconds\x12\x1d\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12C\n" +
+	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastLoginAt\"\xa4\x02\n" +
+	"\tTokenPair\x12&\n" +
+	"\faccess_token\x18\x01 \x01(\tB\x03\xe0A\x03R\vaccessToken\x12>\n" +
+	"\x19access_expires_in_seconds\x18\x02 \x01(\x05B\x03\xe0A\x03R\x16accessExpiresInSeconds\x12(\n" +
+	"\rrefresh_token\x18\x03 \x01(\tB\x03\xe0A\x03R\frefreshToken\x12@\n" +
+	"\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05B\x03\xe0A\x03R\x17refreshExpiresInSeconds\x12\"\n" +
 	"\n" +
-	"token_type\x18\x05 \x01(\tR\ttokenType\x12\x1a\n" +
-	"\baudience\x18\x06 \x01(\tR\baudienceBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"token_type\x18\x05 \x01(\tB\x03\xe0A\x03R\ttokenType\x12\x1f\n" +
+	"\baudience\x18\x06 \x01(\tB\x03\xe0A\x03R\baudienceBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_types_proto_rawDescOnce sync.Once

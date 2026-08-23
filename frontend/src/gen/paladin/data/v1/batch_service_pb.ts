@@ -20,6 +20,7 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
+import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -28,12 +29,13 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_batch_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiJsZWdhdGUvZGF0YS92MS9iYXRjaF9zZXJ2aWNlLnByb3RvEg5sZWdhdGUuZGF0YS52MSKWAgoJT3BlcmF0aW9uEgwKBG5hbWUYASABKAkSDAoEdHlwZRgCIAEoCRImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSDAoEZG9uZRgEIAEoCBIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGcmVzdWx0IjkKDk9iamVjdFNlbGVjdG9yEhcKBW5hbWVzGAEgAygJQgi6SAWSAQIQZBIOCgZmaWx0ZXIYAiABKAkigQEKGUJhdGNoRGVsZXRlT2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEjgKCHNlbGVjdG9yGAIgASgLMh4ubGVnYXRlLmRhdGEudjEuT2JqZWN0U2VsZWN0b3JCBrpIA8gBARIRCglwZXJtYW5lbnQYAyABKAgixwEKF0JhdGNoQ29weU9iamVjdHNSZXF1ZXN0Eh4KDXNvdXJjZV9wYXJlbnQYASABKAlCB7pIBHICEAESOAoIc2VsZWN0b3IYAiABKAsyHi5sZWdhdGUuZGF0YS52MS5PYmplY3RTZWxlY3RvckIGukgDyAEBEicKFmRlc3RpbmF0aW9uX2NvbGxlY3Rpb24YAyABKAlCB7pIBHICEAESKQoYZGVzdGluYXRpb25fa2V5X3RlbXBsYXRlGAQgASgJQge6SARyAhABIm8KGkJhdGNoUmVzdG9yZU9iamVjdHNSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARI4CghzZWxlY3RvchgCIAEoCzIeLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdFNlbGVjdG9yQga6SAPIAQEi6QEKFkJhdGNoVXBkYXRlVGFnc1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEjgKCHNlbGVjdG9yGAIgASgLMh4ubGVnYXRlLmRhdGEudjEuT2JqZWN0U2VsZWN0b3JCBrpIA8gBARI+CgR0YWdzGAMgAygLMjAubGVnYXRlLmRhdGEudjEuQmF0Y2hVcGRhdGVUYWdzUmVxdWVzdC5UYWdzRW50cnkSDwoHcmVwbGFjZRgEIAEoCBorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ATL2AgoMQmF0Y2hTZXJ2aWNlEloKEkJhdGNoRGVsZXRlT2JqZWN0cxIpLmxlZ2F0ZS5kYXRhLnYxLkJhdGNoRGVsZXRlT2JqZWN0c1JlcXVlc3QaGS5sZWdhdGUuZGF0YS52MS5PcGVyYXRpb24SVgoQQmF0Y2hDb3B5T2JqZWN0cxInLmxlZ2F0ZS5kYXRhLnYxLkJhdGNoQ29weU9iamVjdHNSZXF1ZXN0GhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uElwKE0JhdGNoUmVzdG9yZU9iamVjdHMSKi5sZWdhdGUuZGF0YS52MS5CYXRjaFJlc3RvcmVPYmplY3RzUmVxdWVzdBoZLmxlZ2F0ZS5kYXRhLnYxLk9wZXJhdGlvbhJUCg9CYXRjaFVwZGF0ZVRhZ3MSJi5sZWdhdGUuZGF0YS52MS5CYXRjaFVwZGF0ZVRhZ3NSZXF1ZXN0GhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uQkVaQ2dpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtsZWdhdGVkYXRhdjFiBnByb3RvMw",
+    "CiJsZWdhdGUvZGF0YS92MS9iYXRjaF9zZXJ2aWNlLnByb3RvEg5sZWdhdGUuZGF0YS52MSKlAgoJT3BlcmF0aW9uEhEKBG5hbWUYASABKAlCA+BBCBIMCgR0eXBlGAIgASgJEiYKCG1ldGFkYXRhGAMgASgLMhQuZ29vZ2xlLnByb3RvYnVmLkFueRIMCgRkb25lGAQgASgIEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIzCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQNCCAoGcmVzdWx0IjkKDk9iamVjdFNlbGVjdG9yEhcKBW5hbWVzGAEgAygJQgi6SAWSAQIQZBIOCgZmaWx0ZXIYAiABKAkigQEKGUJhdGNoRGVsZXRlT2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEjgKCHNlbGVjdG9yGAIgASgLMh4ubGVnYXRlLmRhdGEudjEuT2JqZWN0U2VsZWN0b3JCBrpIA8gBARIRCglwZXJtYW5lbnQYAyABKAgixwEKF0JhdGNoQ29weU9iamVjdHNSZXF1ZXN0Eh4KDXNvdXJjZV9wYXJlbnQYASABKAlCB7pIBHICEAESOAoIc2VsZWN0b3IYAiABKAsyHi5sZWdhdGUuZGF0YS52MS5PYmplY3RTZWxlY3RvckIGukgDyAEBEicKFmRlc3RpbmF0aW9uX2NvbGxlY3Rpb24YAyABKAlCB7pIBHICEAESKQoYZGVzdGluYXRpb25fa2V5X3RlbXBsYXRlGAQgASgJQge6SARyAhABIm8KGkJhdGNoUmVzdG9yZU9iamVjdHNSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARI4CghzZWxlY3RvchgCIAEoCzIeLmxlZ2F0ZS5kYXRhLnYxLk9iamVjdFNlbGVjdG9yQga6SAPIAQEi6QEKFkJhdGNoVXBkYXRlVGFnc1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEjgKCHNlbGVjdG9yGAIgASgLMh4ubGVnYXRlLmRhdGEudjEuT2JqZWN0U2VsZWN0b3JCBrpIA8gBARI+CgR0YWdzGAMgAygLMjAubGVnYXRlLmRhdGEudjEuQmF0Y2hVcGRhdGVUYWdzUmVxdWVzdC5UYWdzRW50cnkSDwoHcmVwbGFjZRgEIAEoCBorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ATL2AgoMQmF0Y2hTZXJ2aWNlEloKEkJhdGNoRGVsZXRlT2JqZWN0cxIpLmxlZ2F0ZS5kYXRhLnYxLkJhdGNoRGVsZXRlT2JqZWN0c1JlcXVlc3QaGS5sZWdhdGUuZGF0YS52MS5PcGVyYXRpb24SVgoQQmF0Y2hDb3B5T2JqZWN0cxInLmxlZ2F0ZS5kYXRhLnYxLkJhdGNoQ29weU9iamVjdHNSZXF1ZXN0GhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uElwKE0JhdGNoUmVzdG9yZU9iamVjdHMSKi5sZWdhdGUuZGF0YS52MS5CYXRjaFJlc3RvcmVPYmplY3RzUmVxdWVzdBoZLmxlZ2F0ZS5kYXRhLnYxLk9wZXJhdGlvbhJUCg9CYXRjaFVwZGF0ZVRhZ3MSJi5sZWdhdGUuZGF0YS52MS5CYXRjaFVwZGF0ZVRhZ3NSZXF1ZXN0GhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uQkVaQ2dpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtsZWdhdGVkYXRhdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
       file_google_protobuf_timestamp,
       file_google_rpc_status,
+      file_google_api_field_behavior,
     ],
   );
 
@@ -270,6 +272,11 @@ export const BatchUpdateTagsRequestSchema: GenMessage<BatchUpdateTagsRequest> =
  */
 export const BatchService: GenService<{
   /**
+   * BatchDeleteObjects starts an asynchronous operation and returns it
+   * immediately — poll OperationService.GetOperation for progress. Partial
+   * failure is reported per object in the operation result, not as an RPC
+   * error.
+   *
    * @generated from rpc paladin.data.v1.BatchService.BatchDeleteObjects
    */
   batchDeleteObjects: {
@@ -278,6 +285,9 @@ export const BatchService: GenService<{
     output: typeof OperationSchema;
   };
   /**
+   * BatchCopyObjects starts an asynchronous copy. Compensating deletes run for
+   * objects already copied if the operation is cancelled part-way.
+   *
    * @generated from rpc paladin.data.v1.BatchService.BatchCopyObjects
    */
   batchCopyObjects: {
@@ -286,6 +296,9 @@ export const BatchService: GenService<{
     output: typeof OperationSchema;
   };
   /**
+   * BatchRestoreObjects starts an asynchronous restore of soft-deleted objects.
+   * Objects that are not in the trash are reported as skipped, not failed.
+   *
    * @generated from rpc paladin.data.v1.BatchService.BatchRestoreObjects
    */
   batchRestoreObjects: {
@@ -294,6 +307,9 @@ export const BatchService: GenService<{
     output: typeof OperationSchema;
   };
   /**
+   * BatchUpdateTags starts an asynchronous tag merge across the named objects.
+   * Same merge semantics as PutObjectTags, applied per object.
+   *
    * @generated from rpc paladin.data.v1.BatchService.BatchUpdateTags
    */
   batchUpdateTags: {

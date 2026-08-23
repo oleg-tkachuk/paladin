@@ -47,8 +47,15 @@ const (
 
 // OperationServiceClient is a client for the paladin.data.v1.OperationService service.
 type OperationServiceClient interface {
+	// GetOperation returns the current state of a long-running operation. done
+	// distinguishes finished from in-flight; result carries either the response
+	// or the error.
 	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
+	// ListOperations pages the caller's operations, most recent first.
 	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
+	// CancelOperation requests cancellation. It is best-effort: work already
+	// committed is not rolled back, and an operation that finished first stays
+	// finished.
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 
@@ -108,8 +115,15 @@ func (c *operationServiceClient) CancelOperation(ctx context.Context, req *conne
 
 // OperationServiceHandler is an implementation of the paladin.data.v1.OperationService service.
 type OperationServiceHandler interface {
+	// GetOperation returns the current state of a long-running operation. done
+	// distinguishes finished from in-flight; result carries either the response
+	// or the error.
 	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
+	// ListOperations pages the caller's operations, most recent first.
 	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
+	// CancelOperation requests cancellation. It is best-effort: work already
+	// committed is not rolled back, and an operation that finished first stays
+	// finished.
 	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
 }
 

@@ -88,19 +88,43 @@ const (
 
 // ObjectServiceClient is a client for the paladin.data.v1.ObjectService service.
 type ObjectServiceClient interface {
+	// UploadObject is the presigned-URL handshake, not a byte pipe: it records
+	// the intent and returns a URL the client PUTs to directly. The control
+	// plane never sees object bytes. Finish with CompleteObject.
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
+	// DownloadObject returns a presigned GET URL. As with upload, the bytes move
+	// between the client and the storage backend, not through here.
 	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
+	// GetObject returns metadata for one object. lock is populated here but left
+	// empty by ListObjects — reading it per row would add a join to the
+	// pagination hot path.
 	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
 	// LookupObject resolves an Object by (collection, key) instead of object_id.
 	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
+	// UpdateObject applies update_mask to metadata, tags and content_type; every
+	// other field is server-owned. resource_version is required.
 	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
 	// CompleteObject is no-op for IMPLICIT completion mode and the event has
 	// already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
 	CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error)
+	// DeleteObject soft-deletes by default — the object moves to the trash and
+	// RestoreObject brings it back. permanent=true purges it irrecoverably. A
+	// locked object refuses deletion unless the caller holds GOVERNANCE bypass
+	// and the window is GOVERNANCE, never COMPLIANCE or a legal hold.
 	DeleteObject(context.Context, *connect.Request[v1.DeleteObjectRequest]) (*connect.Response[v1.DeleteObjectResponse], error)
+	// RestoreObject brings a soft-deleted object back to AVAILABLE. Requires the
+	// current resource_version: a stale one is Aborted rather than overwriting
+	// whatever happened to the row meanwhile.
 	RestoreObject(context.Context, *connect.Request[v1.RestoreObjectRequest]) (*connect.Response[v1.Object], error)
+	// CopyObject creates a new object from an existing one, within or across
+	// collections. Server-side where the backend supports it; the bytes do not
+	// travel through the control plane either way.
 	CopyObject(context.Context, *connect.Request[v1.CopyObjectRequest]) (*connect.Response[v1.Object], error)
+	// ListObjects pages a collection newest-first. Soft-deleted objects are
+	// excluded unless the request asks for them.
 	ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error)
+	// CountObjects returns a count matching the same filters ListObjects
+	// accepts, without paging the rows.
 	CountObjects(context.Context, *connect.Request[v1.CountObjectsRequest]) (*connect.Response[v1.CountObjectsResponse], error)
 	// ─── Versioning (opt-in per bucket) ──────────────────────────────────────
 	// ListObjectVersions returns the immutable history of an object. Empty
@@ -348,19 +372,43 @@ func (c *objectServiceClient) GetObjectLock(ctx context.Context, req *connect.Re
 
 // ObjectServiceHandler is an implementation of the paladin.data.v1.ObjectService service.
 type ObjectServiceHandler interface {
+	// UploadObject is the presigned-URL handshake, not a byte pipe: it records
+	// the intent and returns a URL the client PUTs to directly. The control
+	// plane never sees object bytes. Finish with CompleteObject.
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
+	// DownloadObject returns a presigned GET URL. As with upload, the bytes move
+	// between the client and the storage backend, not through here.
 	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
+	// GetObject returns metadata for one object. lock is populated here but left
+	// empty by ListObjects — reading it per row would add a join to the
+	// pagination hot path.
 	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
 	// LookupObject resolves an Object by (collection, key) instead of object_id.
 	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
+	// UpdateObject applies update_mask to metadata, tags and content_type; every
+	// other field is server-owned. resource_version is required.
 	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
 	// CompleteObject is no-op for IMPLICIT completion mode and the event has
 	// already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
 	CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error)
+	// DeleteObject soft-deletes by default — the object moves to the trash and
+	// RestoreObject brings it back. permanent=true purges it irrecoverably. A
+	// locked object refuses deletion unless the caller holds GOVERNANCE bypass
+	// and the window is GOVERNANCE, never COMPLIANCE or a legal hold.
 	DeleteObject(context.Context, *connect.Request[v1.DeleteObjectRequest]) (*connect.Response[v1.DeleteObjectResponse], error)
+	// RestoreObject brings a soft-deleted object back to AVAILABLE. Requires the
+	// current resource_version: a stale one is Aborted rather than overwriting
+	// whatever happened to the row meanwhile.
 	RestoreObject(context.Context, *connect.Request[v1.RestoreObjectRequest]) (*connect.Response[v1.Object], error)
+	// CopyObject creates a new object from an existing one, within or across
+	// collections. Server-side where the backend supports it; the bytes do not
+	// travel through the control plane either way.
 	CopyObject(context.Context, *connect.Request[v1.CopyObjectRequest]) (*connect.Response[v1.Object], error)
+	// ListObjects pages a collection newest-first. Soft-deleted objects are
+	// excluded unless the request asks for them.
 	ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error)
+	// CountObjects returns a count matching the same filters ListObjects
+	// accepts, without paging the rows.
 	CountObjects(context.Context, *connect.Request[v1.CountObjectsRequest]) (*connect.Response[v1.CountObjectsResponse], error)
 	// ─── Versioning (opt-in per bucket) ──────────────────────────────────────
 	// ListObjectVersions returns the immutable history of an object. Empty

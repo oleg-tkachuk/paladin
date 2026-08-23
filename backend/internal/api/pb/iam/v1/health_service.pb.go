@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -393,18 +394,18 @@ var File_paladin_iam_v1_health_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\n" +
-	"\"paladin/iam/v1/health_service.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x13\n" +
-	"\x11GetVersionRequest\"\x99\x01\n" +
+	"\"paladin/iam/v1/health_service.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x13\n" +
+	"\x11GetVersionRequest\"\x9e\x01\n" +
 	"\vVersionInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit\x129\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\x12>\n" +
 	"\n" +
-	"build_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tbuildTime\x12\x1d\n" +
+	"build_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tbuildTime\x12\x1d\n" +
 	"\n" +
 	"go_version\x18\x04 \x01(\tR\tgoVersion\"\x12\n" +
-	"\x10GetHealthRequest\"\xce\x01\n" +
-	"\x0fComponentHealth\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x126\n" +
+	"\x10GetHealthRequest\"\xd3\x01\n" +
+	"\x0fComponentHealth\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x126\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1e.paladin.iam.v1.ComponentStatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +

@@ -321,6 +321,10 @@ export const ListPartsResponseSchema: GenMessage<ListPartsResponse> =
  */
 export const MultipartUploadService: GenService<{
   /**
+   * InitiateMultipartUpload opens an upload session and returns its id. Sessions
+   * left incomplete are reaped by the housekeeping job after
+   * worker.jobs.housekeeping.multipart_ttl.
+   *
    * @generated from rpc paladin.data.v1.MultipartUploadService.InitiateMultipartUpload
    */
   initiateMultipartUpload: {
@@ -329,6 +333,9 @@ export const MultipartUploadService: GenService<{
     output: typeof InitiateMultipartUploadResponseSchema;
   };
   /**
+   * PresignPart issues a PUT URL for one part. Parts may be uploaded in any
+   * order and in parallel.
+   *
    * @generated from rpc paladin.data.v1.MultipartUploadService.PresignPart
    */
   presignPart: {
@@ -337,6 +344,10 @@ export const MultipartUploadService: GenService<{
     output: typeof PresignPartResponseSchema;
   };
   /**
+   * CompleteMultipartUpload assembles the parts into one object. The part list
+   * must carry every etag the client received; a mismatch is
+   * FailedPrecondition and the object is not created.
+   *
    * @generated from rpc paladin.data.v1.MultipartUploadService.CompleteMultipartUpload
    */
   completeMultipartUpload: {
@@ -345,6 +356,9 @@ export const MultipartUploadService: GenService<{
     output: typeof ObjectSchema;
   };
   /**
+   * AbortMultipartUpload discards the session and the parts already uploaded.
+   * Safe to call on an already-aborted session.
+   *
    * @generated from rpc paladin.data.v1.MultipartUploadService.AbortMultipartUpload
    */
   abortMultipartUpload: {
@@ -353,6 +367,9 @@ export const MultipartUploadService: GenService<{
     output: typeof AbortMultipartUploadResponseSchema;
   };
   /**
+   * ListParts returns the parts recorded for an open session, for a client
+   * reconciling after a crash.
+   *
    * @generated from rpc paladin.data.v1.MultipartUploadService.ListParts
    */
   listParts: {

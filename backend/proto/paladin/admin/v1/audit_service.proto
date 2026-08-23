@@ -12,7 +12,11 @@ import "paladin/common/v1/pagination.proto";
 // AuditLogService is read-only access to the immutable audit log. Writes
 // happen automatically through middleware on every admin/iam mutation.
 service AuditLogService {
+  // ListAuditLog returns audit entries newest-first. The log is append-only:
+  // there is no RPC that mutates or deletes an entry.
   rpc ListAuditLog(ListAuditLogRequest) returns (ListAuditLogResponse);
+  // GetAuditLogEntry returns a single entry by id, including the full request
+  // context recorded at the time.
   rpc GetAuditLogEntry(GetAuditLogEntryRequest) returns (AuditLogEntry);
 
   // ExportAuditLog emits entries to a sink (S3 object, webhook batch).
