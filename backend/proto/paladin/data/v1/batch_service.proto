@@ -57,13 +57,9 @@ message BatchDeleteObjectsRequest {
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   ObjectSelector selector = 2 [(buf.validate.field).required = true];
   // NOT SUPPORTED: the batch executor soft-deletes. Setting this returns
-
   // Unimplemented rather than quietly soft-deleting — a caller told its
-
   // erasure succeeded when the objects are still in the trash is worse off
-
   // than one told it cannot be done here. Use DeleteObject per object.
-
   bool permanent = 3;
 }
 

@@ -89,7 +89,6 @@ service ObjectService {
   // object has exactly one version, so the distinction is invisible; on a
   // versioned one it is the difference between protecting a document and
   // protecting today's copy of it.
-
   // SetObjectRetention applies or extends a retention window on an object's
   // current version. Requires the parent bucket to have object lock enabled.
   rpc SetObjectRetention(SetObjectRetentionRequest) returns (ObjectLockState);

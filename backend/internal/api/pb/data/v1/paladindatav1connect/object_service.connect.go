@@ -135,6 +135,17 @@ type ObjectServiceClient interface {
 	// RestoreObjectVersion makes the named version `current` again. The
 	// current version becomes a non-current entry preserving lock state.
 	RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error)
+	// ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
+	//
+	// Retention and legal hold are separate operations because their rules
+	// differ, which is also how S3 splits them. A legal hold can be lifted by
+	// anyone authorised to set it; a retention window can only ever be extended
+	// unless the mode is GOVERNANCE and the caller holds the bypass role.
+	//
+	// Locks attach to a VERSION, not to an object. On an unversioned bucket the
+	// object has exactly one version, so the distinction is invisible; on a
+	// versioned one it is the difference between protecting a document and
+	// protecting today's copy of it.
 	// SetObjectRetention applies or extends a retention window on an object's
 	// current version. Requires the parent bucket to have object lock enabled.
 	SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error)
@@ -419,6 +430,17 @@ type ObjectServiceHandler interface {
 	// RestoreObjectVersion makes the named version `current` again. The
 	// current version becomes a non-current entry preserving lock state.
 	RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error)
+	// ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
+	//
+	// Retention and legal hold are separate operations because their rules
+	// differ, which is also how S3 splits them. A legal hold can be lifted by
+	// anyone authorised to set it; a retention window can only ever be extended
+	// unless the mode is GOVERNANCE and the caller holds the bypass role.
+	//
+	// Locks attach to a VERSION, not to an object. On an unversioned bucket the
+	// object has exactly one version, so the distinction is invisible; on a
+	// versioned one it is the difference between protecting a document and
+	// protecting today's copy of it.
 	// SetObjectRetention applies or extends a retention window on an object's
 	// current version. Requires the parent bucket to have object lock enabled.
 	SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error)
