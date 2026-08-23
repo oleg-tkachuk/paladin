@@ -1917,26 +1917,6 @@ of the pipeline._
   - A deliberately network-touching test is shown to FAIL under it, so the
     control is proven rather than assumed.
 - **Blockers:** none. A judgment call, currently made as "not yet".
-
----
-## Request fields the server accepts and ignores
-
-- **Status:** Deferred (each is a real gap; listed so they stop being
-  invisible).
-- **Reason:** `tests/contract` now gates against declared-but-unread request
-  fields. The gate's `knownUnread` map is the debt it found on its first run —
-  fields a client must or may send that no handler reads:
-  - `SetQuotaRequest.resource_version` — `quotas.resource_version` exists in
-    the schema; SetQuota upserts without consulting it. The proto now
-    documents it as unenforced instead of demanding it.
-  - `BatchUpdateTagsRequest.replace` — the executor always merges.
-- **Definition of Done:** Each entry either implemented or removed from the
-  proto, and deleted from `knownUnread`. The list should only shrink — a new
-  entry means a defect was just introduced.
-- **Blockers:** Removing a field is a wire-breaking change, so the ones not
-  worth implementing should go out with a deprecation window once the API
-  carries a compatibility promise.
-
 ---
 ## BatchDeleteObjects cannot delete permanently
 
