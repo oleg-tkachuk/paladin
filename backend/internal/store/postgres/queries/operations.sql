@@ -10,13 +10,19 @@ FROM operations
 WHERE id = $1 AND tenant_id = $2;
 
 -- name: UpdateOperationState :execrows
+-- Both uses of $state are cast explicitly. Without them Postgres deduces the
+-- parameter's type twice — operation_state from the SET, text from the IN
+-- comparison — and refuses the statement with 42P08 "inconsistent types
+-- deduced for parameter". Every terminal transition failed on that: the runner
+-- logged "operation succeeded" and then "failed to mark SUCCEEDED", leaving
+-- every operation RUNNING forever and its response unwritten.
 UPDATE operations
-SET state         = sqlc.arg('state'),
+SET state         = sqlc.arg('state')::operation_state,
     metadata      = COALESCE(sqlc.narg('metadata'),      metadata),
     response      = COALESCE(sqlc.narg('response'),      response),
     error_code    = COALESCE(sqlc.narg('error_code'),    error_code),
     error_message = COALESCE(sqlc.narg('error_message'), error_message),
-    done_at       = CASE WHEN sqlc.arg('state') IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+    done_at       = CASE WHEN sqlc.arg('state')::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
 WHERE id = $1;

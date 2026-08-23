@@ -151,17 +151,23 @@ func (q *Queries) PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Tim
 
 const updateOperationState = `-- name: UpdateOperationState :execrows
 UPDATE operations
-SET state         = $2,
+SET state         = $2::operation_state,
     metadata      = COALESCE($3,      metadata),
     response      = COALESCE($4,      response),
     error_code    = COALESCE($5,    error_code),
     error_message = COALESCE($6, error_message),
-    done_at       = CASE WHEN $2 IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+    done_at       = CASE WHEN $2::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
 WHERE id = $1
 `
 
+// Both uses of $state are cast explicitly. Without them Postgres deduces the
+// parameter's type twice — operation_state from the SET, text from the IN
+// comparison — and refuses the statement with 42P08 "inconsistent types
+// deduced for parameter". Every terminal transition failed on that: the runner
+// logged "operation succeeded" and then "failed to mark SUCCEEDED", leaving
+// every operation RUNNING forever and its response unwritten.
 func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error) {
 	result, err := q.db.Exec(ctx, updateOperationState,
 		iD,

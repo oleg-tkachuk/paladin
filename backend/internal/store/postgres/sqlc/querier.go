@@ -592,6 +592,12 @@ type Querier interface {
 	// enforces optimistic concurrency: a stale resource_version aborts the
 	// update with 0 rows affected and the handler returns CodeAborted.
 	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
+	// Both uses of $state are cast explicitly. Without them Postgres deduces the
+	// parameter's type twice — operation_state from the SET, text from the IN
+	// comparison — and refuses the statement with 42P08 "inconsistent types
+	// deduced for parameter". Every terminal transition failed on that: the runner
+	// logged "operation succeeded" and then "failed to mark SUCCEEDED", leaving
+	// every operation RUNNING forever and its response unwritten.
 	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, name string, expectedVersion int64) (int64, error)
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)

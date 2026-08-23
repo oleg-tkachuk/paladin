@@ -99,10 +99,15 @@ SELECT sqlc.embed(v),
 FROM object_versions v
 LEFT JOIN object_locks l ON l.version_id = v.id
 WHERE v.object_id = $1
+  -- Every column qualified with v.: the LEFT JOIN brings object_locks into
+  -- scope, which also has created_at and id, so the bare names were ambiguous
+  -- and Postgres refused the statement with 42702. sqlc accepted it — it
+  -- checks names and shapes, not resolution — so ListObjectVersions failed on
+  -- every call rather than at build time.
   AND (sqlc.narg('after_created_at')::timestamptz IS NULL
-       OR created_at < sqlc.narg('after_created_at')::timestamptz
-       OR (created_at = sqlc.narg('after_created_at')::timestamptz
-           AND id < sqlc.arg('after_id')::uuid))
+       OR v.created_at < sqlc.narg('after_created_at')::timestamptz
+       OR (v.created_at = sqlc.narg('after_created_at')::timestamptz
+           AND v.id < sqlc.arg('after_id')::uuid))
 ORDER BY v.created_at DESC, v.id DESC
 LIMIT sqlc.arg('page_size');
 
