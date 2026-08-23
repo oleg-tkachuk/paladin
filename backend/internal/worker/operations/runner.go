@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
@@ -128,7 +130,16 @@ func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
 
 	logger.Info("executing operation")
 	start := time.Now()
-	response, err := exec.Execute(r.withProgress(ctx, op), op)
+	// Scope the connection to the operation's tenant before the executor
+	// touches anything. The worker runs as paladin_app, which has no BYPASSRLS,
+	// and objects/collections are under FORCE ROW LEVEL SECURITY — so without
+	// this every batch executor read back zero rows and reported each id as
+	// "not found", while the operation itself dutifully recorded SUCCEEDED
+	// with failed == total. The tenant is not caller-supplied: it comes off
+	// the claimed operation row, which the RPC wrote under the caller's own
+	// tenant scope.
+	execCtx := auth.WithActingTenant(r.withProgress(ctx, op), op.TenantID)
+	response, err := exec.Execute(execCtx, op)
 	duration := time.Since(start)
 
 	if err != nil {
