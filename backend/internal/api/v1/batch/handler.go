@@ -41,6 +41,11 @@ type BatchUpdateTagsArgs struct {
 	Collection string
 	ObjectIDs  []uuid.UUID
 	Tags       map[string]string
+	// Replace selects wholesale replacement over per-key merge. The request
+	// has carried this flag all along and nothing read it: the executor
+	// always replaced, so the DEFAULT call — replace=false, meaning merge —
+	// silently dropped every tag the caller did not restate.
+	Replace bool
 }
 
 type BatchRestoreObjectsArgs struct {

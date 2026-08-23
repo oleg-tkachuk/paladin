@@ -44,8 +44,14 @@ func (s *QuotaServer) SetQuota(ctx context.Context, req *connect.Request[pb.SetQ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	rv, err := parseRV(m.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	src := m.GetQuota()
 	q := admindomain.Quota{
+		ResourceVersion:  rv,
 		TenantID:         scope.tenantID,
 		BackendID:        scope.backendID,
 		BucketName:       scope.bucketName,

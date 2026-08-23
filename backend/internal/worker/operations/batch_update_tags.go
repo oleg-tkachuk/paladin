@@ -26,10 +26,15 @@ import (
 // BatchUpdateTags. Total / Succeeded / Failed counts mirror the
 // BatchDelete contract.
 //
-// Tags semantics: the supplied Tags map REPLACES the existing tag
-// map for each object — empty map clears tags entirely. Per-key
-// merge would require a richer args shape; that's a follow-up if
-// the user-facing API ever wants partial-merge.
+// Tags semantics: args.Replace selects between the two, matching the RPC.
+// Replace=true overwrites the object's tag map wholesale — an empty map then
+// clears tags entirely. Replace=false (the default, and what the proto
+// documents) merges per key: supplied keys win, keys the caller did not
+// mention are left alone.
+//
+// The merge branch is why this file changed. The executor used to replace
+// unconditionally, so the default call quietly deleted tags nobody asked it
+// to touch — the opposite of what the request said it would do.
 type BatchUpdateTagsExecutor struct {
 	Objects object.Repository
 }
@@ -94,7 +99,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 			ObjectID:        obj.ObjectID,
 			ResourceVersion: obj.ResourceVersion,
 			UpdatedFields:   []string{"tags"},
-			Tags:            args.Tags,
+			Tags:            resolveTags(obj.Tags, args.Tags, args.Replace),
 		}); err != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchUpdateTagsFailure{
@@ -112,4 +117,25 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 		return nil, fmt.Errorf("encode response: %w", err)
 	}
 	return body, nil
+}
+
+// resolveTags computes the tag map to write for one object.
+//
+// Replace hands back the caller's map untouched. Merge copies the object's
+// current tags and overlays the supplied keys, so a key the caller did not
+// mention survives. The copy matters: writing into obj.Tags would mutate the
+// row we read, and the same map is the OCC comparison basis for the retry a
+// caller makes after a mismatch.
+func resolveTags(current, supplied map[string]string, replace bool) map[string]string {
+	if replace {
+		return supplied
+	}
+	merged := make(map[string]string, len(current)+len(supplied))
+	for k, v := range current {
+		merged[k] = v
+	}
+	for k, v := range supplied {
+		merged[k] = v
+	}
+	return merged
 }

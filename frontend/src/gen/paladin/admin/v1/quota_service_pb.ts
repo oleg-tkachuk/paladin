@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_quota_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiNsZWdhdGUvYWRtaW4vdjEvcXVvdGFfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIigKD0dldFF1b3RhUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqoBCg9TZXRRdW90YVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEi0KBXF1b3RhGAQgASgLMhYubGVnYXRlLmFkbWluLnYxLlF1b3RhQga6SAPIAQEiKgoRUmVzZXRVc2FnZVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATLkAQoMUXVvdGFTZXJ2aWNlEkQKCEdldFF1b3RhEiAubGVnYXRlLmFkbWluLnYxLkdldFF1b3RhUmVxdWVzdBoWLmxlZ2F0ZS5hZG1pbi52MS5RdW90YRJECghTZXRRdW90YRIgLmxlZ2F0ZS5hZG1pbi52MS5TZXRRdW90YVJlcXVlc3QaFi5sZWdhdGUuYWRtaW4udjEuUXVvdGESSAoKUmVzZXRVc2FnZRIiLmxlZ2F0ZS5hZG1pbi52MS5SZXNldFVzYWdlUmVxdWVzdBoWLmxlZ2F0ZS5hZG1pbi52MS5RdW90YUJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
+    "CiNsZWdhdGUvYWRtaW4vdjEvcXVvdGFfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIigKD0dldFF1b3RhUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrMBCg9TZXRRdW90YVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEi0KBXF1b3RhGAQgASgLMhYubGVnYXRlLmFkbWluLnYxLlF1b3RhQga6SAPIAQEiKgoRUmVzZXRVc2FnZVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATLkAQoMUXVvdGFTZXJ2aWNlEkQKCEdldFF1b3RhEiAubGVnYXRlLmFkbWluLnYxLkdldFF1b3RhUmVxdWVzdBoWLmxlZ2F0ZS5hZG1pbi52MS5RdW90YRJECghTZXRRdW90YRIgLmxlZ2F0ZS5hZG1pbi52MS5TZXRRdW90YVJlcXVlc3QaFi5sZWdhdGUuYWRtaW4udjEuUXVvdGESSAoKUmVzZXRVc2FnZRIiLmxlZ2F0ZS5hZG1pbi52MS5SZXNldFVzYWdlUmVxdWVzdBoWLmxlZ2F0ZS5hZG1pbi52MS5RdW90YUJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -58,16 +58,13 @@ export const GetQuotaRequestSchema: GenMessage<GetQuotaRequest> =
  */
 export type SetQuotaRequest = Message<"paladin.admin.v1.SetQuotaRequest"> & {
   /**
+   * OCC, required. Checked in the upsert's DO UPDATE clause: a stored
+   *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * NOT enforced yet: the quotas table carries a resource_version column, but
-   * SetQuota upserts without consulting it. Left optional rather than
-   * required, because demanding a guard the server ignores is worse than
-   * having none — the caller believes it is protected. Tracked in BACKLOG.
-   *
    * @generated from field: string resource_version = 2;
    */
   resourceVersion: string;

@@ -28,11 +28,15 @@ message GetQuotaRequest {
 
 message SetQuotaRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // NOT enforced yet: the quotas table carries a resource_version column, but
-  // SetQuota upserts without consulting it. Left optional rather than
-  // required, because demanding a guard the server ignores is worse than
-  // having none — the caller believes it is protected. Tracked in BACKLOG.
-  string resource_version = 2;
+  // OCC, required. Checked in the upsert's DO UPDATE clause: a stored
+
+  //   version that differs updates nothing and the call is Aborted. Pass the
+
+  //   version from a prior GetQuota; "0" asserts no row exists yet, and is
+
+  //   itself a conflict if one does.
+
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   Quota quota = 4 [(buf.validate.field).required = true];
 }

@@ -125,7 +125,7 @@ func (q *Queries) ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastReset
 	return err
 }
 
-const upsertBucketQuota = `-- name: UpsertBucketQuota :exec
+const upsertBucketQuota = `-- name: UpsertBucketQuota :one
 INSERT INTO quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, (SELECT b.id FROM buckets b
                   JOIN storage_backends sb ON sb.id = b.backend_id
@@ -135,11 +135,15 @@ ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
     max_objects_per_day = EXCLUDED.max_objects_per_day,
+    resource_version    = quotas.resource_version + 1,
     updated_at          = now()
+WHERE quotas.resource_version = $8::bigint
+RETURNING resource_version
 `
 
-func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error {
-	_, err := q.db.Exec(ctx, upsertBucketQuota,
+// Same OCC contract as UpsertTenantQuota.
+func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error) {
+	row := q.db.QueryRow(ctx, upsertBucketQuota,
 		iD,
 		name,
 		name_2,
@@ -147,11 +151,14 @@ func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name st
 		maxObjectCount,
 		maxBytesPerDay,
 		maxObjectsPerDay,
+		expectedVersion,
 	)
-	return err
+	var resource_version int64
+	err := row.Scan(&resource_version)
+	return resource_version, err
 }
 
-const upsertTenantQuota = `-- name: UpsertTenantQuota :exec
+const upsertTenantQuota = `-- name: UpsertTenantQuota :one
 INSERT INTO quotas (id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
@@ -159,17 +166,30 @@ ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
     max_objects_per_day = EXCLUDED.max_objects_per_day,
+    resource_version    = quotas.resource_version + 1,
     updated_at          = now()
+WHERE quotas.resource_version = $7::bigint
+RETURNING resource_version
 `
 
-func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error {
-	_, err := q.db.Exec(ctx, upsertTenantQuota,
+// OCC on update, no guard on insert.
+//
+// The DO UPDATE's WHERE is the concurrency check: it fires only when the
+// stored resource_version equals what the caller read. A mismatch — including
+// a caller that passed 0 believing the row did not exist — updates nothing and
+// returns no row, which the adapter maps to Aborted. Without it this was a
+// blind last-writer-wins overwrite of another operator's limits.
+func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error) {
+	row := q.db.QueryRow(ctx, upsertTenantQuota,
 		iD,
 		tenantID,
 		maxTotalBytes,
 		maxObjectCount,
 		maxBytesPerDay,
 		maxObjectsPerDay,
+		expectedVersion,
 	)
-	return err
+	var resource_version int64
+	err := row.Scan(&resource_version)
+	return resource_version, err
 }

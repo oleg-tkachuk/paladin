@@ -1,4 +1,11 @@
--- name: UpsertTenantQuota :exec
+-- name: UpsertTenantQuota :one
+-- OCC on update, no guard on insert.
+--
+-- The DO UPDATE's WHERE is the concurrency check: it fires only when the
+-- stored resource_version equals what the caller read. A mismatch — including
+-- a caller that passed 0 believing the row did not exist — updates nothing and
+-- returns no row, which the adapter maps to Aborted. Without it this was a
+-- blind last-writer-wins overwrite of another operator's limits.
 INSERT INTO quotas (id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
@@ -6,9 +13,13 @@ ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
     max_objects_per_day = EXCLUDED.max_objects_per_day,
-    updated_at          = now();
+    resource_version    = quotas.resource_version + 1,
+    updated_at          = now()
+WHERE quotas.resource_version = sqlc.arg('expected_version')::bigint
+RETURNING resource_version;
 
--- name: UpsertBucketQuota :exec
+-- name: UpsertBucketQuota :one
+-- Same OCC contract as UpsertTenantQuota.
 INSERT INTO quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, (SELECT b.id FROM buckets b
                   JOIN storage_backends sb ON sb.id = b.backend_id
@@ -18,7 +29,10 @@ ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
     max_objects_per_day = EXCLUDED.max_objects_per_day,
-    updated_at          = now();
+    resource_version    = quotas.resource_version + 1,
+    updated_at          = now()
+WHERE quotas.resource_version = sqlc.arg('expected_version')::bigint
+RETURNING resource_version;
 
 -- name: GetTenantQuota :one
 -- LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.

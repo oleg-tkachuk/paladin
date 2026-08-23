@@ -95,6 +95,11 @@ export type InitiateMultipartUploadRequest =
     externalRef: string;
 
     /**
+     * Optional idempotency key. Equivalent to the `Idempotency-Key` HTTP
+     * header — the interceptor reads whichever is present, and rejects the
+     * request if both are set and disagree. A repeat with the same key
+     * replays the first response instead of re-executing.
+     *
      * @generated from field: string idempotency_key = 9;
      */
     idempotencyKey: string;

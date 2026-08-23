@@ -100,15 +100,13 @@ var exemptField = map[fieldKey]string{
 // this list should shrink, and a reviewer adding to it is recording a defect,
 // not resolving one.
 //
+// It is currently empty. It started at eleven entries the day this gate was
+// written; keeping it empty is the point.
+//
 // New entries need a BACKLOG item. The gate fails on anything not in either
 // map, which is the point: the next field to go unread gets caught the day it
 // lands, not two years later.
-var knownUnread = map[fieldKey]string{
-
-	{"SetQuotaRequest", "resource_version"}: "quotas.resource_version exists in the schema but SetQuota upserts without it; the field is documented as unenforced",
-
-	{"BatchUpdateTagsRequest", "replace"}: "the executor always merges; replace=true silently merges too",
-}
+var knownUnread = map[fieldKey]string{}
 
 // forwardsWholeMessage matches a body that hands the whole message to
 // something else, which reads every field transitively.
@@ -116,8 +114,8 @@ var knownUnread = map[fieldKey]string{
 // It deliberately does NOT match `m := req.Msg`. That binds a local and reads
 // fields through it one at a time — exactly the shape where a field gets
 // forgotten. An earlier version of this pattern treated the assignment as a
-// forward and silently exempted ListParts, which ignores object_name for the
-// same reason AbortMultipartUpload did.
+// forward, which silently exempted ListParts — at the time one of three RPCs
+// ignoring object_name, and invisible to the gate because of that one regex.
 var forwardsWholeMessage = regexp.MustCompile(
 	`\((?:req\.Msg|m)[,)]|,\s*(?:req\.Msg|m)[,)]|\bfromProto\(|\btoDomain\(`)
 

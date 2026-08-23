@@ -407,7 +407,13 @@ type BatchUpdateTagsRequest struct {
 	Parent   string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Selector *ObjectSelector        `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	Tags     map[string]string      `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// When true, replace the existing tag set; else merge.
+	// When true, replace the existing tag set wholesale — an empty `tags` then
+	// clears the object's tags. When false (the default) the supplied keys are
+	// merged in: keys the caller does not mention are left as they are.
+	//
+	// This flag went unread for a while and the executor always replaced, so
+	// the default call silently dropped tags nobody asked it to touch. It is
+	// honoured now.
 	Replace       bool `protobuf:"varint,4,opt,name=replace,proto3" json:"replace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

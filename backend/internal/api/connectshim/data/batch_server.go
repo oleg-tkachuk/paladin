@@ -117,6 +117,7 @@ func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[
 		Collection: collection,
 		ObjectIDs:  ids,
 		Tags:       m.GetTags(),
+		Replace:    m.GetReplace(),
 	})
 	if err != nil {
 		return nil, err

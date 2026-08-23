@@ -597,7 +597,8 @@ type Querier interface {
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
-	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
+	// Same OCC contract as UpsertTenantQuota.
+	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error)
 	// Monotonic upsert: never moves the watermark backwards. Concurrent
 	// replicas may try to advance with stale values; the GREATEST() guard
 	// preserves the highest seen committed_at.
@@ -613,7 +614,14 @@ type Querier interface {
 	// Keyed on name, not id: the caller knows the config key ("primary"), and the
 	// uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.
 	UpsertStorageBackendV2(ctx context.Context, name string, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string, displayName string, publicEndpoint string, forcePathStyle bool, credentialsSecretRef string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
-	UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
+	// OCC on update, no guard on insert.
+	//
+	// The DO UPDATE's WHERE is the concurrency check: it fires only when the
+	// stored resource_version equals what the caller read. A mismatch — including
+	// a caller that passed 0 believing the row did not exist — updates nothing and
+	// returns no row, which the adapter maps to Aborted. Without it this was a
+	// blind last-writer-wins overwrite of another operator's limits.
+	UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error)
 	// Insert-or-update with a single round trip. Returns the post-write row so
 	// the handler can echo the bumped resource_version back to the caller.
 	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSetting, error)

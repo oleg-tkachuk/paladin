@@ -145,11 +145,14 @@ export default function TenantQuotasPage() {
         maxObjectsPerDay: bigIntFromInput(maxObjectsPerDay),
       });
       // FieldMask covers all four caps — usage stays untouched
-      // (server-managed). resource_version supplied for OCC; empty
-      // on first creation.
+      // (server-managed). resource_version is the OCC guard and is now
+      // required: "0" asserts "no quota row exists yet", which is what the
+      // first save means. Sending "" would be rejected by validation, and
+      // sending a stale version is Aborted rather than silently overwriting
+      // another operator's limits.
       await quotaClient.setQuota({
         name: quotaName,
-        resourceVersion: quota?.resourceVersion ?? "",
+        resourceVersion: quota?.resourceVersion || "0",
         updateMask: create(FieldMaskSchema, {
           paths: [
             "max_total_bytes",

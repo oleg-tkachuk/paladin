@@ -55,14 +55,16 @@ func upsertTenantQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 	if q.QuotaID == uuid.Nil {
 		q.QuotaID = uuid.Must(uuid.NewV7())
 	}
-	return qq.UpsertTenantQuota(ctx,
+	_, err := qq.UpsertTenantQuota(ctx,
 		pgUUID(q.QuotaID),
 		pgUUID(q.TenantID),
 		q.MaxTotalBytes,
 		q.MaxObjectCount,
 		q.MaxBytesPerDay,
 		q.MaxObjectsPerDay,
+		q.ResourceVersion,
 	)
+	return mapQuotaOCCErr(err)
 }
 
 func (r *QuotaRepoV2) UpsertBucket(ctx context.Context, q admindomain.Quota) error {
@@ -78,7 +80,7 @@ func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 	if q.QuotaID == uuid.Nil {
 		q.QuotaID = uuid.Must(uuid.NewV7())
 	}
-	return qq.UpsertBucketQuota(ctx,
+	_, err := qq.UpsertBucketQuota(ctx,
 		pgUUID(q.QuotaID),
 		q.BackendID,
 		q.BucketName,
@@ -86,7 +88,22 @@ func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 		q.MaxObjectCount,
 		q.MaxBytesPerDay,
 		q.MaxObjectsPerDay,
+		q.ResourceVersion,
 	)
+	return mapQuotaOCCErr(err)
+}
+
+// mapQuotaOCCErr turns "no row came back" into the OCC conflict it means.
+//
+// The upsert RETURNINGs a row only when the INSERT fired or the DO UPDATE's
+// version guard held. No row means the row exists and its resource_version is
+// not what the caller passed — a concurrent writer got there first, or the
+// caller sent 0 for a row that already exists.
+func mapQuotaOCCErr(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return admindomain.ErrVersionMismatch
+	}
+	return err
 }
 
 func (r *QuotaRepoV2) GetTenant(ctx context.Context, tenantID uuid.UUID) (admindomain.Quota, error) {

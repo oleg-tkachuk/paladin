@@ -89,9 +89,7 @@ func bypassFlag(msg protoreflect.MessageDescriptor) string {
 
 // occExempt records requests where an optional guard is the documented,
 // intended behaviour. Each entry is a claim that the omission is safe.
-var occExempt = map[string]string{
-	"SetQuotaRequest": "documented in the proto as not enforced — SetQuota upserts without consulting the column; requiring it would demand a guard the server ignores",
-}
+var occExempt = map[string]string{}
 
 func hasMinLen(t *testing.T, f protoreflect.FieldDescriptor) bool {
 	t.Helper()

@@ -156,6 +156,14 @@ func (h *Handler) GetBucketQuota(ctx context.Context, backendID, bucketName stri
 // SetQuota upserts a quota. Tenant-scoped quota = TenantID set. Bucket-scoped
 // = BackendID + BucketName set. Mask: max_total_bytes / max_object_count /
 // max_bytes_per_day / max_objects_per_day.
+// SetQuota writes the caps for one scope, guarded by q.ResourceVersion.
+//
+// The guard is checked in SQL, in the upsert's DO UPDATE clause: a row whose
+// stored version differs updates nothing, and the adapter turns the empty
+// result into ErrVersionMismatch → Aborted. Passing 0 means "I believe no row
+// exists"; if one does, that is a conflict too. Before this the upsert was a
+// blind overwrite — two operators editing limits at once, last write wins,
+// neither told.
 func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []string) (*admindomain.Quota, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
@@ -193,7 +201,7 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 					"max_objects_per_day": q.MaxObjectsPerDay,
 				})
 		}); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, apiutil.MapError(err)
 		}
 		got, err := h.repo.GetTenant(ctx, q.TenantID)
 		if err != nil {
@@ -228,7 +236,7 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 				"max_objects_per_day": got.MaxObjectsPerDay,
 			})
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &got, nil
 }
