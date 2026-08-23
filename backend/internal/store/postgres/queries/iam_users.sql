@@ -93,11 +93,18 @@ LIMIT 5;
 -- name: ListMembershipsBySubject :many
 -- Every tenant this subject belongs to, for the tenant switcher. Ordered by
 -- creation so the list is stable across calls rather than whatever the
--- planner returns; unbounded because a membership the UI does not show is a
--- tenant the user cannot reach.
+-- planner returns.
+--
+-- Keyset-paged on (created_at, id) rather than unbounded. The caller passes a
+-- large limit by default: a membership the switcher does not show is a tenant
+-- the user cannot reach, so the page is a backstop against a pathological
+-- account, not a display trim. Pass after_created_at='-infinity' for the
+-- first page.
 SELECT id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
 WHERE subject = $1
-ORDER BY created_at ASC, id ASC;
+  AND (created_at, id) > (sqlc.arg('after_created_at')::timestamptz, sqlc.arg('after_id')::uuid)
+ORDER BY created_at ASC, id ASC
+LIMIT sqlc.arg('page_size');

@@ -51,8 +51,23 @@ type fakeUsers struct {
 func (f *fakeUsers) GetByID(context.Context, uuid.UUID) (authstore.User, error) {
 	return f.user, f.err
 }
-func (f *fakeUsers) GetBySubject(context.Context, uuid.UUID, string) (authstore.User, error) {
-	return f.user, f.err
+
+// GetBySubject resolves within ONE tenant, as the real query does. Returning
+// f.user regardless of tenant made this fake unable to express "not a member
+// of that tenant" — the exact condition SwitchTenant asks it about.
+func (f *fakeUsers) GetBySubject(_ context.Context, tenantID uuid.UUID, subject string) (authstore.User, error) {
+	if f.err != nil {
+		return authstore.User{}, f.err
+	}
+	for _, u := range f.global {
+		if u.TenantID == tenantID && u.Subject == subject {
+			return u, nil
+		}
+	}
+	if f.user.TenantID == tenantID && f.user.Subject == subject {
+		return f.user, nil
+	}
+	return authstore.User{}, authstore.ErrNotFound
 }
 func (f *fakeUsers) FindBySubjectGlobal(context.Context, string) ([]authstore.User, error) {
 	return f.global, f.err
@@ -61,7 +76,7 @@ func (f *fakeUsers) FindBySubjectGlobal(context.Context, string) ([]authstore.Us
 // ListMembershipsBySubject: for a fake, memberships and subject
 // matches are the same set — the production cap that separates
 // them is exactly what this does not model.
-func (f *fakeUsers) ListMembershipsBySubject(ctx context.Context, subject string) ([]authstore.User, error) {
+func (f *fakeUsers) ListMembershipsBySubject(ctx context.Context, subject string, _ time.Time, _ uuid.UUID, _ int32) ([]authstore.User, error) {
 	return f.FindBySubjectGlobal(ctx, subject)
 }
 func (f *fakeUsers) Create(context.Context, authstore.User) (authstore.User, error) {
@@ -297,7 +312,7 @@ func TestListMyMemberships_Success(t *testing.T) {
 	users := &fakeUsers{user: caller, global: []authstore.User{caller, other}}
 	h := newHandler(users, &fakeRefresh{}, &stubMinter{})
 
-	ms, err := h.ListMyMemberships(ctxAsUser(caller.UserID))
+	ms, _, err := h.ListMyMemberships(ctxAsUser(caller.UserID), ListMembershipsInput{})
 	if err != nil {
 		t.Fatalf("ListMyMemberships: %v", err)
 	}
@@ -320,7 +335,7 @@ func TestListMyMemberships_Success(t *testing.T) {
 
 func TestListMyMemberships_Unauthenticated(t *testing.T) {
 	h := newHandler(&fakeUsers{}, &fakeRefresh{}, &stubMinter{})
-	if _, err := h.ListMyMemberships(context.Background()); code(err) != connect.CodeUnauthenticated {
+	if _, _, err := h.ListMyMemberships(context.Background(), ListMembershipsInput{}); code(err) != connect.CodeUnauthenticated {
 		t.Errorf("code = %v, want Unauthenticated", code(err))
 	}
 }

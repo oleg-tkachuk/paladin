@@ -242,8 +242,9 @@ type getNameArgs struct {
 // listChildrenArgs is the canonical "list under parent" shape for Get
 // tools that take a parent + page size.
 type listChildrenArgs struct {
-	Parent   string `json:"parent,omitempty" jsonschema:"optional parent resource name"`
-	PageSize int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
+	Parent    string `json:"parent,omitempty" jsonschema:"optional parent resource name"`
+	PageSize  int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
+	PageToken string `json:"page_token,omitempty" jsonschema:"cursor from a previous response's page.next_page_token"`
 }
 
 type listOperationsArgs struct {
@@ -485,9 +486,12 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_distinct_tags",
-		Description: "List the distinct tag keys/values currently in use under a collection — useful before filtering or tagging.",
+		Description: "List the distinct tag keys/values currently in use under a collection — useful before filtering or tagging. Keys are paged; a key with more values than the server cap comes back with truncated=true.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listChildrenArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, connect.NewRequest(&datav1.ListDistinctTagsRequest{Parent: in.Parent})))
+		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, connect.NewRequest(&datav1.ListDistinctTagsRequest{
+			Parent: in.Parent,
+			Page:   &commonv1.PageRequest{PageSize: in.PageSize, PageToken: in.PageToken},
+		})))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{

@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -92,6 +93,10 @@ func (h *Handler) authorize(ctx context.Context) error {
 	return nil
 }
 
+// defaultSessionPageSize bounds the merged fan-out result when the caller
+// does not ask for a size.
+const defaultSessionPageSize = 50
+
 // ListSessions proxies to the MCP server's /sessions endpoint, forwarding the
 // caller's admin JWT (which that endpoint re-verifies + RBAC-gates). The live
 // registry lives in the MCP process, not here, so this is the only way the
@@ -150,7 +155,34 @@ func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1
 		}
 		return infos[i].StartedAt.Before(infos[j].StartedAt)
 	})
-	for _, s := range infos {
+	// Page the MERGED list, not each replica's. A cursor minted by one pod is
+	// meaningless to another, and the fan-out has to complete before the
+	// ordering is even known — so the page bounds the response, which is what
+	// the wire and the caller care about. The replicas' own /sessions endpoint
+	// stays unpaged on purpose: it is an internal, plane-to-plane call whose
+	// only consumer is this merge.
+	start := 0
+	if tok := req.Msg.GetPage().GetPageToken(); tok != "" {
+		for i := range infos {
+			if infos[i].ID == tok {
+				start = i + 1
+				break
+			}
+		}
+		// An unknown cursor (the session was reaped between pages) restarts
+		// the listing rather than failing it.
+	}
+	limit := int(req.Msg.GetPage().GetPageSize())
+	if limit <= 0 {
+		limit = defaultSessionPageSize
+	}
+	end := start + limit
+	if end >= len(infos) {
+		end = len(infos)
+	} else {
+		out.Page = &commonv1.PageResponse{NextPageToken: infos[end-1].ID}
+	}
+	for _, s := range infos[start:end] {
 		out.Sessions = append(out.Sessions, &adminv1.MCPSession{
 			Id:            s.ID,
 			AgentSubject:  s.AgentSubject,

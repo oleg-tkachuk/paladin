@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -454,14 +455,29 @@ type Membership struct {
 // ListMyMemberships returns every tenant the caller's subject has a user row
 // in. The caller is identified from their access token (Subject = user_id); we
 // resolve that row's login subject, then scan all tenants for it.
-func (h *Handler) ListMyMemberships(ctx context.Context) ([]Membership, error) {
+func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput) ([]Membership, string, error) {
 	cur, err := h.callerUser(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	matches, err := h.users.ListMembershipsBySubject(ctx, cur.Subject)
+	afterCreated, afterID, err := decodeMembershipCursor(in.PageToken)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	limit := in.PageSize
+	if limit <= 0 {
+		limit = membershipDefaultPageSize
+	}
+	// One extra row to detect a further page without a second query.
+	matches, err := h.users.ListMembershipsBySubject(ctx, cur.Subject, afterCreated, afterID, limit+1)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInternal, err)
+	}
+	var next string
+	if int32(len(matches)) > limit {
+		matches = matches[:limit]
+		last := matches[len(matches)-1]
+		next = encodeMembershipCursor(last.CreatedAt, last.UserID)
 	}
 	out := make([]Membership, 0, len(matches))
 	for _, m := range matches {
@@ -477,7 +493,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context) ([]Membership, error) {
 			Current:    m.TenantID == cur.TenantID,
 		})
 	}
-	return out, nil
+	return out, next, nil
 }
 
 type SwitchTenantOutput struct {
@@ -506,21 +522,21 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	}
 	p, _ := auth.PrincipalFromContext(ctx) // callerUser already validated it
 
-	// Every membership, not the first five: FindBySubjectGlobal caps its
-	// result because Login only needs to know whether a subject is
-	// ambiguous. Using it here made the sixth and later tenants
-	// unreachable — the switch refused with "not a member" for a
-	// membership that plainly existed.
-	matches, err := h.users.ListMembershipsBySubject(ctx, cur.Subject)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
+	// Point lookup, not a scan. This used to walk every membership the
+	// subject had — which broke when the underlying query was capped at five
+	// rows, making the sixth and later tenants unreachable ("not a member" for
+	// a membership that plainly existed). Asking about the ONE tenant in
+	// question cannot regress that way, and does not depend on the listing
+	// staying unbounded.
 	var target *authstore.User
-	for i := range matches {
-		if matches[i].TenantID == targetTenantID {
-			target = &matches[i]
-			break
-		}
+	found, err := h.users.GetBySubject(ctx, targetTenantID, cur.Subject)
+	switch {
+	case err == nil:
+		target = &found
+	case errors.Is(err, authstore.ErrNotFound):
+		// leave target nil — handled by the generic refusal below
+	default:
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// Same generic phrasing whether the tenant exists or the caller just isn't
 	// a member — don't leak tenant existence.
@@ -827,4 +843,46 @@ func (h *Handler) parseRefresh(token string) (uuid.UUID, uuid.UUID, uuid.UUID, e
 		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("refresh decoder not configured")
 	}
 	return h.refreshDecoder.DecodeRefresh(token)
+}
+
+// ─── Membership paging ──────────────────────────────────────────────────────
+
+// membershipDefaultPageSize is deliberately larger than the 50 other List RPCs
+// default to. This endpoint backs the tenant switcher, and a membership the
+// switcher does not show is a tenant the caller cannot reach — truncating it
+// hides access rather than trimming a display. The page bounds the
+// pathological account; it is not meant to be hit by an ordinary one.
+const membershipDefaultPageSize = 500
+
+// ListMembershipsInput carries the page controls for ListMyMemberships.
+type ListMembershipsInput struct {
+	PageSize  int32
+	PageToken string
+}
+
+// Membership cursors are "<unix_nanos>:<uuid>" — the (created_at, id) tuple
+// the query orders by. Opaque to the caller by contract; readable here because
+// a malformed cursor should produce InvalidArgument, not a silent first page.
+func encodeMembershipCursor(created time.Time, id uuid.UUID) string {
+	return strconv.FormatInt(created.UnixNano(), 10) + ":" + id.String()
+}
+
+func decodeMembershipCursor(tok string) (time.Time, uuid.UUID, error) {
+	if tok == "" {
+		// Zero time sorts before every row; uuid.Nil is the lowest uuid.
+		return time.Time{}, uuid.Nil, nil
+	}
+	nanos, idStr, ok := strings.Cut(tok, ":")
+	if !ok {
+		return time.Time{}, uuid.Nil, fmt.Errorf("malformed page_token %q", tok)
+	}
+	n, err := strconv.ParseInt(nanos, 10, 64)
+	if err != nil {
+		return time.Time{}, uuid.Nil, fmt.Errorf("malformed page_token %q: %w", tok, err)
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return time.Time{}, uuid.Nil, fmt.Errorf("malformed page_token %q: %w", tok, err)
+	}
+	return time.Unix(0, n).UTC(), id, nil
 }

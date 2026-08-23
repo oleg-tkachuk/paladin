@@ -113,6 +113,41 @@ func (r *SessionRegistry) Snapshot() []SessionInfo {
 	return out
 }
 
+// SnapshotPage returns one page of Snapshot's ordering, starting after the
+// session whose id is afterID. An unknown or empty afterID starts from the
+// beginning — a cursor pointing at a session the reaper has since evicted
+// should resume the listing, not fail it.
+//
+// The scan is linear over an in-memory map that the idle reaper keeps small;
+// this is a bound on the RESPONSE, which is what the caller and the wire care
+// about, not an index.
+func (r *SessionRegistry) SnapshotPage(afterID string, limit int) ([]SessionInfo, string) {
+	all := r.Snapshot()
+	start := 0
+	if afterID != "" {
+		for i := range all {
+			if all[i].ID == afterID {
+				start = i + 1
+				break
+			}
+		}
+	}
+	if start >= len(all) {
+		return []SessionInfo{}, ""
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	end := start + limit
+	next := ""
+	if end < len(all) {
+		next = all[end-1].ID
+	} else {
+		end = len(all)
+	}
+	return all[start:end], next
+}
+
 // Reap drops sessions whose last_seen is older than maxIdle and returns the
 // number evicted. The streamable transport has no reliable disconnect signal
 // (clients may vanish without a DELETE), so a long-running bridge would leak

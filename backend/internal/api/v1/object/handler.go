@@ -246,7 +246,7 @@ type Repository interface {
 	// ListDistinctTags returns the distinct tag key→values across the
 	// Collection's live (non-DELETED) objects, each value list sorted. Backs
 	// the tag-facet filter dropdown.
-	ListDistinctTags(ctx context.Context, tenantID uuid.UUID, collection string) (map[string][]string, error)
+	ListDistinctTags(ctx context.Context, tenantID uuid.UUID, collection, afterKey string, keyLimit, valueLimit int32) (DistinctTagPage, error)
 	// LookupBucket returns the storage backend id and the physical S3 bucket
 	// for a tenant's Collection. Cheap lookup (covered by
 	// idx_collections_bucket_routing). An empty bucket means the row exists
@@ -972,19 +972,40 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	return &CountObjectsOutput{ApproximateCount: n, Exact: exact}, nil
 }
 
+// DistinctTagPage is one page of tag facets: keys in ascending order, each
+// with its (possibly capped) value list.
+type DistinctTagPage struct {
+	// Keys, ascending — the order the cursor advances through.
+	Keys []string
+	// Values per key. Truncated marks a key whose value list hit ValueLimit
+	// and has more behind it.
+	Values    map[string][]string
+	Truncated map[string]bool
+	// NextKey is the cursor for the following page; empty when exhausted.
+	NextKey string
+}
+
+// distinctTagValueLimit caps how many values come back per tag key. The facet
+// UI this feeds shows a filter list, not a full inventory; a key with more
+// values than this is marked truncated so the caller knows it is seeing a
+// sample rather than the set.
+const distinctTagValueLimit = 100
+
 // ─── ListDistinctTags ─────────────────────────────────────────────────────────
 
 // ListDistinctTags returns the distinct tag key→values across the Collection's
 // live objects, for populating a tag-facet filter. Same auth contract as
 // ListObjects: an OpList capability caveat plus a single tenant+collection Cedar
 // check (no per-row authz — the result is an aggregate, not object data).
-func (h *Handler) ListDistinctTags(ctx context.Context, collection string) (map[string][]string, error) {
+func (h *Handler) ListDistinctTags(
+	ctx context.Context, collection, pageToken string, pageSize int32,
+) (DistinctTagPage, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
-		return nil, err
+		return DistinctTagPage{}, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
-		return nil, err
+		return DistinctTagPage{}, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on the tag facet; best-effort + read-only (see ListObjects).
@@ -993,13 +1014,13 @@ func (h *Handler) ListDistinctTags(ctx context.Context, collection string) (map[
 		TenantID: tenantID, Collection: collection,
 		BackendID: tagsBackendID, BucketName: tagsBucket,
 	}, cedar.ActionGetObject, 0, ""); err != nil {
-		return nil, err
+		return DistinctTagPage{}, err
 	}
-	tags, err := h.repo.ListDistinctTags(ctx, tenantID, collection)
+	page, err := h.repo.ListDistinctTags(ctx, tenantID, collection, pageToken, pageSize, distinctTagValueLimit)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return DistinctTagPage{}, connect.NewError(connect.CodeInternal, err)
 	}
-	return tags, nil
+	return page, nil
 }
 
 // ─── Read RPCs ──────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ package paladin.data.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
 
 import "buf/validate/validate.proto";
+import "paladin/common/v1/pagination.proto";
 
 // ObjectTagService isolates the tag-only path so callers can be granted
 // "TagObject" without "UpdateObject" — common pattern for downstream
@@ -24,16 +25,34 @@ message ListDistinctTagsRequest {
   // The tenant is enforced from the auth context; this narrows the distinct
   // scan to one Collection's objects.
   string parent = 1 [(buf.validate.field).string.min_len = 1];
+  // Pages over tag KEYS, ordered ascending; page_token is the last key of the
+  // previous page. Values within a key are capped separately — see
+  // TagValues.truncated — because a single key can hold far more values than
+  // a page of keys.
+  //
+  // This RPC was unbounded before: it returned every key and every value in
+  // one response, and nothing in the schema said the caller should expect
+  // otherwise.
+  paladin.common.v1.PageRequest page = 2;
 }
 
 message ListDistinctTagsResponse {
   // Tag key → the distinct values observed for that key across the scope,
   // each value list sorted ascending.
   map<string, TagValues> tags = 1;
+  // next_page_token carries the last key of this page; empty means the keys
+  // are exhausted. total_size is not populated — counting distinct keys costs
+  // the same scan as returning them.
+  paladin.common.v1.PageResponse page = 2;
 }
 
 message TagValues {
   repeated string values = 1;
+  // The value list was capped by the server and more values exist for this
+  // key. There is no cursor for values: a facet UI that hits this should
+  // filter rather than page, and a caller that needs them all should query
+  // the objects directly.
+  bool truncated = 2;
 }
 
 message GetObjectTagsRequest {

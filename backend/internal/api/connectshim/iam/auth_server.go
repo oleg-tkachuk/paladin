@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
@@ -154,8 +155,11 @@ func (s *AuthServer) ExchangeAudience(ctx context.Context, req *connect.Request[
 	}), nil
 }
 
-func (s *AuthServer) ListMyMemberships(ctx context.Context, _ *connect.Request[pb.ListMyMembershipsRequest]) (*connect.Response[pb.ListMyMembershipsResponse], error) {
-	ms, err := s.H.ListMyMemberships(ctx)
+func (s *AuthServer) ListMyMemberships(ctx context.Context, req *connect.Request[pb.ListMyMembershipsRequest]) (*connect.Response[pb.ListMyMembershipsResponse], error) {
+	ms, next, err := s.H.ListMyMemberships(ctx, authh.ListMembershipsInput{
+		PageSize:  req.Msg.GetPage().GetPageSize(),
+		PageToken: req.Msg.GetPage().GetPageToken(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +173,11 @@ func (s *AuthServer) ListMyMemberships(ctx context.Context, _ *connect.Request[p
 			Current:    m.Current,
 		}
 	}
-	return connect.NewResponse(&pb.ListMyMembershipsResponse{Memberships: out}), nil
+	resp := &pb.ListMyMembershipsResponse{Memberships: out}
+	if next != "" {
+		resp.Page = &commonpb.PageResponse{NextPageToken: next}
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (s *AuthServer) SwitchTenant(ctx context.Context, req *connect.Request[pb.SwitchTenantRequest]) (*connect.Response[pb.SwitchTenantResponse], error) {

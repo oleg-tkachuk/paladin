@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
@@ -105,13 +106,22 @@ func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, badName(err)
 	}
-	tags, err := s.H.ListDistinctTags(ctx, collection)
+	page, err := s.H.ListDistinctTags(ctx, collection,
+		req.Msg.GetPage().GetPageToken(), req.Msg.GetPage().GetPageSize())
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListDistinctTagsResponse{Tags: make(map[string]*pb.TagValues, len(tags))}
-	for k, vals := range tags {
-		out.Tags[k] = &pb.TagValues{Values: vals}
+	out := &pb.ListDistinctTagsResponse{
+		Tags: make(map[string]*pb.TagValues, len(page.Keys)),
+	}
+	for _, k := range page.Keys {
+		out.Tags[k] = &pb.TagValues{
+			Values:    page.Values[k],
+			Truncated: page.Truncated[k],
+		}
+	}
+	if page.NextKey != "" {
+		out.Page = &commonpb.PageResponse{NextPageToken: page.NextKey}
 	}
 	return connect.NewResponse(out), nil
 }

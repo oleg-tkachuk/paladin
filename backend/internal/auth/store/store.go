@@ -41,10 +41,17 @@ type UserRepository interface {
 	// 0/1/many — caller resolves ambiguity. Capped to 5 rows so a malicious
 	// scan cannot enumerate the user table via repeated calls.
 	FindBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
-	// ListMembershipsBySubject returns EVERY tenant the subject belongs to.
-	// FindBySubjectGlobal caps its result — it exists to detect an ambiguous
-	// login, not to enumerate — so the tenant switcher needs its own query.
-	ListMembershipsBySubject(ctx context.Context, subject string) ([]User, error)
+	// ListMembershipsBySubject returns one page of the tenants a subject
+	// belongs to, ordered by membership creation, with the cursor being the
+	// previous page's last (created_at, id). FindBySubjectGlobal caps its
+	// result — it exists to detect an ambiguous login, not to enumerate — so
+	// this is a separate query.
+	//
+	// Callers that need to answer "is this subject a member of tenant X"
+	// should use GetBySubject instead of scanning this: SwitchTenant used to
+	// walk the whole list, which is why it broke when an earlier version
+	// capped the query at five rows.
+	ListMembershipsBySubject(ctx context.Context, subject string, afterCreated time.Time, afterID uuid.UUID, limit int32) ([]User, error)
 	Update(ctx context.Context, u User, expectedVersion int64) (User, error)
 	Delete(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	List(ctx context.Context, args ListUsersArgs) ([]User, string, error)

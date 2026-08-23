@@ -63,7 +63,7 @@ func (f *fakeUserRepo) FindBySubjectGlobal(context.Context, string) ([]authstore
 // ListMembershipsBySubject: for a fake, memberships and subject
 // matches are the same set — the production cap that separates
 // them is exactly what this does not model.
-func (f *fakeUserRepo) ListMembershipsBySubject(ctx context.Context, subject string) ([]authstore.User, error) {
+func (f *fakeUserRepo) ListMembershipsBySubject(ctx context.Context, subject string, _ time.Time, _ uuid.UUID, _ int32) ([]authstore.User, error) {
 	return f.FindBySubjectGlobal(ctx, subject)
 }
 func (f *fakeUserRepo) Update(_ context.Context, u authstore.User, _ int64) (authstore.User, error) {

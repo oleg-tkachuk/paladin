@@ -5,6 +5,7 @@ package paladin.iam.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
 
 import "buf/validate/validate.proto";
+import "paladin/common/v1/pagination.proto";
 import "paladin/iam/v1/types.proto";
 
 // AuthService handles login + token lifecycle. Public-facing endpoints
@@ -164,7 +165,17 @@ message ExchangeAudienceResponse {
   string token_type = 3;
 }
 
-message ListMyMembershipsRequest {}
+message ListMyMembershipsRequest {
+  // Pages over memberships, ordered by membership creation (stable across
+  // calls). page_token is the previous page's last user id.
+  //
+  // The server default is deliberately large — 500, where other List RPCs
+  // default to 50. This endpoint backs the tenant switcher, and a membership
+  // the switcher does not show is a tenant the caller cannot reach, so
+  // silently truncating it hides access rather than trimming a display. The
+  // page exists to bound the pathological account, not the ordinary one.
+  paladin.common.v1.PageRequest page = 1;
+}
 
 message Membership {
   string tenant_id = 1;
@@ -180,6 +191,9 @@ message Membership {
 
 message ListMyMembershipsResponse {
   repeated Membership memberships = 1;
+  // next_page_token is the last tenant_slug of this page; empty when
+  // exhausted. total_size is not populated.
+  paladin.common.v1.PageResponse page = 2;
 }
 
 message SwitchTenantRequest {

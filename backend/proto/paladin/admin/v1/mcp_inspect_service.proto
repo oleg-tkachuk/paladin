@@ -5,6 +5,7 @@ package paladin.admin.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
 
 import "google/protobuf/timestamp.proto";
+import "paladin/common/v1/pagination.proto";
 
 // MCPInspectService — read-only operator visibility into the MCP
 // (Model Context Protocol) bridge. The MCP plane sits between agentic
@@ -35,10 +36,19 @@ service MCPInspectService {
 
 message MCPInspectRequest {}
 
-message ListSessionsRequest {}
+message ListSessionsRequest {
+  // Pages over live MCP sessions, ordered by session start (ties broken by
+  // session id). page_token is the previous page's last session id. The
+  // registry is bounded only by the idle reaper — nothing the caller controls
+  // — so the page is what keeps this response bounded.
+  paladin.common.v1.PageRequest page = 1;
+}
 
 message ListSessionsResponse {
   repeated MCPSession sessions = 1;
+  // next_page_token is the last session id of this page; empty when
+  // exhausted. total_size is not populated.
+  paladin.common.v1.PageResponse page = 2;
 }
 
 // MCPSession mirrors internal/mcp.SessionInfo — one live streamable-HTTP

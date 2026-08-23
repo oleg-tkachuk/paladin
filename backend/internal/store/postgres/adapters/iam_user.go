@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -79,8 +81,14 @@ func (r *UserRepo) FindBySubjectGlobal(ctx context.Context, subject string) ([]a
 // only needs to detect ambiguity. Sharing that query made the tenant
 // switcher drop memberships past the fifth — silently, since a shorter list
 // looks exactly like a smaller account.
-func (r *UserRepo) ListMembershipsBySubject(ctx context.Context, subject string) ([]authstore.User, error) {
-	rows, err := r.q.ListMembershipsBySubject(ctx, subject)
+func (r *UserRepo) ListMembershipsBySubject(
+	ctx context.Context, subject string, afterCreated time.Time, afterID uuid.UUID, limit int32,
+) ([]authstore.User, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := r.q.ListMembershipsBySubject(ctx, subject,
+		pgtype.Timestamptz{Time: afterCreated, Valid: true}, pgUUID(afterID), limit)
 	if err != nil {
 		return nil, err
 	}

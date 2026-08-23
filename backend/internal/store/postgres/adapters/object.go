@@ -297,40 +297,87 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 	}
 }
 
-// ListDistinctTags returns each tag key present on the Collection's live objects
-// with its distinct values, sorted in SQL. A single pass over the rows via
-// LATERAL jsonb_each_text; the per-Collection scope bounds the scan, and
-// idx_objects_tags_gin covers tag predicates on the same table.
-func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, collection string) (map[string][]string, error) {
+// ListDistinctTags returns one page of tag facets for the Collection's live
+// objects, sorted in SQL.
+//
+// Two axes are unbounded in the underlying data and both are capped here. The
+// number of distinct KEYS is paged with a keyset cursor (afterKey, exclusive);
+// the number of VALUES under one key is capped by valueLimit, because a single
+// key can hold more values than a whole page of keys. The window function does
+// the value cap inside the same scan rather than aggregating everything and
+// slicing in Go — the point is to not build the full array in the first place.
+//
+// Both limits fetch one extra row to detect "there is more" without a second
+// count query. A single pass over the rows via LATERAL jsonb_each_text; the
+// per-Collection scope bounds the scan, and idx_objects_tags_gin covers tag
+// predicates on the same table.
+func (r *ObjectRepo) ListDistinctTags(
+	ctx context.Context, tenantID uuid.UUID, collection, afterKey string, keyLimit, valueLimit int32,
+) (object.DistinctTagPage, error) {
+	if keyLimit <= 0 {
+		keyLimit = 50
+	}
+	if valueLimit <= 0 {
+		valueLimit = 100
+	}
 	rows, err := r.pool.Query(ctx,
-		`SELECT t.key, array_agg(DISTINCT t.value ORDER BY t.value)
-		   FROM objects o
-		   JOIN collections c ON c.id = o.collection_id,
-		        LATERAL jsonb_each_text(o.tags) AS t(key, value)
-		  WHERE o.tenant_id = $1
-		    AND c.name      = $2
-		    AND o.state <> 'DELETED'
-		  GROUP BY t.key
-		  ORDER BY t.key`,
-		pgUUID(tenantID), collection,
+		`WITH ranked AS (
+		   SELECT DISTINCT t.key, t.value,
+		          dense_rank() OVER (PARTITION BY t.key ORDER BY t.value) AS vrank
+		     FROM objects o
+		     JOIN collections c ON c.id = o.collection_id,
+		          LATERAL jsonb_each_text(o.tags) AS t(key, value)
+		    WHERE o.tenant_id = $1
+		      AND c.name      = $2
+		      AND o.state <> 'DELETED'
+		      AND ($3 = '' OR t.key > $3)
+		 ),
+		 keys AS (
+		   SELECT DISTINCT key FROM ranked ORDER BY key LIMIT $4
+		 )
+		 SELECT r.key,
+		        array_agg(r.value ORDER BY r.value) FILTER (WHERE r.vrank <= $5) AS vals,
+		        bool_or(r.vrank > $5) AS more
+		   FROM ranked r
+		   JOIN keys k ON k.key = r.key
+		  GROUP BY r.key
+		  ORDER BY r.key`,
+		pgUUID(tenantID), collection, afterKey, keyLimit+1, valueLimit,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list distinct tags: %w", err)
+		return object.DistinctTagPage{}, fmt.Errorf("list distinct tags: %w", err)
 	}
 	defer rows.Close()
-	out := map[string][]string{}
+
+	page := object.DistinctTagPage{
+		Values:    map[string][]string{},
+		Truncated: map[string]bool{},
+	}
 	for rows.Next() {
 		var key string
 		var values []string
-		if err := rows.Scan(&key, &values); err != nil {
-			return nil, fmt.Errorf("scan distinct tag: %w", err)
+		var more bool
+		if err := rows.Scan(&key, &values, &more); err != nil {
+			return object.DistinctTagPage{}, fmt.Errorf("scan distinct tag: %w", err)
 		}
-		out[key] = values
+		page.Keys = append(page.Keys, key)
+		page.Values[key] = values
+		page.Truncated[key] = more
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate distinct tags: %w", err)
+		return object.DistinctTagPage{}, fmt.Errorf("iterate distinct tags: %w", err)
 	}
-	return out, nil
+
+	// The extra key proves there is another page; drop it and cursor on the
+	// last key actually RETURNED, not the overflow one.
+	if len(page.Keys) > int(keyLimit) {
+		overflow := page.Keys[keyLimit]
+		page.Keys = page.Keys[:keyLimit]
+		delete(page.Values, overflow)
+		delete(page.Truncated, overflow)
+		page.NextKey = page.Keys[len(page.Keys)-1]
+	}
+	return page, nil
 }
 
 // LookupBucket returns the physical S3 bucket bound to a tenant's

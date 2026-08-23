@@ -285,9 +285,14 @@ type Querier interface {
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
 	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
 	// creation so the list is stable across calls rather than whatever the
-	// planner returns; unbounded because a membership the UI does not show is a
-	// tenant the user cannot reach.
-	ListMembershipsBySubject(ctx context.Context, subject string) ([]User, error)
+	// planner returns.
+	//
+	// Keyset-paged on (created_at, id) rather than unbounded. The caller passes a
+	// large limit by default: a membership the switcher does not show is a tenant
+	// the user cannot reach, so the page is a backstop against a pathological
+	// account, not a display trim. Pass after_created_at='-infinity' for the
+	// first page.
+	ListMembershipsBySubject(ctx context.Context, subject string, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]User, error)
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// Newest first. Cursor: (created_at, id).
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)

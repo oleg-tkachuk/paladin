@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -771,7 +772,16 @@ func (x *ExchangeAudienceResponse) GetTokenType() string {
 }
 
 type ListMyMembershipsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Pages over memberships, ordered by membership creation (stable across
+	// calls). page_token is the previous page's last user id.
+	//
+	// The server default is deliberately large — 500, where other List RPCs
+	// default to 50. This endpoint backs the tenant switcher, and a membership
+	// the switcher does not show is a tenant the caller cannot reach, so
+	// silently truncating it hides access rather than trimming a display. The
+	// page exists to bound the pathological account, not the ordinary one.
+	Page          *v1.PageRequest `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -804,6 +814,13 @@ func (x *ListMyMembershipsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListMyMembershipsRequest.ProtoReflect.Descriptor instead.
 func (*ListMyMembershipsRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListMyMembershipsRequest) GetPage() *v1.PageRequest {
+	if x != nil {
+		return x.Page
+	}
+	return nil
 }
 
 type Membership struct {
@@ -887,8 +904,11 @@ func (x *Membership) GetCurrent() bool {
 }
 
 type ListMyMembershipsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Memberships   []*Membership          `protobuf:"bytes,1,rep,name=memberships,proto3" json:"memberships,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Memberships []*Membership          `protobuf:"bytes,1,rep,name=memberships,proto3" json:"memberships,omitempty"`
+	// next_page_token is the last tenant_slug of this page; empty when
+	// exhausted. total_size is not populated.
+	Page          *v1.PageResponse `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -926,6 +946,13 @@ func (*ListMyMembershipsResponse) Descriptor() ([]byte, []int) {
 func (x *ListMyMembershipsResponse) GetMemberships() []*Membership {
 	if x != nil {
 		return x.Memberships
+	}
+	return nil
+}
+
+func (x *ListMyMembershipsResponse) GetPage() *v1.PageResponse {
+	if x != nil {
+		return x.Page
 	}
 	return nil
 }
@@ -1042,7 +1069,7 @@ var File_paladin_iam_v1_auth_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\n" +
-	" paladin/iam/v1/auth_service.proto\x12\rlegate.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19legate/iam/v1/types.proto\"\xa1\x01\n" +
+	" paladin/iam/v1/auth_service.proto\x12\rlegate.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a!paladin/common/v1/pagination.proto\x1a\x19legate/iam/v1/types.proto\"\xa1\x01\n" +
 	"\fLoginRequest\x12!\n" +
 	"\asubject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12#\n" +
@@ -1088,8 +1115,9 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
 	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12\x1d\n" +
 	"\n" +
-	"token_type\x18\x03 \x01(\tR\ttokenType\"\x1a\n" +
-	"\x18ListMyMembershipsRequest\"\x96\x01\n" +
+	"token_type\x18\x03 \x01(\tR\ttokenType\"M\n" +
+	"\x18ListMyMembershipsRequest\x121\n" +
+	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\x96\x01\n" +
 	"\n" +
 	"Membership\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1f\n" +
@@ -1097,9 +1125,10 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"tenantSlug\x12\x14\n" +
 	"\x05roles\x18\x03 \x03(\tR\x05roles\x12\x1a\n" +
 	"\bdisabled\x18\x04 \x01(\bR\bdisabled\x12\x18\n" +
-	"\acurrent\x18\x05 \x01(\bR\acurrent\"X\n" +
+	"\acurrent\x18\x05 \x01(\bR\acurrent\"\x8c\x01\n" +
 	"\x19ListMyMembershipsResponse\x12;\n" +
-	"\vmemberships\x18\x01 \x03(\v2\x19.paladin.iam.v1.MembershipR\vmemberships\"w\n" +
+	"\vmemberships\x18\x01 \x03(\v2\x19.paladin.iam.v1.MembershipR\vmemberships\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"w\n" +
 	"\x13SwitchTenantRequest\x121\n" +
 	"\x10target_tenant_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0etargetTenantId\x12-\n" +
 	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"q\n" +
@@ -1150,6 +1179,8 @@ var file_paladin_iam_v1_auth_service_proto_goTypes = []any{
 	(*SwitchTenantResponse)(nil),      // 17: paladin.iam.v1.SwitchTenantResponse
 	(*TokenPair)(nil),                 // 18: paladin.iam.v1.TokenPair
 	(*User)(nil),                      // 19: paladin.iam.v1.User
+	(*v1.PageRequest)(nil),            // 20: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),           // 21: paladin.common.v1.PageResponse
 }
 var file_paladin_iam_v1_auth_service_proto_depIdxs = []int32{
 	18, // 0: paladin.iam.v1.LoginResponse.tokens:type_name -> paladin.iam.v1.TokenPair
@@ -1157,30 +1188,32 @@ var file_paladin_iam_v1_auth_service_proto_depIdxs = []int32{
 	18, // 2: paladin.iam.v1.RefreshTokenResponse.tokens:type_name -> paladin.iam.v1.TokenPair
 	19, // 3: paladin.iam.v1.WhoAmIResponse.user:type_name -> paladin.iam.v1.User
 	8,  // 4: paladin.iam.v1.WhoAmIResponse.routes:type_name -> paladin.iam.v1.CollectionRoute
-	14, // 5: paladin.iam.v1.ListMyMembershipsResponse.memberships:type_name -> paladin.iam.v1.Membership
-	18, // 6: paladin.iam.v1.SwitchTenantResponse.tokens:type_name -> paladin.iam.v1.TokenPair
-	19, // 7: paladin.iam.v1.SwitchTenantResponse.user:type_name -> paladin.iam.v1.User
-	0,  // 8: paladin.iam.v1.AuthService.Login:input_type -> paladin.iam.v1.LoginRequest
-	2,  // 9: paladin.iam.v1.AuthService.RefreshToken:input_type -> paladin.iam.v1.RefreshTokenRequest
-	4,  // 10: paladin.iam.v1.AuthService.Revoke:input_type -> paladin.iam.v1.RevokeRequest
-	6,  // 11: paladin.iam.v1.AuthService.WhoAmI:input_type -> paladin.iam.v1.WhoAmIRequest
-	9,  // 12: paladin.iam.v1.AuthService.ChangePassword:input_type -> paladin.iam.v1.ChangePasswordRequest
-	11, // 13: paladin.iam.v1.AuthService.ExchangeAudience:input_type -> paladin.iam.v1.ExchangeAudienceRequest
-	13, // 14: paladin.iam.v1.AuthService.ListMyMemberships:input_type -> paladin.iam.v1.ListMyMembershipsRequest
-	16, // 15: paladin.iam.v1.AuthService.SwitchTenant:input_type -> paladin.iam.v1.SwitchTenantRequest
-	1,  // 16: paladin.iam.v1.AuthService.Login:output_type -> paladin.iam.v1.LoginResponse
-	3,  // 17: paladin.iam.v1.AuthService.RefreshToken:output_type -> paladin.iam.v1.RefreshTokenResponse
-	5,  // 18: paladin.iam.v1.AuthService.Revoke:output_type -> paladin.iam.v1.RevokeResponse
-	7,  // 19: paladin.iam.v1.AuthService.WhoAmI:output_type -> paladin.iam.v1.WhoAmIResponse
-	10, // 20: paladin.iam.v1.AuthService.ChangePassword:output_type -> paladin.iam.v1.ChangePasswordResponse
-	12, // 21: paladin.iam.v1.AuthService.ExchangeAudience:output_type -> paladin.iam.v1.ExchangeAudienceResponse
-	15, // 22: paladin.iam.v1.AuthService.ListMyMemberships:output_type -> paladin.iam.v1.ListMyMembershipsResponse
-	17, // 23: paladin.iam.v1.AuthService.SwitchTenant:output_type -> paladin.iam.v1.SwitchTenantResponse
-	16, // [16:24] is the sub-list for method output_type
-	8,  // [8:16] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	20, // 5: paladin.iam.v1.ListMyMembershipsRequest.page:type_name -> paladin.common.v1.PageRequest
+	14, // 6: paladin.iam.v1.ListMyMembershipsResponse.memberships:type_name -> paladin.iam.v1.Membership
+	21, // 7: paladin.iam.v1.ListMyMembershipsResponse.page:type_name -> paladin.common.v1.PageResponse
+	18, // 8: paladin.iam.v1.SwitchTenantResponse.tokens:type_name -> paladin.iam.v1.TokenPair
+	19, // 9: paladin.iam.v1.SwitchTenantResponse.user:type_name -> paladin.iam.v1.User
+	0,  // 10: paladin.iam.v1.AuthService.Login:input_type -> paladin.iam.v1.LoginRequest
+	2,  // 11: paladin.iam.v1.AuthService.RefreshToken:input_type -> paladin.iam.v1.RefreshTokenRequest
+	4,  // 12: paladin.iam.v1.AuthService.Revoke:input_type -> paladin.iam.v1.RevokeRequest
+	6,  // 13: paladin.iam.v1.AuthService.WhoAmI:input_type -> paladin.iam.v1.WhoAmIRequest
+	9,  // 14: paladin.iam.v1.AuthService.ChangePassword:input_type -> paladin.iam.v1.ChangePasswordRequest
+	11, // 15: paladin.iam.v1.AuthService.ExchangeAudience:input_type -> paladin.iam.v1.ExchangeAudienceRequest
+	13, // 16: paladin.iam.v1.AuthService.ListMyMemberships:input_type -> paladin.iam.v1.ListMyMembershipsRequest
+	16, // 17: paladin.iam.v1.AuthService.SwitchTenant:input_type -> paladin.iam.v1.SwitchTenantRequest
+	1,  // 18: paladin.iam.v1.AuthService.Login:output_type -> paladin.iam.v1.LoginResponse
+	3,  // 19: paladin.iam.v1.AuthService.RefreshToken:output_type -> paladin.iam.v1.RefreshTokenResponse
+	5,  // 20: paladin.iam.v1.AuthService.Revoke:output_type -> paladin.iam.v1.RevokeResponse
+	7,  // 21: paladin.iam.v1.AuthService.WhoAmI:output_type -> paladin.iam.v1.WhoAmIResponse
+	10, // 22: paladin.iam.v1.AuthService.ChangePassword:output_type -> paladin.iam.v1.ChangePasswordResponse
+	12, // 23: paladin.iam.v1.AuthService.ExchangeAudience:output_type -> paladin.iam.v1.ExchangeAudienceResponse
+	15, // 24: paladin.iam.v1.AuthService.ListMyMemberships:output_type -> paladin.iam.v1.ListMyMembershipsResponse
+	17, // 25: paladin.iam.v1.AuthService.SwitchTenant:output_type -> paladin.iam.v1.SwitchTenantResponse
+	18, // [18:26] is the sub-list for method output_type
+	10, // [10:18] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_paladin_iam_v1_auth_service_proto_init() }
