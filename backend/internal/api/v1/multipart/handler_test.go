@@ -472,7 +472,7 @@ func TestAbortMultipartUpload(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
-			AbortMultipartUpload(context.Background(), "up-1")
+			AbortMultipartUpload(context.Background(), "up-1", SessionRef{})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
@@ -481,21 +481,21 @@ func TestAbortMultipartUpload(t *testing.T) {
 			return Session{}, errors.New("no session")
 		}}
 		err := newHandler(repo, &fakeStorage{}, allow()).
-			AbortMultipartUpload(authedCtx(tid), "up-1")
+			AbortMultipartUpload(authedCtx(tid), "up-1", SessionRef{})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("capability lacks delete op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpDelete
 		err := newHandler(okSession(), &fakeStorage{}, allow()).
-			AbortMultipartUpload(ctx, "up-1")
+			AbortMultipartUpload(ctx, "up-1", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		authz := &fakeAuthorizer{decision: cedar.DecisionDeny}
 		err := newHandler(okSession(), &fakeStorage{}, authz).
-			AbortMultipartUpload(authedCtx(tid), "up-1")
+			AbortMultipartUpload(authedCtx(tid), "up-1", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if authz.lastAction != cedar.ActionDeleteObject {
 			t.Fatalf("cedar action: got %q want %q", authz.lastAction, cedar.ActionDeleteObject)
@@ -505,7 +505,7 @@ func TestAbortMultipartUpload(t *testing.T) {
 	t.Run("storage abort error → internal, forwards upload id", func(t *testing.T) {
 		storage := &fakeStorage{abortFn: func() error { return errors.New("abort rejected") }}
 		err := newHandler(okSession(), storage, allow()).
-			AbortMultipartUpload(authedCtx(tid), "up-1")
+			AbortMultipartUpload(authedCtx(tid), "up-1", SessionRef{})
 		wantCode(t, err, connect.CodeInternal)
 		if storage.lastAbort.storageUploadID != "storage-up-9" {
 			t.Fatalf("storage upload id not forwarded: %q", storage.lastAbort.storageUploadID)
@@ -527,7 +527,7 @@ func TestPresignPart(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, _, _, err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
-			PresignPart(context.Background(), "up-1", 1, time.Minute)
+			PresignPart(context.Background(), "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
@@ -536,7 +536,7 @@ func TestPresignPart(t *testing.T) {
 			return Session{}, errors.New("no session")
 		}}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute)
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
@@ -545,40 +545,40 @@ func TestPresignPart(t *testing.T) {
 			return sessionForTenant(uuid.New()), nil // different tenant
 		}}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute)
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("part number zero → invalid argument", func(t *testing.T) {
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 0, time.Minute)
+			PresignPart(authedCtx(tid), "up-1", 0, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("part number above total → invalid argument", func(t *testing.T) {
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 6, time.Minute) // TotalParts=5
+			PresignPart(authedCtx(tid), "up-1", 6, time.Minute, SessionRef{}) // TotalParts=5
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpPut) // has put, not presign
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(ctx, "up-1", 1, time.Minute)
+			PresignPart(ctx, "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpPresign) // has presign, not put
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(ctx, "up-1", 1, time.Minute)
+			PresignPart(ctx, "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		authz := &fakeAuthorizer{decision: cedar.DecisionDeny}
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, authz).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute)
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if authz.lastAction != cedar.ActionPresignPut {
 			t.Fatalf("cedar action: got %q want %q", authz.lastAction, cedar.ActionPresignPut)
@@ -597,7 +597,7 @@ func TestPresignPart(t *testing.T) {
 			},
 		}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute)
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
@@ -606,7 +606,7 @@ func TestPresignPart(t *testing.T) {
 			return "https://s3/presigned-part", map[string]string{"Content-Length": "5"}, time.Unix(1700000123, 0), nil
 		}}
 		url, headers, exp, err := newHandler(okSession(), storage, allow()).
-			PresignPart(authedCtx(tid), "up-1", 3, 7*time.Minute)
+			PresignPart(authedCtx(tid), "up-1", 3, 7*time.Minute, SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -633,7 +633,7 @@ func TestPresignPart(t *testing.T) {
 	t.Run("non-positive ttl defaults to 15m", func(t *testing.T) {
 		storage := &fakeStorage{}
 		_, _, _, err := newHandler(okSession(), storage, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, 0)
+			PresignPart(authedCtx(tid), "up-1", 1, 0, SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -661,7 +661,7 @@ func TestListParts(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, _, err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
-			ListParts(context.Background(), "up-1", 10, "")
+			ListParts(context.Background(), "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
@@ -670,7 +670,7 @@ func TestListParts(t *testing.T) {
 			return Session{}, errors.New("no session")
 		}}
 		_, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			ListParts(authedCtx(tid), "up-1", 10, "")
+			ListParts(authedCtx(tid), "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
@@ -679,21 +679,21 @@ func TestListParts(t *testing.T) {
 			return sessionForTenant(uuid.New()), nil
 		}}
 		_, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			ListParts(authedCtx(tid), "up-1", 10, "")
+			ListParts(authedCtx(tid), "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability lacks list op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpList
 		_, _, err := newHandler(okSession(nil), &fakeStorage{}, allow()).
-			ListParts(ctx, "up-1", 10, "")
+			ListParts(ctx, "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		authz := &fakeAuthorizer{decision: cedar.DecisionDeny}
 		_, _, err := newHandler(okSession(nil), &fakeStorage{}, authz).
-			ListParts(authedCtx(tid), "up-1", 10, "")
+			ListParts(authedCtx(tid), "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if authz.lastAction != cedar.ActionGetObject {
 			t.Fatalf("cedar action: got %q want %q", authz.lastAction, cedar.ActionGetObject)
@@ -705,7 +705,7 @@ func TestListParts(t *testing.T) {
 			return nil, 0, errors.New("list failed")
 		}}
 		_, _, err := newHandler(okSession(nil), storage, allow()).
-			ListParts(authedCtx(tid), "up-1", 10, "")
+			ListParts(authedCtx(tid), "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodeInternal)
 	})
 
@@ -714,7 +714,7 @@ func TestListParts(t *testing.T) {
 			return []Part{{PartNumber: 1, ETag: "e1"}}, 7, nil
 		}}
 		parts, next, err := newHandler(okSession(nil), storage, allow()).
-			ListParts(authedCtx(tid), "up-1", 25, "3")
+			ListParts(authedCtx(tid), "up-1", 25, "3", SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -746,7 +746,7 @@ func TestListParts(t *testing.T) {
 			return []Part{{PartNumber: 1}}, 0, nil
 		}}
 		_, next, err := newHandler(okSession(nil), storage, allow()).
-			ListParts(authedCtx(tid), "up-1", 10, "")
+			ListParts(authedCtx(tid), "up-1", 10, "", SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -758,7 +758,7 @@ func TestListParts(t *testing.T) {
 	t.Run("malformed page token → invalid argument", func(t *testing.T) {
 		for _, tok := range []string{"cursor-in", "-1", "1.5", "99999999999999999999"} {
 			_, _, err := newHandler(okSession(nil), &fakeStorage{}, allow()).
-				ListParts(authedCtx(tid), "up-1", 10, tok)
+				ListParts(authedCtx(tid), "up-1", 10, tok, SessionRef{})
 			wantCode(t, err, connect.CodeInvalidArgument)
 		}
 	})
@@ -766,7 +766,7 @@ func TestListParts(t *testing.T) {
 	t.Run("page size clamped when non-positive", func(t *testing.T) {
 		storage := &fakeStorage{}
 		if _, _, err := newHandler(okSession(nil), storage, allow()).
-			ListParts(authedCtx(tid), "up-1", 0, ""); err != nil {
+			ListParts(authedCtx(tid), "up-1", 0, "", SessionRef{}); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if storage.lastListParts.maxParts != 100 {
@@ -777,7 +777,7 @@ func TestListParts(t *testing.T) {
 	t.Run("page size clamped when over max", func(t *testing.T) {
 		storage := &fakeStorage{}
 		if _, _, err := newHandler(okSession(nil), storage, allow()).
-			ListParts(authedCtx(tid), "up-1", 5000, ""); err != nil {
+			ListParts(authedCtx(tid), "up-1", 5000, "", SessionRef{}); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if storage.lastListParts.maxParts != 100 {

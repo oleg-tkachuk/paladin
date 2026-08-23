@@ -89,7 +89,9 @@ type fieldKey struct{ msg, field string }
 // exemptField lists fields a handler legitimately does not read. An entry here
 // is a claim that the absence is CORRECT.
 var exemptField = map[fieldKey]string{
-	{"BatchDeleteObjectsRequest", "permanent"}: "read only to refuse it — the executor soft-deletes, so permanent=true returns Unimplemented rather than lying",
+	{"BatchDeleteObjectsRequest", "permanent"}:            "read only to refuse it — the executor soft-deletes, so permanent=true returns Unimplemented rather than lying",
+	{"InitiateMultipartUploadRequest", "idempotency_key"}: "read by the idempotency interceptor, not the handler — see middleware.idempotencyKey",
+	{"UploadObjectRequest", "idempotency_key"}:            "same as InitiateMultipartUpload",
 }
 
 // knownUnread is the debt list: fields the server accepts and ignores today.
@@ -106,13 +108,6 @@ var knownUnread = map[fieldKey]string{
 	{"SetQuotaRequest", "resource_version"}: "quotas.resource_version exists in the schema but SetQuota upserts without it; the field is documented as unenforced",
 
 	{"BatchUpdateTagsRequest", "replace"}: "the executor always merges; replace=true silently merges too",
-
-	{"AbortMultipartUploadRequest", "object_name"}:        "session is located by upload_id alone; object_name is not checked for consistency",
-	{"ListPartsRequest", "object_name"}:                   "same as AbortMultipartUpload",
-	{"PresignPartRequest", "object_name"}:                 "same as AbortMultipartUpload",
-	{"InitiateMultipartUploadRequest", "external_ref"}:    "accepted and dropped; the object is created without it",
-	{"InitiateMultipartUploadRequest", "idempotency_key"}: "accepted and dropped; a retried initiate opens a second session",
-	{"UploadObjectRequest", "idempotency_key"}:            "idempotency is enforced from the Idempotency-Key HEADER by middleware; the body field duplicates it and is ignored, which invites a caller to set the wrong one",
 }
 
 // forwardsWholeMessage matches a body that hands the whole message to

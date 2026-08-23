@@ -50,6 +50,38 @@ type PartETag struct {
 	ETag       string
 }
 
+// SessionRef is the object a caller claims an upload session belongs to,
+// parsed from the request's object_name. Every per-session RPC carries that
+// name, and until this existed none of them checked it: the session was found
+// by upload_id alone and the name was accepted unread. A mismatched pair —
+// wrong name, right id — was answered as though it were right.
+type SessionRef struct {
+	Collection string
+	ObjectID   uuid.UUID
+}
+
+// assertSessionMatches rejects a request whose object_name disagrees with the
+// session it names. InvalidArgument rather than NotFound: the tenant check
+// above has already established the caller may see this session, so the
+// disagreement is the caller's bookkeeping, not a probe — and saying so is
+// more useful than pretending the session is missing.
+func assertSessionMatches(sess Session, want SessionRef) error {
+	if want.ObjectID == uuid.Nil && want.Collection == "" {
+		return nil // caller did not name an object (internal call sites)
+	}
+	if want.ObjectID != uuid.Nil && sess.ObjectID != want.ObjectID {
+		return connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("object_name names object %s but upload %s belongs to %s",
+				want.ObjectID, sess.UploadID, sess.ObjectID))
+	}
+	if want.Collection != "" && sess.Collection != want.Collection {
+		return connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("object_name names collection %q but upload %s belongs to %q",
+				want.Collection, sess.UploadID, sess.Collection))
+	}
+	return nil
+}
+
 type Session struct {
 	UploadID        string
 	ObjectID        uuid.UUID
@@ -79,6 +111,12 @@ type InitiateArgs struct {
 	ChecksumAlgo       string
 	Metadata           map[string]string
 	Tags               map[string]string
+	// ExternalRef is the caller's own identifier for the object, stored on
+	// the objects row. Accepted by InitiateMultipartUpload and dropped on the
+	// floor until now: the field existed on the request, on this struct's
+	// single-shot sibling, and as a column — just not on the path between
+	// them.
+	ExternalRef string
 }
 
 type CompleteArgs struct {
@@ -289,7 +327,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	return nil
 }
 
-func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) error {
+func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) error {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
@@ -297,6 +335,9 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	sess, err := h.repo.GetSession(ctx, uploadID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := assertSessionMatches(sess, want); err != nil {
+		return err
 	}
 	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
@@ -331,7 +372,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 // in-flight multipart session. Authorization is checked against the underlying
 // object's (collection, key); the storage URL targets the bucket bound to that
 // Collection.
-func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, want SessionRef) (string, map[string]string, time.Time, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -342,6 +383,9 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	}
 	if sess.TenantID != tenantID {
 		return "", nil, time.Time{}, connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+	}
+	if err := assertSessionMatches(sess, want); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	if partNumber <= 0 || (sess.TotalParts > 0 && partNumber > sess.TotalParts) {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
@@ -387,7 +431,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 //
 // The page token is the last part number seen, matching the S3 contract the
 // call is a thin wrapper over.
-func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error) {
+func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want SessionRef) ([]Part, string, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -398,6 +442,9 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	}
 	if sess.TenantID != tenantID {
 		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+	}
+	if err := assertSessionMatches(sess, want); err != nil {
+		return nil, "", err
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err

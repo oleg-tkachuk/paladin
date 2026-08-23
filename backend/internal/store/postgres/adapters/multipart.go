@@ -62,7 +62,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		nil,
 		encodeMap(args.Metadata),
 		encodeMap(args.Tags),
-		nil,
+		strPtrOrNil(args.ExternalRef),
 		pgTS(time.Now().Add(multipartSessionTTL)),
 	); err != nil {
 		return multipart.Session{}, fmt.Errorf("create multipart object row: %w", err)
@@ -208,4 +208,14 @@ func pgUUIDFromString(s string) pgtype.UUID {
 		return pgtype.UUID{}
 	}
 	return pgUUID(id)
+}
+
+// strPtrOrNil maps "" to a SQL NULL so an unset external_ref stays absent
+// rather than being stored as an empty string — the two are different to a
+// caller looking the object up by their own identifier.
+func strPtrOrNil(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
 }

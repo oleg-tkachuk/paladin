@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -34,6 +36,7 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 		ChecksumAlgo: checksumAlgoStr(m.GetChecksumAlgorithm()),
 		Metadata:     m.GetMetadata(),
 		Tags:         m.GetTags(),
+		ExternalRef:  m.GetExternalRef(),
 	})
 	if err != nil {
 		return nil, err
@@ -59,7 +62,11 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 
 func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[pb.PresignPartRequest]) (*connect.Response[pb.PresignPartResponse], error) {
 	m := req.Msg
-	url, headers, expires, err := s.H.PresignPart(ctx, m.GetUploadId(), m.GetPartNumber(), m.GetTtl().AsDuration())
+	want, err := sessionRef(ctx, m.GetObjectName())
+	if err != nil {
+		return nil, err
+	}
+	url, headers, expires, err := s.H.PresignPart(ctx, m.GetUploadId(), m.GetPartNumber(), m.GetTtl().AsDuration(), want)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +95,11 @@ func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *conn
 }
 
 func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *connect.Request[pb.AbortMultipartUploadRequest]) (*connect.Response[pb.AbortMultipartUploadResponse], error) {
-	if err := s.H.AbortMultipartUpload(ctx, req.Msg.GetUploadId()); err != nil {
+	want, err := sessionRef(ctx, req.Msg.GetObjectName())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.H.AbortMultipartUpload(ctx, req.Msg.GetUploadId(), want); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.AbortMultipartUploadResponse{}), nil
@@ -96,7 +107,11 @@ func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *connect
 
 func (s *MultipartServer) ListParts(ctx context.Context, req *connect.Request[pb.ListPartsRequest]) (*connect.Response[pb.ListPartsResponse], error) {
 	m := req.Msg
-	parts, next, err := s.H.ListParts(ctx, m.GetUploadId(), m.GetPage().GetPageSize(), m.GetPage().GetPageToken())
+	want, err := sessionRef(ctx, m.GetObjectName())
+	if err != nil {
+		return nil, err
+	}
+	parts, next, err := s.H.ListParts(ctx, m.GetUploadId(), m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), want)
 	if err != nil {
 		return nil, err
 	}
@@ -117,3 +132,20 @@ var _ paladindatav1connect.MultipartUploadServiceHandler = (*MultipartServer)(ni
 // silence unused
 var _ = durationpb.New
 var _ = commonpb.PageResponse{}
+
+// sessionRef parses the object_name every per-session multipart RPC carries.
+// The name is the caller's statement of which object the upload belongs to;
+// the handler checks it against the session. An unparseable name is rejected
+// here rather than silently treated as "no claim".
+func sessionRef(ctx context.Context, objectName string) (multipart.SessionRef, error) {
+	collection, objectID, err := objectNameParts(ctx, objectName)
+	if err != nil {
+		return multipart.SessionRef{}, badName(err)
+	}
+	id, err := uuid.Parse(objectID)
+	if err != nil {
+		return multipart.SessionRef{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid object_id in object_name: %w", err))
+	}
+	return multipart.SessionRef{Collection: collection, ObjectID: id}, nil
+}

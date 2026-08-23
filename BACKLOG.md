@@ -1930,14 +1930,6 @@ of the pipeline._
     the schema; SetQuota upserts without consulting it. The proto now
     documents it as unenforced instead of demanding it.
   - `BatchUpdateTagsRequest.replace` — the executor always merges.
-  - `object_name` on AbortMultipartUpload / ListParts / PresignPart — the
-    session is found by `upload_id` alone; the name is never checked against
-    it, so a mismatched pair is accepted.
-  - `InitiateMultipartUploadRequest.external_ref` / `.idempotency_key` —
-    accepted and dropped; a retried initiate opens a second session.
-  - `UploadObjectRequest.idempotency_key` — idempotency comes from the
-    `Idempotency-Key` header; the body field duplicates it and is ignored,
-    which invites a caller to set the one that does nothing.
 - **Definition of Done:** Each entry either implemented or removed from the
   proto, and deleted from `knownUnread`. The list should only shrink — a new
   entry means a defect was just introduced.

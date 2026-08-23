@@ -146,13 +146,51 @@ type idempotencyInterceptor struct {
 	respTypes sync.Map
 }
 
+// idempotencyKeyCarrier is satisfied by any request message declaring an
+// `idempotency_key` field — protoc-gen-go generates the getter.
+type idempotencyKeyCarrier interface {
+	GetIdempotencyKey() string
+}
+
+// idempotencyKey resolves the key from the header, falling back to the request
+// body's idempotency_key field.
+//
+// The body field is why this exists. Two request messages declare one, and
+// until now nothing read either: the interceptor looked only at the header, so
+// a client that set the field — reasonably, since the schema offers it —
+// got no idempotency at all and no indication of that. A retried
+// InitiateMultipartUpload opened a second session.
+//
+// When both are present they must agree. Silently preferring one would make
+// the effective key depend on a precedence rule nothing documents, and the
+// caller disagreeing with itself is a bug worth surfacing.
+func idempotencyKey(req connect.AnyRequest) (string, error) {
+	header := req.Header().Get(idempotencyHeader)
+	var body string
+	if c, ok := req.Any().(idempotencyKeyCarrier); ok {
+		body = c.GetIdempotencyKey()
+	}
+	switch {
+	case header != "" && body != "" && header != body:
+		return "", connect.NewError(connect.CodeInvalidArgument,
+			errors.New("idempotency: Idempotency-Key header and idempotency_key field disagree"))
+	case header != "":
+		return header, nil
+	default:
+		return body, nil
+	}
+}
+
 func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		method := req.Spec().Procedure
 		if i.cfg.SkipMethods[method] {
 			return next(ctx, req)
 		}
-		key := req.Header().Get(idempotencyHeader)
+		key, err := idempotencyKey(req)
+		if err != nil {
+			return nil, err
+		}
 		if key == "" {
 			if i.cfg.RequireOnCreate && isMutationMethod(method) {
 				return nil, connect.NewError(connect.CodeInvalidArgument,

@@ -453,8 +453,10 @@ type UploadObjectRequest struct {
 	Tags              map[string]string    `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ExternalRef       string               `protobuf:"bytes,8,opt,name=external_ref,json=externalRef,proto3" json:"external_ref,omitempty"`
 	Transport         PresignTransport     `protobuf:"varint,9,opt,name=transport,proto3,enum=paladin.data.v1.PresignTransport" json:"transport,omitempty"`
-	// Idempotency key — if a request with the same key is replayed, the
-	// server returns the cached response instead of creating a duplicate.
+	// Optional idempotency key. Equivalent to the `Idempotency-Key` HTTP
+	// header — the interceptor reads whichever is present, and rejects the
+	// request if both are set and disagree. A repeat with the same key
+	// replays the first response instead of re-executing.
 	IdempotencyKey string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
