@@ -1,5 +1,34 @@
 # Upgrading
 
+## Changing the API contract
+
+`buf breaking` runs in CI against the `api/v0.3.0` tag and **blocks**. Pre-1.0
+the project still breaks compatibility deliberately — see *Project status* in
+the README — so the gate does not forbid it. It forbids doing it by accident.
+
+To land a deliberate breaking change:
+
+1. Make the change and let CI fail on it. Read the failure: `buf` names the
+   message, the field number and what changed.
+2. Decide it is worth it. The common case is a field rename that keeps the
+   number — gRPC clients survive that, JSON clients do not, and nothing at
+   runtime will tell you which you broke.
+3. Note it here, under a heading for the release.
+4. Move the baseline once the change is merged:
+
+   ```
+   git tag -f -a api/v0.4.0 -m "…what changed and why"
+   git tag -f api/latest
+   git push --force origin api/v0.4.0 api/latest
+   ```
+
+   Then bump `breaking_against` in `.github/workflows/test.yml` to the new tag.
+
+The baseline is a tag rather than the default branch on purpose: `main` and
+`develop` advance together in this repo, so comparing against `main` compares
+the tree with itself and passes without checking anything.
+
+
 ## v4.0.0 — the `paladin` rename
 
 The project was renamed from `paladin` / `paladin` to `paladin`
