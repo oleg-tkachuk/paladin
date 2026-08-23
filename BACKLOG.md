@@ -1926,9 +1926,6 @@ of the pipeline._
 - **Reason:** `tests/contract` now gates against declared-but-unread request
   fields. The gate's `knownUnread` map is the debt it found on its first run —
   fields a client must or may send that no handler reads:
-  - `filter` on ListTenants / ListBackends / ListBuckets / ListCollections /
-    ListOperations — there is no filter plumbing at all (`ListTenantsArgs` has
-    no such field), so a caller that filters silently receives everything.
   - `SetQuotaRequest.resource_version` — `quotas.resource_version` exists in
     the schema; SetQuota upserts without consulting it. The proto now
     documents it as unenforced instead of demanding it.

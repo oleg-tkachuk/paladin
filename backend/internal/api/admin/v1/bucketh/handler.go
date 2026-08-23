@@ -61,6 +61,8 @@ type Handler struct {
 	repo        Repository
 	provisioner Provisioner
 	policy      cedar.Authorizer
+	// cel compiles and caches List filters (program cache only).
+	cel *celpkg.Evaluator
 
 	events EventProducer
 	log    *zap.Logger
@@ -70,7 +72,7 @@ func NewHandler(r Repository, p Provisioner, policyEngine cedar.Authorizer) *Han
 	if policyEngine == nil {
 		panic("bucketh: policy authorizer is required")
 	}
-	return &Handler{repo: r, provisioner: p, policy: policyEngine, log: zap.NewNop()}
+	return &Handler{repo: r, provisioner: p, policy: policyEngine, cel: celpkg.NewEvaluator(), log: zap.NewNop()}
 }
 
 // SetEventProducer attaches the optional outbox producer. nil is
@@ -349,7 +351,34 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 	if err := h.authorize(ctx, cedar.ActionReadBucket, args.BackendID, "", uuid.Nil); err != nil {
 		return nil, "", err
 	}
-	return h.repo.List(ctx, args)
+	page, next, err := h.repo.List(ctx, args)
+	if err != nil {
+		return nil, "", err
+	}
+	page, err = celpkg.FilterPage(h.cel, celpkg.PhysicalBucketSchema, args.Filter, page, bucketRow)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("filter: %w", err))
+	}
+	return page, next, nil
+}
+
+// bucketRow projects a Bucket onto the variables PhysicalBucketSchema declares.
+func bucketRow(b admindomain.Bucket) map[string]any {
+	owner := ""
+	if b.OwnerTenantID != uuid.Nil {
+		owner = b.OwnerTenantID.String()
+	}
+	return map[string]any{
+		"bucket_id":           b.BucketName,
+		"backend_id":          b.BackendID,
+		"display_name":        b.DisplayName,
+		"versioning_enabled":  b.Versioning.Enabled,
+		"object_lock_enabled": b.ObjectLock.Enabled,
+		"replication_enabled": b.Replication.Enabled,
+		"owner_tenant_id":     owner,
+		"created_at":          b.CreatedAt,
+	}
 }
 
 func (h *Handler) ListAccessibleBuckets(ctx context.Context, tenantID uuid.UUID, pageSize int32, afterBackend, afterName string) ([]admindomain.Bucket, string, error) {

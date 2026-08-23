@@ -260,6 +260,7 @@ func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.
 		PageSize:       m.GetPage().GetPageSize(),
 		IncludeTrashed: m.GetIncludeTrashed(),
 		OnlyTrashed:    m.GetOnlyTrashed(),
+		Filter:         m.GetFilter(),
 	}
 	list, next, err := s.H.ListTenants(ctx, args, m.GetPage().GetPageToken())
 	if err != nil {

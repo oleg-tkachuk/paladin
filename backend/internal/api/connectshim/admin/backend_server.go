@@ -46,7 +46,7 @@ func (s *BackendServer) GetBackend(ctx context.Context, req *connect.Request[pb.
 
 func (s *BackendServer) ListBackends(ctx context.Context, req *connect.Request[pb.ListBackendsRequest]) (*connect.Response[pb.ListBackendsResponse], error) {
 	m := req.Msg
-	list, next, err := s.H.ListBackends(ctx, m.GetPage().GetPageSize(), m.GetPage().GetPageToken())
+	list, next, err := s.H.ListBackends(ctx, m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter())
 	if err != nil {
 		return nil, err
 	}

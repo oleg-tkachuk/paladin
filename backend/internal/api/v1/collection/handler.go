@@ -19,6 +19,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
@@ -82,6 +83,9 @@ type ListCollectionsArgs struct {
 	// every OK platform-wide just to client-filter a handful per bucket.
 	BackendID  string
 	BucketName string
+	// Filter is a CEL expression over CollectionSchema, applied to the fetched
+	// page. The repo cursor is returned unchanged.
+	Filter string
 }
 
 type Repository interface {
@@ -110,10 +114,12 @@ type Handler struct {
 
 	events EventProducer
 	log    *zap.Logger
+	// cel compiles and caches List filters (program cache only).
+	cel *celpkg.Evaluator
 }
 
 func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
-	return &Handler{repo: repo, policy: policy, log: zap.NewNop()}
+	return &Handler{cel: celpkg.NewEvaluator(), repo: repo, policy: policy, log: zap.NewNop()}
 }
 
 // SetEventProducer / SetLogger — same opt-in contract as tenanth /
@@ -442,7 +448,32 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	} else {
 		ctx = auth.WithActingTenant(ctx, authzTenant)
 	}
-	return h.repo.List(ctx, args)
+	page, next, err := h.repo.List(ctx, args)
+	if err != nil {
+		return nil, "", err
+	}
+	page, err = celpkg.FilterPage(h.cel, celpkg.CollectionSchema, args.Filter, page, collectionRow)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("filter: %w", err))
+	}
+	return page, next, nil
+}
+
+// collectionRow projects a Collection onto the variables CollectionSchema
+// declares. storage_backend is the (backend, bucket) pair the collection is
+// bound to, rendered the way the console shows it.
+func collectionRow(c Collection) map[string]any {
+	backend := c.BackendID
+	if c.BucketName != "" {
+		backend = c.BackendID + "/" + c.BucketName
+	}
+	return map[string]any{
+		"collection":      c.Collection,
+		"storage_backend": backend,
+		"display_name":    c.DisplayName,
+		"created_at":      c.CreatedAt,
+	}
 }
 
 func (h *Handler) GetCollectionStats(ctx context.Context, collection string) (*CollectionStats, error) {

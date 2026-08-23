@@ -231,6 +231,7 @@ func (ObjectLockMode) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
+// ─── Storage backend ────────────────────────────────────────────────────────
 // StorageBackend is the physical S3-compatible target. Provisioned by
 // platform admins. Credentials are NEVER returned in responses — only
 // `credentials_secret_ref` (an opaque reference to the secret manager).
@@ -616,6 +617,7 @@ func (x *EventSourceConfig) GetPollInterval() *durationpb.Duration {
 	return nil
 }
 
+// ─── Bucket ─────────────────────────────────────────────────────────────────
 type Bucket struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
@@ -1295,6 +1297,7 @@ func (x *BucketReplication) GetFilter() string {
 	return ""
 }
 
+// ─── Tenant ─────────────────────────────────────────────────────────────────
 type Tenant struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resource name: "tenants/{tenant_id_or_slug}".
@@ -1447,6 +1450,7 @@ func (x *Tenant) GetStorageLayout() string {
 	return ""
 }
 
+// ─── Collection ──────────────────────────────────────────────────────────────
 type Collection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
@@ -1576,6 +1580,7 @@ func (x *Collection) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ─── Quota ──────────────────────────────────────────────────────────────────
 // Quota caps usage at tenant or bucket scope. Enforced at presign time.
 type Quota struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1757,6 +1762,7 @@ func (x *QuotaUsage) GetLastResetAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ─── Audit ──────────────────────────────────────────────────────────────────
 // AuditLogEntry is append-only. Every admin/iam mutation emits one row.
 type AuditLogEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1905,6 +1911,7 @@ func (x *AuditLogEntry) GetCapabilityId() string {
 	return ""
 }
 
+// ─── Event subscription ─────────────────────────────────────────────────────
 // EventSubscription describes a webhook / queue sink for Paladin events.
 // Replaces the need for clients to consume S3 events directly.
 type EventSubscription struct {

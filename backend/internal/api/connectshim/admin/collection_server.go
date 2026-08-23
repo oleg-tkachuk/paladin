@@ -147,6 +147,7 @@ func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Req
 	args := objectkey.ListCollectionsArgs{
 		PageSize:  m.GetPage().GetPageSize(),
 		PageToken: m.GetPage().GetPageToken(),
+		Filter:    m.GetFilter(),
 	}
 	if m.GetParent() != "" {
 		if id, err := resolve.ResolveTenantParent(m.GetParent()); err == nil {

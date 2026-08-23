@@ -63,6 +63,10 @@ export type ListOperationsRequest =
     page?: PageRequest | undefined;
 
     /**
+     * CEL filter, evaluated against the Operation schema (see internal/filter/cel).
+     * Applied to each fetched page; the page cursor is unaffected, so a page
+     * whose rows all fail the predicate still returns next_page_token.
+     *
      * @generated from field: string filter = 2;
      */
     filter: string;

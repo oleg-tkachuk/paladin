@@ -151,6 +151,11 @@ export type BatchDeleteObjectsRequest =
     selector?: ObjectSelector | undefined;
 
     /**
+     * NOT SUPPORTED: the batch executor soft-deletes. Setting this returns
+     * Unimplemented rather than quietly soft-deleting — a caller told its
+     * erasure succeeded when the objects are still in the trash is worse off
+     * than one told it cannot be done here. Use DeleteObject per object.
+     *
      * @generated from field: bool permanent = 3;
      */
     permanent: boolean;

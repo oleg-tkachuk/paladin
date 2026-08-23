@@ -99,6 +99,9 @@ message ListBucketsRequest {
   // Parent: "storageBackends/{backend_id}" or empty for cross-backend.
   string parent = 1;
   paladin.common.v1.PageRequest page = 2;
+  // CEL filter, evaluated against the Bucket schema (see internal/filter/cel).
+  // Applied to each fetched page; the page cursor is unaffected, so a page
+  // whose rows all fail the predicate still returns next_page_token.
   string filter = 3; // CEL over Bucket (reserved — not yet evaluated)
   // owner_tenant_id narrows the listing to buckets owned by exactly
   // this tenant (matches buckets.owner_tenant_id). UUID or slug;

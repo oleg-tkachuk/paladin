@@ -77,6 +77,7 @@ func (PresignTransport) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{0}
 }
 
+// ─── Versioning ─────────────────────────────────────────────────────────────
 type ObjectVersion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
@@ -434,6 +435,7 @@ func (x *RestoreObjectVersionRequest) GetResourceVersion() string {
 	return ""
 }
 
+// ─── Upload ─────────────────────────────────────────────────────────────────
 type UploadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
@@ -618,6 +620,7 @@ func (x *UploadObjectResponse) GetCompletionMode() v1.CompletionMode {
 	return v1.CompletionMode(0)
 }
 
+// ─── Download ───────────────────────────────────────────────────────────────
 type DownloadObjectRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -730,6 +733,7 @@ func (x *DownloadObjectResponse) GetDownloadUrl() *v1.PresignedUrl {
 	return nil
 }
 
+// ─── Get / Lookup ───────────────────────────────────────────────────────────
 type GetObjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -827,6 +831,7 @@ func (x *LookupObjectRequest) GetKey() string {
 	return ""
 }
 
+// ─── Update ─────────────────────────────────────────────────────────────────
 type UpdateObjectRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -919,6 +924,7 @@ func (x *UpdateObjectRequest) GetExternalRef() string {
 	return ""
 }
 
+// ─── Complete ───────────────────────────────────────────────────────────────
 type CompleteObjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -979,6 +985,7 @@ func (x *CompleteObjectRequest) GetChecksumValue() string {
 	return ""
 }
 
+// ─── Delete / Restore ───────────────────────────────────────────────────────
 type DeleteObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1102,6 +1109,7 @@ func (x *DeleteObjectResponse) GetObject() *Object {
 	return nil
 }
 
+// ─── Object Lock ────────────────────────────────────────────────────────────
 type SetObjectRetentionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Object resource name: "tenants/{tenant}/collections/{ok}/objects/{id}".
@@ -1335,6 +1343,7 @@ func (x *RestoreObjectRequest) GetResourceVersion() string {
 	return ""
 }
 
+// ─── Copy ───────────────────────────────────────────────────────────────────
 type CopyObjectRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	SourceName string                 `protobuf:"bytes,1,opt,name=source_name,json=sourceName,proto3" json:"source_name,omitempty"`
@@ -1500,6 +1509,7 @@ func (x *TagsOverride) GetTags() map[string]string {
 	return nil
 }
 
+// ─── List / Count ───────────────────────────────────────────────────────────
 type ListObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".

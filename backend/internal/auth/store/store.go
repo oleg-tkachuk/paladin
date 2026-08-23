@@ -63,7 +63,11 @@ type ListUsersArgs struct {
 	TenantID  uuid.UUID // uuid.Nil = cross-tenant (platform-admin)
 	PageSize  int32
 	PageToken string
-	Filter    string // CEL
+	// Filter is carried for symmetry with the RPC and is NOT applied by the
+	// store — userh evaluates it against the fetched page. It stayed here
+	// unread for a long time, which is exactly how the RPC ended up accepting
+	// a filter that did nothing.
+	Filter string
 }
 
 // ─── Refresh tokens ─────────────────────────────────────────────────────────

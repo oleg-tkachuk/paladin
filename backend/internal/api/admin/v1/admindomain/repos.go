@@ -113,6 +113,9 @@ type ListBucketsArgs struct {
 	PageSize      int32
 	AfterBackend  string
 	AfterName     string
+	// Filter is a CEL expression over PhysicalBucketSchema, applied to the
+	// fetched page. The repo cursor is returned unchanged.
+	Filter string
 }
 
 // ─── Audit repository ───────────────────────────────────────────────────────

@@ -37,6 +37,7 @@ export const file_paladin_admin_v1_types: GenFile =
   );
 
 /**
+ * ─── Storage backend ────────────────────────────────────────────────────────
  * StorageBackend is the physical S3-compatible target. Provisioned by
  * platform admins. Credentials are NEVER returned in responses — only
  * `credentials_secret_ref` (an opaque reference to the secret manager).
@@ -281,6 +282,8 @@ export const EventSourceConfigSchema: GenMessage<EventSourceConfig> =
   messageDesc(file_paladin_admin_v1_types, 2);
 
 /**
+ * ─── Bucket ─────────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.admin.v1.Bucket
  */
 export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
@@ -651,6 +654,8 @@ export const BucketReplicationSchema: GenMessage<BucketReplication> =
   messageDesc(file_paladin_admin_v1_types, 10);
 
 /**
+ * ─── Tenant ─────────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.admin.v1.Tenant
  */
 export type Tenant = Message<"paladin.admin.v1.Tenant"> & {
@@ -750,6 +755,8 @@ export const TenantSchema: GenMessage<Tenant> =
   messageDesc(file_paladin_admin_v1_types, 11);
 
 /**
+ * ─── Collection ──────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.admin.v1.Collection
  */
 export type Collection = Message<"paladin.admin.v1.Collection"> & {
@@ -830,6 +837,7 @@ export const CollectionSchema: GenMessage<Collection> =
   messageDesc(file_paladin_admin_v1_types, 12);
 
 /**
+ * ─── Quota ──────────────────────────────────────────────────────────────────
  * Quota caps usage at tenant or bucket scope. Enforced at presign time.
  *
  * @generated from message paladin.admin.v1.Quota
@@ -930,6 +938,7 @@ export const QuotaUsageSchema: GenMessage<QuotaUsage> =
   messageDesc(file_paladin_admin_v1_types, 14);
 
 /**
+ * ─── Audit ──────────────────────────────────────────────────────────────────
  * AuditLogEntry is append-only. Every admin/iam mutation emits one row.
  *
  * @generated from message paladin.admin.v1.AuditLogEntry
@@ -1024,6 +1033,7 @@ export const AuditLogEntrySchema: GenMessage<AuditLogEntry> =
   messageDesc(file_paladin_admin_v1_types, 15);
 
 /**
+ * ─── Event subscription ─────────────────────────────────────────────────────
  * EventSubscription describes a webhook / queue sink for Paladin events.
  * Replaces the need for clients to consume S3 events directly.
  *

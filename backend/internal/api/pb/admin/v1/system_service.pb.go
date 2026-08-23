@@ -330,6 +330,7 @@ func (x *SubscriptionDeliveryStat) GetLastAttemptAt() string {
 	return ""
 }
 
+// ─── Platform census ────────────────────────────────────────────────────────
 type GetPlatformStatsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

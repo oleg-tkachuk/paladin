@@ -291,9 +291,12 @@ func (*DeleteBackendResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListBackendsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Page          *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
-	Filter        string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over StorageBackend
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Page  *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	// CEL filter, evaluated against the StorageBackendSchema (see internal/filter/cel).
+	// Applied to each fetched page; the page cursor is unaffected, so a page
+	// whose rows all fail the predicate still returns next_page_token.
+	Filter        string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over StorageBackend
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

@@ -87,7 +87,6 @@ message SubscriptionDeliveryStat {
 }
 
 // ─── Platform census ────────────────────────────────────────────────────────
-
 message GetPlatformStatsRequest {}
 
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by

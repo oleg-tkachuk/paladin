@@ -16,19 +16,22 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 type Handler struct {
 	users  authstore.UserRepository
 	policy cedar.Authorizer
+	// cel compiles and caches List filters (program cache only).
+	cel *celpkg.Evaluator
 }
 
 func NewHandler(u authstore.UserRepository, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("userh: policy authorizer is required")
 	}
-	return &Handler{users: u, policy: policy}
+	return &Handler{cel: celpkg.NewEvaluator(), users: u, policy: policy}
 }
 
 // authorize gates a user-management RPC against Cedar. Pre-existing
@@ -246,12 +249,43 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: authzScope}); err != nil {
 		return nil, "", err
 	}
-	return h.users.List(ctx, authstore.ListUsersArgs{
+	page, next, err := h.users.List(ctx, authstore.ListUsersArgs{
 		TenantID:  scope,
 		PageSize:  in.PageSize,
 		PageToken: in.PageToken,
 		Filter:    in.Filter,
 	})
+	if err != nil {
+		return nil, "", err
+	}
+	// ListUsersArgs.Filter reached the store and was ignored there — the field
+	// existed at every layer and was applied at none. Evaluate it here, where
+	// the rows are.
+	page, err = celpkg.FilterPage(h.cel, celpkg.UserSchema, in.Filter, page, userRow)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("filter: %w", err))
+	}
+	return page, next, nil
+}
+
+// userRow projects a User onto the variables UserSchema declares. The password
+// hash and scopes are deliberately absent: a filter must not become an oracle
+// for either.
+func userRow(u authstore.User) map[string]any {
+	roles := make([]any, 0, len(u.Roles))
+	for _, r := range u.Roles {
+		roles = append(roles, r)
+	}
+	return map[string]any{
+		"user_id":      u.UserID.String(),
+		"tenant_id":    u.TenantID.String(),
+		"subject":      u.Subject,
+		"display_name": u.DisplayName,
+		"disabled":     u.Disabled,
+		"roles":        roles,
+		"created_at":   u.CreatedAt,
+	}
 }
 
 // ─── GrantScopes / RevokeScopes ─────────────────────────────────────────────

@@ -46,14 +46,101 @@ var ObjectSchema = &Schema{
 	},
 }
 
-// BucketSchema is exposed to filters against Collection rows.
-var BucketSchema = &Schema{
+// CollectionSchema is exposed to filters against Collection rows.
+//
+// Named BucketSchema until the resources were renamed; the wire name was
+// already "Collection". It had no callers at all — ListCollections accepted a
+// filter and dropped it — so this is its first use.
+var CollectionSchema = &Schema{
 	Name: "Collection",
 	vars: map[string]*cel.Type{
 		"collection":      cel.StringType,
 		"storage_backend": cel.StringType,
 		"display_name":    cel.StringType,
 		"created_at":      cel.TimestampType,
+	},
+}
+
+// BucketSchema is the deprecated alias for CollectionSchema.
+//
+// Deprecated: use CollectionSchema.
+var BucketSchema = CollectionSchema
+
+// TenantSchema is exposed to filters against Tenant rows. deleted_at is
+// present so an operator can filter the trash view (`deleted_at != null` is
+// not expressible — use the include_trashed / only_trashed flags for that —
+// but `slug.startsWith("acme")` narrows either view).
+var TenantSchema = &Schema{
+	Name: "Tenant",
+	vars: map[string]*cel.Type{
+		"tenant_id":      cel.StringType,
+		"slug":           cel.StringType,
+		"display_name":   cel.StringType,
+		"storage_layout": cel.StringType,
+		"labels":         cel.MapType(cel.StringType, cel.StringType),
+		"created_at":     cel.TimestampType,
+		"updated_at":     cel.TimestampType,
+	},
+}
+
+// StorageBackendSchema is exposed to filters against StorageBackend rows.
+var StorageBackendSchema = &Schema{
+	Name: "StorageBackend",
+	vars: map[string]*cel.Type{
+		"backend_id":   cel.StringType,
+		"display_name": cel.StringType,
+		"provider":     cel.StringType,
+		"endpoint":     cel.StringType,
+		"region":       cel.StringType,
+		"enabled":      cel.BoolType,
+		"read_only":    cel.BoolType,
+		"maintenance":  cel.BoolType,
+		"created_at":   cel.TimestampType,
+	},
+}
+
+// PhysicalBucketSchema is exposed to filters against Bucket rows — the
+// physical bucket on a backend, not the Collection namespace above.
+var PhysicalBucketSchema = &Schema{
+	Name: "Bucket",
+	vars: map[string]*cel.Type{
+		"bucket_id":           cel.StringType,
+		"backend_id":          cel.StringType,
+		"display_name":        cel.StringType,
+		"versioning_enabled":  cel.BoolType,
+		"object_lock_enabled": cel.BoolType,
+		"replication_enabled": cel.BoolType,
+		"owner_tenant_id":     cel.StringType,
+		"created_at":          cel.TimestampType,
+	},
+}
+
+// OperationSchema is exposed to filters against long-running Operation rows.
+var OperationSchema = &Schema{
+	Name: "Operation",
+	vars: map[string]*cel.Type{
+		"operation_id": cel.StringType,
+		"type":         cel.StringType,
+		"state":        cel.StringType,
+		"done":         cel.BoolType,
+		"tenant_id":    cel.StringType,
+		"error_code":   cel.StringType,
+		"created_at":   cel.TimestampType,
+		"updated_at":   cel.TimestampType,
+	},
+}
+
+// UserSchema is exposed to filters against User rows.
+var UserSchema = &Schema{
+	Name: "User",
+	vars: map[string]*cel.Type{
+		"user_id":      cel.StringType,
+		"tenant_id":    cel.StringType,
+		"subject":      cel.StringType,
+		"display_name": cel.StringType,
+		"disabled":     cel.BoolType,
+		"roles":        cel.ListType(cel.StringType),
+		"created_at":   cel.TimestampType,
 	},
 }
 
@@ -130,8 +217,18 @@ func SchemaByName(name string) *Schema {
 	switch name {
 	case ObjectSchema.Name:
 		return ObjectSchema
-	case BucketSchema.Name:
-		return BucketSchema
+	case CollectionSchema.Name:
+		return CollectionSchema
+	case TenantSchema.Name:
+		return TenantSchema
+	case StorageBackendSchema.Name:
+		return StorageBackendSchema
+	case PhysicalBucketSchema.Name:
+		return PhysicalBucketSchema
+	case OperationSchema.Name:
+		return OperationSchema
+	case UserSchema.Name:
+		return UserSchema
 	case AuditLogSchema.Name:
 		return AuditLogSchema
 	case EventEnvelopeSchema.Name:
@@ -322,4 +419,43 @@ func init() {
 	}
 	alwaysTrueProgram = prog
 	_ = types.Bool(true) // keep types pulled in
+}
+
+// ─── Page filtering ─────────────────────────────────────────────────────────
+
+// FilterPage applies a CEL expression to one already-fetched page.
+//
+// This is the shape every List RPC with a `filter` uses: the SQL query decides
+// which rows are candidates (optionally narrowed by a pushdown), and the full
+// CEL program then decides which of them the caller actually asked for. The
+// program is authoritative — pushdown may only narrow, never replace it — so a
+// filter that SQL cannot express still returns exactly the right rows.
+//
+// The page cursor is NOT adjusted here, and callers must return the repo's
+// cursor unchanged. A page where every row fails the predicate is a legitimate
+// empty page with a next_page_token: the caller keeps paging. Recomputing the
+// cursor from the surviving rows would skip everything that was filtered out.
+//
+// An empty expression returns the page untouched, without compiling anything.
+func FilterPage[T any](
+	e *Evaluator, schema *Schema, expr string, page []T, row func(T) map[string]any,
+) ([]T, error) {
+	if expr == "" {
+		return page, nil
+	}
+	prog, err := e.Compile(schema, expr)
+	if err != nil {
+		return nil, err
+	}
+	out := page[:0]
+	for i := range page {
+		match, err := Match(prog, row(page[i]))
+		if err != nil {
+			return nil, err
+		}
+		if match {
+			out = append(out, page[i])
+		}
+	}
+	return out, nil
 }

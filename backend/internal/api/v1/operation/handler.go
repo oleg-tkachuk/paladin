@@ -17,6 +17,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -62,13 +63,15 @@ type Repository interface {
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer
+	// cel compiles and caches List filters (program cache only).
+	cel *celpkg.Evaluator
 }
 
 func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("operation: policy authorizer is required")
 	}
-	return &Handler{repo: repo, policy: policy}
+	return &Handler{cel: celpkg.NewEvaluator(), repo: repo, policy: policy}
 }
 
 // authorize gates operation RPCs against Cedar with the operation's
@@ -124,7 +127,11 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	return nil
 }
 
-func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken string) ([]Operation, string, error) {
+// ListOperations returns one page of the caller tenant's operations. filter is
+// an optional CEL expression over OperationSchema, applied after the fetch;
+// the repo cursor is returned unchanged so paging survives a page whose rows
+// all fail the predicate.
+func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string) ([]Operation, string, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
@@ -141,7 +148,32 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 		}
 		afterID = id
 	}
-	return h.repo.List(ctx, tenantID, state, afterID, pageSize)
+	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize)
+	if err != nil {
+		return nil, "", err
+	}
+	page, err = celpkg.FilterPage(h.cel, celpkg.OperationSchema, filter, page, operationRow)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("filter: %w", err))
+	}
+	return page, next, nil
+}
+
+// operationRow projects an Operation onto the variables OperationSchema
+// declares. `done` is derived from DoneAt rather than stored, matching what
+// the proto reports.
+func operationRow(o Operation) map[string]any {
+	return map[string]any{
+		"operation_id": o.OperationID.String(),
+		"type":         o.Type,
+		"state":        string(o.State),
+		"done":         o.DoneAt != nil,
+		"tenant_id":    o.TenantID.String(),
+		"error_code":   o.ErrorCode,
+		"created_at":   o.CreatedAt,
+		"updated_at":   o.UpdatedAt,
+	}
 }
 
 // Submit records a new operation row. Called by Batch handlers before they

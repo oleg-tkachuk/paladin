@@ -105,7 +105,6 @@ service ObjectService {
 }
 
 // ─── Versioning ─────────────────────────────────────────────────────────────
-
 message ObjectVersion {
   // Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
@@ -151,7 +150,6 @@ message RestoreObjectVersionRequest {
 }
 
 // ─── Upload ─────────────────────────────────────────────────────────────────
-
 message UploadObjectRequest {
   // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
@@ -187,7 +185,6 @@ message UploadObjectResponse {
 }
 
 // ─── Download ───────────────────────────────────────────────────────────────
-
 message DownloadObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   google.protobuf.Duration ttl = 2;
@@ -200,7 +197,6 @@ message DownloadObjectResponse {
 }
 
 // ─── Get / Lookup ───────────────────────────────────────────────────────────
-
 message GetObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
@@ -212,7 +208,6 @@ message LookupObjectRequest {
 }
 
 // ─── Update ─────────────────────────────────────────────────────────────────
-
 message UpdateObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2 [(buf.validate.field).string.min_len = 1];
@@ -224,7 +219,6 @@ message UpdateObjectRequest {
 }
 
 // ─── Complete ───────────────────────────────────────────────────────────────
-
 message CompleteObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string etag = 2;
@@ -232,7 +226,6 @@ message CompleteObjectRequest {
 }
 
 // ─── Delete / Restore ───────────────────────────────────────────────────────
-
 message DeleteObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   // OCC, required: an absent guard would silently become a blind delete
@@ -255,7 +248,6 @@ message DeleteObjectResponse {
 }
 
 // ─── Object Lock ────────────────────────────────────────────────────────────
-
 message SetObjectRetentionRequest {
   // Object resource name: "tenants/{tenant}/collections/{ok}/objects/{id}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
@@ -302,7 +294,6 @@ message RestoreObjectRequest {
 }
 
 // ─── Copy ───────────────────────────────────────────────────────────────────
-
 message CopyObjectRequest {
   string source_name = 1 [(buf.validate.field).string.min_len = 1];
   // Destination Collection resource name.
@@ -316,7 +307,6 @@ message MetadataOverride { map<string, string> metadata = 1; }
 message TagsOverride     { map<string, string> tags = 1; }
 
 // ─── List / Count ───────────────────────────────────────────────────────────
-
 message ListObjectsRequest {
   // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];

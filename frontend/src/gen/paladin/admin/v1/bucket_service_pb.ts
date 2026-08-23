@@ -216,6 +216,10 @@ export type ListBucketsRequest =
     page?: PageRequest | undefined;
 
     /**
+     * CEL filter, evaluated against the Bucket schema (see internal/filter/cel).
+     * Applied to each fetched page; the page cursor is unaffected, so a page
+     * whose rows all fail the predicate still returns next_page_token.
+     *
      * CEL over Bucket (reserved — not yet evaluated)
      *
      * @generated from field: string filter = 3;

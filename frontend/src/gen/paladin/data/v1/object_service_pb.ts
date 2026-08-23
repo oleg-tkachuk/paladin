@@ -64,6 +64,8 @@ export const file_paladin_data_v1_object_service: GenFile =
   );
 
 /**
+ * ─── Versioning ─────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.ObjectVersion
  */
 export type ObjectVersion = Message<"paladin.data.v1.ObjectVersion"> & {
@@ -250,6 +252,8 @@ export const RestoreObjectVersionRequestSchema: GenMessage<RestoreObjectVersionR
   messageDesc(file_paladin_data_v1_object_service, 4);
 
 /**
+ * ─── Upload ─────────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.UploadObjectRequest
  */
 export type UploadObjectRequest =
@@ -356,6 +360,8 @@ export const UploadObjectResponseSchema: GenMessage<UploadObjectResponse> =
   messageDesc(file_paladin_data_v1_object_service, 6);
 
 /**
+ * ─── Download ───────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.DownloadObjectRequest
  */
 export type DownloadObjectRequest =
@@ -409,6 +415,8 @@ export const DownloadObjectResponseSchema: GenMessage<DownloadObjectResponse> =
   messageDesc(file_paladin_data_v1_object_service, 8);
 
 /**
+ * ─── Get / Lookup ───────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.GetObjectRequest
  */
 export type GetObjectRequest = Message<"paladin.data.v1.GetObjectRequest"> & {
@@ -453,6 +461,8 @@ export const LookupObjectRequestSchema: GenMessage<LookupObjectRequest> =
   messageDesc(file_paladin_data_v1_object_service, 10);
 
 /**
+ * ─── Update ─────────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.UpdateObjectRequest
  */
 export type UpdateObjectRequest =
@@ -502,6 +512,8 @@ export const UpdateObjectRequestSchema: GenMessage<UpdateObjectRequest> =
   messageDesc(file_paladin_data_v1_object_service, 11);
 
 /**
+ * ─── Complete ───────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.CompleteObjectRequest
  */
 export type CompleteObjectRequest =
@@ -531,6 +543,8 @@ export const CompleteObjectRequestSchema: GenMessage<CompleteObjectRequest> =
   messageDesc(file_paladin_data_v1_object_service, 12);
 
 /**
+ * ─── Delete / Restore ───────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.DeleteObjectRequest
  */
 export type DeleteObjectRequest =
@@ -596,6 +610,8 @@ export const DeleteObjectResponseSchema: GenMessage<DeleteObjectResponse> =
   messageDesc(file_paladin_data_v1_object_service, 14);
 
 /**
+ * ─── Object Lock ────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.SetObjectRetentionRequest
  */
 export type SetObjectRetentionRequest =
@@ -718,6 +734,8 @@ export const RestoreObjectRequestSchema: GenMessage<RestoreObjectRequest> =
   messageDesc(file_paladin_data_v1_object_service, 18);
 
 /**
+ * ─── Copy ───────────────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.CopyObjectRequest
  */
 export type CopyObjectRequest = Message<"paladin.data.v1.CopyObjectRequest"> & {
@@ -794,6 +812,8 @@ export const TagsOverrideSchema: GenMessage<TagsOverride> =
   messageDesc(file_paladin_data_v1_object_service, 21);
 
 /**
+ * ─── List / Count ───────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.data.v1.ListObjectsRequest
  */
 export type ListObjectsRequest =
@@ -1101,6 +1121,17 @@ export const ObjectService: GenService<{
     output: typeof ObjectSchema;
   };
   /**
+   * ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
+   *
+   * Retention and legal hold are separate operations because their rules
+   * differ, which is also how S3 splits them. A legal hold can be lifted by
+   * anyone authorised to set it; a retention window can only ever be extended
+   * unless the mode is GOVERNANCE and the caller holds the bypass role.
+   *
+   * Locks attach to a VERSION, not to an object. On an unversioned bucket the
+   * object has exactly one version, so the distinction is invisible; on a
+   * versioned one it is the difference between protecting a document and
+   * protecting today's copy of it.
    * SetObjectRetention applies or extends a retention window on an object's
    * current version. Requires the parent bucket to have object lock enabled.
    *

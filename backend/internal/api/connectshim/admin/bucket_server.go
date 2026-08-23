@@ -67,6 +67,7 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 	m := req.Msg
 	args := admindomain.ListBucketsArgs{
 		PageSize: m.GetPage().GetPageSize(),
+		Filter:   m.GetFilter(),
 	}
 	if m.GetParent() != "" {
 		if backend, err := backendIDFromName(m.GetParent()); err == nil {

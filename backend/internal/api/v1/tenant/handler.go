@@ -8,6 +8,7 @@ package tenant
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
@@ -242,6 +244,10 @@ type ListTenantsArgs struct {
 	AfterID        uuid.UUID
 	IncludeTrashed bool
 	OnlyTrashed    bool
+	// Filter is a CEL expression over TenantSchema. Applied to the fetched
+	// page; the repo cursor is returned unchanged so paging continues past a
+	// page whose rows all failed the predicate.
+	Filter string
 }
 
 // Tenant gains a single bit of derived state for callers that need
@@ -257,6 +263,9 @@ const (
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer
+	// cel compiles and caches List filters. Owned here rather than injected:
+	// it holds only a program cache, and every handler that filters needs one.
+	cel *celpkg.Evaluator
 
 	// events is optional — when nil, lifecycle Dispatch calls are
 	// silent no-ops. Set via SetEventProducer once the dispatcher is
@@ -272,7 +281,7 @@ func NewHandler(repo Repository, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("tenant: policy authorizer is required")
 	}
-	return &Handler{repo: repo, policy: policyEngine, log: zap.NewNop()}
+	return &Handler{repo: repo, policy: policyEngine, cel: celpkg.NewEvaluator(), log: zap.NewNop()}
 }
 
 // SetEventProducer attaches the optional outbox producer. nil clears
@@ -902,7 +911,31 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 		}
 		args.AfterID = id
 	}
-	return h.repo.List(ctx, args)
+	page, next, err := h.repo.List(ctx, args)
+	if err != nil {
+		return nil, "", err
+	}
+	page, err = celpkg.FilterPage(h.cel, celpkg.TenantSchema, args.Filter, page, tenantRow)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("filter: %w", err))
+	}
+	return page, next, nil
+}
+
+// tenantRow projects a Tenant onto the variables TenantSchema declares.
+func tenantRow(t Tenant) map[string]any {
+	labels := map[string]string{}
+	_ = json.Unmarshal(t.Labels, &labels)
+	return map[string]any{
+		"tenant_id":      t.TenantID.String(),
+		"slug":           t.Slug,
+		"display_name":   t.DisplayName,
+		"storage_layout": t.StorageLayout,
+		"labels":         labels,
+		"created_at":     t.CreatedAt,
+		"updated_at":     t.UpdatedAt,
+	}
 }
 
 // requireProvisioningAuthority admits platform.admin or the narrow

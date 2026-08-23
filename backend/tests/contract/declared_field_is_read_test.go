@@ -102,11 +102,6 @@ var exemptField = map[fieldKey]string{
 // map, which is the point: the next field to go unread gets caught the day it
 // lands, not two years later.
 var knownUnread = map[fieldKey]string{
-	{"ListTenantsRequest", "filter"}:     "no filter support in ListTenantsArgs; the caller's filter is silently ignored and it gets everything",
-	{"ListBackendsRequest", "filter"}:    "same as ListTenants",
-	{"ListBucketsRequest", "filter"}:     "same as ListTenants",
-	{"ListCollectionsRequest", "filter"}: "same as ListTenants",
-	{"ListOperationsRequest", "filter"}:  "same as ListTenants",
 
 	{"SetQuotaRequest", "resource_version"}: "quotas.resource_version exists in the schema but SetQuota upserts without it; the field is documented as unenforced",
 

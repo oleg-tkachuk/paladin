@@ -72,6 +72,9 @@ message DeleteCollectionResponse {}
 message ListCollectionsRequest {
   string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
   paladin.common.v1.PageRequest page = 2;
+  // CEL filter, evaluated against the Collection schema (see internal/filter/cel).
+  // Applied to each fetched page; the page cursor is unaffected, so a page
+  // whose rows all fail the predicate still returns next_page_token.
   string filter = 3;
   // bucket — optional server-side narrow to Collections bound to a
   // specific (backend, bucket) pair. Resource-name form

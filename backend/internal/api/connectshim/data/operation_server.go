@@ -38,7 +38,7 @@ func (s *OperationServer) GetOperation(ctx context.Context, req *connect.Request
 
 func (s *OperationServer) ListOperations(ctx context.Context, req *connect.Request[pb.ListOperationsRequest]) (*connect.Response[pb.ListOperationsResponse], error) {
 	m := req.Msg
-	list, next, err := s.H.ListOperations(ctx, nil, m.GetPage().GetPageSize(), m.GetPage().GetPageToken())
+	list, next, err := s.H.ListOperations(ctx, nil, m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter())
 	if err != nil {
 		return nil, err
 	}

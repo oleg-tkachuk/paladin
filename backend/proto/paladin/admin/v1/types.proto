@@ -10,7 +10,6 @@ import "paladin/common/v1/resource.proto";
 import "google/api/field_behavior.proto";
 
 // ─── Storage backend ────────────────────────────────────────────────────────
-
 // StorageBackend is the physical S3-compatible target. Provisioned by
 // platform admins. Credentials are NEVER returned in responses — only
 // `credentials_secret_ref` (an opaque reference to the secret manager).
@@ -109,7 +108,6 @@ enum EventTarget {
 }
 
 // ─── Bucket ─────────────────────────────────────────────────────────────────
-
 message Bucket {
   // Resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
@@ -215,7 +213,6 @@ message BucketReplication {
 }
 
 // ─── Tenant ─────────────────────────────────────────────────────────────────
-
 message Tenant {
   // Resource name: "tenants/{tenant_id_or_slug}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
@@ -252,7 +249,6 @@ message Tenant {
 }
 
 // ─── Collection ──────────────────────────────────────────────────────────────
-
 message Collection {
   // Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
@@ -273,7 +269,6 @@ message Collection {
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────
-
 // Quota caps usage at tenant or bucket scope. Enforced at presign time.
 message Quota {
   // Resource name: "tenants/{tenant_id_or_slug}/quota" or
@@ -299,7 +294,6 @@ message QuotaUsage {
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────
-
 // AuditLogEntry is append-only. Every admin/iam mutation emits one row.
 message AuditLogEntry {
   string entry_id = 1;
@@ -325,7 +319,6 @@ message AuditLogEntry {
 }
 
 // ─── Event subscription ─────────────────────────────────────────────────────
-
 // EventSubscription describes a webhook / queue sink for Paladin events.
 // Replaces the need for clients to consume S3 events directly.
 message EventSubscription {

@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -70,13 +71,15 @@ type Handler struct {
 	// events is the optional outbox producer; nil → events are skipped.
 	events EventProducer
 	log    *zap.Logger
+	// cel compiles and caches List filters (program cache only).
+	cel *celpkg.Evaluator
 }
 
 func NewHandler(r Repository, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("backendh: policy authorizer is required")
 	}
-	return &Handler{repo: r, policy: policyEngine, log: zap.NewNop()}
+	return &Handler{cel: celpkg.NewEvaluator(), repo: r, policy: policyEngine, log: zap.NewNop()}
 }
 
 // SetProber wires the TestBackend connectivity prober. Opt-in: an unset
@@ -197,7 +200,10 @@ func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomai
 	return &b, nil
 }
 
-func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID string) ([]admindomain.StorageBackend, string, error) {
+// ListBackends returns one page of registered backends. filter is an optional
+// CEL expression over StorageBackendSchema, applied after the fetch; the repo
+// cursor is returned unchanged so paging survives a fully-filtered page.
+func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID, filter string) ([]admindomain.StorageBackend, string, error) {
 	if err := requireAnyRole(ctx, rolePlatformAdmin, roleBucketAdmin, roleTenantAdmin); err != nil {
 		return nil, "", err
 	}
@@ -217,7 +223,29 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID stri
 			}
 		}
 	}
+	out, err = celpkg.FilterPage(h.cel, celpkg.StorageBackendSchema, filter, out, backendRow)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("filter: %w", err))
+	}
 	return out, next, nil
+}
+
+// backendRow projects a StorageBackend onto the variables
+// StorageBackendSchema declares. Credential refs are deliberately absent —
+// a filter must not become a way to probe them.
+func backendRow(b admindomain.StorageBackend) map[string]any {
+	return map[string]any{
+		"backend_id":   b.BackendID,
+		"display_name": b.DisplayName,
+		"provider":     b.Provider,
+		"endpoint":     b.Endpoint,
+		"region":       b.Region,
+		"enabled":      b.Enabled,
+		"read_only":    b.ReadOnly,
+		"maintenance":  b.Maintenance,
+		"created_at":   b.CreatedAt,
+	}
 }
 
 // ─── Update ─────────────────────────────────────────────────────────────────

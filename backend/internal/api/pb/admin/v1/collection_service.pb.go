@@ -302,7 +302,10 @@ type ListCollectionsRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Parent string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
 	Page   *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	Filter string                 `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	// CEL filter, evaluated against the Collection schema (see internal/filter/cel).
+	// Applied to each fetched page; the page cursor is unaffected, so a page
+	// whose rows all fail the predicate still returns next_page_token.
+	Filter string `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
 	// bucket — optional server-side narrow to Collections bound to a
 	// specific (backend, bucket) pair. Resource-name form
 	// "storageBackends/{backend_id}/buckets/{bucket_id}". When set

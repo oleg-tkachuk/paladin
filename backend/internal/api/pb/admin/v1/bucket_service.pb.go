@@ -330,7 +330,10 @@ type ListBucketsRequest struct {
 	// Parent: "storageBackends/{backend_id}" or empty for cross-backend.
 	Parent string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Page   *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	Filter string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over Bucket (reserved — not yet evaluated)
+	// CEL filter, evaluated against the Bucket schema (see internal/filter/cel).
+	// Applied to each fetched page; the page cursor is unaffected, so a page
+	// whose rows all fail the predicate still returns next_page_token.
+	Filter string `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over Bucket (reserved — not yet evaluated)
 	// owner_tenant_id narrows the listing to buckets owned by exactly
 	// this tenant (matches buckets.owner_tenant_id). UUID or slug;
 	// empty = no tenant filter (cross-tenant listing for platform-

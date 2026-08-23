@@ -237,19 +237,19 @@ func TestListOperations(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAuthorizer())
-		_, _, err := h.ListOperations(context.Background(), nil, 10, "")
+		_, _, err := h.ListOperations(context.Background(), nil, 10, "", "")
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, denyAuthorizer())
-		_, _, err := h.ListOperations(authedCtx(tid), nil, 10, "")
+		_, _, err := h.ListOperations(authedCtx(tid), nil, 10, "", "")
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("invalid page token → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAuthorizer())
-		_, _, err := h.ListOperations(authedCtx(tid), nil, 10, "not-a-uuid")
+		_, _, err := h.ListOperations(authedCtx(tid), nil, 10, "not-a-uuid", "")
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
@@ -258,7 +258,7 @@ func TestListOperations(t *testing.T) {
 		fr := &fakeRepo{listFn: func(_ context.Context, tenant uuid.UUID, _ *State, _ uuid.UUID, _ int32) ([]Operation, string, error) {
 			return []Operation{{TenantID: tenant, State: StateRunning}}, "next-tok", nil
 		}}
-		ops, next, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), &state, 25, "")
+		ops, next, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), &state, 25, "", "")
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -281,7 +281,7 @@ func TestListOperations(t *testing.T) {
 		fr := &fakeRepo{listFn: func(context.Context, uuid.UUID, *State, uuid.UUID, int32) ([]Operation, string, error) {
 			return nil, "", nil
 		}}
-		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), nil, 10, after.String())
+		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), nil, 10, after.String(), "")
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -295,7 +295,7 @@ func TestListOperations(t *testing.T) {
 		fr := &fakeRepo{listFn: func(context.Context, uuid.UUID, *State, uuid.UUID, int32) ([]Operation, string, error) {
 			return nil, "", sentinel
 		}}
-		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), nil, 10, "")
+		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), nil, 10, "", "")
 		if !errors.Is(err, sentinel) {
 			t.Fatalf("expected sentinel error passthrough, got %v", err)
 		}

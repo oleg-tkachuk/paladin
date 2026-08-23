@@ -188,6 +188,8 @@ export const SubscriptionDeliveryStatSchema: GenMessage<SubscriptionDeliveryStat
   messageDesc(file_paladin_admin_v1_system_service, 4);
 
 /**
+ * ─── Platform census ────────────────────────────────────────────────────────
+ *
  * @generated from message paladin.admin.v1.GetPlatformStatsRequest
  */
 export type GetPlatformStatsRequest =
