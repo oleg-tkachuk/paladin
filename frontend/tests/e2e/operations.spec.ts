@@ -19,7 +19,7 @@ import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
-  seedBucket,
+  seedPhysicalBucket,
   seedCollection,
   seedObject,
   seedBatchTagOperation,
@@ -34,7 +34,10 @@ test.describe("Background operations", () => {
     // An operation with a metadata payload is the precondition — the bug is
     // invisible against an empty listing, which is exactly how it survived.
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket({ provision: true });
+    // The already-provisioned shared bucket: a freshly created one is still
+    // provisioning when the upload starts, and the failure ("storage bucket is
+    // still provisioning") has nothing to do with what this test is about.
+    const bucket = await seedPhysicalBucket();
     const collection = await seedCollection({ tenantId, bucket });
     const obj = await seedObject({
       tenantId,
