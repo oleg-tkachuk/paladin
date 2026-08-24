@@ -23,6 +23,22 @@ function lifecycleURL(tenantId: string, backendId: string, bucketId: string) {
   return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/lifecycle`;
 }
 
+/**
+ * Open the rule editor.
+ *
+ * The click is forced because the page re-renders as its data settles, so
+ * Playwright's actionability wait never sees the button hold still — it is
+ * visible and enabled throughout, just moving. Forcing skips the stability
+ * wait, not the visibility one, and waiting for the dialog afterwards keeps
+ * the failure honest if the click really did miss.
+ */
+async function openRuleEditor(page: import("@playwright/test").Page) {
+  const addRule = page.getByRole("button", { name: /Add rule/ }).first();
+  await expect(addRule).toBeVisible({ timeout: 20_000 });
+  await addRule.click({ force: true });
+  await expect(page.getByLabel("Rule ID")).toBeVisible({ timeout: 15_000 });
+}
+
 test.describe("Bucket lifecycle rules", () => {
   test("a bucket with no rules says so", async ({ page }) => {
     await loginAsAdmin(page);
@@ -46,10 +62,7 @@ test.describe("Bucket lifecycle rules", () => {
     expect(before.ruleCount).toBe(0);
 
     await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
-    await page
-      .getByRole("button", { name: /Add rule/ })
-      .first()
-      .click();
+    await openRuleEditor(page);
 
     await page.getByLabel("Rule ID").fill("e2e-expire-tmp");
     await page.getByLabel("Match (CEL)").fill("size_bytes > 1000");
@@ -80,10 +93,7 @@ test.describe("Bucket lifecycle rules", () => {
     const bucket = await seedBucket();
 
     await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
-    await page
-      .getByRole("button", { name: /Add rule/ })
-      .first()
-      .click();
+    await openRuleEditor(page);
 
     await page.getByLabel("Rule ID").fill("e2e-bad-match");
     // A field the Object schema does not declare. Accepting this would store
@@ -114,10 +124,7 @@ test.describe("Bucket lifecycle rules", () => {
     const bucket = await seedBucket();
 
     await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
-    await page
-      .getByRole("button", { name: /Add rule/ })
-      .first()
-      .click();
+    await openRuleEditor(page);
     await page.getByLabel("Rule ID").fill("e2e-stale-write");
     await page.getByLabel("Match (CEL)").fill("size_bytes > 1000");
     await page.getByRole("button", { name: /^Expiration/ }).click();
@@ -149,10 +156,7 @@ test.describe("Bucket lifecycle rules", () => {
     const bucket = await seedBucket();
 
     await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
-    await page
-      .getByRole("button", { name: /Add rule/ })
-      .first()
-      .click();
+    await openRuleEditor(page);
 
     // A placeholder in a CEL field is a worked example — an operator copies
     // it. It carried `object.size_bytes > 1_000_000`, which is wrong twice:

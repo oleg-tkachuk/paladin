@@ -1938,16 +1938,20 @@ of the pipeline._
 ## Dialog-driven flows have no e2e coverage on continuously-rendering pages
 
 - **Status:** Deferred (test-harness problem, not a product defect).
-- **Reason:** Affects the collections table and the event-subscriptions page.
+- **Reason:** Affects the collections table, the event-subscriptions page and
+  — residually — the lifecycle rule editor.
   Both re-render continuously — subscriptions polls for delivery status — so
   Playwright's actionability wait never sees a trigger hold still. The button
   is visible and enabled throughout; it just keeps moving, and the click times
   out. Forcing the click opens the dialog, but the next interaction races the
   same way: three consecutive runs of event-subscriptions.spec.ts failed a
   different test each time. Only the flows that do not drive a dialog are
-  covered. The RPCs themselves — CreateCollection, DeleteCollection,
-  CreateSubscription and its CEL validation, all OCC-guarded where applicable
-  — are covered by the Go integration suite.
+  covered. bucket-lifecycle.spec.ts keeps its dialog tests because forcing the
+  click brought it to roughly six clean runs in eight — better than the others
+  but not clean, so treat a single failure there as this, not as a regression,
+  until it is fixed properly. The RPCs themselves — CreateCollection,
+  DeleteCollection, CreateSubscription and its CEL validation, all OCC-guarded
+  where applicable — are covered by the Go integration suite.
 - **Definition of Done:** the create/delete flows for both pages are driven
   through the UI without forced clicks, and pass ten consecutive runs.
 - **Blockers:** Needs the pages to settle deterministically — a test hook that
