@@ -1935,21 +1935,24 @@ of the pipeline._
   rather than an on-demand path; batch would need that logic factored out.
 
 ---
-## Collection create/delete have no e2e coverage
+## Dialog-driven flows have no e2e coverage on continuously-rendering pages
 
 - **Status:** Deferred (test-harness problem, not a product defect).
-- **Reason:** Both flows drive controls inside the collections table, which
-  re-renders as its pages settle. Playwright's actionability wait never sees
-  the button hold still, so a click times out while the element is visible and
-  enabled the whole time. Forcing the click gets past that, but the row lookup
-  after the write is racy for the same reason. Two flaky tests are worse than
-  an honest gap, so only the create dialog's binding requirement is covered.
-  The RPCs themselves (CreateCollection / DeleteCollection, both OCC-guarded)
-  are covered by the Go integration suite.
-- **Definition of Done:** collections-crud.spec.ts covers create and delete
-  through the UI without forced clicks, and passes ten consecutive runs.
-- **Blockers:** Needs the page to settle deterministically — a test hook that
-  signals "list is stable", or pagination that does not re-render in place.
+- **Reason:** Affects the collections table and the event-subscriptions page.
+  Both re-render continuously — subscriptions polls for delivery status — so
+  Playwright's actionability wait never sees a trigger hold still. The button
+  is visible and enabled throughout; it just keeps moving, and the click times
+  out. Forcing the click opens the dialog, but the next interaction races the
+  same way: three consecutive runs of event-subscriptions.spec.ts failed a
+  different test each time. Only the flows that do not drive a dialog are
+  covered. The RPCs themselves — CreateCollection, DeleteCollection,
+  CreateSubscription and its CEL validation, all OCC-guarded where applicable
+  — are covered by the Go integration suite.
+- **Definition of Done:** the create/delete flows for both pages are driven
+  through the UI without forced clicks, and pass ten consecutive runs.
+- **Blockers:** Needs the pages to settle deterministically — a test hook that
+  signals "list is stable", or polling that does not re-render in place.
+
 
 ---
 ## TenantBudgetService.Set has no OCC guard
