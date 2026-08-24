@@ -802,3 +802,77 @@ export async function quotaVersion(tenantId: string): Promise<string> {
   const q = await client.getQuota({ name: `tenants/${tenantId}/quota` });
   return q.resourceVersion;
 }
+
+/** Read a bucket's current settings + version, for tests that assert a UI
+ *  write landed (or was refused). */
+export async function bucketState(
+  backendId: string,
+  bucketId: string,
+): Promise<{
+  resourceVersion: string;
+  versioningEnabled: boolean;
+  keepDeletesForever: boolean;
+}> {
+  const b = await bucketAdminClient().getBucket({
+    name: `storageBackends/${backendId}/buckets/${bucketId}`,
+  });
+  return {
+    resourceVersion: b.resourceVersion,
+    versioningEnabled: b.versioning?.enabled ?? false,
+    keepDeletesForever: b.versioning?.keepDeletesForever ?? false,
+  };
+}
+
+/** Flip a bucket's versioning through the admin API — used to move the
+ *  resource_version underneath an open form. */
+export async function setBucketVersioning(opts: {
+  backendId: string;
+  bucketId: string;
+  enabled: boolean;
+  keepDeletesForever?: boolean;
+}): Promise<string> {
+  const name = `storageBackends/${opts.backendId}/buckets/${opts.bucketId}`;
+  const current = await bucketAdminClient().getBucket({ name });
+  const res = await bucketAdminClient().setVersioning({
+    name,
+    resourceVersion: current.resourceVersion,
+    versioning: {
+      enabled: opts.enabled,
+      keepDeletesForever: opts.keepDeletesForever ?? false,
+    },
+  });
+  return res.resourceVersion;
+}
+
+/** Read a backend's operational flags + version. */
+export async function backendState(backendId: string): Promise<{
+  resourceVersion: string;
+  enabled: boolean;
+  readOnly: boolean;
+  maintenance: boolean;
+}> {
+  const b = await backendAdminClient().getBackend({
+    name: `storageBackends/${backendId}`,
+  });
+  return {
+    resourceVersion: b.resourceVersion,
+    enabled: b.enabled,
+    readOnly: b.readOnly,
+    maintenance: b.maintenance,
+  };
+}
+
+/** Seed a backend that is enabled — the starting state for drain/maintenance
+ *  tests, which seedDisabledBackend deliberately does not give. */
+export async function seedEnabledBackend(): Promise<SeededBackend> {
+  const be = await seedDisabledBackend();
+  const current = await backendAdminClient().getBackend({
+    name: `storageBackends/${be.backendId}`,
+  });
+  await backendAdminClient().setBackendEnabled({
+    name: `storageBackends/${be.backendId}`,
+    enabled: true,
+    resourceVersion: current.resourceVersion,
+  });
+  return be;
+}
