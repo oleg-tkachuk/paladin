@@ -165,14 +165,15 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 // the proto reports.
 func operationRow(o Operation) map[string]any {
 	return map[string]any{
-		"operation_id": o.OperationID.String(),
-		"type":         o.Type,
-		"state":        string(o.State),
-		"done":         o.DoneAt != nil,
-		"tenant_id":    o.TenantID.String(),
-		"error_code":   o.ErrorCode,
-		"created_at":   o.CreatedAt,
-		"updated_at":   o.UpdatedAt,
+		"operation_id":  o.OperationID.String(),
+		"type":          o.Type,
+		"state":         string(o.State),
+		"done":          o.DoneAt != nil,
+		"tenant_id":     o.TenantID.String(),
+		"error_code":    o.ErrorCode,
+		"error_message": o.ErrorMessage,
+		"created_at":    o.CreatedAt,
+		"updated_at":    o.UpdatedAt,
 	}
 }
 

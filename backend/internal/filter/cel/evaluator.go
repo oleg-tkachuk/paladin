@@ -119,14 +119,15 @@ var PhysicalBucketSchema = &Schema{
 var OperationSchema = &Schema{
 	Name: "Operation",
 	vars: map[string]*cel.Type{
-		"operation_id": cel.StringType,
-		"type":         cel.StringType,
-		"state":        cel.StringType,
-		"done":         cel.BoolType,
-		"tenant_id":    cel.StringType,
-		"error_code":   cel.StringType,
-		"created_at":   cel.TimestampType,
-		"updated_at":   cel.TimestampType,
+		"operation_id":  cel.StringType,
+		"type":          cel.StringType,
+		"state":         cel.StringType,
+		"done":          cel.BoolType,
+		"tenant_id":     cel.StringType,
+		"error_code":    cel.StringType,
+		"error_message": cel.StringType,
+		"created_at":    cel.TimestampType,
+		"updated_at":    cel.TimestampType,
 	},
 }
 

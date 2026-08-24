@@ -30,6 +30,7 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
+import { BatchService } from "@/gen/paladin/data/v1/batch_service_pb";
 import { MultipartUploadService } from "@/gen/paladin/data/v1/multipart_service_pb";
 import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
@@ -875,4 +876,25 @@ export async function seedEnabledBackend(): Promise<SeededBackend> {
     resourceVersion: current.resourceVersion,
   });
   return be;
+}
+
+/**
+ * Kick off a BatchUpdateTags operation and return its name.
+ *
+ * The point is the row it leaves in `operations`: its metadata is a
+ * google.protobuf.Any, which is what makes ListOperations exercise the Any
+ * path at all. An empty operations table hides that entirely.
+ */
+export async function seedBatchTagOperation(opts: {
+  tenantId: string;
+  collection: string;
+  objectName: string;
+}): Promise<string> {
+  const client = createClient(BatchService, dataTransport());
+  const res = await client.batchUpdateTags({
+    parent: `tenants/${opts.tenantId}/collections/${opts.collection}`,
+    selector: { names: [opts.objectName] },
+    tags: { env: "e2e" },
+  });
+  return res.name;
 }

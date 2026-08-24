@@ -135,7 +135,11 @@ function FailedOpsWidget() {
         .listOperations(
           {
             page: { pageSize: 5, pageToken: "" },
-            filter: "error_message != null",
+            // != "" rather than != null: the field is a string, and CEL
+            // strings are never null — the old expression matched every
+            // operation, leaving the client-side opError() filter below to do
+            // all the work while the server shipped a full page each time.
+            filter: 'error_message != ""',
           },
           { signal },
         )
