@@ -34,11 +34,10 @@ function collectionsURL(tenantId: string): string {
 /**
  * Open the create dialog.
  *
- * The click is forced because the collection list re-renders as its pages
- * settle, and Playwright's actionability check waits for a stability that a
- * long list never quite reaches — the button is visible and enabled the whole
- * time, it just keeps moving. Forcing skips the stability wait, not the
- * visibility one, so a genuinely missing or covered button still fails.
+ * Forced because this page remains unreliable to drive even after the
+ * viewport fix that settled the other console forms — see BACKLOG. Forcing
+ * skips the stability wait, not the visibility one, so a genuinely missing or
+ * covered button still fails.
  */
 async function openCreateDialog(page: import("@playwright/test").Page) {
   const newBtn = page.getByRole("button", { name: /New Collection/ });

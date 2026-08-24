@@ -88,7 +88,21 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // Desktop Chrome defaults to 1280x720, and several console forms are
+        // taller than that — the budget and bucket-settings submit buttons sit
+        // below the fold at y≈748. Playwright scrolls to reach them, but on a
+        // page that is still settling the scroll changes the layout under it,
+        // so the click lands on a moving target and times out. The button was
+        // never moving on its own: elementFromPoint at its centre returned
+        // null because the point was outside the viewport entirely.
+        //
+        // A taller viewport puts those controls on screen and removes the
+        // scroll from the equation. 900 is the shortest common laptop height,
+        // so it also matches what an operator actually sees.
+        viewport: { width: 1440, height: 900 },
+      },
     },
   ],
 

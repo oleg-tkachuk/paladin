@@ -1,14 +1,6 @@
 /**
  * Event subscriptions — the fan-out configuration.
  *
- * Only the read-side flows are covered here. Anything that drives the editor
- * dialog is not: the page polls for delivery status, so it re-renders
- * continuously and Playwright's actionability wait never sees the trigger hold
- * still. Forcing the click opens the dialog but the next interaction races the
- * same way — three consecutive runs failed a different test each time. The gap
- * is recorded in BACKLOG rather than papered over; CreateSubscription and its
- * CEL validation are covered by the Go integration suite.
- *
  * A subscription decides where a tenant's events are delivered, so a broken
  * one is silent by nature: nothing errors, events simply stop arriving
  * somewhere. The editor validates its CEL filter server-side before saving,
@@ -27,22 +19,6 @@ function subsURL(tenantId: string): string {
   return `/tenants/${tenantId}/event-subscriptions`;
 }
 
-/**
- * Open the subscription editor.
- *
- * The click is forced because the page re-renders as its data settles, and
- * Playwright's actionability wait never sees the button hold still — it is
- * visible and enabled throughout, just moving. Forcing skips the stability
- * wait, not the visibility one, so a genuinely missing button still fails.
- */
-async function openEditor(page: import("@playwright/test").Page) {
-  const newSub = page.getByRole("button", { name: /New subscription/ }).first();
-  await expect(newSub).toBeVisible({ timeout: 20_000 });
-  await newSub.click({ force: true });
-  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator("#sub-http-url")).toBeVisible({ timeout: 15_000 });
-}
-
 test.describe("Event subscriptions", () => {
   test("a tenant with no subscriptions offers to create one", async ({
     page,
@@ -55,6 +31,67 @@ test.describe("Event subscriptions", () => {
     await expect(
       page.getByRole("button", { name: /New subscription/ }).first(),
     ).toBeEnabled({ timeout: 15_000 });
+  });
+
+  test("creating an HTTP subscription persists it", async ({ page }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+    expect(await subscriptionCount(tenant.tenantId)).toBe(0);
+
+    await page.goto(subsURL(tenant.tenantId));
+    const newSub = page
+      .getByRole("button", { name: /New subscription/ })
+      .first();
+    await expect(newSub).toBeEnabled({ timeout: 15_000 });
+    await newSub.click();
+    await expect(page.locator("#sub-http-url")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page
+      .locator("#sub-http-url")
+      .fill("https://hooks.example.invalid/e2e");
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^Create$/ })
+      .click();
+
+    await expect
+      .poll(() => subscriptionCount(tenant.tenantId), { timeout: 15_000 })
+      .toBe(1);
+  });
+
+  test("an invalid CEL filter is refused", async ({ page }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+
+    await page.goto(subsURL(tenant.tenantId));
+    const newSub = page
+      .getByRole("button", { name: /New subscription/ })
+      .first();
+    await expect(newSub).toBeEnabled({ timeout: 15_000 });
+    await newSub.click();
+    await expect(page.locator("#sub-http-url")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page
+      .locator("#sub-http-url")
+      .fill("https://hooks.example.invalid/e2e");
+    // A field the EventEnvelope schema does not declare. Storing this would
+    // produce a subscription whose filter never matches what its author meant.
+    await page.locator("#sub-filter").fill('not_a_field == "x"');
+
+    // The dialog validates the expression as it is typed and disables Create
+    // outright — stronger than letting the server refuse it, because the
+    // operator finds out before the round trip. Nothing may be stored either
+    // way, which is the assertion that actually matters.
+    await expect(
+      page.getByRole("dialog").getByRole("button", { name: /^Create$/ }),
+    ).toBeDisabled({
+      timeout: 15_000,
+    });
+    expect(await subscriptionCount(tenant.tenantId)).toBe(0);
   });
 
   test("an existing subscription is listed and can be deleted", async ({
@@ -85,5 +122,46 @@ test.describe("Event subscriptions", () => {
     await expect
       .poll(() => subscriptionCount(tenant.tenantId), { timeout: 15_000 })
       .toBe(0);
+  });
+
+  test("the filter hint's examples are valid expressions", async ({ page }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+
+    await page.goto(subsURL(tenant.tenantId));
+    const newSub = page
+      .getByRole("button", { name: /New subscription/ })
+      .first();
+    await expect(newSub).toBeEnabled({ timeout: 15_000 });
+    await newSub.click();
+    await expect(page.locator("#sub-http-url")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // The hint is a worked example, so it has to work. It suggested
+    // `event.kind == '...'` while the EventEnvelope schema declares bare
+    // identifiers, so anyone copying it got "undeclared reference to 'event'"
+    // — the same defect the lifecycle editor's placeholder had.
+    const hint = await page
+      .getByText(/Empty = all events\. Examples:/)
+      .first()
+      .textContent();
+    expect(hint, "the filter field must suggest something").toBeTruthy();
+
+    const first = /Examples:\s*([^,]+),/.exec(hint ?? "")?.[1]?.trim();
+    expect(first, `could not read an example out of: ${hint}`).toBeTruthy();
+
+    await page
+      .locator("#sub-http-url")
+      .fill("https://hooks.example.invalid/e2e");
+    await page.locator("#sub-filter").fill(first as string);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^Create$/ })
+      .click();
+
+    await expect
+      .poll(() => subscriptionCount(tenant.tenantId), { timeout: 15_000 })
+      .toBe(1);
   });
 });

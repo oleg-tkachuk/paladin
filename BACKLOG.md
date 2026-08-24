@@ -1935,29 +1935,26 @@ of the pipeline._
   rather than an on-demand path; batch would need that logic factored out.
 
 ---
-## Dialog-driven flows have no e2e coverage on continuously-rendering pages
+## The collections page is unreliable to drive from e2e
 
 - **Status:** Deferred (test-harness problem, not a product defect).
-- **Reason:** Affects the collections table, the event-subscriptions page and
-  — residually — the lifecycle rule editor and the budget form.
-  Both re-render continuously — subscriptions polls for delivery status — so
-  Playwright's actionability wait never sees a trigger hold still. The button
-  is visible and enabled throughout; it just keeps moving, and the click times
-  out. Forcing the click opens the dialog, but the next interaction races the
-  same way: three consecutive runs of event-subscriptions.spec.ts failed a
-  different test each time. Only the flows that do not drive a dialog are
-  covered. bucket-lifecycle.spec.ts and budget.spec.ts keep their tests because
-  forcing the click brought them to roughly half to three-quarters clean runs — better than the others
-  but not clean, so treat a single failure there as this, not as a regression,
-  until it is fixed properly. The RPCs themselves — CreateCollection,
-  DeleteCollection, CreateSubscription and its CEL validation, all OCC-guarded
-  where applicable — are covered by the Go integration suite.
-- **Definition of Done:** the create/delete flows for both pages are driven
-  through the UI without forced clicks, and pass ten consecutive runs.
-- **Blockers:** Needs the pages to settle deterministically — a test hook that
-  signals "list is stable", or polling that does not re-render in place.
-
-
+- **Reason:** The root cause behind the flake on every OTHER console form was
+  the viewport: Desktop Chrome defaults to 1280x720 and several forms are
+  taller, so submit buttons sat below the fold and Playwright had to scroll to
+  reach them — on a page still settling, that scroll moved the target. A
+  1440x900 viewport fixed budget, bucket-lifecycle, bucket-object-lock and
+  event-subscriptions outright (three clean runs each, and the three
+  subscription tests dropped for flakiness are back).
+  Collections did not settle with it. Its create dialog opens, then the
+  backend/bucket selects behave differently on each attempt — a Radix trigger
+  that is enabled but not actionable, a choice that does not stick, a dialog
+  that does not reopen. Each fix moved the symptom rather than removing it, so
+  only the dialog's binding requirement is covered (four clean runs).
+- **Definition of Done:** create and delete through the UI, ten consecutive
+  clean runs, no forced clicks.
+- **Blockers:** Needs someone to work out why this page's selects differ from
+  the identical ones elsewhere. CreateCollection and DeleteCollection are
+  covered by the Go integration suite meanwhile.
 ---
 ## TenantBudgetService.Set has no OCC guard
 
