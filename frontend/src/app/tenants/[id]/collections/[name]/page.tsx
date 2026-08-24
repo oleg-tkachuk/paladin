@@ -102,7 +102,7 @@ export default function CollectionOverviewPage() {
       const updated = await collectionClient.updateCollection({
         name: collection.name,
         resourceVersion: collection.resourceVersion,
-        updateMask: create(FieldMaskSchema, { paths: ["displayName"] }),
+        updateMask: create(FieldMaskSchema, { paths: ["display_name"] }),
         collectionResource,
       });
       setCollection(updated);

@@ -89,9 +89,7 @@ export function useUserAdmin() {
       roles?: string[];
     }) => {
       const paths: string[] = [];
-      // camelCase: FieldMask paths are JSON field names. snake_case is
-      // rejected as an invalid path and fails the entire request.
-      if (args.displayName !== undefined) paths.push("displayName");
+      if (args.displayName !== undefined) paths.push("display_name");
       if (args.disabled !== undefined) paths.push("disabled");
       if (args.roles !== undefined) paths.push("roles");
       return run(() =>

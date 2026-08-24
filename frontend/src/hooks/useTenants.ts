@@ -143,7 +143,7 @@ export function useTenants() {
           name: tenantResourceName(tenantId),
           resourceVersion,
           updateMask: create(FieldMaskSchema, {
-            paths: ["displayName", "labels"],
+            paths: ["display_name", "labels"],
           }),
           tenant,
         });

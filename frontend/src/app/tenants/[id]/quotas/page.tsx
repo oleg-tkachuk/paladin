@@ -153,16 +153,12 @@ export default function TenantQuotasPage() {
       await quotaClient.setQuota({
         name: quotaName,
         resourceVersion: quota?.resourceVersion || "0",
-        // FieldMask paths are the JSON field names, i.e. camelCase — that is
-        // the canonical protojson form. snake_case is rejected outright
-        // ("contains invalid path"), so a mask written the way the .proto
-        // spells its fields fails the whole request, not just the mask.
         updateMask: create(FieldMaskSchema, {
           paths: [
-            "maxTotalBytes",
-            "maxObjectCount",
-            "maxBytesPerDay",
-            "maxObjectsPerDay",
+            "max_total_bytes",
+            "max_object_count",
+            "max_bytes_per_day",
+            "max_objects_per_day",
           ],
         }),
         quota: next,
