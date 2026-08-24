@@ -34,6 +34,7 @@ import { MultipartUploadService } from "@/gen/paladin/data/v1/multipart_service_
 import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
+import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
@@ -743,4 +744,61 @@ export async function seedMultipartObject(opts: {
     parts,
   });
   return { name: objectName, key };
+}
+
+// ─── Quota ──────────────────────────────────────────────────────────────────
+
+export interface SeededQuota {
+  name: string;
+  resourceVersion: string;
+}
+
+/**
+ * Set a tenant's quota through the admin API and return the version the write
+ * produced.
+ *
+ * SetQuota is OCC-guarded in the upsert's DO UPDATE clause: "0" asserts no row
+ * exists yet and is itself a conflict if one does, so this reads the current
+ * version first rather than assuming a fresh tenant.
+ */
+export async function seedQuota(opts: {
+  tenantId: string;
+  maxTotalBytes?: bigint;
+  maxObjectCount?: bigint;
+}): Promise<SeededQuota> {
+  const client = createClient(QuotaService, adminTransport());
+  const name = `tenants/${opts.tenantId}/quota`;
+
+  let resourceVersion = "0";
+  try {
+    const current = await client.getQuota({ name });
+    resourceVersion = current.resourceVersion;
+  } catch (err) {
+    // NotFound is the expected shape for a tenant with no quota row — that is
+    // what "0" is for. Anything else is a real failure and must not be
+    // swallowed into a misleading create attempt.
+    if (!(err instanceof ConnectError) || err.code !== Code.NotFound) throw err;
+  }
+
+  const res = await client.setQuota({
+    name,
+    resourceVersion,
+    updateMask: {
+      paths: ["max_total_bytes", "max_object_count"],
+    },
+    quota: {
+      name,
+      maxTotalBytes: opts.maxTotalBytes ?? BigInt(1_073_741_824),
+      maxObjectCount: opts.maxObjectCount ?? BigInt(1000),
+    },
+  });
+  return { name, resourceVersion: res.resourceVersion };
+}
+
+/** Read a quota's current resource_version, for tests that need to detect a
+ *  write the UI made (or prove one was refused). */
+export async function quotaVersion(tenantId: string): Promise<string> {
+  const client = createClient(QuotaService, adminTransport());
+  const q = await client.getQuota({ name: `tenants/${tenantId}/quota` });
+  return q.resourceVersion;
 }
