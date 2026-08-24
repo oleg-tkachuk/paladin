@@ -19,6 +19,24 @@ function budgetURL(tenantId: string): string {
   return `/tenants/${tenantId}/budget`;
 }
 
+/**
+ * Submit the budget form.
+ *
+ * Forced for the same reason as the other console pages: the layout settles
+ * after the spend summary loads, so the button is visible and enabled but not
+ * still, and Playwright's actionability wait times out on a click that would
+ * have landed. Waiting for the effect afterwards keeps the failure honest.
+ */
+async function submitBudget(
+  page: import("@playwright/test").Page,
+  name: RegExp,
+) {
+  const btn = page.getByRole("button", { name });
+  await expect(btn).toBeVisible({ timeout: 20_000 });
+  await expect(btn).toBeEnabled({ timeout: 20_000 });
+  await btn.click({ force: true });
+}
+
 test.describe("Tenant budget", () => {
   test("a tenant with no budget offers to create one", async ({ page }) => {
     await loginAsAdmin(page);
@@ -43,7 +61,7 @@ test.describe("Tenant budget", () => {
     await expect(submit).toBeVisible({ timeout: 15_000 });
 
     await page.locator("#max-budget").fill("250");
-    await submit.click();
+    await submitBudget(page, /Create budget/);
 
     await expect
       .poll(
@@ -81,7 +99,7 @@ test.describe("Tenant budget", () => {
       page.getByRole("button", { name: /Create budget/ }),
     ).toBeVisible({ timeout: 15_000 });
     await page.locator("#max-budget").fill("100");
-    await page.getByRole("button", { name: /Create budget/ }).click();
+    await submitBudget(page, /Create budget/);
 
     await expect
       .poll(
@@ -100,7 +118,7 @@ test.describe("Tenant budget", () => {
     const apply = page.getByRole("button", { name: /Apply changes/ });
     await expect(apply).toBeVisible({ timeout: 15_000 });
     await page.locator("#max-budget").fill("500");
-    await apply.click();
+    await submitBudget(page, /Apply changes/);
 
     await expect
       .poll(

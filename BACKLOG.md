@@ -1939,15 +1939,15 @@ of the pipeline._
 
 - **Status:** Deferred (test-harness problem, not a product defect).
 - **Reason:** Affects the collections table, the event-subscriptions page and
-  — residually — the lifecycle rule editor.
+  — residually — the lifecycle rule editor and the budget form.
   Both re-render continuously — subscriptions polls for delivery status — so
   Playwright's actionability wait never sees a trigger hold still. The button
   is visible and enabled throughout; it just keeps moving, and the click times
   out. Forcing the click opens the dialog, but the next interaction races the
   same way: three consecutive runs of event-subscriptions.spec.ts failed a
   different test each time. Only the flows that do not drive a dialog are
-  covered. bucket-lifecycle.spec.ts keeps its dialog tests because forcing the
-  click brought it to roughly six clean runs in eight — better than the others
+  covered. bucket-lifecycle.spec.ts and budget.spec.ts keep their tests because
+  forcing the click brought them to roughly half to three-quarters clean runs — better than the others
   but not clean, so treat a single failure there as this, not as a regression,
   until it is fixed properly. The RPCs themselves — CreateCollection,
   DeleteCollection, CreateSubscription and its CEL validation, all OCC-guarded
