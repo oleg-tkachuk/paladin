@@ -898,3 +898,57 @@ export async function seedBatchTagOperation(opts: {
   });
   return res.name;
 }
+
+/** Read a bucket's object-lock config alongside its version. */
+export async function bucketLockState(
+  backendId: string,
+  bucketId: string,
+): Promise<{
+  resourceVersion: string;
+  enabled: boolean;
+  defaultMode: string;
+  defaultRetentionSeconds: number;
+}> {
+  const b = await bucketAdminClient().getBucket({
+    name: `storageBackends/${backendId}/buckets/${bucketId}`,
+  });
+  return {
+    resourceVersion: b.resourceVersion,
+    enabled: b.objectLock?.enabled ?? false,
+    defaultMode: String(b.objectLock?.defaultMode ?? ""),
+    defaultRetentionSeconds: Number(
+      b.objectLock?.defaultRetention?.seconds ?? 0,
+    ),
+  };
+}
+
+/** Read a bucket's lifecycle rules alongside its version. */
+export async function bucketLifecycle(
+  backendId: string,
+  bucketId: string,
+): Promise<{ resourceVersion: string; ruleCount: number }> {
+  const b = await bucketAdminClient().getBucket({
+    name: `storageBackends/${backendId}/buckets/${bucketId}`,
+  });
+  return {
+    resourceVersion: b.resourceVersion,
+    ruleCount: b.lifecycleRules?.length ?? 0,
+  };
+}
+
+/** Move a bucket's version out from under an open form, by toggling a field
+ *  the test is not itself editing. */
+export async function bumpBucketVersion(
+  backendId: string,
+  bucketId: string,
+): Promise<string> {
+  const name = `storageBackends/${backendId}/buckets/${bucketId}`;
+  const current = await bucketAdminClient().getBucket({ name });
+  const res = await bucketAdminClient().updateBucket({
+    name,
+    resourceVersion: current.resourceVersion,
+    updateMask: { paths: ["display_name"] },
+    bucket: { displayName: `${current.displayName} (touched)` },
+  });
+  return res.resourceVersion;
+}

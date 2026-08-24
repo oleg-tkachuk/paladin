@@ -649,7 +649,12 @@ function RuleEditor({
               <Textarea
                 id="rule-match"
                 className="font-mono text-xs min-h-[80px]"
-                placeholder="object.size_bytes > 1_000_000"
+                // The placeholder is a worked example, so it has to be a
+                // valid expression: identifiers are bare (the Object schema
+                // declares size_bytes, not object.size_bytes) and CEL has no
+                // digit separators. The previous value was wrong on both
+                // counts, so an operator who copied it got two errors.
+                placeholder="size_bytes > 1000000"
                 value={form.match}
                 onChange={(e) => update("match", e.target.value)}
                 aria-invalid={!!errors.match || undefined}
