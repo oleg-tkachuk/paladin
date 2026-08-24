@@ -1124,6 +1124,24 @@ traefik:
     admin:
       pathPrefix: /paladin.admin.v1.
       port: 8090   # served by the admin role
+      # Dedicated hostnames for the admin plane. Empty (the default)
+      # keeps admin on traefik.hosts, dispatched by pathPrefix above.
+      #
+      # When non-empty the admin plane is served ONLY from these hosts and
+      # the path-prefix rule on traefik.hosts is NOT emitted. That is the
+      # point: a middleware chain attached to a dedicated host is only a
+      # control if the same RPCs cannot also be reached on the shared one.
+      # Leaving both would make `middlewares` below decorative.
+      #
+      # The hosts must be covered by the serving certificate — the shared
+      # traefik-tls secret carries *.paladin.local, so admin.paladin.local
+      # needs no new cert — and must resolve (gitops dns task).
+      hosts: []
+      # Middlewares applied to the admin route only, in addition to
+      # traefik.middlewares. This is where an IP allow-list, mTLS, or a
+      # tighter rate-limit goes when admin should be reachable from less
+      # than the data plane is. Same shape as traefik.middlewares.
+      middlewares: []
     data:
       port: 8080   # api role bare-Host fallthrough
 

@@ -1,11 +1,18 @@
 {{/*
 IngressRoute — Traefik CRD that fronts the Paladin backend Connect-RPC
-planes. One hostname, three plane rules dispatched by procedure-prefix:
+planes. By default one hostname, three plane rules dispatched by
+procedure-prefix:
 
   /paladin.iam.v1.<Service>/<Method>    → api role,   iam port   (8085)
   /paladin.admin.v1.<Service>/<Method>  → admin role, admin port (8090)
   anything else (incl. /livez, /readyz, /paladin.data.v1.*)
                                     → api role,   data port  (8080)
+
+Setting traefik.planes.admin.hosts moves the admin plane onto its own
+hostname(s) and DROPS the path-prefix rule from the shared host. Both
+halves matter: a dedicated host exists so a middleware chain can gate
+the whole admin plane, and that gate is only real if the same
+procedures are not still answering on the shared host beside it.
 
 Each plane rule renders only when its backing role Deployment is
 enabled (deployments.<role>.enabled), so routing tracks the deployed
@@ -30,6 +37,7 @@ Traefik would get a 400 before the auth chain.
 {{- $adminEnabled := (index .Values.deployments "admin").enabled -}}
 {{- $planes := .Values.traefik.planes -}}
 {{- $bt := .Values.traefik.backendTLS -}}
+{{- $adminHosts := $planes.admin.hosts -}}
 {{- $stName := printf "%s-backend-tls" (include "chart.fullname" .) -}}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -69,8 +77,8 @@ spec:
         {{- end }}
       {{- end }}
     {{- end }}
-    {{- if $adminEnabled }}
-    # admin plane
+    {{- if and $adminEnabled (not $adminHosts) }}
+    # admin plane — shared host, procedure-prefix dispatch.
     - kind: Rule
       match: Host(`{{ $host }}`) && PathPrefix(`{{ $planes.admin.pathPrefix }}`)
       services:
@@ -104,6 +112,33 @@ spec:
           serversTransport: {{ $stName }}
           {{- end }}
       {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if and $adminEnabled $adminHosts }}
+    {{- range $ahost := $adminHosts }}
+    # admin plane — dedicated host. No PathPrefix: everything on this
+    # hostname is the admin plane, so a middleware attached here covers
+    # the whole surface rather than one procedure prefix.
+    - kind: Rule
+      match: Host(`{{ $ahost }}`)
+      services:
+        - kind: Service
+          name: {{ $adminFullname }}
+          port: {{ $planes.admin.port }}
+          {{- if $bt.enabled }}
+          scheme: https
+          serversTransport: {{ $stName }}
+          {{- end }}
+      {{- $mw := concat ($.Values.traefik.middlewares | default list) ($planes.admin.middlewares | default list) }}
+      {{- with $mw }}
       middlewares:
         {{- range . }}
         - name: {{ .name }}

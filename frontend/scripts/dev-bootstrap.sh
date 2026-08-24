@@ -11,10 +11,18 @@
 # and exercise the full object lifecycle without any manual setup.
 #
 # Requires: curl, jq. Backend reachable at $PALADIN_HOST.
+#
+# The admin plane has its own hostname: the IngressRoute serves
+# admin.paladin.local separately so a middleware chain can gate the whole
+# plane, and the /paladin.admin.v1. prefix is NO LONGER routed on
+# $PALADIN_HOST. `call` dispatches on the procedure prefix, so call sites
+# stay unchanged. Override $PALADIN_ADMIN_HOST for a deployment that keeps
+# admin on the shared host (chart default: traefik.planes.admin.hosts empty).
 
 set -euo pipefail
 
 PALADIN_HOST="${PALADIN_HOST:-https://api.paladin.local}"
+PALADIN_ADMIN_HOST="${PALADIN_ADMIN_HOST:-https://admin.paladin.local}"
 TENANT_ID="${TENANT_ID:-3a823fd4-0b3d-4ce2-a280-93b8d75cc07b}"
 BACKEND_ID="${BACKEND_ID:-primary}"
 BUCKET_ID="${BUCKET_ID:-paladin-primary}"
@@ -33,7 +41,11 @@ fi
 
 call() {
     local method=$1 body=$2
-    curl -k -s -X POST "$PALADIN_HOST/$method" \
+    local host="$PALADIN_HOST"
+    case "$method" in
+        paladin.admin.v1.*) host="$PALADIN_ADMIN_HOST" ;;
+    esac
+    curl -k -s -X POST "$host/$method" \
         -H "Content-Type: application/json" \
         -H "Connect-Protocol-Version: 1" \
         -H "Authorization: Bearer $JWT" \

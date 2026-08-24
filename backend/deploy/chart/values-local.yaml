@@ -114,6 +114,18 @@ deployments:
 traefik:
   hosts:
     - api.paladin.local
+  planes:
+    admin:
+      # Admin gets its own hostname so a middleware chain can gate the whole
+      # plane rather than one procedure prefix. Setting this also REMOVES the
+      # /paladin.admin.v1. rule from api.paladin.local — leaving both would make
+      # any gate here bypassable by calling the shared host instead.
+      #
+      # Covered by the existing traefik-tls wildcard (*.paladin.local), so no
+      # new certificate. Requires the name to resolve — gitops `task
+      # dns:setup`.
+      hosts:
+        - admin.paladin.local
 
 # cert-manager: letsencrypt-prod can't validate *.local, so on the
 # local cluster we skip cert-manager and use the cluster-wide
