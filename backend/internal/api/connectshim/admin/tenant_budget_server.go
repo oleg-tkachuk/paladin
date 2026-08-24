@@ -53,7 +53,11 @@ func (s *TenantBudgetServer) Get(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("tenant_id: %w", err))
 	}
-	tb, err := s.Usage.GetTenantBudget(ctx, tenantID)
+	// Same RLS constraint as Set, on the read side: the isolation policy's
+	// USING clause hides rows belonging to another tenant, so a platform admin
+	// reading someone else's budget got NotFound for a row that exists. Acting
+	// as the tenant is what makes the read see it.
+	tb, err := s.Usage.GetTenantBudget(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
 		if errors.Is(err, capability.ErrTenantBudgetNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)
