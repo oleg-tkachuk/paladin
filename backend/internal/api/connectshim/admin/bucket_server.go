@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -95,7 +97,7 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListBucketsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListBucketsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Buckets = append(out.Buckets, bucketToProto(&list[i]))
 	}
@@ -117,7 +119,7 @@ func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *connect.R
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListBucketsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListBucketsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Buckets = append(out.Buckets, bucketToProto(&list[i]))
 	}
@@ -130,7 +132,7 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -162,7 +164,7 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -195,7 +197,7 @@ func (s *BucketServer) SetBucketPolicy(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -212,7 +214,7 @@ func (s *BucketServer) SetLifecycleRules(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -229,7 +231,7 @@ func (s *BucketServer) SetObjectLock(ctx context.Context, req *connect.Request[p
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -246,7 +248,7 @@ func (s *BucketServer) SetVersioning(ctx context.Context, req *connect.Request[p
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -263,7 +265,7 @@ func (s *BucketServer) SetReplication(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
@@ -108,7 +110,7 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, badName(err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -219,7 +221,7 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListObjectsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListObjectsResponse{Page: convx.PageResponseProto(next)}
 	for i := range objs {
 		out.Objects = append(out.Objects, objectToProto(&objs[i]))
 	}
@@ -270,7 +272,7 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, err
 	}
-	resp := &pb.ListObjectVersionsResponse{Page: pageResponseProto(next)}
+	resp := &pb.ListObjectVersionsResponse{Page: convx.PageResponseProto(next)}
 	for i := range out {
 		resp.Versions = append(resp.Versions, versionToProto(m.GetParent(), &out[i]))
 	}

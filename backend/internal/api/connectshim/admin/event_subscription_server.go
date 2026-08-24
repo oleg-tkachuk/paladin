@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -103,7 +105,7 @@ func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, err
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -128,7 +130,7 @@ func (s *EventSubscriptionServer) DeleteSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, err
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -158,7 +160,7 @@ func (s *EventSubscriptionServer) ListSubscriptions(ctx context.Context, req *co
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListSubscriptionsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListSubscriptionsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Subscriptions = append(out.Subscriptions, eventSubToProto(&list[i]))
 	}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 )
@@ -35,7 +37,7 @@ func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersio
 		ContentType:    v.ContentType,
 		Metadata:       v.Metadata,
 		Tags:           v.Tags,
-		CreatedAt:      tsProto(v.CreatedAt),
+		CreatedAt:      convx.TsProto(v.CreatedAt),
 		IsCurrent:      v.IsCurrent,
 	}
 	if v.ChecksumAlgo != "" || v.Checksum != "" {
@@ -44,7 +46,7 @@ func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersio
 	if v.LockMode != "" || v.LockRetainUntil != nil || v.LegalHold {
 		out.Lock = &pb.ObjectLockState{
 			Mode:        v.LockMode,
-			RetainUntil: tsPtrProto(v.LockRetainUntil),
+			RetainUntil: convx.TsPtrProto(v.LockRetainUntil),
 			LegalHold:   v.LegalHold,
 		}
 	}
@@ -57,7 +59,7 @@ func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersio
 func lockStateToProto(l object.ObjectLock) *pb.ObjectLockState {
 	return &pb.ObjectLockState{
 		Mode:        l.Mode,
-		RetainUntil: tsPtrProto(l.RetainUntil),
+		RetainUntil: convx.TsPtrProto(l.RetainUntil),
 		LegalHold:   l.LegalHold,
 	}
 }

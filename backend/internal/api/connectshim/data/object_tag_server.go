@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 
 	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
@@ -40,7 +42,7 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, badName(err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -64,7 +66,7 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, badName(err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))

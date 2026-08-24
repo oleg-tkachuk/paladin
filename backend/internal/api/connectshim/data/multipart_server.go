@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"github.com/google/uuid"
 
 	"connectrpc.com/connect"
@@ -115,13 +117,13 @@ func (s *MultipartServer) ListParts(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListPartsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListPartsResponse{Page: convx.PageResponseProto(next)}
 	for i := range parts {
 		out.Parts = append(out.Parts, &pb.PartInfo{
 			PartNumber: parts[i].PartNumber,
 			SizeBytes:  parts[i].SizeBytes,
 			Etag:       parts[i].ETag,
-			UploadedAt: tsProto(parts[i].UploadedAt),
+			UploadedAt: convx.TsProto(parts[i].UploadedAt),
 		})
 	}
 	return connect.NewResponse(out), nil

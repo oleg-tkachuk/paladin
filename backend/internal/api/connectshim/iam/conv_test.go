@@ -26,36 +26,6 @@ var (
 
 // ─── timestamp / page helpers ──────────────────────────────────────────────
 
-func TestTsHelpers(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-
-	if tsProto(time.Time{}) != nil {
-		t.Error("a zero time must project as nil, not epoch 0")
-	}
-	if got := tsProto(now); got == nil || !got.AsTime().Equal(now) {
-		t.Errorf("tsProto = %v", got)
-	}
-	if tsPtrProto(nil) != nil {
-		t.Error("nil pointer must project as nil")
-	}
-	zero := time.Time{}
-	if tsPtrProto(&zero) != nil {
-		t.Error("pointer to a zero time must project as nil")
-	}
-	if got := tsPtrProto(&now); got == nil || !got.AsTime().Equal(now) {
-		t.Errorf("tsPtrProto = %v", got)
-	}
-}
-
-func TestPageResponseProto(t *testing.T) {
-	if pageResponseProto("") != nil {
-		t.Error("no next token must omit the page response entirely")
-	}
-	if got := pageResponseProto("tok"); got == nil || got.NextPageToken != "tok" {
-		t.Errorf("pageResponseProto = %v", got)
-	}
-}
-
 // ─── scopes ────────────────────────────────────────────────────────────────
 
 // The scope type mapping is used in both directions on the auth path, so a
@@ -224,36 +194,6 @@ func TestTenantFromParent(t *testing.T) {
 		t.Run(label, func(t *testing.T) {
 			if _, err := tenantFromParent(p); err == nil {
 				t.Errorf("want an error for %q", p)
-			}
-		})
-	}
-}
-
-func TestParseRV(t *testing.T) {
-	t.Run("empty is zero", func(t *testing.T) {
-		got, err := parseRV("")
-		if err != nil || got != 0 {
-			t.Errorf("got %d, %v", got, err)
-		}
-	})
-	t.Run("digits", func(t *testing.T) {
-		got, err := parseRV("1234")
-		if err != nil || got != 1234 {
-			t.Errorf("got %d, %v", got, err)
-		}
-	})
-	// The hand-rolled digit loop accepts only ASCII digits — no signs, spaces,
-	// or unicode numerals.
-	for label, s := range map[string]string{
-		"negative":      "-1",
-		"plus":          "+1",
-		"letters":       "12a",
-		"space":         "1 2",
-		"unicode digit": "１２",
-	} {
-		t.Run(label, func(t *testing.T) {
-			if _, err := parseRV(s); err == nil {
-				t.Errorf("want an error for %q", s)
 			}
 		})
 	}

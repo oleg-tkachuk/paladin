@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -91,7 +93,7 @@ func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -123,7 +125,7 @@ func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -167,7 +169,7 @@ func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListCollectionsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListCollectionsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Collections = append(out.Collections, collectionDomainToProto(&list[i]))
 	}
@@ -179,7 +181,7 @@ func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *connect
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -203,7 +205,7 @@ func (s *CollectionServer) BindCollectionToBucket(ctx context.Context, req *conn
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -236,9 +238,9 @@ func collectionDomainToProto(o *objectkey.Collection) *pb.Collection {
 		DisplayName:     o.DisplayName,
 		Bucket:          fmt.Sprintf("storageBackends/%s/buckets/%s", o.BackendID, o.BucketName),
 		CedarPolicy:     o.CedarPolicy,
-		ResourceVersion: resourceVersion(o.ResourceVersion),
-		CreatedAt:       tsProto(o.CreatedAt),
-		UpdatedAt:       tsProto(o.UpdatedAt),
+		ResourceVersion: convx.ResourceVersion(o.ResourceVersion),
+		CreatedAt:       convx.TsProto(o.CreatedAt),
+		UpdatedAt:       convx.TsProto(o.UpdatedAt),
 	}
 }
 

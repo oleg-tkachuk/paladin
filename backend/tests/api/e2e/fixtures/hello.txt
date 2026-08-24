@@ -1,2 +1,0 @@
-Hello, this is a test file for the Paladin!
-It has some content to verify uploads.

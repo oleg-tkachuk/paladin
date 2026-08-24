@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -59,7 +61,7 @@ func (s *UserServer) UpdateUser(ctx context.Context, req *connect.Request[pb.Upd
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -83,7 +85,7 @@ func (s *UserServer) DeleteUser(ctx context.Context, req *connect.Request[pb.Del
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -107,7 +109,7 @@ func (s *UserServer) ListUsers(ctx context.Context, req *connect.Request[pb.List
 		return nil, err
 	}
 	out := &pb.ListUsersResponse{
-		Page: pageResponseProto(next),
+		Page: convx.PageResponseProto(next),
 	}
 	for i := range users {
 		out.Users = append(out.Users, userToProto(&users[i]))
@@ -180,18 +182,4 @@ func userIDFromName(name string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("invalid user name %q", name)
 	}
 	return uuid.Parse(parts[3])
-}
-
-func parseRV(s string) (int64, error) {
-	if s == "" {
-		return 0, nil
-	}
-	var n int64
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, fmt.Errorf("invalid resource_version %q", s)
-		}
-		n = n*10 + int64(c-'0')
-	}
-	return n, nil
 }

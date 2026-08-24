@@ -15,56 +15,6 @@ import (
 
 // ─── small helpers ─────────────────────────────────────────────────────────
 
-func TestTsHelpers(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-
-	if tsProto(time.Time{}) != nil {
-		t.Error("a zero time must project as nil, not epoch 0")
-	}
-	if got := tsProto(now); got == nil || !got.AsTime().Equal(now) {
-		t.Errorf("tsProto = %v", got)
-	}
-	if tsPtrProto(nil) != nil {
-		t.Error("nil must project as nil")
-	}
-	zero := time.Time{}
-	if tsPtrProto(&zero) != nil {
-		t.Error("a pointer to a zero time must project as nil")
-	}
-	if got := tsPtrProto(&now); got == nil || !got.AsTime().Equal(now) {
-		t.Errorf("tsPtrProto = %v", got)
-	}
-}
-
-func TestResourceVersionAndParseRV(t *testing.T) {
-	// 0 means "unset" and must travel as empty so clients do not echo "0".
-	if got := resourceVersion(0); got != "" {
-		t.Errorf("resourceVersion(0) = %q, want empty", got)
-	}
-	if got := resourceVersion(12); got != "12" {
-		t.Errorf("resourceVersion(12) = %q", got)
-	}
-
-	if got, err := parseRV(""); err != nil || got != 0 {
-		t.Errorf("parseRV(\"\") = %d, %v", got, err)
-	}
-	if got, err := parseRV("12"); err != nil || got != 12 {
-		t.Errorf("parseRV round trip = %d, %v", got, err)
-	}
-	if _, err := parseRV("nope"); err == nil {
-		t.Error("parseRV must reject garbage")
-	}
-}
-
-func TestPageResponseProto(t *testing.T) {
-	if pageResponseProto("") != nil {
-		t.Error("no next token must omit the page response")
-	}
-	if got := pageResponseProto("tok"); got == nil || got.NextPageToken != "tok" {
-		t.Errorf("pageResponseProto = %v", got)
-	}
-}
-
 // The all-zero UUID is how the DB spells "no value"; it must not reach the
 // client as a literal 00000000-… which would read as a real id.
 func TestUuidStrEmpty(t *testing.T) {

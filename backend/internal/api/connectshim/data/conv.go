@@ -15,13 +15,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
@@ -31,41 +31,6 @@ import (
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────
-
-func tsProto(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
-}
-
-func tsPtrProto(t *time.Time) *timestamppb.Timestamp {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(*t)
-}
-
-func resourceVersion(v int64) string {
-	if v == 0 {
-		return ""
-	}
-	return strconv.FormatInt(v, 10)
-}
-
-func parseRV(s string) (int64, error) {
-	if s == "" {
-		return 0, nil
-	}
-	return strconv.ParseInt(s, 10, 64)
-}
-
-func pageResponseProto(next string) *commonpb.PageResponse {
-	if next == "" {
-		return nil
-	}
-	return &commonpb.PageResponse{NextPageToken: next}
-}
 
 // ─── Resource-name parsers ──────────────────────────────────────────────────
 
@@ -205,12 +170,12 @@ func objectToProto(o *object.Object) *pb.Object {
 		Metadata:         o.Metadata,
 		Tags:             o.Tags,
 		ExternalRef:      o.ExternalRef,
-		ResourceVersion:  resourceVersion(o.ResourceVersion),
-		CreatedAt:        tsProto(o.CreatedAt),
-		UpdatedAt:        tsProto(o.UpdatedAt),
-		CommittedAt:      tsPtrProto(o.CommittedAt),
-		TerminatedAt:     tsPtrProto(o.TerminatedAt),
-		PresignExpiresAt: tsPtrProto(o.PresignExpiresAt),
+		ResourceVersion:  convx.ResourceVersion(o.ResourceVersion),
+		CreatedAt:        convx.TsProto(o.CreatedAt),
+		UpdatedAt:        convx.TsProto(o.UpdatedAt),
+		CommittedAt:      convx.TsPtrProto(o.CommittedAt),
+		TerminatedAt:     convx.TsPtrProto(o.TerminatedAt),
+		PresignExpiresAt: convx.TsPtrProto(o.PresignExpiresAt),
 	}
 	if o.ChecksumAlgo != "" || o.Checksum != "" {
 		out.Checksum = &pb.ChecksumDigest{
@@ -225,7 +190,7 @@ func objectToProto(o *object.Object) *pb.Object {
 	if o.Lock.Mode != "" || o.Lock.LegalHold || o.Lock.RetainUntil != nil {
 		out.Lock = &pb.ObjectLockState{
 			Mode:        o.Lock.Mode,
-			RetainUntil: tsPtrProto(o.Lock.RetainUntil),
+			RetainUntil: convx.TsPtrProto(o.Lock.RetainUntil),
 			LegalHold:   o.Lock.LegalHold,
 		}
 	}

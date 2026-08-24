@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -138,7 +140,7 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -187,7 +189,7 @@ func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -266,7 +268,7 @@ func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListTenantsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListTenantsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Tenants = append(out.Tenants, tenantDomainToProto(&list[i]))
 	}
@@ -283,7 +285,7 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(m.GetResourceVersion())
+	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -312,7 +314,7 @@ func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, err := parseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
@@ -357,14 +359,14 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 		Slug:                 t.Slug,
 		DisplayName:          t.DisplayName,
 		InheritedCedarPolicy: t.InheritedCedarPolicy,
-		ResourceVersion:      resourceVersion(t.ResourceVersion),
-		CreatedAt:            tsProto(t.CreatedAt),
-		UpdatedAt:            tsProto(t.UpdatedAt),
+		ResourceVersion:      convx.ResourceVersion(t.ResourceVersion),
+		CreatedAt:            convx.TsProto(t.CreatedAt),
+		UpdatedAt:            convx.TsProto(t.UpdatedAt),
 		DefaultBucket:        t.DefaultBucket,
 		StorageLayout:        t.StorageLayout,
 	}
 	if !t.DeletedAt.IsZero() {
-		out.DeletedAt = tsProto(t.DeletedAt)
+		out.DeletedAt = convx.TsProto(t.DeletedAt)
 	}
 	if len(t.Labels) > 0 {
 		var m map[string]string

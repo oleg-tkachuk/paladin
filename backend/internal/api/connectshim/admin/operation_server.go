@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -41,7 +43,7 @@ func (s *OperationServer) ListOperations(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListOperationsResponse{Page: pageResponseProto(next)}
+	out := &pb.ListOperationsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Operations = append(out.Operations, operationToProto(&list[i]))
 	}
@@ -82,8 +84,8 @@ func operationToProto(o *operation.Operation) *pb.Operation {
 		Type:              o.Type,
 		Done:              o.State == operation.StateSucceeded || o.State == operation.StateFailed || o.State == operation.StateCancelled,
 		InitiatorTenantId: o.TenantID.String(),
-		CreatedAt:         tsProto(o.CreatedAt),
-		UpdatedAt:         tsProto(o.UpdatedAt),
+		CreatedAt:         convx.TsProto(o.CreatedAt),
+		UpdatedAt:         convx.TsProto(o.UpdatedAt),
 	}
 	if md := jsonToAny(o.Metadata); md != nil {
 		out.Metadata = md

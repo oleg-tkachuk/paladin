@@ -6,14 +6,13 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
@@ -21,41 +20,6 @@ import (
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────
-
-func tsProto(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
-}
-
-func tsPtrProto(t *time.Time) *timestamppb.Timestamp {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(*t)
-}
-
-func resourceVersion(v int64) string {
-	if v == 0 {
-		return ""
-	}
-	return strconv.FormatInt(v, 10)
-}
-
-func parseRV(s string) (int64, error) {
-	if s == "" {
-		return 0, nil
-	}
-	return strconv.ParseInt(s, 10, 64)
-}
-
-func pageResponseProto(next string) *commonpb.PageResponse {
-	if next == "" {
-		return nil
-	}
-	return &commonpb.PageResponse{NextPageToken: next}
-}
 
 // ─── StorageBackend ↔ proto ─────────────────────────────────────────────────
 
@@ -82,12 +46,12 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		Maintenance:                   b.Maintenance,
 		HealthStatus:                  b.HealthStatus,
 		HealthMessage:                 b.HealthMessage,
-		HealthCheckedAt:               tsProto(b.HealthCheckedAt),
+		HealthCheckedAt:               convx.TsProto(b.HealthCheckedAt),
 		PreviousCredentialsSecretRef:  b.PreviousCredentialsSecretRef,
-		PreviousCredentialsValidUntil: tsProto(b.PreviousCredentialsValidUntil),
-		ResourceVersion:               resourceVersion(b.ResourceVersion),
-		CreatedAt:                     tsProto(b.CreatedAt),
-		UpdatedAt:                     tsProto(b.UpdatedAt),
+		PreviousCredentialsValidUntil: convx.TsProto(b.PreviousCredentialsValidUntil),
+		ResourceVersion:               convx.ResourceVersion(b.ResourceVersion),
+		CreatedAt:                     convx.TsProto(b.CreatedAt),
+		UpdatedAt:                     convx.TsProto(b.UpdatedAt),
 	}
 }
 
@@ -217,9 +181,9 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 		Versioning:      versioningToProto(b.Versioning),
 		Replication:     replicationToProto(b.Replication),
 		Labels:          b.Labels,
-		ResourceVersion: resourceVersion(b.ResourceVersion),
-		CreatedAt:       tsProto(b.CreatedAt),
-		UpdatedAt:       tsProto(b.UpdatedAt),
+		ResourceVersion: convx.ResourceVersion(b.ResourceVersion),
+		CreatedAt:       convx.TsProto(b.CreatedAt),
+		UpdatedAt:       convx.TsProto(b.UpdatedAt),
 		ProvisionState:  b.ProvisionState,
 	}
 }
@@ -388,7 +352,7 @@ func auditEntryToProto(e *admindomain.AuditEntry) *pb.AuditLogEntry {
 	}
 	return &pb.AuditLogEntry{
 		EntryId:       e.EntryID.String(),
-		At:            tsProto(e.At),
+		At:            convx.TsProto(e.At),
 		ActorSubject:  e.ActorSubject,
 		ActorTenantId: uuidStrEmpty(e.ActorTenantID.String()),
 		ActorAudience: e.ActorAudience,
@@ -428,10 +392,10 @@ func quotaToProto(q *admindomain.Quota) *pb.Quota {
 			ObjectCount:  q.UsageObjectCount,
 			BytesToday:   q.UsageBytesToday,
 			ObjectsToday: q.UsageObjectsToday,
-			LastResetAt:  tsPtrProto(q.LastResetAt),
+			LastResetAt:  convx.TsPtrProto(q.LastResetAt),
 		},
-		ResourceVersion: resourceVersion(q.ResourceVersion),
-		UpdatedAt:       tsProto(q.UpdatedAt),
+		ResourceVersion: convx.ResourceVersion(q.ResourceVersion),
+		UpdatedAt:       convx.TsProto(q.UpdatedAt),
 	}
 }
 
@@ -444,9 +408,9 @@ func eventSubToProto(s *admindomain.EventSubscription) *pb.EventSubscription {
 		TenantId:        s.TenantID.String(),
 		Filter:          s.CELFilter,
 		Disabled:        s.Disabled,
-		ResourceVersion: resourceVersion(s.ResourceVersion),
-		CreatedAt:       tsProto(s.CreatedAt),
-		UpdatedAt:       tsProto(s.UpdatedAt),
+		ResourceVersion: convx.ResourceVersion(s.ResourceVersion),
+		CreatedAt:       convx.TsProto(s.CreatedAt),
+		UpdatedAt:       convx.TsProto(s.UpdatedAt),
 	}
 	out.Sink = sinkFromConfig(s.SinkKind, s.SinkConfig)
 	return out

@@ -5,36 +5,14 @@ package iam
 
 import (
 	"fmt"
-	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
 
 	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 )
-
-func tsProto(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
-}
-
-func tsPtrProto(t *time.Time) *timestamppb.Timestamp {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(*t)
-}
-
-func pageResponseProto(nextToken string) *commonpb.PageResponse {
-	if nextToken == "" {
-		return nil
-	}
-	return &commonpb.PageResponse{NextPageToken: nextToken}
-}
 
 // ─── Wire helpers ───────────────────────────────────────────────────────────
 
@@ -52,9 +30,9 @@ func userToProto(u *authstore.User) *pb.User {
 		Scopes:          scopesToProto(u.Scopes),
 		Disabled:        u.Disabled,
 		ResourceVersion: fmt.Sprintf("%d", u.ResourceVersion),
-		CreatedAt:       tsProto(u.CreatedAt),
-		UpdatedAt:       tsProto(u.UpdatedAt),
-		LastLoginAt:     tsPtrProto(u.LastLoginAt),
+		CreatedAt:       convx.TsProto(u.CreatedAt),
+		UpdatedAt:       convx.TsProto(u.UpdatedAt),
+		LastLoginAt:     convx.TsPtrProto(u.LastLoginAt),
 	}
 }
 

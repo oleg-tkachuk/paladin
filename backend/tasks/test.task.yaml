@@ -45,24 +45,7 @@ tasks:
 
   # ─── E2E + functional ────────────────────────────────────────────────────
 
-  e2e:
-    desc: "Run Hurl E2E suite (override HOST=...)"
-    vars:
-      HOST: '{{.HOST | default "http://localhost:8080"}}'
-    cmds:
-      - hurl --variable host={{.HOST}} --test tests/api/e2e/*.hurl
 
-  functional:
-    desc: "Run API functional tests"
-    dir: tests/api/functional
-    cmds:
-      - ./run-functional.sh
-
-  mutations:
-    desc: "Run API mutation tests"
-    dir: tests/api/mutations
-    cmds:
-      - ./run-mutations.sh
 
   # ─── Security ────────────────────────────────────────────────────────────
   # Each of these shells out to a script in tests/api/security/. Keeping
@@ -97,10 +80,9 @@ tasks:
   # ─── Aggregate ───────────────────────────────────────────────────────────
 
   all:
-    desc: "Run lint + unit + functional + e2e + security"
+    desc: "Run lint + unit + integration + security"
     cmds:
       - task: lint
       - task: unit
-      - task: functional
-      - task: e2e
+      - task: integration
       - task: security

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -35,7 +37,7 @@ func (s *AuditServer) ListAuditLog(ctx context.Context, req *connect.Request[pb.
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListAuditLogResponse{Page: pageResponseProto(next)}
+	out := &pb.ListAuditLogResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Entries = append(out.Entries, auditEntryToProto(&list[i]))
 	}
