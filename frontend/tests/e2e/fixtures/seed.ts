@@ -36,10 +36,12 @@ import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
+import { EventSubscriptionService } from "@/gen/paladin/admin/v1/event_subscription_service_pb";
+import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
+import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
-import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import {
   CapabilityService,
   PrincipalKind,
@@ -951,4 +953,71 @@ export async function bumpBucketVersion(
     bucket: { displayName: `${current.displayName} (touched)` },
   });
   return res.resourceVersion;
+}
+
+// ─── Event subscriptions ────────────────────────────────────────────────────
+
+/** Count a tenant's event subscriptions — the observable effect of the
+ *  editor dialog's Create/Delete. */
+export async function subscriptionCount(tenantId: string): Promise<number> {
+  const client = createClient(EventSubscriptionService, adminTransport());
+  const res = await client.listSubscriptions({ parent: `tenants/${tenantId}` });
+  return res.subscriptions.length;
+}
+
+/** Create a subscription through the API, for tests that need one to exist
+ *  before they drive the UI against it. */
+export async function seedSubscription(opts: {
+  tenantId: string;
+  httpUrl?: string;
+}): Promise<{ name: string; resourceVersion: string }> {
+  const client = createClient(EventSubscriptionService, adminTransport());
+  const res = await client.createSubscription({
+    parent: `tenants/${opts.tenantId}`,
+    subscription: {
+      tenantId: opts.tenantId,
+      sink: {
+        target: {
+          case: "http",
+          value: { url: opts.httpUrl ?? "https://hooks.example.invalid/e2e" },
+        },
+      },
+    },
+  });
+  return { name: res.name, resourceVersion: res.resourceVersion };
+}
+
+// ─── Tenant budget ──────────────────────────────────────────────────────────
+
+/** Read a tenant's budget cap and spend. Returns null when no budget row
+ *  exists — the state the console renders as "Create budget". */
+export async function tenantBudget(tenantId: string): Promise<{
+  maxBudgetAmount: number;
+  spentAmount: number;
+  unitCode: string;
+} | null> {
+  const client = createClient(TenantBudgetService, adminTransport());
+  try {
+    const res = await client.get({ tenantId });
+    return {
+      maxBudgetAmount: res.budget?.maxBudgetAmount ?? 0,
+      spentAmount: res.budget?.spentAmount ?? 0,
+      unitCode: res.budget?.unitCode ?? "",
+    };
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.NotFound) return null;
+    throw err;
+  }
+}
+
+// ─── Collections ────────────────────────────────────────────────────────────
+
+/** Count a tenant's collections, for asserting a create or delete landed. */
+export async function collectionCount(tenantId: string): Promise<number> {
+  const client = createClient(CollectionService, adminTransport());
+  const res = await client.listCollections({
+    parent: `tenants/${tenantId}`,
+    page: { pageSize: 200 },
+  });
+  return res.collections.length;
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
@@ -98,7 +99,14 @@ func (s *TenantBudgetServer) Set(
 		t := pe.AsTime()
 		args.PeriodEnd = &t
 	}
-	tb, err := s.Usage.SetTenantBudget(ctx, args)
+	// tenant_budgets carries the standard RLS policy, whose WITH CHECK pins
+	// writes to paladin_session_tenant_id(). A platform admin setting another
+	// tenant's cap therefore has to act AS that tenant for the write, or
+	// Postgres refuses the insert with "new row violates row-level security
+	// policy" — which is what happened: creating a budget from the console
+	// failed for every tenant except the admin's own. SetQuota, the same shape
+	// on the same policy, has always done this.
+	tb, err := s.Usage.SetTenantBudget(auth.WithActingTenant(ctx, tenantID), args)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

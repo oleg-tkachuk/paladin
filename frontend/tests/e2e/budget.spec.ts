@@ -1,0 +1,117 @@
+/**
+ * Tenant budget — the aggregate spend cap.
+ *
+ * Unlike quotas, TenantBudgetService.Set carries NO resource_version: it is a
+ * plain upsert, so two operators editing the same cap race with last-write-
+ * wins and neither is told. That is recorded in BACKLOG rather than fixed
+ * here; these tests cover what the page does today.
+ *
+ * The flag worth pinning is reset_spend. Set(false) changes the cap mid-window
+ * and leaves the counter alone; Set(true) rolls the period and zeroes it.
+ * Getting that backwards either loses a tenant's accrued spend or refuses
+ * charges it should still accept.
+ */
+import { test, expect } from "@playwright/test";
+import { loginAsAdmin } from "./fixtures/auth";
+import { seedTenant, tenantBudget } from "./fixtures/seed";
+
+function budgetURL(tenantId: string): string {
+  return `/tenants/${tenantId}/budget`;
+}
+
+test.describe("Tenant budget", () => {
+  test("a tenant with no budget offers to create one", async ({ page }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+    expect(await tenantBudget(tenant.tenantId)).toBeNull();
+
+    await page.goto(budgetURL(tenant.tenantId));
+
+    // "Create budget" rather than "Apply changes" is the page saying it holds
+    // no row — the same create/update distinction the quota form makes.
+    await expect(
+      page.getByRole("button", { name: /Create budget/ }),
+    ).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("setting a cap persists it", async ({ page }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+
+    await page.goto(budgetURL(tenant.tenantId));
+    const submit = page.getByRole("button", { name: /Create budget/ });
+    await expect(submit).toBeVisible({ timeout: 15_000 });
+
+    await page.locator("#max-budget").fill("250");
+    await submit.click();
+
+    await expect
+      .poll(
+        async () => (await tenantBudget(tenant.tenantId))?.maxBudgetAmount,
+        {
+          timeout: 15_000,
+        },
+      )
+      .toBe(250);
+  });
+
+  test("Save is held until a cap is entered", async ({ page }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+
+    await page.goto(budgetURL(tenant.tenantId));
+    const submit = page.getByRole("button", { name: /Create budget/ });
+    await expect(submit).toBeVisible({ timeout: 15_000 });
+
+    // An empty cap is not "unlimited" — it is nothing to send. The form holds
+    // rather than posting a value it would have to invent.
+    await page.locator("#max-budget").fill("");
+    await expect(submit).toBeDisabled();
+  });
+
+  test("editing an existing budget keeps the spend counter", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const tenant = await seedTenant();
+
+    // First save creates the row.
+    await page.goto(budgetURL(tenant.tenantId));
+    await expect(
+      page.getByRole("button", { name: /Create budget/ }),
+    ).toBeVisible({ timeout: 15_000 });
+    await page.locator("#max-budget").fill("100");
+    await page.getByRole("button", { name: /Create budget/ }).click();
+
+    await expect
+      .poll(
+        async () => (await tenantBudget(tenant.tenantId))?.maxBudgetAmount,
+        {
+          timeout: 15_000,
+        },
+      )
+      .toBe(100);
+    const afterCreate = await tenantBudget(tenant.tenantId);
+
+    // Second save raises the cap without rolling the period. reset_spend
+    // defaults off, so spent_amount must survive — a cap change mid-window is
+    // not a new accounting period.
+    await page.reload();
+    const apply = page.getByRole("button", { name: /Apply changes/ });
+    await expect(apply).toBeVisible({ timeout: 15_000 });
+    await page.locator("#max-budget").fill("500");
+    await apply.click();
+
+    await expect
+      .poll(
+        async () => (await tenantBudget(tenant.tenantId))?.maxBudgetAmount,
+        {
+          timeout: 15_000,
+        },
+      )
+      .toBe(500);
+    expect((await tenantBudget(tenant.tenantId))?.spentAmount).toBe(
+      afterCreate?.spentAmount,
+    );
+  });
+});

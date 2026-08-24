@@ -630,7 +630,11 @@ export function SubscriptionEditorDialog({
               htmlFor="sub-filter"
               optional
               hint={
-                "Empty = all events. Examples: event.kind == 'object.uploaded', event.tenant_id == 't_acme' && event.severity == 'error'. CEL evaluates against the EventEnvelope."
+                // Identifiers are bare: the EventEnvelope schema declares
+                // kind, tenant_id and severity, not event.kind. The examples
+                // carried an `event.` prefix that the validator rejects, so
+                // anyone copying them got "undeclared reference to 'event'".
+                "Empty = all events. Examples: kind == 'object.uploaded', tenant_id == 't_acme' && severity == 'error'. CEL evaluates against the EventEnvelope."
               }
             >
               <Textarea
