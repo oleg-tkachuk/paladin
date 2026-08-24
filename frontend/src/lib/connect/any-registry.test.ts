@@ -17,7 +17,7 @@ import { describe, it, expect } from "vitest";
 import { fromJson, toJson, createRegistry } from "@bufbuild/protobuf";
 import { StructSchema } from "@bufbuild/protobuf/wkt";
 import { ListOperationsResponseSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
-import { anyRegistry } from "./transport";
+import { anyRegistry } from "./any-registry";
 
 /** A ListOperations response shaped exactly as the admin plane returns it —
  *  captured from the cluster, not invented. */

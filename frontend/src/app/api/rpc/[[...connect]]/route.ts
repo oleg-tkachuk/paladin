@@ -6,6 +6,7 @@ import {
   ConnectError,
 } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import { anyRegistry } from "@/lib/connect/any-registry";
 // DescService is the descriptor type for any generated Connect service.
 // connect-es v2 doesn't re-export it; import directly from protobuf codegenv1.
 import type { DescService } from "@bufbuild/protobuf";
@@ -122,7 +123,20 @@ function buildPlaneRouter(plane: Plane) {
     ],
   });
 
-  const router = createConnectRouter();
+  // The bridge is a real Connect server, not a byte pipe: it decodes each
+  // response from the plane and re-encodes it as JSON for the browser. Any
+  // carries its payload's type as a URL, so that re-encode needs a registry —
+  // without one it throws "google.protobuf.Struct is not in the type
+  // registry" and the bridge answers 500, even though the plane itself
+  // returned a perfectly good response.
+  //
+  // PlatformOperationService is where this bit: operations.metadata and
+  // .response are Any, packed as Struct by connectshim's jsonToAny. Calling
+  // the plane directly returned 200; the same call through here returned 500,
+  // which is what made it look like a server bug.
+  const router = createConnectRouter({
+    jsonOptions: { registry: anyRegistry },
+  });
 
   for (const service of planeServices[plane]) {
     const internalClient = createClient(service, internalTransport);

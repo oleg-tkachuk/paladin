@@ -1,6 +1,5 @@
 import { createConnectTransport } from "@connectrpc/connect-web";
-import { createRegistry } from "@bufbuild/protobuf";
-import { StructSchema } from "@bufbuild/protobuf/wkt";
+import { anyRegistry } from "./any-registry";
 import {
   ConnectError,
   Code,
@@ -171,23 +170,6 @@ function authInterceptorFor(audience: Audience): Interceptor {
     }
   };
 }
-
-// google.protobuf.Any carries its payload's type in a URL, so a JSON codec
-// needs a registry to turn that URL back into a message — without one it
-// cannot decode the field at all, and the whole response fails.
-//
-// PlatformOperationService is the surface that hit this: operations.metadata
-// and .response are Any, and the server packs the executor's JSON payload as a
-// Struct (see connectshim jsonToAny). Every ListOperations carrying an
-// operation therefore came back as "cannot decode message google.protobuf.Any
-// from JSON: google.protobuf.Struct is not in the type registry" — the drawer
-// and dashboard widget were empty for as long as no operation existed, then
-// broke the moment one did.
-//
-// Register what the server actually packs. A type absent here fails loudly
-// with the same message, which is the right outcome: silently dropping an Any
-// would leave a client believing an operation carried no metadata.
-export const anyRegistry = createRegistry(StructSchema);
 
 function makePlaneTransport(plane: Plane, audience: Audience): Transport {
   return createConnectTransport({
