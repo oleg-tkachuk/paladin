@@ -312,9 +312,17 @@ export default function TenantQuotasPage() {
             >
               {resetting ? "Resetting…" : "Reset daily counters"}
             </Button>
-            <Button type="submit" disabled={submitting}>
+            {/* Disabled while the quota is still loading, not just while
+                submitting. The form's resource_version comes from the fetched
+                quota; before it arrives the state is null and the request
+                would carry "0" — which asserts "no quota row exists" and is
+                refused with a version mismatch if one does. The user sees
+                "Update failed" for a click that was simply too early. */}
+            <Button type="submit" disabled={submitting || loading}>
               {submitting ? (
                 "Updating…"
+              ) : loading ? (
+                "Loading…"
               ) : (
                 <>
                   <CheckCircleIcon className="size-4" />

@@ -31,7 +31,7 @@ test.describe("Tenant quotas — OCC", () => {
     // "Create quota" rather than "Apply changes" is the console saying it
     // holds no row and will send resource_version "0".
     const submit = page.getByRole("button", { name: /Create quota/ });
-    await expect(submit).toBeVisible({ timeout: 15_000 });
+    await expect(submit).toBeEnabled({ timeout: 15_000 });
 
     await page.getByLabel("Max total bytes").fill("2048");
     await page.getByLabel("Max object count").fill("10");
@@ -51,8 +51,11 @@ test.describe("Tenant quotas — OCC", () => {
     const seeded = await seedQuota({ tenantId: tenant.tenantId });
 
     await page.goto(quotasURL(tenant.tenantId));
+    // Enabled, not merely visible: the button stays disabled until the quota
+    // has loaded, because the form's resource_version comes from it. Clicking
+    // early would send "0" — "no row exists" — and be refused.
     const submit = page.getByRole("button", { name: /Apply changes/ });
-    await expect(submit).toBeVisible({ timeout: 15_000 });
+    await expect(submit).toBeEnabled({ timeout: 15_000 });
 
     await page.getByLabel("Max object count").fill("4242");
     await submit.click();
@@ -75,8 +78,11 @@ test.describe("Tenant quotas — OCC", () => {
 
     // Load the form — the console now holds the version it just read.
     await page.goto(quotasURL(tenant.tenantId));
+    // Enabled, not merely visible: the button stays disabled until the quota
+    // has loaded, because the form's resource_version comes from it. Clicking
+    // early would send "0" — "no row exists" — and be refused.
     const submit = page.getByRole("button", { name: /Apply changes/ });
-    await expect(submit).toBeVisible({ timeout: 15_000 });
+    await expect(submit).toBeEnabled({ timeout: 15_000 });
 
     // Someone else edits the same quota. The page's held version is stale
     // from here on; this is the race the guard exists for.
