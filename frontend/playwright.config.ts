@@ -76,6 +76,12 @@ export default defineConfig({
     // navigation through an ingress is not a regression.
     actionTimeout: process.env.PALADIN_E2E_BASE_URL ? 20_000 : 10_000,
     navigationTimeout: process.env.PALADIN_E2E_BASE_URL ? 30_000 : 15_000,
+    // A deployed target serves a certificate from the environment's own CA.
+    // Whether the browser accepts it depends on the machine's trust store —
+    // it passes where that CA happens to be installed and fails everywhere
+    // else, which is a bad thing for a suite to depend on. Scoped to external
+    // runs: the compose stack is plain HTTP and unaffected either way.
+    ignoreHTTPSErrors: Boolean(process.env.PALADIN_E2E_BASE_URL),
   },
 
   // Chromium only per Clarification Q1.
