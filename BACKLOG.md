@@ -1933,3 +1933,37 @@ of the pipeline._
   DeleteObject does, and the Unimplemented guard in the shim is removed.
 - **Blockers:** Hard delete currently lives in a TTL-driven housekeeping job
   rather than an on-demand path; batch would need that logic factored out.
+
+---
+## Collection create/delete have no e2e coverage
+
+- **Status:** Deferred (test-harness problem, not a product defect).
+- **Reason:** Both flows drive controls inside the collections table, which
+  re-renders as its pages settle. Playwright's actionability wait never sees
+  the button hold still, so a click times out while the element is visible and
+  enabled the whole time. Forcing the click gets past that, but the row lookup
+  after the write is racy for the same reason. Two flaky tests are worse than
+  an honest gap, so only the create dialog's binding requirement is covered.
+  The RPCs themselves (CreateCollection / DeleteCollection, both OCC-guarded)
+  are covered by the Go integration suite.
+- **Definition of Done:** collections-crud.spec.ts covers create and delete
+  through the UI without forced clicks, and passes ten consecutive runs.
+- **Blockers:** Needs the page to settle deterministically — a test hook that
+  signals "list is stable", or pagination that does not re-render in place.
+
+---
+## TenantBudgetService.Set has no OCC guard
+
+- **Status:** Deferred (needs a proto change).
+- **Reason:** Unlike SetQuota, which now checks resource_version in its
+  upsert's DO UPDATE clause, TenantBudgetServiceSetRequest carries no version
+  at all — it is a plain upsert. Two operators editing the same tenant's spend
+  cap race with last-write-wins and neither is told, which is the exact defect
+  that was just closed for quotas. Noticed while adding e2e for the budget
+  page.
+- **Definition of Done:** SetRequest carries a required resource_version, the
+  store checks it in the same statement as the write, and a concurrent edit is
+  Aborted rather than silently overwritten — the shape TestQuotaUpsertOCC pins
+  for quotas.
+- **Blockers:** tenant_budgets has no resource_version column yet, so this
+  needs a migration alongside the proto change.
