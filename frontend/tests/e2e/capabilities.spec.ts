@@ -23,6 +23,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { seedTenant, seedCapability } from "./fixtures/seed";
 
 // /tenants/<id>/capabilities is browse-scoped (CapabilityService.List is
@@ -46,7 +47,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     const tenant = await seedTenant();
     const cap = await seedCapability({ tenantId: tenant.tenantId });
 
-    await page.goto(`/tenants/${encodeURIComponent(tenant.slug)}/capabilities`);
+    await gotoSettled(
+      page,
+      `/tenants/${encodeURIComponent(tenant.slug)}/capabilities`,
+    );
     await browseCapabilities(page, cap.subject);
     // The table renders the capability ID (no subject column); match on it.
     await expect(page.getByText(cap.id).first()).toBeVisible({
@@ -98,7 +102,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     // carries the first's subject, so first.subject is the right
     // browse key. exact:true matches the ID cell only — not the
     // "Actions for capability <id>" sr-only label.
-    await page.goto(`/tenants/${encodeURIComponent(tenant.slug)}/capabilities`);
+    await gotoSettled(
+      page,
+      `/tenants/${encodeURIComponent(tenant.slug)}/capabilities`,
+    );
     await browseCapabilities(page, first.subject);
     await expect(page.getByText(first.id, { exact: true })).toHaveCount(1, {
       timeout: 10_000,
@@ -112,7 +119,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     const tenant = await seedTenant();
     const cap = await seedCapability({ tenantId: tenant.tenantId });
 
-    await page.goto(`/tenants/${encodeURIComponent(tenant.slug)}/capabilities`);
+    await gotoSettled(
+      page,
+      `/tenants/${encodeURIComponent(tenant.slug)}/capabilities`,
+    );
     await browseCapabilities(page, cap.subject);
     await expect(page.getByText(cap.id).first()).toBeVisible({
       timeout: 10_000,

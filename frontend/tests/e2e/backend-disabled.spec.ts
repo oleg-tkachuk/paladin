@@ -12,6 +12,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { seedDisabledBackend } from "./fixtures/seed";
 
 test.describe("US3 — disabled backends in the UI", () => {
@@ -21,7 +22,7 @@ test.describe("US3 — disabled backends in the UI", () => {
     await loginAsAdmin(page);
     const be = await seedDisabledBackend();
 
-    await page.goto("/storage-backends");
+    await gotoSettled(page, "/storage-backends");
 
     // The row for our seeded backend shows the "Disabled" badge.
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });

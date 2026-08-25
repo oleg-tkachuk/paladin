@@ -15,6 +15,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import {
   seedPhysicalBucket,
   seedCollection,
@@ -74,7 +75,7 @@ test.describe("US6 — Object lifecycle", () => {
     const { tenantId, tenantSlug, collection } = await seedScope();
     const obj = await seedObject({ tenantId, collection });
 
-    await page.goto(objectsURL(tenantSlug, collection));
+    await gotoSettled(page, objectsURL(tenantSlug, collection));
     await expectKeyVisible(page, obj.key);
   });
 
@@ -95,7 +96,7 @@ test.describe("US6 — Object lifecycle", () => {
     // which no tenant-level check would catch. A listing that stopped
     // narrowing by collection shows more data than expected rather than
     // erroring, so only an assertion like this notices.
-    await page.goto(objectsURL(a.tenantSlug, a.collection));
+    await gotoSettled(page, objectsURL(a.tenantSlug, a.collection));
     await expectKeyVisible(page, inA.key);
     await expect(objectRow(page, inB.key)).toHaveCount(0);
   });
@@ -107,7 +108,7 @@ test.describe("US6 — Object lifecycle", () => {
     const { tenantSlug, tenantId, collection } = await seedScope();
     const obj = await seedObject({ tenantId, collection });
 
-    await page.goto(objectsURL(tenantSlug, collection));
+    await gotoSettled(page, objectsURL(tenantSlug, collection));
     await expectKeyVisible(page, obj.key);
 
     // Deleted through the data plane rather than the row menu: this test is
@@ -133,7 +134,7 @@ test.describe("US6 — Object lifecycle", () => {
     const { tenantSlug, tenantId, collection } = await seedScope();
     const obj = await seedObject({ tenantId, collection });
 
-    await page.goto(objectsURL(tenantSlug, collection));
+    await gotoSettled(page, objectsURL(tenantSlug, collection));
     await expectKeyVisible(page, obj.key);
 
     // The trigger is icon-only, so its accessible name is the only thing
@@ -165,7 +166,7 @@ test.describe("US6 — Object lifecycle", () => {
       sizeBytes: 12 * 1024 * 1024,
     });
 
-    await page.goto(objectsURL(tenantSlug, collection));
+    await gotoSettled(page, objectsURL(tenantSlug, collection));
     // One row, not one per part: the parts are an implementation detail of
     // the transfer, and a listing that showed them would mean Complete did
     // not merge them.

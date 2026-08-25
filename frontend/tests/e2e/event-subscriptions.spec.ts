@@ -14,6 +14,7 @@ import {
   seedSubscription,
   subscriptionCount,
 } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 function subsURL(tenantId: string): string {
   return `/tenants/${tenantId}/event-subscriptions`;
@@ -33,16 +34,11 @@ async function openEditor(page: import("@playwright/test").Page) {
   const newSub = page.getByRole("button", { name: /New subscription/ }).first();
   await expect(newSub).toBeVisible({ timeout: 20_000 });
 
-  // Wait for the page to go quiet first. The shell's scope picker fetches the
-  // whole backend and bucket inventory on every mount — 55 and 184 rows here —
-  // and while React renders that, a click on an already-visible button is
-  // dropped: the press lands, the handler never runs, and the dialog does not
-  // open. It only shows up when a heavyweight file ran just before this one,
-  // which is why it looked like cross-file interference.
-  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {
-    // A page that never goes fully idle is not a reason to fail here; the
-    // click below still gets its own wait.
-  });
+  // gotoSettled already waited for the shell to stop fetching; this second
+  // wait covers a refetch triggered since then.
+  await page
+    .waitForLoadState("networkidle", { timeout: 30_000 })
+    .catch(() => {});
   await newSub.click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("#sub-http-url")).toBeVisible({ timeout: 15_000 });
@@ -55,7 +51,7 @@ test.describe("Event subscriptions", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto(subsURL(tenant.tenantId));
+    await gotoSettled(page, subsURL(tenant.tenantId));
 
     await expect(
       page.getByRole("button", { name: /New subscription/ }).first(),
@@ -67,7 +63,7 @@ test.describe("Event subscriptions", () => {
     const tenant = await seedTenant();
     expect(await subscriptionCount(tenant.tenantId)).toBe(0);
 
-    await page.goto(subsURL(tenant.tenantId));
+    await gotoSettled(page, subsURL(tenant.tenantId));
     await openEditor(page);
 
     await page
@@ -87,7 +83,7 @@ test.describe("Event subscriptions", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto(subsURL(tenant.tenantId));
+    await gotoSettled(page, subsURL(tenant.tenantId));
     await openEditor(page);
 
     await page
@@ -125,7 +121,7 @@ test.describe("Event subscriptions", () => {
     await seedSubscription({ tenantId: tenant.tenantId });
     expect(await subscriptionCount(tenant.tenantId)).toBe(1);
 
-    await page.goto(subsURL(tenant.tenantId));
+    await gotoSettled(page, subsURL(tenant.tenantId));
 
     const row = page
       .getByRole("row")
@@ -151,7 +147,7 @@ test.describe("Event subscriptions", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto(subsURL(tenant.tenantId));
+    await gotoSettled(page, subsURL(tenant.tenantId));
     await openEditor(page);
 
     // The hint is a worked example, so it has to work. It suggested

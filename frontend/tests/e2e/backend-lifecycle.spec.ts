@@ -12,6 +12,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { seedEnabledBackend, backendState } from "./fixtures/seed";
 
 test.describe("Storage backend — drain and maintenance", () => {
@@ -23,7 +24,7 @@ test.describe("Storage backend — drain and maintenance", () => {
     const before = await backendState(be.backendId);
     expect(before.readOnly).toBe(false);
 
-    await page.goto("/storage-backends");
+    await gotoSettled(page, "/storage-backends");
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
@@ -46,7 +47,7 @@ test.describe("Storage backend — drain and maintenance", () => {
     await loginAsAdmin(page);
     const be = await seedEnabledBackend();
 
-    await page.goto("/storage-backends");
+    await gotoSettled(page, "/storage-backends");
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
@@ -71,7 +72,7 @@ test.describe("Storage backend — drain and maintenance", () => {
     await loginAsAdmin(page);
     const be = await seedEnabledBackend();
 
-    await page.goto("/storage-backends");
+    await gotoSettled(page, "/storage-backends");
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
     await expect(row).toBeVisible({ timeout: 15_000 });
 

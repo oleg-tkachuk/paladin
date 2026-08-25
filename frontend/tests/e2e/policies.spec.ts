@@ -12,6 +12,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { seedAdminTenantID, seedBucket, seedCollection } from "./fixtures/seed";
 
 const VALID_POLICY = `permit(principal, action, resource);`;
@@ -38,7 +39,7 @@ async function pickFirstTarget(page: import("@playwright/test").Page) {
 test.describe("Cedar policy editor", () => {
   test("the page loads with a scope and target picker", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/policies");
+    await gotoSettled(page, "/policies");
 
     await expect(page.getByText(/^Scope$/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/^Target$/)).toBeVisible();
@@ -47,7 +48,7 @@ test.describe("Cedar policy editor", () => {
 
   test("the editor is inert until a target is chosen", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/policies");
+    await gotoSettled(page, "/policies");
 
     // Stronger than a disabled Save: the textarea itself is locked, so a
     // policy cannot even be drafted with nowhere to put it. The placeholder
@@ -66,7 +67,7 @@ test.describe("Cedar policy editor", () => {
     const bucket = await seedBucket();
     await seedCollection({ tenantId, bucket });
 
-    await page.goto("/policies");
+    await gotoSettled(page, "/policies");
     await pickFirstTarget(page);
 
     // Cedar, not CEL: `permit` needs its three clauses. The point of Validate
@@ -84,7 +85,7 @@ test.describe("Cedar policy editor", () => {
 
   test("Validate accepts a well-formed policy", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/policies");
+    await gotoSettled(page, "/policies");
     await pickFirstTarget(page);
 
     await page.getByLabel("Cedar policy").fill(VALID_POLICY);

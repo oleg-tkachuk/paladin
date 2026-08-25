@@ -12,6 +12,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { uniqueSlug } from "./fixtures/unique";
 
 test.describe("US7 — User administration", () => {
@@ -19,7 +20,7 @@ test.describe("US7 — User administration", () => {
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/users");
+    await gotoSettled(page, "/users");
 
     const subject = `${uniqueSlug("e2e-user")}@example.test`;
     await page.getByRole("button", { name: "New user" }).click();
@@ -40,7 +41,7 @@ test.describe("US7 — User administration", () => {
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/users");
+    await gotoSettled(page, "/users");
     await page.getByRole("button", { name: "New user" }).click();
 
     await page.getByLabel("Subject").fill("too-short@example.test");
@@ -58,7 +59,7 @@ test.describe("US7 — User administration", () => {
 
   test("a created user can be disabled from its row menu", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/users");
+    await gotoSettled(page, "/users");
 
     const subject = `${uniqueSlug("e2e-disable")}@example.test`;
     await page.getByRole("button", { name: "New user" }).click();
@@ -86,7 +87,7 @@ test.describe("US7 — Password change", () => {
     page,
   }) => {
     await loginAsAdmin(page);
-    await page.goto("/profile");
+    await gotoSettled(page, "/profile");
 
     // getByText, not getByRole("heading"): CardTitle renders a <div>, so
     // section titles are not headings and cannot be navigated to as such.

@@ -12,6 +12,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { seedTenant } from "./fixtures/seed";
 
 test.describe("US5 — Tenant restore from trash", () => {
@@ -19,7 +20,7 @@ test.describe("US5 — Tenant restore from trash", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto("/tenants");
+    await gotoSettled(page, "/tenants");
     await expect(page.getByText(tenant.slug)).toBeVisible({
       timeout: 5_000,
     });
@@ -56,7 +57,7 @@ test.describe("US5 — Tenant restore from trash", () => {
     });
 
     // And the tenant appears in /trash.
-    await page.goto("/trash");
+    await gotoSettled(page, "/trash");
     await expect(page.getByText(tenant.slug)).toBeVisible({
       timeout: 5_000,
     });
@@ -72,7 +73,7 @@ test.describe("US5 — Tenant restore from trash", () => {
     // restore via UI. We could shortcut the delete via API
     // (would shave ~500ms) but having the same operator path
     // catches any regression in either direction.
-    await page.goto("/tenants");
+    await gotoSettled(page, "/tenants");
 
     // Wait for the row before opening its menu. The sibling test above does
     // this and passes; this one went straight for the Actions button, and
@@ -95,7 +96,7 @@ test.describe("US5 — Tenant restore from trash", () => {
     });
 
     // Restore from /trash.
-    await page.goto("/trash");
+    await gotoSettled(page, "/trash");
 
     // Wait for the row before reaching into it. The delete above is a
     // round-trip the test does not await: it clicked confirm and navigated,
@@ -116,12 +117,12 @@ test.describe("US5 — Tenant restore from trash", () => {
     // Reload /tenants and verify the tenant is back. The
     // restore flow flips deleted_at = NULL; the list should
     // include the row again on the next ListTenants call.
-    await page.goto("/tenants");
+    await gotoSettled(page, "/tenants");
     await expect(page.getByText(tenant.slug)).toBeVisible({
       timeout: 5_000,
     });
     // And it's GONE from /trash.
-    await page.goto("/trash");
+    await gotoSettled(page, "/trash");
     await expect(page.getByText(tenant.slug)).not.toBeVisible({
       timeout: 5_000,
     });

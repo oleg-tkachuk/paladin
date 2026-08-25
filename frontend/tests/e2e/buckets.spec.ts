@@ -12,13 +12,14 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { seedTenant, seedBucket, seedCollection } from "./fixtures/seed";
 
 test.describe("US3 — Bucket list & Collection navigation", () => {
   test("bucket list shows seeded bucket", async ({ page }) => {
     await loginAsAdmin(page);
     const bucket = await seedBucket();
-    await page.goto("/buckets");
+    await gotoSettled(page, "/buckets");
     // Bucket name renders in a font-mono cell (page.tsx:417).
     // Locator on text is stable because every bucket name is
     // UUID-suffixed by seedBucket().
@@ -37,7 +38,7 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
 
     // Drive through the natural operator path: /buckets →
     // click the seeded bucket row → bucket detail page.
-    await page.goto("/buckets");
+    await gotoSettled(page, "/buckets");
     const bucketLink = page.getByText(bucket.bucketId).first();
     await bucketLink.click();
 
