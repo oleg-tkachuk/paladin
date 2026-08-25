@@ -84,13 +84,21 @@ test.describe("Event subscriptions", () => {
 
     // The dialog validates the expression as it is typed and disables Create
     // outright — stronger than letting the server refuse it, because the
-    // operator finds out before the round trip. Nothing may be stored either
-    // way, which is the assertion that actually matters.
-    await expect(
-      page.getByRole("dialog").getByRole("button", { name: /^Create$/ }),
-    ).toBeDisabled({
-      timeout: 15_000,
-    });
+    // operator finds out before the round trip.
+    //
+    // The check is a round trip to CELService, so the refusal arrives
+    // asynchronously and its latency tracks how busy the plane is. Inside the
+    // full suite — twenty minutes of continuous traffic — 15s was not always
+    // enough, and this test failed only there, never on its own. Poll with
+    // headroom rather than asserting on one moment.
+    const create = page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^Create$/ });
+    await expect
+      .poll(() => create.isDisabled(), { timeout: 30_000 })
+      .toBe(true);
+
+    // And the refusal has to be real, not just a greyed-out button.
     expect(await subscriptionCount(tenant.tenantId)).toBe(0);
   });
 
@@ -161,7 +169,7 @@ test.describe("Event subscriptions", () => {
       .click();
 
     await expect
-      .poll(() => subscriptionCount(tenant.tenantId), { timeout: 15_000 })
+      .poll(() => subscriptionCount(tenant.tenantId), { timeout: 30_000 })
       .toBe(1);
   });
 });
