@@ -25,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
@@ -168,13 +169,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// and any provisioning integration drive it, and its handlers are the
 	// expensive ones. Disabled yields a pass-through.
 	tenantRLCfg := middleware.TenantRateLimitConfig{
-		MaxTenants:    cfg.Middleware.RateLimit.MaxTenants,
-		IdleTTL:       cfg.Middleware.RateLimit.CleanupTTL,
-		SweepInterval: cfg.Middleware.RateLimit.CleanupInterval,
+		Store: adapters.NewTenantRateStore(deps.DB.Queries),
 	}
 	if cfg.Middleware.RateLimit.Enabled {
 		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond
-		tenantRLCfg.Burst = cfg.Middleware.RateLimit.Burst
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 

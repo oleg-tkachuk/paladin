@@ -3,14 +3,15 @@ package middleware
 import (
 	"context"
 	"errors"
+	"math"
+	"strconv"
 	"sync"
-	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"golang.org/x/time/rate"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
@@ -18,12 +19,15 @@ import (
 // TenantRateLimitInterceptor caps how fast one tenant can call the data and
 // admin planes.
 //
-// TenantRateLimiter existed with tests for a long time and nothing ever
-// constructed it, so the only limits actually in force were the login window
-// (credential stuffing) and the per-api-token window. A tenant authenticating
-// with a JWT — the console, or any service integrating against the API — had
-// no ceiling at all, and one runaway client could saturate the connection
-// pool for everyone on the shared Postgres.
+// The limit is shared across replicas: the counters live in
+// tenant_rate_buckets, the same sliding-window shape api_token uses. An
+// in-memory bucket per process would give each pod its own ceiling, so the
+// configured rate would silently be multiplied by the replica count — 600/s
+// at the chart's default of two api replicas, where the operator wrote 300.
+//
+// The cost is one statement per request. That is the trade a shared limit
+// requires, and it is the same trade the api_token verify path already makes
+// on every PAT request.
 //
 // Keyed on the caller's own tenant, from the authenticated principal. The
 // acting-tenant marker a platform admin sets to reach another tenant's rows is
@@ -37,7 +41,16 @@ import (
 // them all to one shared bucket would let any unauthenticated caller deny
 // service to the rest.
 type TenantRateLimitInterceptor struct {
-	limiter *TenantRateLimiter
+	store TenantRateStore
+	// capacity is the trailing-60s ceiling. Zero disables the interceptor.
+	capacity int
+}
+
+// TenantRateStore is the storage seam: one call that bumps the tenant's
+// current bucket and returns the weighted count over the trailing minute
+// together with the seconds left in the bucket.
+type TenantRateStore interface {
+	BumpTenantRate(ctx context.Context, tenantID uuid.UUID) (weighted float64, retryAfterSeconds float64, err error)
 }
 
 // TenantRateLimitConfig is the operator-facing shape. RPS <= 0 disables
@@ -45,53 +58,49 @@ type TenantRateLimitInterceptor struct {
 // through, which is safer than handing callers something that may be nil in a
 // list Connect will happily dereference.
 type TenantRateLimitConfig struct {
-	// RPS is the sustained per-tenant request rate.
+	// RPS is the sustained per-tenant request rate. It becomes a per-minute
+	// ceiling (RPS × 60) because the window is a minute wide.
 	RPS float64
-	// Burst is how far above RPS a tenant may spike before being throttled.
-	// <= 0 derives a burst of one second's worth of RPS (minimum 1).
-	Burst int
-	// MaxTenants bounds the limiter map; least-recently-used buckets are
-	// evicted past it so a tenant-id flood cannot grow it without limit.
-	MaxTenants int
-	// IdleTTL drops a tenant's bucket after this long without traffic.
-	IdleTTL time.Duration
-	// SweepInterval is how often idle buckets are collected.
-	SweepInterval time.Duration
+	// Store holds the shared counters. Nil disables throttling for the same
+	// reason RPS <= 0 does — there is nowhere to count.
+	Store TenantRateStore
 }
 
-// NewTenantRateLimitInterceptor builds the interceptor. A config with
-// RPS <= 0 yields a pass-through: no limiter is constructed, so no sweep
-// goroutine runs either.
+// NewTenantRateLimitInterceptor builds the interceptor. RPS <= 0 or a nil
+// store yields a pass-through.
+//
+// Burst is not a separate knob here. A trailing-minute window admits a spike
+// on its own — a tenant idle for the previous minute may spend the whole
+// minute's budget at once — so a second burst parameter would only describe
+// the same slack twice.
 func NewTenantRateLimitInterceptor(cfg TenantRateLimitConfig) *TenantRateLimitInterceptor {
-	if cfg.RPS <= 0 {
+	if cfg.RPS <= 0 || cfg.Store == nil {
 		return &TenantRateLimitInterceptor{}
 	}
-	burst := cfg.Burst
-	if burst <= 0 {
-		burst = int(cfg.RPS)
-		if burst < 1 {
-			burst = 1
-		}
+	capacity := int(cfg.RPS * 60)
+	if capacity < 1 {
+		capacity = 1
 	}
-	if cfg.MaxTenants <= 0 {
-		cfg.MaxTenants = 10_000
+	return &TenantRateLimitInterceptor{store: cfg.Store, capacity: capacity}
+}
+
+// admit bumps the tenant's window and decides. A store error admits the
+// request and is counted: refusing every tenant because Postgres hiccuped
+// would turn a database blip into a full outage, which is the same call the
+// api_token limiter makes. The counter is what makes the silence visible —
+// while it is non-zero the ceiling is not in force.
+func (i *TenantRateLimitInterceptor) admit(ctx context.Context, tenant uuid.UUID) (bool, float64) {
+	weighted, retryAfter, err := i.store.BumpTenantRate(ctx, tenant)
+	if err != nil {
+		recordTenantRateLimitFailOpen(ctx, tenant.String())
+		return true, 0
 	}
-	if cfg.IdleTTL <= 0 {
-		cfg.IdleTTL = 10 * time.Minute
-	}
-	if cfg.SweepInterval <= 0 {
-		cfg.SweepInterval = time.Minute
-	}
-	return &TenantRateLimitInterceptor{
-		limiter: NewTenantRateLimiter(
-			rate.Limit(cfg.RPS), burst, cfg.MaxTenants, cfg.IdleTTL, cfg.SweepInterval,
-		),
-	}
+	return weighted <= float64(i.capacity), retryAfter
 }
 
 func (i *TenantRateLimitInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if i.limiter == nil {
+		if i.store == nil {
 			return next(ctx, req)
 		}
 		tenant, err := auth.EffectiveTenant(ctx)
@@ -100,17 +109,17 @@ func (i *TenantRateLimitInterceptor) WrapUnary(next connect.UnaryFunc) connect.U
 			return next(ctx, req)
 		}
 		id := tenant.String()
-		if !i.limiter.GetLimiter(id).Allow() {
-			recordTenantRateLimitDecision(ctx, id, false)
+		allowed, retryAfter := i.admit(ctx, tenant)
+		recordTenantRateLimitDecision(ctx, id, allowed)
+		if !allowed {
 			cerr := connect.NewError(connect.CodeResourceExhausted,
 				errors.New("per-tenant request rate exceeded; retry shortly"))
 			// Retry-After is what makes this actionable for an integrating
 			// service: ResourceExhausted alone does not say whether to back
 			// off or give up.
-			cerr.Meta().Set("Retry-After", "1")
+			cerr.Meta().Set("Retry-After", retryAfterHeader(retryAfter))
 			return nil, cerr
 		}
-		recordTenantRateLimitDecision(ctx, id, true)
 		return next(ctx, req)
 	}
 }
@@ -124,7 +133,7 @@ func (i *TenantRateLimitInterceptor) WrapStreamingClient(next connect.StreamingC
 // are event subscriptions, whose cost is in the subscription, not the frame.
 func (i *TenantRateLimitInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if i.limiter == nil {
+		if i.store == nil {
 			return next(ctx, conn)
 		}
 		tenant, err := auth.EffectiveTenant(ctx)
@@ -132,17 +141,28 @@ func (i *TenantRateLimitInterceptor) WrapStreamingHandler(next connect.Streaming
 			return next(ctx, conn)
 		}
 		id := tenant.String()
-		if !i.limiter.GetLimiter(id).Allow() {
-			recordTenantRateLimitDecision(ctx, id, false)
+		allowed, _ := i.admit(ctx, tenant)
+		recordTenantRateLimitDecision(ctx, id, allowed)
+		if !allowed {
 			return connect.NewError(connect.CodeResourceExhausted,
 				errors.New("per-tenant request rate exceeded; retry shortly"))
 		}
-		recordTenantRateLimitDecision(ctx, id, true)
 		return next(ctx, conn)
 	}
 }
 
 var _ connect.Interceptor = (*TenantRateLimitInterceptor)(nil)
+
+// retryAfterHeader renders the seconds left in the bucket, rounded up and
+// floored at 1: a client told to retry in 0 seconds retries immediately and
+// is refused again.
+func retryAfterHeader(seconds float64) string {
+	s := int(math.Ceil(seconds))
+	if s < 1 {
+		s = 1
+	}
+	return strconv.Itoa(s)
+}
 
 // ─── Metrics ────────────────────────────────────────────────────────────────
 
@@ -153,9 +173,10 @@ var _ connect.Interceptor = (*TenantRateLimitInterceptor)(nil)
 var (
 	tenantRLMetricsOnce sync.Once
 	tenantRLDecisions   metric.Int64Counter
+	tenantRLFailOpen    metric.Int64Counter
 )
 
-func recordTenantRateLimitDecision(ctx context.Context, tenantID string, allowed bool) {
+func initTenantRLMetrics() {
 	tenantRLMetricsOnce.Do(func() {
 		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/middleware")
 		tenantRLDecisions, _ = meter.Int64Counter(
@@ -164,7 +185,27 @@ func recordTenantRateLimitDecision(ctx context.Context, tenantID string, allowed
 				"Per-tenant request rate-limit decisions. A rising denied count means a "+
 					"tenant is being throttled — either a runaway client or a cap set too low."),
 		)
+		tenantRLFailOpen, _ = meter.Int64Counter(
+			"paladin.tenant.ratelimit.fail_open",
+			metric.WithDescription(
+				"Requests admitted without a rate-limit decision because the bucket store "+
+					"errored. Non-zero means the per-tenant ceiling is not in force."),
+		)
 	})
+}
+
+func recordTenantRateLimitFailOpen(ctx context.Context, tenantID string) {
+	initTenantRLMetrics()
+	if tenantRLFailOpen == nil {
+		return
+	}
+	tenantRLFailOpen.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("tenant_id", tenantID),
+	))
+}
+
+func recordTenantRateLimitDecision(ctx context.Context, tenantID string, allowed bool) {
+	initTenantRLMetrics()
 	if tenantRLDecisions == nil {
 		return
 	}

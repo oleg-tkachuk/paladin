@@ -148,6 +148,15 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
+	// Tenant rate-bucket sweeper — always on, for the same reason the
+	// idempotency purger is: the limiter writes a row per active tenant per
+	// minute whatever else is toggled, and reads back only the last two.
+	out = append(out, &worker.TenantRateBucketSweeper{
+		Store:    adapters.NewTenantRateStore(deps.DB.Queries),
+		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
+		Logger:   l.Named("tenant-rate-sweeper"),
+	})
+
 	// Idempotency-key purger — always on (the table grows on every
 	// idempotent Create regardless of other housekeeping toggles). Rows
 	// self-expire via expires_at; this reclaims them so the unique index

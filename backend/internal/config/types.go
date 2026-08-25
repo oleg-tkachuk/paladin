@@ -659,13 +659,29 @@ type Middleware struct {
 	Idempotency Idempotency `yaml:"idempotency" json:"idempotency"`
 }
 
+// RateLimit configures the per-tenant request ceiling enforced by
+// middleware.TenantRateLimitInterceptor.
+//
+// The counters live in Postgres (tenant_rate_buckets), so the limit is the
+// tenant's across every replica. It used to be an in-memory bucket per
+// process, which multiplied the configured rate by the replica count.
 type RateLimit struct {
-	Enabled           bool          `yaml:"enabled" json:"enabled"`
-	RequestsPerSecond float64       `yaml:"requests_per_second" json:"requests_per_second"`
-	Burst             int           `yaml:"burst" json:"burst"`
-	MaxTenants        int           `yaml:"max_tenants" json:"max_tenants"`
-	CleanupTTL        time.Duration `yaml:"cleanup_ttl" json:"cleanup_ttl"`
-	CleanupInterval   time.Duration `yaml:"cleanup_interval" json:"cleanup_interval"`
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// RequestsPerSecond is the sustained per-tenant rate. The window is a
+	// trailing minute, so the effective ceiling is this × 60 per minute.
+	RequestsPerSecond float64 `yaml:"requests_per_second" json:"requests_per_second"`
+	// Burst is retained for compatibility with existing values files and is
+	// no longer read. A trailing-minute window admits a spike on its own — a
+	// tenant idle for the previous minute may spend the whole budget at once
+	// — so a separate burst knob described the same slack twice.
+	Burst int `yaml:"burst" json:"burst"`
+	// MaxTenants, CleanupTTL and CleanupInterval sized the in-memory bucket
+	// map and are likewise no longer read: Postgres holds the buckets, and
+	// worker.TenantRateBucketSweeper reclaims them on the housekeeping
+	// interval.
+	MaxTenants      int           `yaml:"max_tenants" json:"max_tenants"`
+	CleanupTTL      time.Duration `yaml:"cleanup_ttl" json:"cleanup_ttl"`
+	CleanupInterval time.Duration `yaml:"cleanup_interval" json:"cleanup_interval"`
 }
 
 type OTel struct {

@@ -1,0 +1,49 @@
+-- Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
+--
+-- Shared across replicas: an in-memory bucket gave each pod its own ceiling,
+-- so the configured rate was multiplied by the replica count.
+
+-- name: BumpTenantRateBucket :one
+-- Atomic increment-and-read of the sliding window, in one statement so
+-- concurrent requests cannot interleave a read between another's write.
+--
+--   1. Bump the current minute's bucket (INSERT ... ON CONFLICT count + 1).
+--   2. Read the previous minute's count (0 when the tenant was idle).
+--   3. Weight the previous bucket by how much of the current minute is left.
+--
+-- The increment is unconditional — a denied request still counts, so a caller
+-- that keeps hammering while throttled does not get to spend the next
+-- window's budget on rejected calls. Returns the weighted count and the
+-- seconds until the bucket rolls, which becomes Retry-After.
+WITH
+  cur_start AS (SELECT date_trunc('minute', NOW()) AS s),
+  bumped AS (
+    INSERT INTO tenant_rate_buckets (tenant_id, bucket_start, count)
+    VALUES ($1, (SELECT s FROM cur_start), 1)
+    ON CONFLICT (tenant_id, bucket_start) DO UPDATE
+      SET count = tenant_rate_buckets.count + 1
+    RETURNING count
+  ),
+  prev_count AS (
+    SELECT COALESCE(SUM(count), 0)::bigint AS c
+    FROM tenant_rate_buckets
+    WHERE tenant_id = $1
+      AND bucket_start = (SELECT s - interval '1 minute' FROM cur_start)
+  ),
+  elapsed AS (
+    SELECT EXTRACT(EPOCH FROM NOW() - (SELECT s FROM cur_start))::float8 AS sec
+  )
+SELECT
+  -- The outer cast is for sqlc, not Postgres: without it the generated
+  -- struct types this column int32 and the fractional part of the weighted
+  -- window is silently truncated on the way out.
+  ((SELECT count FROM bumped)::float8
+    + (SELECT c FROM prev_count)::float8 * (1.0 - (SELECT sec FROM elapsed) / 60.0)
+  )::float8 AS weighted_count,
+  (60.0 - (SELECT sec FROM elapsed))::float8 AS retry_after_seconds;
+
+-- name: SweepTenantRateBuckets :execrows
+-- Drops buckets older than the supplied age. Two buckets per active tenant
+-- are live at any moment; everything older is history nothing reads.
+DELETE FROM tenant_rate_buckets
+WHERE bucket_start < NOW() - (sqlc.arg('older_than_micros')::bigint || ' microseconds')::interval;

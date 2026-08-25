@@ -246,6 +246,12 @@ middleware: {
     s3_operation:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"60s"
     long_operation:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2m"
   }
+  // Per-tenant request ceiling. Counters live in Postgres, so the limit is
+  // shared across replicas rather than granted afresh to each pod.
+  //
+  // burst / max_tenants / cleanup_* are kept so existing values files keep
+  // loading (the loader rejects unknown fields) but are no longer read — they
+  // configured the in-memory bucket map that Postgres replaced.
   rate_limit: {
     enabled:             bool   | *true
     requests_per_second: number | *300

@@ -719,6 +719,12 @@ type TenantDefaultBinding struct {
 	SetBy    string             `json:"set_by"`
 }
 
+type TenantRateBucket struct {
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	BucketStart pgtype.Timestamptz `json:"bucket_start"`
+	Count       int64              `json:"count"`
+}
+
 type TenantSlugHistory struct {
 	ID        int64              `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
