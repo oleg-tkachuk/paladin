@@ -207,7 +207,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// span wraps auth + the handler. No-op spans when OTel is disabled
 	// (global providers are noops). Only errors on invalid options, which
 	// we don't pass — a failure here is a wiring bug, so fail fast.
-	otelInt, err := otelconnect.NewInterceptor()
+	// WithoutServerPeerAttributes: the semconv default tags every server-side
+	// span and metric with net.peer.name and net.peer.port — the CLIENT'S
+	// EPHEMERAL PORT. On traces that is merely noisy; on metrics it makes one
+	// time series per TCP connection, so rpc_server_duration grows without
+	// bound and the cost lands on whoever stores it. The upstream option exists
+	// for exactly this and says so.
+	otelInt, err := otelconnect.NewInterceptor(otelconnect.WithoutServerPeerAttributes())
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}

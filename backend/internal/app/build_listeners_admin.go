@@ -152,7 +152,13 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}
 
-	otelInt, err := otelconnect.NewInterceptor()
+	// WithoutServerPeerAttributes: the semconv default tags every server-side
+	// span and metric with net.peer.name and net.peer.port — the CLIENT'S
+	// EPHEMERAL PORT. On traces that is merely noisy; on metrics it makes one
+	// time series per TCP connection, so rpc_server_duration grows without
+	// bound and the cost lands on whoever stores it. The upstream option exists
+	// for exactly this and says so.
+	otelInt, err := otelconnect.NewInterceptor(otelconnect.WithoutServerPeerAttributes())
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
