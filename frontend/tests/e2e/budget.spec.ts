@@ -14,6 +14,7 @@
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 import { seedTenant, tenantBudget } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 function budgetURL(tenantId: string): string {
   return `/tenants/${tenantId}/budget`;
@@ -43,7 +44,7 @@ test.describe("Tenant budget", () => {
     const tenant = await seedTenant();
     expect(await tenantBudget(tenant.tenantId)).toBeNull();
 
-    await page.goto(budgetURL(tenant.tenantId));
+    await gotoSettled(page, budgetURL(tenant.tenantId));
 
     // "Create budget" rather than "Apply changes" is the page saying it holds
     // no row — the same create/update distinction the quota form makes.
@@ -56,7 +57,7 @@ test.describe("Tenant budget", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto(budgetURL(tenant.tenantId));
+    await gotoSettled(page, budgetURL(tenant.tenantId));
     const submit = page.getByRole("button", { name: /Create budget/ });
     await expect(submit).toBeVisible({ timeout: 15_000 });
 
@@ -77,7 +78,7 @@ test.describe("Tenant budget", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto(budgetURL(tenant.tenantId));
+    await gotoSettled(page, budgetURL(tenant.tenantId));
     const submit = page.getByRole("button", { name: /Create budget/ });
     await expect(submit).toBeVisible({ timeout: 15_000 });
 
@@ -94,7 +95,7 @@ test.describe("Tenant budget", () => {
     const tenant = await seedTenant();
 
     // First save creates the row.
-    await page.goto(budgetURL(tenant.tenantId));
+    await gotoSettled(page, budgetURL(tenant.tenantId));
     await expect(
       page.getByRole("button", { name: /Create budget/ }),
     ).toBeVisible({ timeout: 15_000 });

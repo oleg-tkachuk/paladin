@@ -15,6 +15,7 @@ import {
   bucketState,
   setBucketVersioning,
 } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 function versioningURL(tenantId: string, backendId: string, bucketId: string) {
   return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/versioning`;
@@ -30,7 +31,10 @@ test.describe("Bucket versioning", () => {
     const before = await bucketState(bucket.backendId, bucket.bucketId);
     expect(before.versioningEnabled).toBe(false);
 
-    await page.goto(versioningURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      versioningURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
 
     // Save starts disabled — nothing is dirty yet. That it becomes enabled
     // only after a change is itself the guard against submitting a form whose
@@ -60,7 +64,10 @@ test.describe("Bucket versioning", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(versioningURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      versioningURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
 
     // Retaining delete markers is meaningless without versioning, and the
     // server would store a combination it never honours. The UI refuses to
@@ -79,7 +86,10 @@ test.describe("Bucket versioning", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(versioningURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      versioningURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     const save = page.getByRole("button", { name: /^Save$/ });
     await expect(save).toBeDisabled({ timeout: 15_000 });
 

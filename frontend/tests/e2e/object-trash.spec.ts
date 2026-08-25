@@ -19,6 +19,7 @@ import {
   seedPhysicalBucket,
   softDeleteObject,
 } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 /** Tenant + physical bucket + collection — the same scope
  *  object-lifecycle.spec.ts builds, since these tests also move real bytes. */
@@ -44,7 +45,7 @@ test.describe("Object trash — version + restore", () => {
     const obj = await seedObject({ tenantId, collection });
     await softDeleteObject(obj.name);
 
-    await page.goto(trashURL(tenantId, collection));
+    await gotoSettled(page, trashURL(tenantId, collection));
 
     const row = page.getByRole("row").filter({ hasText: obj.objectId });
     await expect(row).toBeVisible({ timeout: 10_000 });
@@ -67,7 +68,7 @@ test.describe("Object trash — version + restore", () => {
     const obj = await seedObject({ tenantId, collection });
     await softDeleteObject(obj.name);
 
-    await page.goto(trashURL(tenantId, collection));
+    await gotoSettled(page, trashURL(tenantId, collection));
     const row = page.getByRole("row").filter({ hasText: obj.objectId });
     await expect(row).toBeVisible({ timeout: 10_000 });
 
@@ -88,7 +89,7 @@ test.describe("Object trash — version + restore", () => {
     await loginAsAdmin(page);
     const { tenantId, collection } = await seedScope();
 
-    await page.goto(trashURL(tenantId, collection));
+    await gotoSettled(page, trashURL(tenantId, collection));
 
     await expect(page.getByText(/Trash is empty/i)).toBeVisible({
       timeout: 10_000,

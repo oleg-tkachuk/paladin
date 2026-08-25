@@ -15,6 +15,7 @@ import {
   bumpBucketVersion,
   setBucketVersioning,
 } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 /** A bucket with versioning already on. Object lock refuses to engage without
  *  it (ADR-0013) — retention has nothing to pin to when a write replaces the
@@ -41,7 +42,10 @@ test.describe("Bucket object lock", () => {
     const before = await bucketLockState(bucket.backendId, bucket.bucketId);
     expect(before.enabled).toBe(false);
 
-    await page.goto(lockURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lockURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
 
     const save = page.getByRole("button", { name: /^Save$/ });
     await expect(save).toBeDisabled({ timeout: 15_000 });
@@ -73,7 +77,10 @@ test.describe("Bucket object lock", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(lockURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lockURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
 
     // Neither control means anything with the lock off, and offering them
     // would let an operator believe they had configured something.
@@ -93,7 +100,10 @@ test.describe("Bucket object lock", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedVersionedBucket();
 
-    await page.goto(lockURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lockURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     const save = page.getByRole("button", { name: /^Save$/ });
     await expect(save).toBeDisabled({ timeout: 15_000 });
 
@@ -122,7 +132,10 @@ test.describe("Bucket object lock", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket(); // versioning deliberately off
 
-    await page.goto(lockURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lockURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     await page.getByRole("switch", { name: /Enable object lock/i }).click();
     await page.getByRole("button", { name: /^Save$/ }).click();
 

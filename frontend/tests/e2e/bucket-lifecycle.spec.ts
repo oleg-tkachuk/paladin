@@ -18,6 +18,7 @@ import {
   bucketLifecycle,
   bumpBucketVersion,
 } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 function lifecycleURL(tenantId: string, backendId: string, bucketId: string) {
   return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/lifecycle`;
@@ -45,7 +46,10 @@ test.describe("Bucket lifecycle rules", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
 
     await expect(page.getByText(/No lifecycle rules/i)).toBeVisible({
       timeout: 15_000,
@@ -61,7 +65,10 @@ test.describe("Bucket lifecycle rules", () => {
     const before = await bucketLifecycle(bucket.backendId, bucket.bucketId);
     expect(before.ruleCount).toBe(0);
 
-    await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     await openRuleEditor(page);
 
     await page.getByLabel("Rule ID").fill("e2e-expire-tmp");
@@ -92,7 +99,10 @@ test.describe("Bucket lifecycle rules", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     await openRuleEditor(page);
 
     await page.getByLabel("Rule ID").fill("e2e-bad-match");
@@ -123,7 +133,10 @@ test.describe("Bucket lifecycle rules", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     await openRuleEditor(page);
     await page.getByLabel("Rule ID").fill("e2e-stale-write");
     await page.getByLabel("Match (CEL)").fill("size_bytes > 1000");
@@ -155,7 +168,10 @@ test.describe("Bucket lifecycle rules", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedBucket();
 
-    await page.goto(lifecycleURL(tenantId, bucket.backendId, bucket.bucketId));
+    await gotoSettled(
+      page,
+      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
+    );
     await openRuleEditor(page);
 
     // A placeholder in a CEL field is a worked example — an operator copies

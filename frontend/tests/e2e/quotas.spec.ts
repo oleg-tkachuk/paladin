@@ -14,6 +14,7 @@
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 import { seedTenant, seedQuota, quotaVersion } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 
 function quotasURL(tenantId: string): string {
   return `/tenants/${tenantId}/quotas`;
@@ -26,7 +27,7 @@ test.describe("Tenant quotas — OCC", () => {
     await loginAsAdmin(page);
     const tenant = await seedTenant();
 
-    await page.goto(quotasURL(tenant.tenantId));
+    await gotoSettled(page, quotasURL(tenant.tenantId));
 
     // "Create quota" rather than "Apply changes" is the console saying it
     // holds no row and will send resource_version "0".
@@ -50,7 +51,7 @@ test.describe("Tenant quotas — OCC", () => {
     const tenant = await seedTenant();
     const seeded = await seedQuota({ tenantId: tenant.tenantId });
 
-    await page.goto(quotasURL(tenant.tenantId));
+    await gotoSettled(page, quotasURL(tenant.tenantId));
     // Enabled, not merely visible: the button stays disabled until the quota
     // has loaded, because the form's resource_version comes from it. Clicking
     // early would send "0" — "no row exists" — and be refused.
@@ -77,7 +78,7 @@ test.describe("Tenant quotas — OCC", () => {
     await seedQuota({ tenantId: tenant.tenantId, maxObjectCount: BigInt(100) });
 
     // Load the form — the console now holds the version it just read.
-    await page.goto(quotasURL(tenant.tenantId));
+    await gotoSettled(page, quotasURL(tenant.tenantId));
     // Enabled, not merely visible: the button stays disabled until the quota
     // has loaded, because the form's resource_version comes from it. Clicking
     // early would send "0" — "no row exists" — and be refused.

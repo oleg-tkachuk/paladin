@@ -25,6 +25,7 @@ import {
   seedCollection,
   collectionCount,
 } from "./fixtures/seed";
+import { gotoSettled } from "./fixtures/navigate";
 import { uniqueSlug } from "./fixtures/unique";
 
 function collectionsURL(tenantId: string): string {
@@ -74,7 +75,7 @@ test.describe("Collections CRUD", () => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
 
-    await page.goto(collectionsURL(tenantId));
+    await gotoSettled(page, collectionsURL(tenantId));
     await openCreateDialog(page);
 
     const dialog = page.getByRole("dialog");
