@@ -46,7 +46,7 @@ func (w *StaleOperationReclaimer) Run(ctx context.Context) error {
 	if w.StaleAfter <= 0 {
 		w.StaleAfter = 15 * time.Minute
 	}
-	return RunTicker(ctx, "stale_operation_reclaimer", w.Interval, func(ctx context.Context) error {
+	return RunTicker(ctx, "stale_operation_reclaimer", w.tickInterval(), func(ctx context.Context) error {
 		n, err := w.Repo.ReclaimStale(ctx, w.StaleAfter)
 		if err != nil {
 			w.log().Warn("failed to reclaim stale operations", zap.Error(err))
@@ -61,6 +61,25 @@ func (w *StaleOperationReclaimer) Run(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+// tickInterval keeps detection bounded by StaleAfter rather than by the
+// caller's interval. The job is wired to the housekeeping interval, which is
+// an hour — right for retention sweeps, wrong here: a stuck operation is
+// something a caller is actively waiting on, and an hourly tick would stretch
+// the worst case to 75 minutes instead of 20. A third of StaleAfter, floored
+// at a minute — absolutely, including against a caller that asks for less:
+// nothing needs sub-minute reclaim when staleness is measured in minutes, and
+// this table has no index on state alone.
+func (w *StaleOperationReclaimer) tickInterval() time.Duration {
+	every := w.Interval
+	if third := w.StaleAfter / 3; every > third {
+		every = third
+	}
+	if every < time.Minute {
+		every = time.Minute
+	}
+	return every
 }
 
 func (w *StaleOperationReclaimer) log() *zap.Logger {
