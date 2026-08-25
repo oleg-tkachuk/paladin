@@ -136,6 +136,9 @@ type TenantBudget struct {
 	PeriodStart     time.Time
 	PeriodEnd       *time.Time
 	UpdatedAt       time.Time
+	// ResourceVersion is the OCC token a caller passes back to Set. Zero
+	// means the row has never been written.
+	ResourceVersion int64
 }
 
 // SetTenantBudgetArgs is the input for UsageStore.SetTenantBudget.
@@ -153,6 +156,11 @@ type SetTenantBudgetArgs struct {
 	// now. false leaves the counter alone — the cap changes mid-
 	// window.
 	ResetSpend bool
+	// ExpectedVersion is the OCC guard, checked in the same statement as the
+	// write. 0 asserts the row does not exist yet and is itself a conflict if
+	// it does. Without this two operators editing the same cap overwrote each
+	// other and neither was told.
+	ExpectedVersion int64
 }
 
 // TenantBudgetSummary joins TenantBudget with the tenant's slug +
@@ -208,4 +216,10 @@ var (
 	// configured AND has never been charged. Distinct from "cap = 0"
 	// (which means "configured but unlimited").
 	ErrTenantBudgetNotFound = errors.New("capability: tenant budget row not found")
+
+	// ErrTenantBudgetVersionMismatch — SetTenantBudget's OCC guard refused the
+	// write: the stored resource_version is not the one the caller read, so
+	// someone else changed the cap in between. The caller re-reads and decides,
+	// rather than silently overwriting a change it never saw.
+	ErrTenantBudgetVersionMismatch = errors.New("capability: tenant budget resource_version mismatch")
 )

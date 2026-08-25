@@ -380,7 +380,19 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	b := s.budgets[args.TenantID]
+	b, exists := s.budgets[args.TenantID]
+
+	// Same OCC contract as the Postgres store, or tests pass against a
+	// memstore that permits writes production refuses. A missing row expects
+	// version 0; an existing one expects its current version.
+	want := int64(0)
+	if exists {
+		want = b.ResourceVersion
+	}
+	if args.ExpectedVersion != want {
+		return capability.TenantBudget{}, capability.ErrTenantBudgetVersionMismatch
+	}
+
 	unit := args.UnitCode
 	if unit == "" {
 		unit = b.UnitCode
@@ -398,6 +410,7 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 		b.PeriodStart = s.nowFn()
 	}
 	b.UpdatedAt = s.nowFn()
+	b.ResourceVersion++
 	s.budgets[args.TenantID] = b
 	return b, nil
 }

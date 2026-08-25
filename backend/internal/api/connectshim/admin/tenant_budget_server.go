@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 
@@ -93,11 +94,17 @@ func (s *TenantBudgetServer) Set(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("unit_code: %q not in %v", unit, capability.AllowedUnitCodes))
 	}
+	expected, err := convx.ParseRV(m.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version: %w", err))
+	}
 	args := capability.SetTenantBudgetArgs{
 		TenantID:        tenantID,
 		MaxBudgetAmount: m.GetMaxBudgetAmount(),
 		UnitCode:        unit,
 		ResetSpend:      m.GetResetSpend(),
+		ExpectedVersion: expected,
 	}
 	if pe := m.GetPeriodEnd(); pe != nil {
 		t := pe.AsTime()
@@ -112,6 +119,11 @@ func (s *TenantBudgetServer) Set(
 	// on the same policy, has always done this.
 	tb, err := s.Usage.SetTenantBudget(auth.WithActingTenant(ctx, tenantID), args)
 	if err != nil {
+		// A version mismatch is the caller's to resolve — re-read and retry —
+		// not a server fault, so it must not read as Internal.
+		if errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
+			return nil, connect.NewError(connect.CodeAborted, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&pb.TenantBudgetServiceSetResponse{
@@ -176,6 +188,7 @@ func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
 		MaxBudgetAmount: tb.MaxBudgetAmount,
 		SpentAmount:     tb.SpentAmount,
 		UnitCode:        unit,
+		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
 	if !tb.PeriodStart.IsZero() {
 		out.PeriodStart = timestamppb.New(tb.PeriodStart)

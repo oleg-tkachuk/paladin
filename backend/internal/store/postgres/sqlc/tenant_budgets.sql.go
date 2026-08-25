@@ -36,19 +36,20 @@ func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getTenantBudget = `-- name: GetTenantBudget :one
-SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at
+SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version
 FROM tenant_budgets
 WHERE tenant_id = $1
 `
 
 type GetTenantBudgetRow struct {
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
-	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
-	UnitCode     string             `json:"unit_code"`
-	PeriodStart  pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	UnitCode        string             `json:"unit_code"`
+	PeriodStart     pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ResourceVersion int64              `json:"resource_version"`
 }
 
 func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error) {
@@ -62,6 +63,7 @@ func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (Ge
 		&i.PeriodStart,
 		&i.PeriodEnd,
 		&i.UpdatedAt,
+		&i.ResourceVersion,
 	)
 	return i, err
 }
@@ -202,18 +204,21 @@ SET max_budget_usd = EXCLUDED.max_budget_usd,
     period_start   = CASE WHEN $5::boolean THEN now() ELSE tenant_budgets.period_start END,
     period_end     = COALESCE($4::timestamptz, tenant_budgets.period_end),
     unit_code      = COALESCE(NULLIF($3::text, ''), tenant_budgets.unit_code),
+    resource_version = tenant_budgets.resource_version + 1,
     updated_at     = now()
-RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at
+WHERE tenant_budgets.resource_version = $6::bigint
+RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version
 `
 
 type SetTenantBudgetRow struct {
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
-	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
-	UnitCode     string             `json:"unit_code"`
-	PeriodStart  pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	UnitCode        string             `json:"unit_code"`
+	PeriodStart     pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ResourceVersion int64              `json:"resource_version"`
 }
 
 // Tenant aggregate budget queries.
@@ -230,13 +235,21 @@ type SetTenantBudgetRow struct {
 // updated only when the caller passes a non-empty value (an empty
 // arg keeps the existing currency unchanged — operators editing
 // the cap shouldn't accidentally reinterpret an EUR budget as USD).
-func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool) (SetTenantBudgetRow, error) {
+//
+// OCC on update, no guard on insert. The DO UPDATE's WHERE is the
+// concurrency check: it fires only when the stored resource_version
+// matches what the caller read. A mismatch — including a caller that
+// passed 0 believing no row existed — updates nothing and returns no
+// row, which the adapter maps to a version conflict. Without it two
+// operators editing the same cap silently overwrote each other.
+func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool, expectedVersion int64) (SetTenantBudgetRow, error) {
 	row := q.db.QueryRow(ctx, setTenantBudget,
 		tenantID,
 		maxBudgetUsd,
 		unitCode,
 		periodEnd,
 		resetSpend,
+		expectedVersion,
 	)
 	var i SetTenantBudgetRow
 	err := row.Scan(
@@ -247,6 +260,7 @@ func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, max
 		&i.PeriodStart,
 		&i.PeriodEnd,
 		&i.UpdatedAt,
+		&i.ResourceVersion,
 	)
 	return i, err
 }

@@ -1,10 +1,9 @@
 /**
  * Tenant budget — the aggregate spend cap.
  *
- * Unlike quotas, TenantBudgetService.Set carries NO resource_version: it is a
- * plain upsert, so two operators editing the same cap race with last-write-
- * wins and neither is told. That is recorded in BACKLOG rather than fixed
- * here; these tests cover what the page does today.
+ * Set carries a resource_version, the same OCC guard quotas have: two
+ * operators editing one cap no longer race with last-write-wins, and the
+ * loser is told rather than having its change vanish.
  *
  * The flag worth pinning is reset_spend. Set(false) changes the cap mid-window
  * and leaves the counter alone; Set(true) rolls the period and zeroes it.
@@ -13,7 +12,7 @@
  */
 import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
-import { tenantBudget } from "./fixtures/seed";
+import { setTenantBudget, tenantBudget } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 
 function budgetURL(tenantId: string): string {
@@ -136,5 +135,46 @@ test.describe("Tenant budget", () => {
     expect((await tenantBudget(tenant.tenantId))?.spentAmount).toBe(
       afterCreate?.spentAmount,
     );
+  });
+
+  test("a concurrent edit is refused, not silently overwritten", async ({
+    page,
+    makeTenant,
+  }) => {
+    await loginAsAdmin(page);
+    const tenant = await makeTenant();
+
+    // Someone already created the budget; the page loads that version.
+    const v1 = await setTenantBudget({
+      tenantId: tenant.tenantId,
+      maxBudgetAmount: 100,
+      resourceVersion: "0",
+    });
+    await gotoSettled(page, budgetURL(tenant.tenantId));
+    await expect(
+      page.getByRole("button", { name: /Apply changes/ }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // A second operator raises the cap while this form sits open.
+    await setTenantBudget({
+      tenantId: tenant.tenantId,
+      maxBudgetAmount: 300,
+      resourceVersion: v1,
+    });
+
+    // The open form now holds a stale version. Its write must not land.
+    await page.locator("#max-budget").fill("999");
+    await submitBudget(page, /Apply changes/);
+
+    await expect(page.getByText(/changed elsewhere/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    expect((await tenantBudget(tenant.tenantId))?.maxBudgetAmount).toBe(300);
+
+    // After the refetch the form shows what actually won, so re-applying is a
+    // decision on current data rather than a blind retry.
+    await expect(page.locator("#max-budget")).toHaveValue("300", {
+      timeout: 15_000,
+    });
   });
 });

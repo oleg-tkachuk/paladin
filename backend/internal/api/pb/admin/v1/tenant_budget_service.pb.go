@@ -30,6 +30,8 @@ const (
 type TenantBudget struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// OCC token for Set. Empty means the row has never been written.
+	ResourceVersion string `protobuf:"bytes,8,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// max_budget_amount is the cap. 0 = unlimited (counter still
 	// accumulates so admin tooling can show "current spend"). Field
 	// number unchanged (wire-compatible with the previous
@@ -82,6 +84,13 @@ func (*TenantBudget) Descriptor() ([]byte, []int) {
 func (x *TenantBudget) GetTenantId() string {
 	if x != nil {
 		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TenantBudget) GetResourceVersion() string {
+	if x != nil {
+		return x.ResourceVersion
 	}
 	return ""
 }
@@ -219,6 +228,12 @@ func (x *TenantBudgetServiceGetResponse) GetBudget() *TenantBudget {
 type TenantBudgetServiceSetRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// OCC, required. Two operators editing the same cap used to race with
+	//
+	//	last-write-wins and neither was told; the loser's change vanished while
+	//	its UI reported success. Pass the version from a prior Get; "0" asserts
+	//	no budget row exists yet, and is itself a conflict if one does.
+	ResourceVersion string `protobuf:"bytes,6,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// max_budget_amount is the new cap. 0 = unlimited. Field number
 	// unchanged (wire-compatible with previous max_budget_usd).
 	MaxBudgetAmount float64 `protobuf:"fixed64,2,opt,name=max_budget_amount,json=maxBudgetAmount,proto3" json:"max_budget_amount,omitempty"`
@@ -269,6 +284,13 @@ func (*TenantBudgetServiceSetRequest) Descriptor() ([]byte, []int) {
 func (x *TenantBudgetServiceSetRequest) GetTenantId() string {
 	if x != nil {
 		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TenantBudgetServiceSetRequest) GetResourceVersion() string {
+	if x != nil {
+		return x.ResourceVersion
 	}
 	return ""
 }
@@ -552,9 +574,10 @@ var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescripto
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\n" +
-	"+paladin/admin/v1/tenant_budget_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf5\x02\n" +
+	"+paladin/admin/v1/tenant_budget_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xa0\x03\n" +
 	"\fTenantBudget\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12:\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12)\n" +
+	"\x10resource_version\x18\b \x01(\tR\x0fresourceVersion\x12:\n" +
 	"\x11max_budget_amount\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\x0fmaxBudgetAmount\x12!\n" +
 	"\fspent_amount\x18\x03 \x01(\x01R\vspentAmount\x12B\n" +
 	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vperiodStart\x12>\n" +
@@ -566,9 +589,10 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\x1dTenantBudgetServiceGetRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"W\n" +
 	"\x1eTenantBudgetServiceGetResponse\x125\n" +
-	"\x06budget\x18\x01 \x01(\v2\x1d.paladin.admin.v1.TenantBudgetR\x06budget\"\xfb\x01\n" +
+	"\x06budget\x18\x01 \x01(\v2\x1d.paladin.admin.v1.TenantBudgetR\x06budget\"\xaf\x02\n" +
 	"\x1dTenantBudgetServiceSetRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12:\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x122\n" +
+	"\x10resource_version\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12:\n" +
 	"\x11max_budget_amount\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\x0fmaxBudgetAmount\x12\x1f\n" +
 	"\vreset_spend\x18\x03 \x01(\bR\n" +
 	"resetSpend\x129\n" +

@@ -53,6 +53,16 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	if f.budgets == nil {
 		f.budgets = map[uuid.UUID]capability.TenantBudget{}
 	}
+	// Mirror the store's OCC contract, or the handler test would pass against
+	// a fake that accepts writes production refuses.
+	prev, exists := f.budgets[args.TenantID]
+	want := int64(0)
+	if exists {
+		want = prev.ResourceVersion
+	}
+	if args.ExpectedVersion != want {
+		return capability.TenantBudget{}, capability.ErrTenantBudgetVersionMismatch
+	}
 	unit := args.UnitCode
 	if unit == "" {
 		unit = f.budgets[args.TenantID].UnitCode
@@ -66,7 +76,8 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 		UnitCode:        unit,
 		// SpentAmount: ResetSpend semantics aren't unit-tested
 		// here — the postgres impl owns the SQL that zeroes it.
-		SpentAmount: f.budgets[args.TenantID].SpentAmount,
+		SpentAmount:     f.budgets[args.TenantID].SpentAmount,
+		ResourceVersion: want + 1,
 	}
 	if args.ResetSpend {
 		tb.SpentAmount = 0
@@ -187,5 +198,61 @@ func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Errorf("expected CodeInvalidArgument, got %v", err)
+	}
+}
+
+// The Set response has to carry the new version, or the console has nothing to
+// send on the next edit and every second write is a conflict.
+func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	res, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        uuid.New().String(),
+		MaxBudgetAmount: 10,
+	}))
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got := res.Msg.GetBudget().GetResourceVersion(); got != "1" {
+		t.Errorf("resource_version = %q, want \"1\"", got)
+	}
+}
+
+// A stale version is the caller's problem to resolve, so it must surface as
+// Aborted. Internal would tell the console to retry the same doomed write and
+// page whoever watches 5xx rates.
+func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
+	store := &fakeUsageStore{}
+	srv := NewTenantBudgetServer(store)
+	tenantID := uuid.New().String()
+
+	if _, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        tenantID,
+		MaxBudgetAmount: 10,
+	})); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        tenantID,
+		MaxBudgetAmount: 999,
+		ResourceVersion: "1234",
+	}))
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeAborted {
+		t.Fatalf("err = %v, want CodeAborted", err)
+	}
+}
+
+// An unparseable version is a malformed request, not a conflict.
+func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        uuid.New().String(),
+		MaxBudgetAmount: 1,
+		ResourceVersion: "not-a-number",
+	}))
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
+		t.Fatalf("err = %v, want CodeInvalidArgument", err)
 	}
 }

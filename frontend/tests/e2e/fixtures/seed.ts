@@ -1040,6 +1040,7 @@ export async function tenantBudget(tenantId: string): Promise<{
   maxBudgetAmount: number;
   spentAmount: number;
   unitCode: string;
+  resourceVersion: string;
 } | null> {
   const client = createClient(TenantBudgetService, adminTransport());
   try {
@@ -1048,6 +1049,7 @@ export async function tenantBudget(tenantId: string): Promise<{
       maxBudgetAmount: res.budget?.maxBudgetAmount ?? 0,
       spentAmount: res.budget?.spentAmount ?? 0,
       unitCode: res.budget?.unitCode ?? "",
+      resourceVersion: res.budget?.resourceVersion ?? "",
     };
   } catch (err) {
     if (err instanceof ConnectError && err.code === Code.NotFound) return null;
@@ -1109,4 +1111,28 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
       });
     }),
   );
+}
+
+/**
+ * Set a tenant budget straight through the admin API, bypassing the console.
+ *
+ * Used to simulate the other operator in an OCC race: the page holds a version
+ * it read, this moves the row underneath it.
+ */
+export async function setTenantBudget(args: {
+  tenantId: string;
+  maxBudgetAmount: number;
+  resourceVersion: string;
+  unitCode?: string;
+  resetSpend?: boolean;
+}): Promise<string> {
+  const client = createClient(TenantBudgetService, adminTransport());
+  const res = await client.set({
+    tenantId: args.tenantId,
+    maxBudgetAmount: args.maxBudgetAmount,
+    unitCode: args.unitCode ?? "USD",
+    resetSpend: args.resetSpend ?? false,
+    resourceVersion: args.resourceVersion,
+  });
+  return res.budget?.resourceVersion ?? "";
 }

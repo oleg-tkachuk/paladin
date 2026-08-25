@@ -54,10 +54,20 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	// Configure a tenant cap of 5 (default = 0 = unlimited; we want
 	// the rejection path).
+	//
+	// The charge above already created the accumulator row, so this is an
+	// update and carries that row's version — the same read-then-write an
+	// operator does from the console. Passing 0 here would (correctly) be
+	// refused as "I believe no row exists".
+	cur, err := store.GetTenantBudget(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("read tenant budget: %v", err)
+	}
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
 		TenantID:        tenantID,
 		MaxBudgetAmount: 5.0,
 		ResetSpend:      false, // keep the 4 we already charged
+		ExpectedVersion: cur.ResourceVersion,
 	}); err != nil {
 		t.Fatalf("set tenant budget: %v", err)
 	}
@@ -150,11 +160,12 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-period")
 
 	// Initial cap 10, charge 7 against an unrelated capability.
-	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	initial, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
 		TenantID:        tenantID,
 		MaxBudgetAmount: 10.0,
 		ResetSpend:      true,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	capID := uuid.New()
@@ -168,11 +179,14 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 		t.Fatalf("pre-roll spent = %v, want 7", tb.SpentAmount)
 	}
 
-	// Roll the period: same cap (10), reset_spend=true.
+	// Roll the period: same cap (10), reset_spend=true. The roll carries the
+	// version the create returned — Charge() does not bump it, so the caller's
+	// read is still current.
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
 		TenantID:        tenantID,
 		MaxBudgetAmount: 10.0,
 		ResetSpend:      true,
+		ExpectedVersion: initial.ResourceVersion,
 	}); err != nil {
 		t.Fatalf("roll: %v", err)
 	}

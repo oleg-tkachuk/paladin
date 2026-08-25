@@ -282,7 +282,9 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
-	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
+	got := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
+	got.ResourceVersion = row.ResourceVersion
+	return got, nil
 }
 
 // SetTenantBudget implements capability.UsageStore[pgx.Tx].
@@ -311,11 +313,20 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 		unit,
 		periodEnd,
 		args.ResetSpend,
+		args.ExpectedVersion,
 	)
 	if err != nil {
+		// No row back means the upsert's INSERT did not fire and its DO UPDATE's
+		// version guard did not hold: the row exists and its version is not the
+		// one the caller read.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return capability.TenantBudget{}, capability.ErrTenantBudgetVersionMismatch
+		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
 	}
-	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
+	out := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
+	out.ResourceVersion = row.ResourceVersion
+	return out, nil
 }
 
 // ListTenantBudgets joins tenant_budgets with tenants and applies the

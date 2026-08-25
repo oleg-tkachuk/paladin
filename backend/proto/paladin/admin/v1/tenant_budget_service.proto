@@ -46,6 +46,9 @@ service TenantBudgetService {
 message TenantBudget {
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
+  // OCC token for Set. Empty means the row has never been written.
+  string resource_version = 8;
+
   // max_budget_amount is the cap. 0 = unlimited (counter still
   // accumulates so admin tooling can show "current spend"). Field
   // number unchanged (wire-compatible with the previous
@@ -75,6 +78,12 @@ message TenantBudgetServiceGetResponse {
 
 message TenantBudgetServiceSetRequest {
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // OCC, required. Two operators editing the same cap used to race with
+  //   last-write-wins and neither was told; the loser's change vanished while
+  //   its UI reported success. Pass the version from a prior Get; "0" asserts
+  //   no budget row exists yet, and is itself a conflict if one does.
+  string resource_version = 6 [(buf.validate.field).string.min_len = 1];
 
   // max_budget_amount is the new cap. 0 = unlimited. Field number
   // unchanged (wire-compatible with previous max_budget_usd).

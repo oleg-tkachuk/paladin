@@ -394,8 +394,12 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 	}
 
 	t.Run("mid-cycle cap change preserves spend and currency", func(t *testing.T) {
+		cur, err := f.usage.GetTenantBudget(ctx, f.tenant)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
 		if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
-			TenantID: f.tenant, MaxBudgetAmount: 200,
+			TenantID: f.tenant, MaxBudgetAmount: 200, ExpectedVersion: cur.ResourceVersion,
 		}); err != nil {
 			t.Fatalf("set: %v", err)
 		}
@@ -412,8 +416,12 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 	})
 
 	t.Run("reset_spend closes the period", func(t *testing.T) {
+		cur, err := f.usage.GetTenantBudget(ctx, f.tenant)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
 		if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
-			TenantID: f.tenant, MaxBudgetAmount: 200, ResetSpend: true,
+			TenantID: f.tenant, MaxBudgetAmount: 200, ResetSpend: true, ExpectedVersion: cur.ResourceVersion,
 		}); err != nil {
 			t.Fatalf("set: %v", err)
 		}

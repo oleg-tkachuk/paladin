@@ -700,14 +700,15 @@ type Tenant struct {
 }
 
 type TenantBudget struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
-	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
-	UnitCode     string             `json:"unit_code"`
-	PeriodStart  pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	UnitCode        string             `json:"unit_code"`
+	PeriodStart     pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ResourceVersion int64              `json:"resource_version"`
 }
 
 type TenantDefaultBinding struct {

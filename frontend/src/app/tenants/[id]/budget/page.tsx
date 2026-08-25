@@ -157,6 +157,11 @@ export default function TenantBudgetPage() {
         maxBudgetAmount: cap,
         unitCode,
         resetSpend,
+        // OCC guard. "0" asserts no row exists yet — the create case — and is
+        // itself rejected if someone created one in the meantime. Anything
+        // else is the version this page last read, so a concurrent edit by
+        // another operator is refused instead of silently overwritten.
+        resourceVersion: budget?.resourceVersion || "0",
         // Pin the period close date when set; blank leaves the server window.
         periodEnd: periodEnd
           ? timestampFromDate(new Date(`${periodEnd}T00:00:00Z`))
@@ -171,6 +176,20 @@ export default function TenantBudgetPage() {
           : `Cap set to ${formatAmount(cap, unitCode)}.`,
       });
     } catch (err) {
+      // Aborted is the OCC guard, not a fault: the row moved under us. Refetch
+      // so the form reflects what is actually stored before the operator
+      // decides whether they still want their change.
+      if (err instanceof ConnectError && err.code === Code.Aborted) {
+        await fetchBudget();
+        showNotification({
+          type: "error",
+          title: "Budget changed elsewhere",
+          message:
+            "Someone else updated this budget while you were editing. " +
+            "The form now shows the current values — re-apply if you still want your change.",
+        });
+        return;
+      }
       const msg =
         err instanceof ConnectError ? err.rawMessage : "Update failed";
       showNotification({ type: "error", title: "Update failed", message: msg });
@@ -379,7 +398,10 @@ export default function TenantBudgetPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={submitting || !maxBudget.trim()}>
+            <Button
+              type="submit"
+              disabled={submitting || loading || !maxBudget.trim()}
+            >
               {submitting ? (
                 "Updating…"
               ) : (

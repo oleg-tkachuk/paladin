@@ -14,6 +14,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -90,13 +91,23 @@ func (f *billingFixture) seedCapability(t *testing.T, tenant uuid.UUID, subject 
 }
 
 // seedBudget upserts a tenant budget cap.
+//
+// Reads the current version first: Set carries an OCC guard, and a charge may
+// already have created the accumulator row, in which case this is an update
+// and 0 would be refused. GetTenantBudget on a missing row yields the zero
+// value, whose version is 0 — the create case, which is what we want.
 func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max float64, unit string) {
 	t.Helper()
+	cur, err := f.store.GetTenantBudget(context.Background(), tenant)
+	if err != nil && !errors.Is(err, capability.ErrTenantBudgetNotFound) {
+		t.Fatalf("read budget: %v", err)
+	}
 	if _, err := f.store.SetTenantBudget(context.Background(), capability.SetTenantBudgetArgs{
 		TenantID:        tenant,
 		MaxBudgetAmount: max,
 		UnitCode:        unit,
 		ResetSpend:      true,
+		ExpectedVersion: cur.ResourceVersion,
 	}); err != nil {
 		t.Fatalf("seed budget: %v", err)
 	}

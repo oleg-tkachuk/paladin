@@ -254,7 +254,13 @@ export type BatchUpdateTagsRequest =
     tags: { [key: string]: string };
 
     /**
-     * When true, replace the existing tag set; else merge.
+     * When true, replace the existing tag set wholesale — an empty `tags` then
+     * clears the object's tags. When false (the default) the supplied keys are
+     * merged in: keys the caller does not mention are left as they are.
+     *
+     * This flag went unread for a while and the executor always replaced, so
+     * the default call silently dropped tags nobody asked it to touch. It is
+     * honoured now.
      *
      * @generated from field: bool replace = 4;
      */

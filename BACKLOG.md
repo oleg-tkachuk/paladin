@@ -1934,19 +1934,3 @@ of the pipeline._
 - **Blockers:** Hard delete currently lives in a TTL-driven housekeeping job
   rather than an on-demand path; batch would need that logic factored out.
 
----
-## TenantBudgetService.Set has no OCC guard
-
-- **Status:** Deferred (needs a proto change).
-- **Reason:** Unlike SetQuota, which now checks resource_version in its
-  upsert's DO UPDATE clause, TenantBudgetServiceSetRequest carries no version
-  at all — it is a plain upsert. Two operators editing the same tenant's spend
-  cap race with last-write-wins and neither is told, which is the exact defect
-  that was just closed for quotas. Noticed while adding e2e for the budget
-  page.
-- **Definition of Done:** SetRequest carries a required resource_version, the
-  store checks it in the same statement as the write, and a concurrent edit is
-  Aborted rather than silently overwritten — the shape TestQuotaUpsertOCC pins
-  for quotas.
-- **Blockers:** tenant_budgets has no resource_version column yet, so this
-  needs a migration alongside the proto change.

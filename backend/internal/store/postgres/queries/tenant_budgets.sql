@@ -14,6 +14,13 @@
 -- updated only when the caller passes a non-empty value (an empty
 -- arg keeps the existing currency unchanged — operators editing
 -- the cap shouldn't accidentally reinterpret an EUR budget as USD).
+--
+-- OCC on update, no guard on insert. The DO UPDATE's WHERE is the
+-- concurrency check: it fires only when the stored resource_version
+-- matches what the caller read. A mismatch — including a caller that
+-- passed 0 believing no row existed — updates nothing and returns no
+-- row, which the adapter maps to a version conflict. Without it two
+-- operators editing the same cap silently overwrote each other.
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at)
 VALUES ($1, sqlc.arg('max_budget_usd')::numeric, 0, COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), 'USD'), now(), sqlc.narg('period_end')::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
@@ -22,11 +29,13 @@ SET max_budget_usd = EXCLUDED.max_budget_usd,
     period_start   = CASE WHEN sqlc.arg('reset_spend')::boolean THEN now() ELSE tenant_budgets.period_start END,
     period_end     = COALESCE(sqlc.narg('period_end')::timestamptz, tenant_budgets.period_end),
     unit_code      = COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), tenant_budgets.unit_code),
+    resource_version = tenant_budgets.resource_version + 1,
     updated_at     = now()
-RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at;
+WHERE tenant_budgets.resource_version = sqlc.arg('expected_version')::bigint
+RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version;
 
 -- name: GetTenantBudget :one
-SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at
+SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version
 FROM tenant_budgets
 WHERE tenant_id = $1;
 
