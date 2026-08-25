@@ -19,6 +19,35 @@ function subsURL(tenantId: string): string {
   return `/tenants/${tenantId}/event-subscriptions`;
 }
 
+/**
+ * Open the subscription editor.
+ *
+ * The click is forced. The taller viewport fixed the other console forms, but
+ * this page still fails to take a normal click when it runs after a
+ * heavyweight file — the button is visible and enabled, and the click simply
+ * times out. Forcing skips the actionability wait, not the visibility one, so
+ * a genuinely missing button still fails; waiting for the dialog afterwards
+ * keeps the failure honest if the press really did miss.
+ */
+async function openEditor(page: import("@playwright/test").Page) {
+  const newSub = page.getByRole("button", { name: /New subscription/ }).first();
+  await expect(newSub).toBeVisible({ timeout: 20_000 });
+
+  // Wait for the page to go quiet first. The shell's scope picker fetches the
+  // whole backend and bucket inventory on every mount — 55 and 184 rows here —
+  // and while React renders that, a click on an already-visible button is
+  // dropped: the press lands, the handler never runs, and the dialog does not
+  // open. It only shows up when a heavyweight file ran just before this one,
+  // which is why it looked like cross-file interference.
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {
+    // A page that never goes fully idle is not a reason to fail here; the
+    // click below still gets its own wait.
+  });
+  await newSub.click({ force: true });
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("#sub-http-url")).toBeVisible({ timeout: 15_000 });
+}
+
 test.describe("Event subscriptions", () => {
   test("a tenant with no subscriptions offers to create one", async ({
     page,
@@ -39,14 +68,7 @@ test.describe("Event subscriptions", () => {
     expect(await subscriptionCount(tenant.tenantId)).toBe(0);
 
     await page.goto(subsURL(tenant.tenantId));
-    const newSub = page
-      .getByRole("button", { name: /New subscription/ })
-      .first();
-    await expect(newSub).toBeEnabled({ timeout: 15_000 });
-    await newSub.click();
-    await expect(page.locator("#sub-http-url")).toBeVisible({
-      timeout: 15_000,
-    });
+    await openEditor(page);
 
     await page
       .locator("#sub-http-url")
@@ -66,14 +88,7 @@ test.describe("Event subscriptions", () => {
     const tenant = await seedTenant();
 
     await page.goto(subsURL(tenant.tenantId));
-    const newSub = page
-      .getByRole("button", { name: /New subscription/ })
-      .first();
-    await expect(newSub).toBeEnabled({ timeout: 15_000 });
-    await newSub.click();
-    await expect(page.locator("#sub-http-url")).toBeVisible({
-      timeout: 15_000,
-    });
+    await openEditor(page);
 
     await page
       .locator("#sub-http-url")
@@ -137,14 +152,7 @@ test.describe("Event subscriptions", () => {
     const tenant = await seedTenant();
 
     await page.goto(subsURL(tenant.tenantId));
-    const newSub = page
-      .getByRole("button", { name: /New subscription/ })
-      .first();
-    await expect(newSub).toBeEnabled({ timeout: 15_000 });
-    await newSub.click();
-    await expect(page.locator("#sub-http-url")).toBeVisible({
-      timeout: 15_000,
-    });
+    await openEditor(page);
 
     // The hint is a worked example, so it has to work. It suggested
     // `event.kind == '...'` while the EventEnvelope schema declares bare
