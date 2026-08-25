@@ -21,10 +21,10 @@
  * the Idempotency-Key value — the UI form's auto-injected
  * UUID is opaque to the test.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedTenant, seedCapability } from "./fixtures/seed";
+import { seedCapability } from "./fixtures/seed";
 
 // /tenants/<id>/capabilities is browse-scoped (CapabilityService.List is
 // principal-scoped at the SQL level): it lists nothing until you pick a
@@ -42,9 +42,10 @@ async function browseCapabilities(
 test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
   test("seeded capability appears on /tenants/<id>/capabilities", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     const cap = await seedCapability({ tenantId: tenant.tenantId });
 
     await gotoSettled(
@@ -60,6 +61,7 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
 
   test("double-submit with the same Idempotency-Key collapses (FR-008)", async ({
     page,
+    makeTenant,
   }) => {
     // This is the single most important test in the suite. It
     // verifies the middleware reflective-replay layer
@@ -75,7 +77,7 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     // that hazard — both calls reach the server.
 
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     // Same key for both calls — that's the entire point.
     const sharedKey = crypto.randomUUID();
@@ -114,9 +116,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
 
   test("revoke flips capability status without removing the row", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     const cap = await seedCapability({ tenantId: tenant.tenantId });
 
     await gotoSettled(

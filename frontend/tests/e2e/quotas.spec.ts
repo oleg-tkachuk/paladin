@@ -11,9 +11,9 @@
  * it is a conflict if a row already exists. These tests drive the real form so
  * that contract is exercised end to end rather than at the repository seam.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
-import { seedTenant, seedQuota, quotaVersion } from "./fixtures/seed";
+import { seedQuota, quotaVersion } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 
 function quotasURL(tenantId: string): string {
@@ -23,9 +23,10 @@ function quotasURL(tenantId: string): string {
 test.describe("Tenant quotas — OCC", () => {
   test("a tenant with no quota offers Create, and creating one succeeds", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, quotasURL(tenant.tenantId));
 
@@ -46,9 +47,10 @@ test.describe("Tenant quotas — OCC", () => {
 
   test("editing an existing quota advances its resource version", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     const seeded = await seedQuota({ tenantId: tenant.tenantId });
 
     await gotoSettled(page, quotasURL(tenant.tenantId));
@@ -72,9 +74,10 @@ test.describe("Tenant quotas — OCC", () => {
 
   test("a quota changed underneath the form is refused, not overwritten", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     await seedQuota({ tenantId: tenant.tenantId, maxObjectCount: BigInt(100) });
 
     // Load the form — the console now holds the version it just read.

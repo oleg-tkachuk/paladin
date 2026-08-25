@@ -10,10 +10,10 @@
  * grouped by tenant; without a seeded Collection we'd hit the
  * empty-state "No data stored in this bucket yet."
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedTenant, seedBucket, seedCollection } from "./fixtures/seed";
+import { seedBucket, seedCollection } from "./fixtures/seed";
 
 test.describe("US3 — Bucket list & Collection navigation", () => {
   test("bucket list shows seeded bucket", async ({ page }) => {
@@ -30,9 +30,10 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
 
   test("bucket detail page lists Collections grouped by tenant", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     const bucket = await seedBucket();
     const ok = await seedCollection({ tenantId: tenant.tenantId, bucket });
 
@@ -57,9 +58,10 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
 
   test("Collection detail page renders identity + canonical name", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     const bucket = await seedBucket();
     const ok = await seedCollection({ tenantId: tenant.tenantId, bucket });
 

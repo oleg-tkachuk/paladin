@@ -11,9 +11,9 @@
  * Getting that backwards either loses a tenant's accrued spend or refuses
  * charges it should still accept.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
-import { seedTenant, tenantBudget } from "./fixtures/seed";
+import { tenantBudget } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 
 function budgetURL(tenantId: string): string {
@@ -39,9 +39,12 @@ async function submitBudget(
 }
 
 test.describe("Tenant budget", () => {
-  test("a tenant with no budget offers to create one", async ({ page }) => {
+  test("a tenant with no budget offers to create one", async ({
+    page,
+    makeTenant,
+  }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     expect(await tenantBudget(tenant.tenantId)).toBeNull();
 
     await gotoSettled(page, budgetURL(tenant.tenantId));
@@ -53,9 +56,9 @@ test.describe("Tenant budget", () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
-  test("setting a cap persists it", async ({ page }) => {
+  test("setting a cap persists it", async ({ page, makeTenant }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, budgetURL(tenant.tenantId));
     const submit = page.getByRole("button", { name: /Create budget/ });
@@ -74,9 +77,9 @@ test.describe("Tenant budget", () => {
       .toBe(250);
   });
 
-  test("Save is held until a cap is entered", async ({ page }) => {
+  test("Save is held until a cap is entered", async ({ page, makeTenant }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, budgetURL(tenant.tenantId));
     const submit = page.getByRole("button", { name: /Create budget/ });
@@ -90,9 +93,10 @@ test.describe("Tenant budget", () => {
 
   test("editing an existing budget keeps the spend counter", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     // First save creates the row.
     await gotoSettled(page, budgetURL(tenant.tenantId));

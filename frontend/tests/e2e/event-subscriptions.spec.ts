@@ -7,13 +7,9 @@
  * which is the same shape as the lifecycle rule editor and the same failure
  * mode — a form that looks fine carrying an expression the server rejects.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
-import {
-  seedTenant,
-  seedSubscription,
-  subscriptionCount,
-} from "./fixtures/seed";
+import { seedSubscription, subscriptionCount } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 
 function subsURL(tenantId: string): string {
@@ -47,9 +43,10 @@ async function openEditor(page: import("@playwright/test").Page) {
 test.describe("Event subscriptions", () => {
   test("a tenant with no subscriptions offers to create one", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, subsURL(tenant.tenantId));
 
@@ -58,9 +55,12 @@ test.describe("Event subscriptions", () => {
     ).toBeEnabled({ timeout: 15_000 });
   });
 
-  test("creating an HTTP subscription persists it", async ({ page }) => {
+  test("creating an HTTP subscription persists it", async ({
+    page,
+    makeTenant,
+  }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     expect(await subscriptionCount(tenant.tenantId)).toBe(0);
 
     await gotoSettled(page, subsURL(tenant.tenantId));
@@ -79,9 +79,9 @@ test.describe("Event subscriptions", () => {
       .toBe(1);
   });
 
-  test("an invalid CEL filter is refused", async ({ page }) => {
+  test("an invalid CEL filter is refused", async ({ page, makeTenant }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, subsURL(tenant.tenantId));
     await openEditor(page);
@@ -115,9 +115,10 @@ test.describe("Event subscriptions", () => {
 
   test("an existing subscription is listed and can be deleted", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
     await seedSubscription({ tenantId: tenant.tenantId });
     expect(await subscriptionCount(tenant.tenantId)).toBe(1);
 
@@ -143,9 +144,12 @@ test.describe("Event subscriptions", () => {
       .toBe(0);
   });
 
-  test("the filter hint's examples are valid expressions", async ({ page }) => {
+  test("the filter hint's examples are valid expressions", async ({
+    page,
+    makeTenant,
+  }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, subsURL(tenant.tenantId));
     await openEditor(page);

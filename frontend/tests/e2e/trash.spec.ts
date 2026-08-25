@@ -10,15 +10,17 @@
  * flows are driven through the UI to exercise the dialog + button
  * affordances.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedTenant } from "./fixtures/seed";
 
 test.describe("US5 — Tenant restore from trash", () => {
-  test("soft-delete moves tenant from /tenants to /trash", async ({ page }) => {
+  test("soft-delete moves tenant from /tenants to /trash", async ({
+    page,
+    makeTenant,
+  }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     await gotoSettled(page, "/tenants");
     await expect(page.getByText(tenant.slug)).toBeVisible({
@@ -65,9 +67,10 @@ test.describe("US5 — Tenant restore from trash", () => {
 
   test("restore from /trash returns the tenant to /tenants", async ({
     page,
+    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await seedTenant();
+    const tenant = await makeTenant();
 
     // Drive through the full lifecycle: delete via UI, then
     // restore via UI. We could shortcut the delete via API

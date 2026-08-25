@@ -1021,3 +1021,34 @@ export async function collectionCount(tenantId: string): Promise<number> {
   });
   return res.collections.length;
 }
+
+// ─── Teardown ───────────────────────────────────────────────────────────────
+
+/**
+ * Delete the tenants a test created.
+ *
+ * Nothing cleaned up before this, and it was not merely untidy: after a day of
+ * runs the cluster held 500 tenants, every console page rendered hundreds of
+ * rows, and clicks started being dropped while React worked through them. The
+ * flake that looked like a viewport problem, then like cross-file
+ * interference, was in large part this — tests slowly making the app they were
+ * testing slower.
+ *
+ * force: true because a tenant that has collections under it refuses a plain
+ * delete, and a test's tenant is disposable by construction. Failures are
+ * swallowed: a teardown that throws turns a passing test red for a reason that
+ * has nothing to do with what it asserted.
+ */
+export async function deleteTenants(tenantIds: string[]): Promise<void> {
+  const client = createClient(TenantService, adminTransport());
+  await Promise.allSettled(
+    tenantIds.map(async (id) => {
+      const current = await client.getTenant({ name: `tenants/${id}` });
+      await client.deleteTenant({
+        name: `tenants/${id}`,
+        resourceVersion: current.resourceVersion,
+        force: true,
+      });
+    }),
+  );
+}
