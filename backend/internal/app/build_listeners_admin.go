@@ -157,6 +157,21 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
 
+	// Per-tenant request rate limit — same block, same semantics as the data
+	// plane (middleware.rate_limit). The admin plane needs it too: the console
+	// and any provisioning integration drive it, and its handlers are the
+	// expensive ones. Disabled yields a pass-through.
+	tenantRLCfg := middleware.TenantRateLimitConfig{
+		MaxTenants:    cfg.Middleware.RateLimit.MaxTenants,
+		IdleTTL:       cfg.Middleware.RateLimit.CleanupTTL,
+		SweepInterval: cfg.Middleware.RateLimit.CleanupInterval,
+	}
+	if cfg.Middleware.RateLimit.Enabled {
+		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond
+		tenantRLCfg.Burst = cfg.Middleware.RateLimit.Burst
+	}
+	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
+
 	// Every plane decodes JSON with the strict codec: an unknown request field
 	// is a 400, not a silent discard. See internal/api/codec for why the
 	// forward-compatibility the default buys is not worth its cost here.
@@ -180,6 +195,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			// must land a principal first.
 			apiTokAdmin,
 			auth.RequireAudience(auth.AudienceAdmin),
+			// After auth so the tenant is known, and ahead of the audit and
+			// idempotency writers so a throttled call costs no database work.
+			tenantRL,
 			// See the data plane: after otel (span) and after auth (principal).
 			middleware.LogContextStreaming(l),
 			capAdmin,

@@ -229,19 +229,23 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Telemetry is disabled in the cluster, so none of it is reachable
+### Telemetry is instrumented and exported, but nothing collects it
 
-- **Status:** Blocked (deploy-config change + a dashboard, not a code change).
-- **Reason:** `paladin-core-config` in the cluster carries `otel.enabled: false`,
-  and the pods have no `prometheus.io/scrape` annotations. Every instrument
-  described below therefore goes nowhere: Alloy scrapes nothing from Paladin and
-  VictoriaMetrics holds no `paladin_*` series, while Grafana has 22 dashboards
-  and none for Paladin. This is why the SeaweedFS volume-slot outage had to be
-  diagnosed from logs — the same would be true of any Paladin incident today.
+- **Status:** Blocked (cluster collector is unhealthy — not a Paladin change).
+- **Reason:** Paladin's side is wired: every pod carries
+  `prometheus.io/scrape` + port 9095, the Prometheus exporter serves there
+  (verified by reading `paladin_tenant_ratelimit_decisions_total` and the
+  otelconnect `rpc_server_*` series straight off an admin pod), and traces now
+  have a real OTLP endpoint. Nothing collects any of it: the Alloy DaemonSet
+  pod is 1/2 ready with 9 restarts, failing k8s API watches on TLS handshake
+  timeouts and dropping Loki batches, and VictoriaMetrics currently holds zero
+  `up` series **cluster-wide** — 9 two hours ago, none now. The `paladin_*`
+  names still in VM's index are historical, from when scraping worked; an
+  instant query returns nothing. So an incident is still diagnosed from logs,
+  and Grafana still has no Paladin dashboard.
 - **Definition of Done:**
-  - `otel.enabled: true` with the endpoint pointed at Alloy, in the values that
-    ArgoCD renders — verified by a `paladin_*` series appearing in
-    VictoriaMetrics, not by the config diff.
+  - Alloy healthy and scraping again, verified by `up{namespace="paladin"}`
+    returning a series per pod — not by the pod being Running.
   - A Paladin dashboard built on the metric names that actually arrive (the
     Garage and SeaweedFS dashboards were built that way, and it is why they
     show the right things): RED per plane from otelconnect, presign outcomes,
@@ -250,8 +254,9 @@ the same commit. Treat this file like a runtime invariant.
     worker whose `last_run` exceeds its interval, `paladin_api_token_ratelimit_fail_open`
     non-zero (rate limiting silently off), and capability charges rejecting at
     a rate that means a tenant is stuck.
-- **Blockers:** none technical. The instruments and the collector both exist;
-  the switch is off.
+- **Blockers:** the collector. Building panels against series nothing is
+  currently writing would repeat the mistake that made the last two dashboards
+  wrong — fix the scrape first, then query what arrives.
 
 ### Domains still uninstrumented
 

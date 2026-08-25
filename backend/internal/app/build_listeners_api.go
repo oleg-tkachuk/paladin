@@ -212,6 +212,23 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
 
+	// Per-tenant request rate limit (middleware.rate_limit). The config block
+	// has existed since the initial schema with enabled=true; nothing ever read
+	// it, so the only limits in force were on login and on api tokens, and a
+	// JWT-authenticated client had no ceiling at all. Disabled yields a
+	// pass-through rather than an absent interceptor, so the chains below stay
+	// the same shape either way.
+	tenantRLCfg := middleware.TenantRateLimitConfig{
+		MaxTenants:    cfg.Middleware.RateLimit.MaxTenants,
+		IdleTTL:       cfg.Middleware.RateLimit.CleanupTTL,
+		SweepInterval: cfg.Middleware.RateLimit.CleanupInterval,
+	}
+	if cfg.Middleware.RateLimit.Enabled {
+		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond
+		tenantRLCfg.Burst = cfg.Middleware.RateLimit.Burst
+	}
+	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
+
 	// Every plane decodes JSON with the strict codec: an unknown request field
 	// is a 400, not a silent discard. See internal/api/codec for why the
 	// forward-compatibility the default buys is not worth its cost here.
@@ -233,6 +250,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// one has to run first.
 			capData,
 			auth.RequireAudience(auth.AudienceData),
+			// After auth so the tenant is known, and before the quota and
+			// idempotency work so a throttled caller is turned away before it
+			// costs a database round-trip.
+			tenantRL,
 			// After otel (span exists) and after auth (principal known), so the
 			// request logger carries trace_id, span_id, request_id and tenant_id
 			// for every line the handlers write through logger.FromContext.
@@ -274,6 +295,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// Synchronous + crash-durable (ADR-0004): the row commits before
 			// the RPC returns, so a kill can't drop a credential-misuse trail.
 			middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
+			// Tenant-scoped IAM calls (memberships, password change) are charged
+			// to their tenant; Login and RefreshToken carry no tenant yet and are
+			// covered by the login limiter above.
+			tenantRL,
 			// See the data plane: after otel and after auth. On IAM the principal
 			// is often absent (Login, RefreshToken are permissive), so these lines
 			// carry trace and request id without a tenant — which is correct, not

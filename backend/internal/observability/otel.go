@@ -56,18 +56,27 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, MetricsHandle
 		return nil, nil, err
 	}
 
-	// Trace Exporter
+	// Trace Exporter.
+	//
+	// cfg.Insecure decides the transport. It used to be ignored: every path
+	// below forced plaintext, so `insecure: false` in the staging and prod
+	// values described a TLS connection that was never made and telemetry —
+	// which carries resource names and tenant ids in its attributes — crossed
+	// the network in the clear. Omitting the option is what selects TLS with
+	// the system roots, for both exporters.
 	var traceExporter sdktrace.SpanExporter
 	if cfg.Protocol == "http" {
-		traceExporter, err = otlptracehttp.New(ctx,
-			otlptracehttp.WithEndpoint(cfg.Endpoint),
-			otlptracehttp.WithInsecure(),
-		)
+		opts := []otlptracehttp.Option{otlptracehttp.WithEndpoint(cfg.Endpoint)}
+		if cfg.Insecure {
+			opts = append(opts, otlptracehttp.WithInsecure())
+		}
+		traceExporter, err = otlptracehttp.New(ctx, opts...)
 	} else {
-		traceExporter, err = otlptracegrpc.New(ctx,
-			otlptracegrpc.WithEndpoint(cfg.Endpoint),
-			otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
-		)
+		opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(cfg.Endpoint)}
+		if cfg.Insecure {
+			opts = append(opts, otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()))
+		}
+		traceExporter, err = otlptracegrpc.New(ctx, opts...)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -102,15 +111,17 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, MetricsHandle
 	default: // "otlp" — the historical behaviour, kept as the default.
 		var metricExporter metric.Exporter
 		if cfg.Protocol == "http" {
-			metricExporter, err = otlpmetrichttp.New(ctx,
-				otlpmetrichttp.WithEndpoint(cfg.Endpoint),
-				otlpmetrichttp.WithInsecure(),
-			)
+			opts := []otlpmetrichttp.Option{otlpmetrichttp.WithEndpoint(cfg.Endpoint)}
+			if cfg.Insecure {
+				opts = append(opts, otlpmetrichttp.WithInsecure())
+			}
+			metricExporter, err = otlpmetrichttp.New(ctx, opts...)
 		} else {
-			metricExporter, err = otlpmetricgrpc.New(ctx,
-				otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
-				otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()),
-			)
+			opts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(cfg.Endpoint)}
+			if cfg.Insecure {
+				opts = append(opts, otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()))
+			}
+			metricExporter, err = otlpmetricgrpc.New(ctx, opts...)
 		}
 		if err != nil {
 			return nil, nil, err

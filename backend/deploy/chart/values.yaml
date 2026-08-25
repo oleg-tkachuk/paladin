@@ -601,7 +601,12 @@ config:
 
   otel:
     enabled: false
-    endpoint: "otel-collector:4317"
+    # 4318, not 4317: protocol http means the OTLP/HTTP exporter, which posts
+    # to <endpoint>/v1/traces. The pair shipped as http + 4317 — the gRPC port
+    # — so any deployment taking the defaults exported into a port that would
+    # never answer it. The host is a placeholder either way; every overlay
+    # names its own collector.
+    endpoint: "otel-collector:4318"
     protocol: http
     # insecure off by default — prod OTel collector terminates TLS.
     # Local overlay flips this back on.
