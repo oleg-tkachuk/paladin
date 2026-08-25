@@ -55,18 +55,50 @@ const IAM_URL = process.env.PALADIN_E2E_IAM_URL ?? "http://localhost:8085";
 const ADMIN_URL = process.env.PALADIN_E2E_ADMIN_URL ?? "http://localhost:8090";
 const DATA_URL = process.env.PALADIN_E2E_DATA_URL ?? "http://localhost:8080";
 
-// ─── token cache: audience → access JWT ────────────────────
-// Lifetime: process-scoped. Playwright spawns one Node worker
-// process per shard; tokens live as long as the worker does.
-// AuthService.Login returns short-lived (≤ 15 min) tokens —
-// the suite finishes in <3 min, so we never expire in
-// practice. A future refresh-on-expiry path would call
-// AuthService.ExchangeAudience instead of re-logging in.
-const tokenCache = new Map<string, string>();
+// ─── token cache: audience → access JWT + its expiry ───────
+//
+// Lifetime: process-scoped. Playwright spawns one Node worker process per
+// shard; tokens live as long as the worker does.
+//
+// This used to cache the token alone, on the reasoning that Login returns
+// ≤15-minute tokens and "the suite finishes in <3 min, so we never expire in
+// practice". That was true of 27 tests against the compose stack. Against a
+// cluster the suite runs 28 minutes, and the token expired mid-run — every
+// time, in whichever test happened to be running at the 15-minute mark. It
+// looked like a different flaky test on every run, and I chased it through
+// four wrong explanations before reading the error: "jwt: token expired".
+//
+// So: keep the expiry, and re-login before it lapses.
+interface CachedToken {
+  token: string;
+  /** Epoch ms. Read from the JWT's own `exp`, not assumed. */
+  expiresAt: number;
+}
+const tokenCache = new Map<string, CachedToken>();
+
+/** Seconds of headroom: refresh this long before the token actually lapses,
+ *  so a call that starts just under the wire does not finish just over it. */
+const TOKEN_REFRESH_MARGIN_MS = 60_000;
+
+/** Read `exp` out of a JWT without verifying it — this is a test helper
+ *  deciding when to re-login, not an authorization check. A token whose exp
+ *  cannot be read is treated as already expired, so the next call re-logins
+ *  rather than sending something unusable. */
+function jwtExpiryMs(token: string): number {
+  try {
+    const payload = token.split(".")[1];
+    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return typeof json.exp === "number" ? json.exp * 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
 
 async function getAdminToken(): Promise<string> {
   const cached = tokenCache.get("paladin-admin");
-  if (cached) return cached;
+  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
+    return cached.token;
+  }
   const iam = createClient(
     AuthService,
     createConnectTransport({
@@ -87,7 +119,10 @@ async function getAdminToken(): Promise<string> {
         `check the bootstrap container provisioned ${SEEDED_ADMIN.subject}`,
     );
   }
-  tokenCache.set("paladin-admin", access);
+  tokenCache.set("paladin-admin", {
+    token: access,
+    expiresAt: jwtExpiryMs(access),
+  });
   return access;
 }
 
@@ -96,7 +131,9 @@ async function getAdminToken(): Promise<string> {
 // build it once and reuse across TenantService / BucketService.
 async function getDataToken(): Promise<string> {
   const cached = tokenCache.get("paladin-data");
-  if (cached) return cached;
+  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
+    return cached.token;
+  }
   const client = createClient(
     AuthService,
     createConnectTransport({
@@ -116,7 +153,10 @@ async function getDataToken(): Promise<string> {
       "seed.ts: Login(audience=paladin-data) returned no access_token",
     );
   }
-  tokenCache.set("paladin-data", access);
+  tokenCache.set("paladin-data", {
+    token: access,
+    expiresAt: jwtExpiryMs(access),
+  });
   return access;
 }
 
@@ -511,7 +551,9 @@ export async function seedCapability(opts: {
 
 async function getIamToken(): Promise<string> {
   const cached = tokenCache.get("paladin-iam");
-  if (cached) return cached;
+  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
+    return cached.token;
+  }
   const iam = createClient(
     AuthService,
     createConnectTransport({
@@ -532,7 +574,10 @@ async function getIamToken(): Promise<string> {
         `check the bootstrap container provisioned ${SEEDED_ADMIN.subject}`,
     );
   }
-  tokenCache.set("paladin-iam", access);
+  tokenCache.set("paladin-iam", {
+    token: access,
+    expiresAt: jwtExpiryMs(access),
+  });
   return access;
 }
 
