@@ -140,10 +140,25 @@ export default function TenantCollectionsPage() {
   );
 
   const [search, setSearch] = useState("");
+
+  // The server takes a CEL expression, not a search string. Sending the raw
+  // box contents means "e2e/inv" reaches the plane as an expression and fails
+  // to compile ("extraneous input"), so the list comes back empty and the
+  // search looks broken. It went unnoticed while ListCollections ignored the
+  // filter field entirely and returned everything regardless.
+  //
+  // Quote-escape: a collection name may legitimately contain a double quote,
+  // and pasting one would otherwise produce an expression that either fails to
+  // compile or — worse — changes meaning.
+  const celFilter = useMemo(() => {
+    const term = search.trim();
+    if (!term) return "";
+    return `collection.startsWith("${term.replace(/["\\]/g, "\\$&")}")`;
+  }, [search]);
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   const listQuery = useQuery({
-    queryKey: ["tenantCollections", tenant.tenantId, search],
+    queryKey: ["tenantCollections", tenant.tenantId, celFilter],
     retry: false, // queryFn toasts real failures.
     queryFn: async ({ signal }) => {
       try {
@@ -151,7 +166,7 @@ export default function TenantCollectionsPage() {
           {
             parent: `tenants/${tenant.tenantId}`,
             page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-            filter: search,
+            filter: celFilter,
           },
           { signal },
         );

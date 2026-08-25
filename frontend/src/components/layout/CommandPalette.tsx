@@ -251,11 +251,22 @@ export function CommandPalette() {
         // best-effort: a slow / failing one doesn't block the others
         // from populating the palette. Result count caps per source
         // keep the palette scannable.
+        // The plane's `filter` is a CEL expression, not a search string.
+        // Passing the raw query made every keystroke a compile error, and the
+        // .catch() below turned that into an empty result — a palette that
+        // silently found nothing rather than one that looked broken. It went
+        // unnoticed while ListTenants ignored the field and returned
+        // everything.
+        const escaped = searchQuery.trim().replace(/["\\]/g, "\\$&");
+        const tenantFilter = escaped
+          ? `slug.startsWith("${escaped}") || display_name.startsWith("${escaped}")`
+          : "";
+
         const [tenantRes, bucketRes, okRes, backendRes] = await Promise.all([
           tenantClient
             .listTenants({
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-              filter: searchQuery,
+              filter: tenantFilter,
             })
             .catch(() => ({ tenants: [] })),
           bucketClient
