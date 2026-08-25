@@ -1966,3 +1966,43 @@ of the pipeline._
   what made the bucket case take a flaky e2e to notice.
 - **Blockers:** None — deferred to keep this change scoped to the defect that
   actually surfaced.
+
+---
+## The per-tenant rate limit is per pod, not per tenant
+
+- **Status:** Deferred (already wrong at the chart's own defaults).
+- **Reason:** `middleware.TenantRateLimiter` is an in-memory token bucket held
+  by each process, so the ceiling a tenant actually gets is
+  `replicas × requests_per_second`. This is not hypothetical: the chart
+  defaults the api role to `replicas: 2`, so a deployment taking the defaults
+  already grants 600/s where `middleware.rate_limit` says 300. The dev cluster
+  reads 300 only because its overlay pins one replica. The failure is
+  invisible — nothing errors, the limit is simply looser than the number an
+  operator set, and it loosens further with every replica added.
+  The api_token limiter next to it already solved this — its buckets live in
+  Postgres (`api_token_rate_buckets`) precisely so they are shared — so the
+  shape to copy exists in-tree.
+- **Definition of Done:** Either the buckets are shared across replicas (the
+  api_token limiter's table, or Redis if the round-trip proves too costly on
+  the request path), or the config documents that the value is per replica and
+  the Helm chart derives it from the replica count. Whichever is chosen, a
+  test pins the arithmetic — the current unit tests all run one limiter.
+- **Blockers:** none. Deferred rather than done because a shared bucket puts a
+  database round-trip on every request, and that trade is worth making
+  deliberately — not folded into the commit that merely wired the limiter up.
+
+---
+## Streaming RPCs are charged one rate-limit token at open
+
+- **Status:** Deferred (matches today's streams; revisit when one is chatty).
+- **Reason:** `TenantRateLimitInterceptor.WrapStreamingHandler` takes a single
+  token when the stream opens and none per message. That fits the streams
+  Paladin has — event subscriptions, whose cost is the subscription rather than
+  the frame — but a tenant can hold a stream open and push messages through it
+  at any rate without the limiter noticing, so the ceiling covers unary traffic
+  only.
+- **Definition of Done:** Per-message accounting inside the message loop for
+  any stream whose per-frame cost is non-trivial, or a documented statement
+  that streams are governed by their own concurrency limit instead.
+- **Blockers:** none. No stream in the API today carries enough per-frame work
+  to be worth the accounting.
