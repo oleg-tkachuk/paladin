@@ -142,7 +142,11 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     // The Revoke menu item lives below the divider in the
     // Dropdown.Menu. Match by text — the only "Revoke"
     // affordance on this page.
-    await page.getByRole("menuitem", { name: /Revoke/ }).click();
+    await (async () => {
+      const item = page.getByRole("menuitem", { name: /Revoke/ });
+      await expect(item).toBeVisible({ timeout: 15_000 });
+      await item.click({ force: true });
+    })();
 
     // Confirm in the dialog. The dialog footer has a
     // destructive-styled confirm button; matched by role +

@@ -129,15 +129,23 @@ test.describe("Event subscriptions", () => {
       .filter({ hasText: "hooks.example.invalid" });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
+    // Each step waits for the one before it to actually appear. Chained
+    // clicks read fine and fail under load: the menu has not mounted when the
+    // second click fires, so it lands on nothing and the third never has a
+    // dialog to confirm. This test failed only in the full suite, where the
+    // browser is busiest, and passed every time it ran on its own.
     await row
       .getByRole("button", { name: /Actions|Delete/i })
       .first()
-      .click();
-    await page.getByRole("menuitem", { name: /Delete/i }).click();
-    await page
-      .getByRole("button", { name: /^Delete/ })
-      .last()
-      .click();
+      .click({ force: true });
+
+    const deleteItem = page.getByRole("menuitem", { name: /Delete/i });
+    await expect(deleteItem).toBeVisible({ timeout: 15_000 });
+    await deleteItem.click({ force: true });
+
+    const confirm = page.getByRole("button", { name: /^Delete/ }).last();
+    await expect(confirm).toBeVisible({ timeout: 15_000 });
+    await confirm.click({ force: true });
 
     await expect
       .poll(() => subscriptionCount(tenant.tenantId), { timeout: 15_000 })

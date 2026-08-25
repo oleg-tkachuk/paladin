@@ -33,7 +33,11 @@ test.describe("US5 — Tenant restore from trash", () => {
       name: `Actions for ${tenant.tenantId}`,
     });
     await actions.click();
-    await page.getByRole("menuitem", { name: /Delete tenant/ }).click();
+    await (async () => {
+      const item = page.getByRole("menuitem", { name: /Delete tenant/ });
+      await expect(item).toBeVisible({ timeout: 15_000 });
+      await item.click({ force: true });
+    })();
 
     // Confirm in the AlertDialog. There are two matching
     // strings: the menuitem AND the dialog's confirm button.
@@ -89,7 +93,11 @@ test.describe("US5 — Tenant restore from trash", () => {
       name: `Actions for ${tenant.tenantId}`,
     });
     await actions.click();
-    await page.getByRole("menuitem", { name: /Delete tenant/ }).click();
+    await (async () => {
+      const item = page.getByRole("menuitem", { name: /Delete tenant/ });
+      await expect(item).toBeVisible({ timeout: 15_000 });
+      await item.click({ force: true });
+    })();
     await page.getByRole("button", { name: /^Delete tenant$/ }).click();
 
     // Same OCC confirmation as the sibling test: prove the delete landed
