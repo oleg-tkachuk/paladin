@@ -177,6 +177,26 @@ func (r *OperationRepo) PurgeTerminalBefore(ctx context.Context, cutoff time.Tim
 	return r.q.PurgeTerminalOperations(ctx, ts)
 }
 
+// Touch keeps a RUNNING operation's updated_at fresh so the stale-operation
+// reclaim can tell "still working" from "worker died". Bumps nothing else —
+// metadata carries progress counters the executor writes concurrently.
+func (r *OperationRepo) Touch(ctx context.Context, opID uuid.UUID) error {
+	if _, err := r.q.TouchOperation(ctx, pgtype.UUID{Bytes: opID, Valid: true}); err != nil {
+		return fmt.Errorf("operation: touch: %w", err)
+	}
+	return nil
+}
+
+// ReclaimStale fails operations left RUNNING longer than staleAfter without a
+// heartbeat. Returns how many were reclaimed.
+func (r *OperationRepo) ReclaimStale(ctx context.Context, staleAfter time.Duration) (int64, error) {
+	n, err := r.q.ReclaimStaleOperations(ctx, staleAfter.Microseconds())
+	if err != nil {
+		return 0, fmt.Errorf("operation: reclaim stale: %w", err)
+	}
+	return n, nil
+}
+
 func operationFromSQLC(o sqlc.Operation) operation.Operation {
 	return operation.Operation{
 		OperationID:  uuidFrom(o.ID),

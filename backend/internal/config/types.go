@@ -580,6 +580,16 @@ type OperationsWorker struct {
 	// tick (up to 100 ops), so this can be a few seconds — backlog
 	// burns down quickly without polling pressure.
 	Interval time.Duration `yaml:"interval" json:"interval"`
+
+	// StaleAfter is how long an operation may stay RUNNING without a
+	// heartbeat before StaleOperationReclaimer marks it FAILED with
+	// WORKER_LOST. The runner heartbeats every 30s while an executor works,
+	// so this only fires for an operation whose worker is gone.
+	//
+	// Trade-off in one number: too tight fails a live operation whose
+	// heartbeat was delayed by a slow database, too loose leaves a dead one
+	// showing as running for that much longer. 0 uses the 15m default.
+	StaleAfter time.Duration `yaml:"stale_after" json:"stale_after"`
 }
 
 // CapabilityWorker drops capability_revocations rows for tokens whose

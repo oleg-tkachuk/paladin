@@ -329,6 +329,12 @@ worker: {
   // RPCs enqueue work that nothing ever completes.
   operations: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+    // How long a RUNNING operation may go without a heartbeat before it is
+    // declared lost and marked FAILED (WORKER_LOST). The runner heartbeats
+    // every 30s, so this only catches operations whose worker stopped —
+    // between claiming one and writing its result, nothing else in the
+    // system would ever look at the row again.
+    stale_after: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   }
   // Quota reconciler: recomputes quotas.usage_total_bytes /
   // usage_object_count from live objects and rolls the per-day

@@ -1982,3 +1982,23 @@ of the pipeline._
   that streams are governed by their own concurrency limit instead.
 - **Blockers:** none. No stream in the API today carries enough per-frame work
   to be worth the accounting.
+
+---
+## A reclaimed operation reports FAILED without saying how far it got
+
+- **Status:** Deferred (needs per-executor progress semantics).
+- **Reason:** `StaleOperationReclaimer` marks an abandoned operation FAILED
+  with `WORKER_LOST` and a message saying the work may have been partially
+  applied. That is honest but coarse: the batch executors are not
+  transactional across their items, so a BatchDelete or BatchCopy killed
+  halfway leaves a caller no way to learn which items landed. The progress
+  counters in `metadata` are the closest thing, and they are throttled to ~1/s
+  and overwritten by the terminal write.
+- **Definition of Done:** A reclaimed operation's response carries what the
+  executor had recorded — at minimum the last progress snapshot, ideally the
+  per-item outcomes the successful path already returns — so a caller can
+  reissue only the remainder rather than the whole batch.
+- **Blockers:** none technical. Deferred because retrying the whole batch is
+  correct for the idempotent executors (tags, restore) and only wasteful, and
+  the two where it is not (copy, permanent delete) deserve a design pass
+  rather than a partial record bolted onto the reclaim.

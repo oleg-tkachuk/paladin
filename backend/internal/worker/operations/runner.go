@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 
 	"go.uber.org/zap"
@@ -58,7 +60,30 @@ type Runner struct {
 	Executors map[string]Executor
 	Interval  time.Duration
 	Logger    *zap.Logger
+
+	// Heartbeat is how often a RUNNING operation's updated_at is refreshed
+	// while its executor works. It is what lets the stale-operation reclaim
+	// distinguish a long batch from a worker that died mid-flight. Zero
+	// picks a sane default; it must stay well under the reclaim threshold.
+	Heartbeat time.Duration
+
+	// Toucher refreshes the heartbeat. Optional: a Repo that does not
+	// implement it simply runs without one, and long operations are then
+	// only kept alive by their own progress reports.
+	Toucher OperationToucher
 }
+
+// OperationToucher is the heartbeat seam, kept separate from
+// operation.Repository so existing implementations (and tests) that do not
+// need it are unaffected.
+type OperationToucher interface {
+	Touch(ctx context.Context, opID uuid.UUID) error
+}
+
+// terminalWriteTimeout bounds the write that records SUCCEEDED or FAILED.
+// It runs on a context detached from the runner's, so a shutdown cannot stop
+// the row from reaching a terminal state — see runOne.
+const terminalWriteTimeout = 10 * time.Second
 
 // Run blocks until ctx is cancelled. The loop:
 //   - on every tick, drain as many PENDING operations as ClaimNext
@@ -139,7 +164,10 @@ func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
 	// the claimed operation row, which the RPC wrote under the caller's own
 	// tenant scope.
 	execCtx := auth.WithActingTenant(r.withProgress(ctx, op), op.TenantID)
+	stopHeartbeat := make(chan struct{})
+	go r.heartbeat(ctx, op, stopHeartbeat)
 	response, err := exec.Execute(execCtx, op)
+	close(stopHeartbeat)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -155,9 +183,55 @@ func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
 		zap.Duration("duration", duration),
 		zap.Int("response_bytes", len(response)),
 	)
-	if err := r.Repo.UpdateState(ctx, op.OperationID,
+	writeCtx, cancel := terminalCtx(ctx)
+	defer cancel()
+	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
 		operation.StateSucceeded, op.Metadata, response, "", ""); err != nil {
 		logger.Warn("failed to mark SUCCEEDED", zap.Error(err))
+	}
+}
+
+// terminalCtx detaches the terminal write from the runner's lifecycle.
+//
+// Both terminal writes used to run on the runner's own ctx. On shutdown that
+// ctx is already cancelled by the time the executor returns — it is what
+// cancelled the executor — so the UPDATE was refused before it reached
+// Postgres, the failure was logged as a warning, and the row stayed RUNNING.
+// Nothing revisits a RUNNING row: ClaimNext takes only PENDING and the reaper
+// only terminal states, so it stayed that way indefinitely. One such row sat
+// RUNNING for two days while an identical operation, retried nine minutes
+// later, finished in 2.5 seconds.
+//
+// WithoutCancel keeps the values (trace, logger) and drops the cancellation;
+// the timeout stops a shutdown from being held open by a stuck database.
+func terminalCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), terminalWriteTimeout)
+}
+
+// heartbeat refreshes the operation's updated_at until stop is closed. See
+// Runner.Heartbeat for why liveness cannot be left to progress reporting.
+func (r *Runner) heartbeat(ctx context.Context, op operation.Operation, stop <-chan struct{}) {
+	if r.Toucher == nil {
+		return
+	}
+	every := r.Heartbeat
+	if every <= 0 {
+		every = 30 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := r.Toucher.Touch(ctx, op.OperationID); err != nil {
+				r.log().Debug("operation heartbeat failed",
+					zap.String("operation_id", op.OperationID.String()), zap.Error(err))
+			}
+		}
 	}
 }
 
@@ -190,7 +264,9 @@ func (r *Runner) withProgress(ctx context.Context, op operation.Operation) conte
 // so polling clients can render the error without a separate fetch.
 func (r *Runner) markFailed(ctx context.Context, op operation.Operation, code, msg string) {
 	resp, _ := json.Marshal(map[string]string{"error": msg, "code": code})
-	if err := r.Repo.UpdateState(ctx, op.OperationID,
+	writeCtx, cancel := terminalCtx(ctx)
+	defer cancel()
+	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
 		operation.StateFailed, op.Metadata, resp, code, msg); err != nil {
 		r.log().Warn("failed to mark FAILED", zap.Error(err))
 	}

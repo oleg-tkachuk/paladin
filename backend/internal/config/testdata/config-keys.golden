@@ -405,6 +405,7 @@ worker.jobs.lifecycle.enabled
 worker.jobs.lifecycle.interval
 worker.jobs.operations
 worker.jobs.operations.interval
+worker.jobs.operations.stale_after
 worker.jobs.purge_drain
 worker.jobs.purge_drain.batch_size
 worker.jobs.purge_drain.interval

@@ -335,6 +335,20 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Executors: executors,
 			Interval:  cfg.Worker.Jobs.Operations.Interval,
 			Logger:    l.Named("operations-runner"),
+			// Heartbeat so StaleOperationReclaimer can tell a long batch from a
+			// worker that died holding one.
+			Toucher: opRepo,
+		})
+
+		// Reclaim operations abandoned by a worker that stopped between the
+		// claim and the terminal write. Runs alongside the runner rather than
+		// with the other housekeeping jobs because it is part of the queue's
+		// own correctness, not retention.
+		out = append(out, &worker.StaleOperationReclaimer{
+			Repo:       opRepo,
+			Interval:   cfg.Worker.Jobs.Housekeeping.Interval,
+			StaleAfter: cfg.Worker.Jobs.Operations.StaleAfter,
+			Logger:     l.Named("stale-operation-reclaimer"),
 		})
 	}
 

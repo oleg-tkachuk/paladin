@@ -57,3 +57,40 @@ SET state   = 'CANCELLED',
     updated_at = now()
 WHERE id = $1 AND tenant_id = $2
   AND state IN ('PENDING', 'RUNNING');
+
+-- name: TouchOperation :execrows
+-- Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
+-- particular it must not touch metadata, which carries the progress counters
+-- an executor may be writing concurrently.
+--
+-- Liveness has to be separate from progress: an executor that reports no
+-- progress (a short batch, or one iterating something without a total) would
+-- otherwise look identical to a worker that died mid-operation, and
+-- ReclaimStaleOperations would fail it while it was still working.
+UPDATE operations
+SET updated_at = now()
+WHERE id = $1 AND state = 'RUNNING';
+
+-- name: ReclaimStaleOperations :execrows
+-- Fails operations left RUNNING by a worker that went away.
+--
+-- ClaimNext only ever selects PENDING, and there is no lease to expire, so a
+-- row whose worker died between the claim and the terminal write is invisible
+-- to every worker forever: not retried, not reaped (PurgeTerminalOperations
+-- takes only terminal states), and shown to the operator as "running" for as
+-- long as the database keeps it. One sat that way for two days.
+--
+-- Marked FAILED rather than requeued to PENDING, deliberately. The executors
+-- here are not transactional across their items — a batch copy or delete may
+-- have applied to half the set — so re-running one would repeat side effects
+-- nobody can see. FAILED with WORKER_LOST tells the caller the truth: the
+-- outcome is unknown, decide for yourself whether to reissue.
+UPDATE operations
+SET state         = 'FAILED',
+    error_code    = 'WORKER_LOST',
+    error_message = 'the worker executing this operation stopped before it finished; '
+                    'the work may have been partially applied',
+    done_at       = now(),
+    updated_at    = now()
+WHERE state = 'RUNNING'
+  AND updated_at < now() - (sqlc.arg('stale_after_micros')::bigint || ' microseconds')::interval;
