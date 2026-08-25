@@ -1935,27 +1935,6 @@ of the pipeline._
   rather than an on-demand path; batch would need that logic factored out.
 
 ---
-## The collections page is unreliable to drive from e2e
-
-- **Status:** Deferred (test-harness problem, not a product defect).
-- **Reason:** The root cause behind the flake on every OTHER console form was
-  the viewport: Desktop Chrome defaults to 1280x720 and several forms are
-  taller, so submit buttons sat below the fold and Playwright had to scroll to
-  reach them — on a page still settling, that scroll moved the target. A
-  1440x900 viewport fixed budget, bucket-lifecycle, bucket-object-lock and
-  event-subscriptions outright (three clean runs each, and the three
-  subscription tests dropped for flakiness are back).
-  Collections did not settle with it. Its create dialog opens, then the
-  backend/bucket selects behave differently on each attempt — a Radix trigger
-  that is enabled but not actionable, a choice that does not stick, a dialog
-  that does not reopen. Each fix moved the symptom rather than removing it, so
-  only the dialog's binding requirement is covered (four clean runs).
-- **Definition of Done:** create and delete through the UI, ten consecutive
-  clean runs, no forced clicks.
-- **Blockers:** Needs someone to work out why this page's selects differ from
-  the identical ones elsewhere. CreateCollection and DeleteCollection are
-  covered by the Go integration suite meanwhile.
----
 ## TenantBudgetService.Set has no OCC guard
 
 - **Status:** Deferred (needs a proto change).

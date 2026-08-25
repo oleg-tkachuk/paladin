@@ -1057,14 +1057,27 @@ export async function tenantBudget(tenantId: string): Promise<{
 
 // ─── Collections ────────────────────────────────────────────────────────────
 
-/** Count a tenant's collections, for asserting a create or delete landed. */
+/**
+ * Count a tenant's collections, for asserting a create or delete landed.
+ *
+ * Pages through to the end. A single request capped at 200 returned exactly
+ * 200 against a tenant that had 335, so before and after a delete were both
+ * "200" and the assertion could never see the difference — a test that could
+ * only fail, never pass, for a reason that had nothing to do with the delete.
+ */
 export async function collectionCount(tenantId: string): Promise<number> {
   const client = createClient(CollectionService, adminTransport());
-  const res = await client.listCollections({
-    parent: `tenants/${tenantId}`,
-    page: { pageSize: 200 },
-  });
-  return res.collections.length;
+  let total = 0;
+  let pageToken = "";
+  do {
+    const res = await client.listCollections({
+      parent: `tenants/${tenantId}`,
+      page: { pageSize: 200, pageToken },
+    });
+    total += res.collections.length;
+    pageToken = res.page?.nextPageToken ?? "";
+  } while (pageToken);
+  return total;
 }
 
 // ─── Teardown ───────────────────────────────────────────────────────────────
