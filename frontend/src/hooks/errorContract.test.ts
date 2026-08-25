@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { errorMessage } from "./errorContract";
+import { errorMessage, isAbortError } from "./errorContract";
 
 // Pins the caller-facing half of the data-hook error contract (see
 // README.md): errorMessage is what every mutation caller uses to turn a
@@ -38,5 +38,24 @@ describe("errorMessage", () => {
   it("prefers a ConnectError unwrap over the fallback", () => {
     const err = new ConnectError("denied", Code.PermissionDenied);
     expect(errorMessage(err, "fb")).toBe("denied");
+  });
+});
+
+describe("isAbortError", () => {
+  it("recognises a cancelled Connect request", () => {
+    expect(isAbortError(new ConnectError("cancelled", Code.Canceled))).toBe(
+      true,
+    );
+  });
+
+  it("recognises a DOM AbortError", () => {
+    expect(
+      isAbortError(new DOMException("signal is aborted", "AbortError")),
+    ).toBe(true);
+  });
+
+  it("does not swallow a real failure", () => {
+    expect(isAbortError(new ConnectError("boom", Code.Internal))).toBe(false);
+    expect(isAbortError(new Error("boom"))).toBe(false);
   });
 });

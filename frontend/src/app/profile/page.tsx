@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
+import { isAbortError } from "@/hooks/errorContract";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
 // Tenant comes from the JWT, so the page always operates on the calling
@@ -107,6 +108,9 @@ export default function ProfilePage() {
       try {
         return await userSettingsClient.getMine({}, { signal });
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         // First-time users may not have a row yet; the backend creates an
         // empty default on UpdateMine, so a NotFound here is fine → null.
         if (err instanceof ConnectError && /not.*found/i.test(err.rawMessage)) {

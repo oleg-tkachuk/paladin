@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
+import { isAbortError } from "@/hooks/errorContract";
 
 /** Renders a bucket reference as backend / bucket, falling back to the raw
  *  resource name when it does not parse. */
@@ -56,6 +57,9 @@ export default function DefaultBindingPage() {
       try {
         return await tenantClient.getTenantDefaultBinding({ name }, { signal });
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         if (err instanceof ConnectError && err.code === Code.NotFound) {
           return null;
         }

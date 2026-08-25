@@ -86,6 +86,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 
@@ -172,6 +173,9 @@ export default function TenantCollectionsPage() {
         );
         return res.collections;
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         showNotification({
           type: "error",
           title: "Load failed",

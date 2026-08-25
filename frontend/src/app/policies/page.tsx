@@ -45,6 +45,7 @@ import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
+import { isAbortError } from "@/hooks/errorContract";
 import { TestSuite } from "./_TestSuite";
 
 // Curated Cedar policy starters surfaced via the "Load template"
@@ -251,6 +252,9 @@ export default function PoliciesPage() {
         );
         return { policy: k.cedarPolicy, resourceVersion: k.resourceVersion };
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         showNotification({
           type: "error",
           title: "Load failed",

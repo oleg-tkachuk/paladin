@@ -1,4 +1,4 @@
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 /**
  * Data-hook error contract — the ONE rule every hook in this directory
@@ -32,4 +32,22 @@ export function errorMessage(
     return err.message;
   }
   return fallback;
+}
+
+/**
+ * True when a request failed because it was cancelled, not because anything
+ * went wrong: TanStack aborts an in-flight query when the component unmounts
+ * or a newer fetch supersedes it, and the transport surfaces that as
+ * Code.Canceled (or a DOMException AbortError).
+ *
+ * Worth its own helper because the page-level queryFns toast on failure, and
+ * an abort toasted as "Load failed — signal is aborted without reason". That
+ * is noise on every navigation, and on the budget page the toast landed on top
+ * of the submit button and swallowed the click.
+ */
+export function isAbortError(err: unknown): boolean {
+  if (err instanceof ConnectError) {
+    return err.code === Code.Canceled;
+  }
+  return err instanceof DOMException && err.name === "AbortError";
 }

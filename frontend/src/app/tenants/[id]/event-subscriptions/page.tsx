@@ -35,6 +35,7 @@ import { eventSubscriptionClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { EventSubscription } from "@/gen/paladin/admin/v1/types_pb";
+import { isAbortError } from "@/hooks/errorContract";
 import { sinkSummary, truncate, type TestResult } from "./_form";
 import { TestResultDisplay } from "./_components";
 import { SubscriptionEditorDialog } from "./SubscriptionEditorDialog";
@@ -74,6 +75,9 @@ export default function EventsPage() {
         );
         return res.subscriptions;
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         showNotification({
           type: "error",
           title: "Load failed",
@@ -299,8 +303,8 @@ export default function EventsPage() {
                         No event subscriptions
                       </p>
                       <p className={cn(T.helper, "mt-1 text-balance")}>
-                        Forward Paladin events to a webhook (HTTP) or NATS subject.
-                        Kafka / SQS sinks are roadmap stubs.
+                        Forward Paladin events to a webhook (HTTP) or NATS
+                        subject. Kafka / SQS sinks are roadmap stubs.
                       </p>
                     </div>
                     <Button onClick={openCreate} size="sm">

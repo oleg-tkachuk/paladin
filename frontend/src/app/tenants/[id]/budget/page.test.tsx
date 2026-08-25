@@ -105,6 +105,74 @@ describe("TenantBudgetPage OCC", () => {
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("0");
   });
 
+  it("holds submit until the first read resolves, so it cannot send a version it never read", async () => {
+    // Never resolves: the page has no snapshot, so it does not know whether
+    // this is a create or an update.
+    h.get.mockReturnValue(new Promise(() => {}));
+    render(<BudgetPage />);
+
+    // Label is whatever the not-yet-known state renders; what matters is that
+    // it cannot be pressed.
+    const submit = await screen.findByRole("button", {
+      name: /create budget|apply changes/i,
+    });
+    expect(submit).toBeDisabled();
+  });
+
+  it("keeps submit usable while a background refetch is in flight", async () => {
+    h.get.mockResolvedValue({ budget });
+    render(<BudgetPage />);
+
+    const submit = await screen.findByRole("button", {
+      name: /apply changes/i,
+    });
+
+    // Refresh kicks off a refetch. The button must stay clickable: disabling it
+    // on every in-flight read silently drops clicks an operator has already
+    // committed to.
+    await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    expect(submit).toBeEnabled();
+  });
+
+  it("stays silent when a read is cancelled rather than toasting Load failed", async () => {
+    // TanStack aborts in-flight reads on unmount and on supersede. Toasting
+    // that put a "Load failed — signal is aborted without reason" card in the
+    // bottom-right corner, on top of the submit button, where it swallowed the
+    // operator's click.
+    h.get.mockRejectedValue(new ConnectError("aborted", Code.Canceled));
+    render(<BudgetPage />);
+
+    await waitFor(() => expect(h.get).toHaveBeenCalled());
+    expect(h.notify).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite an in-progress edit when a refetch lands", async () => {
+    h.get.mockResolvedValue({ budget });
+    render(<BudgetPage />);
+
+    const submit = await screen.findByRole("button", {
+      name: /apply changes/i,
+    });
+
+    // jsdom does not support selection on <input type="number">, so typing
+    // appends to the seeded 100 rather than replacing it. The digits do not
+    // matter — what matters is that the refetch leaves them alone.
+    const field = screen.getByLabelText(/max budget/i);
+    await userEvent.type(field, "500");
+    const typed = (field as HTMLInputElement).value;
+
+    // Refresh re-reads the stored row while the operator is mid-edit. Seeding
+    // the form from that snapshot reverted the typed cap to the stored one,
+    // and Apply then submitted the old number as if nothing had been typed.
+    await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    await waitFor(() => expect(h.get.mock.calls.length).toBeGreaterThan(1));
+    expect(field).toHaveValue(Number(typed));
+
+    await userEvent.click(submit);
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
+    expect(h.set.mock.calls[0][0].maxBudgetAmount).toBe(Number(typed));
+  });
+
   it("refetches and explains the conflict when the server aborts", async () => {
     h.get.mockResolvedValue({ budget });
     h.set.mockRejectedValue(new ConnectError("stale", Code.Aborted));

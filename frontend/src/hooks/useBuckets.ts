@@ -10,6 +10,11 @@ import { BucketSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
+// Ceiling on how many pages one fetchBuckets call will follow. At the maximum
+// page size this is 10k buckets — far past any console list that stays usable,
+// and a backstop against paging forever if a token ever fails to terminate.
+const MAX_LIST_PAGES = 20;
+
 /**
  * useBuckets — wrapper around admin/v1.BucketService.
  *
@@ -43,20 +48,42 @@ export function useBuckets() {
       setLoading(true);
       setError(null);
       try {
-        // ownerTenantId pushes the tenant-narrow filter to the
-        // server (uses the partial index on buckets.owner_tenant_id).
-        // Empty/undefined preserves the cross-tenant listing for
-        // platform-admin views.
-        const res = await bucketClient.listBuckets({
-          parent: backendId ? backendParent(backendId) : "",
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken },
-          filter,
-          ownerTenantId: ownerTenantId ?? "",
-        });
-        setBuckets(res.buckets);
+        // Follows nextPageToken to the end rather than returning one page.
+        //
+        // Every caller — the scope picker, the bucket selectors in the
+        // collection and tenant dialogs, the /buckets tables — asks for "the
+        // buckets" and got the first API_PAGE_SIZE_MAX of them, ordered by
+        // backend then name. Past that ceiling a bucket was invisible and
+        // unselectable everywhere in the console, with nothing on screen
+        // saying so; the deployment that crossed 500 buckets started losing
+        // whichever names sorted last. The server-side `filter` is no escape
+        // hatch: ListBuckets evaluates CEL over the page it already read, so
+        // searching cannot reach rows the page never contained.
+        //
+        // MAX_PAGES bounds a pathological account rather than the normal one;
+        // the residual token is still returned so a caller can continue.
+        let token = pageToken;
+        let pages = 0;
+        const acc: Bucket[] = [];
+        do {
+          // ownerTenantId pushes the tenant-narrow filter to the
+          // server (uses the partial index on buckets.owner_tenant_id).
+          // Empty/undefined preserves the cross-tenant listing for
+          // platform-admin views.
+          const res = await bucketClient.listBuckets({
+            parent: backendId ? backendParent(backendId) : "",
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+            filter,
+            ownerTenantId: ownerTenantId ?? "",
+          });
+          acc.push(...res.buckets);
+          token = res.page?.nextPageToken ?? "";
+          pages += 1;
+        } while (token && pages < MAX_LIST_PAGES);
+        setBuckets(acc);
         return {
-          buckets: res.buckets,
-          nextPageToken: res.page?.nextPageToken ?? "",
+          buckets: acc,
+          nextPageToken: token,
         };
       } catch (err) {
         // Query contract (state-only): surface via `error`, never throw.

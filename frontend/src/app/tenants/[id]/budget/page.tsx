@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatMoney, ALLOWED_UNIT_CODES } from "@/lib/format/money";
 import { Select } from "@/components/ui/Select";
+import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 
@@ -81,6 +82,9 @@ export default function TenantBudgetPage() {
         const res = await tenantBudgetClient.get({ tenantId }, { signal });
         return { budget: res.budget ?? null, notFound: false };
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         // No budget row yet is a normal "Create budget" state, not an error.
         if (err instanceof ConnectError && err.code === Code.NotFound) {
           return { budget: null, notFound: true };
@@ -100,6 +104,10 @@ export default function TenantBudgetPage() {
   const budget = budgetQuery.data?.budget ?? null;
   const notFound = budgetQuery.data?.notFound ?? false;
   const loading = budgetQuery.isFetching;
+  // Distinct from `loading`: true only until the first read resolves. Submit is
+  // held on this, never on isFetching — a background refetch must not disable
+  // Apply out from under an operator who is already clicking it.
+  const initialising = budgetQuery.isPending;
   const fetchBudget = () => budgetQuery.refetch();
 
   const [maxBudget, setMaxBudget] = useState<string>("");
@@ -113,13 +121,23 @@ export default function TenantBudgetPage() {
   // untouched; a value pins when the billing period ends.
   const [periodEnd, setPeriodEnd] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  // Set once the operator touches any field, cleared when their edit lands.
+  // While set, an arriving snapshot is not written into the form.
+  const [edited, setEdited] = useState(false);
 
   // Hydrate the form whenever a new snapshot arrives — render-phase
   // adjust-on-change (React's recommended alternative to a sync effect, and
   // not a set-state-in-effect hit). `budget` identity only changes on real
   // data change thanks to TanStack's structural sharing.
+  //
+  // Skipped while the operator has unsaved edits: a refetch — Refresh, a
+  // remount, the read this page issues after a save — used to overwrite what
+  // they had typed with the stored values, so a cap they had just entered
+  // reverted mid-edit and Apply then submitted the old number. seededFrom is
+  // left behind deliberately, so the pending snapshot seeds the form the
+  // moment the edit resolves.
   const [seededFrom, setSeededFrom] = useState(budget);
-  if (budget !== seededFrom) {
+  if (budget !== seededFrom && !edited) {
     setSeededFrom(budget);
     if (budget) {
       setMaxBudget(String(budget.maxBudgetAmount));
@@ -167,6 +185,7 @@ export default function TenantBudgetPage() {
           ? timestampFromDate(new Date(`${periodEnd}T00:00:00Z`))
           : undefined,
       });
+      setEdited(false);
       await fetchBudget();
       showNotification({
         type: "success",
@@ -180,6 +199,9 @@ export default function TenantBudgetPage() {
       // so the form reflects what is actually stored before the operator
       // decides whether they still want their change.
       if (err instanceof ConnectError && err.code === Code.Aborted) {
+        // The stored row wins: drop the edit flag so the refetched snapshot
+        // seeds the form and the operator sees what actually landed.
+        setEdited(false);
         await fetchBudget();
         showNotification({
           type: "error",
@@ -339,7 +361,10 @@ export default function TenantBudgetPage() {
                 min={0}
                 placeholder="0 = unlimited"
                 value={maxBudget}
-                onChange={(e) => setMaxBudget(e.target.value)}
+                onChange={(e) => {
+                  setEdited(true);
+                  setMaxBudget(e.target.value);
+                }}
               />
               <p className={T.hint}>
                 0 keeps the counter accumulating without rejecting.
@@ -354,7 +379,10 @@ export default function TenantBudgetPage() {
                   label: u,
                 }))}
                 value={unitCode}
-                onChange={setUnitCode}
+                onChange={(v) => {
+                  setEdited(true);
+                  setUnitCode(v);
+                }}
                 className="w-full"
               />
               <p className={T.hint}>
@@ -368,7 +396,10 @@ export default function TenantBudgetPage() {
                 <input
                   type="checkbox"
                   checked={resetSpend}
-                  onChange={(e) => setResetSpend(e.target.checked)}
+                  onChange={(e) => {
+                    setEdited(true);
+                    setResetSpend(e.target.checked);
+                  }}
                   className="size-4 accent-primary"
                 />
                 <span>
@@ -387,7 +418,10 @@ export default function TenantBudgetPage() {
                 id="period-end"
                 type="date"
                 value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
+                onChange={(e) => {
+                  setEdited(true);
+                  setPeriodEnd(e.target.value);
+                }}
                 className="w-full"
               />
               <p className={T.hint}>
@@ -400,7 +434,7 @@ export default function TenantBudgetPage() {
           <div className="flex justify-end">
             <Button
               type="submit"
-              disabled={submitting || loading || !maxBudget.trim()}
+              disabled={submitting || initialising || !maxBudget.trim()}
             >
               {submitting ? (
                 "Updating…"

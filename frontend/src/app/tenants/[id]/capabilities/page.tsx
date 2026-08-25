@@ -46,6 +46,7 @@ import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { formatMoney } from "@/lib/format/money";
+import { isAbortError } from "@/hooks/errorContract";
 
 // Per-capability usage snapshot keyed by capability id; "never" ⇒ the
 // capability has no usage row yet (GetUsage NotFound).
@@ -188,6 +189,9 @@ export default function CapabilitiesPage() {
                 },
               ] as const;
             } catch (err) {
+              // An aborted query is not a failure the operator needs to see:
+              // TanStack cancels in-flight reads on unmount and on supersede.
+              if (isAbortError(err)) throw err;
               if (err instanceof ConnectError && err.code === Code.NotFound) {
                 return [c.id, "never" as const] as const;
               }

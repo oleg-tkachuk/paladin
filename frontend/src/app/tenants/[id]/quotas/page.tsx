@@ -41,6 +41,7 @@ import { quotaClient } from "@/lib/connect/client";
 import { QuotaSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 
@@ -92,6 +93,9 @@ export default function TenantQuotasPage() {
         const res = await quotaClient.getQuota({ name: quotaName }, { signal });
         return { quota: res, notFound: false };
       } catch (err) {
+        // An aborted query is not a failure the operator needs to see:
+        // TanStack cancels in-flight reads on unmount and on supersede.
+        if (isAbortError(err)) throw err;
         // No quota row yet is a normal "unlimited / create" state, not an error.
         if (err instanceof ConnectError && err.code === Code.NotFound) {
           return { quota: null, notFound: true };

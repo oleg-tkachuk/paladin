@@ -28,6 +28,7 @@ import { apiTokenClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
+import { isAbortError } from "@/hooks/errorContract";
 import { formatTimestamp, isRevoked, isExpired } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
@@ -106,6 +107,9 @@ export default function M2MTokensPage() {
                 },
               ] as const;
             } catch (err) {
+              // An aborted query is not a failure the operator needs to see:
+              // TanStack cancels in-flight reads on unmount and on supersede.
+              if (isAbortError(err)) throw err;
               if (err instanceof ConnectError && err.code === Code.NotFound) {
                 return [t.id, "never" as const] as const;
               }
