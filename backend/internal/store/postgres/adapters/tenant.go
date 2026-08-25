@@ -378,11 +378,18 @@ func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {
 	rows, err := q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
-		// FK RESTRICT from collections/objects → the tenant still owns
+		// FK RESTRICT from collections/users/objects → the tenant still owns
 		// data. Map to a typed sentinel so the handler returns a clear
 		// FailedPrecondition instead of a generic Internal error.
+		//
+		// Both codes, because Postgres splits them: 23503 is
+		// foreign_key_violation, 23001 is restrict_violation, and a column
+		// declared ON DELETE RESTRICT raises the latter. Checking only 23503
+		// meant DeleteTenant(force=true) on a tenant with users — which every
+		// tenant has — leaked the raw SQL text as CodeInternal instead of
+		// saying what was wrong. delete-collection already handled both.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		if errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23001") {
 			return tenant.ErrTenantHasChildren
 		}
 		return fmt.Errorf("hard-delete tenant: %w", err)
