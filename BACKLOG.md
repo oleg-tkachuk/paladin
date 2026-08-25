@@ -229,34 +229,23 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Telemetry is instrumented and exported, but nothing collects it
+### Presign and capability panels wait for those paths to run here
 
-- **Status:** Blocked (cluster collector is unhealthy — not a Paladin change).
-- **Reason:** Paladin's side is wired: every pod carries
-  `prometheus.io/scrape` + port 9095, the Prometheus exporter serves there
-  (verified by reading `paladin_tenant_ratelimit_decisions_total` and the
-  otelconnect `rpc_server_*` series straight off an admin pod), and traces now
-  have a real OTLP endpoint. Nothing collects any of it: the Alloy DaemonSet
-  pod is 1/2 ready with 9 restarts, failing k8s API watches on TLS handshake
-  timeouts and dropping Loki batches, and VictoriaMetrics currently holds zero
-  `up` series **cluster-wide** — 9 two hours ago, none now. The `paladin_*`
-  names still in VM's index are historical, from when scraping worked; an
-  instant query returns nothing. So an incident is still diagnosed from logs,
-  and Grafana still has no Paladin dashboard.
-- **Definition of Done:**
-  - Alloy healthy and scraping again, verified by `up{namespace="paladin"}`
-    returning a series per pod — not by the pod being Running.
-  - A Paladin dashboard built on the metric names that actually arrive (the
-    Garage and SeaweedFS dashboards were built that way, and it is why they
-    show the right things): RED per plane from otelconnect, presign outcomes,
-    outbox depth, worker staleness, capability charge rejections.
-  - Alerts for the four that page: outbox depth climbing without drain, a
-    worker whose `last_run` exceeds its interval, `paladin_api_token_ratelimit_fail_open`
-    non-zero (rate limiting silently off), and capability charges rejecting at
-    a rate that means a tenant is stuck.
-- **Blockers:** the collector. Building panels against series nothing is
-  currently writing would repeat the mistake that made the last two dashboards
-  wrong — fix the scrape first, then query what arrives.
+- **Status:** Deferred (no data to chart, deliberately).
+- **Reason:** The Paladin dashboard and the five alert rules landed, and the
+  collector is healthy again — `up{namespace="paladin"}` returns a series per
+  pod and Grafana evaluates every rule with health=ok. Two of the signals the
+  original entry named are still uncharted: `paladin_presign_total` and
+  `paladin_capability_charges_total` exist in the binary but no presign or
+  capability charge has run in this cluster, so a panel would show a flat zero
+  that reads as "broken" rather than "unused". The alert on capability charges
+  is written anyway, because a rule costs nothing while idle and a panel costs
+  a wrong first impression.
+- **Definition of Done:** Once either path runs here, chart it: presign by
+  op and outcome with its p95, and capability charges by outcome. Read the
+  label values off the live series first — that discipline is what the
+  dashboard header records, and it has already caught a mistyped regex.
+- **Blockers:** none. Needs traffic, not work.
 
 ### Domains still uninstrumented
 
