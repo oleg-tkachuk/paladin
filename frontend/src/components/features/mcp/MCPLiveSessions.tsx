@@ -19,25 +19,39 @@ function fmtTs(ts: { seconds: bigint; nanos: number } | undefined): string {
 /**
  * MCPLiveSessions renders the live streamable-HTTP sessions from
  * MCPInspectService.ListSessions (which proxies the MCP server's registry).
- * The list reflects one MCP replica and is empty when the MCP server is
- * unreachable or the proxy is unconfigured — in which case the audit-log
- * fallback link still gives operators per-tool-call visibility.
+ *
+ * ListSessions answers an empty list when the bridge is unreachable — a
+ * deliberate degrade, so one dead replica cannot fail the call, but one that
+ * made "the bridge is down" and "nobody is using MCP" render identically. So
+ * the empty state asks GetBridgeStatus which of the two it is, and says so.
+ * An operator opens this page when something looks wrong; a tidy "no active
+ * sessions" over an unreachable bridge is the worst thing it could show.
  */
 export function MCPLiveSessions() {
   const [sessions, setSessions] = useState<MCPSession[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    mcpInspectClient
-      .listSessions({})
-      .then((res) => {
-        if (!cancelled) setSessions(res.sessions);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          console.debug("listSessions failed", ConnectError.from(e).message);
-          setSessions([]);
+    // Both in one pass: the sessions, and whether the bridge could be asked at
+    // all. Two calls rather than one because they answer different questions —
+    // and the second is the one that makes an empty first honest.
+    Promise.allSettled([
+      mcpInspectClient.listSessions({}),
+      mcpInspectClient.getBridgeStatus({}),
+    ])
+      .then(([list, status]) => {
+        if (cancelled) return;
+        setSessions(list.status === "fulfilled" ? list.value.sessions : []);
+        if (status.status === "fulfilled") {
+          setBridgeError(
+            status.value.reachable
+              ? null
+              : status.value.error || "the MCP server could not be reached",
+          );
+        } else {
+          setBridgeError(ConnectError.from(status.reason).message);
         }
       })
       .finally(() => {
@@ -57,7 +71,12 @@ export function MCPLiveSessions() {
         </span>
       </div>
 
-      {loaded && sessions.length === 0 ? (
+      {loaded && sessions.length === 0 && bridgeError ? (
+        <p className="text-xs text-amber-400">
+          The MCP server could not be reached, so this list is not empty — it is
+          unknown. {bridgeError}
+        </p>
+      ) : loaded && sessions.length === 0 ? (
         <p className="text-xs text-slate-400">
           No active sessions on this MCP server. MCP tool calls are also visible
           in the audit log — filter by{" "}

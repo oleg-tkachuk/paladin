@@ -25,13 +25,128 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_mcp_inspect_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CilsZWdhdGUvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IkIKE0xpc3RTZXNzaW9uc1JlcXVlc3QSKwoEcGFnZRgBIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QicwoUTGlzdFNlc3Npb25zUmVzcG9uc2USLQoIc2Vzc2lvbnMYASADKAsyGy5sZWdhdGUuYWRtaW4udjEuTUNQU2Vzc2lvbhIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2Ui3AEKCk1DUFNlc3Npb24SDwoCaWQYASABKAlCA+BBAxIaCg1hZ2VudF9zdWJqZWN0GAIgASgJQgPgQQMSMwoKc3RhcnRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIyCglsYXN0X3NlZW4YBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSHAoPdG9vbF9jYWxsX2NvdW50GAUgASgDQgPgQQMSGgoNcmVxdWVzdF9jb3VudBgGIAEoA0ID4EEDIu4BChJNQ1BJbnNwZWN0UmVzcG9uc2USLQoIcHJvZmlsZXMYASADKAsyGy5sZWdhdGUuYWRtaW4udjEuTUNQUHJvZmlsZRITCgthbHdheXNfZGVueRgCIAMoCRIuCgx0b29sX2NhdGFsb2cYAyADKAsyGC5sZWdhdGUuYWRtaW4udjEuTUNQVG9vbBIwCgl1cHN0cmVhbXMYBCABKAsyHS5sZWdhdGUuYWRtaW4udjEuTUNQVXBzdHJlYW1zEjIKCnRyYW5zcG9ydHMYBSABKAsyHi5sZWdhdGUuYWRtaW4udjEuTUNQVHJhbnNwb3J0cyJiCgpNQ1BQcm9maWxlEhEKBG5hbWUYASABKAlCA+BBCBINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkiawoHTUNQVG9vbBIRCgRuYW1lGAEgASgJQgPgQQgSEAoIYXVkaWVuY2UYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSFQoNY2FwYWJpbGl0eV9vcBgEIAEoCRIPCgdtdXRhdGVzGAUgASgIIkQKDE1DUFVwc3RyZWFtcxIRCglhZG1pbl91cmwYASABKAkSEAoIZGF0YV91cmwYAiABKAkSDwoHaWFtX3VybBgDIAEoCSJzCg1NQ1BUcmFuc3BvcnRzEjEKBXN0ZGlvGAEgASgLMiIubGVnYXRlLmFkbWluLnYxLk1DUFRyYW5zcG9ydFN0ZGlvEi8KBGh0dHAYAiABKAsyIS5sZWdhdGUuYWRtaW4udjEuTUNQVHJhbnNwb3J0SFRUUCI1ChFNQ1BUcmFuc3BvcnRTdGRpbxIPCgdlbmFibGVkGAEgASgIEg8KB3Byb2ZpbGUYAiABKAkiYwoQTUNQVHJhbnNwb3J0SFRUUBIPCgdlbmFibGVkGAEgASgIEgwKBGFkZHIYAiABKAkSDwoHcHJvZmlsZRgDIAEoCRIfChdzZXNzaW9uX3RpbWVvdXRfc2Vjb25kcxgEIAEoAzLEAQoRTUNQSW5zcGVjdFNlcnZpY2USUgoHSW5zcGVjdBIiLmxlZ2F0ZS5hZG1pbi52MS5NQ1BJbnNwZWN0UmVxdWVzdBojLmxlZ2F0ZS5hZG1pbi52MS5NQ1BJbnNwZWN0UmVzcG9uc2USWwoMTGlzdFNlc3Npb25zEiQubGVnYXRlLmFkbWluLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaJS5sZWdhdGUuYWRtaW4udjEuTGlzdFNlc3Npb25zUmVzcG9uc2VCR1pFZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtsZWdhdGVhZG1pbnYxYgZwcm90bzM",
+    "CilsZWdhdGUvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIPbGVnYXRlLmFkbWluLnYxIhgKFkdldEJyaWRnZVN0YXR1c1JlcXVlc3QizQEKF0dldEJyaWRnZVN0YXR1c1Jlc3BvbnNlEhYKCXJlYWNoYWJsZRgBIAEoCEID4EEDEhIKBWVycm9yGAIgASgJQgPgQQMSOgoJdXBzdHJlYW1zGAMgAygLMiIubGVnYXRlLmFkbWluLnYxLk1DUFVwc3RyZWFtSGVhbHRoQgPgQQMSFQoIc2Vzc2lvbnMYBCABKAVCA+BBAxIzCgpjaGVja2VkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIn0KEU1DUFVwc3RyZWFtSGVhbHRoEhEKBG5hbWUYASABKAlCA+BBAxIQCgN1cmwYAiABKAlCA+BBAxIWCglyZWFjaGFibGUYAyABKAhCA+BBAxISCgVlcnJvchgEIAEoCUID4EEDEhcKCmxhdGVuY3lfbXMYBSABKANCA+BBAyITChFNQ1BJbnNwZWN0UmVxdWVzdCJCChNMaXN0U2Vzc2lvbnNSZXF1ZXN0EisKBHBhZ2UYASABKAsyHS5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0InMKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEi0KCHNlc3Npb25zGAEgAygLMhsubGVnYXRlLmFkbWluLnYxLk1DUFNlc3Npb24SLAoEcGFnZRgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlc3BvbnNlItwBCgpNQ1BTZXNzaW9uEg8KAmlkGAEgASgJQgPgQQMSGgoNYWdlbnRfc3ViamVjdBgCIAEoCUID4EEDEjMKCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMgoJbGFzdF9zZWVuGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhwKD3Rvb2xfY2FsbF9jb3VudBgFIAEoA0ID4EEDEhoKDXJlcXVlc3RfY291bnQYBiABKANCA+BBAyLuAQoSTUNQSW5zcGVjdFJlc3BvbnNlEi0KCHByb2ZpbGVzGAEgAygLMhsubGVnYXRlLmFkbWluLnYxLk1DUFByb2ZpbGUSEwoLYWx3YXlzX2RlbnkYAiADKAkSLgoMdG9vbF9jYXRhbG9nGAMgAygLMhgubGVnYXRlLmFkbWluLnYxLk1DUFRvb2wSMAoJdXBzdHJlYW1zGAQgASgLMh0ubGVnYXRlLmFkbWluLnYxLk1DUFVwc3RyZWFtcxIyCgp0cmFuc3BvcnRzGAUgASgLMh4ubGVnYXRlLmFkbWluLnYxLk1DUFRyYW5zcG9ydHMiYgoKTUNQUHJvZmlsZRIRCgRuYW1lGAEgASgJQgPgQQgSDQoFdG9vbHMYAiADKAkSFAoMcmF3X3BhdHRlcm5zGAMgAygJEgwKBGRlbnkYBCADKAkSDgoGc291cmNlGAUgASgJImsKB01DUFRvb2wSEQoEbmFtZRgBIAEoCUID4EEIEhAKCGF1ZGllbmNlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWNhcGFiaWxpdHlfb3AYBCABKAkSDwoHbXV0YXRlcxgFIAEoCCJECgxNQ1BVcHN0cmVhbXMSEQoJYWRtaW5fdXJsGAEgASgJEhAKCGRhdGFfdXJsGAIgASgJEg8KB2lhbV91cmwYAyABKAkicwoNTUNQVHJhbnNwb3J0cxIxCgVzdGRpbxgBIAEoCzIiLmxlZ2F0ZS5hZG1pbi52MS5NQ1BUcmFuc3BvcnRTdGRpbxIvCgRodHRwGAIgASgLMiEubGVnYXRlLmFkbWluLnYxLk1DUFRyYW5zcG9ydEhUVFAiNQoRTUNQVHJhbnNwb3J0U3RkaW8SDwoHZW5hYmxlZBgBIAEoCBIPCgdwcm9maWxlGAIgASgJImMKEE1DUFRyYW5zcG9ydEhUVFASDwoHZW5hYmxlZBgBIAEoCBIMCgRhZGRyGAIgASgJEg8KB3Byb2ZpbGUYAyABKAkSHwoXc2Vzc2lvbl90aW1lb3V0X3NlY29uZHMYBCABKAMyqgIKEU1DUEluc3BlY3RTZXJ2aWNlElIKB0luc3BlY3QSIi5sZWdhdGUuYWRtaW4udjEuTUNQSW5zcGVjdFJlcXVlc3QaIy5sZWdhdGUuYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlElsKDExpc3RTZXNzaW9ucxIkLmxlZ2F0ZS5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiUubGVnYXRlLmFkbWluLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlEmQKD0dldEJyaWRnZVN0YXR1cxInLmxlZ2F0ZS5hZG1pbi52MS5HZXRCcmlkZ2VTdGF0dXNSZXF1ZXN0GigubGVnYXRlLmFkbWluLnYxLkdldEJyaWRnZVN0YXR1c1Jlc3BvbnNlQkdaRWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7bGVnYXRlYWRtaW52MWIGcHJvdG8z",
     [
       file_google_protobuf_timestamp,
       file_paladin_common_v1_pagination,
       file_google_api_field_behavior,
     ],
   );
+
+/**
+ * @generated from message paladin.admin.v1.GetBridgeStatusRequest
+ */
+export type GetBridgeStatusRequest =
+  Message<"paladin.admin.v1.GetBridgeStatusRequest"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.GetBridgeStatusRequest.
+ * Use `create(GetBridgeStatusRequestSchema)` to create a new message.
+ */
+export const GetBridgeStatusRequestSchema: GenMessage<GetBridgeStatusRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 0);
+
+/**
+ * @generated from message paladin.admin.v1.GetBridgeStatusResponse
+ */
+export type GetBridgeStatusResponse =
+  Message<"paladin.admin.v1.GetBridgeStatusResponse"> & {
+    /**
+     * reachable is false when the admin plane could not get an answer out of any
+     * MCP replica — including when no MCP server is configured at all, which
+     * `error` then says.
+     *
+     * @generated from field: bool reachable = 1;
+     */
+    reachable: boolean;
+
+    /**
+     * error is why the bridge could not be reached. Empty when reachable.
+     *
+     * @generated from field: string error = 2;
+     */
+    error: string;
+
+    /**
+     * upstreams is the bridge's own view of the planes it dials. Empty when the
+     * bridge is unreachable — the answer is not "no upstreams", it is "nobody
+     * to ask", which `reachable` already carries.
+     *
+     * @generated from field: repeated paladin.admin.v1.MCPUpstreamHealth upstreams = 3;
+     */
+    upstreams: MCPUpstreamHealth[];
+
+    /**
+     * sessions is the live session count the bridge holds, as it reports it.
+     *
+     * @generated from field: int32 sessions = 4;
+     */
+    sessions: number;
+
+    /**
+     * checked_at is when the bridge ran these probes, not when the admin plane
+     * asked — the difference matters if a reply is ever cached.
+     *
+     * @generated from field: google.protobuf.Timestamp checked_at = 5;
+     */
+    checkedAt?: Timestamp | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.GetBridgeStatusResponse.
+ * Use `create(GetBridgeStatusResponseSchema)` to create a new message.
+ */
+export const GetBridgeStatusResponseSchema: GenMessage<GetBridgeStatusResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 1);
+
+/**
+ * MCPUpstreamHealth is one plane as the bridge sees it. Distinct from
+ * MCPUpstreams, which reports the configured URLs: this says whether they
+ * answer.
+ *
+ * @generated from message paladin.admin.v1.MCPUpstreamHealth
+ */
+export type MCPUpstreamHealth = Message<"paladin.admin.v1.MCPUpstreamHealth"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: bool reachable = 3;
+   */
+  reachable: boolean;
+
+  /**
+   * error carries why, when reachable is false.
+   *
+   * @generated from field: string error = 4;
+   */
+  error: string;
+
+  /**
+   * latency_ms is present either way: a slow reachable plane is worth seeing
+   * before it becomes an unreachable one.
+   *
+   * @generated from field: int64 latency_ms = 5;
+   */
+  latencyMs: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.MCPUpstreamHealth.
+ * Use `create(MCPUpstreamHealthSchema)` to create a new message.
+ */
+export const MCPUpstreamHealthSchema: GenMessage<MCPUpstreamHealth> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.MCPInspectRequest
@@ -45,7 +160,7 @@ export type MCPInspectRequest =
  */
 export const MCPInspectRequestSchema: GenMessage<MCPInspectRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 0);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.ListSessionsRequest
@@ -69,7 +184,7 @@ export type ListSessionsRequest =
  */
 export const ListSessionsRequestSchema: GenMessage<ListSessionsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 1);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.ListSessionsResponse
@@ -96,7 +211,7 @@ export type ListSessionsResponse =
  */
 export const ListSessionsResponseSchema: GenMessage<ListSessionsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 2);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 5);
 
 /**
  * MCPSession mirrors internal/mcp.SessionInfo — one live streamable-HTTP
@@ -143,7 +258,7 @@ export type MCPSession = Message<"paladin.admin.v1.MCPSession"> & {
  */
 export const MCPSessionSchema: GenMessage<MCPSession> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 3);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.MCPInspectResponse
@@ -200,7 +315,7 @@ export type MCPInspectResponse =
  */
 export const MCPInspectResponseSchema: GenMessage<MCPInspectResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 4);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.MCPProfile
@@ -252,7 +367,7 @@ export type MCPProfile = Message<"paladin.admin.v1.MCPProfile"> & {
  */
 export const MCPProfileSchema: GenMessage<MCPProfile> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 5);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.MCPTool
@@ -300,7 +415,7 @@ export type MCPTool = Message<"paladin.admin.v1.MCPTool"> & {
  */
 export const MCPToolSchema: GenMessage<MCPTool> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 6);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.MCPUpstreams
@@ -328,7 +443,7 @@ export type MCPUpstreams = Message<"paladin.admin.v1.MCPUpstreams"> & {
  */
 export const MCPUpstreamsSchema: GenMessage<MCPUpstreams> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 7);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 10);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransports
@@ -351,7 +466,7 @@ export type MCPTransports = Message<"paladin.admin.v1.MCPTransports"> & {
  */
 export const MCPTransportsSchema: GenMessage<MCPTransports> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 8);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 11);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransportStdio
@@ -374,7 +489,7 @@ export type MCPTransportStdio = Message<"paladin.admin.v1.MCPTransportStdio"> & 
  */
 export const MCPTransportStdioSchema: GenMessage<MCPTransportStdio> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 9);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 12);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransportHTTP
@@ -409,7 +524,7 @@ export type MCPTransportHTTP = Message<"paladin.admin.v1.MCPTransportHTTP"> & {
  */
 export const MCPTransportHTTPSchema: GenMessage<MCPTransportHTTP> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 10);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 13);
 
 /**
  * MCPInspectService — read-only operator visibility into the MCP
@@ -456,5 +571,25 @@ export const MCPInspectService: GenService<{
     methodKind: "unary";
     input: typeof ListSessionsRequestSchema;
     output: typeof ListSessionsResponseSchema;
+  };
+  /**
+   * GetBridgeStatus reports what only the MCP server can answer: whether it
+   * can currently reach the planes it proxies to, and how many sessions it
+   * holds.
+   *
+   * It exists because the bridge's own reachability was invisible.
+   * ListSessions treats an unreachable bridge as an empty list — deliberately,
+   * so one dead replica cannot fail the call — with the consequence that "the
+   * bridge is down" and "nobody is using MCP" render identically, on the page
+   * an operator opens when something is wrong. This call distinguishes them:
+   * `reachable` is the bridge's own answer, and `error` says why when it is
+   * not. Platform-admin only.
+   *
+   * @generated from rpc paladin.admin.v1.MCPInspectService.GetBridgeStatus
+   */
+  getBridgeStatus: {
+    methodKind: "unary";
+    input: typeof GetBridgeStatusRequestSchema;
+    output: typeof GetBridgeStatusResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_mcp_inspect_service, 0);

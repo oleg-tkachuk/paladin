@@ -368,6 +368,16 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 		l.Warn("mcp /sessions disabled: no usable JWT verifier", zap.Error(verr))
 	} else {
 		mux.Handle("GET /sessions", mcp.SessionsHandler(sessions, verifier))
+		// /status answers what only the bridge can: whether it can currently
+		// reach the planes it proxies to. The admin plane treats an
+		// unreachable bridge as an empty session list, so without this "the
+		// bridge is down" and "nobody is using MCP" look identical to an
+		// operator — on the page they open precisely when something is wrong.
+		mux.Handle("GET /status", mcp.StatusHandler(sessions, verifier, []mcp.UpstreamTarget{
+			{Name: "admin", URL: cfg.MCP.Upstreams.AdminURL},
+			{Name: "data", URL: cfg.MCP.Upstreams.DataURL},
+			{Name: "iam", URL: cfg.MCP.Upstreams.IAMURL},
+		}, nil))
 	}
 
 	// The streamable transport has no reliable disconnect signal (clients can

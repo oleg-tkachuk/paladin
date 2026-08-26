@@ -2022,3 +2022,25 @@ of the pipeline._
 - **Blockers:** OrbStack. The same scrape returns full `container_*` data on a
   normal kubelet, so nothing in the Alloy config needs changing for a real
   cluster.
+
+---
+## The console shell re-fetches its chrome on every navigation
+
+- **Status:** Deferred (needs an aggregate endpoint and a partial-failure
+  contract).
+- **Reason:** Loading `/mcp` issued eight RPCs across two planes, and seven of
+  them were the shell, not the page: the health badge, the running-operations
+  poller (three calls of its own), the tenant context and the scope picker's
+  bucket and backend lists. Every page pays that, so any page's availability is
+  the product of about six services — which is how one TLS handshake timeout
+  turned into a page of 401s. The MCP bridge status added below is the same
+  lesson applied to one dependency; the shell is where it repeats.
+- **Definition of Done:** One call returns the shell's context with a per
+  section status (`ok` / `degraded` / `unavailable` plus a reason), and each
+  section of the chrome renders its own state. A failing health probe should
+  grey the health badge, not empty the page. The BFF is already a Connect
+  server that decodes and re-encodes every response, so it is the natural place
+  to compose rather than proxy 1:1.
+- **Blockers:** none technical. Deferred because it changes how every page
+  loads, which deserves its own change rather than riding along with a bridge
+  status endpoint.

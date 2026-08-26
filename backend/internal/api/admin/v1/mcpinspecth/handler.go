@@ -405,3 +405,100 @@ func matchAny(name string, patterns []string) bool {
 	}
 	return false
 }
+
+// GetBridgeStatus asks the MCP server whether it can reach the planes it
+// proxies to.
+//
+// The admin plane cannot answer this itself: the bridge's upstream clients,
+// their mTLS material and their failures all live in that process. So this is
+// a proxy, like ListSessions — but with the opposite failure policy. Where
+// ListSessions degrades to an empty list so one dead replica cannot fail the
+// call, this reports the failure, because the failure IS the answer. An
+// operator opens the MCP page when something looks wrong; a page that renders
+// "no sessions, all well" over an unreachable bridge is worse than one that
+// says it cannot ask.
+//
+// The first replica to answer wins: upstream reachability is a property of the
+// deployment, not of a pod, and asking every replica would turn one slow pod
+// into a slow page.
+func (h *Handler) GetBridgeStatus(
+	ctx context.Context,
+	req *connect.Request[adminv1.GetBridgeStatusRequest],
+) (*connect.Response[adminv1.GetBridgeStatusResponse], error) {
+	if err := h.authorize(ctx); err != nil {
+		return nil, err
+	}
+	out := &adminv1.GetBridgeStatusResponse{}
+	if h.sessionsURL == "" {
+		out.Error = "no MCP server configured (mcp.http.sessions_url is empty)"
+		return connect.NewResponse(out), nil
+	}
+	authz := req.Header().Get("Authorization")
+
+	var lastErr error
+	for _, target := range h.sessionTargets(ctx) {
+		st, err := h.fetchStatus(ctx, statusURL(target), authz)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		out.Reachable = true
+		out.Sessions = int32(st.Sessions)
+		out.CheckedAt = timestamppb.New(st.CheckedAt)
+		for _, u := range st.Upstreams {
+			out.Upstreams = append(out.Upstreams, &adminv1.MCPUpstreamHealth{
+				Name:      u.Name,
+				Url:       u.URL,
+				Reachable: u.Reachable,
+				Error:     u.Error,
+				LatencyMs: u.LatencyMs,
+			})
+		}
+		return connect.NewResponse(out), nil
+	}
+	if lastErr != nil {
+		out.Error = lastErr.Error()
+	} else {
+		out.Error = "no MCP replica answered"
+	}
+	return connect.NewResponse(out), nil
+}
+
+// statusURL rewrites a /sessions target into its /status sibling. The two
+// endpoints are configured as one URL because they live in the same process
+// behind the same gate; carrying a second config knob for the second path
+// would be a way for them to point at different bridges.
+func statusURL(sessionsTarget string) string {
+	u, err := url.Parse(sessionsTarget)
+	if err != nil {
+		return sessionsTarget
+	}
+	u.Path = "/status"
+	return u.String()
+}
+
+// fetchStatus GETs one replica's /status, forwarding the caller's admin JWT —
+// the endpoint re-verifies it and requires platform-admin, exactly as
+// /sessions does.
+func (h *Handler) fetchStatus(ctx context.Context, target, authz string) (mcppkg.BridgeStatus, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return mcppkg.BridgeStatus{}, err
+	}
+	if authz != "" {
+		httpReq.Header.Set("Authorization", authz)
+	}
+	resp, err := h.httpClient.Do(httpReq)
+	if err != nil {
+		return mcppkg.BridgeStatus{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return mcppkg.BridgeStatus{}, fmt.Errorf("MCP server answered HTTP %d", resp.StatusCode)
+	}
+	var out mcppkg.BridgeStatus
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return mcppkg.BridgeStatus{}, err
+	}
+	return out, nil
+}

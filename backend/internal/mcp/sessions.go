@@ -273,22 +273,35 @@ func SessionsHandler(reg *SessionRegistry, verifier auth.TokenVerifier) http.Han
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		const bearer = "Bearer "
-		authz := r.Header.Get("Authorization")
-		if verifier == nil || !strings.HasPrefix(authz, bearer) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		p, err := verifier.Verify(r.Context(), strings.TrimSpace(authz[len(bearer):]))
-		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		if !p.HasRole(apiutil.RolePlatformAdmin) {
-			http.Error(w, "forbidden", http.StatusForbidden)
+		if code := authorizePlatformAdmin(r, verifier); code != 0 {
+			http.Error(w, http.StatusText(code), code)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(reg.Snapshot())
 	})
+}
+
+// authorizePlatformAdmin gates the bridge's operator endpoints: a Bearer JWT
+// the verifier accepts, carrying the platform-admin role — the same gate as
+// the admin service they back. Returns 0 when the request may proceed, or the
+// HTTP status to answer with.
+//
+// Shared by /sessions and /status so the two cannot drift apart: an operator
+// endpoint that quietly acquired a weaker gate than its sibling is the kind of
+// difference nobody notices until it matters.
+func authorizePlatformAdmin(r *http.Request, verifier auth.TokenVerifier) int {
+	const bearer = "Bearer "
+	authz := r.Header.Get("Authorization")
+	if verifier == nil || !strings.HasPrefix(authz, bearer) {
+		return http.StatusUnauthorized
+	}
+	p, err := verifier.Verify(r.Context(), strings.TrimSpace(authz[len(bearer):]))
+	if err != nil {
+		return http.StatusUnauthorized
+	}
+	if !p.HasRole(apiutil.RolePlatformAdmin) {
+		return http.StatusForbidden
+	}
+	return 0
 }

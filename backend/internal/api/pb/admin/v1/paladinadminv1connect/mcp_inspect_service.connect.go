@@ -40,6 +40,9 @@ const (
 	// MCPInspectServiceListSessionsProcedure is the fully-qualified name of the MCPInspectService's
 	// ListSessions RPC.
 	MCPInspectServiceListSessionsProcedure = "/paladin.admin.v1.MCPInspectService/ListSessions"
+	// MCPInspectServiceGetBridgeStatusProcedure is the fully-qualified name of the MCPInspectService's
+	// GetBridgeStatus RPC.
+	MCPInspectServiceGetBridgeStatusProcedure = "/paladin.admin.v1.MCPInspectService/GetBridgeStatus"
 )
 
 // MCPInspectServiceClient is a client for the paladin.admin.v1.MCPInspectService service.
@@ -54,6 +57,18 @@ type MCPInspectServiceClient interface {
 	// endpoint. Returns an empty list when the MCP server is unconfigured or
 	// unreachable. Platform-admin only.
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	// GetBridgeStatus reports what only the MCP server can answer: whether it
+	// can currently reach the planes it proxies to, and how many sessions it
+	// holds.
+	//
+	// It exists because the bridge's own reachability was invisible.
+	// ListSessions treats an unreachable bridge as an empty list — deliberately,
+	// so one dead replica cannot fail the call — with the consequence that "the
+	// bridge is down" and "nobody is using MCP" render identically, on the page
+	// an operator opens when something is wrong. This call distinguishes them:
+	// `reachable` is the bridge's own answer, and `error` says why when it is
+	// not. Platform-admin only.
+	GetBridgeStatus(context.Context, *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error)
 }
 
 // NewMCPInspectServiceClient constructs a client for the paladin.admin.v1.MCPInspectService service.
@@ -79,13 +94,20 @@ func NewMCPInspectServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
 			connect.WithClientOptions(opts...),
 		),
+		getBridgeStatus: connect.NewClient[v1.GetBridgeStatusRequest, v1.GetBridgeStatusResponse](
+			httpClient,
+			baseURL+MCPInspectServiceGetBridgeStatusProcedure,
+			connect.WithSchema(mCPInspectServiceMethods.ByName("GetBridgeStatus")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // mCPInspectServiceClient implements MCPInspectServiceClient.
 type mCPInspectServiceClient struct {
-	inspect      *connect.Client[v1.MCPInspectRequest, v1.MCPInspectResponse]
-	listSessions *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	inspect         *connect.Client[v1.MCPInspectRequest, v1.MCPInspectResponse]
+	listSessions    *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	getBridgeStatus *connect.Client[v1.GetBridgeStatusRequest, v1.GetBridgeStatusResponse]
 }
 
 // Inspect calls paladin.admin.v1.MCPInspectService.Inspect.
@@ -96,6 +118,11 @@ func (c *mCPInspectServiceClient) Inspect(ctx context.Context, req *connect.Requ
 // ListSessions calls paladin.admin.v1.MCPInspectService.ListSessions.
 func (c *mCPInspectServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
 	return c.listSessions.CallUnary(ctx, req)
+}
+
+// GetBridgeStatus calls paladin.admin.v1.MCPInspectService.GetBridgeStatus.
+func (c *mCPInspectServiceClient) GetBridgeStatus(ctx context.Context, req *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error) {
+	return c.getBridgeStatus.CallUnary(ctx, req)
 }
 
 // MCPInspectServiceHandler is an implementation of the paladin.admin.v1.MCPInspectService service.
@@ -110,6 +137,18 @@ type MCPInspectServiceHandler interface {
 	// endpoint. Returns an empty list when the MCP server is unconfigured or
 	// unreachable. Platform-admin only.
 	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	// GetBridgeStatus reports what only the MCP server can answer: whether it
+	// can currently reach the planes it proxies to, and how many sessions it
+	// holds.
+	//
+	// It exists because the bridge's own reachability was invisible.
+	// ListSessions treats an unreachable bridge as an empty list — deliberately,
+	// so one dead replica cannot fail the call — with the consequence that "the
+	// bridge is down" and "nobody is using MCP" render identically, on the page
+	// an operator opens when something is wrong. This call distinguishes them:
+	// `reachable` is the bridge's own answer, and `error` says why when it is
+	// not. Platform-admin only.
+	GetBridgeStatus(context.Context, *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error)
 }
 
 // NewMCPInspectServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -131,12 +170,20 @@ func NewMCPInspectServiceHandler(svc MCPInspectServiceHandler, opts ...connect.H
 		connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	mCPInspectServiceGetBridgeStatusHandler := connect.NewUnaryHandler(
+		MCPInspectServiceGetBridgeStatusProcedure,
+		svc.GetBridgeStatus,
+		connect.WithSchema(mCPInspectServiceMethods.ByName("GetBridgeStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.MCPInspectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MCPInspectServiceInspectProcedure:
 			mCPInspectServiceInspectHandler.ServeHTTP(w, r)
 		case MCPInspectServiceListSessionsProcedure:
 			mCPInspectServiceListSessionsHandler.ServeHTTP(w, r)
+		case MCPInspectServiceGetBridgeStatusProcedure:
+			mCPInspectServiceGetBridgeStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -152,4 +199,8 @@ func (UnimplementedMCPInspectServiceHandler) Inspect(context.Context, *connect.R
 
 func (UnimplementedMCPInspectServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.ListSessions is not implemented"))
+}
+
+func (UnimplementedMCPInspectServiceHandler) GetBridgeStatus(context.Context, *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.GetBridgeStatus is not implemented"))
 }
