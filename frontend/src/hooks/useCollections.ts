@@ -117,7 +117,10 @@ export function useCollections() {
     async (
       collection: string,
       resourceVersion: string = "",
-      force: boolean = false,
+      // Waives the OCC guard, nothing more. The server refuses a collection
+      // that still holds objects whatever this says — that is a foreign key,
+      // not a policy.
+      skipVersionCheck: boolean = false,
     ): Promise<void> => {
       try {
         setError(null);
@@ -125,7 +128,7 @@ export function useCollections() {
         await collectionClient.deleteCollection({
           name: collectionResourceName(tenantId, collection),
           resourceVersion,
-          force,
+          skipVersionCheck,
         });
         setCollections((prev) =>
           prev.filter((b) => b.collection !== collection),

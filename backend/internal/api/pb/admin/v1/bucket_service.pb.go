@@ -219,16 +219,16 @@ type DeleteBucketRequest struct {
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// When true, also removes the physical bucket (and is a destructive op).
 	DeleteOnBackend bool `protobuf:"varint,3,opt,name=delete_on_backend,json=deleteOnBackend,proto3" json:"delete_on_backend,omitempty"`
-	// Explicit opt-out of the OCC guard, matching DeleteTenant / DeleteBackend.
+	// Explicit opt-out of the OCC guard, and nothing else. Renamed from `force`:
+	// the same word meant "skip the trash" on tenants and "ignore the child
+	// count" on backends, so an integrator who learned it on one entity turned
+	// off the concurrency check on this one while believing they were merely
+	// insisting.
 	//
-	// This used to be spelled `delete_on_backend`, which inverted the intended
-	// risk gradient: the single most destructive form of this call — the one
-	// that also erases the physical bucket — was the only one that skipped the
-	// concurrency check. The two decisions are unrelated and now have separate
-	// flags.
-	Force         bool `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Destructiveness lives in delete_on_backend, which names what it destroys.
+	SkipVersionCheck bool `protobuf:"varint,4,opt,name=skip_version_check,json=skipVersionCheck,proto3" json:"skip_version_check,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeleteBucketRequest) Reset() {
@@ -282,9 +282,9 @@ func (x *DeleteBucketRequest) GetDeleteOnBackend() bool {
 	return false
 }
 
-func (x *DeleteBucketRequest) GetForce() bool {
+func (x *DeleteBucketRequest) GetSkipVersionCheck() bool {
 	if x != nil {
-		return x.Force
+		return x.SkipVersionCheck
 	}
 	return false
 }
@@ -845,12 +845,12 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12/\n" +
-	"\x06bucket\x18\x04 \x01(\v2\x17.paladin.admin.v1.BucketR\x06bucket\"\x9f\x01\n" +
+	"\x06bucket\x18\x04 \x01(\v2\x17.paladin.admin.v1.BucketR\x06bucket\"\xb7\x01\n" +
 	"\x13DeleteBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12*\n" +
-	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\x12\x14\n" +
-	"\x05force\x18\x04 \x01(\bR\x05force\"\x16\n" +
+	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\x12,\n" +
+	"\x12skip_version_check\x18\x04 \x01(\bR\x10skipVersionCheck\"\x16\n" +
 	"\x14DeleteBucketResponse\"\x9f\x01\n" +
 	"\x12ListBucketsRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +

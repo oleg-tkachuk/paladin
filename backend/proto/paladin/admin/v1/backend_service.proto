@@ -21,9 +21,9 @@ service BackendService {
   // the endpoint of a backend with live buckets does not migrate anything —
   // the objects stay where they are.
   rpc UpdateBackend(UpdateBackendRequest) returns (StorageBackend);
-  // DeleteBackend refuses while buckets still reference it, unless force=true.
-  // force also waives the OCC guard, which is why it is a separate flag from
-  // resource_version.
+  // DeleteBackend refuses while buckets still reference it. No flag overrides
+  // that — buckets.backend_id is ON DELETE RESTRICT, so the refusal comes from
+  // the database. resource_version is required.
   rpc DeleteBackend(DeleteBackendRequest) returns (DeleteBackendResponse);
   // ListBackends returns every registered backend for the platform; backends
   // are not tenant-scoped.
@@ -75,9 +75,16 @@ message UpdateBackendRequest {
 
 message DeleteBackendRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
-  // Refuse delete when buckets still reference the backend.
-  bool force = 3;
+  // Required, and required by the schema rather than by a handler branch:
+  // with the bypass flag gone there is nothing left to make it optional for.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  // Field 3 was `force`, documented as "delete even if buckets still
+  // reference it" — a promise the schema does not keep. buckets.backend_id is
+  // ON DELETE RESTRICT, so the database refuses regardless; all the flag did
+  // was skip the friendly pre-count and turn a clear conflict into a raw
+  // SQLSTATE. Delete the buckets first.
+  reserved 3;
+  reserved "force";
 }
 
 message DeleteBackendResponse {}

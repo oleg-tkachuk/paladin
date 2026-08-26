@@ -674,12 +674,12 @@ func TestDeleteTenant(t *testing.T) {
 	tid := uuid.New()
 
 	t.Run("non-admin → permission denied", func(t *testing.T) {
-		err := NewHandler(&fakeRepo{}, allow()).DeleteTenant(principalCtx(tid), tid, 0, false)
+		err := NewHandler(&fakeRepo{}, allow()).DeleteTenant(principalCtx(tid), tid, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
-		err := NewHandler(&fakeRepo{}, deny()).DeleteTenant(adminCtx(tid), tid, 0, false)
+		err := NewHandler(&fakeRepo{}, deny()).DeleteTenant(adminCtx(tid), tid, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
@@ -687,13 +687,13 @@ func TestDeleteTenant(t *testing.T) {
 		fr := &fakeRepo{softDeleteTxFn: func(context.Context, pgx.Tx, uuid.UUID, int64) error {
 			return ErrVersionMismatch
 		}}
-		err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 9, false)
+		err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 9)
 		wantCode(t, err, connect.CodeAborted)
 	})
 
 	t.Run("ok soft-delete calls SoftDeleteTx with version", func(t *testing.T) {
 		fr := &fakeRepo{}
-		if err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 7, false); err != nil {
+		if err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 7); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if fr.lastSoftDelete.tenantID != tid || fr.lastSoftDelete.version != 7 {
@@ -701,13 +701,19 @@ func TestDeleteTenant(t *testing.T) {
 		}
 	})
 
-	t.Run("ok force uses HardDeleteTx", func(t *testing.T) {
+	// DeleteTenant no longer hard-deletes under any argument: the flag that
+	// used to switch it is gone, and PurgeTenant owns that transition. A
+	// delete that reached HardDeleteTx would be the old behaviour returning.
+	t.Run("never hard-deletes", func(t *testing.T) {
 		fr := &fakeRepo{}
-		if err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 3, true); err != nil {
+		if err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 3); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastHardDelete.tenantID != tid || fr.lastHardDelete.version != 3 {
-			t.Fatalf("hard-delete forwarded %+v", fr.lastHardDelete)
+		if fr.lastHardDelete.tenantID != uuid.Nil {
+			t.Fatalf("hard-delete was called: %+v", fr.lastHardDelete)
+		}
+		if fr.lastSoftDelete.version != 3 {
+			t.Fatalf("soft-delete forwarded %+v", fr.lastSoftDelete)
 		}
 	})
 }

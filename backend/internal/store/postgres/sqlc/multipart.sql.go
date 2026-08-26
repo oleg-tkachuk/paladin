@@ -11,23 +11,119 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backoffMultipartAbortDebt = `-- name: BackoffMultipartAbortDebt :exec
+UPDATE pending_multipart_aborts
+SET attempts        = attempts + 1,
+    last_error      = $2,
+    next_attempt_at = now() + ($3::bigint || ' microseconds')::interval
+WHERE id = $1
+`
+
+// The abort failed. Record why and push the next attempt out; the debt is
+// never dropped, because nothing else in the system remembers those parts.
+func (q *Queries) BackoffMultipartAbortDebt(ctx context.Context, iD pgtype.UUID, lastError *string, backoffMicros int64) error {
+	_, err := q.db.Exec(ctx, backoffMultipartAbortDebt, iD, lastError, backoffMicros)
+	return err
+}
+
+const claimDueMultipartAborts = `-- name: ClaimDueMultipartAborts :many
+
+SELECT d.id, d.tenant_id, d.object_id, d.collection_name, d.path,
+       d.storage_upload_id, d.attempts,
+       sb.name AS backend_name,
+       b.name  AS bucket_name
+FROM pending_multipart_aborts d
+JOIN buckets b           ON b.id = d.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE d.next_attempt_at <= now()
+ORDER BY d.next_attempt_at
+LIMIT $1
+FOR UPDATE OF d SKIP LOCKED
+`
+
+type ClaimDueMultipartAbortsRow struct {
+	ID              pgtype.UUID `json:"id"`
+	TenantID        pgtype.UUID `json:"tenant_id"`
+	ObjectID        pgtype.UUID `json:"object_id"`
+	CollectionName  string      `json:"collection_name"`
+	Path            string      `json:"path"`
+	StorageUploadID string      `json:"storage_upload_id"`
+	Attempts        int32       `json:"attempts"`
+	BackendName     string      `json:"backend_name"`
+	BucketName      string      `json:"bucket_name"`
+}
+
+// ─── Abort debt (010_multipart_abort_debt.sql) ──────────────────────────────
+//
+// Rows the trigger wrote when a session was deleted without anyone telling S3
+// about it. Same contract as pending_purges: the debt outlives the rows whose
+// deletion created it, and is discharged by a drainer.
+// One drainer tick's worth. FOR UPDATE SKIP LOCKED so replicas take disjoint
+// rows; the join resolves the backend the parts actually live on, which is
+// why bucket_id carries a RESTRICT foreign key.
+func (q *Queries) ClaimDueMultipartAborts(ctx context.Context, batchSize int32) ([]ClaimDueMultipartAbortsRow, error) {
+	rows, err := q.db.Query(ctx, claimDueMultipartAborts, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimDueMultipartAbortsRow
+	for rows.Next() {
+		var i ClaimDueMultipartAbortsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.ObjectID,
+			&i.CollectionName,
+			&i.Path,
+			&i.StorageUploadID,
+			&i.Attempts,
+			&i.BackendName,
+			&i.BucketName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countPendingMultipartAborts = `-- name: CountPendingMultipartAborts :one
+SELECT count(*) FROM pending_multipart_aborts
+`
+
+func (q *Queries) CountPendingMultipartAborts(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingMultipartAborts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMultipartUpload = `-- name: CreateMultipartUpload :exec
 
 INSERT INTO multipart_uploads (
     id, tenant_id, object_id, storage_upload_id, part_size_bytes, total_parts,
-    bucket_id, initiated_by_subject, initiated_by_kind
+    bucket_id, initiated_by_subject, initiated_by_kind, collection_name, path
 ) VALUES ($1, $2, $3, $4, $5, $6,
           (SELECT b.id FROM buckets b
              JOIN storage_backends sb ON sb.id = b.backend_id
             WHERE sb.name = $7 AND b.name = $8),
-          $9, $10)
+          $9, $10, $11, $12)
 `
 
 // Multipart upload queries.
 // bucket_id anchors the upload to the physical location resolved at initiate
 // time, so the rest of the lifecycle targets it regardless of a later
 // collection rebind. Resolved from the (backend, bucket) name pair here.
-func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string) error {
+//
+// collection_name / path are denormalised copies of where the object lives.
+// They exist because the abort-debt trigger (010) has to write a
+// self-sufficient row: when the session is removed by a cascade from objects,
+// the object row is already gone and a join for the key returns nothing.
+func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string, collectionName string, path string) error {
 	_, err := q.db.Exec(ctx, createMultipartUpload,
 		iD,
 		tenantID,
@@ -39,7 +135,21 @@ func (q *Queries) CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, ten
 		name_2,
 		initiatedBySubject,
 		initiatedByKind,
+		collectionName,
+		path,
 	)
+	return err
+}
+
+const deleteMultipartAbortDebt = `-- name: DeleteMultipartAbortDebt :exec
+DELETE FROM pending_multipart_aborts WHERE id = $1
+`
+
+// The abort landed. S3 DELETE-style operations are idempotent, so a debt
+// discharged twice costs nothing — which is what makes "keep the row on any
+// doubt" the right failure policy.
+func (q *Queries) DeleteMultipartAbortDebt(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMultipartAbortDebt, id)
 	return err
 }
 

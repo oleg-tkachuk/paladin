@@ -83,14 +83,14 @@ message DeleteBucketRequest {
   string resource_version = 2;
   // When true, also removes the physical bucket (and is a destructive op).
   bool delete_on_backend = 3;
-  // Explicit opt-out of the OCC guard, matching DeleteTenant / DeleteBackend.
+  // Explicit opt-out of the OCC guard, and nothing else. Renamed from `force`:
+  // the same word meant "skip the trash" on tenants and "ignore the child
+  // count" on backends, so an integrator who learned it on one entity turned
+  // off the concurrency check on this one while believing they were merely
+  // insisting.
   //
-  // This used to be spelled `delete_on_backend`, which inverted the intended
-  // risk gradient: the single most destructive form of this call — the one
-  // that also erases the physical bucket — was the only one that skipped the
-  // concurrency check. The two decisions are unrelated and now have separate
-  // flags.
-  bool force = 4;
+  // Destructiveness lives in delete_on_backend, which names what it destroys.
+  bool skip_version_check = 4;
 }
 
 message DeleteBucketResponse {}

@@ -103,7 +103,7 @@ func TestTenantLifecycle_StaysPlatformAdminOnly(t *testing.T) {
 
 	t.Run("DeleteTenant", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allow())
-		wantCode(t, h.DeleteTenant(ctx, tid, 1, false), connect.CodePermissionDenied)
+		wantCode(t, h.DeleteTenant(ctx, tid, 1), connect.CodePermissionDenied)
 	})
 
 	t.Run("PurgeTenant", func(t *testing.T) {

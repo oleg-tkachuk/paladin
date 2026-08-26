@@ -294,20 +294,17 @@ export function useBackends(autoFetch: boolean = true) {
   );
 
   // deleteBackend — removes a backend via BackendService.DeleteBackend,
-  // OCC-guarded. The server refuses (FailedPrecondition) when buckets still
-  // reference it unless `force` is set. Caller redirects away on success.
+  // OCC-guarded. The server refuses (FailedPrecondition) while buckets still
+  // reference it, and nothing overrides that: buckets.backend_id is
+  // ON DELETE RESTRICT. The `force` argument this used to take promised
+  // otherwise. Caller redirects away on success.
   const deleteBackend = useCallback(
-    async (
-      backendId: string,
-      resourceVersion: string,
-      force: boolean = false,
-    ): Promise<void> => {
+    async (backendId: string, resourceVersion: string): Promise<void> => {
       try {
         setError(null);
         await backendClient.deleteBackend({
           name: `storageBackends/${backendId}`,
           resourceVersion,
-          force,
         });
         setBackends((prev) => prev.filter((b) => b.backendId !== backendId));
         bumpRefresh("backends");

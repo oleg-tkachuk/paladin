@@ -134,9 +134,21 @@ message UpdateTenantRequest {
 
 message DeleteTenantRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  string resource_version = 2;
-  // Refuse delete when collections/users/api_keys still reference the tenant.
-  bool force = 3;
+  // Required, and required by the schema rather than by a handler branch:
+  // with the bypass flag gone there is nothing left to make it optional for.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Field 3 was `force`, which meant "skip the trash and hard-delete". It is
+  // gone: a flag that changes which state the tenant lands in is a different
+  // transition, not a modifier, and the transition already exists. Delete
+  // moves the tenant to the trash; PurgeTenant removes it from there. Two
+  // calls, each doing one thing, and the destructive one names itself.
+  //
+  // `force` survives nowhere in this API with that meaning. Where the word
+  // remains it is spelled `skip_version_check` and does exactly one thing:
+  // waive the OCC guard.
+  reserved 3;
+  reserved "force";
 }
 
 message DeleteTenantResponse {}

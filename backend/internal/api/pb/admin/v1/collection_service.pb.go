@@ -206,9 +206,14 @@ type DeleteCollectionRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	Force           bool                   `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"` // refuse when non-DELETED objects exist unless force=true
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Waives the OCC guard, and nothing else — renamed from `force` so it says
+	// so. The previous comment here claimed it also deleted a collection that
+	// still held objects; the handler never read the flag for that, and could
+	// not have: objects.collection_id is ON DELETE RESTRICT, so the database
+	// refuses either way. Delete the objects first.
+	SkipVersionCheck bool `protobuf:"varint,3,opt,name=skip_version_check,json=skipVersionCheck,proto3" json:"skip_version_check,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeleteCollectionRequest) Reset() {
@@ -255,9 +260,9 @@ func (x *DeleteCollectionRequest) GetResourceVersion() string {
 	return ""
 }
 
-func (x *DeleteCollectionRequest) GetForce() bool {
+func (x *DeleteCollectionRequest) GetSkipVersionCheck() bool {
 	if x != nil {
-		return x.Force
+		return x.SkipVersionCheck
 	}
 	return false
 }
@@ -575,11 +580,11 @@ const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12L\n" +
-	"\x13collection_resource\x18\x04 \x01(\v2\x1b.paladin.admin.v1.CollectionR\x12collectionResource\"w\n" +
+	"\x13collection_resource\x18\x04 \x01(\v2\x1b.paladin.admin.v1.CollectionR\x12collectionResource\"\x8f\x01\n" +
 	"\x17DeleteCollectionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\"\x1a\n" +
+	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12,\n" +
+	"\x12skip_version_check\x18\x03 \x01(\bR\x10skipVersionCheck\"\x1a\n" +
 	"\x18DeleteCollectionResponse\"\x93\x01\n" +
 	"\x16ListCollectionsRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +

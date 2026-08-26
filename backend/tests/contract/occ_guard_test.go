@@ -80,7 +80,11 @@ func TestOCCGuardIsRequired(t *testing.T) {
 func bypassFlag(msg protoreflect.MessageDescriptor) string {
 	for i := 0; i < msg.Fields().Len(); i++ {
 		f := msg.Fields().Get(i)
-		if f.Kind() == protoreflect.BoolKind && string(f.Name()) == "force" {
+		// One name, one meaning, across every entity: skip_version_check
+		// waives the OCC guard and does nothing else. It used to be `force`,
+		// which on tenants meant "skip the trash" and on backends meant
+		// "ignore the child count" — three behaviours behind one word.
+		if f.Kind() == protoreflect.BoolKind && string(f.Name()) == "skip_version_check" {
 			return string(f.Name())
 		}
 	}

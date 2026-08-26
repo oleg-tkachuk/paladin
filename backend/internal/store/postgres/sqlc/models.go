@@ -493,6 +493,8 @@ type MultipartUpload struct {
 	InitiatedByKind    string             `json:"initiated_by_kind"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CollectionName     string             `json:"collection_name"`
+	Path               string             `json:"path"`
 }
 
 type OauthAuthorizationCode struct {
@@ -598,6 +600,20 @@ type Operation struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DoneAt       pgtype.Timestamptz `json:"done_at"`
+}
+
+type PendingMultipartAbort struct {
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ObjectID        pgtype.UUID        `json:"object_id"`
+	BucketID        pgtype.UUID        `json:"bucket_id"`
+	CollectionName  string             `json:"collection_name"`
+	Path            string             `json:"path"`
+	StorageUploadID string             `json:"storage_upload_id"`
+	Attempts        int32              `json:"attempts"`
+	NextAttemptAt   pgtype.Timestamptz `json:"next_attempt_at"`
+	LastError       *string            `json:"last_error"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type PendingPurge struct {

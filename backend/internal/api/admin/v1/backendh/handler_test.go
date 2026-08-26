@@ -44,7 +44,7 @@ func (fakeBackendRepo) SetHealth(context.Context, string, string, string, time.T
 	return nil
 }
 func (fakeBackendRepo) RotateCredentials(context.Context, string, string, int64) error { return nil }
-func (fakeBackendRepo) Delete(context.Context, string, int64, bool) error              { return nil }
+func (fakeBackendRepo) Delete(context.Context, string, int64) error                    { return nil }
 
 // ADR-0003 tx seam — RunInTx invokes fn with a nil tx (the fake's *Tx methods
 // ignore it); the in-tx event dispatch then runs against the fake producer.

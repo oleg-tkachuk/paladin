@@ -759,35 +759,28 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 // The force flag preserves the legacy "rip and run" path that E2E
 // cleanups + emergency procedures rely on, while the default protects
 // operators from undoable accidents.
-func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expectedVersion int64, force bool) error {
+// DeleteTenant moves the tenant to the trash. It is the only thing this call
+// does now: the `force` flag that used to make it hard-delete instead is gone,
+// because landing the tenant in a different state is a different transition,
+// and that transition already has a name — PurgeTenant. A caller that wants
+// the tenant gone makes two calls, the destructive one saying so.
+func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return err
 	}
-	op := "paladin.tenant.trashed"
-	if force {
-		op = "paladin.tenant.purged"
-	}
-	// Delete + lifecycle event in one tx (ADR-0003). force → hard delete +
-	// purged; otherwise soft delete + trashed.
+	// Soft delete + lifecycle event in one tx (ADR-0003).
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		var e error
-		if force {
-			e = h.repo.HardDeleteTx(ctx, tx, tenantID, expectedVersion)
-		} else {
-			e = h.repo.SoftDeleteTx(ctx, tx, tenantID, expectedVersion)
-		}
-		if e != nil {
+		if e := h.repo.SoftDeleteTx(ctx, tx, tenantID, expectedVersion); e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, op,
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.trashed",
 			fmt.Sprintf("tenants/%s", tenantID),
 			map[string]any{
 				"tenant_id":        tenantID.String(),
 				"resource_version": expectedVersion,
-				"force":            force,
 			})
 	}); err != nil {
 		// ErrVersionMismatch→Aborted, ErrNotFound→NotFound,

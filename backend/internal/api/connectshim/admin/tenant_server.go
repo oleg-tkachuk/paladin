@@ -194,15 +194,17 @@ func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	// Require either an OCC guard or an explicit `force` opt-out. Without
-	// this, a race-delete is silent: caller A reads version 7, caller B
-	// deletes (no rv), A's next mutation against the missing row returns
-	// 404 with no signal that the row was concurrently removed.
-	if rv == 0 && !req.Msg.GetForce() {
+	// The OCC guard is required. A race-delete is otherwise silent: caller A
+	// reads version 7, caller B deletes without a version, and A's next
+	// mutation returns 404 with no signal that the row was concurrently
+	// removed.
+	if rv == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version is required; pass force=true to bypass"))
+			fmt.Errorf("resource_version is required"))
 	}
-	if err := s.H.DeleteTenant(ctx, id, rv, req.Msg.GetForce()); err != nil {
+	// Always the trash. Hard deletion is PurgeTenant, which is a separate
+	// call because it is a separate decision.
+	if err := s.H.DeleteTenant(ctx, id, rv); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteTenantResponse{}), nil

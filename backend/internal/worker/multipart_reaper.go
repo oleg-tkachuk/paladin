@@ -20,12 +20,22 @@ import (
 // on the backend, then deletes the DB session row. The PENDING object is
 // left to the reconciler.
 type MultipartReaper struct {
-	Q         *sqlc.Queries
+	Q *sqlc.Queries
+	// Sessions owns row removal. Kept separate from Q because deleting a
+	// session is not a plain DELETE — see SessionDeleter.
+	Sessions  SessionDeleter
 	Storage   MultipartAborter
 	TTL       time.Duration
 	Interval  time.Duration
 	BatchSize int32
 	Logger    *zap.Logger
+}
+
+// SessionDeleter removes a session row whose S3-side upload has already been
+// aborted, signalling that fact to the abort-debt trigger. Satisfied by
+// adapters.MultipartRepo.
+type SessionDeleter interface {
+	DeleteSession(ctx context.Context, uploadID string) error
 }
 
 // MultipartAborter is the slice of the storage adapter the reaper needs.
@@ -75,7 +85,10 @@ func (r *MultipartReaper) sweep(ctx context.Context, batch int32) {
 			)
 			continue
 		}
-		if err := r.Q.DeleteMultipartUpload(ctx, row.ID); err != nil {
+		// Through the repo, not the queries: the delete has to run in a
+		// transaction that sets `paladin.multipart_aborted`, or the abort-debt
+		// trigger files a debt against the upload we have just aborted.
+		if err := r.Sessions.DeleteSession(ctx, uuid.UUID(row.ID.Bytes).String()); err != nil {
 			r.log().Warn("delete multipart session row failed",
 				zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()), zap.Error(err))
 			continue

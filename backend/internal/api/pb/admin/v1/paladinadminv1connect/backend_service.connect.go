@@ -77,9 +77,9 @@ type BackendServiceClient interface {
 	// the endpoint of a backend with live buckets does not migrate anything —
 	// the objects stay where they are.
 	UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
-	// DeleteBackend refuses while buckets still reference it, unless force=true.
-	// force also waives the OCC guard, which is why it is a separate flag from
-	// resource_version.
+	// DeleteBackend refuses while buckets still reference it. No flag overrides
+	// that — buckets.backend_id is ON DELETE RESTRICT, so the refusal comes from
+	// the database. resource_version is required.
 	DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error)
 	// ListBackends returns every registered backend for the platform; backends
 	// are not tenant-scoped.
@@ -254,9 +254,9 @@ type BackendServiceHandler interface {
 	// the endpoint of a backend with live buckets does not migrate anything —
 	// the objects stay where they are.
 	UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
-	// DeleteBackend refuses while buckets still reference it, unless force=true.
-	// force also waives the OCC guard, which is why it is a separate flag from
-	// resource_version.
+	// DeleteBackend refuses while buckets still reference it. No flag overrides
+	// that — buckets.backend_id is ON DELETE RESTRICT, so the refusal comes from
+	// the database. resource_version is required.
 	DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error)
 	// ListBackends returns every registered backend for the platform; backends
 	// are not tenant-scoped.

@@ -387,14 +387,14 @@ func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef st
 
 // ─── Delete ─────────────────────────────────────────────────────────────────
 
-func (h *Handler) DeleteBackend(ctx context.Context, backendID string, expectedVersion int64, force bool) error {
+func (h *Handler) DeleteBackend(ctx context.Context, backendID string, expectedVersion int64) error {
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return err
 	}
 	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
 		return err
 	}
-	if err := h.repo.Delete(ctx, backendID, expectedVersion, force); err != nil {
+	if err := h.repo.Delete(ctx, backendID, expectedVersion); err != nil {
 		return apiutil.MapError(err)
 	}
 	return nil

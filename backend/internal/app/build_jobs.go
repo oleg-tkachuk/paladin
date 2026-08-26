@@ -152,7 +152,11 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// idempotency purger is: the limiter writes a row per active tenant per
 	// minute whatever else is toggled, and reads back only the last two.
 	out = append(out, &worker.TenantRateBucketSweeper{
-		Store:    adapters.NewTenantRateStore(deps.DB.Queries),
+		// reaperQ, not the app queries: the sweep deletes across every
+		// tenant, and tenant_rate_buckets carries an RLS policy (011). On the
+		// app role with no tenant in context the policy would match nothing
+		// and the sweep would silently reclaim zero rows.
+		Store:    adapters.NewTenantRateStore(reaperQ),
 		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 		Logger:   l.Named("tenant-rate-sweeper"),
 	})
@@ -198,8 +202,23 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// client never Completed/Aborted (otherwise part bytes are billed
 	// forever). 0 disables it.
 	if cfg.Worker.Jobs.Housekeeping.MultipartTTL > 0 {
+		// Pays the abort debt the trigger records when a cascade — from an
+		// object's permanent delete or a tenant's hard delete — removes a
+		// session row without anyone telling S3. Runs alongside the reaper,
+		// which handles the other half: sessions the client simply abandoned.
+		out = append(out, &worker.MultipartAbortDrainer{
+			Pool:       reaperPool,
+			Q:          reaperQ,
+			Storage:    s3adapter.NewMultipartRouter(deps.Registry),
+			Interval:   cfg.Worker.Jobs.PurgeDrain.Interval,
+			BatchSize:  int32(cfg.Worker.Jobs.PurgeDrain.BatchSize),
+			MaxBackoff: cfg.Worker.Jobs.PurgeDrain.MaxBackoff,
+			Logger:     l.Named("multipart-abort-drainer"),
+		})
+
 		out = append(out, &worker.MultipartReaper{
-			Q: reaperQ,
+			Q:        reaperQ,
+			Sessions: adapters.NewMultipartRepo(reaperQ, reaperPool),
 			// Routed: ListStaleMultipartUploads returns each session's backend,
 			// so the abort targets the object's own backend.
 			Storage:   s3adapter.NewMultipartRouter(deps.Registry),

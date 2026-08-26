@@ -41,8 +41,11 @@ with explicitly.
 | Call | Effect | Reversible |
 | --- | --- | --- |
 | `DeleteTenant` | Moves to trash (`deleted_at` set). Nothing is destroyed. | `RestoreTenant` |
-| `DeleteTenant(force=true)` | Hard delete, skipping the trash. Refuses while the tenant owns anything (`RESTRICT`). | No |
-| `PurgeTenant` | Hard delete of a **trashed** tenant. Same `RESTRICT` refusal. | No |
+| `PurgeTenant` | Hard delete of a **trashed** tenant. Refuses while the tenant owns anything (`RESTRICT`). | No |
+
+There is no one-shot hard delete. There used to be — `DeleteTenant(force=true)`
+— and it is gone: landing the tenant in a different state is a different
+transition, not a modifier on this one.
 
 When a hard delete does go through, the CASCADE column above goes with it and
 nothing asks again. Two entries deserve attention before you run it:
@@ -55,10 +58,10 @@ nothing asks again. Two entries deserve attention before you run it:
 ## Storage backend
 
 `DeleteBackend` counts the buckets that reference the backend and refuses while
-any exist. `force=true` skips **that count**, not the foreign key — `buckets`
-is `ON DELETE RESTRICT`, so the delete still fails, just further down. Both
-refusals surface as a conflict with the same actionable message; the flag
-changes which layer says no, not the answer.
+any exist. There is no override: `buckets.backend_id` is `ON DELETE RESTRICT`,
+so the database refuses whatever the caller asks for. The count exists to say
+how many and which, in a sentence an operator can act on, rather than as a
+SQLSTATE.
 
 Deleting a backend never touches the object storage it points at. It removes
 Paladin's registration of it.
@@ -70,15 +73,17 @@ touched when `delete_on_backend=true`, which routes the row through a `deleting`
 state for the worker to finish; without it the row is deleted immediately and
 cleaning up the remote bucket is the operator's business.
 
-`force` on this call means "skip the OCC guard" and nothing else. The two used
-to share one field, which put the most destructive form of the call — the one
-that also erases the physical bucket — on the only path that skipped the
-concurrency check.
+`skip_version_check` on this call waives the OCC guard and nothing else. It
+was called `force` until that word was found to mean four different things
+across four entities; destructiveness lives in `delete_on_backend`, which
+names what it destroys.
 
 ## Collection
 
-`DeleteCollection` refuses while the collection holds objects that are not
-already DELETED, unless `force=true`. `force` also waives the OCC guard.
+`DeleteCollection` refuses while the collection still holds objects. No flag
+overrides that — `objects.collection_id` is `ON DELETE RESTRICT`. The proto
+used to claim `force=true` did; the handler never read it for that and could
+not have. `skip_version_check` waives the OCC guard, which is all it ever did.
 
 ## Object
 
@@ -96,6 +101,21 @@ Object lock outranks all of it:
   from a caller holding `lock.governance.bypass` or `platform.admin`. The
   server sets `paladin.bypass_governance_retention` for that transaction and a
   trigger on `object_locks` reads it before allowing the row to go.
+
+## Multipart sessions
+
+An in-flight multipart upload holds parts on the storage backend that only
+`AbortMultipart` releases, and only two callers issue it: the Abort RPC and
+`MultipartReaper`. Both work from the `multipart_uploads` row — so a row
+removed any other way used to leave the S3 session open forever, accruing
+part-storage charges with nothing left in the system that knew about them.
+
+`ON DELETE CASCADE` from `objects` did exactly that: permanently deleting a
+PENDING object dropped the session. A trigger now turns any such deletion into
+a `pending_multipart_aborts` row, and `MultipartAbortDrainer` discharges it —
+the same debt-and-drainer shape the object bytes use below. The Abort RPC and
+the reaper set `paladin.multipart_aborted` for their transaction, which tells
+the trigger they have already done the work.
 
 ## Bytes, and the debt when they survive
 
@@ -118,10 +138,10 @@ bucket.
 ## Practical order for removing a tenant completely
 
 1. Delete or purge its objects (`permanent=true`, or let the trash TTL expire).
-2. Delete its collections (`force=true` once the objects are gone).
+2. Delete its collections (possible once the objects are gone).
 3. Delete its buckets — with `delete_on_backend=true` if the remote bucket
    should go too.
 4. Delete its users.
-5. `DeleteTenant`, then `PurgeTenant`.
+5. `DeleteTenant` (to the trash), then `PurgeTenant`.
 
 Skipping ahead does not corrupt anything; the FK refuses and the step fails.

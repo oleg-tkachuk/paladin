@@ -15,11 +15,11 @@
 --
 --   current + previous * (1 - elapsed_in_current / 60)
 --
--- No RLS, deliberately, exactly as api_token_rate_buckets has none: these
--- rows are infrastructure counters keyed by tenant id, not tenant data, and
--- the limiter runs on the request path before any acting-tenant is
--- established. A policy here would make the limiter's own writes depend on
--- the session variable the request has not set yet.
+-- The policy is applied in 011, not here: this migration shipped claiming one
+-- could not work, on the theory that the limiter runs before any tenant scope
+-- exists. It does not — EnableRLS sets the session tenant in PrepareConn, on
+-- every connection checkout, and the limiter runs after the auth
+-- interceptors.
 
 CREATE TABLE tenant_rate_buckets (
     tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

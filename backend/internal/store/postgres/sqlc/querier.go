@@ -18,6 +18,9 @@ type Querier interface {
 	// overwrites an existing row — an explicit SetObjectRetention that arrived
 	// first outranks a default.
 	ApplyBucketDefaultLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retentionSeconds int64) error
+	// The abort failed. Record why and push the next attempt out; the debt is
+	// never dropped, because nothing else in the system remembers those parts.
+	BackoffMultipartAbortDebt(ctx context.Context, iD pgtype.UUID, lastError *string, backoffMicros int64) error
 	// Atomically rebinds a collection to a different bucket. Tenancy is enforced
 	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
 	// name cannot be moved under a bucket that would orphan them.
@@ -62,6 +65,15 @@ type Querier interface {
 	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, name string, path string) (bool, error)
+	// ─── Abort debt (010_multipart_abort_debt.sql) ──────────────────────────────
+	//
+	// Rows the trigger wrote when a session was deleted without anyone telling S3
+	// about it. Same contract as pending_purges: the debt outlives the rows whose
+	// deletion created it, and is discharged by a drainer.
+	// One drainer tick's worth. FOR UPDATE SKIP LOCKED so replicas take disjoint
+	// rows; the join resolves the backend the parts actually live on, which is
+	// why bucket_id carries a RESTRICT foreign key.
+	ClaimDueMultipartAborts(ctx context.Context, batchSize int32) ([]ClaimDueMultipartAbortsRow, error)
 	// Idempotency / dedup for the ingest plane. Every CloudEvent the worker
 	// claims passes through ClaimIngestedEvent — INSERT ... ON CONFLICT
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
@@ -75,6 +87,7 @@ type Querier interface {
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState) (int64, error)
+	CountPendingMultipartAborts(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; Collection rows FK to the
 	// bucket_id foreign key.
@@ -91,7 +104,12 @@ type Querier interface {
 	// bucket_id anchors the upload to the physical location resolved at initiate
 	// time, so the rest of the lifecycle targets it regardless of a later
 	// collection rebind. Resolved from the (backend, bucket) name pair here.
-	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string) error
+	//
+	// collection_name / path are denormalised copies of where the object lives.
+	// They exist because the abort-debt trigger (010) has to write a
+	// self-sufficient row: when the session is removed by a cascade from objects,
+	// the object row is already gone and a join for the key returns nothing.
+	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string, collectionName string, path string) error
 	// Object queries.
 	// collection_id is resolved by the caller via ResolveCollectionID.
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
@@ -113,6 +131,10 @@ type Querier interface {
 	DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (int64, error)
 	DeleteCollection(ctx context.Context, tenantID pgtype.UUID, name string, expectedVersion int64) (int64, error)
 	DeleteEventSubscription(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	// The abort landed. S3 DELETE-style operations are idempotent, so a debt
+	// discharged twice costs nothing — which is what makes "keep the row on any
+	// doubt" the right failure policy.
+	DeleteMultipartAbortDebt(ctx context.Context, id pgtype.UUID) error
 	DeleteMultipartUpload(ctx context.Context, id pgtype.UUID) error
 	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)

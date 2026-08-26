@@ -194,13 +194,13 @@ func (x *UpdateBackendRequest) GetBackend() *StorageBackend {
 }
 
 type DeleteBackendRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	// Refuse delete when buckets still reference the backend.
-	Force         bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Required, and required by the schema rather than by a handler branch:
+	// with the bypass flag gone there is nothing left to make it optional for.
+	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeleteBackendRequest) Reset() {
@@ -245,13 +245,6 @@ func (x *DeleteBackendRequest) GetResourceVersion() string {
 		return x.ResourceVersion
 	}
 	return ""
-}
-
-func (x *DeleteBackendRequest) GetForce() bool {
-	if x != nil {
-		return x.Force
-	}
-	return false
 }
 
 type DeleteBackendResponse struct {
@@ -760,9 +753,8 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"updateMask\x129\n" +
 	"\abackend\x18\x04 \x01(\v2\x1f.paladin.admin.v1.StorageBackendR\abackend\"t\n" +
 	"\x14DeleteBackendRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\"\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersionJ\x04\b\x03\x10\x04R\x05force\"\x17\n" +
 	"\x15DeleteBackendResponse\"`\n" +
 	"\x13ListBackendsRequest\x121\n" +
 	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +

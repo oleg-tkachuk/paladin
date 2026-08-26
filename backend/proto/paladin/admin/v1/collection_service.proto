@@ -22,8 +22,8 @@ service CollectionService {
   // UpdateCollection applies update_mask; resource_version is required. The
   // tenant and the collection name are immutable.
   rpc UpdateCollection(UpdateCollectionRequest) returns (Collection);
-  // DeleteCollection refuses while the collection still holds objects, unless
-  // force=true. force also waives the OCC guard.
+  // DeleteCollection refuses while the collection still holds objects — the
+  // foreign key enforces that, and no flag overrides it.
   rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
   // ListCollections returns the collections under a tenant, or across all
   // tenants for a platform admin.
@@ -64,7 +64,12 @@ message UpdateCollectionRequest {
 message DeleteCollectionRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
-  bool force = 3; // refuse when non-DELETED objects exist unless force=true
+  // Waives the OCC guard, and nothing else — renamed from `force` so it says
+  // so. The previous comment here claimed it also deleted a collection that
+  // still held objects; the handler never read the flag for that, and could
+  // not have: objects.collection_id is ON DELETE RESTRICT, so the database
+  // refuses either way. Delete the objects first.
+  bool skip_version_check = 3;
 }
 
 message DeleteCollectionResponse {}

@@ -184,9 +184,9 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         backendId={bid}
-        onSubmit={async (force) => {
+        onSubmit={async () => {
           try {
-            await deleteBackend(bid, backend.resourceVersion, force);
+            await deleteBackend(bid, backend.resourceVersion);
             showNotification({
               type: "success",
               title: "Backend deleted",
@@ -433,7 +433,7 @@ function DeleteBackendDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   backendId: string;
-  onSubmit: (force: boolean) => Promise<void>;
+  onSubmit: () => Promise<void>;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -462,16 +462,15 @@ function DeleteBackendForm({
 }: {
   backendId: string;
   onCancel: () => void;
-  onSubmit: (force: boolean) => Promise<void>;
+  onSubmit: () => Promise<void>;
 }) {
-  const [force, setForce] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
     setBusy(true);
     try {
-      await onSubmit(force);
+      await onSubmit();
     } finally {
       setBusy(false);
     }
@@ -486,13 +485,10 @@ function DeleteBackendForm({
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
         />
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={force}
-            onCheckedChange={(v) => setForce(v === true)}
-          />
-          Force — delete even if buckets still reference it
-        </label>
+        <p className="text-xs text-muted-foreground">
+          A backend that still has buckets cannot be deleted — delete the
+          buckets first. There is no override: the constraint is a foreign key.
+        </p>
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onCancel} disabled={busy}>

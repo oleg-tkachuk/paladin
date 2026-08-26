@@ -89,12 +89,14 @@ func (s *BackendServer) DeleteBackend(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	// OCC contract: rv=0 only allowed with explicit force=true.
-	if rv == 0 && !req.Msg.GetForce() {
+	// OCC contract. There is no opt-out on this RPC: the old `force` claimed
+	// to delete a backend buckets still reference, which the RESTRICT foreign
+	// key refuses anyway, so the flag bought nothing and cost the guard.
+	if rv == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version required; pass force=true to bypass"))
+			fmt.Errorf("resource_version is required"))
 	}
-	if err := s.H.DeleteBackend(ctx, id, rv, req.Msg.GetForce()); err != nil {
+	if err := s.H.DeleteBackend(ctx, id, rv); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteBackendResponse{}), nil

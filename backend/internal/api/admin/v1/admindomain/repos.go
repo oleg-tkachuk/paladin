@@ -54,7 +54,7 @@ type BackendRepository interface {
 	// in-flight presigns signed against the old credentials are observably
 	// still valid; 0 rotates instantly (clears the previous window).
 	RotateCredentials(ctx context.Context, backendID, secretRef string, graceSeconds int64) error
-	Delete(ctx context.Context, backendID string, expectedVersion int64, force bool) error
+	Delete(ctx context.Context, backendID string, expectedVersion int64) error
 }
 
 // ─── Bucket repository ──────────────────────────────────────────────────────

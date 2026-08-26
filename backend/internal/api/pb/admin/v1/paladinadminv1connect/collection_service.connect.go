@@ -68,8 +68,8 @@ type CollectionServiceClient interface {
 	// UpdateCollection applies update_mask; resource_version is required. The
 	// tenant and the collection name are immutable.
 	UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error)
-	// DeleteCollection refuses while the collection still holds objects, unless
-	// force=true. force also waives the OCC guard.
+	// DeleteCollection refuses while the collection still holds objects — the
+	// foreign key enforces that, and no flag overrides it.
 	DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error)
 	// ListCollections returns the collections under a tenant, or across all
 	// tenants for a platform admin.
@@ -197,8 +197,8 @@ type CollectionServiceHandler interface {
 	// UpdateCollection applies update_mask; resource_version is required. The
 	// tenant and the collection name are immutable.
 	UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error)
-	// DeleteCollection refuses while the collection still holds objects, unless
-	// force=true. force also waives the OCC guard.
+	// DeleteCollection refuses while the collection still holds objects — the
+	// foreign key enforces that, and no flag overrides it.
 	DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error)
 	// ListCollections returns the collections under a tenant, or across all
 	// tenants for a platform admin.

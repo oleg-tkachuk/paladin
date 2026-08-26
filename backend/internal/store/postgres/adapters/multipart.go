@@ -79,6 +79,11 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		bucket,
 		args.InitiatedBySubject,
 		args.InitiatedByKind,
+		// Denormalised so the abort-debt trigger can write a self-sufficient
+		// row: when a cascade from objects removes this session, the object
+		// row is already gone and the key could not be recovered by a join.
+		args.Collection,
+		args.Key,
 	); err != nil {
 		return multipart.Session{}, fmt.Errorf("create multipart upload row: %w", err)
 	}
@@ -157,8 +162,30 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	return s, nil
 }
 
+// DeleteSession removes a session whose S3-side upload has already been
+// aborted. Both callers — the Abort RPC and MultipartReaper — call
+// AbortMultipart first and only then come here.
+//
+// The delete runs in a transaction that sets `paladin.multipart_aborted`, which
+// is what tells the abort-debt trigger (010) to stay quiet. Every other way a
+// session row disappears is a cascade from objects or tenants, which cannot
+// have called S3 — so the trigger records the obligation and
+// MultipartAbortDrainer discharges it. Without the flag this path would file a
+// debt against an upload it has just aborted.
 func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) error {
-	return r.q.DeleteMultipartUpload(ctx, pgUUIDFromString(uploadID))
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("delete multipart session: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, "SET LOCAL paladin.multipart_aborted = 'on'"); err != nil {
+		return fmt.Errorf("delete multipart session: mark aborted: %w", err)
+	}
+	if err := r.q.WithTx(tx).DeleteMultipartUpload(ctx, pgUUIDFromString(uploadID)); err != nil {
+		return fmt.Errorf("delete multipart session: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
 // LookupBucket reads the physical S3 bucket bound to a Collection via

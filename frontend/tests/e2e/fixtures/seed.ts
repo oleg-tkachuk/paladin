@@ -1094,8 +1094,8 @@ export async function collectionCount(tenantId: string): Promise<number> {
  * interference, was in large part this — tests slowly making the app they were
  * testing slower.
  *
- * force: true because a tenant that has collections under it refuses a plain
- * delete, and a test's tenant is disposable by construction. Failures are
+ * Trash then purge, because those are the two transitions the API has —
+ * `force` used to collapse them into one call and is gone. Failures are
  * swallowed: a teardown that throws turns a passing test red for a reason that
  * has nothing to do with what it asserted.
  */
@@ -1103,14 +1103,10 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
   const client = createClient(TenantService, adminTransport());
   const results = await Promise.allSettled(
     tenantIds.map(async (id) => {
-      // Soft-delete into the trash, then purge. Two calls, in that order,
-      // because each refuses the other's starting state: PurgeTenant wants a
-      // trashed tenant ("tenant is active; soft-delete it first"), and
-      // DeleteTenant with force=true is the hard-delete path, which refuses a
-      // tenant that still owns anything ("still has object keys or objects").
-      // A test's tenant almost always owns something by the time it ends, so
-      // force is the wrong door here — the trash accepts it, and the purge
-      // takes the children with it.
+      // Soft-delete into the trash, then purge — the two transitions the API
+      // offers, in the only order that works: PurgeTenant wants a trashed
+      // tenant ("tenant is active; soft-delete it first"), and DeleteTenant
+      // only ever trashes.
       //
       // The delete is allowed to fail: a spec that trashes its own fixture
       // (US5 does, that being the feature) leaves nothing for it to do, and

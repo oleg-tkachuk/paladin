@@ -160,22 +160,17 @@ export function useTenants() {
     [bumpRefresh],
   );
 
-  // deleteTenant — defaults to SOFT delete (server moves the row to
-  // trash with deleted_at set). Pass `force=true` to skip the trash
-  // and hard-delete in one shot (E2E cleanups, emergency purge from
-  // an active tenant).
+  // deleteTenant — moves the tenant to the trash (the server sets deleted_at)
+  // and does nothing else. The `force` argument that used to hard-delete in
+  // one shot is gone: landing the tenant in a different state is a different
+  // transition, and purgeTenant is that transition.
   const deleteTenant = useCallback(
-    async (
-      tenantId: string,
-      resourceVersion: string = "",
-      force: boolean = false,
-    ): Promise<void> => {
+    async (tenantId: string, resourceVersion: string = ""): Promise<void> => {
       try {
         setError(null);
         await tenantClient.deleteTenant({
           name: tenantResourceName(tenantId),
           resourceVersion,
-          force,
         });
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         bumpRefresh("tenants");

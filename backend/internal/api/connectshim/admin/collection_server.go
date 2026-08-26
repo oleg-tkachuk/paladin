@@ -134,7 +134,7 @@ func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Re
 	// unless the caller explicitly opts out. Without this the request had a
 	// force flag but no guard to force past — an omitted resource_version
 	// simply skipped the check (expected_version=0 disables it in SQL).
-	if rv == 0 && !req.Msg.GetForce() {
+	if rv == 0 && !req.Msg.GetSkipVersionCheck() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("resource_version is required; pass force=true to bypass"))
 	}

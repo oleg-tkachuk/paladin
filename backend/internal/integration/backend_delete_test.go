@@ -14,12 +14,13 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// force=true skips the friendly bucket count, but buckets.backend_id is
-// ON DELETE RESTRICT, so the database refuses regardless. That refusal used to
-// reach the operator as a raw SQLSTATE under CodeInternal — a 500 for the
-// system working as designed. It must read as a conflict, like every other
+// A backend that still has buckets cannot be deleted: buckets.backend_id is
+// ON DELETE RESTRICT. There used to be a force flag documented as overriding
+// that; it could not, and all it did was skip the friendly pre-count so the
+// database's refusal arrived as a raw SQLSTATE under CodeInternal — a 500 for
+// the system working as designed. It must read as a conflict, like every other
 // "this thing still has children" refusal.
-func TestDeleteBackendWithBucketsIsAConflictEvenWithForce(t *testing.T) {
+func TestDeleteBackendWithBucketsIsAConflict(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -36,10 +37,7 @@ func TestDeleteBackendWithBucketsIsAConflictEvenWithForce(t *testing.T) {
 		 SELECT id, $2, $3 FROM storage_backends WHERE name = $1`,
 		backendID, "bk-"+uuid.NewString()[:8], tenant)
 
-	for _, force := range []bool{false, true} {
-		err := repo.Delete(ctx, backendID, 0, force)
-		if !errors.Is(err, admindomain.ErrConflict) {
-			t.Errorf("Delete(force=%v) = %v, want ErrConflict", force, err)
-		}
+	if err := repo.Delete(ctx, backendID, 0); !errors.Is(err, admindomain.ErrConflict) {
+		t.Errorf("Delete = %v, want ErrConflict", err)
 	}
 }

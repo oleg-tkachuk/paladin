@@ -335,15 +335,21 @@ func (r *BackendRepoV2) RotateCredentials(ctx context.Context, backendID, secret
 	return nil
 }
 
-func (r *BackendRepoV2) Delete(ctx context.Context, backendID string, expectedVersion int64, force bool) error {
-	if !force {
-		count, err := r.q.CountBucketsForBackend(ctx, backendID)
-		if err != nil {
-			return err
-		}
-		if count > 0 {
-			return fmt.Errorf("%w: %d buckets still reference backend %q", admindomain.ErrConflict, count, backendID)
-		}
+// Delete removes the backend registration.
+//
+// The bucket count is not a bypassable pre-check: buckets.backend_id is
+// ON DELETE RESTRICT, so the database refuses a backend that still has any.
+// The count runs first purely to say how many, and which backend, in a
+// sentence an operator can act on — the foreign key's own answer arrives as a
+// SQLSTATE. There used to be a `force` flag documented as overriding this; it
+// could not, and only turned the clear refusal into an opaque one.
+func (r *BackendRepoV2) Delete(ctx context.Context, backendID string, expectedVersion int64) error {
+	count, err := r.q.CountBucketsForBackend(ctx, backendID)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: %d buckets still reference backend %q; delete them first", admindomain.ErrConflict, count, backendID)
 	}
 	rows, err := r.q.DeleteStorageBackend(ctx, backendID, expectedVersion)
 	if err != nil {

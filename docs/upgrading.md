@@ -29,6 +29,41 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — `force` is gone from the delete RPCs
+
+One word meant four different things, and two of them were dangerous.
+
+| RPC | `force` used to mean | Now |
+| --- | --- | --- |
+| `DeleteTenant` | skip the trash and hard-delete | **removed** — `DeleteTenant` trashes, `PurgeTenant` destroys |
+| `DeleteBackend` | "delete even if buckets reference it" | **removed** — it never could; `buckets.backend_id` is `ON DELETE RESTRICT` |
+| `DeleteBucket` | waive the OCC guard | renamed `skip_version_check` |
+| `DeleteCollection` | documented as "ignore objects", implemented as "waive OCC" | renamed `skip_version_check`, doc corrected |
+
+An integrator who learned the word on tenants and applied it to buckets was
+turning off the concurrency check while believing they were insisting harder.
+That is the kind of mistake an API should make impossible to make.
+
+`skip_version_check` now means exactly one thing everywhere it appears: waive
+the optimistic-concurrency guard. Nothing else in the API is spelled `force`.
+
+**What callers have to change**
+
+- `DeleteTenant(force=true)` → `DeleteTenant(...)` then `PurgeTenant(...)`.
+  Two calls, and the destructive one names itself.
+- `DeleteBackend(force=true)` → delete the buckets first. The flag never
+  worked; it only turned a clear conflict into a raw SQLSTATE under
+  `Internal`.
+- `DeleteBucket(force=…)` / `DeleteCollection(force=…)` → rename the field to
+  `skip_version_check`. Same meaning, same behaviour.
+- `resource_version` is now required by the schema on `DeleteTenant` and
+  `DeleteBackend`, not by a handler branch — with no bypass flag left, there
+  is nothing for an omission to be legitimate for.
+
+Field numbers 3 on `DeleteTenantRequest` and `DeleteBackendRequest` are
+reserved, so nothing can silently reuse them.
+
+
 ## v4.0.0 — the `paladin` rename
 
 The project was renamed from `paladin` / `paladin` to `paladin`

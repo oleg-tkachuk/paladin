@@ -153,7 +153,6 @@ describe("BackendActions", () => {
       expect(h.del).toHaveBeenCalledWith({
         name: "storageBackends/b1",
         resourceVersion: "7",
-        force: false,
       }),
     );
     expect(h.push).toHaveBeenCalledWith("/storage-backends");

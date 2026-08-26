@@ -177,9 +177,9 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 	// bucket was the only one exempt from the concurrency check. Whether the
 	// physical bucket goes and whether the caller holds a current version are
 	// independent decisions.
-	if rv == 0 && !req.Msg.GetForce() {
+	if rv == 0 && !req.Msg.GetSkipVersionCheck() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version is required; pass force=true to bypass"))
+			fmt.Errorf("resource_version is required; pass skip_version_check=true to bypass"))
 	}
 	if err := s.H.DeleteBucket(ctx, bucketh.DeleteBucketInput{
 		BackendID:       backend,
