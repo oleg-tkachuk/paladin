@@ -17,7 +17,7 @@
  * buckets.spec.ts covers navigating to a Collection. This covers making and
  * removing them.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/backends";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
@@ -74,7 +74,14 @@ async function pickOption(
 test.describe("Collections CRUD", () => {
   test("the create dialog refuses to submit without a bucket", async ({
     page,
+    makeEnabledBackend,
   }) => {
+    // A backend with no buckets is the only way to reach the no-bucket state
+    // now: the dialog defaults to a backend that HAS buckets, precisely so an
+    // operator is not dropped into a form that cannot be completed. This test
+    // used to pass because that default was broken and picked an empty
+    // backend every time — it asserted the guard while demonstrating the bug.
+    const empty = await makeEnabledBackend();
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
 
@@ -83,11 +90,20 @@ test.describe("Collections CRUD", () => {
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("#ok-name")).toBeVisible({ timeout: 15_000 });
+    await dialog.locator("#ok-name").fill(`e2e/${uniqueSlug("ok")}`);
+
+    // Choosing the empty backend leaves nothing to bind to.
+    await pickOption(
+      page,
+      dialog.locator("#ok-backend"),
+      new RegExp(empty.backendId),
+    );
 
     // A name alone is not enough: without a bucket the Collection has no
     // storage to bind to, so the dialog holds the submit rather than creating
-    // something unusable.
-    await dialog.locator("#ok-name").fill(`e2e/${uniqueSlug("ok")}`);
+    // something unusable — and says why rather than leaving the operator to
+    // guess which field is at fault.
+    await expect(dialog.locator("#ok-bucket")).toBeDisabled();
     await expect(
       dialog.getByRole("button", { name: /^Create Collection$/ }),
     ).toBeDisabled();
