@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -146,7 +148,7 @@ func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) er
 	return nil
 }
 
-func (r *OperationRepo) List(ctx context.Context, tenantID uuid.UUID, state *operation.State, afterID uuid.UUID, pageSize int32) ([]operation.Operation, string, error) {
+func (r *OperationRepo) List(ctx context.Context, tenantID uuid.UUID, state *operation.State, afterID uuid.UUID, pageSize int32, filter string) ([]operation.Operation, string, error) {
 	if pageSize <= 0 {
 		pageSize = 50
 	}
@@ -154,7 +156,16 @@ func (r *OperationRepo) List(ctx context.Context, tenantID uuid.UUID, state *ope
 	if state != nil {
 		ns = sqlc.NullOperationState{OperationState: sqlc.OperationState(string(*state)), Valid: true}
 	}
-	rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), pageSize)
+	// Pushdown: see admin_bucket.go. `state` is deliberately not pushed from
+	// the filter — the column is an enum, and casting an arbitrary literal to
+	// it makes Postgres reject the whole query rather than match nothing. The
+	// typed state argument above is already validated.
+	pd := hints(cel.OperationSchema, filter)
+	typeEq, typeLike := pd.StringHint("type")
+	errorCodeEq, _ := pd.StringHint("error_code")
+
+	rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
+		typeEq, typeLike, errorCodeEq, pageSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("list operations: %w", err)
 	}

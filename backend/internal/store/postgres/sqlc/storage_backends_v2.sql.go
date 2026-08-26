@@ -140,8 +140,20 @@ FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE ($1::text IS NULL
        OR storage_backends.name > $1::text)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($2::text IS NULL OR storage_backends.name = $2::text)
+  AND ($3::text IS NULL OR storage_backends.name LIKE $3::text)
+  AND ($4::text IS NULL OR display_name = $4::text)
+  AND ($5::text IS NULL OR display_name LIKE $5::text)
+  AND ($6::text IS NULL OR provider = $6::text)
+  AND ($7::text IS NULL OR region = $7::text)
+  AND ($8::bool IS NULL OR enabled = $8::bool)
+  AND ($9::bool IS NULL OR read_only = $9::bool)
+  AND ($10::bool IS NULL OR maintenance = $10::bool)
 ORDER BY storage_backends.name ASC
-LIMIT $2::int
+LIMIT $11::int
 `
 
 type ListStorageBackendsRow struct {
@@ -187,8 +199,20 @@ type ListStorageBackendsRow struct {
 // the first page, and a bare `name > NULL` evaluates to NULL → zero rows
 // (the same trap that bit ListUsersByTenant). Keep the
 // `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
-func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, pageSize int32) ([]ListStorageBackendsRow, error) {
-	rows, err := q.db.Query(ctx, listStorageBackends, afterID, pageSize)
+func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, pageSize int32) ([]ListStorageBackendsRow, error) {
+	rows, err := q.db.Query(ctx, listStorageBackends,
+		afterID,
+		nameEq,
+		nameLike,
+		displayNameEq,
+		displayNameLike,
+		providerEq,
+		regionEq,
+		enabled,
+		readOnly,
+		maintenance,
+		pageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

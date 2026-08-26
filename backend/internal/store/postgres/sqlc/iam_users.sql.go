@@ -217,16 +217,32 @@ SELECT id, tenant_id, subject, display_name, password_hash,
 FROM users
 WHERE ($1::uuid IS NULL
        OR id > $1::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($2::text IS NULL OR subject = $2::text)
+  AND ($3::text IS NULL OR subject LIKE $3::text)
+  AND ($4::text IS NULL OR display_name = $4::text)
+  AND ($5::text IS NULL OR display_name LIKE $5::text)
+  AND ($6::bool IS NULL OR disabled = $6::bool)
 ORDER BY id ASC
-LIMIT $2::int
+LIMIT $7::int
 `
 
 // Cross-tenant listing for platform.admin. Same NULL-safe after_id
 // pattern as ListUsersByTenant — without the IS-NULL guard the
 // /users page renders empty even when there are rows, because the
 // adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
-func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsersAll, afterID, pageSize)
+func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, pageSize int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersAll,
+		afterID,
+		subjectEq,
+		subjectLike,
+		displayNameEq,
+		displayNameLike,
+		disabled,
+		pageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -266,8 +282,16 @@ FROM users
 WHERE tenant_id = $1
   AND ($2::uuid IS NULL
        OR id > $2::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($3::text IS NULL OR subject = $3::text)
+  AND ($4::text IS NULL OR subject LIKE $4::text)
+  AND ($5::text IS NULL OR display_name = $5::text)
+  AND ($6::text IS NULL OR display_name LIKE $6::text)
+  AND ($7::bool IS NULL OR disabled = $7::bool)
 ORDER BY id ASC
-LIMIT $3::int
+LIMIT $8::int
 `
 
 // after_id is NULL on first page (no page token). The IS-NULL guard
@@ -275,8 +299,17 @@ LIMIT $3::int
 // NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
 // Valid:false} → SQL NULL, so the guard is the contract callers
 // rely on.
-func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsersByTenant, tenantID, afterID, pageSize)
+func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, pageSize int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByTenant,
+		tenantID,
+		afterID,
+		subjectEq,
+		subjectLike,
+		displayNameEq,
+		displayNameLike,
+		disabled,
+		pageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

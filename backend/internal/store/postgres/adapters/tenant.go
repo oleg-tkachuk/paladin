@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -448,10 +450,18 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 	if pageSize <= 0 {
 		pageSize = 50
 	}
+	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
+	// stays authoritative, these only narrow the scan.
+	pd := hints(cel.TenantSchema, args.Filter)
+	slugEq, slugLike := pd.StringHint("slug")
+	displayEq, displayLike := pd.StringHint("display_name")
+	layoutEq, _ := pd.StringHint("storage_layout")
+
 	rows, err := r.q.ListTenants(ctx,
 		pgUUID(args.AfterID),
 		args.OnlyTrashed,
 		args.IncludeTrashed,
+		slugEq, slugLike, displayEq, displayLike, layoutEq,
 		pageSize,
 	)
 	if err != nil {

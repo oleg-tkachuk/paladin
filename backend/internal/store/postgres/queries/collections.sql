@@ -69,6 +69,14 @@ JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE collections.tenant_id = $1
   AND (sqlc.narg('after_id')::text IS NULL
        OR collections.name > sqlc.narg('after_id')::text)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('name_eq')::text IS NULL OR collections.name = sqlc.narg('name_eq')::text)
+  AND (sqlc.narg('name_like')::text IS NULL OR collections.name LIKE sqlc.narg('name_like')::text)
+  AND (sqlc.narg('display_name_eq')::text IS NULL OR collections.display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_like')::text IS NULL OR collections.display_name LIKE sqlc.narg('display_name_like')::text)
+  AND (sqlc.narg('backend_eq')::text IS NULL OR sb.name = sqlc.narg('backend_eq')::text)
 ORDER BY collections.name
 LIMIT sqlc.arg('page_size');
 

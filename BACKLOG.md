@@ -1930,26 +1930,28 @@ of the pipeline._
 
 
 ---
-## List filters are evaluated after pagination, so search cannot reach past the page
+## List filters push down only the conjuncts SQL can express
 
-- **Status:** Deferred (needs SQL pushdown per resource).
-- **Reason:** `ListBuckets` (and the other handlers using `celpkg.FilterPage`)
-  read one page from the repo and *then* evaluate the CEL filter over that
-  page. A filter therefore narrows what the page happened to contain, never
-  the table: with 559 buckets and a 500-row page, a filter matching the 559th
-  returns nothing. Callers reasonably read `filter` as "search", which is what
-  the console's bucket search did — it silently could not find the rows past
-  the ceiling. The console now pages through client-side (useBuckets follows
-  nextPageToken), which fixes reachability but moves the cost to the browser
-  and does not fix the API's semantics for other clients, including MCP.
-- **Definition of Done:** The filterable list RPCs push their predicate into
-  SQL — the shape `objectpushdown.go` already implements for objects — so
-  `filter` selects from the table and pagination applies to the filtered set.
-  Anything the pushdown cannot express must be rejected as InvalidArgument
-  rather than silently degraded to page-local evaluation.
-- **Blockers:** Each schema needs its own pushdown + a decision on which CEL
-  subset is supported; a partial pushdown that silently falls back to
-  in-memory evaluation would preserve the bug while looking fixed.
+- **Status:** Deferred (the remainder needs per-schema work, not a rule).
+- **Reason:** The filterable list RPCs now extract the SQL-expressible subset
+  of the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
+  `filter` selects from the table rather than from whichever page the cursor
+  landed on. What the walk understands is the top-level `&&` chain of string
+  equality, `startsWith`, `contains`, and booleans over columns the query
+  carries. Everything else — disjunctions, timestamp comparisons, `labels[…]`,
+  functions — still reaches only the in-memory pass, which means a filter made
+  entirely of those reads the whole table one page at a time. That is correct
+  (paging continues, no row is dropped) and slow.
+- **Definition of Done:** Either the walk covers the rest of the CEL surface
+  each schema exposes — timestamp ranges are the obvious next one, and
+  `auditpushdown.go` already does them for its own schema — or the schemas
+  stop exposing what no query can answer.
+- **Blockers:** none. Deliberately not solved by rejecting un-pushable filters
+  with InvalidArgument: that would make a legal CEL expression an error
+  because of an implementation detail of one storage engine, and the shape the
+  object and audit paths established is narrow-only for exactly that reason.
+
+---
 
 ## Streaming RPCs are charged one rate-limit token at open
 

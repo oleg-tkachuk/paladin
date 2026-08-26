@@ -58,6 +58,18 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
       ELSE                                          tenants.deleted_at IS NULL
     END
   )
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('slug_eq')::text IS NULL OR tenants.slug = sqlc.narg('slug_eq')::text)
+  AND (sqlc.narg('slug_like')::text IS NULL OR tenants.slug LIKE sqlc.narg('slug_like')::text)
+  AND (sqlc.narg('display_name_eq')::text IS NULL OR tenants.display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_like')::text IS NULL OR tenants.display_name LIKE sqlc.narg('display_name_like')::text)
+  -- Compared as text on purpose: the literal comes from a caller's filter, and
+  -- casting an arbitrary string to the enum makes Postgres reject the whole
+  -- query ("invalid input value for enum") instead of returning no rows.
+  AND (sqlc.narg('storage_layout')::text IS NULL
+       OR tenants.storage_layout::text = sqlc.narg('storage_layout')::text)
 ORDER BY tenants.id
 LIMIT sqlc.arg('page_size');
 

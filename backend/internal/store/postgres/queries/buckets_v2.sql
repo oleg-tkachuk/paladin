@@ -79,6 +79,16 @@ FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_name')::text)
   AND (sqlc.narg('owner_tenant_id')::uuid IS NULL OR b.owner_tenant_id = sqlc.narg('owner_tenant_id')::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('name_eq')::text IS NULL OR b.name = sqlc.narg('name_eq')::text)
+  AND (sqlc.narg('name_like')::text IS NULL OR b.name LIKE sqlc.narg('name_like')::text)
+  AND (sqlc.narg('display_name_eq')::text IS NULL OR b.display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_like')::text IS NULL OR b.display_name LIKE sqlc.narg('display_name_like')::text)
+  AND (sqlc.narg('versioning_enabled')::bool IS NULL OR b.versioning_enabled = sqlc.narg('versioning_enabled')::bool)
+  AND (sqlc.narg('object_lock_enabled')::bool IS NULL OR b.object_lock_enabled = sqlc.narg('object_lock_enabled')::bool)
+  AND (sqlc.narg('replication_enabled')::bool IS NULL OR b.replication_enabled = sqlc.narg('replication_enabled')::bool)
   AND (sb.name, b.name) > (sqlc.arg('after_backend_id')::text, sqlc.arg('after_name')::text)
 ORDER BY sb.name, b.name
 LIMIT sqlc.arg('page_size');

@@ -70,6 +70,18 @@ FROM storage_backends
 LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE (sqlc.narg('after_id')::text IS NULL
        OR storage_backends.name > sqlc.narg('after_id')::text)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('name_eq')::text IS NULL OR storage_backends.name = sqlc.narg('name_eq')::text)
+  AND (sqlc.narg('name_like')::text IS NULL OR storage_backends.name LIKE sqlc.narg('name_like')::text)
+  AND (sqlc.narg('display_name_eq')::text IS NULL OR display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_like')::text IS NULL OR display_name LIKE sqlc.narg('display_name_like')::text)
+  AND (sqlc.narg('provider_eq')::text IS NULL OR provider = sqlc.narg('provider_eq')::text)
+  AND (sqlc.narg('region_eq')::text IS NULL OR region = sqlc.narg('region_eq')::text)
+  AND (sqlc.narg('enabled')::bool IS NULL OR enabled = sqlc.narg('enabled')::bool)
+  AND (sqlc.narg('read_only')::bool IS NULL OR read_only = sqlc.narg('read_only')::bool)
+  AND (sqlc.narg('maintenance')::bool IS NULL OR maintenance = sqlc.narg('maintenance')::bool)
 ORDER BY storage_backends.name ASC
 LIMIT sqlc.arg('page_size')::int;
 

@@ -192,8 +192,16 @@ JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE collections.tenant_id = $1
   AND ($2::text IS NULL
        OR collections.name > $2::text)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($3::text IS NULL OR collections.name = $3::text)
+  AND ($4::text IS NULL OR collections.name LIKE $4::text)
+  AND ($5::text IS NULL OR collections.display_name = $5::text)
+  AND ($6::text IS NULL OR collections.display_name LIKE $6::text)
+  AND ($7::text IS NULL OR sb.name = $7::text)
 ORDER BY collections.name
-LIMIT $3
+LIMIT $8
 `
 
 type ListCollectionsRow struct {
@@ -202,8 +210,17 @@ type ListCollectionsRow struct {
 	BucketName  string     `json:"bucket_name"`
 }
 
-func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListCollectionsRow, error) {
-	rows, err := q.db.Query(ctx, listCollections, tenantID, afterID, pageSize)
+func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, backendEq *string, pageSize int32) ([]ListCollectionsRow, error) {
+	rows, err := q.db.Query(ctx, listCollections,
+		tenantID,
+		afterID,
+		nameEq,
+		nameLike,
+		displayNameEq,
+		displayNameLike,
+		backendEq,
+		pageSize,
+	)
 	if err != nil {
 		return nil, err
 	}

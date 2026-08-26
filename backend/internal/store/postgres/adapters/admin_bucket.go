@@ -8,6 +8,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -259,7 +261,26 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	if args.OwnerTenantID != nil {
 		ownerFilter = pgUUID(*args.OwnerTenantID)
 	}
-	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter, args.AfterBackend, args.AfterName, pageSize)
+	// Pushdown: the SQL-expressible conjuncts of the caller's CEL filter
+	// narrow the scan. The handler still evaluates the whole expression over
+	// the returned page, so a hint that is absent costs a wider read and
+	// never a wrong row.
+	pd := hints(cel.PhysicalBucketSchema, args.Filter)
+	if backendFilter == nil {
+		// `backend_id == "x"` in the filter narrows the same way the typed
+		// field does; the typed field wins when both are set.
+		if eq, _ := pd.StringHint("backend_id"); eq != nil {
+			backendFilter = eq
+		}
+	}
+	nameEq, nameLike := pd.StringHint("bucket_id")
+	displayEq, displayLike := pd.StringHint("display_name")
+
+	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter,
+		nameEq, nameLike, displayEq, displayLike,
+		pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
+		pd.BoolHint("replication_enabled"),
+		args.AfterBackend, args.AfterName, pageSize)
 	if err != nil {
 		return nil, "", err
 	}

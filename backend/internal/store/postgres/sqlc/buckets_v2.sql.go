@@ -235,9 +235,19 @@ FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE ($1::text IS NULL OR sb.name = $1::text)
   AND ($2::uuid IS NULL OR b.owner_tenant_id = $2::uuid)
-  AND (sb.name, b.name) > ($3::text, $4::text)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($3::text IS NULL OR b.name = $3::text)
+  AND ($4::text IS NULL OR b.name LIKE $4::text)
+  AND ($5::text IS NULL OR b.display_name = $5::text)
+  AND ($6::text IS NULL OR b.display_name LIKE $6::text)
+  AND ($7::bool IS NULL OR b.versioning_enabled = $7::bool)
+  AND ($8::bool IS NULL OR b.object_lock_enabled = $8::bool)
+  AND ($9::bool IS NULL OR b.replication_enabled = $9::bool)
+  AND (sb.name, b.name) > ($10::text, $11::text)
 ORDER BY sb.name, b.name
-LIMIT $5
+LIMIT $12
 `
 
 type ListBucketsV2Row struct {
@@ -269,10 +279,17 @@ type ListBucketsV2Row struct {
 // Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 // (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 // below is plain equality so the planner uses the partial index.
-func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
+func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,
 		backendName,
 		ownerTenantID,
+		nameEq,
+		nameLike,
+		displayNameEq,
+		displayNameLike,
+		versioningEnabled,
+		objectLockEnabled,
+		replicationEnabled,
 		afterBackendID,
 		afterName,
 		pageSize,

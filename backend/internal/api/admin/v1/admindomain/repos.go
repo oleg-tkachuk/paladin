@@ -35,7 +35,11 @@ func init() {
 type BackendRepository interface {
 	Upsert(ctx context.Context, b StorageBackend) error
 	Get(ctx context.Context, backendID string) (StorageBackend, error)
-	List(ctx context.Context, pageSize int32, afterID string) ([]StorageBackend, string, error)
+	// filter is the caller's CEL expression. The repo pushes its
+	// SQL-expressible conjuncts into the query; the handler still evaluates
+	// the whole expression over the returned page, so pushdown may only
+	// narrow the candidate set, never decide the answer.
+	List(ctx context.Context, pageSize int32, afterID, filter string) ([]StorageBackend, string, error)
 	Update(ctx context.Context, b StorageBackend, expectedVersion int64, mask []string) error
 	SetEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) error
 	// SetReadOnly flips the drain (read-only) state (the schema baseline (001_initial_schema.sql)). Same

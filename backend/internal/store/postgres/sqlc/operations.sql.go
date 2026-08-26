@@ -81,19 +81,28 @@ FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
   AND ($3::uuid IS NULL OR id > $3::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($4::text IS NULL OR type = $4::text)
+  AND ($5::text IS NULL OR type LIKE $5::text)
+  AND ($6::text IS NULL OR error_code = $6::text)
 ORDER BY id
-LIMIT $4
+LIMIT $7
 `
 
 type ListOperationsRow struct {
 	Operation Operation `json:"operation"`
 }
 
-func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error) {
+func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, pageSize int32) ([]ListOperationsRow, error) {
 	rows, err := q.db.Query(ctx, listOperations,
 		tenantID,
 		state,
 		afterID,
+		typeEq,
+		typeLike,
+		errorCodeEq,
 		pageSize,
 	)
 	if err != nil {

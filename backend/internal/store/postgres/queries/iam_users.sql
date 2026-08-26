@@ -57,6 +57,14 @@ FROM users
 WHERE tenant_id = $1
   AND (sqlc.narg('after_id')::uuid IS NULL
        OR id > sqlc.narg('after_id')::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('subject_eq')::text IS NULL OR subject = sqlc.narg('subject_eq')::text)
+  AND (sqlc.narg('subject_like')::text IS NULL OR subject LIKE sqlc.narg('subject_like')::text)
+  AND (sqlc.narg('display_name_eq')::text IS NULL OR display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_like')::text IS NULL OR display_name LIKE sqlc.narg('display_name_like')::text)
+  AND (sqlc.narg('disabled')::bool IS NULL OR disabled = sqlc.narg('disabled')::bool)
 ORDER BY id ASC
 LIMIT sqlc.arg('page_size')::int;
 
@@ -71,6 +79,14 @@ SELECT id, tenant_id, subject, display_name, password_hash,
 FROM users
 WHERE (sqlc.narg('after_id')::uuid IS NULL
        OR id > sqlc.narg('after_id')::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('subject_eq')::text IS NULL OR subject = sqlc.narg('subject_eq')::text)
+  AND (sqlc.narg('subject_like')::text IS NULL OR subject LIKE sqlc.narg('subject_like')::text)
+  AND (sqlc.narg('display_name_eq')::text IS NULL OR display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_like')::text IS NULL OR display_name LIKE sqlc.narg('display_name_like')::text)
+  AND (sqlc.narg('disabled')::bool IS NULL OR disabled = sqlc.narg('disabled')::bool)
 ORDER BY id ASC
 LIMIT sqlc.arg('page_size')::int;
 

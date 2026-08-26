@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -179,7 +181,15 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 			tok := args.PageToken
 			after = &tok
 		}
-		rows, err := r.q.ListCollections(ctx, pgUUID(args.TenantID), after, pageSize)
+		// Pushdown: see admin_bucket.go — the handler's CEL pass over the
+		// page stays authoritative, these only narrow the scan.
+		pd := hints(cel.CollectionSchema, args.Filter)
+		nameEq, nameLike := pd.StringHint("collection")
+		displayEq, displayLike := pd.StringHint("display_name")
+		backendEq, _ := pd.StringHint("storage_backend")
+
+		rows, err := r.q.ListCollections(ctx, pgUUID(args.TenantID), after,
+			nameEq, nameLike, displayEq, displayLike, backendEq, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list collections: %w", err)
 		}

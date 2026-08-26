@@ -29,7 +29,7 @@ func (fakeBackendRepo) Upsert(context.Context, admindomain.StorageBackend) error
 func (fakeBackendRepo) Get(context.Context, string) (admindomain.StorageBackend, error) {
 	return admindomain.StorageBackend{BackendID: "primary", Kind: "s3-compatible"}, nil
 }
-func (fakeBackendRepo) List(context.Context, int32, string) ([]admindomain.StorageBackend, string, error) {
+func (fakeBackendRepo) List(context.Context, int32, string, string) ([]admindomain.StorageBackend, string, error) {
 	return nil, "", nil
 }
 func (fakeBackendRepo) Update(context.Context, admindomain.StorageBackend, int64, []string) error {

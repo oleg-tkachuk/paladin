@@ -141,8 +141,20 @@ WHERE ($1::uuid IS NULL OR tenants.id > $1::uuid)
       ELSE                                          tenants.deleted_at IS NULL
     END
   )
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND ($4::text IS NULL OR tenants.slug = $4::text)
+  AND ($5::text IS NULL OR tenants.slug LIKE $5::text)
+  AND ($6::text IS NULL OR tenants.display_name = $6::text)
+  AND ($7::text IS NULL OR tenants.display_name LIKE $7::text)
+  -- Compared as text on purpose: the literal comes from a caller's filter, and
+  -- casting an arbitrary string to the enum makes Postgres reject the whole
+  -- query ("invalid input value for enum") instead of returning no rows.
+  AND ($8::text IS NULL
+       OR tenants.storage_layout::text = $8::text)
 ORDER BY tenants.id
-LIMIT $4
+LIMIT $9
 `
 
 type ListTenantsRow struct {
@@ -156,11 +168,16 @@ type ListTenantsRow struct {
 // The boolean gating is inline-CASE so sqlc emits a single prepared
 // statement; planner uses the partial idx_tenants_active index on
 // the common path.
-func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, pageSize int32) ([]ListTenantsRow, error) {
+func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugEq *string, slugLike *string, displayNameEq *string, displayNameLike *string, storageLayout *string, pageSize int32) ([]ListTenantsRow, error) {
 	rows, err := q.db.Query(ctx, listTenants,
 		afterID,
 		onlyTrashed,
 		includeTrashed,
+		slugEq,
+		slugLike,
+		displayNameEq,
+		displayNameLike,
+		storageLayout,
 		pageSize,
 	)
 	if err != nil {

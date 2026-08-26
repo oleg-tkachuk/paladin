@@ -210,7 +210,7 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID, fil
 	if err := h.authorize(ctx, cedar.ActionReadBackend, ""); err != nil {
 		return nil, "", err
 	}
-	out, next, err := h.repo.List(ctx, pageSize, afterID)
+	out, next, err := h.repo.List(ctx, pageSize, afterID, filter)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}

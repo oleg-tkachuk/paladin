@@ -51,7 +51,11 @@ type Repository interface {
 	Get(ctx context.Context, opID, tenantID uuid.UUID) (Operation, error)
 	UpdateState(ctx context.Context, opID uuid.UUID, newState State, metadata, response []byte, errCode, errMsg string) error
 	Cancel(ctx context.Context, opID, tenantID uuid.UUID) error
-	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32) ([]Operation, string, error)
+	// filter is the caller's CEL expression. The repo pushes its
+	// SQL-expressible conjuncts into the query; ListOperations still
+	// evaluates the whole expression over the returned page, so pushdown may
+	// only narrow the candidate set.
+	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string) ([]Operation, string, error)
 
 	// ClaimNext is the worker-side atomic dequeue: pick the oldest
 	// PENDING row, flip it to RUNNING, return it. Returns
@@ -148,7 +152,7 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 		}
 		afterID = id
 	}
-	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize)
+	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize, filter)
 	if err != nil {
 		return nil, "", err
 	}

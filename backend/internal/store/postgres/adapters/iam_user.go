@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/google/uuid"
@@ -156,15 +158,24 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 		}
 		afterID = id
 	}
+	// Pushdown: see admin_bucket.go — userh still evaluates the whole CEL
+	// expression over the page, these only narrow the scan.
+	pd := hints(cel.UserSchema, args.Filter)
+	subjectEq, subjectLike := pd.StringHint("subject")
+	displayEq, displayLike := pd.StringHint("display_name")
+	disabled := pd.BoolHint("disabled")
+
 	var rows []sqlc.User
 	if args.TenantID == uuid.Nil {
-		got, err := r.q.ListUsersAll(ctx, pgUUID(afterID), limit)
+		got, err := r.q.ListUsersAll(ctx, pgUUID(afterID),
+			subjectEq, subjectLike, displayEq, displayLike, disabled, limit)
 		if err != nil {
 			return nil, "", err
 		}
 		rows = got
 	} else {
-		got, err := r.q.ListUsersByTenant(ctx, pgUUID(args.TenantID), pgUUID(afterID), limit)
+		got, err := r.q.ListUsersByTenant(ctx, pgUUID(args.TenantID), pgUUID(afterID),
+			subjectEq, subjectLike, displayEq, displayLike, disabled, limit)
 		if err != nil {
 			return nil, "", err
 		}

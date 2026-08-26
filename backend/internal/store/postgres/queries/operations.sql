@@ -33,6 +33,12 @@ FROM operations
 WHERE tenant_id = $1
   AND (sqlc.narg('state')::operation_state IS NULL OR state = sqlc.narg('state')::operation_state)
   AND (sqlc.narg('after_id')::uuid IS NULL OR id > sqlc.narg('after_id')::uuid)
+  -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
+  -- The full CEL program still runs over the fetched page, so a hint that is
+  -- absent only widens the scan; see ListObjects for the contract.
+  AND (sqlc.narg('type_eq')::text IS NULL OR type = sqlc.narg('type_eq')::text)
+  AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
+  AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
 ORDER BY id
 LIMIT sqlc.arg('page_size');
 

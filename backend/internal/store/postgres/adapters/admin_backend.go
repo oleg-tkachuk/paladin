@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -137,7 +139,7 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 	}
 }
 
-func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string) ([]admindomain.StorageBackend, string, error) {
+func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filter string) ([]admindomain.StorageBackend, string, error) {
 	if pageSize <= 0 || pageSize > 1000 {
 		pageSize = 50
 	}
@@ -151,7 +153,18 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 	if afterID != "" {
 		afterPtr = &afterID
 	}
-	rows, err := r.q.ListStorageBackends(ctx, afterPtr, pageSize)
+	// The filter's SQL-expressible conjuncts narrow the scan; the handler's
+	// CEL pass over the returned page stays authoritative.
+	pd := hints(cel.StorageBackendSchema, filter)
+	nameEq, nameLike := pd.StringHint("backend_id")
+	displayEq, displayLike := pd.StringHint("display_name")
+	providerEq, _ := pd.StringHint("provider")
+	regionEq, _ := pd.StringHint("region")
+
+	rows, err := r.q.ListStorageBackends(ctx, afterPtr,
+		nameEq, nameLike, displayEq, displayLike, providerEq, regionEq,
+		pd.BoolHint("enabled"), pd.BoolHint("read_only"), pd.BoolHint("maintenance"),
+		pageSize)
 	if err != nil {
 		return nil, "", err
 	}
