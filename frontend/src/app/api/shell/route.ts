@@ -28,9 +28,20 @@ import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
  * connection the bridge already keeps warm, in parallel — and each section
  * reports its own status, so the console can grey one badge instead of
  * failing a page.
+ *
+ * Two tokens, because the sections live on two planes and each plane verifies
+ * its own audience: the admin token in Authorization, the iam token in
+ * X-Paladin-Iam-Authorization. Forwarding one token to both planes would make
+ * the health badge permanently unavailable with an authentication error —
+ * the plane is right to refuse it.
  */
 
 export const dynamic = "force-dynamic";
+
+// The header the console uses to carry its iam-audience token alongside the
+// admin one. Not "Authorization" twice: a proxy that mangles duplicates would
+// fail in a way nobody could read.
+const IAM_AUTH_HEADER = "X-Paladin-Iam-Authorization";
 
 type SectionStatus = "ok" | "unavailable";
 
@@ -89,12 +100,35 @@ export async function GET(req: Request) {
   }
   const headers = { Authorization: auth };
 
+  // The iam half is optional in the sense that its absence degrades two
+  // sections rather than the response — but it is never guessed at.
+  const iamAuth = req.headers.get(IAM_AUTH_HEADER);
+  const iamHeaders = iamAuth ? { Authorization: iamAuth } : null;
+  const noIamToken = async () => {
+    throw new Error(
+      iamAuth
+        ? "iam token audience does not match the iam plane"
+        : `missing ${IAM_AUTH_HEADER}`,
+    );
+  };
+  const iamUsable = iamHeaders !== null && tokenMatchesPlane(iamAuth, "iam");
+
   const [version, health, operations] = await Promise.all([
     section("version", async () =>
-      toJson(VersionInfoSchema, await iamClient.getVersion({}, { headers })),
+      iamUsable
+        ? toJson(
+            VersionInfoSchema,
+            await iamClient.getVersion({}, { headers: iamHeaders! }),
+          )
+        : noIamToken(),
     ),
     section("health", async () =>
-      toJson(HealthInfoSchema, await iamClient.getHealth({}, { headers })),
+      iamUsable
+        ? toJson(
+            HealthInfoSchema,
+            await iamClient.getHealth({}, { headers: iamHeaders! }),
+          )
+        : noIamToken(),
     ),
     section("operations", async () =>
       toJson(

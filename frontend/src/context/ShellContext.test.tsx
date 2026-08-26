@@ -100,3 +100,77 @@ describe("ShellContext", () => {
     expect(screen.getByTestId("ops-count")).toHaveTextContent("-1");
   });
 });
+
+// The version and health sections live on the iam plane, the operations
+// section on admin, and each plane verifies its own audience. Sending one
+// token to both would make the health badge permanently unavailable with an
+// authentication error — and the plane would be right to refuse it.
+describe("ShellContext tokens", () => {
+  beforeEach(() => {
+    h.token.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the admin and iam tokens on their own headers", async () => {
+    h.token.mockImplementation(async (aud: string) => `tok-${aud}`);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        version: { status: "ok", data: {} },
+        health: { status: "ok", data: {} },
+        operations: { status: "ok", data: { operations: [] } },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const init = fetchMock.mock.calls[0][1] as {
+      headers: Record<string, string>;
+    };
+    expect(init.headers.Authorization).toMatch(/^Bearer tok-/);
+    expect(init.headers["X-Paladin-Iam-Authorization"]).toMatch(/^Bearer tok-/);
+    expect(init.headers.Authorization).not.toBe(
+      init.headers["X-Paladin-Iam-Authorization"],
+    );
+  });
+
+  // A failed iam exchange costs the two sections that need it, not the call.
+  it("still asks for the shell when the iam token cannot be minted", async () => {
+    h.token.mockImplementation(async (aud: string) => {
+      if (aud.includes("iam")) throw new Error("exchange failed");
+      return "tok-admin";
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        version: { status: "unavailable", reason: "missing token" },
+        health: { status: "unavailable", reason: "missing token" },
+        operations: { status: "ok", data: { operations: [] } },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("operations")).toHaveTextContent("ok"),
+    );
+    const init = fetchMock.mock.calls[0][1] as {
+      headers: Record<string, string>;
+    };
+    expect(init.headers["X-Paladin-Iam-Authorization"]).toBeUndefined();
+    expect(screen.getByTestId("health")).toHaveTextContent("unavailable");
+  });
+});

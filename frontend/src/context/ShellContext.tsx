@@ -95,9 +95,20 @@ export function ShellProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const token = await getAccessToken(AUDIENCES.admin);
+      // Two tokens: the sections live on two planes and each plane verifies
+      // its own audience. The iam one is allowed to fail on its own — that
+      // costs the version and health sections, not the operations list.
+      const [adminToken, iamToken] = await Promise.all([
+        getAccessToken(AUDIENCES.admin),
+        getAccessToken(AUDIENCES.iam).catch(() => null),
+      ]);
       const res = await fetch("/api/shell", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          ...(iamToken
+            ? { "X-Paladin-Iam-Authorization": `Bearer ${iamToken}` }
+            : {}),
+        },
         cache: "no-store",
       });
       if (!res.ok) {
