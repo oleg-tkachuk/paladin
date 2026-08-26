@@ -29,6 +29,33 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — a failed operation fills `Operation.error`, not `Operation.response`
+
+`Operation.result` is a oneof of `google.rpc.Status error` and
+`google.protobuf.Any response`. Both API planes used to put every stored
+payload — failures included — into `response`, and never set `error` at all.
+The stored `error_code` and `error_message` reached no client, and a caller
+that asked `result.case == "error"` to tell a failure from a success got
+"success" for every failed operation. The console's ops drawer and dashboard
+widget both asked exactly that.
+
+Now an operation in FAILED or CANCELLED fills `error`:
+
+- `code` — the canonical code: `CANCELLED` for a cancellation, `ABORTED` for
+  `WORKER_LOST` (the work may be half-applied), `UNIMPLEMENTED` for an
+  unknown operation type, `UNKNOWN` otherwise.
+- `message` — the stored `error_message`, falling back to the code when the
+  row has no message.
+- `details[0]` — the payload that used to be in `response`, unchanged, as an
+  `Any`-wrapped `Struct`. A reclaimed operation's payload also carries
+  `last_progress: {processed, total}`: the last snapshot the worker wrote
+  before it died, which is a lower bound — progress writes are throttled to
+  about one a second.
+
+A client that read failure detail out of `response` needs to read
+`error.details[0]` instead. A client that only reads successes is unaffected:
+the `response` arm still carries them.
+
 ## Unreleased — `force` is gone from the delete RPCs
 
 One word meant four different things, and two of them were dangerous.

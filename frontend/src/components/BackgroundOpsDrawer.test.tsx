@@ -9,7 +9,33 @@ vi.mock("@/lib/connect/client", () => ({
   adminOperationClient: { listOperations: h.list, cancelOperation: h.cancel },
 }));
 
+import { create } from "@bufbuild/protobuf";
+import { anyPack, StructSchema, ValueSchema } from "@bufbuild/protobuf/wkt";
+
 import { BackgroundOpsDrawer } from "./BackgroundOpsDrawer";
+
+// The wire carries metadata and failure details as Any-wrapped Structs; build
+// them the same way the server does rather than hand-rolling the encoding.
+function toStructFields(obj: Record<string, unknown>) {
+  const out: Record<string, ReturnType<typeof create<typeof ValueSchema>>> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === "number") {
+      out[k] = create(ValueSchema, { kind: { case: "numberValue", value: v } });
+    } else if (typeof v === "string") {
+      out[k] = create(ValueSchema, { kind: { case: "stringValue", value: v } });
+    } else {
+      out[k] = create(ValueSchema, {
+        kind: {
+          case: "structValue",
+          value: create(StructSchema, {
+            fields: toStructFields(v as Record<string, unknown>),
+          }),
+        },
+      });
+    }
+  }
+  return out;
+}
 
 // Minimal Operation shape the component reads: name/type/done/result oneof.
 const runningOp = {
@@ -78,5 +104,100 @@ describe("BackgroundOpsDrawer cancel", () => {
 
     await waitFor(() => expect(h.cancel).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/cancel failed/i)).toBeInTheDocument();
+  });
+});
+
+// A worker that dies mid-batch leaves the operation FAILED/WORKER_LOST, and
+// "the outcome is unknown" is all the operator used to get. The reclaimer
+// copies the last {processed, total} snapshot into the failure payload, so the
+// row can say how far the work actually got before the worker stopped.
+describe("BackgroundOpsDrawer progress", () => {
+  beforeEach(() => {
+    h.list.mockReset();
+    h.cancel.mockReset();
+  });
+
+  function anyStruct(fields: Record<string, unknown>) {
+    return anyPack(
+      StructSchema,
+      create(StructSchema, { fields: toStructFields(fields) }),
+    );
+  }
+
+  it("reports how far a reclaimed operation got", async () => {
+    h.list.mockResolvedValue({
+      operations: [
+        {
+          name: "operations/lost-1",
+          type: "BatchUpdateTags",
+          done: true,
+          createdAt: undefined,
+          result: {
+            case: "error",
+            value: {
+              code: 10,
+              message: "the worker executing this operation stopped",
+              details: [
+                anyStruct({
+                  code: "WORKER_LOST",
+                  last_progress: { processed: 7, total: 9 },
+                }),
+              ],
+            },
+          },
+        },
+      ],
+    });
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+
+    expect(await screen.findByText(/7 of 9/)).toBeInTheDocument();
+    expect(screen.getByText(/before the worker stopped/)).toBeInTheDocument();
+  });
+
+  it("says nothing about progress when the worker never reported any", async () => {
+    h.list.mockResolvedValue({
+      operations: [
+        {
+          name: "operations/lost-2",
+          type: "BatchUpdateTags",
+          done: true,
+          createdAt: undefined,
+          result: {
+            case: "error",
+            value: {
+              code: 10,
+              message: "the worker executing this operation stopped",
+              // Died before its first report: metadata still held the args.
+              details: [anyStruct({ code: "WORKER_LOST" })],
+            },
+          },
+        },
+      ],
+    });
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+
+    await screen.findByText(/the worker executing this operation stopped/);
+    expect(screen.queryByText(/ of /)).not.toBeInTheDocument();
+  });
+
+  it("shows live progress for a running operation", async () => {
+    h.list.mockResolvedValue({
+      operations: [
+        {
+          name: "operations/run-1",
+          type: "BatchCopy",
+          done: false,
+          createdAt: undefined,
+          metadata: anyStruct({ processed: 3, total: 12 }),
+          result: { case: undefined },
+        },
+      ],
+    });
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+
+    expect(await screen.findByText(/3 of 12 processed/)).toBeInTheDocument();
   });
 });

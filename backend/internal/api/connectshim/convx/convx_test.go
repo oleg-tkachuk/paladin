@@ -3,6 +3,9 @@ package convx
 import (
 	"testing"
 	"time"
+
+	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ParseRV replaced three per-plane copies, one of which — iam's hand-rolled
@@ -134,5 +137,68 @@ func TestTsPtrProto(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if got := TsPtrProto(&now); got == nil || !got.AsTime().Equal(now) {
 		t.Errorf("TsPtrProto(%v) = %v", now, got)
+	}
+}
+
+// Every payload used to land in Operation.result.response, `error` left unset
+// — so a client asking "did this fail?" got "no" for every failed operation.
+// The failure payload has to reach the error arm, and it has to bring the
+// stored details with it: for a reclaimed operation those details are the only
+// record of how far the work got.
+func TestOperationErrorCarriesCodeAndDetails(t *testing.T) {
+	st := OperationError("WORKER_LOST", "the worker stopped",
+		[]byte(`{"code":"WORKER_LOST","last_progress":{"processed":7,"total":9}}`), false)
+
+	if st.GetCode() != int32(code.Code_ABORTED) {
+		t.Errorf("code = %d, want ABORTED (%d) — the work may be half-applied, "+
+			"which is exactly what ABORTED means", st.GetCode(), code.Code_ABORTED)
+	}
+	if st.GetMessage() != "the worker stopped" {
+		t.Errorf("message = %q", st.GetMessage())
+	}
+	if len(st.GetDetails()) != 1 {
+		t.Fatalf("details = %d, want the stored payload", len(st.GetDetails()))
+	}
+	var payload structpb.Struct
+	if err := st.GetDetails()[0].UnmarshalTo(&payload); err != nil {
+		t.Fatalf("details are not a readable struct: %v", err)
+	}
+	progress := payload.GetFields()["last_progress"].GetStructValue()
+	if got := progress.GetFields()["processed"].GetNumberValue(); got != 7 {
+		t.Errorf("processed = %v, want 7", got)
+	}
+}
+
+// A cancellation is not a failure, and a payload-free row is not a crash.
+func TestOperationErrorEdges(t *testing.T) {
+	cancelled := OperationError("", "", nil, true)
+	if cancelled.GetCode() != int32(code.Code_CANCELLED) {
+		t.Errorf("cancelled code = %d, want CANCELLED", cancelled.GetCode())
+	}
+	if len(cancelled.GetDetails()) != 0 {
+		t.Errorf("invented details for a row that stored none")
+	}
+
+	// A row with a code but no message still has to say something.
+	bare := OperationError("EXEC_FAILED", "", nil, false)
+	if bare.GetMessage() != "EXEC_FAILED" {
+		t.Errorf("message = %q, want the code as a fallback", bare.GetMessage())
+	}
+	if bare.GetCode() != int32(code.Code_UNKNOWN) {
+		t.Errorf("code = %d, want UNKNOWN for an executor failure", bare.GetCode())
+	}
+}
+
+// Metadata that is not a JSON object is dropped, not fatal: a listing is more
+// useful without one row's payload than not at all.
+func TestJSONToAny(t *testing.T) {
+	if JSONToAny(nil) != nil {
+		t.Error("empty payload produced an Any")
+	}
+	if JSONToAny([]byte(`[1,2,3]`)) != nil {
+		t.Error("a JSON array was packed as a Struct")
+	}
+	if JSONToAny([]byte(`{"processed":7}`)) == nil {
+		t.Error("a JSON object was dropped")
 	}
 }

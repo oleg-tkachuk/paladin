@@ -19,6 +19,11 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { adminOperationClient } from "@/lib/connect/client";
+import {
+  progressFromFailure,
+  progressFromMetadata,
+  type OpProgress,
+} from "@/lib/operationProgress";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
@@ -28,6 +33,16 @@ import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 function opError(o: Operation): string {
   if (o.result.case === "error") return o.result.value.message || "error";
   return "";
+}
+
+// How far the work got — live for a running operation, last-known for one
+// whose worker died. A failure with no snapshot returns null and the row says
+// nothing rather than guessing zero.
+function opProgress(o: Operation): OpProgress | null {
+  if (o.result.case === "error") {
+    return progressFromFailure(o.result.value.details);
+  }
+  return progressFromMetadata(o.metadata);
 }
 import { Button } from "@/components/ui/button";
 import {
@@ -213,6 +228,7 @@ function OpRow({
 }) {
   const inProgress = !op.done && !opError(op);
   const failed = !!opError(op);
+  const progress = opProgress(op);
   // Local per-row state so the button disables + reports its own failure
   // without coupling to the drawer's shared error banner.
   const [canceling, setCanceling] = useState(false);
@@ -271,6 +287,18 @@ function OpRow({
           {opError(op) && (
             <p className="mt-1 font-mono text-[10px] text-destructive">
               {opError(op)}
+            </p>
+          )}
+          {progress && (
+            <p
+              className={cn(
+                "mt-1 text-[10px] tabular-nums",
+                failed ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {failed ? "reached at least " : ""}
+              {progress.processed} of {progress.total}
+              {failed ? " before the worker stopped" : " processed"}
             </p>
           )}
           {cancelErr && (

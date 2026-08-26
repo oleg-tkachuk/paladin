@@ -496,6 +496,19 @@ type Querier interface {
 	// have applied to half the set — so re-running one would repeat side effects
 	// nobody can see. FAILED with WORKER_LOST tells the caller the truth: the
 	// outcome is unknown, decide for yourself whether to reissue.
+	// The response carries how far the executor got, when that is knowable.
+	//
+	// "The outcome is unknown" is honest but coarse: a caller reissuing a batch
+	// has no way to tell which items already landed. The runner's progress
+	// reporter writes {processed, total} into metadata while an operation runs, so
+	// for anything that reported progress the last snapshot is right there — the
+	// difference between "unknown" and "stopped after 7 of 9". It is a lower
+	// bound, not a count: progress is throttled to about one write a second, so
+	// the executor may have finished more before it died.
+	//
+	// metadata is not always progress — an operation that died before its first
+	// report still holds the executor's arguments — hence the validity check
+	// rather than a bare cast, which would fail the whole statement on one row.
 	ReclaimStaleOperations(ctx context.Context, staleAfterMicros int64) (int64, error)
 	// Symmetric refund on the per-capability counter. Same floor rule.
 	RefundCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric) error

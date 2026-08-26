@@ -1967,26 +1967,27 @@ of the pipeline._
   to be worth the accounting.
 
 ---
-## A reclaimed operation reports FAILED without saying how far it got
+## A reclaimed operation records a count, not which items landed
 
 - **Status:** Deferred (needs per-executor progress semantics).
-- **Reason:** `StaleOperationReclaimer` marks an abandoned operation FAILED
-  with `WORKER_LOST` and a message saying the work may have been partially
-  applied. That is honest but coarse: the batch executors are not
-  transactional across their items, so a BatchDelete or BatchCopy killed
-  halfway leaves a caller no way to learn which items landed. The progress
-  counters in `metadata` are the closest thing, and they are throttled to ~1/s
-  and overwritten by the terminal write.
-- **Definition of Done:** A reclaimed operation's response carries what the
-  executor had recorded — at minimum the last progress snapshot, ideally the
-  per-item outcomes the successful path already returns — so a caller can
-  reissue only the remainder rather than the whole batch.
-- **Blockers:** none technical. Deferred because retrying the whole batch is
-  correct for the idempotent executors (tags, restore) and only wasteful, and
-  the two where it is not (copy, permanent delete) deserve a design pass
+- **Reason:** `StaleOperationReclaimer` now copies the runner's last
+  `{processed, total}` snapshot into the failure payload as `last_progress`,
+  so a caller learns the batch reached at least item N. That is a count, not
+  an identity: the batch executors are not transactional across their items
+  and process them in argument order, so "7 of 9" only implies which items
+  landed as long as the executor never reorders. Nothing enforces that today,
+  and the snapshot is throttled to ~1/s, so the true figure is at least N.
+- **Definition of Done:** A reclaimed operation's response carries the
+  per-item outcomes the successful path already returns, so a caller can
+  reissue exactly the remainder rather than inferring it from a count.
+- **Blockers:** none technical. Still deferred because retrying the whole
+  batch is correct for the idempotent executors (tags, restore) and only
+  wasteful, and the two where it is not (copy, permanent delete) deserve a
+  design pass — most likely per-item rows the executor writes as it goes —
   rather than a partial record bolted onto the reclaim.
 
 ---
+
 ## `container_*` metrics do not exist on this cluster, and the scrape says otherwise
 
 - **Status:** Blocked (OrbStack's kubelet, not our configuration).

@@ -85,11 +85,38 @@ WHERE id = $1 AND state = 'RUNNING';
 -- have applied to half the set — so re-running one would repeat side effects
 -- nobody can see. FAILED with WORKER_LOST tells the caller the truth: the
 -- outcome is unknown, decide for yourself whether to reissue.
+-- The response carries how far the executor got, when that is knowable.
+--
+-- "The outcome is unknown" is honest but coarse: a caller reissuing a batch
+-- has no way to tell which items already landed. The runner's progress
+-- reporter writes {processed, total} into metadata while an operation runs, so
+-- for anything that reported progress the last snapshot is right there — the
+-- difference between "unknown" and "stopped after 7 of 9". It is a lower
+-- bound, not a count: progress is throttled to about one write a second, so
+-- the executor may have finished more before it died.
+--
+-- metadata is not always progress — an operation that died before its first
+-- report still holds the executor's arguments — hence the validity check
+-- rather than a bare cast, which would fail the whole statement on one row.
 UPDATE operations
 SET state         = 'FAILED',
     error_code    = 'WORKER_LOST',
     error_message = 'the worker executing this operation stopped before it finished; '
                     'the work may have been partially applied',
+    response      = convert_to(
+        jsonb_build_object(
+            'code', 'WORKER_LOST',
+            'error', 'the worker executing this operation stopped before it finished; '
+                     'the work may have been partially applied',
+            'last_progress',
+            CASE
+                WHEN metadata IS NOT NULL
+                 AND pg_input_is_valid(convert_from(metadata, 'UTF8'), 'jsonb')
+                 AND (convert_from(metadata, 'UTF8')::jsonb ? 'processed')
+                THEN convert_from(metadata, 'UTF8')::jsonb
+                ELSE NULL
+            END
+        )::text, 'UTF8'),
     done_at       = now(),
     updated_at    = now()
 WHERE state = 'RUNNING'

@@ -9,9 +9,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
@@ -89,39 +86,19 @@ func dataOperationToProto(o *operation.Operation) *pb.Operation {
 		CreatedAt: convx.TsProto(o.CreatedAt),
 		UpdatedAt: convx.TsProto(o.UpdatedAt),
 	}
-	if md := jsonToAny(o.Metadata); md != nil {
+	if md := convx.JSONToAny(o.Metadata); md != nil {
 		out.Metadata = md
 	}
-	if resp := jsonToAny(o.Response); resp != nil {
-		out.Result = &pb.Operation_Response{Response: resp}
+	switch o.State {
+	case operation.StateFailed, operation.StateCancelled:
+		out.Result = &pb.Operation_Error{
+			Error: convx.OperationError(o.ErrorCode, o.ErrorMessage, o.Response,
+				o.State == operation.StateCancelled),
+		}
+	default:
+		if resp := convx.JSONToAny(o.Response); resp != nil {
+			out.Result = &pb.Operation_Response{Response: resp}
+		}
 	}
 	return out
-}
-
-// jsonToAny wraps an executor's JSON payload in an Any the wire can carry.
-//
-// operations.metadata / .response hold JSON produced by json.Marshal in the
-// worker, not a serialized proto. The previous code put those bytes straight
-// into &anypb.Any{Value: ...} with no TypeUrl, which proto refuses to marshal:
-// "google.protobuf.Any: type_url is not set". Every ListOperations and
-// GetOperation carrying a payload failed with CodeInternal — invisible for as
-// long as the listing came back empty for an unrelated reason.
-//
-// Decoding into a Struct keeps the payload readable to any client instead of
-// making it an opaque blob, and gives the Any a real type_url. A payload that
-// is not a JSON object (nothing writes one today) is dropped rather than
-// failing the whole response.
-func jsonToAny(raw []byte) *anypb.Any {
-	if len(raw) == 0 {
-		return nil
-	}
-	var st structpb.Struct
-	if err := protojson.Unmarshal(raw, &st); err != nil {
-		return nil
-	}
-	packed, err := anypb.New(&st)
-	if err != nil {
-		return nil
-	}
-	return packed
 }
