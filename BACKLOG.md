@@ -2044,3 +2044,38 @@ of the pipeline._
 - **Blockers:** none technical. Deferred because it changes how every page
   loads, which deserves its own change rather than riding along with a bridge
   status endpoint.
+
+---
+## Something inside the api pod speaks plain HTTP to its own TLS port
+
+- **Status:** Deferred (cosmetic today; the client was not identified).
+- **Reason:** The api pod logs `http: TLS handshake error from 127.0.0.1:
+  client sent an HTTP request to an HTTPS server` — 14 of them inside a
+  21-second burst, 18 minutes into the pod's life, during an e2e run. No other
+  pod logs it. It is not the kubelet probes: liveness, readiness and startup on
+  api and admin all carry `scheme: HTTPS`, their periods (20s / 10s / 5s) do
+  not fit a 14-in-21-seconds burst, and a probe would not come from 127.0.0.1.
+  Whatever the client is, it is inside the pod and it is wrong about the
+  scheme. Harmless so far — the connections fail and something evidently
+  retries or ignores them — but it is noise in exactly the log an operator
+  greps when chasing a real handshake failure, which is how a genuine one
+  (the console BFF's, from a different IP) nearly got lost in the count.
+- **Definition of Done:** The client is identified and either corrected or
+  documented. `ss -tnp` inside the pod during a burst, or a packet capture on
+  the loopback, would name it.
+- **Blockers:** none. Not chased further because it breaks nothing and the
+  session had a real failure to fix.
+
+---
+## Nothing probes the iam listener
+
+- **Status:** Deferred (noticed while reading the probe configuration).
+- **Reason:** The api pod serves two listeners — data on 8080 and iam on 8085
+  — and all three probes point at `data`. The iam listener could stop
+  answering and the pod would stay Ready, keeping its Service endpoint, while
+  every login and token exchange failed. The blast radius is the whole
+  console: the token exchange rides iam.
+- **Definition of Done:** Readiness reflects both listeners — either a second
+  probe, or a readiness handler on the data port that checks the iam listener
+  is accepting.
+- **Blockers:** none.
