@@ -114,6 +114,13 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         throw new Error(`shell: HTTP ${res.status}`);
       }
+      // A session whose refresh cookie has expired gets redirected to the
+      // login page by the edge middleware, and fetch follows the redirect —
+      // so "200 OK" here can be an HTML page. Say that, rather than letting
+      // the JSON parser report a stray "<".
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("shell: not signed in");
+      }
       const body = (await res.json()) as Record<string, WireSection>;
       setVersion(decode(body.version, (j) => fromJson(VersionInfoSchema, j)));
       setHealth(decode(body.health, (j) => fromJson(HealthInfoSchema, j)));

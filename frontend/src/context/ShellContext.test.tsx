@@ -26,6 +26,7 @@ function mockShellResponse(body: unknown, ok = true) {
     vi.fn().mockResolvedValue({
       ok,
       status: ok ? 200 : 500,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => body,
     }),
   );
@@ -116,6 +117,7 @@ describe("ShellContext tokens", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         version: { status: "ok", data: {} },
         health: { status: "ok", data: {} },
@@ -150,6 +152,7 @@ describe("ShellContext tokens", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         version: { status: "unavailable", reason: "missing token" },
         health: { status: "unavailable", reason: "missing token" },
@@ -172,5 +175,41 @@ describe("ShellContext tokens", () => {
     };
     expect(init.headers["X-Paladin-Iam-Authorization"]).toBeUndefined();
     expect(screen.getByTestId("health")).toHaveTextContent("unavailable");
+  });
+});
+
+describe("ShellContext session", () => {
+  beforeEach(() => {
+    h.token.mockReset();
+    vi.unstubAllGlobals();
+  });
+  // An expired session is redirected to the login page by the edge middleware,
+  // and fetch follows redirects — so a 200 here can be an HTML page.
+  it("reports a signed-out session instead of a JSON parse error", async () => {
+    h.token.mockResolvedValue("tok");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+        json: async () => {
+          throw new SyntaxError("Unexpected token '<'");
+        },
+      }),
+    );
+
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("health")).toHaveTextContent("unavailable"),
+    );
+    expect(screen.getByTestId("health-reason")).toHaveTextContent(
+      "not signed in",
+    );
   });
 });
