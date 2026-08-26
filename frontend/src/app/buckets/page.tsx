@@ -69,6 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -116,8 +117,14 @@ function SortHeader({
 const ALL_BACKENDS = "__all__";
 
 export default function BucketsPage() {
-  const { buckets, loading, fetchBuckets, createBucket, deleteBucket } =
-    useBuckets();
+  const {
+    buckets,
+    loading,
+    error: listError,
+    fetchBuckets,
+    createBucket,
+    deleteBucket,
+  } = useBuckets();
   const { backends: backendRows } = useBackends();
   const { showNotification } = useNotification();
 
@@ -336,6 +343,19 @@ export default function BucketsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : listError ? (
+              // "No buckets yet" for a failed list is a lie with consequences:
+              // it invites the operator to create a bucket that already
+              // exists.
+              <TableRow>
+                <TableCell colSpan={6} className="h-48 text-center">
+                  <ListLoadError
+                    what="Buckets"
+                    reason={listError}
+                    onRetry={() => void fetchBuckets()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-48 text-center">

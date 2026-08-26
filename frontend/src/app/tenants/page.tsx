@@ -43,6 +43,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -102,6 +103,7 @@ export default function TenantsPage() {
   const {
     tenants,
     loading,
+    error: listError,
     fetchTenants,
     createTenant,
     updateTenantMetadata,
@@ -233,6 +235,16 @@ export default function TenantsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : listError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-48 text-center">
+                  <ListLoadError
+                    what="Tenants"
+                    reason={listError}
+                    onRetry={() => void fetchTenants()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-48 text-center">

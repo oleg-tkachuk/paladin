@@ -66,6 +66,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -110,6 +111,7 @@ export default function CollectionsPage() {
   const {
     collections,
     loading,
+    error: listError,
     fetchCollections,
     createCollection,
     deleteCollection,
@@ -316,6 +318,16 @@ export default function CollectionsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : listError ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-48 text-center">
+                  <ListLoadError
+                    what="Collections"
+                    reason={listError}
+                    onRetry={() => void fetchCollections()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : sorted.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="h-48 text-center">
