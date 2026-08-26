@@ -10,17 +10,18 @@
  * backend-disabled.spec.ts covers what a DISABLED backend does to the rest of
  * the console. This covers the transitions themselves.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/backends";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedEnabledBackend, backendState } from "./fixtures/seed";
+import { backendState } from "./fixtures/seed";
 
 test.describe("Storage backend — drain and maintenance", () => {
   test("draining a backend makes it read-only and advances the version", async ({
     page,
+    makeEnabledBackend,
   }) => {
     await loginAsAdmin(page);
-    const be = await seedEnabledBackend();
+    const be = await makeEnabledBackend();
     const before = await backendState(be.backendId);
     expect(before.readOnly).toBe(false);
 
@@ -43,9 +44,9 @@ test.describe("Storage backend — drain and maintenance", () => {
     expect(after.enabled).toBe(true);
   });
 
-  test("undrain restores writes", async ({ page }) => {
+  test("undrain restores writes", async ({ page, makeEnabledBackend }) => {
     await loginAsAdmin(page);
-    const be = await seedEnabledBackend();
+    const be = await makeEnabledBackend();
 
     await gotoSettled(page, "/storage-backends");
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
@@ -68,9 +69,12 @@ test.describe("Storage backend — drain and maintenance", () => {
       .toBe(false);
   });
 
-  test("maintenance is independent of drain", async ({ page }) => {
+  test("maintenance is independent of drain", async ({
+    page,
+    makeEnabledBackend,
+  }) => {
     await loginAsAdmin(page);
-    const be = await seedEnabledBackend();
+    const be = await makeEnabledBackend();
 
     await gotoSettled(page, "/storage-backends");
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
