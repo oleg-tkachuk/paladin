@@ -171,11 +171,52 @@ export function dedupWithGrace<T>(
   return p;
 }
 
+// Rotation successors, keyed by the token that WENT IN.
+//
+// The dedup above collapses callers that present the same token for the same
+// audience. It cannot help the other shape: only the iam audience rotates the
+// chain, while data/admin derive their access token with ExchangeAudience from
+// the same refresh token — so an ExchangeAudience that starts before an iam
+// rotation and lands after it presents a token the server has just consumed
+// and is told, correctly, that it is rejected. The route's self-heal re-reads
+// the session cookie, but a cookie set on another response cannot appear in
+// this request's headers, so it re-reads the same value and gives up.
+//
+// This index lets that caller ask "was my token rotated out from under me?"
+// and continue from the successor instead. Same grace window as the dedup:
+// long enough to cover a browser that cannot update its cookie between two
+// in-flight requests.
+const rotationSuccessors = new Map<string, Promise<RotateResult>>();
+
+/**
+ * Follows the rotation chain from `token` to the newest refresh token this
+ * process has produced from it, within the grace window.
+ *
+ * Returns `token` unchanged when nothing rotated it — the common case — and
+ * when a rotation failed, since a failed rotation consumed nothing.
+ */
+export async function currentRefreshToken(
+  token: string,
+  depth = 0,
+): Promise<string> {
+  const next = rotationSuccessors.get(token);
+  // The bound is a safety net against a cycle, not an expected depth: two
+  // hops would already be unusual.
+  if (!next || depth >= 8) return token;
+  try {
+    const rotated = await next;
+    if (!rotated.refreshToken || rotated.refreshToken === token) return token;
+    return currentRefreshToken(rotated.refreshToken, depth + 1);
+  } catch {
+    return token;
+  }
+}
+
 export async function refreshIamChain(
   refreshToken: string,
   audience: Audience,
 ): Promise<RotateResult> {
-  return dedupWithGrace(
+  const p = dedupWithGrace(
     inflightRotations,
     `${audience}::${refreshToken}`,
     ROTATION_RESULT_GRACE_MS,
@@ -195,6 +236,23 @@ export async function refreshIamChain(
       };
     },
   );
+  // Indexed by the input token so a concurrent ExchangeAudience holding that
+  // same token can follow the chain forward. Dropped on failure (nothing was
+  // consumed) and after the grace window on success.
+  rotationSuccessors.set(refreshToken, p);
+  p.then(
+    () => {
+      const timer = setTimeout(
+        () => rotationSuccessors.delete(refreshToken),
+        ROTATION_RESULT_GRACE_MS,
+      );
+      (timer as { unref?: () => void }).unref?.();
+    },
+    () => {
+      rotationSuccessors.delete(refreshToken);
+    },
+  );
+  return p;
 }
 
 // ────────────────────────── DTO shaping ──────────────────────────

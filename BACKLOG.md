@@ -1953,24 +1953,22 @@ of the pipeline._
 
 ---
 
-## Two audiences minted at once from one cookie can revoke the session
+## The BFF's rotation bookkeeping is per-process
 
-- **Status:** Deferred (avoided at the call site; the trap is still there).
-- **Reason:** The session holds a single refresh token, and minting an access
-  token for any audience rotates it. The BFF dedups concurrent rotations, but
-  the key is `(audience, token)` — so two mints for *different* audiences that
-  start from the same cookie both send the same refresh token, the loser
-  replays a consumed one, and the backend correctly reads that as RFC-6819
-  reuse and revokes the whole family. The operator is logged out. Today every
-  caller that needs two audiences is careful to ask sequentially
-  (ShellContext does), which is a convention nothing enforces.
-- **Definition of Done:** The BFF serialises rotations per refresh token
-  regardless of audience — the second waiter rotates from the token the first
-  one produced — so concurrent mints for different audiences are safe by
-  construction rather than by everyone remembering.
-- **Blockers:** none technical. The dedup map is per-process, which is already
-  noted as a single-replica assumption in bff.ts; fixing this properly is a
-  good moment to decide whether that assumption stays.
+- **Status:** Deferred (single-replica assumption, already documented).
+- **Reason:** Two maps in `bff.ts` make concurrent token work safe: the dedup
+  that collapses identical rotations, and the successor index that lets an
+  ExchangeAudience follow a rotation that consumed its token
+  (`currentRefreshToken`). Both live in process memory. With one console
+  replica that is exactly right; with two, a request routed to the replica
+  that did not perform the rotation sees nothing to follow and fails the same
+  way it did before — the operator is logged out by a race.
+- **Definition of Done:** Either the deployment pins the console to one
+  replica and says so, or the bookkeeping moves to a shared store (Redis) so
+  any replica can follow a chain another one advanced.
+- **Blockers:** none technical. It is a decision about topology, not code:
+  bff.ts has carried the single-instance note since the dedup was written, and
+  this is the second mechanism to inherit it.
 
 ---
 
