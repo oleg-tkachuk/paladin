@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -361,8 +362,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// Critical=true: a pod that cannot authenticate anyone has no business in
 	// the Service's endpoint list.
 	if addr := cfg.API.Server.IAM.Addr; addr != "" {
+		iamTLS := cfg.API.Server.IAM.TLS.Enabled
 		AddSubsystemCheck(healthH, "iam_listener", true, func(ctx context.Context) error {
-			return dialLocalListener(ctx, addr)
+			return dialLocalListener(ctx, addr, iamTLS)
 		})
 	}
 
@@ -481,17 +483,37 @@ func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multipart.Ve
 // a bind address, not a destination, and the question is whether this process
 // accepts — not how it advertises itself.
 //
-// A TCP dial is the right depth. It catches a listener that failed to start or
-// died while the process lived, which is the failure a second listener in a
-// shared process can have on its own; anything deeper (TLS, an HTTP GET) would
-// re-test what the health handler answering this check has already proved.
-func dialLocalListener(ctx context.Context, addr string) error {
+// A connection is the right depth. It catches a listener that failed to start
+// or died while the process lived, which is the failure a second listener in a
+// shared process can have on its own; an HTTP round trip would re-test what
+// the health handler answering this check has already proved.
+//
+// On a TLS listener the connection completes the handshake rather than
+// hanging up on it. A bare TCP dial is enough to prove the port accepts, but
+// closing mid-handshake is indistinguishable from a client that gave up, so
+// the server logged "TLS handshake error ... EOF" on every readiness probe —
+// six warnings a minute, in the very log where an unexplained handshake error
+// was being investigated. The certificate is not verified: this dials itself,
+// so identity is not the question and a probe must not start failing on the
+// day the cert's SANs change.
+func dialLocalListener(ctx context.Context, addr string, useTLS bool) error {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return fmt.Errorf("listener address %q: %w", addr, err)
 	}
+	target := net.JoinHostPort("127.0.0.1", port)
 	d := net.Dialer{Timeout: 2 * time.Second}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", port))
+
+	if useTLS {
+		td := &tls.Dialer{NetDialer: &d, Config: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // dialling ourselves; identity is not what this probes
+		conn, err := td.DialContext(ctx, "tcp", target)
+		if err != nil {
+			return fmt.Errorf("not accepting TLS on port %s: %w", port, err)
+		}
+		return conn.Close()
+	}
+
+	conn, err := d.DialContext(ctx, "tcp", target)
 	if err != nil {
 		return fmt.Errorf("not accepting on port %s: %w", port, err)
 	}
