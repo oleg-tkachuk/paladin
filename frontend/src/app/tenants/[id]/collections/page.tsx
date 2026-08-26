@@ -135,9 +135,20 @@ export default function TenantCollectionsPage() {
   const { showNotification } = useNotification();
 
   const isOwnTenant = user?.tenantId === tenant.tenantId;
-  const backends = useMemo(
-    () => backendRows.map((b) => b.backendId),
+  // Only backends that can actually receive a Collection. A disabled one
+  // cannot, and a drained (read-only) one cannot either — offering them puts
+  // a trap in the dialog: the operator picks it, no bucket is available, and
+  // the form silently cannot be completed. This cluster accumulated 160
+  // backends from tests, all but two of them disabled leftovers, and the
+  // dialog defaulted to the alphabetically first — which is exactly the
+  // no-buckets case.
+  const usableBackends = useMemo(
+    () => backendRows.filter((b) => b.enabled && !b.readOnly),
     [backendRows],
+  );
+  const backends = useMemo(
+    () => usableBackends.map((b) => b.backendId),
+    [usableBackends],
   );
 
   const [search, setSearch] = useState("");
@@ -213,8 +224,20 @@ export default function TenantCollectionsPage() {
   // dialog opens and the lists have loaded. Render-phase adjust-on-condition
   // (the !newBackend / !newBucketRef guards converge in one extra render) —
   // not set-state-in-effect.
-  if (createOpen && !newBackend && backends.length > 0) {
-    setNewBackend(backends[0]);
+  // Default to a backend that has buckets when one exists — a Collection
+  // binds to a bucket, so defaulting to a usable-but-empty backend produces a
+  // dialog that cannot be submitted until the operator works out that the
+  // backend, not the form, is the problem.
+  const defaultBackend = useMemo(() => {
+    if (backends.length === 0) return "";
+    const withBuckets = backends.find((id) =>
+      buckets.some((b) => b.backendId === id),
+    );
+    return withBuckets ?? backends[0];
+  }, [backends, buckets]);
+
+  if (createOpen && !newBackend && defaultBackend) {
+    setNewBackend(defaultBackend);
   }
 
   const availableBuckets = useMemo(

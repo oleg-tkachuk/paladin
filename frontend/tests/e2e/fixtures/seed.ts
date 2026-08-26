@@ -1136,3 +1136,23 @@ export async function setTenantBudget(args: {
   });
   return res.budget?.resourceVersion ?? "";
 }
+
+/**
+ * Delete storage backends by id. Best-effort per backend: one that has since
+ * acquired buckets refuses deletion, and a teardown must not fail a test that
+ * passed.
+ */
+export async function deleteBackends(backendIds: string[]): Promise<void> {
+  const client = backendAdminClient();
+  await Promise.allSettled(
+    backendIds.map(async (id) => {
+      const current = await client.getBackend({
+        name: `storageBackends/${id}`,
+      });
+      await client.deleteBackend({
+        name: `storageBackends/${id}`,
+        resourceVersion: current.resourceVersion,
+      });
+    }),
+  );
+}

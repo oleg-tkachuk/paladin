@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { ConnectError } from "@connectrpc/connect";
 
@@ -37,6 +37,14 @@ export function useBuckets() {
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sequence number of the most recent fetch. Only that fetch may write the
+  // list: callers commonly fire two in a row — the collection dialog opens
+  // with no backend chosen and refetches the moment one is defaulted in — and
+  // the results are not interchangeable. Without this the slower request wins
+  // whenever it happens to finish last, which left the dialog holding the
+  // buckets of a backend the operator was no longer looking at, or an empty
+  // list that disabled its bucket picker outright.
+  const seq = useRef(0);
 
   const fetchBuckets = useCallback(
     async (
@@ -45,6 +53,7 @@ export function useBuckets() {
       pageToken: string = "",
       ownerTenantId?: string,
     ) => {
+      const mine = ++seq.current;
       setLoading(true);
       setError(null);
       try {
@@ -80,18 +89,24 @@ export function useBuckets() {
           token = res.page?.nextPageToken ?? "";
           pages += 1;
         } while (token && pages < MAX_LIST_PAGES);
-        setBuckets(acc);
+        if (mine === seq.current) {
+          setBuckets(acc);
+        }
+        // The caller still gets what it asked for either way — only the
+        // shared list is guarded.
         return {
           buckets: acc,
           nextPageToken: token,
         };
       } catch (err) {
         // Query contract (state-only): surface via `error`, never throw.
-        setError(
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to fetch buckets",
-        );
+        if (mine === seq.current) {
+          setError(
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to fetch buckets",
+          );
+        }
         return { buckets: [], nextPageToken: "" };
       } finally {
         setLoading(false);

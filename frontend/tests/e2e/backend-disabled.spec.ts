@@ -8,19 +8,20 @@
  * with the change reflected promptly.
  *
  * Per-test fixture: one backend seeded then disabled via
- * BackendService.SetBackendEnabled (seedDisabledBackend()).
+ * BackendService.SetBackendEnabled (makeDisabledBackend(), which also deletes
+ * the backend on teardown — 160 of them accumulated before it did).
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/backends";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedDisabledBackend } from "./fixtures/seed";
 
 test.describe("US3 — disabled backends in the UI", () => {
   test("admin page badges a disabled backend and can re-enable it", async ({
     page,
+    makeDisabledBackend,
   }) => {
     await loginAsAdmin(page);
-    const be = await seedDisabledBackend();
+    const be = await makeDisabledBackend();
 
     await gotoSettled(page, "/storage-backends");
 
@@ -36,9 +37,10 @@ test.describe("US3 — disabled backends in the UI", () => {
 
   test("scope picker marks a disabled backend non-selectable", async ({
     page,
+    makeDisabledBackend,
   }) => {
     await loginAsAdmin(page);
-    const be = await seedDisabledBackend();
+    const be = await makeDisabledBackend();
 
     // The ScopePicker fetched backends on mount (at login), before the
     // seed ran — reload so its list includes the freshly-seeded backend.

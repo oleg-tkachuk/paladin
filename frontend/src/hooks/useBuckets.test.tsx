@@ -44,6 +44,37 @@ describe("useBuckets pagination", () => {
     ]);
   });
 
+  // Two overlapping fetches are the norm — the collection dialog opens with no
+  // backend chosen and refetches the moment one is defaulted in. Their results
+  // are not interchangeable, so the newest request must win regardless of
+  // which response arrives last.
+  it("ignores a slow earlier fetch that finishes after a newer one", async () => {
+    let releaseFirst: (v: unknown) => void = () => {};
+    h.listBuckets
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () => resolve(page(["stale-a", "stale-b"]));
+          }),
+      )
+      .mockResolvedValueOnce(page(["fresh"]));
+
+    const { result } = renderHook(() => useBuckets());
+
+    let firstDone: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      firstDone = result.current.fetchBuckets(); // slow, started first
+      await result.current.fetchBuckets("backend-b"); // fast, started second
+    });
+    expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
+
+    await act(async () => {
+      releaseFirst(null);
+      await firstDone;
+    });
+    expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
+  });
+
   it("stops at the page ceiling instead of following a token forever", async () => {
     // A token that never clears would otherwise page until the tab dies.
     h.listBuckets.mockResolvedValue(page(["x"], "always-more"));
