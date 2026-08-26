@@ -15,6 +15,10 @@ import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service
 import { useBumpRefresh, useRefreshSignal } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
+// Ceiling on how many pages one fetch will follow — a backstop against paging
+// forever if a token ever fails to terminate, not a limit anyone should reach.
+const MAX_LIST_PAGES = 20;
+
 // useBackends — list rows from the `backends` table via
 // admin/v1.BackendService.ListBackends. Use this for any UI that needs
 // the set of bind-targets (bucket creation, Collection provisioning, etc.).
@@ -67,12 +71,27 @@ export function useBackends(autoFetch: boolean = true) {
     setLoading(true);
     setError(null);
     try {
-      const res = await backendClient.listBackends({
-        page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-        filter: "",
-      });
-      setBackends(res.backends);
-      return res.backends;
+      // Follows nextPageToken to the end. Every caller here asks for "the
+      // backends" — the scope picker, the create-collection and create-bucket
+      // dialogs, the tables — and a single page silently hid the rest, exactly
+      // as it did for buckets until that bit: a backend past the ceiling was
+      // invisible and unselectable everywhere, with nothing on screen saying
+      // the list was cut. There are few backends today, which is the only
+      // reason this had not surfaced yet.
+      let token = "";
+      let pages = 0;
+      const acc: StorageBackend[] = [];
+      do {
+        const res = await backendClient.listBackends({
+          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+          filter: "",
+        });
+        acc.push(...res.backends);
+        token = res.page?.nextPageToken ?? "";
+        pages += 1;
+      } while (token && pages < MAX_LIST_PAGES);
+      setBackends(acc);
+      return acc;
     } catch (err) {
       // Query contract (state-only): surface via `error`, never throw.
       setError(

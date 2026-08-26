@@ -12,6 +12,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
+// Ceiling on how many pages one exhaustive fetch will follow — a backstop, not
+// a limit anyone should reach.
+const MAX_LIST_PAGES = 20;
+
 /**
  * useCollections — wrapper around admin/v1.CollectionService.
  *
@@ -73,6 +77,47 @@ export function useCollections() {
     },
     [tenantParent],
   );
+
+  /**
+   * Every collection, following nextPageToken to the end.
+   *
+   * Distinct from fetchCollections, which stays single-page on purpose: the
+   * /collections table has real pagination controls and a caller that wants
+   * page 3 must get page 3. The pickers want something else — the upload
+   * page's collection selector and the policy editor's target list are
+   * choosing from a set, and a set silently cut at one page hides the choice
+   * the operator came to make. That is the defect this closes, the same one
+   * the bucket picker had.
+   */
+  const fetchAllCollections = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let token = "";
+      let pages = 0;
+      const acc: Collection[] = [];
+      do {
+        const res = await collectionClient.listCollections({
+          parent: tenantParent,
+          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+        });
+        acc.push(...res.collections);
+        token = res.page?.nextPageToken ?? "";
+        pages += 1;
+      } while (token && pages < MAX_LIST_PAGES);
+      setCollections(acc);
+      return { collections: acc, nextPageToken: token };
+    } catch (err) {
+      setError(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Failed to fetch collections",
+      );
+      return { collections: [], nextPageToken: "" };
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantParent]);
 
   const createCollection = useCallback(
     async (
@@ -224,6 +269,7 @@ export function useCollections() {
     loading,
     error,
     fetchCollections,
+    fetchAllCollections,
     createCollection,
     deleteCollection,
     getCollection,

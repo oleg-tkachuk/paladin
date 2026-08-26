@@ -163,7 +163,7 @@ export default function PoliciesPage() {
   const { buckets, fetchBuckets, loading: bucketsLoading } = useBuckets();
   const {
     collections,
-    fetchCollections,
+    fetchAllCollections,
     loading: collectionsLoading,
   } = useCollections();
 
@@ -172,8 +172,9 @@ export default function PoliciesPage() {
   }, [fetchTenants]);
   useEffect(() => {
     if (scope === "bucket") void fetchBuckets();
-    if (scope === "collection") void fetchCollections();
-  }, [scope, fetchBuckets, fetchCollections]);
+    // The target picker chooses from a set; one page hides the rest.
+    if (scope === "collection") void fetchAllCollections();
+  }, [scope, fetchBuckets, fetchAllCollections]);
 
   // Reset the selected target whenever the scope changes — render-phase
   // adjust-on-change (not set-state-in-effect).

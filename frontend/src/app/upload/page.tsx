@@ -146,7 +146,8 @@ function TagPill({
 export default function UploadPage() {
   const { queue, uploadFile, clearQueue } = useUpload();
   const router = useRouter();
-  const { collections, fetchCollections } = useCollections();
+  // The picker wants the whole set, not page one — see fetchAllCollections.
+  const { collections, fetchAllCollections } = useCollections();
   const [selectedCollection, setSelectedCollection] = useState<string>("");
   // Sentinel routed through SelectRoot.onValueChange to mean "the user
   // clicked the footer affordance, not an actual Collection row". We
@@ -168,7 +169,7 @@ export default function UploadPage() {
   const [tagInput, setTagInput] = useState("");
 
   useEffect(() => {
-    void fetchCollections().then((res) => {
+    void fetchAllCollections().then((res) => {
       if (
         res?.collections &&
         res.collections.length > 0 &&
@@ -181,7 +182,7 @@ export default function UploadPage() {
     // selectedCollection is read inside only as a guard — keeping it in
     // the deps re-fired this fetch on every dropdown selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchCollections]);
+  }, [fetchAllCollections]);
 
   const handleAddTag = useCallback(() => {
     if (!tagInput.includes(":")) return;

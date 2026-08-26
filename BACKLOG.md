@@ -1951,23 +1951,6 @@ of the pipeline._
   subset is supported; a partial pushdown that silently falls back to
   in-memory evaluation would preserve the bug while looking fixed.
 
----
-## Console pickers other than buckets still read a single page
-
-- **Status:** Deferred (same class as the bucket ceiling, smaller blast radius).
-- **Reason:** `useBackends` fetches one page with an empty page token, and
-  `useCollections` exposes pagination for the /collections table but its
-  callers in the create dialogs read only the first page. Both truncate
-  silently once the account crosses API_PAGE_SIZE_MAX rows, exactly as the
-  bucket picker did before it paged through. Backends are few today, so this
-  has not bitten yet.
-- **Definition of Done:** Selector callers either page through (as useBuckets
-  now does) or the picker states that the list is truncated. A silent cut is
-  what made the bucket case take a flaky e2e to notice.
-- **Blockers:** None — deferred to keep this change scoped to the defect that
-  actually surfaced.
-
----
 ## Streaming RPCs are charged one rate-limit token at open
 
 - **Status:** Deferred (matches today's streams; revisit when one is chatty).
