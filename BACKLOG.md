@@ -2002,3 +2002,23 @@ of the pipeline._
   correct for the idempotent executors (tags, restore) and only wasteful, and
   the two where it is not (copy, permanent delete) deserve a design pass
   rather than a partial record bolted onto the reclaim.
+
+---
+## `container_*` metrics do not exist on this cluster, and the scrape says otherwise
+
+- **Status:** Blocked (OrbStack's kubelet, not our configuration).
+- **Reason:** Alloy scrapes the node's cAdvisor endpoint and reports success —
+  `up{job="cadvisor"} = 1` — while the endpoint returns 25 lines of
+  `machine_*` and no `container_*` series at all. So there is no per-container
+  CPU, memory or throttling data in VictoriaMetrics, and any panel or alert
+  built on `container_cpu_*` would render empty while looking correctly
+  configured. This was noticed while trying to establish whether a TLS
+  handshake timeout came from CPU starvation in the api pod: the question
+  could not be answered, because the data does not exist.
+- **Definition of Done:** Either a source of per-container resource metrics
+  that works here (cadvisor as a DaemonSet, or the metrics-server API), or a
+  note in the observability docs that resource-level questions cannot be
+  answered on OrbStack — so the next person does not spend the time twice.
+- **Blockers:** OrbStack. The same scrape returns full `container_*` data on a
+  normal kubelet, so nothing in the Alloy config needs changing for a real
+  cluster.

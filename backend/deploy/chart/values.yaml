@@ -622,7 +622,16 @@ config:
     server:
       data: &http_defaults
         addr: "0.0.0.0:8080"
-        read_header_timeout: 5s
+        # Also the TLS handshake deadline: Go derives it from
+        # ReadHeaderTimeout when that is set. 5s was too tight for a burst of
+        # mTLS handshakes from one client — the console BFF fans a page out to
+        # eight RPCs, and on a cold connection pool two of those handshakes
+        # missed the deadline ("TLS handshake error ... read tcp: i/o
+        # timeout"), which cascaded into 401s for the whole page because the
+        # token exchange rides the same connection budget. The BFF now caps
+        # its pool; this gives the handshake room on the other side too.
+        # Still short enough to be a slowloris guard, which is its other job.
+        read_header_timeout: 15s
         read_timeout: 30s
         write_timeout: 30s
         idle_timeout: 90s

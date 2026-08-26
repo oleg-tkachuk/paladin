@@ -78,7 +78,10 @@ admin: {
 
 #HTTPServer: {
   addr:                 string
-  read_header_timeout:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+  // Doubles as the TLS handshake deadline — Go derives that from
+  // ReadHeaderTimeout when it is set — so this bounds a slow handshake as
+  // well as a slow header. See the chart values for why 5s was not enough.
+  read_header_timeout:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15s"
   read_timeout:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   write_timeout:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   idle_timeout:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"90s"

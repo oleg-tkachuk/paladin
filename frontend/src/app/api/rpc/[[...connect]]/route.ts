@@ -6,6 +6,7 @@ import {
   ConnectError,
 } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import { Agent } from "undici";
 import { anyRegistry } from "@/lib/connect/any-registry";
 // DescService is the descriptor type for any generated Connect service.
 // connect-es v2 doesn't re-export it; import directly from protobuf codegenv1.
@@ -104,9 +105,45 @@ const authKey = createContextKey<string | null>(null, { description: "auth" });
  * Build one router + internal transport per plane. Done lazily (per cold
  * start) so dev hot-reload picks up env changes without restart hassles.
  */
+// Bounded connection pool for the outbound leg.
+//
+// undici's default agent leaves connections-per-origin unlimited, so a page
+// that fans out — /mcp issues eight RPCs across the admin and iam planes at
+// once — opens that many TLS connections simultaneously on a cold pool. Each
+// handshake is CPU work on Node's single thread, and the planes give a
+// handshake five seconds (Go derives the TLS deadline from ReadHeaderTimeout).
+// Two missed it during an e2e run: the plane logged "TLS handshake error ...
+// read tcp: i/o timeout" from this pod's IP, the GetHealth behind it surfaced
+// as "500 fetch failed", and since the token exchange rides the same plane the
+// browser's 401 self-heal had nothing to recover with — so the rest of that
+// page answered 401.
+//
+// A cap makes a burst queue instead of stampede; keep-alive means the next
+// page reuses what this one opened rather than handshaking again. Sized above
+// the widest fan-out we have so one page still runs concurrently.
+//
+// The dispatcher is passed explicitly rather than installed with
+// setGlobalDispatcher: that relies on a versioned well-known symbol shared
+// with Node's built-in fetch, and a mismatch would silently do nothing.
+const upstreamAgent = new Agent({
+  connections: Number(process.env.PALADIN_BFF_MAX_CONNECTIONS || 16),
+  // Long enough to be reused across a page's requests and the next
+  // navigation; short enough not to hold sockets to a pod that has rolled.
+  keepAliveTimeout: 30_000,
+  keepAliveMaxTimeout: 60_000,
+  // Fail a stuck connect rather than occupying a pool slot until the request
+  // itself times out.
+  connect: { timeout: 10_000 },
+});
+
 function buildPlaneRouter(plane: Plane) {
   const internalTransport = createGrpcWebTransport({
     baseUrl: planeBackendUrls[plane],
+    // Node's fetch honours a `dispatcher` in the init object; the DOM types
+    // do not model it, which is what the cast is for. Using the global fetch
+    // rather than undici's keeps the Response type connect-web expects.
+    fetch: (input, init) =>
+      fetch(input, { ...init, dispatcher: upstreamAgent } as RequestInit),
     interceptors: [
       (next) => async (req) => {
         try {
