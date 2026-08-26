@@ -132,14 +132,28 @@ configureTokenStore(async (audience: Audience) => {
   return { token: body.token, expiresAt: body.expiresAt };
 });
 
+function describe(err: unknown): string {
+  if (err instanceof ConnectError) return err.rawMessage;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 function authInterceptorFor(audience: Audience): Interceptor {
   return (next) => async (req) => {
+    // Why the mint error is kept rather than thrown: an unauthenticated
+    // request reaching the backend is the self-heal path below, and it works.
+    // But when it does NOT heal, the error the operator sees is the backend's
+    // "missing Authorization header", which describes the symptom and hides
+    // the cause — a revoked refresh family reads as a console that forgot to
+    // send a header. One e2e failure was diagnosed twice for that reason.
+    let mintErr: unknown;
     try {
       const token = await getAccessToken(audience);
       req.header.set("Authorization", `Bearer ${token}`);
-    } catch {
+    } catch (err) {
       // No token available — let the request go out unauthenticated.
       // Backend will return 401, the catch below self-heals.
+      mintErr = err;
     }
     try {
       return await next(req);
@@ -161,9 +175,17 @@ function authInterceptorFor(audience: Audience): Interceptor {
           const fresh = await getAccessToken(audience);
           req.header.set("Authorization", `Bearer ${fresh}`);
           return await next(req);
-        } catch {
-          // Refresh path is also broken — fall through with the
-          // original error. App shell handles the redirect.
+        } catch (retryErr) {
+          // Refresh path is also broken. Report why the token could not be
+          // minted — that is the actual failure — instead of the backend's
+          // complaint about the header that was missing because of it.
+          throw new ConnectError(
+            `no ${audience} access token: ${describe(mintErr ?? retryErr)}`,
+            Code.Unauthenticated,
+            undefined,
+            undefined,
+            err,
+          );
         }
       }
       throw err;

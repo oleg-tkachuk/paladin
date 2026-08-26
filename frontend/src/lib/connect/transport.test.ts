@@ -96,3 +96,36 @@ describe("transport interceptors", () => {
     expect(rpcCalls).toBe(2); // original + exactly one retry, then it stops
   });
 });
+
+// When the token cannot be minted at all, the request still goes out
+// unauthenticated and the backend answers "missing Authorization header".
+// That is the symptom; the cause is the mint. Reporting the symptom is how one
+// e2e failure got diagnosed twice — as a console that forgot a header, when
+// the session's refresh family had been revoked.
+describe("auth interceptor with no mintable token", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("reports why the token was missing, not that it was missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/auth/exchange")) {
+          return json({ error: "refresh token rejected" }, 401);
+        }
+        return json(
+          { code: "unauthenticated", message: "missing Authorization header" },
+          401,
+        );
+      }),
+    );
+
+    const { tenantClient } = await import("@/lib/connect/client");
+    await expect(tenantClient.listTenants({})).rejects.toThrow(
+      /no paladin-admin access token/,
+    );
+  });
+});
