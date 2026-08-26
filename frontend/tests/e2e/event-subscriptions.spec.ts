@@ -139,13 +139,25 @@ test.describe("Event subscriptions", () => {
       .first()
       .click({ force: true });
 
+    // NOT forced, unlike the page-level buttons above. These two live in
+    // overlays that animate in — a Radix dropdown and the confirm dialog — and
+    // forcing clicks them mid-animation, when the transform can still put
+    // their box outside the viewport. That is the failure this line produced:
+    // "Element is outside of the viewport", on a menu item the screenshot
+    // shows sitting comfortably on screen a moment later.
+    //
+    // Actionability is the right tool here: it waits for the element to stop
+    // moving and to receive events, which is exactly the wait an animation
+    // needs. Forcing is for something invisible overlapping the target, and
+    // nothing overlaps these. The long timeout covers "slow under load", which
+    // is the problem force was reached for.
     const deleteItem = page.getByRole("menuitem", { name: /Delete/i });
     await expect(deleteItem).toBeVisible({ timeout: 15_000 });
-    await deleteItem.click({ force: true });
+    await deleteItem.click({ timeout: 20_000 });
 
     const confirm = page.getByRole("button", { name: /^Delete/ }).last();
     await expect(confirm).toBeVisible({ timeout: 15_000 });
-    await confirm.click({ force: true });
+    await confirm.click({ timeout: 20_000 });
 
     await expect
       .poll(() => subscriptionCount(tenant.tenantId), { timeout: 15_000 })
