@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -346,6 +347,15 @@ func (r *BackendRepoV2) Delete(ctx context.Context, backendID string, expectedVe
 	}
 	rows, err := r.q.DeleteStorageBackend(ctx, backendID, expectedVersion)
 	if err != nil {
+		// buckets.backend_id is ON DELETE RESTRICT, so the database refuses
+		// this whatever `force` says — force only skips the friendly count
+		// above. Unmapped, that refusal reached the operator as a raw
+		// SQLSTATE under CodeInternal: a 500 for the system working exactly
+		// as designed. Same defect the tenant path had, same fix.
+		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
+			return fmt.Errorf("%w: buckets still reference backend %q; delete them first (force does not override the foreign key)",
+				admindomain.ErrConflict, backendID)
+		}
 		return err
 	}
 	if rows == 0 {

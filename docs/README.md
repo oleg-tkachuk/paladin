@@ -24,6 +24,8 @@ and where its boundaries are. This directory holds the detail.
   delivery and the dedup contract a consumer must implement.
 - [event-bus-jetstream.md](event-bus-jetstream.md) — the JetStream event
   bus.
+- [deletion-semantics.md](deletion-semantics.md) — what each delete
+  destroys, what refuses to be deleted and why, and where the bytes go.
 
 ## Architecture decisions
 

@@ -3,15 +3,14 @@ package adapters
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -140,12 +139,8 @@ func (r *CollectionRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenant
 		// so we can't cascade — surface as a typed sentinel and let
 		// the handler return FAILED_PRECONDITION with a clear hint
 		// rather than the opaque "internal: ERROR: ... 23001" leak.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23001", "23503":
-				return objectkey.ErrCollectionHasObjects
-			}
+		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
+			return objectkey.ErrCollectionHasObjects
 		}
 		return fmt.Errorf("delete collection: %w", err)
 	}

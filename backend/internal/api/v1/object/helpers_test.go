@@ -169,7 +169,7 @@ func TestResolveMaxSize(t *testing.T) {
 // A unique-index conflict is the "this key already exists" case and must
 // surface as AlreadyExists, not as a generic internal error.
 func TestMapCreateErrUniqueViolation(t *testing.T) {
-	err := mapCreateErr(&pgconn.PgError{Code: pgUniqueViolation, Message: "duplicate key"})
+	err := mapCreateErr(&pgconn.PgError{Code: "23505", Message: "duplicate key"})
 	if got := connect.CodeOf(err); got != connect.CodeAlreadyExists {
 		t.Errorf("code = %v, want AlreadyExists", got)
 	}

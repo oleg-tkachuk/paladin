@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 )
 
 // PartitionMaintainer keeps RANGE-partitioned tables (the schema baseline (001_initial_schema.sql)
@@ -229,8 +230,7 @@ func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpe
 // when CREATE TABLE ... PARTITION OF would strand rows already sitting in the
 // parent's DEFAULT partition ("...would be violated by some row").
 func isDefaultOverlap(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23514"
+	return pgerr.Is(err, pgerr.CheckViolation)
 }
 
 // recoverDefaultOverlap creates the partition ensureAhead couldn't, by moving

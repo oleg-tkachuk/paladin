@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -70,8 +71,14 @@ func (r *ObjectLockRepo) SetLegalHold(ctx context.Context, tenantID, versionID u
 // so the message is part of the test — a constraint failure from some other
 // cause must not be reported to the caller as "retention cannot be weakened".
 func isLockWeakeningViolation(err error) bool {
+	if !pgerr.Is(err, pgerr.CheckViolation) {
+		return false
+	}
+	// The Kind is not enough here: an ordinary CHECK raises the same code, and
+	// reporting one as "retention cannot be weakened" would be a lie. The
+	// trigger's message is the only thing that distinguishes them.
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+	if !errors.As(err, &pgErr) {
 		return false
 	}
 	return strings.Contains(pgErr.Message, "retained under") ||

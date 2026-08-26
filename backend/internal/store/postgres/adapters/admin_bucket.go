@@ -10,11 +10,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -94,17 +94,13 @@ func (r *BucketRepoV2) createWith(ctx context.Context, q *sqlc.Queries, b admind
 		// Surface FK + unique violations as typed domain errors so the
 		// handler can map them to user-friendly Connect codes instead of
 		// leaking raw "buckets_backend_id_fkey (SQLSTATE 23503)" strings.
-		var pg *pgconn.PgError
-		if errors.As(err, &pg) {
-			switch pg.Code {
-			case "23503":
-				// foreign_key_violation — only realistic source is the
-				// backend_id FK (storage_backends row missing).
-				return fmt.Errorf("%w: backend %q is not registered (run BackendService.CreateBackend or declare it in storage.backends)", admindomain.ErrConflict, b.BackendID)
-			case "23505":
-				// unique_violation — bucket already exists in this backend.
-				return fmt.Errorf("%w: bucket %q already exists in backend %q", admindomain.ErrConflict, b.BucketName, b.BackendID)
-			}
+		switch pgerr.Classify(err) {
+		case pgerr.ForeignKeyViolation:
+			// Only realistic source is the backend_id FK (storage_backends
+			// row missing).
+			return fmt.Errorf("%w: backend %q is not registered (run BackendService.CreateBackend or declare it in storage.backends)", admindomain.ErrConflict, b.BackendID)
+		case pgerr.UniqueViolation:
+			return fmt.Errorf("%w: bucket %q already exists in backend %q", admindomain.ErrConflict, b.BucketName, b.BackendID)
 		}
 		return err
 	}

@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
@@ -92,9 +92,8 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		// Map UNIQUE violations to typed sentinels so the handler can
 		// surface ALREADY_EXISTS with the offending field. Constraint
 		// names match migrations 001 (PK), 009 (slug), 033 (display_name).
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			switch pgErr.ConstraintName {
+		if pgerr.Is(err, pgerr.UniqueViolation) {
+			switch pgerr.Constraint(err) {
 			case schema.TenantsPK:
 				return tenant.ErrTenantIDConflict
 			case schema.TenantsSlugUnique:
@@ -161,9 +160,8 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 			// FK violation = picked bucket doesn't exist on this backend.
 			// Surface as a typed sentinel so the handler can return a
 			// clean InvalidArgument instead of a Postgres error string.
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23503" &&
-				pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
+			if pgerr.Is(err, pgerr.ForeignKeyViolation) &&
+				pgerr.ConstraintIs(err, schema.TenantDefaultBindingsBucketFK) {
 				return tenant.ErrDefaultBindingBucketMissing
 			}
 			return fmt.Errorf("create tenant: bind default: %w", err)
@@ -255,8 +253,7 @@ func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, 
 	}
 	n, err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
+		if pgerr.ConstraintIs(err, schema.TenantDefaultBindingsBucketFK) {
 			return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
 		}
 		return tenant.DefaultBinding{}, err
@@ -321,9 +318,8 @@ func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenan
 		// display_name UNIQUE collision lands here. Map to a typed
 		// sentinel so the handler surfaces ALREADY_EXISTS with the
 		// offending field.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
-			pgErr.ConstraintName == schema.TenantsDisplayNameUnique {
+		if pgerr.Is(err, pgerr.UniqueViolation) &&
+			pgerr.ConstraintIs(err, schema.TenantsDisplayNameUnique) {
 			return tenant.Tenant{}, tenant.ErrDisplayNameConflict
 		}
 		return tenant.Tenant{}, fmt.Errorf("update tenant: %w", err)
@@ -382,14 +378,13 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 		// data. Map to a typed sentinel so the handler returns a clear
 		// FailedPrecondition instead of a generic Internal error.
 		//
-		// Both codes, because Postgres splits them: 23503 is
-		// foreign_key_violation, 23001 is restrict_violation, and a column
-		// declared ON DELETE RESTRICT raises the latter. Checking only 23503
-		// meant DeleteTenant(force=true) on a tenant with users — which every
+		// pgerr folds the RESTRICT pair into one Kind: Postgres splits 23503
+		// foreign_key_violation from 23001 restrict_violation purely on how
+		// the constraint was declared, and checking only the first meant
+		// DeleteTenant(force=true) on a tenant with users — which every
 		// tenant has — leaked the raw SQL text as CodeInternal instead of
-		// saying what was wrong. delete-collection already handled both.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23001") {
+		// saying what was wrong.
+		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
 			return tenant.ErrTenantHasChildren
 		}
 		return fmt.Errorf("hard-delete tenant: %w", err)
@@ -421,9 +416,8 @@ func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID 
 	if err != nil {
 		// UNIQUE violations can fire even on UPDATE-to-non-NULL paths
 		// if a concurrent restore raced; map them.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			switch pgErr.ConstraintName {
+		if pgerr.Is(err, pgerr.UniqueViolation) {
+			switch pgerr.Constraint(err) {
 			case schema.TenantsSlugUnique:
 				return tenant.Tenant{}, tenant.ErrSlugConflict
 			case schema.TenantsDisplayNameUnique:
@@ -564,8 +558,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		// Slug uniqueness violation surfaces as a unique-constraint
 		// PG error — translate to ErrSlugConflict so the handler can
 		// return AlreadyExists.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantsSlugUnique {
+		if pgerr.ConstraintIs(err, schema.TenantsSlugUnique) {
 			return tenant.Tenant{}, tenant.ErrSlugConflict
 		}
 		return tenant.Tenant{}, fmt.Errorf("rename tenant: update tenant: %w", err)

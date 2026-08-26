@@ -22,7 +22,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -32,6 +31,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
@@ -1795,21 +1795,12 @@ func resolveMaxSize(defaultMax, hint int64) int64 {
 	return defaultMax
 }
 
-// pgUniqueViolation is the SQLSTATE code Postgres returns for a unique-index
-// conflict. Defined here to avoid pulling in jackc/pgerrcode just for one
-// constant.
-const pgUniqueViolation = "23505"
-
 func mapCreateErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case pgUniqueViolation:
-			return connect.NewError(connect.CodeAlreadyExists, err)
-		}
+	if pgerr.Is(err, pgerr.UniqueViolation) {
+		return connect.NewError(connect.CodeAlreadyExists, err)
 	}
 	return apiutil.MapError(err)
 }

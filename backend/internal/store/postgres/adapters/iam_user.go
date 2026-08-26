@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -43,8 +43,7 @@ func (r *UserRepo) Create(ctx context.Context, u authstore.User) (authstore.User
 		scopes,
 		u.Disabled,
 	); err != nil {
-		var pg *pgconn.PgError
-		if errors.As(err, &pg) && pg.Code == "23505" {
+		if pgerr.Is(err, pgerr.UniqueViolation) {
 			return authstore.User{}, authstore.ErrSubjectTaken
 		}
 		return authstore.User{}, fmt.Errorf("create user: %w", err)
