@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -41,7 +43,36 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http
 		BaseContext: func(_ net.Listener) context.Context {
 			return logger.WithContext(context.Background(), l)
 		},
+		// Route the server's own errors — TLS handshake failures, malformed
+		// requests, anything the handler never sees — into the structured log
+		// with the listener's address attached.
+		//
+		// Without this they go to Go's default logger: raw lines on stderr,
+		// carrying the client's address but not which listener they arrived
+		// on. A pod that serves two listeners then produces messages nobody
+		// can attribute. That is not hypothetical — "TLS handshake error from
+		// 127.0.0.1: client sent an HTTP request to an HTTPS server" appeared
+		// in bursts on the api pod, which serves data and iam, and the missing
+		// half of the sentence is why the client is still unidentified.
+		ErrorLog: serverErrorLog(l, c.Addr),
 	}
+}
+
+// serverErrorLog adapts zap for http.Server.ErrorLog at warn level, tagged
+// with the listener the message came from.
+//
+// NewStdLogAt only fails on an unknown level, which is a compile-time
+// constant here; a nil ErrorLog is the stdlib default (Go's global logger), so
+// falling back to it on the impossible branch loses the tag and nothing else.
+func serverErrorLog(l *zap.Logger, addr string) *log.Logger {
+	std, err := zap.NewStdLogAt(
+		l.Named("http").With(zap.String("listen_addr", addr)),
+		zapcore.WarnLevel,
+	)
+	if err != nil {
+		return nil
+	}
+	return std
 }
 
 // BuildVerifier returns a TokenVerifier pinned to a specific audience.

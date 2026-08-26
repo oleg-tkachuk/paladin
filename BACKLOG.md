@@ -2060,8 +2060,13 @@ of the pipeline._
   retries or ignores them — but it is noise in exactly the log an operator
   greps when chasing a real handshake failure, which is how a genuine one
   (the console BFF's, from a different IP) nearly got lost in the count.
+  The burst has not recurred since — two full e2e runs on later builds logged
+  none — so it cannot currently be caught in the act.
 - **Definition of Done:** The client is identified and either corrected or
-  documented. `ss -tnp` inside the pod during a burst, or a packet capture on
-  the loopback, would name it.
-- **Blockers:** none. Not chased further because it breaks nothing and the
-  session had a real failure to fix.
+  documented. The message now carries `listen_addr`, so the next occurrence
+  says whether it arrived on data (8080) or iam (8085); that halves the search
+  and makes the MCP loader's `http://localhost:8085` default a checkable
+  suspect rather than a guess. `ss -tnp` inside the pod during a burst would
+  finish the job.
+- **Blockers:** it stopped happening. Waiting for a recurrence with the tag
+  attached beats guessing at a client that may already be gone.
