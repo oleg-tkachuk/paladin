@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
@@ -344,6 +346,26 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		AddDisabledSubsystem(healthH, "api_token")
 	}
 
+	// The api role serves two listeners — data and iam — and Kubernetes
+	// allows one readiness probe per container, which points at data. So iam
+	// could stop accepting while the pod stayed Ready, kept its Service
+	// endpoint, and failed every login and token exchange behind it: the whole
+	// console, since the token exchange rides iam.
+	//
+	// This closes that by making the readiness the probe DOES reach depend on
+	// the listener it does not. A TCP dial is the right depth: it proves the
+	// listener is accepting, which is precisely the failure a shared process
+	// can have — if the process itself were wedged, this handler would not be
+	// answering either.
+	//
+	// Critical=true: a pod that cannot authenticate anyone has no business in
+	// the Service's endpoint list.
+	if addr := cfg.API.Server.IAM.Addr; addr != "" {
+		AddSubsystemCheck(healthH, "iam_listener", true, func(ctx context.Context) error {
+			return dialLocalListener(ctx, addr)
+		})
+	}
+
 	// Storage-backend reachability probes are tracked in BACKLOG —
 	// the existing S3 adapter doesn't expose a HEAD/ListBuckets
 	// method suited to a sub-second probe. Adding one is a separate
@@ -450,4 +472,28 @@ func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multipart.Ve
 		Metadata:     vo.Metadata,
 		Tags:         vo.Tags,
 	})
+}
+
+// dialLocalListener reports whether this process is accepting connections on
+// addr's port.
+//
+// Dials the loopback rather than the address as configured: "0.0.0.0:8085" is
+// a bind address, not a destination, and the question is whether this process
+// accepts — not how it advertises itself.
+//
+// A TCP dial is the right depth. It catches a listener that failed to start or
+// died while the process lived, which is the failure a second listener in a
+// shared process can have on its own; anything deeper (TLS, an HTTP GET) would
+// re-test what the health handler answering this check has already proved.
+func dialLocalListener(ctx context.Context, addr string) error {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("listener address %q: %w", addr, err)
+	}
+	d := net.Dialer{Timeout: 2 * time.Second}
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", port))
+	if err != nil {
+		return fmt.Errorf("not accepting on port %s: %w", port, err)
+	}
+	return conn.Close()
 }

@@ -2065,17 +2065,3 @@ of the pipeline._
   the loopback, would name it.
 - **Blockers:** none. Not chased further because it breaks nothing and the
   session had a real failure to fix.
-
----
-## Nothing probes the iam listener
-
-- **Status:** Deferred (noticed while reading the probe configuration).
-- **Reason:** The api pod serves two listeners — data on 8080 and iam on 8085
-  — and all three probes point at `data`. The iam listener could stop
-  answering and the pod would stay Ready, keeping its Service endpoint, while
-  every login and token exchange failed. The blast radius is the whole
-  console: the token exchange rides iam.
-- **Definition of Done:** Readiness reflects both listeners — either a second
-  probe, or a readiness handler on the data port that checks the iam listener
-  is accepting.
-- **Blockers:** none.
