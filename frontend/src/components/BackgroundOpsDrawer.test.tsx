@@ -2,12 +2,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
-// The drawer polls admin/v1.OperationService via adminOperationClient;
-// mock listOperations (the poll) and cancelOperation (the row action).
-const h = vi.hoisted(() => ({ list: vi.fn(), cancel: vi.fn() }));
-vi.mock("@/lib/connect/client", () => ({
-  adminOperationClient: { listOperations: h.list, cancelOperation: h.cancel },
+// The operations list arrives with the rest of the shell, so that is what the
+// drawer reads; cancelOperation is still its own RPC.
+const h = vi.hoisted(() => ({
+  cancel: vi.fn(),
+  refresh: vi.fn(),
+  shell: {
+    status: "ok" as "ok" | "unavailable" | "loading",
+    reason: undefined as string | undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: null as any[] | null,
+  },
 }));
+vi.mock("@/lib/connect/client", () => ({
+  adminOperationClient: { cancelOperation: h.cancel },
+}));
+vi.mock("@/context/ShellContext", () => ({
+  useShell: () => ({
+    operations: h.shell,
+    version: { status: "ok", data: null },
+    health: { status: "ok", data: null },
+    error: null,
+    lastUpdated: null,
+    refresh: h.refresh,
+  }),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function shellOps(ops: any[]) {
+  h.shell.status = "ok";
+  h.shell.reason = undefined;
+  h.shell.data = ops;
+}
 
 import { create } from "@bufbuild/protobuf";
 import { anyPack, StructSchema, ValueSchema } from "@bufbuild/protobuf/wkt";
@@ -61,13 +87,15 @@ async function openDrawer() {
 
 describe("BackgroundOpsDrawer cancel", () => {
   beforeEach(() => {
-    h.list.mockReset();
     h.cancel.mockReset();
+    h.refresh.mockReset();
+    h.refresh.mockResolvedValue(undefined);
     h.cancel.mockResolvedValue({});
+    shellOps([]);
   });
 
   it("cancels an in-progress operation via CancelOperation", async () => {
-    h.list.mockResolvedValue({ operations: [runningOp] });
+    shellOps([runningOp]);
     render(<BackgroundOpsDrawer />);
     await openDrawer();
 
@@ -76,14 +104,13 @@ describe("BackgroundOpsDrawer cancel", () => {
 
     await waitFor(() => expect(h.cancel).toHaveBeenCalledTimes(1));
     expect(h.cancel).toHaveBeenCalledWith({ name: "operations/mig-1" });
-    // Refetch fires after a successful cancel (initial poll + post-cancel).
-    await waitFor(() =>
-      expect(h.list.mock.calls.length).toBeGreaterThanOrEqual(2),
-    );
+    // The shell is refreshed after a successful cancel so the row reflects
+    // the new state without waiting for the next tick.
+    await waitFor(() => expect(h.refresh).toHaveBeenCalled());
   });
 
   it("does not render a Cancel button for a completed operation", async () => {
-    h.list.mockResolvedValue({ operations: [doneOp] });
+    shellOps([doneOp]);
     render(<BackgroundOpsDrawer />);
     await openDrawer();
 
@@ -93,7 +120,7 @@ describe("BackgroundOpsDrawer cancel", () => {
   });
 
   it("surfaces a cancel failure inline without throwing", async () => {
-    h.list.mockResolvedValue({ operations: [runningOp] });
+    shellOps([runningOp]);
     h.cancel.mockRejectedValue(new Error("boom"));
     render(<BackgroundOpsDrawer />);
     await openDrawer();
@@ -113,8 +140,9 @@ describe("BackgroundOpsDrawer cancel", () => {
 // row can say how far the work actually got before the worker stopped.
 describe("BackgroundOpsDrawer progress", () => {
   beforeEach(() => {
-    h.list.mockReset();
     h.cancel.mockReset();
+    h.refresh.mockReset();
+    shellOps([]);
   });
 
   function anyStruct(fields: Record<string, unknown>) {
@@ -125,29 +153,27 @@ describe("BackgroundOpsDrawer progress", () => {
   }
 
   it("reports how far a reclaimed operation got", async () => {
-    h.list.mockResolvedValue({
-      operations: [
-        {
-          name: "operations/lost-1",
-          type: "BatchUpdateTags",
-          done: true,
-          createdAt: undefined,
-          result: {
-            case: "error",
-            value: {
-              code: 10,
-              message: "the worker executing this operation stopped",
-              details: [
-                anyStruct({
-                  code: "WORKER_LOST",
-                  last_progress: { processed: 7, total: 9 },
-                }),
-              ],
-            },
+    shellOps([
+      {
+        name: "operations/lost-1",
+        type: "BatchUpdateTags",
+        done: true,
+        createdAt: undefined,
+        result: {
+          case: "error",
+          value: {
+            code: 10,
+            message: "the worker executing this operation stopped",
+            details: [
+              anyStruct({
+                code: "WORKER_LOST",
+                last_progress: { processed: 7, total: 9 },
+              }),
+            ],
           },
         },
-      ],
-    });
+      },
+    ]);
     render(<BackgroundOpsDrawer />);
     await openDrawer();
 
@@ -156,25 +182,23 @@ describe("BackgroundOpsDrawer progress", () => {
   });
 
   it("says nothing about progress when the worker never reported any", async () => {
-    h.list.mockResolvedValue({
-      operations: [
-        {
-          name: "operations/lost-2",
-          type: "BatchUpdateTags",
-          done: true,
-          createdAt: undefined,
-          result: {
-            case: "error",
-            value: {
-              code: 10,
-              message: "the worker executing this operation stopped",
-              // Died before its first report: metadata still held the args.
-              details: [anyStruct({ code: "WORKER_LOST" })],
-            },
+    shellOps([
+      {
+        name: "operations/lost-2",
+        type: "BatchUpdateTags",
+        done: true,
+        createdAt: undefined,
+        result: {
+          case: "error",
+          value: {
+            code: 10,
+            message: "the worker executing this operation stopped",
+            // Died before its first report: metadata still held the args.
+            details: [anyStruct({ code: "WORKER_LOST" })],
           },
         },
-      ],
-    });
+      },
+    ]);
     render(<BackgroundOpsDrawer />);
     await openDrawer();
 
@@ -183,21 +207,44 @@ describe("BackgroundOpsDrawer progress", () => {
   });
 
   it("shows live progress for a running operation", async () => {
-    h.list.mockResolvedValue({
-      operations: [
-        {
-          name: "operations/run-1",
-          type: "BatchCopy",
-          done: false,
-          createdAt: undefined,
-          metadata: anyStruct({ processed: 3, total: 12 }),
-          result: { case: undefined },
-        },
-      ],
-    });
+    shellOps([
+      {
+        name: "operations/run-1",
+        type: "BatchCopy",
+        done: false,
+        createdAt: undefined,
+        metadata: anyStruct({ processed: 3, total: 12 }),
+        result: { case: undefined },
+      },
+    ]);
     render(<BackgroundOpsDrawer />);
     await openDrawer();
 
     expect(await screen.findByText(/3 of 12 processed/)).toBeInTheDocument();
+  });
+});
+
+// A chrome widget that cannot reach its service must say so. The shell
+// reports each section separately for exactly this: an empty list here would
+// read as "nothing is running" while a batch may well be running.
+describe("BackgroundOpsDrawer unavailable section", () => {
+  beforeEach(() => {
+    h.cancel.mockReset();
+    h.refresh.mockReset();
+  });
+
+  it("says the list is unknown rather than empty", async () => {
+    h.shell.status = "unavailable";
+    h.shell.reason = "UNAVAILABLE: connection refused";
+    h.shell.data = null;
+
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+
+    expect(await screen.findByText(/unknown, not empty/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/UNAVAILABLE: connection refused/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No background operations/)).toBeNull();
   });
 });

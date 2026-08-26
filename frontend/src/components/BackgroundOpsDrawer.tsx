@@ -1,15 +1,22 @@
 "use client";
 
 // BackgroundOpsDrawer — TopBar widget showing ongoing/recent
-// long-running operations. Polls admin/v1.OperationService.List,
-// surfaces counts in a small badge ("2 in progress · 1 failed"),
-// expands into a Sheet with retry/cancel actions per op.
+// long-running operations. Surfaces counts in a small badge ("2 in progress ·
+// 1 failed") and expands into a Sheet with cancel actions per op.
 //
-// Polling interval: 5s while drawer is closed, 2s while open. No
-// SSE/WebSocket dependency — keeps the auth surface unchanged and
-// matches the existing useSidebarCounts pattern.
+// The list arrives with the rest of the shell (ShellContext / /api/shell)
+// rather than from a poller of its own: this widget is on every page, and its
+// own listOperations call was one of the ~6 chrome RPCs each page used to pay
+// for. While the sheet is open it asks the shell to refresh faster than the
+// shell's own cadence — still one request, just more often.
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
@@ -25,6 +32,7 @@ import {
   type OpProgress,
 } from "@/lib/operationProgress";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
+import { useShell } from "@/context/ShellContext";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
 // Operation.result is a oneof — case "error" carries google.rpc.Status,
@@ -58,7 +66,6 @@ import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
-const POLL_CLOSED_MS = 5_000;
 const POLL_OPEN_MS = 2_000;
 
 interface OpsSummary {
@@ -70,51 +77,48 @@ interface OpsSummary {
 
 export function BackgroundOpsDrawer() {
   const [open, setOpen] = useState(false);
-  const [summary, setSummary] = useState<OpsSummary>({
-    inProgress: 0,
-    failed: 0,
-    done: 0,
-    ops: [],
-  });
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const shell = useShell();
+  const { operations } = shell;
 
-  const fetchOps = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await adminOperationClient.listOperations({
-        page: { pageSize: 50, pageToken: "" },
-        filter: "",
-      });
-      const ops = res.operations;
-      const inProgress = ops.filter((o) => !o.done && !opError(o)).length;
-      const failed = ops.filter((o) => !!opError(o)).length;
-      const done = ops.filter((o) => o.done && !opError(o)).length;
-      setSummary({ inProgress, failed, done, ops });
-      setError(null);
-    } catch (err) {
-      // OperationService may not be wired in all deployments; degrade
-      // silently. UI shows the icon dimmed when no ops can be loaded.
-      setError(err instanceof ConnectError ? err.rawMessage : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const summary = useMemo<OpsSummary>(() => {
+    const ops = operations.data ?? [];
+    return {
+      inProgress: ops.filter((o) => !o.done && !opError(o)).length,
+      failed: ops.filter((o) => !!opError(o)).length,
+      done: ops.filter((o) => o.done && !opError(o)).length,
+      ops,
+    };
+  }, [operations.data]);
 
-  // Cancel an in-flight operation, then refetch so the row reflects the new
+  // The section reports its own state: "unavailable" dims the trigger and
+  // says why, rather than showing an empty list as if nothing were running.
+  const error =
+    operations.status === "unavailable"
+      ? (operations.reason ?? "Failed to load")
+      : null;
+  const loading = operations.status === "loading";
+
+  // Cancel an in-flight operation, then refresh so the row reflects the new
   // state immediately (the poll would catch it within a tick anyway).
   const cancelOp = useCallback(
     async (name: string) => {
       await adminOperationClient.cancelOperation({ name });
-      await fetchOps();
+      await shell.refresh();
     },
-    [fetchOps],
+    [shell],
   );
 
-  // Polls only while the tab is visible: with the Sheet open this loop
-  // runs every 2s — leaving it alive in a backgrounded tab piles up
-  // pointless listOperations calls indefinitely.
-  useVisiblePolling(fetchOps, open ? POLL_OPEN_MS : POLL_CLOSED_MS);
+  // While the sheet is open the operator is watching a batch move, so ask the
+  // shell for a fresh copy faster than its own cadence. Closed, the shell's
+  // poll is enough and this ticks into a no-op.
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+  const refreshWhileOpen = useCallback(() => {
+    if (openRef.current) void shell.refresh();
+  }, [shell]);
+  useVisiblePolling(refreshWhileOpen, POLL_OPEN_MS);
 
   const triggerLabel = useMemo(() => {
     if (summary.inProgress > 0) return `${summary.inProgress} running`;
@@ -180,6 +184,17 @@ export function BackgroundOpsDrawer() {
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-14 w-full" />
               ))}
+            </div>
+          ) : error ? (
+            // Not "no operations" — unknown. An empty list here would read as
+            // "nothing is running" while a batch is very possibly running.
+            <div className="py-12 text-center text-xs">
+              <p className="text-destructive">
+                Operations are unavailable — this list is unknown, not empty.
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                {error}
+              </p>
             </div>
           ) : summary.ops.length === 0 ? (
             <p className="py-12 text-center text-xs text-muted-foreground">

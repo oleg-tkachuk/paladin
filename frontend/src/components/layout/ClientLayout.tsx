@@ -11,6 +11,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { ActionsProvider } from "@/context/ActionsContext";
 import { ScopeProvider } from "@/context/ScopeContext";
+import { ShellProvider } from "@/context/ShellContext";
 import { StatsProvider } from "@/context/StatsContext";
 import { RefreshProvider } from "@/context/RefreshContext";
 
@@ -58,26 +59,28 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     <RefreshProvider>
       <ActionsProvider>
         <ScopeProvider>
-          <StatsProvider>
-            <AuthGate publicRoutes={STANDALONE_ROUTES}>
-              <div className="flex min-h-screen w-full bg-background text-foreground">
-                <CommandPalette />
-                <KeyboardHelp />
-                <Sidebar
-                  isOpen={isSidebarOpen}
-                  onClose={() => setSidebarOpen(false)}
-                />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
-                  <main className="flex-1">
-                    <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                      {children}
-                    </div>
-                  </main>
+          <ShellProvider>
+            <StatsProvider>
+              <AuthGate publicRoutes={STANDALONE_ROUTES}>
+                <div className="flex min-h-screen w-full bg-background text-foreground">
+                  <CommandPalette />
+                  <KeyboardHelp />
+                  <Sidebar
+                    isOpen={isSidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                  />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
+                    <main className="flex-1">
+                      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                        {children}
+                      </div>
+                    </main>
+                  </div>
                 </div>
-              </div>
-            </AuthGate>
-          </StatsProvider>
+              </AuthGate>
+            </StatsProvider>
+          </ShellProvider>
         </ScopeProvider>
       </ActionsProvider>
     </RefreshProvider>

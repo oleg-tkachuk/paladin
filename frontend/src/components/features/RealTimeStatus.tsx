@@ -24,7 +24,7 @@ import {
  * clashing palette.
  */
 
-type Tone = "live" | "checking" | "degraded" | "down";
+type Tone = "live" | "checking" | "unknown" | "degraded" | "down";
 
 const TONE: Record<
   Tone,
@@ -47,6 +47,15 @@ const TONE: Record<
     dot: "bg-warning",
     text: "text-warning",
     pulse: true,
+  },
+  unknown: {
+    // Distinct from "Down": nothing reported trouble — we could not ask.
+    // Saying "Down" for an unreachable probe is the same lie in the other
+    // direction as saying "Live" for one.
+    label: "Unknown",
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    pulse: false,
   },
   down: {
     label: "Down",
@@ -74,14 +83,18 @@ function toneFor(rollup: string, loading: boolean): Tone {
 }
 
 export function RealTimeStatus() {
-  const { stats, loading } = useStats();
+  const { stats, loading, healthStatus, healthReason } = useStats();
 
   const health = stats?.health;
   const rollup =
     health?.status !== undefined
       ? componentStatusLabel(health.status).toUpperCase()
       : "";
-  const tone = toneFor(rollup, loading);
+  // The shell reports the health section separately from the health it
+  // carries: an unreachable probe greys this badge, and the page it sits on
+  // renders regardless.
+  const tone: Tone =
+    healthStatus === "unavailable" ? "unknown" : toneFor(rollup, loading);
   const meta = TONE[tone];
 
   const components = health?.components ?? [];
@@ -91,11 +104,13 @@ export function RealTimeStatus() {
   }, 0);
 
   const detail =
-    tone === "checking"
-      ? "Waiting for the first health report."
-      : `${meta.label} · ${components.length} component${
-          components.length === 1 ? "" : "s"
-        } reporting · ${maxLatency}ms worst latency`;
+    tone === "unknown"
+      ? `Health is unreachable, not failing${healthReason ? ` — ${healthReason}` : ""}.`
+      : tone === "checking"
+        ? "Waiting for the first health report."
+        : `${meta.label} · ${components.length} component${
+            components.length === 1 ? "" : "s"
+          } reporting · ${maxLatency}ms worst latency`;
 
   return (
     <Tooltip content={detail}>

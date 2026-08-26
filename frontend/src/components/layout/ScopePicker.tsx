@@ -119,7 +119,15 @@ export const ScopePicker: React.FC = () => {
   );
 
   const { buckets, fetchBuckets, loading: bucketsLoading } = useBuckets();
-  const { backends: backendRows } = useBackends();
+  // Both lists are for choosing with, and nothing chooses until the picker is
+  // open — but they used to load on mount, on every page, for every operator
+  // who never touched the picker. That was two of the ~6 chrome RPCs a page
+  // paid for before rendering anything of its own. Loaded on open, like the
+  // tenant memberships above.
+  const { backends: backendRows, fetchBackends } = useBackends(false);
+  useEffect(() => {
+    if (isPickerOpen) void fetchBackends();
+  }, [isPickerOpen, fetchBackends]);
 
   // Backends come from BackendService.ListBackends — same source the
   // /buckets and /collections pickers use, so the picker stays
@@ -130,10 +138,10 @@ export const ScopePicker: React.FC = () => {
   );
 
   // Refetch buckets whenever the backend scope changes, so the bucket
-  // picker only shows valid options.
+  // picker only shows valid options — but not before the picker is open.
   useEffect(() => {
-    fetchBuckets(backendId || undefined);
-  }, [backendId, fetchBuckets]);
+    if (isPickerOpen) void fetchBuckets(backendId || undefined);
+  }, [isPickerOpen, backendId, fetchBuckets]);
 
   // Cascade — narrow the bucket list to the active backend (defence
   // in depth: the server-side filter above already does this, but we
