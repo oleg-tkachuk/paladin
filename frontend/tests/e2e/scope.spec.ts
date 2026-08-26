@@ -22,9 +22,9 @@
  * `primary` backend. The picker needs at least one selectable
  * row for the swap test to be meaningful.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/tenants";
 import { loginAsAdmin } from "./fixtures/auth";
-import { seedBucket, seedTenantMembership } from "./fixtures/seed";
+import { seedBucket } from "./fixtures/seed";
 
 // The ScopePicker is a two-level Radix popover (ScopePicker.tsx): the main
 // trigger ("Scope picker — …") opens a popover holding two ScopeRow buttons —
@@ -115,12 +115,13 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
 
   test("switching to a second tenant re-scopes the session", async ({
     page,
+    makeMembership,
   }) => {
     // Seed BEFORE login: a fresh tenant + a users row for the SAME subject
     // inside it (per-membership roles: tenant.admin there, not
     // platform.admin). SwitchTenant needs no password in the target —
     // the switch re-mints off the caller's existing identity.
-    const membership = await seedTenantMembership();
+    const membership = await makeMembership();
     await loginAsAdmin(page);
 
     // Open the picker, then the tenant ScopeRow. Memberships load lazily

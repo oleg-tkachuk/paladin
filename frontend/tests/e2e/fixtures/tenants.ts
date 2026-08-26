@@ -2,7 +2,13 @@
  * Playwright fixtures take a callback named `use`; the React lint rule sees
  * the name and assumes a hook. There is no React here. */
 import { test as base } from "@playwright/test";
-import { seedTenant, deleteTenants, type SeededTenant } from "./seed";
+import {
+  seedTenant,
+  seedTenantMembership,
+  deleteTenants,
+  type SeededMembership,
+  type SeededTenant,
+} from "./seed";
 
 /**
  * A `test` that cleans up the tenants it created.
@@ -18,6 +24,7 @@ import { seedTenant, deleteTenants, type SeededTenant } from "./seed";
  */
 export const test = base.extend<{
   makeTenant: (opts?: { slugPrefix?: string }) => Promise<SeededTenant>;
+  makeMembership: () => Promise<SeededMembership>;
 }>({
   makeTenant: async ({}, use) => {
     const created: string[] = [];
@@ -27,6 +34,18 @@ export const test = base.extend<{
       return t;
     });
     // Best-effort: a teardown failure must not fail a test that passed.
+    if (created.length) await deleteTenants(created).catch(() => {});
+  },
+
+  // seedTenantMembership creates a whole second tenant (slug switch-*) plus a
+  // users row inside it, and had no teardown at all — 34 of them had piled up.
+  makeMembership: async ({}, use) => {
+    const created: string[] = [];
+    await use(async () => {
+      const m = await seedTenantMembership();
+      created.push(m.tenantId);
+      return m;
+    });
     if (created.length) await deleteTenants(created).catch(() => {});
   },
 });

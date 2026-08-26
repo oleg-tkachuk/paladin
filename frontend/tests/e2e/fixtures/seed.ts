@@ -1101,16 +1101,53 @@ export async function collectionCount(tenantId: string): Promise<number> {
  */
 export async function deleteTenants(tenantIds: string[]): Promise<void> {
   const client = createClient(TenantService, adminTransport());
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     tenantIds.map(async (id) => {
-      const current = await client.getTenant({ name: `tenants/${id}` });
-      await client.deleteTenant({
-        name: `tenants/${id}`,
-        resourceVersion: current.resourceVersion,
-        force: true,
-      });
+      // Soft-delete into the trash, then purge. Two calls, in that order,
+      // because each refuses the other's starting state: PurgeTenant wants a
+      // trashed tenant ("tenant is active; soft-delete it first"), and
+      // DeleteTenant with force=true is the hard-delete path, which refuses a
+      // tenant that still owns anything ("still has object keys or objects").
+      // A test's tenant almost always owns something by the time it ends, so
+      // force is the wrong door here — the trash accepts it, and the purge
+      // takes the children with it.
+      //
+      // The delete is allowed to fail: a spec that trashes its own fixture
+      // (US5 does, that being the feature) leaves nothing for it to do, and
+      // the purge afterwards is still the step that matters.
+      try {
+        const current = await client.getTenant({ name: `tenants/${id}` });
+        await client.deleteTenant({
+          name: `tenants/${id}`,
+          resourceVersion: current.resourceVersion,
+        });
+      } catch {
+        // Already trashed, or gone. The purge below decides which.
+      }
+      // Purging is the ideal end state but not always reachable: the FK from
+      // collections/objects is ON DELETE RESTRICT, so a tenant that owns data
+      // cannot be hard-deleted until the data is gone. That is the product
+      // rule, not something a fixture should route around — trashed is enough,
+      // because what hurt was live tenants filling every list and picker.
+      try {
+        await client.purgeTenant({ name: `tenants/${id}` });
+      } catch (err) {
+        const msg = String(err);
+        if (!/object keys or objects/.test(msg)) throw err;
+      }
     }),
   );
+  // A teardown that fails silently is how the cluster filled up in the first
+  // place — the fixture reported success while the rows stayed. Say so. A
+  // tenant that could only be trashed is not reported: that is the expected
+  // outcome whenever the test wrote any data.
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected") {
+      console.warn(
+        `[teardown] tenant ${tenantIds[i]} not purged: ${String(r.reason).slice(0, 200)}`,
+      );
+    }
+  }
 }
 
 /**
