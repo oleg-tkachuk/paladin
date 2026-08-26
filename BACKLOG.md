@@ -274,6 +274,15 @@ the same commit. Treat this file like a runtime invariant.
   is the signature of a single cause behind several symptoms.
   Deleting the fixtures returned the suite to 3/3 green on the tests that had
   been failing.
+
+  As of 2026-08-27 it is 141 tenants (140 trashed), 859 buckets, 624
+  collections and 399 objects, and the suite is green again — but only because
+  the truncation those numbers cause has been fixed twice since: the console
+  pages through its lists, and `filter` now selects from the table instead of
+  from one page. That is the wrong reason for a suite to be green. Every fixture
+  left behind moves the environment further from any real one, and the next
+  ceiling it crosses will be found the same way: as three unrelated-looking
+  test failures.
 - **Definition of Done:**
   - Fixtures clean up after themselves — a Playwright fixture teardown, or a
     per-run tenant prefix the suite deletes at the end. Deleting by prefix is
@@ -1105,7 +1114,37 @@ open deliberately — each notes why._
 
 ---
 
+### Sidebar badge counts are parked and silently show nothing
 
+- **Status:** Deferred (parked during the proto migration; never resumed).
+- **Reason:** `useSidebarCounts.fetchCounts` returns a zero struct without
+  calling anything — the List/Count request shapes diverged during the proto
+  migration and the hook was parked rather than removed. The sidebar therefore
+  renders no badges at all, which reads as "nothing to see" rather than "not
+  implemented", and the hook keeps a 30s poll loop alive to produce it. It was
+  found as drift: a parked comment in code with no entry here.
+- **Definition of Done:** Either the counts come back — the pushdown work gave
+  the List RPCs a `filter` that selects from the table, so a per-scope count is
+  now expressible — or the hook, its poll and the badge slots go, and the
+  sidebar stops promising a number it does not have.
+- **Blockers:** none. Wants a decision on which counts are worth a query per
+  navigation: objects and trash are scope-dependent, the rest are tenant-wide.
+
+### The console holds whole tables to search them
+
+- **Status:** Deferred (correct today, does not scale).
+- **Reason:** `useBuckets`, `useBackends` and `fetchAllCollections` follow
+  `nextPageToken` to the end and filter in the browser, because a filter used
+  to narrow only the page it was given. That is fixed — `filter` now pushes
+  into SQL — but the console still pulls everything: 859 buckets today, one
+  request per 500, on every picker that offers them.
+- **Definition of Done:** Pickers and list searches send the operator's query
+  as a `filter` and render what comes back, keeping the paging loop only where
+  a caller genuinely needs the whole set (the scope cascade's validity check).
+  The 20-page ceiling stays as the backstop it is.
+- **Blockers:** none technical. Wants a debounce and an empty-state that
+  distinguishes "no matches" from "still typing", which is the part that is
+  easy to get wrong.
 
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY
 
@@ -1942,6 +1981,11 @@ of the pipeline._
   functions — still reaches only the in-memory pass, which means a filter made
   entirely of those reads the whole table one page at a time. That is correct
   (paging continues, no row is dropped) and slow.
+  Two paths are narrower still and worth naming: `ListCollections` has a
+  hand-written branch for the (backend, bucket) browser that takes no hints at
+  all, and `operations.state` is deliberately not pushed from a filter because
+  the column is an enum and casting an arbitrary literal to it makes Postgres
+  reject the whole query rather than return no rows.
 - **Definition of Done:** Either the walk covers the rest of the CEL surface
   each schema exposes — timestamp ranges are the obvious next one, and
   `auditpushdown.go` already does them for its own schema — or the schemas
