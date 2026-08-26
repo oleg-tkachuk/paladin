@@ -98,10 +98,17 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       // Two tokens: the sections live on two planes and each plane verifies
       // its own audience. The iam one is allowed to fail on its own — that
       // costs the version and health sections, not the operations list.
-      const [adminToken, iamToken] = await Promise.all([
-        getAccessToken(AUDIENCES.admin),
-        getAccessToken(AUDIENCES.iam).catch(() => null),
-      ]);
+      //
+      // Sequential, not Promise.all. Minting a token for an audience rotates
+      // the single refresh token in the session cookie, and the BFF's dedup
+      // is keyed on (audience, token) — so two mints for DIFFERENT audiences
+      // starting from the same cookie both send the same refresh token, the
+      // loser replays a consumed one, and the backend reads that as RFC-6819
+      // reuse and revokes the whole family. That logs the operator out. Only
+      // the first poll of a cold session pays for the extra round trip; the
+      // token store caches both afterwards.
+      const adminToken = await getAccessToken(AUDIENCES.admin);
+      const iamToken = await getAccessToken(AUDIENCES.iam).catch(() => null);
       const res = await fetch("/api/shell", {
         headers: {
           Authorization: `Bearer ${adminToken}`,

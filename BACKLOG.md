@@ -1953,6 +1953,27 @@ of the pipeline._
 
 ---
 
+## Two audiences minted at once from one cookie can revoke the session
+
+- **Status:** Deferred (avoided at the call site; the trap is still there).
+- **Reason:** The session holds a single refresh token, and minting an access
+  token for any audience rotates it. The BFF dedups concurrent rotations, but
+  the key is `(audience, token)` — so two mints for *different* audiences that
+  start from the same cookie both send the same refresh token, the loser
+  replays a consumed one, and the backend correctly reads that as RFC-6819
+  reuse and revokes the whole family. The operator is logged out. Today every
+  caller that needs two audiences is careful to ask sequentially
+  (ShellContext does), which is a convention nothing enforces.
+- **Definition of Done:** The BFF serialises rotations per refresh token
+  regardless of audience — the second waiter rotates from the token the first
+  one produced — so concurrent mints for different audiences are safe by
+  construction rather than by everyone remembering.
+- **Blockers:** none technical. The dedup map is per-process, which is already
+  noted as a single-replica assumption in bff.ts; fixing this properly is a
+  good moment to decide whether that assumption stays.
+
+---
+
 ## Streaming RPCs are charged one rate-limit token at open
 
 - **Status:** Deferred (matches today's streams; revisit when one is chatty).

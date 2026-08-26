@@ -113,7 +113,15 @@ describe("ShellContext tokens", () => {
   });
 
   it("sends the admin and iam tokens on their own headers", async () => {
-    h.token.mockImplementation(async (aud: string) => `tok-${aud}`);
+    let inflight = 0;
+    let overlapped = false;
+    h.token.mockImplementation(async (aud: string) => {
+      inflight += 1;
+      if (inflight > 1) overlapped = true;
+      await Promise.resolve();
+      inflight -= 1;
+      return `tok-${aud}`;
+    });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -133,6 +141,10 @@ describe("ShellContext tokens", () => {
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    // Sequentially, never at once: two mints starting from the same cookie
+    // make the loser replay a consumed refresh token, which the backend reads
+    // as reuse and answers by revoking the family — logging the operator out.
+    expect(overlapped).toBe(false);
     const init = fetchMock.mock.calls[0][1] as {
       headers: Record<string, string>;
     };
