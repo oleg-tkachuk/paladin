@@ -258,9 +258,9 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	if err != nil {
 		return nil, "", err
 	}
-	// ListUsersArgs.Filter reached the store and was ignored there — the field
-	// existed at every layer and was applied at none. Evaluate it here, where
-	// the rows are.
+	// Authoritative pass. The store narrows the scan with whatever part of
+	// this expression SQL can express, and may only narrow: anything it does
+	// not understand is decided here, where the rows are.
 	page, err = celpkg.FilterPage(h.cel, celpkg.UserSchema, in.Filter, page, userRow)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument,

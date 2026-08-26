@@ -83,8 +83,10 @@ type ListCollectionsArgs struct {
 	// every OK platform-wide just to client-filter a handful per bucket.
 	BackendID  string
 	BucketName string
-	// Filter is a CEL expression over CollectionSchema, applied to the fetched
-	// page. The repo cursor is returned unchanged.
+	// Filter is a CEL expression over CollectionSchema. The repo pushes its
+	// SQL-expressible conjuncts into the query and the handler evaluates the
+	// whole expression over the page it gets back; the repo cursor is
+	// returned unchanged.
 	Filter string
 }
 

@@ -63,10 +63,14 @@ type ListUsersArgs struct {
 	TenantID  uuid.UUID // uuid.Nil = cross-tenant (platform-admin)
 	PageSize  int32
 	PageToken string
-	// Filter is carried for symmetry with the RPC and is NOT applied by the
-	// store — userh evaluates it against the fetched page. It stayed here
-	// unread for a long time, which is exactly how the RPC ended up accepting
-	// a filter that did nothing.
+	// Filter is the caller's CEL expression. The store pushes its
+	// SQL-expressible conjuncts into the query so the predicate selects from
+	// the table rather than from one page; userh still evaluates the whole
+	// expression over the returned rows, which stays authoritative.
+	//
+	// It sat here unread for a long time before that — the field existed at
+	// every layer and was applied at none, so the RPC accepted a filter that
+	// did nothing.
 	Filter string
 }
 

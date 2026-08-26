@@ -117,8 +117,11 @@ type ListBucketsArgs struct {
 	PageSize      int32
 	AfterBackend  string
 	AfterName     string
-	// Filter is a CEL expression over PhysicalBucketSchema, applied to the
-	// fetched page. The repo cursor is returned unchanged.
+	// Filter is a CEL expression over PhysicalBucketSchema. The repo pushes
+	// its SQL-expressible conjuncts into the query and the handler evaluates
+	// the whole expression over the page it gets back; the repo cursor is
+	// returned unchanged, so a page whose rows all fail the predicate is a
+	// legitimate empty page with a next token.
 	Filter string
 }
 

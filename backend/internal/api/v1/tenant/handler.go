@@ -244,9 +244,11 @@ type ListTenantsArgs struct {
 	AfterID        uuid.UUID
 	IncludeTrashed bool
 	OnlyTrashed    bool
-	// Filter is a CEL expression over TenantSchema. Applied to the fetched
-	// page; the repo cursor is returned unchanged so paging continues past a
-	// page whose rows all failed the predicate.
+	// Filter is a CEL expression over TenantSchema. The repo pushes its
+	// SQL-expressible conjuncts into the query and the handler evaluates the
+	// whole expression over the page it gets back; the repo cursor is
+	// returned unchanged so paging continues past a page whose rows all
+	// failed the predicate.
 	Filter string
 }
 
