@@ -914,6 +914,20 @@ export async function clearTenantDefaultBinding(
   }
 }
 
+/**
+ * Revoke an M2M token by id.
+ *
+ * Teardown. There is no delete on this service by design — an operator
+ * auditing which credentials ever existed needs the revoked rows — so a
+ * suite that mints tokens cannot remove them, only render them harmless.
+ * That is the strongest cleanup the product allows, and leaving live bearer
+ * credentials behind in a shared environment is not an option.
+ */
+export async function revokeM2MToken(id: string): Promise<void> {
+  const client = createClient(APITokenService, adminTransport());
+  await client.revoke({ id });
+}
+
 export async function m2mTokensOf(tenantId: string): Promise<
   {
     id: string;

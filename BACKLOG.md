@@ -2112,6 +2112,37 @@ of the pipeline._
 
 ---
 
+## A cross-tenant token list is empty rather than refused
+
+- **Status:** Open. Surfaced 2026-08-28 by the first cluster run of the M2M
+  page spec.
+- **Reason:** `api_tokens` carries FORCE row-level security with
+  `tenant_isolation: tenant_id = paladin_session_tenant_id()`. When the session
+  tenant is set — as it is on the cluster — a platform admin calling
+  `APITokenService.List` for ANOTHER tenant gets an empty page, not a refusal.
+  Nothing in the handler filters by caller tenant, and nothing refuses: the
+  rows are simply invisible to the query, so success and "no such thing" are
+  indistinguishable from outside.
+  The console makes this reachable in one click. `/tenants/:id/m2m-tokens`
+  renders for any tenant id, so an operator opening another tenant's page is
+  told that tenant has no service credentials. It may have several, including
+  live ones they are looking for in order to revoke.
+  A second policy, `api_tokens_preauth_read: paladin_session_tenant_id() IS
+  NULL`, makes everything visible when the session tenant is unset — which is
+  the compose stack, and is why an earlier draft of the spec passed there and
+  failed on the cluster. The stacks disagree about a security-relevant
+  behaviour, which is its own finding.
+- **Definition of Done:** a cross-tenant list either answers with the rows (if
+  a platform admin is meant to see them — then the session tenant needs
+  widening for that principal) or refuses with PermissionDenied. An empty page
+  is the one answer that cannot be acted on. Whichever way it goes, the two
+  stacks must agree, and `tests/integration/rls_test.go` is where that belongs.
+- **Blockers:** none technical. It is a decision about whether platform admin
+  is a tenant-scoped role for this resource, and the same question applies to
+  every other RLS-forced table.
+
+---
+
 ## Seven console pages have never been opened by a test
 
 - **Status:** Open. Measured 2026-08-27.

@@ -13,11 +13,23 @@
  *
  * Both are checked by listing the tenant's tokens through the admin API.
  * Nothing had opened this page before.
+ *
+ * Everything happens in the CALLER's own tenant, deliberately. api_tokens
+ * carries FORCE row-level security (`tenant_id = paladin_session_tenant_id()`),
+ * so a list for any other tenant comes back empty rather than refused — see
+ * BACKLOG, "A cross-tenant token list is empty rather than refused". An
+ * earlier draft used a fresh tenant and passed only on the compose stack,
+ * where the session tenant is unset and a second policy lets everything
+ * through. It was testing that configuration, not the product.
  */
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { m2mTokensOf, seedAdminTenantID } from "./fixtures/seed";
+import {
+  m2mTokensOf,
+  seedAdminTenantID,
+  revokeM2MToken,
+} from "./fixtures/seed";
 import { ConnectError, Code } from "@connectrpc/connect";
 
 function tokensURL(tenantId: string): string {
@@ -43,13 +55,13 @@ test.describe("M2M tokens", () => {
 
   test("creating a token mints it and reveals the secret once", async ({
     page,
-    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await makeTenant();
-    expect(await m2mTokensOf(tenant.tenantId)).toHaveLength(0);
+    const tenantId = await seedAdminTenantID();
+    const before = await m2mTokensOf(tenantId);
+    const beforeNames = new Set(before.map((t) => t.name));
 
-    await gotoSettled(page, tokensURL(tenant.tenantId));
+    await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
 
     const name = `ci-uploader-${Date.now().toString(36)}`;
@@ -66,27 +78,31 @@ test.describe("M2M tokens", () => {
 
     // The assertion the page cannot make: a credential now exists on the
     // server, under the name that was typed.
+    // The tenant is shared with the rest of the suite, so the assertion is
+    // "this token appeared", not "there is exactly one".
     await expect
-      .poll(async () => (await m2mTokensOf(tenant.tenantId)).length, {
-        timeout: 15_000,
-      })
-      .toBe(1);
-    const [minted] = await m2mTokensOf(tenant.tenantId);
-    expect(minted.name).toBe(name);
+      .poll(
+        async () => (await m2mTokensOf(tenantId)).some((t) => t.name === name),
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    const minted = (await m2mTokensOf(tenantId)).find((t) => t.name === name)!;
+    expect(beforeNames.has(name)).toBe(false);
     expect(minted.revoked).toBe(false);
     // Audience defaults to the data plane; a token pinned to nothing would be
     // a token that works everywhere.
     expect(minted.audience.length).toBeGreaterThan(0);
+
+    await revokeM2MToken(minted.id);
   });
 
   test("the reveal cannot be dismissed until the secret is acknowledged", async ({
     page,
-    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await makeTenant();
+    const tenantId = await seedAdminTenantID();
 
-    await gotoSettled(page, tokensURL(tenant.tenantId));
+    await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
     await page.locator("#m2m-name").fill(`ack-${Date.now().toString(36)}`);
     await page.getByRole("button", { name: /Create token/i }).click();
@@ -100,16 +116,19 @@ test.describe("M2M tokens", () => {
     await expect(done).toBeEnabled();
     await done.click();
     await expect(secretPanel(page)).toHaveCount(0, { timeout: 15_000 });
+
+    for (const t of await m2mTokensOf(tenantId)) {
+      if (!t.revoked) await revokeM2MToken(t.id);
+    }
   });
 
   test("revoking a token marks it revoked rather than deleting it", async ({
     page,
-    makeTenant,
   }) => {
     await loginAsAdmin(page);
-    const tenant = await makeTenant();
+    const tenantId = await seedAdminTenantID();
 
-    await gotoSettled(page, tokensURL(tenant.tenantId));
+    await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
     const name = `to-revoke-${Date.now().toString(36)}`;
     await page.locator("#m2m-name").fill(name);
@@ -130,7 +149,7 @@ test.describe("M2M tokens", () => {
     await expect
       .poll(
         async () => {
-          const tokens = await m2mTokensOf(tenant.tenantId);
+          const tokens = await m2mTokensOf(tenantId);
           return tokens.find((t) => t.name === name)?.revoked;
         },
         { timeout: 15_000 },
