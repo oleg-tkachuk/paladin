@@ -853,6 +853,22 @@ export async function quotaVersion(tenantId: string): Promise<string> {
 
 /** Read a bucket's current settings + version, for tests that assert a UI
  *  write landed (or was refused). */
+/**
+ * Read a Bucket's stored Cedar policy and its current version — the bucket
+ * twin of collectionPolicy, and for the same reason: the editor's job is to
+ * make the stored string what the operator typed, and only the server can say
+ * whether it did.
+ */
+export async function bucketPolicy(
+  backendId: string,
+  bucketId: string,
+): Promise<{ cedarPolicy: string; resourceVersion: string }> {
+  const b = await bucketAdminClient().getBucket({
+    name: `storageBackends/${backendId}/buckets/${bucketId}`,
+  });
+  return { cedarPolicy: b.cedarPolicy, resourceVersion: b.resourceVersion };
+}
+
 export async function bucketState(
   backendId: string,
   bucketId: string,

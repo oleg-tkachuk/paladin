@@ -2068,29 +2068,25 @@ of the pipeline._
 
 ---
 
-## Half the admin API's RPCs have no behavioural test
+## Two write paths are covered only up to their promote tail
 
-- **Status:** Open. Measured 2026-08-27.
-- **Reason:** Statement coverage of `./internal/api/...` is **28.8%** — 28.0%
-  from unit tests, and the two integration suites together add 0.8 points,
-  because they exercise the store, outbox and worker rather than handlers.
-  Thirteen RPC domain handlers sit at exactly 0.0% across both:
-  `CompleteObject`, `CopyObject`, `CountObjects`, `DeleteBackend`,
-  `GetAuditLogEntry`, `GetVersion`, `ListBackends`, `ListDistinctTags`,
-  `ListUsers`, `LookupObject`, `RevokeScopes`, `UpdateBackend` — and
-  `DownloadObject`, which has since been covered to 78.6% and is the reason
-  this entry names numbers rather than impressions.
-  They are not unreached: `tests/integration/rpc_surface_test.go` walks every
-  method in the protobuf descriptors and pins that each refuses an
-  unauthenticated call, a wrong-audience credential, and an empty body with a
-  typed error. That is the surface. It says nothing about what any of them
-  does when the call is valid, which is where `DownloadObject`'s missing state
-  guard would have lived had it been missing.
-- **Definition of Done:** each of the thirteen has a test that calls it with a
-  valid request and asserts on the result, not merely on the refusal. The
-  shape is in `download_handler_test.go`: happy path, the guard the handler
-  documents, and the authorization resource it hands the engine.
-- **Blockers:** none. Purely additive.
+- **Status:** Open (narrowed 2026-08-27). Was: thirteen RPC handlers at 0.0%.
+- **Reason:** The thirteen now have behavioural tests and none is at zero —
+  `./internal/api/...` went 28.0% → 32.9%. Eleven are covered end to end.
+  `CompleteObject` (59.1%) and `CopyObject` (53.3%) are not: both finish by
+  promoting through a concrete `*statemachine.Transitioner` rather than an
+  interface, so the tail — promote, the in-transaction
+  `paladin.object.uploaded` dispatch, the version record, the quota touch —
+  cannot be reached without a database. What is covered is everything before
+  it: the argument guards, the state guards, and the authorization Resource
+  each hands the engine, including the one that matters most on a copy (the
+  Resource is the DESTINATION, not the source being read).
+- **Definition of Done:** either the promote seam becomes an interface the
+  handler can be handed a fake for, or these two gain integration tests that
+  drive the real transitioner against Postgres — `tests/integration/` already
+  has the harness. The second is less invasive and tests more; the first makes
+  the handler unit-testable for everything that follows.
+- **Blockers:** none. It is a choice about where the seam belongs.
 
 ---
 
@@ -2116,25 +2112,28 @@ of the pipeline._
 
 ---
 
-## Eleven console pages have never been opened by a test
+## Nine console pages have never been opened by a test
 
 - **Status:** Open. Measured 2026-08-27.
 - **Reason:** The Playwright suite navigates 27 of the console's 44 routes.
   Two of the rest are `TabStub` placeholders (`/tenants/:id/policies`,
   the bucket `replication` tab) and are not gaps. Several more are reached by
-  clicking from a covered page. These eleven are opened by nothing:
+  clicking from a covered page. These nine are opened by nothing:
   `/upload` (474 lines — uploads in the suite go through presign in the
   fixtures, never this page), `/tenants/:id/m2m-tokens` (425),
   `/storage-backends/:id/buckets/:bucket` (428), `/tenants/:id/audit-log`
   (311), `/storage-backends/:id` (271),
   `/tenants/:id/buckets/:backend/:bucket/collections` (229),
-  `/tenants/:id/default-binding` (186),
-  `/tenants/:id/buckets/:backend/:bucket/policy` (171), `/oauth/consent`
-  (158), `/tenants/:id/collections/:name/objects/:id` (27).
-  The per-collection policy editor was the eleventh until 2026-08-27; the
-  first test ever pointed at it found that Save stored Cedar the engine
-  cannot compile and wedged the collection permanently. That is the argument
-  for the other ten, and it is not a hypothetical one.
+  `/tenants/:id/default-binding` (186), `/oauth/consent` (158),
+  `/tenants/:id/collections/:name/objects/:id` (27).
+  The two policy editors were on this list until 2026-08-27. The first test
+  ever pointed at the collection one found that Save stored Cedar the engine
+  cannot compile and wedged the collection permanently; the bucket one was
+  covered straight after, because a guard proven on one door says nothing
+  about the next. That is the argument for the other nine, and it is not a
+  hypothetical one.
+  Next by value: `/tenants/:id/m2m-tokens` mints credentials, and
+  `/tenants/:id/default-binding` decides where a tenant's objects land.
 - **Definition of Done:** each page is opened by a test that asserts on
   something the page is FOR, in the shape of collection-policy.spec.ts:
   drive the UI, then read the result back through the admin API rather than
