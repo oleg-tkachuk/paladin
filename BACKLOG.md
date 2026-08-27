@@ -1750,6 +1750,51 @@ of the pipeline._
 
 ---
 
+### The Go admin e2e suite has no gate at all — it had stopped compiling
+
+- **Status:** Open (the suite is repaired and passing; the gate is what is
+  missing). Surfaced 2026-08-27.
+- **Reason:** `backend/tests/e2e/admin_api_test.go` sits behind
+  `//go:build e2e`, and nothing anywhere runs it — `grep -rn "tags=e2e"` over
+  `.github/` and every Taskfile returns nothing. Not a workflow, not
+  `verify-all`, not even a compile check. This is the failure mode described
+  one entry up for the integration suites, and it produced the same outcome:
+  the file had drifted out of the API it tests and no longer built.
+  `DeleteTenantRequest.Force` and `Bucket.bucket_name` had been removed from
+  the proto (both fields are `reserved` now), so `go test -tags=e2e` failed at
+  compile with five errors. Underneath that sat two more drifts a compile
+  check would NOT have caught: every `Create*` is rejected without an
+  `Idempotency-Key` header, and delete on all four entities is OCC-guarded —
+  collections and buckets take `skip_version_check`, tenants and backends have
+  no bypass at all and need the current `resource_version` read first. A
+  tenant also takes two calls to remove now (`DeleteTenant` trashes,
+  `PurgeTenant` removes), where `force` used to do both.
+- **Repaired 2026-08-27:** 13/13 subtests pass against the Playwright suite's
+  compose stack, and teardown drains every row it creates:
+
+  ```
+  PALADIN_ADMIN_URL=http://localhost:8090 \
+  PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min \
+  PALADIN_JWT_ISSUER=paladin-dev \
+    go test -tags=e2e -count=1 ./tests/e2e/...
+  ```
+
+- **Definition of Done:**
+  - A compile-only gate — `go vet -tags=e2e ./...` in `verify-all`, next to
+    the `-tags=integration` step the sibling entry asks for. Seconds of local
+    runtime, and it catches exactly the failure that happened here.
+  - A run gate. `.github/workflows/e2e.yml` already builds both images and
+    boots `frontend/tests/e2e/docker-compose.test.yaml`, which publishes the
+    admin plane on `:8090` — the one thing this suite needs. A step after the
+    Playwright run, with the three env vars above, is close to free; the
+    alternative is admitting the suite is manual and saying so in its header
+    comment instead of leaving a run recipe that reads like it is wired up.
+- **Blockers:** none. The run gate depends on the e2e workflow executing on
+  Actions at all, which is the *Playwright e2e suite* entry's remaining item;
+  the compile gate does not depend on anything.
+
+---
+
 ### Playwright e2e suite wired into CI
 
 - **Status:** Workflow AUTHORED (2026-07-02), storage reworked into the

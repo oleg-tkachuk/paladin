@@ -146,8 +146,33 @@ func (f *fixture) collectionsAsTenant(t *testing.T, tenantID string) paladinadmi
 	return paladinadminv1connect.NewCollectionServiceClient(hc, f.adminURL)
 }
 
-// authedTransport injects the bearer JWT on every request without
-// requiring callers to thread it through each Connect call site.
+// tenantVersion reads the tenant's current resource_version for a
+// teardown that has no bypass flag to fall back on. Returns "" when the
+// row is already gone — the caller reads that as "nothing to delete"
+// rather than as a failure, because teardown runs after partial runs too.
+func (f *fixture) tenantVersion(tenantID string) string {
+	got, err := f.tenants.GetTenant(f.ctx, connect.NewRequest(
+		&pb.GetTenantRequest{Name: "tenants/" + tenantID}))
+	if err != nil {
+		return ""
+	}
+	return got.Msg.GetResourceVersion()
+}
+
+// backendVersion is tenantVersion for storage backends — same reason,
+// same contract on the empty return.
+func (f *fixture) backendVersion(backendID string) string {
+	got, err := f.backends.GetBackend(f.ctx, connect.NewRequest(
+		&pb.GetBackendRequest{Name: "storageBackends/" + backendID}))
+	if err != nil {
+		return ""
+	}
+	return got.Msg.GetResourceVersion()
+}
+
+// authedTransport injects the bearer JWT on every request, and an
+// Idempotency-Key on the requests the server refuses without one,
+// so neither has to be threaded through each Connect call site.
 type authedTransport struct {
 	jwt  string
 	base http.RoundTripper
@@ -155,7 +180,30 @@ type authedTransport struct {
 
 func (t *authedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Authorization", "Bearer "+t.jwt)
+	// A fresh key per request, not one per run: every call here is its
+	// own logical operation, and a shared key would make the
+	// duplicate-slug subtest replay the first CreateTenant's response
+	// instead of being rejected — the suite would pass by not testing
+	// what it says it tests.
+	if requiresIdempotencyKey(req.URL.Path) {
+		req.Header.Set("Idempotency-Key", uuid.NewString())
+	}
 	return t.base.RoundTrip(req)
+}
+
+// requiresIdempotencyKey mirrors middleware.isMutationMethod
+// (internal/middleware/idempotency.go): with RequireOnCreate on — and
+// it is on in every config this suite runs against — Create* and Issue*
+// are rejected outright when the key is absent. The Connect procedure
+// path ends in the RPC name, which is all either side keys off.
+func requiresIdempotencyKey(procedure string) bool {
+	idx := strings.LastIndex(procedure, "/")
+	if idx < 0 || idx == len(procedure)-1 {
+		return false
+	}
+	method := procedure[idx+1:]
+	return strings.HasPrefix(method, "Create") ||
+		strings.HasPrefix(method, "Issue")
 }
 
 // randomNonce returns `n` bytes of random hex. Used to scope test
@@ -213,7 +261,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 	f := newFixture(t)
 
 	backendID := "e2e-" + f.nonce
-	bucketName := "paladin-e2e-" + f.nonce
+	bucketID := "paladin-e2e-" + f.nonce
 	tenantSlug := "e2e-" + f.nonce
 	// Multi-segment per the schema baseline (001_initial_schema.sql). Every segment must satisfy the
 	// per-segment kebab-case CHECK (`^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$`)
@@ -231,27 +279,50 @@ func TestAdminAPI_E2E(t *testing.T) {
 	// drains state. The deferred t.Cleanup pattern would scatter
 	// the same intent across subtests; consolidating here keeps the
 	// teardown auditable in one place.
+	//
+	// Every delete on this API is now OCC-guarded. Collections and
+	// buckets expose skip_version_check, and teardown is precisely
+	// what that flag is for — there is no concurrent writer here whose
+	// change is worth preserving. Tenants and backends have no bypass
+	// at all (both proto files reserve the old `force` field), so those
+	// two read the current version first; an empty resource_version is
+	// refused by the schema rather than treated as "no guard".
 	t.Cleanup(func() {
 		if createdTenantID != "" {
 			oks := f.collectionsAsTenant(t, createdTenantID)
 			_, _ = oks.DeleteCollection(f.ctx,
 				connect.NewRequest(&pb.DeleteCollectionRequest{
-					Name: "tenants/" + createdTenantID + "/collections/" + collectionName,
+					Name:             "tenants/" + createdTenantID + "/collections/" + collectionName,
+					SkipVersionCheck: true,
 				}))
-			_, _ = f.tenants.DeleteTenant(f.ctx,
-				connect.NewRequest(&pb.DeleteTenantRequest{
-					Name:  "tenants/" + createdTenantID,
-					Force: true,
+			// DeleteTenant moves the row to the trash; PurgeTenant is
+			// what takes it out. `force` used to collapse the two into
+			// one call and no longer exists, so draining this run's
+			// state takes both.
+			if rv := f.tenantVersion(createdTenantID); rv != "" {
+				_, _ = f.tenants.DeleteTenant(f.ctx,
+					connect.NewRequest(&pb.DeleteTenantRequest{
+						Name:            "tenants/" + createdTenantID,
+						ResourceVersion: rv,
+					}))
+			}
+			_, _ = f.tenants.PurgeTenant(f.ctx,
+				connect.NewRequest(&pb.PurgeTenantRequest{
+					Name: "tenants/" + createdTenantID,
 				}))
 		}
 		_, _ = f.buckets.DeleteBucket(f.ctx,
 			connect.NewRequest(&pb.DeleteBucketRequest{
-				Name: bucketResourceName(backendID, bucketName),
+				Name:             bucketResourceName(backendID, bucketID),
+				SkipVersionCheck: true,
 			}))
-		_, _ = f.backends.DeleteBackend(f.ctx,
-			connect.NewRequest(&pb.DeleteBackendRequest{
-				Name: "storageBackends/" + backendID,
-			}))
+		if rv := f.backendVersion(backendID); rv != "" {
+			_, _ = f.backends.DeleteBackend(f.ctx,
+				connect.NewRequest(&pb.DeleteBackendRequest{
+					Name:            "storageBackends/" + backendID,
+					ResourceVersion: rv,
+				}))
+		}
 	})
 
 	// ─── Backend ─────────────────────────────────────────────────
@@ -302,10 +373,10 @@ func TestAdminAPI_E2E(t *testing.T) {
 	t.Run("BucketService_CreateAndGet", func(t *testing.T) {
 		got, err := f.buckets.CreateBucket(f.ctx, connect.NewRequest(
 			&pb.CreateBucketRequest{
-				Parent:     "storageBackends/" + backendID,
-				BucketName: bucketName,
+				Parent:   "storageBackends/" + backendID,
+				BucketId: bucketID,
 				Bucket: &pb.Bucket{
-					BucketName:  bucketName,
+					BucketId:    bucketID,
 					DisplayName: "E2E Bucket " + f.nonce,
 					Region:      "e2e",
 				},
@@ -313,14 +384,14 @@ func TestAdminAPI_E2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateBucket: %v", err)
 		}
-		if got.Msg.GetBucketName() != bucketName {
-			t.Errorf("BucketName: got %q want %q",
-				got.Msg.GetBucketName(), bucketName)
+		if got.Msg.GetBucketId() != bucketID {
+			t.Errorf("BucketId: got %q want %q",
+				got.Msg.GetBucketId(), bucketID)
 		}
 
 		read, err := f.buckets.GetBucket(f.ctx, connect.NewRequest(
 			&pb.GetBucketRequest{
-				Name: bucketResourceName(backendID, bucketName),
+				Name: bucketResourceName(backendID, bucketID),
 			}))
 		if err != nil {
 			t.Fatalf("GetBucket: %v", err)
@@ -339,7 +410,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 					Slug:        tenantSlug,
 					DisplayName: "E2E Tenant " + f.nonce,
 				},
-				DefaultBucket: bucketResourceName(backendID, bucketName),
+				DefaultBucket: bucketResourceName(backendID, bucketID),
 			}))
 		if err != nil {
 			t.Fatalf("CreateTenant: %v", err)
@@ -362,7 +433,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 		_, err := f.tenants.CreateTenant(f.ctx, connect.NewRequest(
 			&pb.CreateTenantRequest{
 				Tenant:        &pb.Tenant{Slug: "" /* missing */},
-				DefaultBucket: bucketResourceName(backendID, bucketName),
+				DefaultBucket: bucketResourceName(backendID, bucketID),
 			}))
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
@@ -374,7 +445,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 					Slug:        tenantSlug, // already taken
 					DisplayName: "Different " + f.nonce,
 				},
-				DefaultBucket: bucketResourceName(backendID, bucketName),
+				DefaultBucket: bucketResourceName(backendID, bucketID),
 			}))
 		assertCode(t, err, connect.CodeAlreadyExists)
 	})
@@ -456,7 +527,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 				CollectionResource: &pb.Collection{
 					Collection:  collectionName,
 					DisplayName: "E2E OK " + f.nonce,
-					Bucket:      bucketResourceName(backendID, bucketName),
+					Bucket:      bucketResourceName(backendID, bucketID),
 				},
 			}))
 		if err != nil {
@@ -486,10 +557,10 @@ func TestAdminAPI_E2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetCollection: %v", err)
 		}
-		if read.Msg.GetBucket() != bucketResourceName(backendID, bucketName) {
+		if read.Msg.GetBucket() != bucketResourceName(backendID, bucketID) {
 			t.Errorf("Bucket: got %q want %q",
 				read.Msg.GetBucket(),
-				bucketResourceName(backendID, bucketName))
+				bucketResourceName(backendID, bucketID))
 		}
 
 		list, err := oks.ListCollections(f.ctx, connect.NewRequest(
