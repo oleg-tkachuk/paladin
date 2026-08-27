@@ -57,6 +57,10 @@ tasks:
     desc: Test + lint + build both halves. CI's default green-bar gate.
     cmds:
       - task: backend:test
+      # Seconds, no Docker: the tagged suites are excluded from `go test ./...`
+      # by their build tag, so this is the only thing in the local gate that
+      # can notice one has stopped compiling. Both of them had.
+      - task: backend:test:tagged:compile
       - task: backend:test:lint
       - task: frontend:lint
       - task: frontend:node:build

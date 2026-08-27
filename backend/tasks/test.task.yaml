@@ -15,6 +15,26 @@ tasks:
     cmds:
       - go test ./...
 
+  tagged:compile:
+    desc: "Compile-check the build-tagged suites (no Docker, no cluster, seconds)"
+    cmds:
+      # The `integration` and `e2e` suites are invisible to `go build ./...`,
+      # `go vet ./...` and `go test ./...` — a build tag excludes them from all
+      # three. So they rot in complete silence, and they have, twice:
+      #
+      #   - tests/e2e/ stopped compiling when DeleteTenantRequest.Force and
+      #     Bucket.bucket_name were removed (found 2026-08-27, five errors).
+      #   - internal/integration/ stopped compiling when the operations widget
+      #     fix (c14798c3) added newestFirst to OperationRepo.List (found the
+      #     same day, in the same sweep, one error).
+      #
+      # Neither needed a database, a stack or a browser to catch — only a
+      # compiler that was allowed to look. This is that, and it is why it runs
+      # in verify-all while the suites themselves (Docker, ~11 min) do not.
+      # `go vet` rather than `go build`: same compile, plus the vet checks.
+      - go vet -tags=integration ./...
+      - go vet -tags=e2e ./...
+
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
     cmds:

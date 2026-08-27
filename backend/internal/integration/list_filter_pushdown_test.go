@@ -149,7 +149,12 @@ func TestPushdown_Operations(t *testing.T) {
 			uuid.New(), tenantID, typ)
 	}
 
-	got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, 2, `type == "BatchUpdateTags"`)
+	// newestFirst=false: the assertion below reasons about UUIDv7 ordering
+	// ("it sorts last"), which is the ascending page this test was written
+	// against. The parameter arrived with the operations-widget fix
+	// (c14798c3) and this call site was never recompiled — the suite is
+	// build-tagged, so nothing noticed.
+	got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, 2, `type == "BatchUpdateTags"`, false)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
