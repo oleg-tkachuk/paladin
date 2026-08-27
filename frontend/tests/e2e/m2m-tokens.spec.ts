@@ -17,13 +17,30 @@
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { m2mTokensOf } from "./fixtures/seed";
+import { m2mTokensOf, seedAdminTenantID } from "./fixtures/seed";
+import { ConnectError, Code } from "@connectrpc/connect";
 
 function tokensURL(tenantId: string): string {
   return `/tenants/${tenantId}/m2m-tokens`;
 }
 
 test.describe("M2M tokens", () => {
+  // api_token is an OPTIONAL subsystem, off in the shipped chart and in
+  // backend/configs/compose.yaml. The e2e compose stack turns it on so this
+  // page can be exercised at all; a cluster generally has not. Skip rather
+  // than fail there — the page cannot misbehave in a deployment that does not
+  // serve it, and a red suite would say something untrue about the build.
+  test.beforeEach(async () => {
+    try {
+      await m2mTokensOf(await seedAdminTenantID());
+    } catch (err) {
+      if (err instanceof ConnectError && err.code === Code.Unimplemented) {
+        test.skip(true, "api_token subsystem is disabled in this deployment");
+      }
+      throw err;
+    }
+  });
+
   test("creating a token mints it and reveals the secret once", async ({
     page,
     makeTenant,
