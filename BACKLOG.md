@@ -2044,6 +2044,107 @@ of the pipeline._
 
 ---
 
+## A policy that does not compile still wedges the row it is on
+
+- **Status:** Open (the door is shut; the room is not). Surfaced 2026-08-27.
+- **Reason:** Unparseable Cedar can no longer be WRITTEN — every policy-
+  accepting shim now runs `requireCompilablePolicy`. But the reason that bug
+  was severe rather than cosmetic is untouched: an entity whose stored policy
+  fails to parse cannot be read or deleted either. `GetCollection`,
+  `DeleteCollection` and every authorization decision all route through the
+  engine, so all three answer `Internal: cedar: compile policy: parser error`,
+  and the entity is out of reach of the API that created it — its bucket too,
+  via `collections_bucket_id_fkey`. Observed exactly that way while writing
+  collection-policy.spec.ts: teardown could remove neither.
+  Nothing in the product writes such a row today. A direct database write, a
+  restored backup, or an engine that tightens its grammar in a future version
+  all still can, and the operator's only recovery is SQL.
+- **Definition of Done:** reading and deleting an entity do not depend on its
+  policy compiling. A read can return the text with a diagnostic attached
+  instead of failing; a delete has no business consulting a policy that is
+  being removed. Either way, an entity that is broken must remain removable.
+- **Blockers:** none technical. It is a decision about where the engine sits
+  in the read path, which is why it is not folded into the write-side fix.
+
+---
+
+## Half the admin API's RPCs have no behavioural test
+
+- **Status:** Open. Measured 2026-08-27.
+- **Reason:** Statement coverage of `./internal/api/...` is **28.8%** — 28.0%
+  from unit tests, and the two integration suites together add 0.8 points,
+  because they exercise the store, outbox and worker rather than handlers.
+  Thirteen RPC domain handlers sit at exactly 0.0% across both:
+  `CompleteObject`, `CopyObject`, `CountObjects`, `DeleteBackend`,
+  `GetAuditLogEntry`, `GetVersion`, `ListBackends`, `ListDistinctTags`,
+  `ListUsers`, `LookupObject`, `RevokeScopes`, `UpdateBackend` — and
+  `DownloadObject`, which has since been covered to 78.6% and is the reason
+  this entry names numbers rather than impressions.
+  They are not unreached: `tests/integration/rpc_surface_test.go` walks every
+  method in the protobuf descriptors and pins that each refuses an
+  unauthenticated call, a wrong-audience credential, and an empty body with a
+  typed error. That is the surface. It says nothing about what any of them
+  does when the call is valid, which is where `DownloadObject`'s missing state
+  guard would have lived had it been missing.
+- **Definition of Done:** each of the thirteen has a test that calls it with a
+  valid request and asserts on the result, not merely on the refusal. The
+  shape is in `download_handler_test.go`: happy path, the guard the handler
+  documents, and the authorization resource it hands the engine.
+- **Blockers:** none. Purely additive.
+
+---
+
+## The RPC surface gate skips in CI, so it gates nothing there
+
+- **Status:** Open. Surfaced 2026-08-27.
+- **Reason:** `tests/integration/rpc_surface_test.go` is the only thing that
+  covers all 142 RPC declarations at once, and it reaches them over HTTP:
+  `127.0.0.1:8090` / `:8080` / `:8085`. When no stack answers it calls
+  `t.Skip`. `.github/workflows/integration.yml` starts a testcontainers
+  Postgres and nothing else — no `docker compose`, no `paladin-core` — so in CI
+  it has always skipped, silently, and a skipped gate reads exactly like a
+  passing one. It runs locally only for someone who happens to have the e2e
+  compose stack up, which is how it was found.
+  The test anticipated this: `PALADIN_RPC_SURFACE=1` turns the skip into a
+  failure. Nothing sets it.
+- **Definition of Done:** the integration job brings up
+  `frontend/tests/e2e/docker-compose.test.yaml` (it already publishes all
+  three planes on those ports) and sets `PALADIN_RPC_SURFACE=1`, so an
+  unreachable stack fails the job instead of quietly excusing it.
+- **Blockers:** depends on the integration workflow running on Actions at all
+  — see *Branch protection*.
+
+---
+
+## Eleven console pages have never been opened by a test
+
+- **Status:** Open. Measured 2026-08-27.
+- **Reason:** The Playwright suite navigates 27 of the console's 44 routes.
+  Two of the rest are `TabStub` placeholders (`/tenants/:id/policies`,
+  the bucket `replication` tab) and are not gaps. Several more are reached by
+  clicking from a covered page. These eleven are opened by nothing:
+  `/upload` (474 lines — uploads in the suite go through presign in the
+  fixtures, never this page), `/tenants/:id/m2m-tokens` (425),
+  `/storage-backends/:id/buckets/:bucket` (428), `/tenants/:id/audit-log`
+  (311), `/storage-backends/:id` (271),
+  `/tenants/:id/buckets/:backend/:bucket/collections` (229),
+  `/tenants/:id/default-binding` (186),
+  `/tenants/:id/buckets/:backend/:bucket/policy` (171), `/oauth/consent`
+  (158), `/tenants/:id/collections/:name/objects/:id` (27).
+  The per-collection policy editor was the eleventh until 2026-08-27; the
+  first test ever pointed at it found that Save stored Cedar the engine
+  cannot compile and wedged the collection permanently. That is the argument
+  for the other ten, and it is not a hypothetical one.
+- **Definition of Done:** each page is opened by a test that asserts on
+  something the page is FOR, in the shape of collection-policy.spec.ts:
+  drive the UI, then read the result back through the admin API rather than
+  trusting a toast. Highest value first — the bucket policy editor is the
+  same write path as the collection one, and `/tenants/:id/m2m-tokens` mints
+  credentials.
+- **Blockers:** none. Purely additive.
+
+---
+
 ## The BFF's rotation bookkeeping is per-process
 
 - **Status:** Deferred (single-replica assumption, already documented).
