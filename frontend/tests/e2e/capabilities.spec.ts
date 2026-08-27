@@ -21,7 +21,7 @@
  * the Idempotency-Key value — the UI form's auto-injected
  * UUID is opaque to the test.
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 import { seedCapability } from "./fixtures/seed";

@@ -10,7 +10,7 @@
  * Getting that backwards either loses a tenant's accrued spend or refuses
  * charges it should still accept.
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { setTenantBudget, tenantBudget } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";

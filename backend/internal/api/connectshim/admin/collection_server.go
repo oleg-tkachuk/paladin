@@ -138,7 +138,10 @@ func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Re
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("resource_version is required; pass force=true to bypass"))
 	}
-	if err := s.H.DeleteCollection(ctx, ref.Collection, rv); err != nil {
+	// ref.TenantID, not the caller's: a C-shape name says which tenant's
+	// collection this is, and Get and List have always read it. Delete used to
+	// drop it on the floor and operate on the caller's own tenant instead.
+	if err := s.H.DeleteCollection(ctx, ref.TenantID, ref.Collection, rv); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteCollectionResponse{}), nil
@@ -210,7 +213,7 @@ func (s *CollectionServer) BindCollectionToBucket(ctx context.Context, req *conn
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.BindCollectionToBucket(ctx, ref.Collection, m.GetBucket(), rv)
+	out, err := s.H.BindCollectionToBucket(ctx, ref.TenantID, ref.Collection, m.GetBucket(), rv)
 	if err != nil {
 		return nil, err
 	}

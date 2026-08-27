@@ -22,9 +22,8 @@
  * `primary` backend. The picker needs at least one selectable
  * row for the swap test to be meaningful.
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
-import { seedBucket } from "./fixtures/seed";
 
 // The ScopePicker is a two-level Radix popover (ScopePicker.tsx): the main
 // trigger ("Scope picker — …") opens a popover holding two ScopeRow buttons —
@@ -48,10 +47,13 @@ async function selectBucket(
 }
 
 test.describe("US2 — Tenant + backend + bucket scope switching", () => {
-  test("picker opens with backend + bucket switchers", async ({ page }) => {
+  test("picker opens with backend + bucket switchers", async ({
+    page,
+    makeBucket,
+  }) => {
     // Seed BEFORE login so the bucket exists when the picker's first
     // ListBuckets fetch runs (seeding after login races that fetch).
-    await seedBucket();
+    await makeBucket();
     await loginAsAdmin(page);
 
     // The picker trigger has an aria-label starting with
@@ -75,8 +77,11 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
     ).toBeVisible();
   });
 
-  test("selecting a bucket updates the topbar breadcrumb", async ({ page }) => {
-    const bucket = await seedBucket();
+  test("selecting a bucket updates the topbar breadcrumb", async ({
+    page,
+    makeBucket,
+  }) => {
+    const bucket = await makeBucket();
     await loginAsAdmin(page);
 
     await selectBucket(page, bucket.bucketId);
@@ -89,8 +94,8 @@ test.describe("US2 — Tenant + backend + bucket scope switching", () => {
     ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketId}`));
   });
 
-  test("reload preserves the selected scope", async ({ page }) => {
-    const bucket = await seedBucket();
+  test("reload preserves the selected scope", async ({ page, makeBucket }) => {
+    const bucket = await makeBucket();
     await loginAsAdmin(page);
 
     await selectBucket(page, bucket.bucketId);

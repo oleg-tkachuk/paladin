@@ -7,7 +7,7 @@
  * which is the same shape as the lifecycle rule editor and the same failure
  * mode — a form that looks fine carrying an expression the server rejects.
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { seedSubscription, subscriptionCount } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";

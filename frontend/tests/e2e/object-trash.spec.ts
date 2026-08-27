@@ -10,11 +10,10 @@
  * These run against the object trash (per-collection), not the tenant trash
  * covered by trash.spec.ts.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type MakeCollection } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
-  seedCollection,
   seedObject,
   seedPhysicalBucket,
   softDeleteObject,
@@ -23,10 +22,10 @@ import { gotoSettled } from "./fixtures/navigate";
 
 /** Tenant + physical bucket + collection — the same scope
  *  object-lifecycle.spec.ts builds, since these tests also move real bytes. */
-async function seedScope() {
+async function seedScope(makeCollection: MakeCollection) {
   const tenantId = await seedAdminTenantID();
   const bucket = await seedPhysicalBucket();
-  const collection = await seedCollection({ tenantId, bucket });
+  const collection = await makeCollection({ tenantId, bucket });
   return { tenantId, collection: collection.collection };
 }
 
@@ -39,9 +38,10 @@ function trashURL(tenantId: string, collection: string): string {
 test.describe("Object trash — version + restore", () => {
   test("a soft-deleted object shows its resource version in the listing", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
-    const { tenantId, collection } = await seedScope();
+    const { tenantId, collection } = await seedScope(makeCollection);
     const obj = await seedObject({ tenantId, collection });
     await softDeleteObject(obj.name);
 
@@ -62,9 +62,10 @@ test.describe("Object trash — version + restore", () => {
 
   test("restore returns the object to its collection and empties the trash", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
-    const { tenantId, collection } = await seedScope();
+    const { tenantId, collection } = await seedScope(makeCollection);
     const obj = await seedObject({ tenantId, collection });
     await softDeleteObject(obj.name);
 
@@ -85,9 +86,10 @@ test.describe("Object trash — version + restore", () => {
 
   test("an empty trash says so rather than rendering a bare table", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
-    const { tenantId, collection } = await seedScope();
+    const { tenantId, collection } = await seedScope(makeCollection);
 
     await gotoSettled(page, trashURL(tenantId, collection));
 

@@ -429,13 +429,13 @@ func TestDeleteCollection(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAll())
-		err := h.DeleteCollection(context.Background(), "k", 0)
+		err := h.DeleteCollection(context.Background(), uuid.Nil, "k", 0)
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeAuthorizer{decision: cedar.DecisionDeny})
-		err := h.DeleteCollection(authedCtx(tid), "k", 0)
+		err := h.DeleteCollection(authedCtx(tid), uuid.Nil, "k", 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
@@ -447,7 +447,7 @@ func TestDeleteCollection(t *testing.T) {
 			deleteTxFn: func(context.Context, uuid.UUID, string, int64) error { return ErrVersionMismatch },
 		}
 		h := NewHandler(fr, allowAll())
-		err := h.DeleteCollection(authedCtx(tid), "k", 2)
+		err := h.DeleteCollection(authedCtx(tid), uuid.Nil, "k", 2)
 		wantCode(t, err, connect.CodeAborted)
 	})
 
@@ -459,7 +459,7 @@ func TestDeleteCollection(t *testing.T) {
 			deleteTxFn: func(context.Context, uuid.UUID, string, int64) error { return nil },
 		}
 		h := NewHandler(fr, allowAll())
-		if err := h.DeleteCollection(authedCtx(tid), "assets", 5); err != nil {
+		if err := h.DeleteCollection(authedCtx(tid), uuid.Nil, "assets", 5); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if fr.lastDelete.tenantID != tid || fr.lastDelete.collection != "assets" || fr.lastDelete.version != 5 {
@@ -473,7 +473,7 @@ func TestDeleteCollection(t *testing.T) {
 			deleteTxFn: func(context.Context, uuid.UUID, string, int64) error { return nil },
 		}
 		h := NewHandler(fr, allowAll())
-		if err := h.DeleteCollection(authedCtx(tid), "assets", 1); err != nil {
+		if err := h.DeleteCollection(authedCtx(tid), uuid.Nil, "assets", 1); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if fr.lastDelete.collection != "assets" {
@@ -591,19 +591,19 @@ func TestBindCollectionToBucket(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAll())
-		_, err := h.BindCollectionToBucket(context.Background(), "k", validBucket, 0)
+		_, err := h.BindCollectionToBucket(context.Background(), uuid.Nil, "k", validBucket, 0)
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("malformed bucket name → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAll())
-		_, err := h.BindCollectionToBucket(authedCtx(tid), "k", "buckets/only", 0)
+		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil, "k", "buckets/only", 0)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeAuthorizer{decision: cedar.DecisionDeny})
-		_, err := h.BindCollectionToBucket(authedCtx(tid), "k", validBucket, 0)
+		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil, "k", validBucket, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
@@ -612,7 +612,7 @@ func TestBindCollectionToBucket(t *testing.T) {
 			return ErrVersionMismatch
 		}}
 		h := NewHandler(fr, allowAll())
-		_, err := h.BindCollectionToBucket(authedCtx(tid), "k", validBucket, 4)
+		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil, "k", validBucket, 4)
 		wantCode(t, err, connect.CodeAborted)
 	})
 
@@ -621,7 +621,7 @@ func TestBindCollectionToBucket(t *testing.T) {
 			return errors.New("bucket tenancy violation")
 		}}
 		h := NewHandler(fr, allowAll())
-		_, err := h.BindCollectionToBucket(authedCtx(tid), "k", validBucket, 0)
+		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil, "k", validBucket, 0)
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
@@ -631,7 +631,7 @@ func TestBindCollectionToBucket(t *testing.T) {
 			getFn:    func(context.Context, uuid.UUID, string) (Collection, error) { return Collection{}, errors.New("gone") },
 		}
 		h := NewHandler(fr, allowAll())
-		_, err := h.BindCollectionToBucket(authedCtx(tid), "k", validBucket, 0)
+		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil, "k", validBucket, 0)
 		wantCode(t, err, connect.CodeInternal)
 	})
 
@@ -644,7 +644,7 @@ func TestBindCollectionToBucket(t *testing.T) {
 		}
 		authz := allowAll()
 		h := NewHandler(fr, authz)
-		got, err := h.BindCollectionToBucket(authedCtx(tid), "assets", validBucket, 9)
+		got, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil, "assets", validBucket, 9)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -713,5 +713,69 @@ func TestEventDispatch(t *testing.T) {
 
 		_, err := h.CreateCollection(authedCtx(tid), CreateCollectionArgs{Collection: "assets", BackendID: "aws-eu"})
 		wantCode(t, err, connect.CodeInternal)
+	})
+}
+
+// A C-shape name says which tenant's collection it is. Delete used to ignore
+// that and operate on the caller's own tenant: for a platform admin naming
+// another tenant's collection, the call addressed a row that exists and acted
+// on a different one — or, with nothing by that name in the caller's tenant,
+// reported a version mismatch, which says the row moved rather than that it
+// was never looked at. The e2e fixture teardown found it that way.
+func TestDeleteCollectionHonoursTheTenantInTheName(t *testing.T) {
+	caller := uuid.New()
+	other := uuid.New()
+
+	t.Run("platform admin deletes the named tenant's collection", func(t *testing.T) {
+		var sawTenant uuid.UUID
+		fr := &fakeRepo{
+			getFn: func(_ context.Context, tenant uuid.UUID, key string) (Collection, error) {
+				return fullKey(tenant, key), nil
+			},
+			deleteTxFn: func(_ context.Context, tenant uuid.UUID, _ string, _ int64) error {
+				sawTenant = tenant
+				return nil
+			},
+		}
+		h := NewHandler(fr, allowAll())
+		if err := h.DeleteCollection(adminCtx(caller), other, "assets", 1); err != nil {
+			t.Fatalf("delete: %v", err)
+		}
+		if sawTenant != other {
+			t.Errorf("deleted in tenant %s, want the one named in the request (%s)",
+				sawTenant, other)
+		}
+	})
+
+	t.Run("a tenant admin cannot reach across", func(t *testing.T) {
+		fr := &fakeRepo{
+			deleteTxFn: func(context.Context, uuid.UUID, string, int64) error {
+				t.Error("delete ran for a caller with no cross-tenant right")
+				return nil
+			},
+		}
+		h := NewHandler(fr, allowAll())
+		err := h.DeleteCollection(authedCtx(caller), other, "assets", 1)
+		wantCode(t, err, connect.CodePermissionDenied)
+	})
+
+	t.Run("naming your own tenant is not a cross-tenant call", func(t *testing.T) {
+		var sawTenant uuid.UUID
+		fr := &fakeRepo{
+			getFn: func(_ context.Context, tenant uuid.UUID, key string) (Collection, error) {
+				return fullKey(tenant, key), nil
+			},
+			deleteTxFn: func(_ context.Context, tenant uuid.UUID, _ string, _ int64) error {
+				sawTenant = tenant
+				return nil
+			},
+		}
+		h := NewHandler(fr, allowAll())
+		if err := h.DeleteCollection(authedCtx(caller), caller, "assets", 1); err != nil {
+			t.Fatalf("delete: %v", err)
+		}
+		if sawTenant != caller {
+			t.Errorf("deleted in tenant %s, want %s", sawTenant, caller)
+		}
 	})
 }

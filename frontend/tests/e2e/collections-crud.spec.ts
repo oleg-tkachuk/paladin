@@ -17,12 +17,11 @@
  * buckets.spec.ts covers navigating to a Collection. This covers making and
  * removing them.
  */
-import { test, expect } from "./fixtures/backends";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
   seedPhysicalBucket,
-  seedCollection,
   collectionCount,
 } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
@@ -143,11 +142,11 @@ test.describe("Collections CRUD", () => {
     await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
   });
 
-  test("deleting a Collection removes it", async ({ page }) => {
+  test("deleting a Collection removes it", async ({ page, makeCollection }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
     const bucket = await seedPhysicalBucket();
-    const collection = await seedCollection({ tenantId, bucket });
+    const collection = await makeCollection({ tenantId, bucket });
     const before = await collectionCount(tenantId);
 
     await gotoSettled(page, collectionsURL(tenantId));

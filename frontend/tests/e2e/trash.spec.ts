@@ -10,7 +10,7 @@
  * flows are driven through the UI to exercise the dialog + button
  * affordances.
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 

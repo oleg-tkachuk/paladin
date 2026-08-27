@@ -1171,6 +1171,110 @@ export async function setTenantBudget(args: {
 }
 
 /**
+ * Permanently remove every object a collection holds.
+ *
+ * `objects.collection_id` is ON DELETE RESTRICT, so this is not an
+ * optimisation — a collection that holds anything cannot be deleted at all.
+ * Permanent, because a soft delete leaves the row in place and the FK does not
+ * care that it is trashed.
+ *
+ * An object under a COMPLIANCE lock or a legal hold cannot be removed by
+ * anyone, which is the product rule working; the collection then survives and
+ * teardown says so rather than pretending.
+ */
+async function purgeObjectsIn(item: SeededCollection): Promise<void> {
+  const client = createClient(ObjectService, dataTransport());
+  const parent = `tenants/${item.tenantId}/collections/${item.collection}`;
+  // A page at a time, deleting as we go: the cursor is over rows we are
+  // removing, so re-reading the first page until it comes back empty is both
+  // simpler and correct, where paging forward would skip.
+  for (let round = 0; round < 20; round++) {
+    const page = await client.listObjects({
+      parent,
+      page: { pageSize: 200, pageToken: "" },
+    });
+    if (!page.objects.length) return;
+    await Promise.allSettled(
+      page.objects.map((o) =>
+        client.deleteObject({
+          name: o.name,
+          resourceVersion: o.resourceVersion,
+          permanent: true,
+          // Only honoured against a GOVERNANCE window, and only because the
+          // fixture runs as platform.admin. COMPLIANCE and legal hold stay
+          // absolute, as they should.
+          bypassGovernanceRetention: true,
+        }),
+      ),
+    );
+  }
+}
+
+/**
+ * Delete collections, and the objects that keep them alive.
+ *
+ * Best-effort per collection: one that still holds an undeletable object
+ * refuses, and a teardown must not fail a test that passed. What it must not
+ * do is fail silently — that is how the cluster filled up while every run
+ * reported success.
+ */
+export async function deleteCollections(
+  items: SeededCollection[],
+): Promise<void> {
+  const client = collectionAdminClient();
+  const results = await Promise.allSettled(
+    items.map(async (item) => {
+      await purgeObjectsIn(item);
+      const name = `tenants/${item.tenantId}/collections/${item.collection}`;
+      const current = await client.getCollection({ name });
+      await client.deleteCollection({
+        name,
+        resourceVersion: current.resourceVersion,
+      });
+    }),
+  );
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected") {
+      console.warn(
+        `[teardown] collection ${items[i].collection} not deleted: ` +
+          `${String(r.reason).slice(0, 200)}`,
+      );
+    }
+  }
+}
+
+/**
+ * Delete buckets by (backend, name).
+ *
+ * `delete_on_backend` stays false: the physical bucket in the test stack is
+ * shared and provisioning is the worker's job, which this stack does not run.
+ * A bucket still referenced by a collection refuses — collections->buckets is
+ * RESTRICT too — so this runs after deleteCollections, never before.
+ */
+export async function deleteBuckets(items: SeededBucket[]): Promise<void> {
+  const client = bucketAdminClient();
+  const results = await Promise.allSettled(
+    items.map(async (b) => {
+      const name = `storageBackends/${b.backendId}/buckets/${b.bucketId}`;
+      const current = await client.getBucket({ name });
+      await client.deleteBucket({
+        name,
+        resourceVersion: current.resourceVersion,
+        deleteOnBackend: false,
+      });
+    }),
+  );
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected") {
+      console.warn(
+        `[teardown] bucket ${items[i].bucketId} not deleted: ` +
+          `${String(r.reason).slice(0, 200)}`,
+      );
+    }
+  }
+}
+
+/**
  * Delete storage backends by id. Best-effort per backend: one that has since
  * acquired buckets refuses deletion, and a teardown must not fail a test that
  * passed.

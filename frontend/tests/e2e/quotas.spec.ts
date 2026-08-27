@@ -11,7 +11,7 @@
  * it is a conflict if a row already exists. These tests drive the real form so
  * that contract is exercised end to end rather than at the repository seam.
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { seedQuota, quotaVersion } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";

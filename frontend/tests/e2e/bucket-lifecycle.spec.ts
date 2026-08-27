@@ -10,11 +10,10 @@
  * editor has a failure mode the other settings pages do not: a syntactically
  * valid form carrying an expression the server will reject.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
-  seedBucket,
   bucketLifecycle,
   bumpBucketVersion,
 } from "./fixtures/seed";
@@ -41,10 +40,10 @@ async function openRuleEditor(page: import("@playwright/test").Page) {
 }
 
 test.describe("Bucket lifecycle rules", () => {
-  test("a bucket with no rules says so", async ({ page }) => {
+  test("a bucket with no rules says so", async ({ page, makeBucket }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,
@@ -58,10 +57,11 @@ test.describe("Bucket lifecycle rules", () => {
 
   test("creating a rule persists it and advances the version", async ({
     page,
+    makeBucket,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
     const before = await bucketLifecycle(bucket.backendId, bucket.bucketId);
     expect(before.ruleCount).toBe(0);
 
@@ -94,10 +94,11 @@ test.describe("Bucket lifecycle rules", () => {
 
   test("an invalid CEL match is refused before it can delete anything", async ({
     page,
+    makeBucket,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,
@@ -128,10 +129,11 @@ test.describe("Bucket lifecycle rules", () => {
 
   test("a bucket changed underneath the editor is refused", async ({
     page,
+    makeBucket,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,
@@ -163,10 +165,11 @@ test.describe("Bucket lifecycle rules", () => {
 
   test("the match placeholder is itself a valid expression", async ({
     page,
+    makeBucket,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,

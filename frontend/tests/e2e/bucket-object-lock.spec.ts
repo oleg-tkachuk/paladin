@@ -6,11 +6,10 @@
  * be shortened or lifted by anyone, so a form that writes the wrong mode is
  * not a cosmetic bug — it is data nobody can delete until the window expires.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type MakeBucket } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
-  seedBucket,
   bucketLockState,
   bumpBucketVersion,
   setBucketVersioning,
@@ -20,8 +19,8 @@ import { gotoSettled } from "./fixtures/navigate";
 /** A bucket with versioning already on. Object lock refuses to engage without
  *  it (ADR-0013) — retention has nothing to pin to when a write replaces the
  *  object in place rather than adding a version. */
-async function seedVersionedBucket() {
-  const bucket = await seedBucket();
+async function seedVersionedBucket(makeBucket: MakeBucket) {
+  const bucket = await makeBucket();
   await setBucketVersioning({
     backendId: bucket.backendId,
     bucketId: bucket.bucketId,
@@ -35,10 +34,13 @@ function lockURL(tenantId: string, backendId: string, bucketId: string) {
 }
 
 test.describe("Bucket object lock", () => {
-  test("enabling writes the mode and retention window", async ({ page }) => {
+  test("enabling writes the mode and retention window", async ({
+    page,
+    makeBucket,
+  }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedVersionedBucket();
+    const bucket = await seedVersionedBucket(makeBucket);
     const before = await bucketLockState(bucket.backendId, bucket.bucketId);
     expect(before.enabled).toBe(false);
 
@@ -72,10 +74,11 @@ test.describe("Bucket object lock", () => {
 
   test("mode and retention are inert until lock is enabled", async ({
     page,
+    makeBucket,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,
@@ -95,10 +98,13 @@ test.describe("Bucket object lock", () => {
     await expect(page.getByLabel("Default retention (days)")).toBeEnabled();
   });
 
-  test("a bucket changed underneath the form is refused", async ({ page }) => {
+  test("a bucket changed underneath the form is refused", async ({
+    page,
+    makeBucket,
+  }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedVersionedBucket();
+    const bucket = await seedVersionedBucket(makeBucket);
 
     await gotoSettled(
       page,
@@ -127,10 +133,13 @@ test.describe("Bucket object lock", () => {
     expect(now.resourceVersion).toBe(afterConcurrent.resourceVersion);
   });
 
-  test("object lock refuses to engage without versioning", async ({ page }) => {
+  test("object lock refuses to engage without versioning", async ({
+    page,
+    makeBucket,
+  }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket(); // versioning deliberately off
+    const bucket = await makeBucket(); // versioning deliberately off
 
     await gotoSettled(
       page,

@@ -15,12 +15,11 @@
  *
  * These drive the console, not the plane, because the plane was never wrong.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
   seedPhysicalBucket,
-  seedCollection,
   seedObject,
   seedBatchTagOperation,
 } from "./fixtures/seed";
@@ -28,6 +27,7 @@ import {
 test.describe("Background operations", () => {
   test("the operations listing decodes metadata rather than failing", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
 
@@ -38,7 +38,7 @@ test.describe("Background operations", () => {
     // provisioning when the upload starts, and the failure ("storage bucket is
     // still provisioning") has nothing to do with what this test is about.
     const bucket = await seedPhysicalBucket();
-    const collection = await seedCollection({ tenantId, bucket });
+    const collection = await makeCollection({ tenantId, bucket });
     const obj = await seedObject({
       tenantId,
       collection: collection.collection,

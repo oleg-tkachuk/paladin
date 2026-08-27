@@ -10,10 +10,10 @@
  * The tenant-level editor lives under /tenants/:id/policies; this covers the
  * platform-wide page at /policies, which can target any scope.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedAdminTenantID, seedBucket, seedCollection } from "./fixtures/seed";
+import { seedAdminTenantID } from "./fixtures/seed";
 
 const VALID_POLICY = `permit(principal, action, resource);`;
 
@@ -61,11 +61,13 @@ test.describe("Cedar policy editor", () => {
 
   test("Validate reports a broken policy without saving it", async ({
     page,
+    makeBucket,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
-    await seedCollection({ tenantId, bucket });
+    const bucket = await makeBucket();
+    await makeCollection({ tenantId, bucket });
 
     await gotoSettled(page, "/policies");
     await pickFirstTarget(page);

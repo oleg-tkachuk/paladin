@@ -7,11 +7,10 @@
  * the quota form's "submit enabled before the data loaded" defect survived on
  * a sibling page.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
-  seedBucket,
   bucketState,
   setBucketVersioning,
 } from "./fixtures/seed";
@@ -24,10 +23,11 @@ function versioningURL(tenantId: string, backendId: string, bucketId: string) {
 test.describe("Bucket versioning", () => {
   test("enabling versioning persists and advances the version", async ({
     page,
+    makeBucket,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
     const before = await bucketState(bucket.backendId, bucket.bucketId);
     expect(before.versioningEnabled).toBe(false);
 
@@ -59,10 +59,13 @@ test.describe("Bucket versioning", () => {
     expect(after.resourceVersion).not.toBe(before.resourceVersion);
   });
 
-  test("keep-deletes is gated on versioning being on", async ({ page }) => {
+  test("keep-deletes is gated on versioning being on", async ({
+    page,
+    makeBucket,
+  }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,
@@ -81,10 +84,13 @@ test.describe("Bucket versioning", () => {
     await expect(keepDeletes).toBeEnabled();
   });
 
-  test("a bucket changed underneath the form is refused", async ({ page }) => {
+  test("a bucket changed underneath the form is refused", async ({
+    page,
+    makeBucket,
+  }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
 
     await gotoSettled(
       page,

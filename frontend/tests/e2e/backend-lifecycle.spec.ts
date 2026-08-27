@@ -10,7 +10,7 @@
  * backend-disabled.spec.ts covers what a DISABLED backend does to the rest of
  * the console. This covers the transitions themselves.
  */
-import { test, expect } from "./fixtures/backends";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 import { backendState } from "./fixtures/seed";

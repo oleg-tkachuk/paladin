@@ -11,7 +11,7 @@
  * BackendService.SetBackendEnabled (makeDisabledBackend(), which also deletes
  * the backend on teardown — 160 of them accumulated before it did).
  */
-import { test, expect } from "./fixtures/backends";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 

@@ -13,12 +13,12 @@
  * anywhere along that chain fails the test rather than being papered over
  * by a hand-inserted row.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type MakeCollection } from "./fixtures/resources";
+import type { Page } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 import {
   seedPhysicalBucket,
-  seedCollection,
   seedObject,
   seedMultipartObject,
   softDeleteObject,
@@ -35,11 +35,11 @@ import {
  * test therefore runs where its token can see, and cross-tenant behaviour
  * is asserted on the admin plane, where crossing is the point.
  */
-async function seedScope() {
+async function seedScope(makeCollection: MakeCollection) {
   const tenantId = await seedAdminTenantID();
   // The physical bucket: these tests move real bytes.
   const bucket = await seedPhysicalBucket();
-  const collection = await seedCollection({ tenantId, bucket });
+  const collection = await makeCollection({ tenantId, bucket });
   return {
     tenantId,
     tenantSlug: "platform",
@@ -70,19 +70,24 @@ async function expectKeyVisible(page: Page, key: string) {
 test.describe("US6 — Object lifecycle", () => {
   test("an uploaded object appears in its collection's object list", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
-    const { tenantId, tenantSlug, collection } = await seedScope();
+    const { tenantId, tenantSlug, collection } =
+      await seedScope(makeCollection);
     const obj = await seedObject({ tenantId, collection });
 
     await gotoSettled(page, objectsURL(tenantSlug, collection));
     await expectKeyVisible(page, obj.key);
   });
 
-  test("the object list is scoped to its collection", async ({ page }) => {
+  test("the object list is scoped to its collection", async ({
+    page,
+    makeCollection,
+  }) => {
     await loginAsAdmin(page);
-    const a = await seedScope();
-    const b = await seedScope();
+    const a = await seedScope(makeCollection);
+    const b = await seedScope(makeCollection);
     const inA = await seedObject({
       tenantId: a.tenantId,
       collection: a.collection,
@@ -103,9 +108,11 @@ test.describe("US6 — Object lifecycle", () => {
 
   test("a soft-deleted object leaves the list and appears in the trash", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
-    const { tenantSlug, tenantId, collection } = await seedScope();
+    const { tenantSlug, tenantId, collection } =
+      await seedScope(makeCollection);
     const obj = await seedObject({ tenantId, collection });
 
     await gotoSettled(page, objectsURL(tenantSlug, collection));
@@ -129,9 +136,13 @@ test.describe("US6 — Object lifecycle", () => {
     await expectKeyVisible(page, obj.key);
   });
 
-  test("the row menu soft-deletes the object", async ({ page }) => {
+  test("the row menu soft-deletes the object", async ({
+    page,
+    makeCollection,
+  }) => {
     await loginAsAdmin(page);
-    const { tenantSlug, tenantId, collection } = await seedScope();
+    const { tenantSlug, tenantId, collection } =
+      await seedScope(makeCollection);
     const obj = await seedObject({ tenantId, collection });
 
     await gotoSettled(page, objectsURL(tenantSlug, collection));
@@ -152,9 +163,11 @@ test.describe("US6 — Object lifecycle", () => {
 
   test("a multipart upload lands as one object in the list", async ({
     page,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
-    const { tenantSlug, tenantId, collection } = await seedScope();
+    const { tenantSlug, tenantId, collection } =
+      await seedScope(makeCollection);
 
     // Two parts: past the 5 MiB floor S3 imposes on every part but the last,
     // so the server splits it and Complete has more than one ETag to

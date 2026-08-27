@@ -10,19 +10,18 @@
  * grouped by tenant; without a seeded Collection we'd hit the
  * empty-state "No data stored in this bucket yet."
  */
-import { test, expect } from "./fixtures/tenants";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedBucket, seedCollection } from "./fixtures/seed";
 
 test.describe("US3 — Bucket list & Collection navigation", () => {
-  test("bucket list shows seeded bucket", async ({ page }) => {
+  test("bucket list shows seeded bucket", async ({ page, makeBucket }) => {
     await loginAsAdmin(page);
-    const bucket = await seedBucket();
+    const bucket = await makeBucket();
     await gotoSettled(page, "/buckets");
     // Bucket name renders in a font-mono cell (page.tsx:417).
     // Locator on text is stable because every bucket name is
-    // UUID-suffixed by seedBucket().
+    // UUID-suffixed by makeBucket().
     await expect(page.getByText(bucket.bucketId)).toBeVisible({
       timeout: 5_000,
     });
@@ -31,11 +30,13 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
   test("bucket detail page lists Collections grouped by tenant", async ({
     page,
     makeTenant,
+    makeBucket,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
     const tenant = await makeTenant();
-    const bucket = await seedBucket();
-    const ok = await seedCollection({ tenantId: tenant.tenantId, bucket });
+    const bucket = await makeBucket();
+    const ok = await makeCollection({ tenantId: tenant.tenantId, bucket });
 
     // Drive through the natural operator path: /buckets →
     // click the seeded bucket row → bucket detail page.
@@ -59,11 +60,13 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
   test("Collection detail page renders identity + canonical name", async ({
     page,
     makeTenant,
+    makeBucket,
+    makeCollection,
   }) => {
     await loginAsAdmin(page);
     const tenant = await makeTenant();
-    const bucket = await seedBucket();
-    const ok = await seedCollection({ tenantId: tenant.tenantId, bucket });
+    const bucket = await makeBucket();
+    const ok = await makeCollection({ tenantId: tenant.tenantId, bucket });
 
     // Direct nav — the bucket-detail "Browse" link goes to the
     // /objects browser, not the Collection detail page (the Cedar

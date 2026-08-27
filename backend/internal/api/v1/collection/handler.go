@@ -330,8 +330,37 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 	return &b, nil
 }
 
+// targetTenant decides which tenant a name-addressed write applies to.
+//
+// The resource name carries one ("tenants/{tid}/collections/{ok}") and the
+// caller's token carries another. Get and List have always honoured the name,
+// gating a foreign tenant on platform.admin; Delete and Update did not read it
+// at all and silently used the caller's. For a platform admin naming another
+// tenant's collection that is the worst shape a write can take: it addresses a
+// row that exists, and operates on a different one — or, when the caller's
+// tenant has no collection by that name, reports a version mismatch, which
+// says the row moved rather than that it was never looked at.
+//
+// nil target (a bare name, or an explicit self) means the caller's own tenant.
+func targetTenant(
+	target, caller uuid.UUID, principal *auth.Principal, op string,
+) (uuid.UUID, error) {
+	if target == uuid.Nil || target == caller {
+		return caller, nil
+	}
+	if !principal.HasRole(apiutil.RolePlatformAdmin) {
+		return uuid.Nil, connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("cross-tenant %s requires platform.admin", op))
+	}
+	return target, nil
+}
+
 func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArgs) (*Collection, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tenantID, err := targetTenant(args.TenantID, callerTenantID, principal, "UpdateCollection")
 	if err != nil {
 		return nil, err
 	}
@@ -365,8 +394,14 @@ func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArg
 	return &b, nil
 }
 
-func (h *Handler) DeleteCollection(ctx context.Context, collection string, expectedVersion int64) error {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+func (h *Handler) DeleteCollection(
+	ctx context.Context, targetTenantID uuid.UUID, collection string, expectedVersion int64,
+) error {
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return err
+	}
+	tenantID, err := targetTenant(targetTenantID, callerTenantID, principal, "DeleteCollection")
 	if err != nil {
 		return err
 	}
@@ -496,8 +531,14 @@ func (h *Handler) GetCollectionStats(ctx context.Context, collection string) (*C
 
 // BindCollectionToBucket rebinds the namespace to a different bucket. Cedar
 // authorization uses ActionBindCollectionToBucket on the namespace.
-func (h *Handler) BindCollectionToBucket(ctx context.Context, collection, bucket string, expectedVersion int64) (*Collection, error) {
-	tenantID, p, err := apiutil.CallerContext(ctx)
+func (h *Handler) BindCollectionToBucket(
+	ctx context.Context, targetTenantID uuid.UUID, collection, bucket string, expectedVersion int64,
+) (*Collection, error) {
+	callerTenantID, p, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tenantID, err := targetTenant(targetTenantID, callerTenantID, p, "BindCollectionToBucket")
 	if err != nil {
 		return nil, err
 	}
