@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -36,7 +37,9 @@ func (s *OperationServer) GetOperation(ctx context.Context, req *connect.Request
 
 func (s *OperationServer) ListOperations(ctx context.Context, req *connect.Request[pb.ListOperationsRequest]) (*connect.Response[pb.ListOperationsResponse], error) {
 	m := req.Msg
-	list, next, err := s.H.ListOperations(ctx, nil, m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter())
+	list, next, err := s.H.ListOperations(ctx, nil,
+		m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter(),
+		m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC)
 	if err != nil {
 		return nil, err
 	}

@@ -71,10 +71,16 @@ func (x *GetOperationRequest) GetName() string {
 type ListOperationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Page  *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
-	// CEL filter, evaluated against the Operation schema (see internal/filter/cel).
-	// Applied to each fetched page; the page cursor is unaffected, so a page
-	// whose rows all fail the predicate still returns next_page_token.
-	Filter        string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	// CEL filter over the Operation schema (see internal/filter/cel). The
+	// SQL-expressible conjuncts are pushed into the query; the full expression
+	// is then evaluated over the fetched page, so a page whose rows all fail the
+	// predicate still returns next_page_token.
+	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	// Order on the operation id (UUIDv7, so creation order). Unspecified means
+	// ASC — the original behaviour. See the admin-plane twin for why DESC
+	// exists: an ascending page of 50 is the 50 oldest rows, which is not what
+	// "what is running now" means.
+	SortOrder     v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,6 +127,13 @@ func (x *ListOperationsRequest) GetFilter() string {
 		return x.Filter
 	}
 	return ""
+}
+
+func (x *ListOperationsRequest) GetSortOrder() v1.SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return v1.SortOrder(0)
 }
 
 type ListOperationsResponse struct {
@@ -225,10 +238,12 @@ const file_paladin_data_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
 	"&paladin/data/v1/operation_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a!paladin/common/v1/pagination.proto\x1a\"paladin/data/v1/batch_service.proto\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x9e\x01\n" +
 	"\x15ListOperationsRequest\x121\n" +
 	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x87\x01\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\x12:\n" +
+	"\n" +
+	"sort_order\x18\x03 \x01(\x0e2\x1b.paladin.common.v1.SortOrderR\tsortOrder\"\x87\x01\n" +
 	"\x16ListOperationsResponse\x129\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x19.paladin.data.v1.OperationR\n" +
@@ -260,24 +275,26 @@ var file_paladin_data_v1_operation_service_proto_goTypes = []any{
 	(*ListOperationsResponse)(nil), // 2: paladin.data.v1.ListOperationsResponse
 	(*CancelOperationRequest)(nil), // 3: paladin.data.v1.CancelOperationRequest
 	(*v1.PageRequest)(nil),         // 4: paladin.common.v1.PageRequest
-	(*Operation)(nil),              // 5: paladin.data.v1.Operation
-	(*v1.PageResponse)(nil),        // 6: paladin.common.v1.PageResponse
+	(v1.SortOrder)(0),              // 5: paladin.common.v1.SortOrder
+	(*Operation)(nil),              // 6: paladin.data.v1.Operation
+	(*v1.PageResponse)(nil),        // 7: paladin.common.v1.PageResponse
 }
 var file_paladin_data_v1_operation_service_proto_depIdxs = []int32{
 	4, // 0: paladin.data.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
-	5, // 1: paladin.data.v1.ListOperationsResponse.operations:type_name -> paladin.data.v1.Operation
-	6, // 2: paladin.data.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
-	0, // 3: paladin.data.v1.OperationService.GetOperation:input_type -> paladin.data.v1.GetOperationRequest
-	1, // 4: paladin.data.v1.OperationService.ListOperations:input_type -> paladin.data.v1.ListOperationsRequest
-	3, // 5: paladin.data.v1.OperationService.CancelOperation:input_type -> paladin.data.v1.CancelOperationRequest
-	5, // 6: paladin.data.v1.OperationService.GetOperation:output_type -> paladin.data.v1.Operation
-	2, // 7: paladin.data.v1.OperationService.ListOperations:output_type -> paladin.data.v1.ListOperationsResponse
-	5, // 8: paladin.data.v1.OperationService.CancelOperation:output_type -> paladin.data.v1.Operation
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 1: paladin.data.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	6, // 2: paladin.data.v1.ListOperationsResponse.operations:type_name -> paladin.data.v1.Operation
+	7, // 3: paladin.data.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
+	0, // 4: paladin.data.v1.OperationService.GetOperation:input_type -> paladin.data.v1.GetOperationRequest
+	1, // 5: paladin.data.v1.OperationService.ListOperations:input_type -> paladin.data.v1.ListOperationsRequest
+	3, // 6: paladin.data.v1.OperationService.CancelOperation:input_type -> paladin.data.v1.CancelOperationRequest
+	6, // 7: paladin.data.v1.OperationService.GetOperation:output_type -> paladin.data.v1.Operation
+	2, // 8: paladin.data.v1.OperationService.ListOperations:output_type -> paladin.data.v1.ListOperationsResponse
+	6, // 9: paladin.data.v1.OperationService.CancelOperation:output_type -> paladin.data.v1.Operation
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_paladin_data_v1_operation_service_proto_init() }

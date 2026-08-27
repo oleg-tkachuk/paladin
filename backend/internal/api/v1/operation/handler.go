@@ -55,7 +55,11 @@ type Repository interface {
 	// SQL-expressible conjuncts into the query; ListOperations still
 	// evaluates the whole expression over the returned page, so pushdown may
 	// only narrow the candidate set.
-	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string) ([]Operation, string, error)
+	// newestFirst flips the sort and the cursor comparison together. A caller
+	// showing current activity wants the newest rows; an ascending page of 50
+	// is the 50 oldest, which is how a three-day-old failure came to be the
+	// console's idea of what is running.
+	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string, newestFirst bool) ([]Operation, string, error)
 
 	// ClaimNext is the worker-side atomic dequeue: pick the oldest
 	// PENDING row, flip it to RUNNING, return it. Returns
@@ -135,7 +139,7 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 // an optional CEL expression over OperationSchema, applied after the fetch;
 // the repo cursor is returned unchanged so paging survives a page whose rows
 // all fail the predicate.
-func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string) ([]Operation, string, error) {
+func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string, newestFirst bool) ([]Operation, string, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
@@ -152,7 +156,7 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 		}
 		afterID = id
 	}
-	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize, filter)
+	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize, filter, newestFirst)
 	if err != nil {
 		return nil, "", err
 	}

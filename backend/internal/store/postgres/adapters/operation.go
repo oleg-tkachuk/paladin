@@ -148,7 +148,10 @@ func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) er
 	return nil
 }
 
-func (r *OperationRepo) List(ctx context.Context, tenantID uuid.UUID, state *operation.State, afterID uuid.UUID, pageSize int32, filter string) ([]operation.Operation, string, error) {
+func (r *OperationRepo) List(
+	ctx context.Context, tenantID uuid.UUID, state *operation.State,
+	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool,
+) ([]operation.Operation, string, error) {
 	if pageSize <= 0 {
 		pageSize = 50
 	}
@@ -163,15 +166,34 @@ func (r *OperationRepo) List(ctx context.Context, tenantID uuid.UUID, state *ope
 	pd := hints(cel.OperationSchema, filter)
 	typeEq, typeLike := pd.StringHint("type")
 	errorCodeEq, _ := pd.StringHint("error_code")
+	// `error_message != ""` is how a caller asks for "operations that failed"
+	// — the dashboard's failed-ops widget does exactly that. Without the hint
+	// the predicate only narrowed the page it was handed, so a page of five
+	// recent operations that happened to contain no failure rendered as "no
+	// failures" while failures sat one page back.
+	errorMessageNeq := pd.NeqHint("error_message")
 
-	rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-		typeEq, typeLike, errorCodeEq, pageSize)
-	if err != nil {
-		return nil, "", fmt.Errorf("list operations: %w", err)
-	}
-	out := make([]operation.Operation, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, operationFromSQLC(row.Operation))
+	// Two queries rather than one with a flipped comparison: the cursor test
+	// has to move with the sort, and sqlc parameterises neither.
+	out := make([]operation.Operation, 0, pageSize)
+	if newestFirst {
+		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
+			typeEq, typeLike, errorCodeEq, errorMessageNeq, pageSize)
+		if err != nil {
+			return nil, "", fmt.Errorf("list operations: %w", err)
+		}
+		for _, row := range rows {
+			out = append(out, operationFromSQLC(row.Operation))
+		}
+	} else {
+		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
+			typeEq, typeLike, errorCodeEq, errorMessageNeq, pageSize)
+		if err != nil {
+			return nil, "", fmt.Errorf("list operations: %w", err)
+		}
+		for _, row := range rows {
+			out = append(out, operationFromSQLC(row.Operation))
+		}
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {

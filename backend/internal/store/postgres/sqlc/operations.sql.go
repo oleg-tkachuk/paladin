@@ -87,15 +87,18 @@ WHERE tenant_id = $1
   AND ($4::text IS NULL OR type = $4::text)
   AND ($5::text IS NULL OR type LIKE $5::text)
   AND ($6::text IS NULL OR error_code = $6::text)
+  AND ($7::text IS NULL
+       OR coalesce(error_message, '') <> $7::text)
 ORDER BY id
-LIMIT $7
+LIMIT $8
 `
 
 type ListOperationsRow struct {
 	Operation Operation `json:"operation"`
 }
 
-func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, pageSize int32) ([]ListOperationsRow, error) {
+// Oldest first. The cursor compares `>`, so paging walks forward in time.
+func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, pageSize int32) ([]ListOperationsRow, error) {
 	rows, err := q.db.Query(ctx, listOperations,
 		tenantID,
 		state,
@@ -103,6 +106,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 		typeEq,
 		typeLike,
 		errorCodeEq,
+		errorMessageNeq,
 		pageSize,
 	)
 	if err != nil {
@@ -112,6 +116,70 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 	var items []ListOperationsRow
 	for rows.Next() {
 		var i ListOperationsRow
+		if err := rows.Scan(
+			&i.Operation.ID,
+			&i.Operation.TenantID,
+			&i.Operation.Type,
+			&i.Operation.State,
+			&i.Operation.Metadata,
+			&i.Operation.Response,
+			&i.Operation.ErrorCode,
+			&i.Operation.ErrorMessage,
+			&i.Operation.CreatedAt,
+			&i.Operation.UpdatedAt,
+			&i.Operation.DoneAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOperationsDesc = `-- name: ListOperationsDesc :many
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
+FROM operations
+WHERE tenant_id = $1
+  AND ($2::operation_state IS NULL OR state = $2::operation_state)
+  AND ($3::uuid IS NULL OR id < $3::uuid)
+  AND ($4::text IS NULL OR type = $4::text)
+  AND ($5::text IS NULL OR type LIKE $5::text)
+  AND ($6::text IS NULL OR error_code = $6::text)
+  AND ($7::text IS NULL
+       OR coalesce(error_message, '') <> $7::text)
+ORDER BY id DESC
+LIMIT $8
+`
+
+type ListOperationsDescRow struct {
+	Operation Operation `json:"operation"`
+}
+
+// Newest first, for a caller showing current activity. A separate query
+// rather than a CASE in the ORDER BY: the cursor comparison has to flip with
+// the sort (`<` here, `>` above) or the second page walks away from the rows
+// the caller asked for, and sqlc cannot parameterise either.
+func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, pageSize int32) ([]ListOperationsDescRow, error) {
+	rows, err := q.db.Query(ctx, listOperationsDesc,
+		tenantID,
+		state,
+		afterID,
+		typeEq,
+		typeLike,
+		errorCodeEq,
+		errorMessageNeq,
+		pageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOperationsDescRow
+	for rows.Next() {
+		var i ListOperationsDescRow
 		if err := rows.Scan(
 			&i.Operation.ID,
 			&i.Operation.TenantID,

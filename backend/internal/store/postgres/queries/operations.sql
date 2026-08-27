@@ -28,6 +28,7 @@ SET state         = sqlc.arg('state')::operation_state,
 WHERE id = $1;
 
 -- name: ListOperations :many
+-- Oldest first. The cursor compares `>`, so paging walks forward in time.
 SELECT sqlc.embed(operations)
 FROM operations
 WHERE tenant_id = $1
@@ -39,7 +40,27 @@ WHERE tenant_id = $1
   AND (sqlc.narg('type_eq')::text IS NULL OR type = sqlc.narg('type_eq')::text)
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
+  AND (sqlc.narg('error_message_neq')::text IS NULL
+       OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
 ORDER BY id
+LIMIT sqlc.arg('page_size');
+
+-- name: ListOperationsDesc :many
+-- Newest first, for a caller showing current activity. A separate query
+-- rather than a CASE in the ORDER BY: the cursor comparison has to flip with
+-- the sort (`<` here, `>` above) or the second page walks away from the rows
+-- the caller asked for, and sqlc cannot parameterise either.
+SELECT sqlc.embed(operations)
+FROM operations
+WHERE tenant_id = $1
+  AND (sqlc.narg('state')::operation_state IS NULL OR state = sqlc.narg('state')::operation_state)
+  AND (sqlc.narg('after_id')::uuid IS NULL OR id < sqlc.narg('after_id')::uuid)
+  AND (sqlc.narg('type_eq')::text IS NULL OR type = sqlc.narg('type_eq')::text)
+  AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
+  AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
+  AND (sqlc.narg('error_message_neq')::text IS NULL
+       OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
+ORDER BY id DESC
 LIMIT sqlc.arg('page_size');
 
 -- name: PurgeTerminalOperations :execrows

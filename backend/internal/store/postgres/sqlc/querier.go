@@ -343,7 +343,13 @@ type Querier interface {
 	// throughput, never correctness. `substr` is escaped for LIKE by the
 	// adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
 	ListObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
-	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, pageSize int32) ([]ListOperationsRow, error)
+	// Oldest first. The cursor compares `>`, so paging walks forward in time.
+	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, pageSize int32) ([]ListOperationsRow, error)
+	// Newest first, for a caller showing current activity. A separate query
+	// rather than a CASE in the ORDER BY: the cursor comparison has to flip with
+	// the sort (`<` here, `>` above) or the second page walks away from the rows
+	// the caller asked for, and sqlc cannot parameterise either.
+	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, pageSize int32) ([]ListOperationsDescRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
 	ListPendingBucketDeletions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketDeletionsRow, error)

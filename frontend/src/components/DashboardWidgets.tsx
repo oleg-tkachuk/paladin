@@ -33,6 +33,7 @@ import {
 } from "@/lib/connect/client";
 import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import type { TenantBudgetSummary } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { formatMoney } from "@/lib/format/money";
 
@@ -139,7 +140,13 @@ function FailedOpsWidget() {
             // strings are never null — the old expression matched every
             // operation, leaving the client-side opError() filter below to do
             // all the work while the server shipped a full page each time.
+            // The predicate now pushes into SQL, so these five are five
+            // failures rather than five rows that may contain none.
             filter: 'error_message != ""',
+            // Newest first: ascending, this widget showed the five OLDEST
+            // failures — a three-day-old one stayed pinned there while
+            // everything since went unseen.
+            sortOrder: SortOrder.DESC,
           },
           { signal },
         )

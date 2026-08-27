@@ -78,6 +78,24 @@ func TestExtractPushdown(t *testing.T) {
 			},
 		},
 		{
+			name:   "inequality is pushed, and is not a negated equality",
+			schema: OperationSchema,
+			expr:   `error_message != ""`,
+			check: func(t *testing.T, p Pushdown) {
+				t.Helper()
+				// The domain projects a NULL column to "" before CEL sees it,
+				// so the SQL has to be over coalesce(col, ''), not over col —
+				// which is why this is its own hint and not Eq inverted.
+				got := p.NeqHint("error_message")
+				if got == nil || *got != "" {
+					t.Errorf("error_message neq = %v, want the empty literal", got)
+				}
+				if eq, _ := p.StringHint("error_message"); eq != nil {
+					t.Errorf("an inequality was recorded as an equality: %q", *eq)
+				}
+			},
+		},
+		{
 			name:   "a disjunction pushes nothing — either side may match",
 			schema: OperationSchema,
 			expr:   `state == "FAILED" || state == "CANCELLED"`,

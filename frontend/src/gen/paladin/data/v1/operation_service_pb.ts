@@ -13,7 +13,11 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
+import type {
+  PageRequest,
+  PageResponse,
+  SortOrder,
+} from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import type { Operation, OperationSchema } from "./batch_service_pb";
 import { file_paladin_data_v1_batch_service } from "./batch_service_pb";
@@ -25,7 +29,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZsZWdhdGUvZGF0YS92MS9vcGVyYXRpb25fc2VydmljZS5wcm90bxIObGVnYXRlLmRhdGEudjEiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlQKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIrCgRwYWdlGAEgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkidQoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRItCgpvcGVyYXRpb25zGAEgAygLMhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uEiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEymQIKEE9wZXJhdGlvblNlcnZpY2USTgoMR2V0T3BlcmF0aW9uEiMubGVnYXRlLmRhdGEudjEuR2V0T3BlcmF0aW9uUmVxdWVzdBoZLmxlZ2F0ZS5kYXRhLnYxLk9wZXJhdGlvbhJfCg5MaXN0T3BlcmF0aW9ucxIlLmxlZ2F0ZS5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBomLmxlZ2F0ZS5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2USVAoPQ2FuY2VsT3BlcmF0aW9uEiYubGVnYXRlLmRhdGEudjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBoZLmxlZ2F0ZS5kYXRhLnYxLk9wZXJhdGlvbkJFWkNnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7bGVnYXRlZGF0YXYxYgZwcm90bzM",
+    "CiZsZWdhdGUvZGF0YS92MS9vcGVyYXRpb25fc2VydmljZS5wcm90bxIObGVnYXRlLmRhdGEudjEiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIoUBChVMaXN0T3BlcmF0aW9uc1JlcXVlc3QSKwoEcGFnZRgBIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEi8KCnNvcnRfb3JkZXIYAyABKA4yGy5sZWdhdGUuY29tbW9uLnYxLlNvcnRPcmRlciJ1ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi0KCm9wZXJhdGlvbnMYASADKAsyGS5sZWdhdGUuZGF0YS52MS5PcGVyYXRpb24SLAoEcGFnZRgCIAEoCzIeLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlc3BvbnNlIi8KFkNhbmNlbE9wZXJhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATKZAgoQT3BlcmF0aW9uU2VydmljZRJOCgxHZXRPcGVyYXRpb24SIy5sZWdhdGUuZGF0YS52MS5HZXRPcGVyYXRpb25SZXF1ZXN0GhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uEl8KDkxpc3RPcGVyYXRpb25zEiUubGVnYXRlLmRhdGEudjEuTGlzdE9wZXJhdGlvbnNSZXF1ZXN0GiYubGVnYXRlLmRhdGEudjEuTGlzdE9wZXJhdGlvbnNSZXNwb25zZRJUCg9DYW5jZWxPcGVyYXRpb24SJi5sZWdhdGUuZGF0YS52MS5DYW5jZWxPcGVyYXRpb25SZXF1ZXN0GhkubGVnYXRlLmRhdGEudjEuT3BlcmF0aW9uQkVaQ2dpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtsZWdhdGVkYXRhdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_paladin_common_v1_pagination,
@@ -63,13 +67,24 @@ export type ListOperationsRequest =
     page?: PageRequest | undefined;
 
     /**
-     * CEL filter, evaluated against the Operation schema (see internal/filter/cel).
-     * Applied to each fetched page; the page cursor is unaffected, so a page
-     * whose rows all fail the predicate still returns next_page_token.
+     * CEL filter over the Operation schema (see internal/filter/cel). The
+     * SQL-expressible conjuncts are pushed into the query; the full expression
+     * is then evaluated over the fetched page, so a page whose rows all fail the
+     * predicate still returns next_page_token.
      *
      * @generated from field: string filter = 2;
      */
     filter: string;
+
+    /**
+     * Order on the operation id (UUIDv7, so creation order). Unspecified means
+     * ASC — the original behaviour. See the admin-plane twin for why DESC
+     * exists: an ascending page of 50 is the 50 oldest rows, which is not what
+     * "what is running now" means.
+     *
+     * @generated from field: paladin.common.v1.SortOrder sort_order = 3;
+     */
+    sortOrder: SortOrder;
   };
 
 /**

@@ -20,7 +20,11 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
-import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
+import type {
+  PageRequest,
+  PageResponse,
+  SortOrder,
+} from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -31,7 +35,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CidsZWdhdGUvYWRtaW4vdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSLsAgoJT3BlcmF0aW9uEhEKBG5hbWUYASABKAlCA+BBCBIRCgR0eXBlGAIgASgJQgPgQQMSJgoIbWV0YWRhdGEYAyABKAsyFC5nb29nbGUucHJvdG9idWYuQW55EhEKBGRvbmUYBCABKAhCA+BBAxIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASHgoRaW5pdGlhdG9yX3N1YmplY3QYByABKAlCA+BBAxIbChNpbml0aWF0b3JfdGVuYW50X2lkGAggASgJEjMKCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBA0IICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlQKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIrCgRwYWdlGAEgASgLMh0ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkidgoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIuCgpvcGVyYXRpb25zGAEgAygLMhoubGVnYXRlLmFkbWluLnYxLk9wZXJhdGlvbhIsCgRwYWdlGAIgASgLMh4ubGVnYXRlLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABMqcCChhQbGF0Zm9ybU9wZXJhdGlvblNlcnZpY2USUAoMR2V0T3BlcmF0aW9uEiQubGVnYXRlLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGi5sZWdhdGUuYWRtaW4udjEuT3BlcmF0aW9uEmEKDkxpc3RPcGVyYXRpb25zEiYubGVnYXRlLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBonLmxlZ2F0ZS5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlElYKD0NhbmNlbE9wZXJhdGlvbhInLmxlZ2F0ZS5hZG1pbi52MS5DYW5jZWxPcGVyYXRpb25SZXF1ZXN0GhoubGVnYXRlLmFkbWluLnYxLk9wZXJhdGlvbkJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
+    "CidsZWdhdGUvYWRtaW4vdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSLsAgoJT3BlcmF0aW9uEhEKBG5hbWUYASABKAlCA+BBCBIRCgR0eXBlGAIgASgJQgPgQQMSJgoIbWV0YWRhdGEYAyABKAsyFC5nb29nbGUucHJvdG9idWYuQW55EhEKBGRvbmUYBCABKAhCA+BBAxIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASHgoRaW5pdGlhdG9yX3N1YmplY3QYByABKAlCA+BBAxIbChNpbml0aWF0b3JfdGVuYW50X2lkGAggASgJEjMKCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBA0IICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIoUBChVMaXN0T3BlcmF0aW9uc1JlcXVlc3QSKwoEcGFnZRgBIAEoCzIdLmxlZ2F0ZS5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEi8KCnNvcnRfb3JkZXIYAyABKA4yGy5sZWdhdGUuY29tbW9uLnYxLlNvcnRPcmRlciJ2ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi4KCm9wZXJhdGlvbnMYASADKAsyGi5sZWdhdGUuYWRtaW4udjEuT3BlcmF0aW9uEiwKBHBhZ2UYAiABKAsyHi5sZWdhdGUuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEypwIKGFBsYXRmb3JtT3BlcmF0aW9uU2VydmljZRJQCgxHZXRPcGVyYXRpb24SJC5sZWdhdGUuYWRtaW4udjEuR2V0T3BlcmF0aW9uUmVxdWVzdBoaLmxlZ2F0ZS5hZG1pbi52MS5PcGVyYXRpb24SYQoOTGlzdE9wZXJhdGlvbnMSJi5sZWdhdGUuYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXF1ZXN0GicubGVnYXRlLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2USVgoPQ2FuY2VsT3BlcmF0aW9uEicubGVnYXRlLmFkbWluLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGi5sZWdhdGUuYWRtaW4udjEuT3BlcmF0aW9uQkdaRWdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL2xlZ2F0ZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7bGVnYXRlYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
@@ -147,13 +151,28 @@ export type ListOperationsRequest =
     page?: PageRequest | undefined;
 
     /**
-     * CEL filter, evaluated against the Operation schema (see internal/filter/cel).
-     * Applied to each fetched page; the page cursor is unaffected, so a page
-     * whose rows all fail the predicate still returns next_page_token.
+     * CEL filter over the Operation schema (see internal/filter/cel). The
+     * SQL-expressible conjuncts are pushed into the query; the full expression
+     * is then evaluated over the fetched page, so a page whose rows all fail the
+     * predicate still returns next_page_token and the caller keeps paging.
      *
      * @generated from field: string filter = 2;
      */
     filter: string;
+
+    /**
+     * Order on the operation id, which is a UUIDv7 and therefore ordered by
+     * creation time. Unspecified means ASC, the original behaviour.
+     *
+     * DESC exists because every caller that shows "current activity" wants the
+     * newest rows and there was no way to ask for them: a page of 50 off an
+     * ascending cursor is the 50 OLDEST operations, so the console's
+     * background-ops drawer showed a three-day-old failure and none of the
+     * operations that had run since.
+     *
+     * @generated from field: paladin.common.v1.SortOrder sort_order = 3;
+     */
+    sortOrder: SortOrder;
   };
 
 /**

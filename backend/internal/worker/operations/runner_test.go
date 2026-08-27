@@ -60,7 +60,7 @@ func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operation.Stat
 	return nil
 }
 func (m *memRepo) Cancel(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (m *memRepo) List(context.Context, uuid.UUID, *operation.State, uuid.UUID, int32, string) ([]operation.Operation, string, error) {
+func (m *memRepo) List(context.Context, uuid.UUID, *operation.State, uuid.UUID, int32, string, bool) ([]operation.Operation, string, error) {
 	return nil, "", nil
 }
 func (m *memRepo) ClaimNext(_ context.Context) (operation.Operation, error) {

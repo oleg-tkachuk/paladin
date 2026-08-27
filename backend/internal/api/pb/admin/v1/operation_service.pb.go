@@ -222,10 +222,20 @@ func (x *GetOperationRequest) GetName() string {
 type ListOperationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Page  *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
-	// CEL filter, evaluated against the Operation schema (see internal/filter/cel).
-	// Applied to each fetched page; the page cursor is unaffected, so a page
-	// whose rows all fail the predicate still returns next_page_token.
-	Filter        string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	// CEL filter over the Operation schema (see internal/filter/cel). The
+	// SQL-expressible conjuncts are pushed into the query; the full expression
+	// is then evaluated over the fetched page, so a page whose rows all fail the
+	// predicate still returns next_page_token and the caller keeps paging.
+	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	// Order on the operation id, which is a UUIDv7 and therefore ordered by
+	// creation time. Unspecified means ASC, the original behaviour.
+	//
+	// DESC exists because every caller that shows "current activity" wants the
+	// newest rows and there was no way to ask for them: a page of 50 off an
+	// ascending cursor is the 50 OLDEST operations, so the console's
+	// background-ops drawer showed a three-day-old failure and none of the
+	// operations that had run since.
+	SortOrder     v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -272,6 +282,13 @@ func (x *ListOperationsRequest) GetFilter() string {
 		return x.Filter
 	}
 	return ""
+}
+
+func (x *ListOperationsRequest) GetSortOrder() v1.SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return v1.SortOrder(0)
 }
 
 type ListOperationsResponse struct {
@@ -391,10 +408,12 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAtB\b\n" +
 	"\x06result\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x9e\x01\n" +
 	"\x15ListOperationsRequest\x121\n" +
 	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x88\x01\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\x12:\n" +
+	"\n" +
+	"sort_order\x18\x03 \x01(\x0e2\x1b.paladin.common.v1.SortOrderR\tsortOrder\"\x88\x01\n" +
 	"\x16ListOperationsResponse\x12:\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1a.paladin.admin.v1.OperationR\n" +
@@ -430,7 +449,8 @@ var file_paladin_admin_v1_operation_service_proto_goTypes = []any{
 	(*status.Status)(nil),          // 6: google.rpc.Status
 	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
 	(*v1.PageRequest)(nil),         // 8: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),        // 9: paladin.common.v1.PageResponse
+	(v1.SortOrder)(0),              // 9: paladin.common.v1.SortOrder
+	(*v1.PageResponse)(nil),        // 10: paladin.common.v1.PageResponse
 }
 var file_paladin_admin_v1_operation_service_proto_depIdxs = []int32{
 	5,  // 0: paladin.admin.v1.Operation.metadata:type_name -> google.protobuf.Any
@@ -439,19 +459,20 @@ var file_paladin_admin_v1_operation_service_proto_depIdxs = []int32{
 	7,  // 3: paladin.admin.v1.Operation.created_at:type_name -> google.protobuf.Timestamp
 	7,  // 4: paladin.admin.v1.Operation.updated_at:type_name -> google.protobuf.Timestamp
 	8,  // 5: paladin.admin.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
-	0,  // 6: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
-	9,  // 7: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
-	1,  // 8: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
-	2,  // 9: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
-	4,  // 10: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
-	0,  // 11: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
-	3,  // 12: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
-	0,  // 13: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	9,  // 6: paladin.admin.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	0,  // 7: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
+	10, // 8: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
+	1,  // 9: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
+	2,  // 10: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
+	4,  // 11: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
+	0,  // 12: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
+	3,  // 13: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
+	0,  // 14: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
+	12, // [12:15] is the sub-list for method output_type
+	9,  // [9:12] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_operation_service_proto_init() }

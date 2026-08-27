@@ -24,6 +24,10 @@ import (
 type Pushdown struct {
 	// Eq holds `field == "literal"` for string-typed fields.
 	Eq map[string]string
+	// Neq holds `field != "literal"`. Kept apart from Eq because the SQL is
+	// not a negation of it: the domain projects a NULL column to "" before CEL
+	// sees it, so the predicate is over coalesce(col, ''), not over col.
+	Neq map[string]string
 	// BoolEq holds `field == true` / `!field` for bool-typed fields.
 	BoolEq map[string]bool
 	// Prefix and Contains hold field.startsWith / field.contains literals.
@@ -112,6 +116,21 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) bool {
 		default:
 			return false
 		}
+
+	case "_!=_":
+		args := c.Args()
+		if len(args) != 2 {
+			return false
+		}
+		field, lit, ok := identAndLiteral(args[0], args[1])
+		if !ok || fieldType(schema, field) != typeString {
+			return false
+		}
+		v, ok := lit.(string)
+		if !ok {
+			return false
+		}
+		return p.setIn(&p.Neq, field, v)
 
 	case "!_":
 		// `!disabled` is how a filter author writes `disabled == false`.
@@ -211,6 +230,15 @@ func (p Pushdown) StringHint(field string) (eq *string, like *string) {
 		like = &pat
 	}
 	return eq, like
+}
+
+// NeqHint returns the `field != literal` hint for one text column, to be
+// compared against coalesce(col, ”) — see Pushdown.Neq.
+func (p Pushdown) NeqHint(field string) *string {
+	if v, ok := p.Neq[field]; ok {
+		return &v
+	}
+	return nil
 }
 
 // BoolHint returns the SQL narrowing hint for one boolean column.

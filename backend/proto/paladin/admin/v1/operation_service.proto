@@ -49,10 +49,20 @@ message GetOperationRequest {
 
 message ListOperationsRequest {
   paladin.common.v1.PageRequest page = 1;
-  // CEL filter, evaluated against the Operation schema (see internal/filter/cel).
-  // Applied to each fetched page; the page cursor is unaffected, so a page
-  // whose rows all fail the predicate still returns next_page_token.
+  // CEL filter over the Operation schema (see internal/filter/cel). The
+  // SQL-expressible conjuncts are pushed into the query; the full expression
+  // is then evaluated over the fetched page, so a page whose rows all fail the
+  // predicate still returns next_page_token and the caller keeps paging.
   string filter = 2;
+  // Order on the operation id, which is a UUIDv7 and therefore ordered by
+  // creation time. Unspecified means ASC, the original behaviour.
+  //
+  // DESC exists because every caller that shows "current activity" wants the
+  // newest rows and there was no way to ask for them: a page of 50 off an
+  // ascending cursor is the 50 OLDEST operations, so the console's
+  // background-ops drawer showed a three-day-old failure and none of the
+  // operations that had run since.
+  paladin.common.v1.SortOrder sort_order = 3;
 }
 
 message ListOperationsResponse {

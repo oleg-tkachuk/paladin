@@ -10,6 +10,7 @@ import {
   PlatformOperationService,
   ListOperationsResponseSchema,
 } from "@/gen/paladin/admin/v1/operation_service_pb";
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { anyRegistry } from "@/lib/connect/any-registry";
 import { planeTransport } from "@/lib/server/upstream";
 import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
@@ -134,7 +135,15 @@ export async function GET(req: Request) {
       toJson(
         ListOperationsResponseSchema,
         await adminOperations.listOperations(
-          { page: { pageSize: 50, pageToken: "" }, filter: "" },
+          {
+            page: { pageSize: 50, pageToken: "" },
+            filter: "",
+            // Newest first. The cursor is ascending by default, so a page of
+            // 50 is the 50 OLDEST operations — which is how a three-day-old
+            // failure became the drawer's idea of current activity while
+            // everything that ran since stayed out of view.
+            sortOrder: SortOrder.DESC,
+          },
           { headers },
         ),
         // operations.metadata and .response are Any; without the registry the
