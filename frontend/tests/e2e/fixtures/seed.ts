@@ -1177,6 +1177,29 @@ export async function deleteUsersBySubject(subjects: string[]): Promise<void> {
  * ended up with — a collection made through the console's own dialog counts
  * against the purge exactly the same way.
  */
+/**
+ * Read a Collection's stored Cedar policy and its current version.
+ *
+ * The policy editor's whole job is to make this string what the operator
+ * typed, so a test that only asserts on the toast proves nothing: a save that
+ * reported success and wrote the previous text would pass it. Reading the
+ * stored value back through the admin API is the assertion that cannot be
+ * satisfied by the UI alone.
+ */
+export async function collectionPolicy(
+  tenantId: string,
+  collection: string,
+): Promise<{ cedarPolicy: string; resourceVersion: string }> {
+  const client = createClient(CollectionService, adminTransport());
+  const got = await client.getCollection({
+    name: `tenants/${tenantId}/collections/${collection}`,
+  });
+  return {
+    cedarPolicy: got.cedarPolicy,
+    resourceVersion: got.resourceVersion,
+  };
+}
+
 export async function collectionsOf(
   tenantId: string,
 ): Promise<SeededCollection[]> {

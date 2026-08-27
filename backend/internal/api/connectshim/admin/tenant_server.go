@@ -27,6 +27,9 @@ type TenantServer struct {
 func NewTenantServer(h *tenant.Handler) *TenantServer { return &TenantServer{H: h} }
 
 func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb.CreateTenantRequest]) (*connect.Response[pb.Tenant], error) {
+	if err := requireCompilablePolicy(req.Msg.GetTenant().GetInheritedCedarPolicy()); err != nil {
+		return nil, err
+	}
 	args, err := parseCreateTenantArgs(req.Msg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -131,6 +134,9 @@ func (s *TenantServer) GetTenantStorageMigration(ctx context.Context, req *conne
 }
 
 func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb.UpdateTenantRequest]) (*connect.Response[pb.Tenant], error) {
+	if err := requireCompilablePolicy(req.Msg.GetTenant().GetInheritedCedarPolicy()); err != nil {
+		return nil, err
+	}
 	m := req.Msg
 	idStr, err := tenantIDFromName(m.GetName())
 	if err != nil {
@@ -293,6 +299,9 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	policy := m.GetCedarPolicy()
+	if err := requireCompilablePolicy(policy); err != nil {
+		return nil, err
+	}
 	t, err := s.H.UpdateTenant(ctx, tenant.UpdateTenantArgs{
 		TenantID:             id,
 		ExpectedVersion:      rv,

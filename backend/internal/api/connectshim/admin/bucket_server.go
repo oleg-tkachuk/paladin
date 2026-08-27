@@ -23,6 +23,9 @@ type BucketServer struct {
 func NewBucketServer(h *bucketh.Handler) *BucketServer { return &BucketServer{H: h} }
 
 func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb.CreateBucketRequest]) (*connect.Response[pb.Bucket], error) {
+	if err := requireCompilablePolicy(req.Msg.GetBucket().GetCedarPolicy()); err != nil {
+		return nil, err
+	}
 	m := req.Msg
 	backend, err := backendIDFromName(m.GetParent())
 	if err != nil {
@@ -127,6 +130,9 @@ func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *connect.R
 }
 
 func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb.UpdateBucketRequest]) (*connect.Response[pb.Bucket], error) {
+	if err := requireCompilablePolicy(req.Msg.GetBucket().GetCedarPolicy()); err != nil {
+		return nil, err
+	}
 	m := req.Msg
 	backend, name, err := bucketNameParts(m.GetName())
 	if err != nil {
@@ -193,6 +199,9 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *BucketServer) SetBucketPolicy(ctx context.Context, req *connect.Request[pb.SetBucketPolicyRequest]) (*connect.Response[pb.Bucket], error) {
+	if err := requireCompilablePolicy(req.Msg.GetCedarPolicy()); err != nil {
+		return nil, err
+	}
 	backend, name, err := bucketNameParts(req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)

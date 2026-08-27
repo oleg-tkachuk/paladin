@@ -37,6 +37,9 @@ func NewCollectionServer(h *objectkey.Handler, bindings defaultBindingSource) *C
 }
 
 func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Request[pb.CreateCollectionRequest]) (*connect.Response[pb.Collection], error) {
+	if err := requireCompilablePolicy(req.Msg.GetCollectionResource().GetCedarPolicy()); err != nil {
+		return nil, err
+	}
 	m := req.Msg
 	tenantID, err := resolve.ResolveTenantParent(m.GetParent())
 	if err != nil {
@@ -88,6 +91,9 @@ func (s *CollectionServer) GetCollection(ctx context.Context, req *connect.Reque
 }
 
 func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Request[pb.UpdateCollectionRequest]) (*connect.Response[pb.Collection], error) {
+	if err := requireCompilablePolicy(req.Msg.GetCollectionResource().GetCedarPolicy()); err != nil {
+		return nil, err
+	}
 	m := req.Msg
 	ref, err := resolve.ResolveCollectionName(ctx, m.GetName())
 	if err != nil {
@@ -190,6 +196,9 @@ func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *connect
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	policy := req.Msg.GetCedarPolicy()
+	if err := requireCompilablePolicy(policy); err != nil {
+		return nil, err
+	}
 	out, err := s.H.UpdateCollection(ctx, objectkey.UpdateCollectionArgs{
 		TenantID:        ref.TenantID,
 		Collection:      ref.Collection,
