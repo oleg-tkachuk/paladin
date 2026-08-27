@@ -2044,6 +2044,42 @@ of the pipeline._
 
 ---
 
+## An ExchangeAudience can still race the rotation it was meant to follow
+
+- **Status:** Open. Surfaced 2026-08-27 by the e2e suite, roughly once per
+  74-test run with 4 workers — a real 401, not a timeout.
+- **Reason:** `currentRefreshToken` (src/lib/auth/bff.ts) exists so an
+  ExchangeAudience holding a token that a parallel iam rotation just consumed
+  can follow the chain to the successor. The successor is registered at
+  `rotationSuccessors.set(refreshToken, p)`, which runs AFTER
+  `dedupWithGrace` kicks the rotation off. An ExchangeAudience that reads the
+  map in that window finds nothing to follow, sends the consumed token, and
+  the backend does what it should: `refresh token reuse detected; revoked the
+  token family`. Observed in the api log at 16:47:41 with `revoked: 1`,
+  immediately before /config reported four 401s in a row.
+  The retry at exchange/route.ts:114 cannot recover it. It re-reads the
+  cookie, which the comment eight lines above correctly says cannot see a
+  Set-Cookie issued on another response — and by then the family is revoked
+  anyway, so a correct successor would be refused too. The damage is done by
+  the attempt, not by the retry.
+  Note the dedup key is `${audience}::${refreshToken}`, so two rotations of
+  the same token for different audiences are not deduplicated with each other
+  either; whether that is a second path into the same revocation or is fully
+  covered by the successor index has not been established.
+- **Definition of Done:** an ExchangeAudience that loses this race does not
+  cost the operator their session. Registering the successor before the
+  rotation starts (a placeholder the followers await) closes the observed
+  window; whatever the fix, the bar is the e2e suite running green repeatedly
+  with parallel workers, since that is what surfaced it.
+- **Blockers:** none. It is a narrow ordering fix in the auth path, which is
+  why it wants a deliberate change rather than a quick one.
+- **Related:** *The BFF's rotation bookkeeping is per-process*, directly
+  below, is the multi-replica half of the same mechanism. This one reproduces
+  on a single process, so pinning the console to one replica does not address
+  it.
+
+---
+
 ## The BFF's rotation bookkeeping is per-process
 
 - **Status:** Deferred (single-replica assumption, already documented).
