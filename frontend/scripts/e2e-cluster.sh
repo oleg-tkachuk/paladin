@@ -20,8 +20,10 @@
 #   ./scripts/e2e-cluster.sh tests/e2e/x.spec.ts   # one file
 #   NAMESPACE=other ./scripts/e2e-cluster.sh --headed
 #
-# NOTE: fixtures are not torn down (BACKLOG). Every run leaves tenants,
-# collections and objects behind in the cluster it ran against.
+# Fixtures tear themselves down (tests/e2e/fixtures/resources.ts), including
+# rows a test created through the console's own dialogs. A run against the
+# cluster should leave it exactly as it found it; if it does not, the teardown
+# says which resource it could not remove and why.
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-paladin}"

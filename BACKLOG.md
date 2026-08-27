@@ -261,39 +261,44 @@ the same commit. Treat this file like a runtime invariant.
   checks the existing three.
 - **Blockers:** none; ordering is by whichever incident asks first.
 
-### e2e leaves its fixtures behind, and the suite degrades as they pile up
+### Nothing notices when the e2e environment fills up from outside the suite
 
-- **Status:** Deferred (needs a teardown story, not a one-off cleanup).
-- **Reason:** Every run seeds tenants, collections, objects and memberships and
-  removes none of them. Against the dev cluster that reached 103 tenants, 102 of
-  them fixtures — and at that size the suite stopped passing. The failures did
-  not look like a data problem: a scope assertion failed because the wrong
-  "Switch Target" tenant matched, then a trash test timed out clicking a row
-  that had not rendered, then the list itself stopped showing a freshly seeded
-  tenant within ten seconds. Each fix moved the failure one step earlier, which
-  is the signature of a single cause behind several symptoms.
-  Deleting the fixtures returned the suite to 3/3 green on the tests that had
-  been failing.
+- **Status:** Deferred (the suite no longer contributes; other paths still can).
+- **Reason:** The suite used to leave every tenant, bucket, collection and
+  object it created, and at ~100 tenants it stopped passing — as three
+  unrelated-looking failures (a scope assertion matching the wrong "Switch
+  Target", a trash row that had not rendered, a list that stopped showing a
+  freshly seeded tenant), each fix moving the failure one step earlier. That
+  is fixed: teardown walks the RESTRICT edges and removes what a test created,
+  including rows typed into the console's own dialogs, and a full run now
+  leaves the counts exactly where it found them. What is still missing is a
+  floor under the assumption: an aborted run, a manual experiment, or a
+  half-finished migration can still leave rows, and the suite will keep
+  passing until the pile is large enough to fail in that same misleading way.
+- **Definition of Done:** A check that fails loudly when fixture-shaped rows
+  cross a threshold — run before the suite, so the next person reads "the
+  environment is full" instead of debugging a scope-picker assertion.
+- **Blockers:** none. Wants a definition of "fixture-shaped" that does not
+  also match a real tenant: the `e2e-` / `switch-` prefixes are the obvious
+  candidate, and they are a convention nothing enforces.
 
-  As of 2026-08-27 it is 141 tenants (140 trashed), 859 buckets, 624
-  collections and 399 objects, and the suite is green again — but only because
-  the truncation those numbers cause has been fixed twice since: the console
-  pages through its lists, and `filter` now selects from the table instead of
-  from one page. That is the wrong reason for a suite to be green. Every fixture
-  left behind moves the environment further from any real one, and the next
-  ceiling it crosses will be found the same way: as three unrelated-looking
-  test failures.
-- **Definition of Done:**
-  - Fixtures clean up after themselves — a Playwright fixture teardown, or a
-    per-run tenant prefix the suite deletes at the end. Deleting by prefix is
-    the cheap version and needs the RESTRICT edges walked in order (charges,
-    object_locks, object_versions, objects, collections, user_settings, users,
-    then tenants; buckets.owner_tenant_id nulled).
-  - A guard that fails loudly when fixture count crosses a threshold, so the
-    next person sees "the environment is full" instead of debugging a
-    scope-picker assertion.
-- **Blockers:** none. The cleanup is understood; what is missing is deciding
-  where it belongs (fixture teardown vs a `task e2e:clean`).
+### A config key the binary reads and the chart never renders ships inert
+
+- **Status:** Deferred (needs a drift check, not another fix).
+- **Reason:** Two operator-facing features shipped switched off because a
+  values key simply did not exist: `mcp.http.sessions_url` (so the /mcp page
+  could never show a session, and said "no MCP server configured") and
+  `housekeeping.operations_ttl` (so the terminal-operations reaper was never
+  registered and the failed-ops widget kept a three-day-old row). Both were
+  reported as page bugs. The config loader is strict about keys it does not
+  know and silent about keys nobody sets, which is the right way round for
+  safety and the wrong way round for noticing.
+- **Definition of Done:** A test that renders the chart and compares the
+  result against `internal/config/testdata/config-keys.golden`, failing on a
+  key the binary reads that the chart never sets — with an explicit allowlist
+  for the ones that are deliberately unset (secrets, per-deploy overrides).
+- **Blockers:** none. The golden file already exists and already lists every
+  key; what is missing is the comparison.
 
 ### Tables carrying `tenant_id` with no RLS policy
 
