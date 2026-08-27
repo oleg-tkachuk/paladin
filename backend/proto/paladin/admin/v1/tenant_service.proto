@@ -27,10 +27,11 @@ service TenantService {
   // RenameTenantSlug for the latter); resource_version is required and a stale
   // one is Aborted.
   rpc UpdateTenant(UpdateTenantRequest) returns (Tenant);
-  // DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+  // DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
   // remains recoverable via RestoreTenant within the retention window.
-  // Pass `force=true` to skip the trash and hard-delete immediately —
-  // used by automated test cleanups + emergency-purge flows.
+  // There is no flag that skips the trash — removing the row physically
+  // is PurgeTenant, a second call that names what it does. Automated
+  // cleanups and emergency-purge flows therefore make both calls.
   rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
   // ListTenants excludes soft-deleted tenants unless include_trashed or
   // only_trashed is set.
@@ -192,8 +193,8 @@ message RestoreTenantRequest {
 
 message PurgeTenantRequest {
   // name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
-  // soft-deleted, otherwise FAILED_PRECONDITION. Use DeleteTenant with
-  // force=true for the rare "skip the trash" path.
+  // soft-deleted, otherwise FAILED_PRECONDITION. There is no one-call
+  // path past the trash: DeleteTenant first, then this.
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 

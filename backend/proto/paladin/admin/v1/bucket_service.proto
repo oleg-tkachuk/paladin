@@ -23,8 +23,9 @@ service BucketService {
   // through this one.
   rpc UpdateBucket(UpdateBucketRequest) returns (Bucket);
   // DeleteBucket removes the registration. delete_on_backend=true also erases
-  // the physical bucket and its contents, which is irreversible. force waives
-  // the OCC guard and is independent of delete_on_backend.
+  // the physical bucket and its contents, which is irreversible.
+  // skip_version_check waives the OCC guard and nothing else — the two flags
+  // are independent, and only one of them destroys anything.
   rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
   // ListBuckets returns buckets across every backend, optionally filtered to
   // one.
@@ -79,7 +80,8 @@ message UpdateBucketRequest {
 
 message DeleteBucketRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
-  // OCC guard. Required unless force=true — see the note on force.
+  // OCC guard. Required unless skip_version_check is set — see the note
+  // on that field.
   string resource_version = 2;
   // When true, also removes the physical bucket (and is a destructive op).
   bool delete_on_backend = 3;

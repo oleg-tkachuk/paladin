@@ -96,10 +96,11 @@ type TenantServiceClient interface {
 	// RenameTenantSlug for the latter); resource_version is required and a stale
 	// one is Aborted.
 	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
-	// DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+	// DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
 	// remains recoverable via RestoreTenant within the retention window.
-	// Pass `force=true` to skip the trash and hard-delete immediately —
-	// used by automated test cleanups + emergency-purge flows.
+	// There is no flag that skips the trash — removing the row physically
+	// is PurgeTenant, a second call that names what it does. Automated
+	// cleanups and emergency-purge flows therefore make both calls.
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
 	// ListTenants excludes soft-deleted tenants unless include_trashed or
 	// only_trashed is set.
@@ -371,10 +372,11 @@ type TenantServiceHandler interface {
 	// RenameTenantSlug for the latter); resource_version is required and a stale
 	// one is Aborted.
 	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
-	// DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+	// DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
 	// remains recoverable via RestoreTenant within the retention window.
-	// Pass `force=true` to skip the trash and hard-delete immediately —
-	// used by automated test cleanups + emergency-purge flows.
+	// There is no flag that skips the trash — removing the row physically
+	// is PurgeTenant, a second call that names what it does. Automated
+	// cleanups and emergency-purge flows therefore make both calls.
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
 	// ListTenants excludes soft-deleted tenants unless include_trashed or
 	// only_trashed is set.

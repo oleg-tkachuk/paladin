@@ -81,8 +81,9 @@ type BucketServiceClient interface {
 	// through this one.
 	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
 	// DeleteBucket removes the registration. delete_on_backend=true also erases
-	// the physical bucket and its contents, which is irreversible. force waives
-	// the OCC guard and is independent of delete_on_backend.
+	// the physical bucket and its contents, which is irreversible.
+	// skip_version_check waives the OCC guard and nothing else — the two flags
+	// are independent, and only one of them destroys anything.
 	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
 	// ListBuckets returns buckets across every backend, optionally filtered to
 	// one.
@@ -271,8 +272,9 @@ type BucketServiceHandler interface {
 	// through this one.
 	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
 	// DeleteBucket removes the registration. delete_on_backend=true also erases
-	// the physical bucket and its contents, which is irreversible. force waives
-	// the OCC guard and is independent of delete_on_backend.
+	// the physical bucket and its contents, which is irreversible.
+	// skip_version_check waives the OCC guard and nothing else — the two flags
+	// are independent, and only one of them destroys anything.
 	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
 	// ListBuckets returns buckets across every backend, optionally filtered to
 	// one.

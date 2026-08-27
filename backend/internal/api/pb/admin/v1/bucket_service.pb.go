@@ -215,7 +215,8 @@ func (x *UpdateBucketRequest) GetBucket() *Bucket {
 type DeleteBucketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// OCC guard. Required unless force=true — see the note on force.
+	// OCC guard. Required unless skip_version_check is set — see the note
+	// on that field.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// When true, also removes the physical bucket (and is a destructive op).
 	DeleteOnBackend bool `protobuf:"varint,3,opt,name=delete_on_backend,json=deleteOnBackend,proto3" json:"delete_on_backend,omitempty"`

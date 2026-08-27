@@ -318,8 +318,8 @@ export type PurgeTenantRequest =
   Message<"paladin.admin.v1.PurgeTenantRequest"> & {
     /**
      * name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
-     * soft-deleted, otherwise FAILED_PRECONDITION. Use DeleteTenant with
-     * force=true for the rare "skip the trash" path.
+     * soft-deleted, otherwise FAILED_PRECONDITION. There is no one-call
+     * path past the trash: DeleteTenant first, then this.
      *
      * @generated from field: string name = 1;
      */
@@ -732,10 +732,11 @@ export const TenantService: GenService<{
     output: typeof TenantSchema;
   };
   /**
-   * DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+   * DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
    * remains recoverable via RestoreTenant within the retention window.
-   * Pass `force=true` to skip the trash and hard-delete immediately —
-   * used by automated test cleanups + emergency-purge flows.
+   * There is no flag that skips the trash — removing the row physically
+   * is PurgeTenant, a second call that names what it does. Automated
+   * cleanups and emergency-purge flows therefore make both calls.
    *
    * @generated from rpc paladin.admin.v1.TenantService.DeleteTenant
    */

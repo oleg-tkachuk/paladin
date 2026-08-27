@@ -550,8 +550,8 @@ func (x *RestoreTenantRequest) GetName() string {
 type PurgeTenantRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
-	// soft-deleted, otherwise FAILED_PRECONDITION. Use DeleteTenant with
-	// force=true for the rare "skip the trash" path.
+	// soft-deleted, otherwise FAILED_PRECONDITION. There is no one-call
+	// path past the trash: DeleteTenant first, then this.
 	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

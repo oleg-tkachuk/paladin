@@ -149,7 +149,8 @@ export type DeleteBucketRequest =
     name: string;
 
     /**
-     * OCC guard. Required unless force=true — see the note on force.
+     * OCC guard. Required unless skip_version_check is set — see the note
+     * on that field.
      *
      * @generated from field: string resource_version = 2;
      */
@@ -505,8 +506,9 @@ export const BucketService: GenService<{
   };
   /**
    * DeleteBucket removes the registration. delete_on_backend=true also erases
-   * the physical bucket and its contents, which is irreversible. force waives
-   * the OCC guard and is independent of delete_on_backend.
+   * the physical bucket and its contents, which is irreversible.
+   * skip_version_check waives the OCC guard and nothing else — the two flags
+   * are independent, and only one of them destroys anything.
    *
    * @generated from rpc paladin.admin.v1.BucketService.DeleteBucket
    */

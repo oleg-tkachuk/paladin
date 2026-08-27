@@ -718,8 +718,8 @@ export type Tenant = Message<"paladin.admin.v1.Tenant"> & {
    * deleted_at — soft-delete marker. Zero (unset) for active tenants;
    * non-zero for trashed rows recoverable via RestoreTenant. Filtered
    * out of ListTenants by default (set include_trashed or only_trashed
-   * to see them). Hard-delete (PurgeTenant / DeleteTenant force=true)
-   * removes the row physically.
+   * to see them). PurgeTenant removes the row physically, and is the
+   * only thing that does.
    *
    * @generated from field: google.protobuf.Timestamp deleted_at = 10;
    */
