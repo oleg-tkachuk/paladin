@@ -105,25 +105,41 @@ func StatusHandler(
 	})
 }
 
-// probeHealth asks a plane's /livez, which every role registers and which
-// answers without touching the database — the question is "can I reach this
-// process", not "is its database well". A non-2xx is as much a failure as a
-// dial error: both mean the bridge cannot use it.
-func probeHealth(ctx context.Context, base string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/livez", nil)
-	if err != nil {
-		return err
+// HealthProbe asks a plane's /livez over the supplied client, which every role
+// registers and which answers without touching the database — the question is
+// "can I reach this process", not "is its database well". A non-2xx is as much
+// a failure as a dial error: both mean the bridge cannot use it.
+//
+// The client matters: pass the one the bridge uses for its real upstream
+// calls. The planes' certificates chain to the internal mTLS CA, which the
+// system roots do not carry, so probing with http.DefaultClient reports
+// "x509: certificate signed by unknown authority" for every plane while the
+// bridge itself is talking to all three quite happily. A status endpoint that
+// invents an outage is worse than none — it is read during the incident it
+// misdescribes.
+func HealthProbe(c *http.Client) func(context.Context, string) error {
+	if c == nil {
+		c = http.DefaultClient
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	return func(ctx context.Context, base string) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/livez", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := c.Do(req)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			return &statusError{code: resp.StatusCode}
+		}
+		return nil
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return &statusError{code: resp.StatusCode}
-	}
-	return nil
 }
+
+// probeHealth is the zero-configuration default: plaintext upstreams only.
+var probeHealth = HealthProbe(nil)
 
 type statusError struct{ code int }
 

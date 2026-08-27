@@ -98,3 +98,45 @@ func TestStatusHandler_RequiresPlatformAdmin(t *testing.T) {
 		})
 	}
 }
+
+// The probe has to use the bridge's own client. Probing with the default one
+// cannot reach a plane behind the internal CA, so /status reported all three
+// upstreams as certificate failures while the bridge was using them normally —
+// an endpoint whose whole purpose is to be believed during an incident.
+func TestHealthProbeUsesTheSuppliedClient(t *testing.T) {
+	var used bool
+	client := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			used = true
+			if got := r.URL.Path; got != "/livez" {
+				t.Errorf("probed %q, want /livez", got)
+			}
+			return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+		}),
+	}
+
+	if err := HealthProbe(client)(context.Background(), "https://plane:8090"); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if !used {
+		t.Error("the supplied client was never called — the probe built its own")
+	}
+}
+
+// A plane that answers, but not with success, is as unusable as one that
+// refuses the connection.
+func TestHealthProbeTreatsNon2xxAsFailure(t *testing.T) {
+	client := &http.Client{
+		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 503, Body: http.NoBody}, nil
+		}),
+	}
+	err := HealthProbe(client)(context.Background(), "https://plane:8090")
+	if err == nil {
+		t.Fatal("503 reported as reachable")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

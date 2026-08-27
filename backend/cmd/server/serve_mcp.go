@@ -373,11 +373,23 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 		// unreachable bridge as an empty session list, so without this "the
 		// bridge is down" and "nobody is using MCP" look identical to an
 		// operator — on the page they open precisely when something is wrong.
+		// Probe over the same client the bridge uses for its upstream calls.
+		// The default client has no CA bundle, so it reported all three planes
+		// as "certificate signed by unknown authority" while the bridge was
+		// reaching them without trouble.
+		probeClient, perr := upstreamHTTPClient(cfg.MCP.Upstreams)
+		if perr != nil {
+			// Construction already fataled on this in the bridge runner; here
+			// it can only mean the config changed underneath us. Fall back to
+			// the default client rather than dropping /status entirely.
+			l.Warn("mcp /status: falling back to the default probe client", zap.Error(perr))
+			probeClient = nil
+		}
 		mux.Handle("GET /status", mcp.StatusHandler(sessions, verifier, []mcp.UpstreamTarget{
 			{Name: "admin", URL: cfg.MCP.Upstreams.AdminURL},
 			{Name: "data", URL: cfg.MCP.Upstreams.DataURL},
 			{Name: "iam", URL: cfg.MCP.Upstreams.IAMURL},
-		}, nil))
+		}, mcp.HealthProbe(probeClient)))
 	}
 
 	// The streamable transport has no reliable disconnect signal (clients can
