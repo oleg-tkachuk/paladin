@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"cuelang.org/go/cue/cuecontext"
 	cueyaml "cuelang.org/go/encoding/yaml"
@@ -331,4 +332,180 @@ func TestGoBlocksAreDeclaredInSchema(t *testing.T) {
 			"in schema.cue (preferred), or add it to schemaGapAllowlist with a "+
 			"note explaining why zero values are acceptable there.", tag)
 	}
+}
+
+// unsetKnobAllowlist records dotted config paths that neither the chart nor
+// schema.cue supplies a value for, together with why that is right.
+//
+// Prefix match: an entry covers itself and everything under it. Families
+// rather than individual keys, because these are families — a knob added to
+// an opt-in feature that is off by default should not need a new entry, while
+// a knob added anywhere else should.
+var unsetKnobAllowlist = map[string]string{
+	// Supplied at deploy time, never in a committed values file.
+	"auth.signing_key_secret":                    "secret ref; the env overlay or external-secrets fills it",
+	"api_token.hmac_key":                         "secret; per-deploy",
+	"api_token.hmac_key_secret":                  "secret ref; per-deploy",
+	"bootstrap.admin.password":                   "secret; per-deploy",
+	"datastores.postgres.password":               "secret; per-deploy",
+	"datastores.postgres.migrate_password":       "secret; per-deploy",
+	"datastores.postgres.reaper_password":        "secret; per-deploy",
+	"datastores.postgres.reaper_password_secret": "secret ref; per-deploy",
+	"runtime.health_snapshot_token":              "secret; opt-in debug endpoint",
+
+	// TLS knobs whose empty value IS the configuration: the certificate's
+	// SANs already cover the Service names, and skipping verification is
+	// something you turn on, never something you leave on.
+	"admin.server.tls.server_name":             "cert SANs cover the Service name",
+	"admin.server.tls.insecure_skip_verify":    "off is the only safe default",
+	"api.server.data.tls.server_name":          "cert SANs cover the Service name",
+	"api.server.data.tls.insecure_skip_verify": "off is the only safe default",
+	"api.server.iam.tls.server_name":           "cert SANs cover the Service name",
+	"api.server.iam.tls.insecure_skip_verify":  "off is the only safe default",
+	"mcp.upstreams.tls.server_name":            "cert SANs cover the Service name",
+	"mcp.upstreams.tls.insecure_skip_verify":   "off is the only safe default",
+	"worker.ops.tls.server_name":               "cert SANs cover the Service name",
+	"worker.ops.tls.insecure_skip_verify":      "off is the only safe default",
+
+	// The dispatcher's ops listener is in-cluster and plaintext by design;
+	// the whole tls block is therefore unset rather than half-filled.
+	"dispatcher.ops.tls": "in-cluster plaintext listener; enabling TLS is opt-in",
+
+	// Opt-in features. Zero means off, and off is the shipped state.
+	"auth.oauth":      "OAuth AS is opt-in (ADR-0009)",
+	"mcp.oauth":       "MCP OAuth metadata is opt-in",
+	"mcp.always_deny": "empty means 'no extra denies'; profiles carry the defaults",
+	"auth.login_rate_limit_per_ip_per_minute":         "0 disables; a deploy that wants it sets it",
+	"auth.login_rate_limit_per_subject_per_minute":    "0 disables; a deploy that wants it sets it",
+	"worker.jobs.housekeeping.hard_delete_after":      "0 disables the hard-deleter; opt-in per deploy",
+	"worker.jobs.housekeeping.hard_delete_batch_size": "unused while hard_delete_after is 0",
+	"dispatcher.charge_events_enabled":                "opt-in billing signal",
+	"dispatcher.audit_mirror_enabled":                 "set per deploy; the chart's overlay turns it on",
+
+	// Whole blocks already recorded as schema gaps by schemaGapAllowlist.
+	// Repeating every leaf here would say the same thing 30 times.
+	"ingest": "see schemaGapAllowlist — the whole block has no CUE schema",
+}
+
+// TestEveryKnobHasAValueFromSomewhere fails when a config key gets its value
+// from neither the chart nor schema.cue, so a real deploy runs it on the Go
+// zero value.
+//
+// This is the shape of a bug that has already shipped twice, and both times
+// it arrived as a page report rather than a config one:
+//
+//	mcp.http.sessions_url    absent → the admin plane had no bridge to ask,
+//	                         so /mcp answered "no MCP server configured" and
+//	                         could never show a session
+//
+// The loader is strict about keys it does not recognise and silent about keys
+// nobody sets. That is the right way round for safety and the wrong way round
+// for noticing, which is what this test is for.
+//
+// "From somewhere" deliberately excludes the env overlays: values-local.yaml
+// is a dev file, and a knob only it sets is still unset in production.
+func TestEveryKnobHasAValueFromSomewhere(t *testing.T) {
+	chart := chartConfigKeys(t)
+
+	// What CUE alone supplies: load a config carrying only the fields that
+	// have no default, and see what came out non-zero.
+	dir := t.TempDir()
+	minPath := filepath.Join(dir, "min.yaml")
+	if err := os.WriteFile(minPath, []byte(minimalConfigYAML), 0o600); err != nil {
+		t.Fatalf("write minimal config: %v", err)
+	}
+	minimal, err := Load([]string{minPath}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("load minimal config: %v", err)
+	}
+
+	var unset []string
+	for _, path := range zeroValuedPaths(reflect.ValueOf(minimal), "") {
+		if chart[path] || allowlistedKnob(path) {
+			continue
+		}
+		unset = append(unset, path)
+	}
+	sort.Strings(unset)
+
+	for _, path := range unset {
+		t.Errorf("config knob %q has no value from the chart and no default in "+
+			"schema.cue, so a deploy runs it on the Go zero value.\n\n"+
+			"Set it in deploy/chart/values.yaml (preferred — that is what the "+
+			"ConfigMap renders), give it a default in schema.cue, or add it to "+
+			"unsetKnobAllowlist with the reason zero is correct there.", path)
+	}
+}
+
+// allowlistedKnob reports whether path, or any prefix of it, is allowlisted.
+func allowlistedKnob(path string) bool {
+	for {
+		if _, ok := unsetKnobAllowlist[path]; ok {
+			return true
+		}
+		i := strings.LastIndexByte(path, '.')
+		if i < 0 {
+			return false
+		}
+		path = path[:i]
+	}
+}
+
+// chartConfigKeys returns every dotted path the chart's `config:` block names,
+// parents included. values.yaml only: the env overlays are per-deploy, and a
+// knob that only values-local.yaml sets is still unset in production.
+func chartConfigKeys(t *testing.T) map[string]bool {
+	t.Helper()
+	body, err := os.ReadFile(repoFile(t, "deploy/chart/values.yaml"))
+	if err != nil {
+		t.Fatalf("read chart values: %v", err)
+	}
+	var wrap struct {
+		Config map[string]any `yaml:"config"`
+	}
+	if err := goyaml.Unmarshal(body, &wrap); err != nil {
+		t.Fatalf("decode chart values: %v", err)
+	}
+	out := map[string]bool{}
+	var walk func(m map[string]any, prefix string)
+	walk = func(m map[string]any, prefix string) {
+		for k, v := range m {
+			p := k
+			if prefix != "" {
+				p = prefix + "." + k
+			}
+			out[p] = true
+			if sub, ok := v.(map[string]any); ok {
+				walk(sub, p)
+			}
+		}
+	}
+	walk(wrap.Config, "")
+	return out
+}
+
+// zeroValuedPaths returns the dotted path of every leaf field left at its Go
+// zero value. Structs are descended into; anything else is a leaf.
+func zeroValuedPaths(v reflect.Value, prefix string) []string {
+	var out []string
+	tp := v.Type()
+	for i := 0; i < tp.NumField(); i++ {
+		tag := strings.SplitN(tp.Field(i).Tag.Get("yaml"), ",", 2)[0]
+		if tag == "" || tag == "-" {
+			continue
+		}
+		path := tag
+		if prefix != "" {
+			path = prefix + "." + tag
+		}
+		fv := v.Field(i)
+		if fv.Kind() == reflect.Struct && fv.Type() != reflect.TypeOf(time.Time{}) {
+			out = append(out, zeroValuedPaths(fv, path)...)
+			continue
+		}
+		if fv.IsZero() {
+			out = append(out, path)
+		}
+	}
+	return out
 }

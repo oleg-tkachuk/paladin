@@ -282,23 +282,20 @@ the same commit. Treat this file like a runtime invariant.
   also match a real tenant: the `e2e-` / `switch-` prefixes are the obvious
   candidate, and they are a convention nothing enforces.
 
-### A config key the binary reads and the chart never renders ships inert
+### `housekeeping.operations_ttl` is 14 days because the chart says so
 
-- **Status:** Deferred (needs a drift check, not another fix).
-- **Reason:** Two operator-facing features shipped switched off because a
-  values key simply did not exist: `mcp.http.sessions_url` (so the /mcp page
-  could never show a session, and said "no MCP server configured") and
-  `housekeeping.operations_ttl` (so the terminal-operations reaper was never
-  registered and the failed-ops widget kept a three-day-old row). Both were
-  reported as page bugs. The config loader is strict about keys it does not
-  know and silent about keys nobody sets, which is the right way round for
-  safety and the wrong way round for noticing.
-- **Definition of Done:** A test that renders the chart and compares the
-  result against `internal/config/testdata/config-keys.golden`, failing on a
-  key the binary reads that the chart never sets — with an explicit allowlist
-  for the ones that are deliberately unset (secrets, per-deploy overrides).
-- **Blockers:** none. The golden file already exists and already lists every
-  key; what is missing is the comparison.
+- **Status:** Deferred (a number to agree on, not a defect).
+- **Reason:** schema.cue defaults it to 720h and the chart now sets 336h. The
+  chart value was added while chasing a stale row on the failed-operations
+  widget, on the mistaken belief that the key being absent left the reaper
+  switched off — it did not: CUE supplied 720h and the reaper has always run.
+  The row was on the widget because the listing sorted ascending, which is
+  fixed separately. So 14 days is a retention change nobody has weighed:
+  shorter is friendlier to the widget, longer is friendlier to a post-mortem.
+- **Definition of Done:** Either a deliberate decision recorded next to the
+  value, or the chart line goes and 720h stands.
+- **Blockers:** none. Wants an opinion on how far back an operator should be
+  able to read a batch job's outcome.
 
 ### Tables carrying `tenant_id` with no RLS policy
 
