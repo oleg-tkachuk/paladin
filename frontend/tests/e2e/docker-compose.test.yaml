@@ -62,6 +62,15 @@ x-paladin-base: &paladin-base
     # koanf's env provider maps PALADIN_FOO_BAR by replacing every "_" with ".",
     # so a multi-word key like login_rate_limit_per_subject_per_minute can't be
     # reached via env; only single-word path segments (storage.backends.…) can.
+    # ── M2M tokens ───────────────────────────────────────────
+    # Off in backend/configs/compose.yaml, which made the console's
+    # /tenants/:id/m2m-tokens page untestable: every RPC behind it answers
+    # Unimplemented, so a spec could only assert that the feature is absent.
+    # It is a shipped page that mints bearer credentials, so the suite runs
+    # with it on. No key is needed — an empty api_token.hmac_key derives one
+    # from auth.signing_key (build_api_token.go), which is exactly the
+    # single-tenant dev posture this stack already has everywhere else.
+    PALADIN_API_TOKEN_ENABLED: "true"
     # ── storage: in-compose MinIO ────────────────────────────
     # Two endpoints, and they are NOT interchangeable. The backend
     # signs presigned URLs against public_endpoint, and SigV4 covers

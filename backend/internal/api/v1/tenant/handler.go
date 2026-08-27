@@ -333,7 +333,18 @@ func (h *Handler) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (*D
 	}
 	b, err := h.repo.GetDefaultBinding(ctx, tenantID)
 	if err != nil {
-		return nil, err
+		// MapError, not a raw return: ErrNotFound is registered to
+		// CodeNotFound, but nothing here was calling the mapper, so an absent
+		// binding left as connect's default — Unknown. The console reads
+		// exactly this code to decide between "no default route set" and a
+		// real failure, so every tenant without a binding was greeted by an
+		// error toast instead of the empty state the page has always had.
+		//
+		// The wrap keeps errors.Is intact for the two in-process callers that
+		// branch on the sentinel (CreateCollection's bare-name rejection and
+		// the collection-route lister's bare aliases) while saying what is
+		// actually missing: the tenant exists, its binding does not.
+		return nil, apiutil.MapError(fmt.Errorf("tenant has no default binding: %w", err))
 	}
 	return &b, nil
 }

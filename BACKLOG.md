@@ -2112,28 +2112,32 @@ of the pipeline._
 
 ---
 
-## Nine console pages have never been opened by a test
+## Seven console pages have never been opened by a test
 
 - **Status:** Open. Measured 2026-08-27.
 - **Reason:** The Playwright suite navigates 27 of the console's 44 routes.
   Two of the rest are `TabStub` placeholders (`/tenants/:id/policies`,
   the bucket `replication` tab) and are not gaps. Several more are reached by
-  clicking from a covered page. These nine are opened by nothing:
+  clicking from a covered page. These seven are opened by nothing:
   `/upload` (474 lines — uploads in the suite go through presign in the
-  fixtures, never this page), `/tenants/:id/m2m-tokens` (425),
-  `/storage-backends/:id/buckets/:bucket` (428), `/tenants/:id/audit-log`
-  (311), `/storage-backends/:id` (271),
+  fixtures, never this page), `/storage-backends/:id/buckets/:bucket` (428),
+  `/tenants/:id/audit-log` (311), `/storage-backends/:id` (271),
   `/tenants/:id/buckets/:backend/:bucket/collections` (229),
-  `/tenants/:id/default-binding` (186), `/oauth/consent` (158),
+  `/oauth/consent` (158),
   `/tenants/:id/collections/:name/objects/:id` (27).
-  The two policy editors were on this list until 2026-08-27. The first test
-  ever pointed at the collection one found that Save stored Cedar the engine
-  cannot compile and wedged the collection permanently; the bucket one was
-  covered straight after, because a guard proven on one door says nothing
-  about the next. That is the argument for the other nine, and it is not a
-  hypothetical one.
-  Next by value: `/tenants/:id/m2m-tokens` mints credentials, and
-  `/tenants/:id/default-binding` decides where a tenant's objects land.
+  Four pages have come off this list, and three of the four found something.
+  The collection policy editor: Save stored Cedar the engine cannot compile
+  and wedged the collection permanently. The bucket editor followed it,
+  because a guard proven on one door says nothing about the next. The default
+  route page: an absent binding answered Unknown instead of NotFound, so the
+  page the operator saw was an error toast rather than its own empty state.
+  M2M tokens needed the subsystem switched on in the e2e stack before it
+  could be opened at all — it had been off, which is why nothing had noticed.
+  That is the argument for the remaining seven, and none of it was
+  hypothetical.
+  Next by value: `/storage-backends/:id/buckets/:bucket` is the largest
+  uncovered page at 428 lines, and `/upload` is the only object-ingest path a
+  human actually uses.
 - **Definition of Done:** each page is opened by a test that asserts on
   something the page is FOR, in the shape of collection-policy.spec.ts:
   drive the UI, then read the result back through the admin API rather than

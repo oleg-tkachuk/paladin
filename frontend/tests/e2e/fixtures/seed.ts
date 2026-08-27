@@ -38,6 +38,7 @@ import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
 import { EventSubscriptionService } from "@/gen/paladin/admin/v1/event_subscription_service_pb";
 import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
+import { APITokenService } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
@@ -377,6 +378,11 @@ export async function seedBucket(opts?: {
   bucketIdPrefix?: string;
   displayNamePrefix?: string;
   provision?: boolean;
+  // Bind the bucket to one tenant. Unset (the default, and what every caller
+  // before the default-route spec wanted) leaves it shared. The default-route
+  // picker lists tenant-owned buckets only, so a shared bucket is invisible
+  // there — a test that used one would be asserting against an empty select.
+  ownerTenantId?: string;
 }): Promise<SeededBucket> {
   const backendId = opts?.backendId ?? "primary";
   const bucketId = uniqueSlug(opts?.bucketIdPrefix ?? "e2e-bucket");
@@ -394,6 +400,7 @@ export async function seedBucket(opts?: {
       region: "",
       labels: {},
       cedarPolicy: "",
+      ownerTenantId: opts?.ownerTenantId ?? "",
     },
     provisionOnBackend: opts?.provision ?? false,
   });
@@ -859,6 +866,78 @@ export async function quotaVersion(tenantId: string): Promise<string> {
  * make the stored string what the operator typed, and only the server can say
  * whether it did.
  */
+/**
+ * Read a tenant's default binding through the admin API.
+ *
+ * Returns "" when nothing is bound. The page's own text is not evidence: the
+ * binding decides where bare-name creation lands, so the assertion has to be
+ * what the server stores, not what the card renders.
+ */
+export async function tenantDefaultBinding(tenantId: string): Promise<string> {
+  const client = createClient(TenantService, adminTransport());
+  try {
+    const res = await client.getTenantDefaultBinding({
+      name: `tenants/${tenantId}`,
+    });
+    return res.bucket;
+  } catch (err) {
+    // An unbound tenant answers NotFound rather than an empty binding.
+    if (err instanceof ConnectError && err.code === Code.NotFound) return "";
+    throw err;
+  }
+}
+
+/**
+ * List a tenant's M2M tokens through the admin API.
+ *
+ * The console shows a prefix and never the secret again after the reveal, so
+ * this is the only way a test can confirm that pressing "Create token"
+ * actually minted a credential rather than drawing one.
+ */
+/**
+ * Drop a tenant's default binding.
+ *
+ * Teardown only. `tenant_default_bindings.bucket_id` is a foreign key, so a
+ * bucket the binding still names cannot be deleted — a test that leaves a
+ * route set leaks the bucket it pointed at, and the suite says so on the way
+ * out. Idempotent: an already-absent binding is not an error.
+ */
+export async function clearTenantDefaultBinding(
+  tenantId: string,
+): Promise<void> {
+  const client = createClient(TenantService, adminTransport());
+  try {
+    await client.clearTenantDefaultBinding({ name: `tenants/${tenantId}` });
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.NotFound) return;
+    throw err;
+  }
+}
+
+export async function m2mTokensOf(tenantId: string): Promise<
+  {
+    id: string;
+    name: string;
+    prefix: string;
+    audience: string[];
+    revoked: boolean;
+  }[]
+> {
+  const client = createClient(APITokenService, adminTransport());
+  const res = await client.list({
+    tenantId,
+    includeRevoked: true,
+    pageSize: 200,
+  });
+  return res.apiTokens.map((t) => ({
+    id: t.id,
+    name: t.name,
+    prefix: t.prefix,
+    audience: t.audience,
+    revoked: t.revokedAt !== undefined,
+  }));
+}
+
 export async function bucketPolicy(
   backendId: string,
   bucketId: string,
