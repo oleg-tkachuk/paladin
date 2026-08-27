@@ -320,10 +320,13 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 	}
 	stored, err := h.refresh.Get(ctx, jti)
 	if err != nil {
-		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
-		// the whole family and record it before rejecting.
+		// A rotated (revoked) token presented HERE is recorded and rejected,
+		// but the family is left standing — see onRefreshReplayed. This RPC
+		// consumes nothing, so a stale token reaching it is the expected
+		// outcome of a race, not a theft signal. Rotation keeps the full
+		// RFC 6819 response; that is the path the RFC is written about.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
-			h.onRefreshReuse(ctx, jti, userID, tenantID)
+			h.onRefreshReplayed(ctx, jti, userID, tenantID)
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
 		if errors.Is(err, authstore.ErrNotFound) {
@@ -813,10 +816,53 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 }
 
 // parseRefresh delegates to the injected RefreshTokenDecoder.
-// onRefreshReuse revokes every refresh token for the user (RFC 6819 reuse
-// detection), logs a warning, and writes an audit row (is_error → highlighted
-// in the admin audit console). Best-effort — never alters the caller's already
-// decided rejection.
+// onRefreshReplayed records a spent refresh token presented to a
+// NON-consuming RPC and leaves the family alone.
+//
+// ExchangeAudience mints an access token without touching the chain, so a
+// token that a concurrent rotation spent a millisecond earlier arrives here
+// routinely: the console's BFF fires /me and the audience exchanges together
+// carrying one cookie, because the browser cannot update it between requests
+// in flight. Treating that as theft revoked the live successor too, and the
+// operator was signed out by a race they could not have avoided — observed
+// under the e2e suite roughly once per full run.
+//
+// Declining to revoke costs no containment. The presented token is already
+// spent and mints nothing; an attacker holding it gains exactly what the
+// legitimate caller gets here, which is a rejection. What reuse detection
+// genuinely buys on this path is the SIGNAL, so the audit row stays and says
+// plainly that nothing was revoked. Containment stays where the RFC puts it:
+// on rotation, which is the call an attacker must make to get a usable token.
+func (h *Handler) onRefreshReplayed(ctx context.Context, jti, userID, tenantID uuid.UUID) {
+	logger.FromContext(ctx).Warn("spent refresh token presented to a non-consuming RPC; rejected, family left intact",
+		zap.String("user_id", userID.String()),
+		zap.String("jti", jti.String()))
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+		EntryID:       uuid.Must(uuid.NewV7()),
+		At:            h.now().UTC(),
+		ActorSubject:  userID.String(),
+		ActorTenantID: tenantID,
+		ActorAudience: auth.AudienceIAM,
+		Action:        "iam.RefreshTokenReplayed",
+		ResourceName:  "users/" + userID.String(),
+		ErrorMessage:  "spent refresh token presented to ExchangeAudience; rejected without revoking the family",
+	})
+}
+
+// onRefreshReuse revokes the replayed token's FAMILY (RFC 6819 reuse
+// detection — not every session the user has; RevokeRefreshTokenFamily is
+// scoped to the compromised chain), logs a warning, and writes an audit row
+// (is_error → highlighted in the admin audit console). Best-effort — never
+// alters the caller's already decided rejection.
+//
+// Reserved for the CONSUMING path. Rotation is where presenting a spent token
+// is evidence rather than coincidence: the legitimate holder can only have one
+// live token, so a second presentation means two holders. Reaching for this on
+// a read-only path costs real sessions and buys nothing — see
+// onRefreshReplayed.
 func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
 	revoked, err := h.refresh.RevokeFamilyOf(ctx, jti)
 	logger.FromContext(ctx).Warn("refresh token reuse detected; revoked the token family",

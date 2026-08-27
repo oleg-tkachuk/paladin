@@ -481,6 +481,60 @@ func TestRefreshToken_DecoderError(t *testing.T) {
 	}
 }
 
+// ─── Spent-token handling: destructive on rotation, not on exchange ─────────
+
+// A spent refresh token reaching the two paths must be answered differently.
+// Rotation is the call an attacker has to make to obtain a usable token, and a
+// second presentation there means two holders — revoke the family. Exchange
+// consumes nothing, so a token a concurrent rotation spent a millisecond
+// earlier arrives routinely (the console's BFF fires /me and its audience
+// exchanges together on one cookie); revoking there took the live successor
+// with it and signed the operator out over a race.
+
+func revokedTokenHandler(t *testing.T) (*Handler, *fakeRefresh) {
+	t.Helper()
+	uid, tid := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{getErr: authstore.ErrTokenRevoked}
+	users := &fakeUsers{user: authstore.User{UserID: uid, TenantID: tid, Subject: "u1"}}
+	h := NewHandler(users, refresh, &stubMinter{},
+		stubDecoder{jti: uuid.New(), uid: uid, tid: tid}, allowAuthorizer{})
+	return h, refresh
+}
+
+func TestExchangeAudience_SpentTokenRejectedWithoutRevokingTheFamily(t *testing.T) {
+	h, refresh := revokedTokenHandler(t)
+
+	_, err := h.ExchangeAudience(context.Background(), ExchangeAudienceInput{
+		RefreshToken: "spent", TargetAudience: auth.AudienceAdmin,
+	})
+	if code(err) != connect.CodeUnauthenticated {
+		t.Fatalf("code = %v, want Unauthenticated", code(err))
+	}
+	// The point of the change: the caller is refused and everything else
+	// survives. A revocation here would take the successor the legitimate
+	// holder is already using.
+	if refresh.revokeFamilies != 0 {
+		t.Errorf("RevokeFamilyOf calls = %d, want 0 — exchange consumes nothing, so a spent token is a race, not a theft signal", refresh.revokeFamilies)
+	}
+	if refresh.revokeForUsers != 0 {
+		t.Errorf("RevokeForUser calls = %d, want 0", refresh.revokeForUsers)
+	}
+}
+
+func TestRefreshToken_SpentTokenStillRevokesTheFamily(t *testing.T) {
+	h, refresh := revokedTokenHandler(t)
+
+	_, err := h.RefreshToken(context.Background(), RefreshInput{RefreshToken: "spent"})
+	if code(err) != connect.CodeUnauthenticated {
+		t.Fatalf("code = %v, want Unauthenticated", code(err))
+	}
+	// Guards the half that must NOT move: RFC 6819 containment lives on the
+	// consuming path, and softening exchange must not soften this one.
+	if refresh.revokeFamilies != 1 {
+		t.Errorf("RevokeFamilyOf calls = %d, want 1 — rotation keeps full reuse detection", refresh.revokeFamilies)
+	}
+}
+
 // ─── WhoAmI route table (ADR-0010 Phase 4) ──────────────────────────────────
 
 type stubRouteLister struct {
