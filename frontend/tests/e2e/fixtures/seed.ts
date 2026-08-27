@@ -1099,6 +1099,108 @@ export async function collectionCount(tenantId: string): Promise<number> {
  * swallowed: a teardown that throws turns a passing test red for a reason that
  * has nothing to do with what it asserted.
  */
+/**
+ * A teardown target that is already gone is a success, not a warning.
+ *
+ * A spec whose subject IS the delete (collections-crud deletes its own
+ * collection, trash.spec trashes its own tenant) reaches teardown with nothing
+ * left to remove. Reporting that trains the reader to skim past teardown
+ * warnings, which is the opposite of why they exist.
+ */
+function alreadyGone(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.NotFound;
+}
+
+/**
+ * Delete the users a tenant owns, and any this test created by other means.
+ *
+ * `users.tenant_id` is ON DELETE RESTRICT, so a tenant that still has one
+ * cannot be purged — the membership fixture creates exactly one, which is why
+ * every `switch-*` tenant stopped at "trashed" and stayed in the list.
+ *
+ * The UI tests are the other half: user-admin.spec types a subject into the
+ * console's create dialog, so no fixture ever learns the row exists. Those are
+ * registered by subject and removed here.
+ */
+export async function deleteUsersOf(tenantId: string): Promise<void> {
+  const client = createClient(UserService, iamAdminTransport());
+  const page = await client.listUsers({
+    parent: `tenants/${tenantId}`,
+    page: { pageSize: 200, pageToken: "" },
+  });
+  await Promise.allSettled(
+    page.users.map((u) =>
+      client.deleteUser({ name: u.name, resourceVersion: u.resourceVersion }),
+    ),
+  );
+}
+
+/**
+ * Delete users by subject, wherever they live. Used for rows a UI test
+ * created, where the test knows only what it typed.
+ */
+export async function deleteUsersBySubject(subjects: string[]): Promise<void> {
+  if (!subjects.length) return;
+  const client = createClient(UserService, iamAdminTransport());
+  const wanted = new Set(subjects);
+  const results = await Promise.allSettled(
+    subjects.map(async (subject) => {
+      // Cross-tenant listing (empty parent) is platform-admin only, which the
+      // fixture is; filtering server-side keeps this to one page.
+      const page = await client.listUsers({
+        parent: "",
+        page: { pageSize: 50, pageToken: "" },
+        filter: `subject == ${JSON.stringify(subject)}`,
+      });
+      for (const u of page.users) {
+        if (!wanted.has(u.subject)) continue;
+        await client.deleteUser({
+          name: u.name,
+          resourceVersion: u.resourceVersion,
+        });
+      }
+    }),
+  );
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected" && !alreadyGone(r.reason)) {
+      console.warn(
+        `[teardown] user ${subjects[i]} not deleted: ${String(r.reason).slice(0, 200)}`,
+      );
+    }
+  }
+}
+
+/**
+ * Every collection a tenant owns, as deleteCollections takes them.
+ *
+ * Registration covers what a fixture created; this covers what the tenant
+ * ended up with — a collection made through the console's own dialog counts
+ * against the purge exactly the same way.
+ */
+export async function collectionsOf(
+  tenantId: string,
+): Promise<SeededCollection[]> {
+  const client = createClient(CollectionService, adminTransport());
+  const out: SeededCollection[] = [];
+  let pageToken = "";
+  do {
+    const res = await client.listCollections({
+      parent: `tenants/${tenantId}`,
+      page: { pageSize: 200, pageToken },
+    });
+    for (const c of res.collections) {
+      out.push({
+        tenantId,
+        bucket: c.bucket,
+        collection: c.collection,
+        displayName: c.displayName,
+      });
+    }
+    pageToken = res.page?.nextPageToken ?? "";
+  } while (pageToken);
+  return out;
+}
+
 export async function deleteTenants(tenantIds: string[]): Promise<void> {
   const client = createClient(TenantService, adminTransport());
   const results = await Promise.allSettled(
@@ -1120,11 +1222,16 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
       } catch {
         // Already trashed, or gone. The purge below decides which.
       }
-      // Purging is the ideal end state but not always reachable: the FK from
-      // collections/objects is ON DELETE RESTRICT, so a tenant that owns data
-      // cannot be hard-deleted until the data is gone. That is the product
-      // rule, not something a fixture should route around — trashed is enough,
-      // because what hurt was live tenants filling every list and picker.
+      // Walk the RESTRICT edges the way docs/deletion-semantics.md prescribes:
+      // objects, then collections, then users. Trashed was "enough" while
+      // nothing walked them, and the result was a switch-* tenant left in the
+      // trash after every run that used the membership fixture — its one
+      // users row was all it took to refuse the purge.
+      await deleteCollections(await collectionsOf(id)).catch(() => {});
+      await deleteUsersOf(id).catch(() => {});
+      // Purging is still not always reachable — an object under a COMPLIANCE
+      // lock cannot be removed by anyone, and that is the product rule
+      // working. Trashed is the honest fallback then.
       try {
         await client.purgeTenant({ name: `tenants/${id}` });
       } catch (err) {
@@ -1138,7 +1245,7 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
   // tenant that could only be trashed is not reported: that is the expected
   // outcome whenever the test wrote any data.
   for (const [i, r] of results.entries()) {
-    if (r.status === "rejected") {
+    if (r.status === "rejected" && !alreadyGone(r.reason)) {
       console.warn(
         `[teardown] tenant ${tenantIds[i]} not purged: ${String(r.reason).slice(0, 200)}`,
       );
@@ -1234,7 +1341,7 @@ export async function deleteCollections(
     }),
   );
   for (const [i, r] of results.entries()) {
-    if (r.status === "rejected") {
+    if (r.status === "rejected" && !alreadyGone(r.reason)) {
       console.warn(
         `[teardown] collection ${items[i].collection} not deleted: ` +
           `${String(r.reason).slice(0, 200)}`,
@@ -1265,7 +1372,7 @@ export async function deleteBuckets(items: SeededBucket[]): Promise<void> {
     }),
   );
   for (const [i, r] of results.entries()) {
-    if (r.status === "rejected") {
+    if (r.status === "rejected" && !alreadyGone(r.reason)) {
       console.warn(
         `[teardown] bucket ${items[i].bucketId} not deleted: ` +
           `${String(r.reason).slice(0, 200)}`,

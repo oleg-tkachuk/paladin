@@ -74,6 +74,7 @@ test.describe("Collections CRUD", () => {
   test("the create dialog refuses to submit without a bucket", async ({
     page,
     makeEnabledBackend,
+    trackCollection,
   }) => {
     // A backend with no buckets is the only way to reach the no-bucket state
     // now: the dialog defaults to a backend that HAS buckets, precisely so an
@@ -89,7 +90,14 @@ test.describe("Collections CRUD", () => {
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("#ok-name")).toBeVisible({ timeout: 15_000 });
-    await dialog.locator("#ok-name").fill(`e2e/${uniqueSlug("ok")}`);
+    const created = `e2e/${uniqueSlug("ok")}`;
+    trackCollection({
+      tenantId,
+      bucket: "",
+      collection: created,
+      displayName: "",
+    });
+    await dialog.locator("#ok-name").fill(created);
 
     // Choosing the empty backend leaves nothing to bind to.
     await pickOption(
@@ -110,6 +118,7 @@ test.describe("Collections CRUD", () => {
 
   test("creating a Collection makes it appear in the list", async ({
     page,
+    trackCollection,
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
@@ -121,6 +130,12 @@ test.describe("Collections CRUD", () => {
 
     const dialog = page.getByRole("dialog");
     const name = `e2e/${uniqueSlug("ok")}`;
+    trackCollection({
+      tenantId,
+      bucket: "",
+      collection: name,
+      displayName: "",
+    });
     await dialog.locator("#ok-name").fill(name);
 
     // Backend then bucket: the bucket list is derived from the chosen backend,

@@ -4,6 +4,7 @@
 import { test as base } from "@playwright/test";
 import {
   deleteBackends,
+  deleteUsersBySubject,
   deleteBuckets,
   deleteCollections,
   deleteTenants,
@@ -62,6 +63,8 @@ interface Registry {
   backends: string[];
   buckets: SeededBucket[];
   collections: SeededCollection[];
+  /** Subjects of users a UI test created through the console's own dialog. */
+  users: string[];
 }
 
 export const test = base.extend<{
@@ -72,6 +75,17 @@ export const test = base.extend<{
   makeEnabledBackend: () => Promise<SeededBackend>;
   makeBucket: MakeBucket;
   makeCollection: MakeCollection;
+  /**
+   * Register something the test created through the UI rather than through a
+   * maker, so teardown can remove it.
+   *
+   * A console dialog leaves no handle behind — the test knows only what it
+   * typed — so the only thing that can register these rows is the test that
+   * typed them. Without it, user-admin.spec left two users and
+   * collections-crud.spec left a collection behind on every run.
+   */
+  trackUser: (subject: string) => void;
+  trackCollection: (item: SeededCollection) => void;
 }>({
   cleanup: async ({}, use) => {
     const reg: Registry = {
@@ -79,6 +93,7 @@ export const test = base.extend<{
       backends: [],
       buckets: [],
       collections: [],
+      users: [],
     };
     await use(reg);
     // Best-effort throughout: a teardown failure must not fail a test that
@@ -88,6 +103,10 @@ export const test = base.extend<{
     }
     if (reg.buckets.length) await deleteBuckets(reg.buckets).catch(() => {});
     if (reg.backends.length) await deleteBackends(reg.backends).catch(() => {});
+    // Before the tenants: a user pinned to one of them would refuse the purge.
+    if (reg.users.length) {
+      await deleteUsersBySubject(reg.users).catch(() => {});
+    }
     if (reg.tenants.length) await deleteTenants(reg.tenants).catch(() => {});
   },
 
@@ -138,6 +157,18 @@ export const test = base.extend<{
       const c = await seedCollection(opts);
       cleanup.collections.push(c);
       return c;
+    });
+  },
+
+  trackUser: async ({ cleanup }, use) => {
+    await use((subject) => {
+      cleanup.users.push(subject);
+    });
+  },
+
+  trackCollection: async ({ cleanup }, use) => {
+    await use((item) => {
+      cleanup.collections.push(item);
     });
   },
 });

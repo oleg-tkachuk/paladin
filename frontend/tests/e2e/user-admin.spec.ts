@@ -10,7 +10,7 @@
  * These tests drive the console, not the API: the point is that an operator
  * can do the thing, which is exactly what was missing.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 import { uniqueSlug } from "./fixtures/unique";
@@ -18,11 +18,15 @@ import { uniqueSlug } from "./fixtures/unique";
 test.describe("US7 — User administration", () => {
   test("an operator can create a user and see it in the list", async ({
     page,
+    trackUser,
   }) => {
     await loginAsAdmin(page);
     await gotoSettled(page, "/users");
 
     const subject = `${uniqueSlug("e2e-user")}@example.test`;
+    // The dialog leaves no handle behind, so the test is the only thing that
+    // can tell teardown this row will exist.
+    trackUser(subject);
     await page.getByRole("button", { name: "New user" }).click();
 
     await page.getByLabel("Subject").fill(subject);
@@ -57,11 +61,15 @@ test.describe("US7 — User administration", () => {
     ).toBeVisible();
   });
 
-  test("a created user can be disabled from its row menu", async ({ page }) => {
+  test("a created user can be disabled from its row menu", async ({
+    page,
+    trackUser,
+  }) => {
     await loginAsAdmin(page);
     await gotoSettled(page, "/users");
 
     const subject = `${uniqueSlug("e2e-disable")}@example.test`;
+    trackUser(subject);
     await page.getByRole("button", { name: "New user" }).click();
     await page.getByLabel("Subject").fill(subject);
     await page.getByLabel("Initial password").fill("e2e-not-a-secret-2026");
