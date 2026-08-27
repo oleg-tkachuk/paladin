@@ -39,6 +39,13 @@ const eslintConfig = defineConfig([
     // not ours — 35 "unused eslint-disable" warnings that no one can act on,
     // drowning the handful that are actually about our code.
     "src/gen/**",
+    // Playwright's own artifacts — the HTML report bundles a minified copy of
+    // the trace viewer (CodeMirror, the UI-mode app, a service worker). It is
+    // gitignored, so nothing catches it, but eslint walks the working tree:
+    // running the e2e suite once turned `task verify-all` into 3040 problems,
+    // 257 of them errors, every one of them inside Playwright's vendored
+    // bundles. The gate must not depend on whether the tests were run.
+    "tests/e2e/test-results/**",
   ]),
 ]);
 
