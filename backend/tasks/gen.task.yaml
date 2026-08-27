@@ -32,5 +32,25 @@ tasks:
       # buf.yaml/buf.gen.yaml now live in proto/ (the self-contained contract
       # module, tagged api/vX for external consumers). Run from backend/ with
       # explicit input + template so out (.) still lands in ./internal/api/pb.
+      #
+      # Tripwire, deliberately BEFORE the generate step so it fires whether the
+      # stray copy arrived just now or three commits ago. `out: .` in
+      # buf.gen.yaml is relative to the working directory, so a bare
+      # `buf generate` run from inside proto/ writes a complete second copy of
+      # every stub to proto/internal — 60 files that compile, that nothing can
+      # import (the `internal/` in that path scopes them to proto/, which holds
+      # no Go code), and that then rot silently. That copy lived in the tree,
+      # committed, until 2026-08-27, three field removals behind the real one.
+      # Untracked it would still compile into the module while staying out of
+      # `git status`, so .gitignore is the wrong instrument here: the point is
+      # to make it loud, not to hide it.
+      - cmd: |-
+          if [ -e proto/internal ]; then
+            echo "gen:proto: proto/internal exists — that is a stray second copy of the"
+            echo "  generated stubs, produced by running 'buf generate' from inside proto/."
+            echo "  Nothing imports it and it drifts out of the real tree in silence."
+            echo "  Remove it and re-run:  rm -rf backend/proto/internal"
+            exit 1
+          fi
       - buf generate proto --template proto/buf.gen.yaml
       - goimports -w internal/api/pb
