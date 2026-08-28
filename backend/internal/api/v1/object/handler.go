@@ -609,7 +609,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		},
 	)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
@@ -889,7 +889,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if pe, ok := h.policy.(cedar.PerObjectEvaluator); ok {
 		perRow, err := pe.NeedsPerObjectEval(ctx, tenantID, in.Collection)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+			return nil, "", apiutil.MapError(fmt.Errorf("authz: %w", err))
 		}
 		if perRow {
 			kept := objs[:0]
@@ -1764,7 +1764,7 @@ func (h *Handler) authorize(
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
 	)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))

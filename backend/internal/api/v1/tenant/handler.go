@@ -392,7 +392,7 @@ func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UU
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
@@ -858,16 +858,33 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	}
 	// expectedVersion=0 — the row is already trashed and OCC was
 	// enforced at SoftDelete time. Purge is monotonically destructive.
-	// Delete + paladin.tenant.purged in one tx (ADR-0003).
+	//
+	// No paladin.tenant.purged fan-out, and not by omission. The outbox pattern
+	// (ADR-0003) cannot express this event, because everything it would need
+	// is destroyed by the same statement:
+	//
+	//   event_deliveries.tenant_id     → tenants(id)             ON DELETE CASCADE
+	//   event_deliveries.subscription_id → event_subscriptions(id) ON DELETE CASCADE
+	//   event_subscriptions.tenant_id  → tenants(id)             ON DELETE CASCADE
+	//
+	// The fan-out resolves the tenant's own subscriptions, and those rows go
+	// with the tenant. A delivery written before the delete is cascaded away;
+	// one written after violates the foreign key. There is no ordering that
+	// leaves a deliverable row, and no subscriber left to deliver it to — a
+	// tenant cannot be told about its own removal through a per-tenant table.
+	//
+	// It used to be attempted anyway, inside this transaction. The insert
+	// failed the foreign key, which in Postgres poisons the transaction, so
+	// COMMIT came back as ROLLBACK and the tenant stayed in the trash — a
+	// purge that reported failure and left the row. Only tenants with a
+	// subscription were affected, which made it look intermittent. Sixteen
+	// occurrences in one day of e2e runs, and the trashed tenants that had
+	// piled up in the dev cluster.
+	//
+	// If a terminal tenant event is wanted, it belongs on a platform-level
+	// path that outlives the tenant. BACKLOG carries that as its own item.
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if e := h.repo.HardDeleteTx(ctx, tx, tenantID, 0); e != nil {
-			return e
-		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.purged",
-			fmt.Sprintf("tenants/%s", tenantID),
-			map[string]any{
-				"tenant_id": tenantID.String(),
-			})
+		return h.repo.HardDeleteTx(ctx, tx, tenantID, 0)
 	}); err != nil {
 		return apiutil.MapError(err)
 	}

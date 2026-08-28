@@ -608,7 +608,7 @@ func (h *Handler) authorizeFull(
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
@@ -638,4 +638,8 @@ func mapVersionErr(err error) error {
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
 	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition)
+	// A stored Cedar policy that will not compile is a state of the data, not
+	// a fault of the server. Registered here rather than in the cedar package
+	// because apiutil's registry is the API layer's, and cedar sits below it.
+	apiutil.RegisterError(cedar.ErrPolicyUnparseable, connect.CodeFailedPrecondition)
 }

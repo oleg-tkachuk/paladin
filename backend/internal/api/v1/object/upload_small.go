@@ -130,7 +130,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		},
 	)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))

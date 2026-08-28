@@ -85,7 +85,7 @@ func (h *Handler) authorize(ctx context.Context) error {
 		cedar.RequestContext{},
 	)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied, errors.New("mcp inspect denied"))

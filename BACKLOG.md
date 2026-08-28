@@ -2046,7 +2046,8 @@ of the pipeline._
 
 ## A policy that does not compile still wedges the row it is on
 
-- **Status:** Open (the door is shut; the room is not). Surfaced 2026-08-27.
+- **Status:** Open (the door is shut, and the error now names the room).
+  Surfaced 2026-08-27; typed 2026-08-28.
 - **Reason:** Unparseable Cedar can no longer be WRITTEN — every policy-
   accepting shim now runs `requireCompilablePolicy`. But the reason that bug
   was severe rather than cosmetic is untouched: an entity whose stored policy
@@ -2059,6 +2060,15 @@ of the pipeline._
   Nothing in the product writes such a row today. A direct database write, a
   restored backup, or an engine that tightens its grammar in a future version
   all still can, and the operator's only recovery is SQL.
+- **2026-08-28:** the failure is no longer `Internal`.
+  `cedar.ErrPolicyUnparseable` is registered to FailedPrecondition and the 23
+  authz call sites route through `apiutil.MapError`, so the answer names a
+  state of the data and carries the parser's diagnostic instead of reading like
+  an outage. The entity is still unreadable and undeletable — that half is
+  deliberately untouched, because letting an operation through means
+  authorising it against a policy that cannot be evaluated, and a `forbid` the
+  operator meant to hold would be the thing discarded. That is a security
+  judgement, not a bug fix.
 - **Definition of Done:** reading and deleting an entity do not depend on its
   policy compiling. A read can return the text with a diagnostic attached
   instead of failing; a delete has no business consulting a policy that is
@@ -2112,70 +2122,48 @@ of the pipeline._
 
 ---
 
-## A cross-tenant token list is empty rather than refused
+## Cross-tenant token revocation is still out of reach
 
-- **Status:** Open. Surfaced 2026-08-28 by the first cluster run of the M2M
-  page spec.
-- **Reason:** `api_tokens` carries FORCE row-level security with
-  `tenant_isolation: tenant_id = paladin_session_tenant_id()`. When the session
-  tenant is set — as it is on the cluster — a platform admin calling
-  `APITokenService.List` for ANOTHER tenant gets an empty page, not a refusal.
-  Nothing in the handler filters by caller tenant, and nothing refuses: the
-  rows are simply invisible to the query, so success and "no such thing" are
-  indistinguishable from outside.
-  The console makes this reachable in one click. `/tenants/:id/m2m-tokens`
-  renders for any tenant id, so an operator opening another tenant's page is
-  told that tenant has no service credentials. It may have several, including
-  live ones they are looking for in order to revoke.
-  A second policy, `api_tokens_preauth_read: paladin_session_tenant_id() IS
-  NULL`, makes everything visible when the session tenant is unset — which is
-  the compose stack, and is why an earlier draft of the spec passed there and
-  failed on the cluster. The stacks disagree about a security-relevant
-  behaviour, which is its own finding.
-- **Definition of Done:** a cross-tenant list either answers with the rows (if
-  a platform admin is meant to see them — then the session tenant needs
-  widening for that principal) or refuses with PermissionDenied. An empty page
-  is the one answer that cannot be acted on. Whichever way it goes, the two
-  stacks must agree, and `tests/integration/rls_test.go` is where that belongs.
-- **Blockers:** none technical. It is a decision about whether platform admin
-  is a tenant-scoped role for this resource, and the same question applies to
-  every other RLS-forced table.
+- **Status:** Open (narrowed 2026-08-28). Was: the list answering empty.
+- **Reason:** `APITokenService.List` now refuses a foreign tenant with
+  PermissionDenied and, for a platform admin, sets the acting tenant so RLS
+  returns the rows. Both halves were needed: the permission check alone still
+  left the admitted caller reading an empty page.
+  `Revoke` and `GetUsage` are addressed by token id, not tenant, so neither can
+  set an acting tenant before it knows whose token it is — and RLS will not let
+  it find out. A platform admin who can now SEE another tenant's tokens still
+  cannot revoke one, which is the operation the visibility was for.
+- **Definition of Done:** revoking another tenant's token is possible for a
+  caller Cedar permits, or is refused with a code that says so. Resolving the
+  token's tenant needs a lookup outside the caller's RLS scope; whether that is
+  a privileged query or a redesign of the request shape (naming the tenant
+  alongside the id) is the decision to take.
+- **Blockers:** none technical. It is a decision about whether platform admin is
+  tenant-scoped for this resource — the same question the list raised, now
+  narrowed to writes.
 
 ---
 
-## PurgeTenant can be defeated by its own purge event
+## A tenant's own removal cannot be announced to anyone
 
-- **Status:** Open. Surfaced 2026-08-28; the log line predates it.
-- **Reason:** PurgeTenant removes the tenant row and, in the same transaction,
-  the dispatcher enqueues `paladin.tenant.purged`. The delivery row carries the
-  tenant id and `event_deliveries.tenant_id` is a foreign key to the row that
-  has just been deleted, so the insert fails:
-
-      failed to insert outbox row  event_type=paladin.tenant.purged
-        error=violates foreign key constraint "event_deliveries_tenant_id_fkey"
-
-  The dispatcher treats that as non-fatal and warns, but the failed statement
-  has already poisoned the transaction, and the commit comes back as
-  `tenant: commit unexpectedly resulted in rollback`. The tenant stays in the
-  trash. Observed 16 times across one day of e2e runs, and it is at least part
-  of the mechanism behind the tenants that had piled up there — a purge that
-  reports failure and leaves the row is indistinguishable from a purge nobody
-  ran.
-  Only tenants with an event subscription are affected, which is why it is
-  intermittent rather than total.
-- **Definition of Done:** purging a tenant with subscriptions succeeds. Note
-  what will NOT work: `event_deliveries.tenant_id` is already
-  `ON DELETE CASCADE`, and moving the insert before the delete only means the
-  cascade removes the row that was just written. A delivery row keyed to the
-  tenant cannot outlive the tenant — that is the schema working as designed.
-  So the event has to leave the transaction: emit `paladin.tenant.purged` after
-  the commit, on a path not foreign-keyed to the tenant, or exempt terminal
-  events from the per-tenant delivery table entirely. The event describes
-  something already done and has no ordering claim on it, so losing
-  transactional atomicity here costs nothing.
-- **Blockers:** none. It needs a decision about where a tenant's last event
-  lives once the tenant does not — which is the same question ADR-0003's
-  outbox pattern cannot answer for a terminal delete.
+- **Status:** Open (narrowed 2026-08-28). Was: PurgeTenant failing outright.
+- **Reason:** The purge no longer attempts a `paladin.tenant.purged` fan-out,
+  because the outbox cannot carry it — `event_deliveries.tenant_id`,
+  `event_deliveries.subscription_id` and `event_subscriptions.tenant_id` all
+  cascade from the tenant, so the delivery row and the subscription that would
+  receive it are destroyed by the same statement. Attempting it anyway put a
+  foreign-key violation inside the purge transaction and left the tenant in the
+  trash; that is fixed and tested.
+  What remains is the gap the fix exposes rather than creates: nothing is
+  emitted when a tenant is removed. A platform-level consumer — billing
+  reconciliation, an external directory, an archival job — has no signal.
+- **Definition of Done:** a terminal tenant event reaches a subscriber that
+  outlives the tenant. That means a delivery path not keyed on the tenant:
+  platform-scoped subscriptions, or a delivery row whose tenant reference is
+  nullable and set null on cascade.
+- **Blockers:** none technical. It is a question of whether platform-scoped
+  subscriptions are a concept this product wants, which is a bigger answer than
+  the bug that surfaced it.
 
 ---
 

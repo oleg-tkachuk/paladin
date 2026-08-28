@@ -177,13 +177,32 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.APITo
 // List enumerates API tokens for a tenant. Token plaintext / hash are
 // never returned; callers see metadata only.
 func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.APITokenServiceListRequest]) (*connect.Response[adminv1.APITokenServiceListResponse], error) {
-	if _, err := h.authorize(ctx, "list"); err != nil {
+	caller, err := h.authorize(ctx, "list")
+	if err != nil {
 		return nil, err
 	}
 	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
+	// Refuse a foreign tenant explicitly, the way Create already does. Without
+	// this the answer was an empty page: api_tokens carries FORCE row-level
+	// security (`tenant_id = paladin_session_tenant_id()`), so rows outside the
+	// session's tenant are filtered rather than refused, and "you may not see
+	// this" arrived looking exactly like "there is nothing to see". An
+	// operator opening another tenant's M2M page was told it holds no service
+	// credentials when it may hold live ones they came to revoke.
+	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("cross-tenant api_token list denied"))
+	}
+	// And for the caller who IS allowed across, say so to RLS. Without it the
+	// platform admin the guard above just admitted still reads an empty page,
+	// because the session is still bound to their own tenant. WithActingTenant
+	// is the sanctioned mechanism for exactly this, and its contract is that
+	// it runs AFTER the check that permits the crossing — which is the line
+	// above, and the Cedar decision before it.
+	ctx = auth.WithActingTenant(ctx, tenantID)
 	tokens, next, err := h.store.ListByTenant(ctx, api_token.ListByTenantArgs{
 		TenantID:       tenantID,
 		IncludeRevoked: req.Msg.GetIncludeRevoked(),

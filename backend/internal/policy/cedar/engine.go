@@ -8,6 +8,7 @@ package cedar
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -440,7 +441,24 @@ func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, collectio
 	}
 	set, err := compile(text)
 	if err != nil {
-		return nil, fmt.Errorf("cedar: compile policy: %w", err)
+		// A STORED policy that will not parse is not a server fault, and saying
+		// Internal made it look like one: the operator sees "internal error" on
+		// every read, delete and authorization touching the entity, with
+		// nothing naming the cause or the cure.
+		//
+		// It is a precondition on the data. The write path refuses uncompilable
+		// text now (connectshim/admin.requireCompilablePolicy), so nothing in
+		// the product creates such a row; a restored backup or a future,
+		// stricter grammar still can, and then the entity needs a human to
+		// replace the text.
+		//
+		// Note what is NOT changed here: the decision is still a hard failure,
+		// so the entity remains unreadable and undeletable until the policy is
+		// repaired. Letting a repair through would mean authorising an
+		// operation against a policy that cannot be evaluated, which is a
+		// security judgement rather than a bug fix — BACKLOG carries it.
+		return nil, fmt.Errorf("%w for tenant %s collection %q: %w",
+			ErrPolicyUnparseable, tenantID, collection, err)
 	}
 	cp := &compiledPolicy{
 		hash:          hash,
@@ -765,6 +783,15 @@ func compile(text string) (*cedar.PolicySet, error) {
 	}
 	return cedar.NewPolicySetFromBytes("", []byte(combined))
 }
+
+// ErrPolicyUnparseable marks a STORED Cedar policy the engine cannot compile.
+//
+// Distinct from a validation failure on the way in, which the write path now
+// rejects outright: this is text already in the database, so every operation
+// on the entity — including the delete that would remove it — fails until a
+// human replaces it. Registered to FailedPrecondition so the answer names a
+// state the caller can fix rather than an outage they cannot.
+var ErrPolicyUnparseable = errors.New("cedar: stored policy does not compile")
 
 // Validate parses the policy text and returns the parser error (or nil).
 // Exposed for pre-save UI validation; does not persist or compile into cache.

@@ -110,7 +110,7 @@ func (h *Handler) authorize(ctx context.Context, action string, q admindomain.Qu
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+		return ctx, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
 		return ctx, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
