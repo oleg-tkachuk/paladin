@@ -62,6 +62,12 @@ tasks:
       # can notice one has stopped compiling. Both of them had.
       - task: backend:test:tagged:compile
       - task: backend:test:lint
+      # The frontend's own unit tests. Their absence here is how a breaking
+      # API change reached a green gate: the token resource-name conversion
+      # rewrote the m2m page's contract, `verify-all` passed, and three vitest
+      # specs had been failing since — nothing in the local gate ran them.
+      # Lint and build do not exercise assertions.
+      - task: frontend:node:test
       - task: frontend:lint
       - task: frontend:node:build
 

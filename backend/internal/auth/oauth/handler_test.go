@@ -89,6 +89,13 @@ func (m *memRefresh) Get(_ context.Context, jti uuid.UUID) (authstore.RefreshTok
 	return authstore.RefreshToken{JTI: jti, ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
 func (m *memRefresh) Revoke(context.Context, uuid.UUID) error { m.revoked++; return nil }
+func (m *memRefresh) Supersede(context.Context, uuid.UUID) error {
+	m.revoked++
+	return nil
+}
+func (m *memRefresh) GetAny(ctx context.Context, jti uuid.UUID) (authstore.RefreshToken, error) {
+	return m.Get(ctx, jti)
+}
 func (m *memRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) {
 	m.userRevoked++
 	return 1, nil

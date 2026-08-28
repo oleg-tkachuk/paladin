@@ -655,6 +655,8 @@ type RefreshToken struct {
 	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	Revoked   bool               `json:"revoked"`
+	// Set only when this token was rotated for a successor. NULL for tokens revoked for cause (logout, reuse detection), which must never be tolerated.
+	SupersededAt pgtype.Timestamptz `json:"superseded_at"`
 }
 
 type ReplicationState struct {

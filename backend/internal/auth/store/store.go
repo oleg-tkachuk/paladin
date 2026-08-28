@@ -83,6 +83,17 @@ type RefreshTokenRepository interface {
 	Insert(ctx context.Context, t RefreshToken) error
 	Get(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	Revoke(ctx context.Context, jti uuid.UUID) error
+
+	// Supersede marks a token as rotated for a successor. Distinct from Revoke
+	// on purpose: revocation for cause must never be tolerated, while a token
+	// its own holder just traded in may be, briefly, by the non-consuming
+	// paths — see ExchangeAudience.
+	Supersede(ctx context.Context, jti uuid.UUID) error
+
+	// GetAny returns the row whether or not it is revoked. Get refuses a
+	// revoked token, which is right for the consuming paths and useless for a
+	// caller that needs to ask WHY it was revoked.
+	GetAny(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// RevokeFamilyOf revokes every still-live token sharing the family of the
 	// given jti — the reuse-detection chain revocation (ADR-0009). Returns the
@@ -102,6 +113,11 @@ type RefreshToken struct {
 	IssuedAt  time.Time
 	ExpiresAt time.Time
 	Revoked   bool
+	// SupersededAt is set only when this token was ROTATED for a successor —
+	// never by logout and never by reuse detection. It is what lets a handler
+	// tell "the holder traded this in three seconds ago" from "this token was
+	// killed for cause", which the Revoked boolean alone cannot express.
+	SupersededAt *time.Time
 }
 
 // ─── Common errors ──────────────────────────────────────────────────────────

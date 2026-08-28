@@ -24,7 +24,11 @@ func (f *fakeRefreshRepo) Insert(context.Context, authstore.RefreshToken) error 
 func (f *fakeRefreshRepo) Get(context.Context, uuid.UUID) (authstore.RefreshToken, error) {
 	return authstore.RefreshToken{}, authstore.ErrNotFound
 }
-func (f *fakeRefreshRepo) Revoke(context.Context, uuid.UUID) error                 { return nil }
+func (f *fakeRefreshRepo) Revoke(context.Context, uuid.UUID) error  { return nil }
+func (*fakeRefreshRepo) Supersede(context.Context, uuid.UUID) error { return nil }
+func (*fakeRefreshRepo) GetAny(context.Context, uuid.UUID) (authstore.RefreshToken, error) {
+	return authstore.RefreshToken{}, nil
+}
 func (f *fakeRefreshRepo) RevokeForUser(context.Context, uuid.UUID) (int64, error) { return 0, nil }
 func (f *fakeRefreshRepo) RevokeFamilyOf(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil

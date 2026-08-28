@@ -2121,22 +2121,32 @@ of the pipeline._
 
 ## The BFF's rotation bookkeeping is per-process
 
-- **Status:** Deferred (single-replica assumption, now ENFORCED at chart
-  render time as of 2026-08-28 — helm refuses replicaCount > 1 and any
-  autoscaling that could exceed one, naming bff.ts and this entry).
-- **Reason:** Two maps in `bff.ts` make concurrent token work safe: the dedup
-  that collapses identical rotations, and the successor index that lets an
-  ExchangeAudience follow a rotation that consumed its token
-  (`currentRefreshToken`). Both live in process memory. With one console
-  replica that is exactly right; with two, a request routed to the replica
-  that did not perform the rotation sees nothing to follow and fails the same
-  way it did before — the operator is logged out by a race.
-- **Definition of Done:** Either the deployment pins the console to one
-  replica and says so, or the bookkeeping moves to a shared store (Redis) so
-  any replica can follow a chain another one advanced.
-- **Blockers:** none technical. It is a decision about topology, not code:
-  bff.ts has carried the single-instance note since the dedup was written, and
-  this is the second mechanism to inherit it.
+- **Status:** Deferred, and now HALF the size it was. The successor index is
+  gone as of 2026-08-28; the dedup remains. The chart still refuses
+  replicaCount > 1 and any autoscaling that could exceed one.
+- **Reason:** Two maps in `bff.ts` used to make concurrent token work safe.
+  The successor index — the one that let an ExchangeAudience follow a rotation
+  which had just consumed its token — was per-process knowledge the BFF only
+  kept because the SERVER could not tell "rotated a moment ago by its own
+  holder" from "revoked for cause". It can now:
+  `refresh_tokens.superseded_at` is written by rotation and by nothing else,
+  and ExchangeAudience honours a token superseded within 30s. So that half
+  moved to where the fact actually lives, and no client remembers rotations.
+  What remains is the DEDUP, which is a different problem: two concurrent
+  ROTATIONS of one token, where the second is a genuine second rotation rather
+  than a read. The server cannot collapse those — both are legitimate requests
+  to advance the chain, and it must reject one. Only something in front of
+  them can make them one request.
+- **Definition of Done:** Remove the second rotation at its source. The two
+  BFF entry points that race — `/api/auth/me` and
+  `/api/auth/exchange?audience=paladin-iam` — are dispatched by the same page
+  load with the same cookie; if the console shell asks for the session once
+  and the transport waits for it, there is no second rotation to collapse and
+  the map can go. A shared cache (Redis) is the alternative and is worse: it
+  buys multi-replica by adding a dependency whose failure mode is the outage
+  it was meant to prevent.
+- **Blockers:** none technical. Needs the console's early-RPC path traced so
+  the first RPC provably waits for the session it would otherwise race.
 
 ---
 

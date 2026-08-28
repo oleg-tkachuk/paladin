@@ -3,13 +3,23 @@ INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expire
 VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetRefreshToken :one
-SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at
 FROM refresh_tokens
 WHERE id = $1;
 
 -- name: RevokeRefreshToken :exec
+-- Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is
+-- never mistaken for one that was merely rotated.
 UPDATE refresh_tokens
 SET revoked = TRUE
+WHERE id = $1;
+
+-- name: SupersedeRefreshToken :exec
+-- Rotation: the holder traded this token for a successor. Distinct from
+-- RevokeRefreshToken so a superseded token can be tolerated briefly (the
+-- holder is racing its own rotation) while a revoked one never is.
+UPDATE refresh_tokens
+SET revoked = TRUE, superseded_at = now()
 WHERE id = $1;
 
 -- name: RevokeRefreshTokensForUser :execrows

@@ -12,7 +12,7 @@ import (
 )
 
 const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at
 FROM refresh_tokens
 WHERE id = $1
 `
@@ -28,6 +28,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshT
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.Revoked,
+		&i.SupersededAt,
 	)
 	return i, err
 }
@@ -74,6 +75,8 @@ SET revoked = TRUE
 WHERE id = $1
 `
 
+// Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is
+// never mistaken for one that was merely rotated.
 func (q *Queries) RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, revokeRefreshToken, id)
 	return err
@@ -108,4 +111,18 @@ func (q *Queries) RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const supersedeRefreshToken = `-- name: SupersedeRefreshToken :exec
+UPDATE refresh_tokens
+SET revoked = TRUE, superseded_at = now()
+WHERE id = $1
+`
+
+// Rotation: the holder traded this token for a successor. Distinct from
+// RevokeRefreshToken so a superseded token can be tolerated briefly (the
+// holder is racing its own rotation) while a revoked one never is.
+func (q *Queries) SupersedeRefreshToken(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, supersedeRefreshToken, id)
+	return err
 }

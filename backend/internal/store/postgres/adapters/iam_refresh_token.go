@@ -42,7 +42,11 @@ func (r *RefreshTokenRepo) Get(ctx context.Context, jti uuid.UUID) (authstore.Re
 	if row.Revoked {
 		return authstore.RefreshToken{}, authstore.ErrTokenRevoked
 	}
-	return authstore.RefreshToken{
+	return refreshTokenFromSQLC(row), nil
+}
+
+func refreshTokenFromSQLC(row sqlc.RefreshToken) authstore.RefreshToken {
+	out := authstore.RefreshToken{
 		JTI:       uuidFrom(row.ID),
 		FamilyID:  uuidFrom(row.FamilyID),
 		UserID:    uuidFrom(row.UserID),
@@ -50,11 +54,33 @@ func (r *RefreshTokenRepo) Get(ctx context.Context, jti uuid.UUID) (authstore.Re
 		IssuedAt:  timeFrom(row.IssuedAt),
 		ExpiresAt: timeFrom(row.ExpiresAt),
 		Revoked:   row.Revoked,
-	}, nil
+	}
+	if row.SupersededAt.Valid {
+		at := timeFrom(row.SupersededAt)
+		out.SupersededAt = &at
+	}
+	return out
 }
 
 func (r *RefreshTokenRepo) Revoke(ctx context.Context, jti uuid.UUID) error {
 	return r.q.RevokeRefreshToken(ctx, pgUUID(jti))
+}
+
+func (r *RefreshTokenRepo) Supersede(ctx context.Context, jti uuid.UUID) error {
+	return r.q.SupersedeRefreshToken(ctx, pgUUID(jti))
+}
+
+// GetAny is Get without the revoked check — the caller decides what a revoked
+// token means, which is the whole point of superseded_at.
+func (r *RefreshTokenRepo) GetAny(ctx context.Context, jti uuid.UUID) (authstore.RefreshToken, error) {
+	row, err := r.q.GetRefreshToken(ctx, pgUUID(jti))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return authstore.RefreshToken{}, authstore.ErrNotFound
+		}
+		return authstore.RefreshToken{}, err
+	}
+	return refreshTokenFromSQLC(row), nil
 }
 
 func (r *RefreshTokenRepo) RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error) {

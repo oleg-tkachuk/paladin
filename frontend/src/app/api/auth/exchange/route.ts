@@ -4,7 +4,6 @@ import { AUDIENCES, type Audience } from "@/constants";
 import {
   iamAuthClient,
   readSessionCookie,
-  currentRefreshToken,
   refreshIamChain,
   setSessionCookie,
   toAccessTokenDTO,
@@ -88,36 +87,22 @@ export async function POST(req: Request): Promise<NextResponse> {
     // and the operator sees "missing Authorization header" on a page that has
     // simply lost a race.
     //
-    // currentRefreshToken follows any rotation this process performed on that
-    // token and hands back the successor, which is the token the browser's
-    // cookie will carry a moment from now. Re-reading the cookie cannot do
-    // this: a Set-Cookie on another response is not visible in this request's
-    // headers, which is why the old self-heal found the same value and gave up.
-    const chained = await currentRefreshToken(refreshToken);
-    let res;
-    try {
-      res = await iamAuthClient().exchangeAudience({
-        refreshToken: chained,
-        targetAudience: audience,
-      });
-    } catch (err) {
-      const code = (err as { code?: number }).code;
-      // Connect's Unauthenticated maps to numeric Code.Unauthenticated
-      // = 16. We don't import the enum here to avoid pulling
-      // @connectrpc/connect into the BFF; numeric compare works for
-      // the only failure mode we want to retry.
-      if (code !== 16) throw err;
-      // Last resort: a rotation that happened in another process (or before
-      // this one started) leaves nothing to follow, but the browser may have
-      // sent a newer cookie than the value read above.
-      const fresh = (await readSessionCookie()) ?? "";
-      const retryWith = await currentRefreshToken(fresh);
-      if (!retryWith || retryWith === chained) throw err;
-      res = await iamAuthClient().exchangeAudience({
-        refreshToken: retryWith,
-        targetAudience: audience,
-      });
-    }
+    // Sent as-is. The token may already have been rotated by a sibling request
+    // — a browser cannot update its cookie between two requests in flight —
+    // and the server tolerates that itself now: a refresh token superseded
+    // within its grace window is honoured by ExchangeAudience, which consumes
+    // nothing and so gives up no rotation guarantee.
+    //
+    // This used to be a walk through an in-process index of rotations, plus a
+    // retry that re-read the cookie. Both are gone, and with them the reason
+    // this process could not run in more than one replica: a request routed to
+    // the replica that did not perform the rotation had nothing to follow, and
+    // the operator was signed out by a race they could not see. The knowledge
+    // belongs where the tokens are minted, not in a copy kept by every client.
+    const res = await iamAuthClient().exchangeAudience({
+      refreshToken,
+      targetAudience: audience,
+    });
     const payload: AccessTokenDTO = toAccessTokenDTO(
       audience,
       res.accessToken,

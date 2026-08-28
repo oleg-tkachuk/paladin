@@ -261,9 +261,14 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		return nil, err
 	}
 
-	// Rotation: revoke the presented refresh, mint a fresh pair in the SAME
-	// family so the chain stays linked for reuse-detection.
-	if err := h.refresh.Revoke(ctx, jti); err != nil {
+	// Rotation: SUPERSEDE the presented refresh — revoked, and marked as traded
+	// in by its own holder rather than killed for cause — then mint a fresh
+	// pair in the SAME family so the chain stays linked for reuse-detection.
+	//
+	// The distinction is what ExchangeAudience reads below. A bare Revoke here
+	// would make this token indistinguishable from one revoked by logout or by
+	// reuse detection, and the tolerance window could not exist.
+	if err := h.refresh.Supersede(ctx, jti); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID)
@@ -320,15 +325,31 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 	}
 	stored, err := h.refresh.Get(ctx, jti)
 	if err != nil {
-		// A rotated (revoked) token presented HERE is recorded and rejected,
-		// but the family is left standing — see onRefreshReplayed. This RPC
-		// consumes nothing, so a stale token reaching it is the expected
-		// outcome of a race, not a theft signal. Rotation keeps the full
-		// RFC 6819 response; that is the path the RFC is written about.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
-			h.onRefreshReplayed(ctx, jti, userID, tenantID)
-			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+			// Superseded a moment ago means the caller is racing its OWN
+			// rotation, not replaying a stolen token: a browser cannot update
+			// its cookie between two requests already in flight, so the token
+			// it sends here is the one its sibling request just traded in.
+			//
+			// This RPC consumes nothing — it mints an access token and leaves
+			// the chain untouched — so honouring it inside a narrow window
+			// costs no rotation guarantee. What it buys is that the console's
+			// BFF no longer has to remember rotations in process memory to
+			// paper over the race, which is the single reason that process
+			// cannot run in more than one replica.
+			//
+			// Only supersession qualifies. A token revoked for cause — logout,
+			// or reuse detection killing the family — has superseded_at NULL
+			// and is refused here exactly as before.
+			if tok, gerr := h.refresh.GetAny(ctx, jti); gerr == nil && h.withinSupersessionGrace(tok) {
+				stored, err = tok, nil
+			} else {
+				h.onRefreshReplayed(ctx, jti, userID, tenantID)
+				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+			}
 		}
+	}
+	if err != nil {
 		if errors.Is(err, authstore.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
@@ -850,6 +871,39 @@ func (h *Handler) onRefreshReplayed(ctx context.Context, jti, userID, tenantID u
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "spent refresh token presented to ExchangeAudience; rejected without revoking the family",
 	})
+}
+
+// supersessionGrace is how long after a rotation the superseded token is still
+// honoured by the NON-CONSUMING paths.
+//
+// Sized to the thing it covers: two requests a browser dispatched together,
+// where the second carries the cookie the first is in the middle of replacing.
+// That gap is milliseconds; seconds of tolerance is already generous. It is
+// deliberately far shorter than the token's lifetime — this is a window for a
+// race, not a second validity period.
+//
+// What it costs: inside the window, a stolen token that was ALREADY rotated
+// can still mint an access token. It cannot rotate, cannot extend itself, and
+// the window closes on its own. That is the standard replay allowance in
+// rotating-refresh-token schemes, and it is the price of not keeping the same
+// state in every client that talks to this API.
+const supersessionGrace = 30 * time.Second
+
+// withinSupersessionGrace reports whether a revoked token was revoked BY
+// ROTATION and recently enough to still be honoured.
+//
+// Both halves are load-bearing. Without the first, a token revoked at logout
+// or by reuse detection would be accepted for thirty seconds after the
+// revocation meant to stop it. Without the second, supersession would never
+// expire.
+func (h *Handler) withinSupersessionGrace(t authstore.RefreshToken) bool {
+	if t.SupersededAt == nil {
+		return false
+	}
+	if h.now().After(t.ExpiresAt) {
+		return false
+	}
+	return h.now().Sub(*t.SupersededAt) <= supersessionGrace
 }
 
 // onRefreshReuse revokes the replayed token's FAMILY (RFC 6819 reuse

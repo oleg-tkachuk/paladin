@@ -80,26 +80,27 @@ describe("POST /api/auth/exchange", () => {
     expect(res.cookies.get(SESSION_COOKIE_NAME)).toBeUndefined();
   });
 
-  it("self-heals an Unauthenticated ExchangeAudience by re-reading the rotated cookie and retrying once", async () => {
-    // First read returns the stale token; a parallel iam refresh has rotated
-    // the cookie, so the retry re-reads a fresh one.
-    h.readSessionCookie
-      .mockResolvedValueOnce("rt-stale")
-      .mockResolvedValueOnce("rt-fresh");
-    h.exchangeAudience
-      .mockImplementationOnce(() => {
-        throw { code: 16 }; // Connect Code.Unauthenticated
-      })
-      .mockResolvedValueOnce({
-        accessToken: "data-access",
-        accessExpiresInSeconds: 300,
-      });
+  // The self-heal that used to be tested here — catch Unauthenticated,
+  // re-read the cookie, follow the in-process rotation index, retry once — is
+  // gone with the code. A token a sibling rotation just consumed is now
+  // honoured by the server inside a grace window
+  // (refresh_tokens.superseded_at), so the BFF sends what it was given and
+  // does not retry. What replaced the test lives in
+  // backend/internal/api/iam/v1/authh/supersession_test.go, which is where the
+  // decision is now made.
+  it("sends the cookie as given, without a retry", async () => {
+    h.readSessionCookie.mockResolvedValue("rt-possibly-rotated");
+    h.exchangeAudience.mockResolvedValue({
+      accessToken: "data-access",
+      accessExpiresInSeconds: 300,
+    });
+
     const res = await POST(exchangeReq({ audience: "paladin-admin" }));
+
     expect(res.status).toBe(200);
-    expect((await res.json()).token).toBe("data-access");
-    expect(h.exchangeAudience).toHaveBeenCalledTimes(2);
-    expect(h.exchangeAudience).toHaveBeenLastCalledWith({
-      refreshToken: "rt-fresh",
+    expect(h.exchangeAudience).toHaveBeenCalledTimes(1);
+    expect(h.exchangeAudience).toHaveBeenCalledWith({
+      refreshToken: "rt-possibly-rotated",
       targetAudience: "paladin-admin",
     });
   });

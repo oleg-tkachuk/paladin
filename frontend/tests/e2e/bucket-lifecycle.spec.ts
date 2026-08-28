@@ -113,11 +113,22 @@ test.describe("Bucket lifecycle rules", () => {
     await page.getByRole("button", { name: /^Expiration/ }).click();
     await page.getByRole("spinbutton", { name: "After" }).fill("30");
 
-    const submit = page.getByRole("button", { name: /^Create rule$/ });
-    await submit.click();
-
     // Either the editor blocks submission outright or the server refuses it —
-    // both are acceptable, storing the rule is not.
+    // both are acceptable, storing the rule is not. The editor compiles the
+    // match against the Object schema and disables submit when it doesn't
+    // resolve, so a disabled button IS the first outcome; clicking it
+    // unconditionally would fail on actionability and report a refusal that
+    // worked as a timeout. Probe the state, then only click if it opted to
+    // let the server decide.
+    const submit = page.getByRole("button", { name: /^Create rule$/ });
+    const refusedInEditor = await expect(submit)
+      .toBeDisabled({ timeout: 5_000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!refusedInEditor) await submit.click();
+
     await expect
       .poll(
         async () =>

@@ -101,6 +101,9 @@ type fakeRefresh struct {
 	revokeFamilies int
 	getTok         authstore.RefreshToken
 	getErr         error
+	anyTok         authstore.RefreshToken
+	anyErr         error
+	superseded     []uuid.UUID
 }
 
 func (f *fakeRefresh) Insert(context.Context, authstore.RefreshToken) error { f.inserts++; return nil }
@@ -108,6 +111,22 @@ func (f *fakeRefresh) Get(context.Context, uuid.UUID) (authstore.RefreshToken, e
 	return f.getTok, f.getErr
 }
 func (f *fakeRefresh) Revoke(context.Context, uuid.UUID) error { return nil }
+
+// supersedes records rotation-supersession separately from revocation for
+// cause — the distinction ExchangeAudience's grace window turns on.
+func (f *fakeRefresh) Supersede(_ context.Context, jti uuid.UUID) error {
+	f.superseded = append(f.superseded, jti)
+	return nil
+}
+
+// GetAny returns the row regardless of its revoked state. anyTok, when set,
+// stands in for "the row as it is in the database now".
+func (f *fakeRefresh) GetAny(context.Context, uuid.UUID) (authstore.RefreshToken, error) {
+	if f.anyErr != nil {
+		return authstore.RefreshToken{}, f.anyErr
+	}
+	return f.anyTok, nil
+}
 func (f *fakeRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) {
 	f.revokeForUsers++
 	return 0, nil

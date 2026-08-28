@@ -5,8 +5,8 @@ import { AUDIENCES } from "@/constants";
 // The rotation itself is the IAM plane's; what is under test is the
 // bookkeeping around it, so the Connect client is a stub.
 const refreshCalls: string[] = [];
-let rotations: Record<string, string> = {};
-let rotationFails = false;
+const rotations: Record<string, string> = {};
+const rotationFails = false;
 vi.mock("@connectrpc/connect", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@connectrpc/connect")>();
   return {
@@ -28,7 +28,7 @@ vi.mock("@connectrpc/connect", async (importOriginal) => {
   };
 });
 
-import { currentRefreshToken, dedupWithGrace, refreshIamChain } from "./bff";
+import { dedupWithGrace, refreshIamChain } from "./bff";
 
 // Guards the refresh-token rotation dedup that prevents a staggered BFF sibling
 // (/api/auth/me racing an iam /api/auth/exchange, same cookie) from replaying a
@@ -100,42 +100,13 @@ describe("dedupWithGrace", () => {
   });
 });
 
-// Only the iam audience rotates the refresh chain; data/admin derive their
-// access token from the same token with ExchangeAudience. So the dangerous
-// overlap is not two rotations — it is one rotation and one derive, where the
-// derive presents a token the rotation has just consumed. Re-reading the
-// cookie cannot rescue it (a Set-Cookie on another response is not in this
-// request's headers), so the derive must be able to follow the rotation
-// forward instead.
-describe("currentRefreshToken", () => {
-  beforeEach(() => {
-    vi.useRealTimers();
-    refreshCalls.length = 0;
-    rotations = {};
-    rotationFails = false;
-  });
-
-  it("returns the token unchanged when nothing rotated it", async () => {
-    await expect(currentRefreshToken("rt-untouched")).resolves.toBe(
-      "rt-untouched",
-    );
-  });
-
-  it("follows a rotation to its successor, and a chain of them", async () => {
-    rotations = { rt1: "rt2", rt2: "rt3" };
-
-    await refreshIamChain("rt1", AUDIENCES.iam);
-    await expect(currentRefreshToken("rt1")).resolves.toBe("rt2");
-
-    await refreshIamChain("rt2", AUDIENCES.iam);
-    // A caller still holding rt1 lands on the newest token, not the middle one.
-    await expect(currentRefreshToken("rt1")).resolves.toBe("rt3");
-  });
-
-  it("keeps the original token when the rotation failed", async () => {
-    rotationFails = true;
-    await expect(refreshIamChain("rt-doomed", AUDIENCES.iam)).rejects.toThrow();
-    // A failed rotation consumed nothing, so the caller's token still stands.
-    await expect(currentRefreshToken("rt-doomed")).resolves.toBe("rt-doomed");
-  });
-});
+// The successor walk that used to be tested here is gone with the code. An
+// ExchangeAudience whose token a sibling rotation just consumed is now handled
+// by the server: refresh_tokens.superseded_at lets it tell "rotated a moment
+// ago by its own holder" from "revoked for cause", and it honours the former
+// inside a short window. No client keeps a rotation index any more, which is
+// what let this process stop being single-replica for that reason.
+//
+// The dedup below stays, and so does its constraint: two concurrent ROTATIONS
+// of one token are a genuine second rotation, not a read, and collapsing them
+// still happens in this process.

@@ -545,6 +545,8 @@ type Querier interface {
 	// Clears deleted_at on a trashed row. Bumps resource_version +
 	// updated_at.
 	RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is
+	// never mistaken for one that was merely rotated.
 	RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error
 	// Reuse-detection (ADR-0009): revoke every still-live token in the family of
 	// the given id — the compromised chain only, not all the user's sessions.
@@ -654,6 +656,10 @@ type Querier interface {
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
 	SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	// Rotation: the holder traded this token for a successor. Distinct from
+	// RevokeRefreshToken so a superseded token can be tolerated briefly (the
+	// holder is racing its own rotation) while a revoked one never is.
+	SupersedeRefreshToken(ctx context.Context, id pgtype.UUID) error
 	// Drops buckets older than the supplied age. Two buckets per active tenant
 	// are live at any moment; everything older is history nothing reads.
 	SweepTenantRateBuckets(ctx context.Context, olderThanMicros int64) (int64, error)

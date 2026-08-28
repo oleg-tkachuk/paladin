@@ -35,10 +35,15 @@ import M2MTokensPage from "./page";
 const NAME_PLACEHOLDER = /ci-uploader/i;
 const newTokenBtn = () => screen.getByRole("button", { name: "New token" });
 
-const makeToken = (id: string, name: string) => ({
+// `name` is the RESOURCE name now — tenants/{t}/apiTokens/{id} — and the
+// operator's label is display_name. Revoke is addressed by the former, which
+// is the whole reason the conversion happened: a bare id carries no tenant, so
+// it cannot be scoped past row-level security.
+const makeToken = (id: string, displayName: string) => ({
   id,
+  name: `tenants/t-1/apiTokens/${id}`,
   prefix: "abcd",
-  name,
+  displayName,
   scopes: [],
   audience: ["data"],
   rateLimitRpm: 0,
@@ -96,7 +101,10 @@ describe("M2MTokensPage", () => {
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() =>
       expect(h.create).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: "t-1", name: "ci-uploader" }),
+        expect.objectContaining({
+          parent: "tenants/t-1",
+          displayName: "ci-uploader",
+        }),
       ),
     );
   });
@@ -134,7 +142,7 @@ describe("M2MTokensPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() =>
       expect(h.revoke).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "tok-1" }),
+        expect.objectContaining({ name: "tenants/t-1/apiTokens/tok-1" }),
       ),
     );
   });
