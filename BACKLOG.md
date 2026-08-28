@@ -2044,28 +2044,6 @@ of the pipeline._
 
 ---
 
-## Two write paths are covered only up to their promote tail
-
-- **Status:** Open (narrowed 2026-08-27). Was: thirteen RPC handlers at 0.0%.
-- **Reason:** The thirteen now have behavioural tests and none is at zero —
-  `./internal/api/...` went 28.0% → 32.9%. Eleven are covered end to end.
-  `CompleteObject` (59.1%) and `CopyObject` (53.3%) are not: both finish by
-  promoting through a concrete `*statemachine.Transitioner` rather than an
-  interface, so the tail — promote, the in-transaction
-  `paladin.object.uploaded` dispatch, the version record, the quota touch —
-  cannot be reached without a database. What is covered is everything before
-  it: the argument guards, the state guards, and the authorization Resource
-  each hands the engine, including the one that matters most on a copy (the
-  Resource is the DESTINATION, not the source being read).
-- **Definition of Done:** either the promote seam becomes an interface the
-  handler can be handed a fake for, or these two gain integration tests that
-  drive the real transitioner against Postgres — `tests/integration/` already
-  has the harness. The second is less invasive and tests more; the first makes
-  the handler unit-testable for everything that follows.
-- **Blockers:** none. It is a choice about where the seam belongs.
-
----
-
 ## Actions will not start a job: the account, not the code
 
 - **Status:** Blocked (account action — outside this repository). Confirmed

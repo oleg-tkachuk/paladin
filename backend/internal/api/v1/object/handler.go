@@ -392,7 +392,7 @@ type Handler struct {
 	storage Storage
 	policy  cedar.Authorizer
 	filter  *cel.Evaluator
-	sm      *statemachine.Transitioner
+	sm      StateMachine
 	presign PresignConfig
 	// versions is the optional version recorder. When set + the parent
 	// bucket has versioning enabled, the handler emits version history rows
@@ -410,6 +410,22 @@ type Handler struct {
 
 // SetVersionHandler attaches the optional version recorder. Wired by main.
 func (h *Handler) SetVersionHandler(v *VersionHandler) { h.versions = v }
+
+// StateMachine is the object lifecycle transitioner the handler drives.
+// *statemachine.Transitioner is the only production implementation; the
+// interface exists because every OTHER collaborator here is already one
+// (Repository, Storage, QuotaUpdater, EventProducer) and the concrete type
+// made the post-promote tail — version history, quota, capability charge —
+// reachable only with a live Postgres pool. pgx.Tx appears in the callbacks
+// because the transactional guarantee (ADR-0003) is the point of these two
+// methods: the caller's outbox writes must ride the transition's own tx.
+type StateMachine interface {
+	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
+	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
+	SoftDeleteInTx(ctx context.Context, objectID uuid.UUID, resourceVersion int64, onDeleted func(ctx context.Context, tx pgx.Tx) error) error
+	RestoreInTx(ctx context.Context, objectID uuid.UUID, onRestored func(ctx context.Context, tx pgx.Tx) error) error
+	MarkFailed(ctx context.Context, objectID uuid.UUID, reason string) error
+}
 
 // QuotaUpdater is the post-promote accounting hook. Returns nil on missing
 // quota — quotas are opt-in. Implementations live in postgres adapters.
@@ -498,7 +514,7 @@ func NewHandler(
 	storage Storage,
 	policy cedar.Authorizer,
 	filter *cel.Evaluator,
-	sm *statemachine.Transitioner,
+	sm StateMachine,
 	cfg PresignConfig,
 ) *Handler {
 	return &Handler{
@@ -1725,9 +1741,19 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Same tail as CompleteObject, and for the same reason: these fire only
+	// on the real transition, so an at-least-once retry neither re-records a
+	// version nor double-charges. The capability charge belongs here too — a
+	// copy is gated by OpPut and materialises a new stored object, so a
+	// budgeted principal that could copy for free would be able to consume
+	// storage without spending anything, which is the one OpPut path where
+	// that was true.
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
 		h.touchQuota(ctx, fresh)
+		if err := auth.ChargeRequest(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return &fresh, nil
 }

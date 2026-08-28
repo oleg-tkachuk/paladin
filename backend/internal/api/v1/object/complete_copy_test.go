@@ -17,14 +17,15 @@ import (
 // CompleteObject and CopyObject were the last two of the thirteen handlers at
 // 0.0% (BACKLOG: "Half the admin API's RPCs have no behavioural test").
 //
-// Both end in the promote path, which runs through a concrete
-// *statemachine.Transitioner rather than an interface, so the tail of each is
-// out of reach of a unit test without a database. What is covered here is
-// everything up to it: the argument guards, the state guards, and the authz
-// Resource each hands the engine. That is the half where a mistake is a
-// security bug rather than a broken write — and, for CompleteObject, it
-// includes a genuine terminal path: the already-AVAILABLE no-op that makes a
-// client's at-least-once retry safe.
+// Both end in the promote path. What is covered HERE is everything up to it:
+// the argument guards, the state guards, and the authz Resource each hands
+// the engine — the half where a mistake is a security bug rather than a
+// broken write. For CompleteObject that includes a genuine terminal path: the
+// already-AVAILABLE no-op that makes a client's at-least-once retry safe.
+//
+// The promote path itself and everything after it live in
+// promote_tail_test.go; they became reachable when the handler stopped
+// holding a concrete *statemachine.Transitioner.
 
 type completeRepo struct {
 	fakeObjectRepo
@@ -227,7 +228,7 @@ func TestCopyObjectAuthorizesAgainstTheDestination(t *testing.T) {
 		DestCollection: "dst", DestKey: "copy.txt",
 	})
 	if err == nil {
-		t.Fatal("expected the fake CreateObject failure — the promote tail is out of reach here")
+		t.Fatal("expected the fake CreateObject failure — this test stops short of the promote")
 	}
 	if authz.lastResource == nil {
 		t.Fatal("authorizer was never called")
