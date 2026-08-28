@@ -59,10 +59,10 @@ func errEngine() *fakeEngine {
 // fakeStore is a configurable cedar.Store; only Fetch is exercised by the
 // handler. Watch satisfies the interface and is never called here.
 type fakeStore struct {
-	fetchFn func(ctx context.Context, tenantID uuid.UUID, collection string) (string, []byte, string, error)
+	fetchFn func(ctx context.Context, tenantID uuid.UUID, collection string) (cedar.Layers, []byte, string, error)
 }
 
-func (f *fakeStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (string, []byte, string, error) {
+func (f *fakeStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (cedar.Layers, []byte, string, error) {
 	return f.fetchFn(ctx, tenantID, collection)
 }
 
@@ -314,8 +314,8 @@ func TestGetEffectivePolicy(t *testing.T) {
 	})
 
 	t.Run("store fetch error propagates", func(t *testing.T) {
-		fs := &fakeStore{fetchFn: func(context.Context, uuid.UUID, string) (string, []byte, string, error) {
-			return "", nil, "", errors.New("db down")
+		fs := &fakeStore{fetchFn: func(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
+			return cedar.Layers{}, nil, "", errors.New("db down")
 		}}
 		h := NewHandler(allowEngine(), fs)
 		_, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String(), tid)
@@ -325,11 +325,11 @@ func TestGetEffectivePolicy(t *testing.T) {
 	})
 
 	t.Run("tenant-only resource → single tenant layer", func(t *testing.T) {
-		fs := &fakeStore{fetchFn: func(_ context.Context, _ uuid.UUID, key string) (string, []byte, string, error) {
+		fs := &fakeStore{fetchFn: func(_ context.Context, _ uuid.UUID, key string) (cedar.Layers, []byte, string, error) {
 			if key != "" {
 				t.Fatalf("tenant-only name must fetch empty collection, got %q", key)
 			}
-			return "permit(principal, action, resource);", nil, "", nil
+			return cedar.Layers{Tenant: "permit(principal, action, resource);"}, nil, "", nil
 		}}
 		h := NewHandler(allowEngine(), fs)
 		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String(), tid)
@@ -347,14 +347,16 @@ func TestGetEffectivePolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("collection resource → tenant + collection layers split at marker", func(t *testing.T) {
-		merged := "tenant-rule\n// --- collection-scoped ---\nobj-rule"
+	// Attribution comes off the store's own layers now. It used to be
+	// recovered by splitting a joined string on a comment marker, which a
+	// tenant policy containing that text would have defeated.
+	t.Run("collection resource → tenant + collection layers, attributed", func(t *testing.T) {
 		objTenant := uuid.New()
 		var gotTenant uuid.UUID
 		var gotKey string
-		fs := &fakeStore{fetchFn: func(_ context.Context, tenant uuid.UUID, key string) (string, []byte, string, error) {
+		fs := &fakeStore{fetchFn: func(_ context.Context, tenant uuid.UUID, key string) (cedar.Layers, []byte, string, error) {
 			gotTenant, gotKey = tenant, key
-			return merged, nil, "", nil
+			return cedar.Layers{Tenant: "tenant-rule", Collection: "obj-rule"}, nil, "", nil
 		}}
 		h := NewHandler(allowEngine(), fs)
 		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+objTenant.String()+"/collections/logs", tid)
@@ -422,29 +424,6 @@ func TestParseSimulateResource(t *testing.T) {
 		}
 		if gotT != fallback || gotK != "" {
 			t.Fatalf("got (%v,%q), want fallback %v/empty", gotT, gotK, fallback)
-		}
-	})
-}
-
-func TestExtractLayers(t *testing.T) {
-	t.Run("no marker: tenant layer is the whole text, collection empty", func(t *testing.T) {
-		merged := "just tenant policy"
-		if got := extractTenantLayer(merged); got != "just tenant policy" {
-			t.Fatalf("tenant layer: %q", got)
-		}
-		if got := extractCollectionLayer(merged); got != "" {
-			t.Fatalf("collection layer should be empty: %q", got)
-		}
-	})
-
-	t.Run("with marker: split and right-trim the tenant layer", func(t *testing.T) {
-		// Mirrors PostgresStore.Fetch's concatenation shape.
-		merged := "tenant-rule\n// --- collection-scoped ---\nobj-rule"
-		if got := extractTenantLayer(merged); got != "tenant-rule" {
-			t.Fatalf("tenant layer: %q", got)
-		}
-		if got := extractCollectionLayer(merged); got != "obj-rule" {
-			t.Fatalf("collection layer: %q", got)
 		}
 	})
 }

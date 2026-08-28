@@ -62,8 +62,8 @@ func TestRenderDefaultPolicy(t *testing.T) {
 
 type staticPolicyStore struct{ text, slug string }
 
-func (s staticPolicyStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
-	return s.text, []byte("h"), s.slug, nil
+func (s staticPolicyStore) Fetch(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
+	return cedar.Layers{Tenant: s.text}, []byte("h"), s.slug, nil
 }
 func (s staticPolicyStore) Watch(context.Context) (<-chan cedar.ChangeEvent, error) {
 	return nil, nil

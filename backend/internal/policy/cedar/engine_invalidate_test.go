@@ -11,8 +11,8 @@ import (
 // watchStore is a Store whose Watch hands back a caller-controlled channel.
 type watchStore struct{ ch chan ChangeEvent }
 
-func (w watchStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
-	return "", nil, "", nil
+func (w watchStore) Fetch(context.Context, uuid.UUID, string) (Layers, []byte, string, error) {
+	return Layers{}, nil, "", nil
 }
 func (w watchStore) Watch(context.Context) (<-chan ChangeEvent, error) { return w.ch, nil }
 

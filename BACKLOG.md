@@ -2044,40 +2044,6 @@ of the pipeline._
 
 ---
 
-## A policy that does not compile still wedges the row it is on
-
-- **Status:** Open (the door is shut, and the error now names the room).
-  Surfaced 2026-08-27; typed 2026-08-28.
-- **Reason:** Unparseable Cedar can no longer be WRITTEN — every policy-
-  accepting shim now runs `requireCompilablePolicy`. But the reason that bug
-  was severe rather than cosmetic is untouched: an entity whose stored policy
-  fails to parse cannot be read or deleted either. `GetCollection`,
-  `DeleteCollection` and every authorization decision all route through the
-  engine, so all three answer `Internal: cedar: compile policy: parser error`,
-  and the entity is out of reach of the API that created it — its bucket too,
-  via `collections_bucket_id_fkey`. Observed exactly that way while writing
-  collection-policy.spec.ts: teardown could remove neither.
-  Nothing in the product writes such a row today. A direct database write, a
-  restored backup, or an engine that tightens its grammar in a future version
-  all still can, and the operator's only recovery is SQL.
-- **2026-08-28:** the failure is no longer `Internal`.
-  `cedar.ErrPolicyUnparseable` is registered to FailedPrecondition and the 23
-  authz call sites route through `apiutil.MapError`, so the answer names a
-  state of the data and carries the parser's diagnostic instead of reading like
-  an outage. The entity is still unreadable and undeletable — that half is
-  deliberately untouched, because letting an operation through means
-  authorising it against a policy that cannot be evaluated, and a `forbid` the
-  operator meant to hold would be the thing discarded. That is a security
-  judgement, not a bug fix.
-- **Definition of Done:** reading and deleting an entity do not depend on its
-  policy compiling. A read can return the text with a diagnostic attached
-  instead of failing; a delete has no business consulting a policy that is
-  being removed. Either way, an entity that is broken must remain removable.
-- **Blockers:** none technical. It is a decision about where the engine sits
-  in the read path, which is why it is not folded into the write-side fix.
-
----
-
 ## Two write paths are covered only up to their promote tail
 
 - **Status:** Open (narrowed 2026-08-27). Was: thirteen RPC handlers at 0.0%.

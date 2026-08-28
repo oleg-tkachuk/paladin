@@ -289,6 +289,11 @@ type cacheKey struct {
 type compiledPolicy struct {
 	hash      []byte
 	policySet *cedar.PolicySet
+	// degraded names the tenant-authored layers ("tenant", "collection") that
+	// did not parse and were replaced by a freeze. Empty in the normal case.
+	// Kept so a reader can tell a scope that denies from a scope that cannot
+	// answer.
+	degraded []string
 	// tenantSlug is the DB-authoritative slug for this policy's tenant
 	// (ADR-0012). Cached with the policy so keying tenant membership on the
 	// trusted slug costs no extra query on the authz hot path.
@@ -435,34 +440,36 @@ func (e *Engine) loadCompiled(ctx context.Context, tenantID uuid.UUID, collectio
 	}
 	e.m.cacheMisses.Add(1)
 
-	text, hash, slug, err := e.store.Fetch(ctx, tenantID, collection)
+	layers, hash, slug, err := e.store.Fetch(ctx, tenantID, collection)
 	if err != nil {
 		return nil, fmt.Errorf("cedar: fetch policy: %w", err)
 	}
+	text, degraded := e.degradeUnparseableLayers(layers, tenantID, collection)
 	set, err := compile(text)
 	if err != nil {
-		// A STORED policy that will not parse is not a server fault, and saying
-		// Internal made it look like one: the operator sees "internal error" on
-		// every read, delete and authorization touching the entity, with
-		// nothing naming the cause or the cure.
+		// Reaching here means the BUILT-IN layer does not compile, or the
+		// degradation above produced something that does not. Tenant-authored
+		// text can no longer get this far: degradeUnparseableLayers has already
+		// replaced any layer that fails to parse.
 		//
-		// It is a precondition on the data. The write path refuses uncompilable
-		// text now (connectshim/admin.requireCompilablePolicy), so nothing in
-		// the product creates such a row; a restored backup or a future,
-		// stricter grammar still can, and then the entity needs a human to
-		// replace the text.
-		//
-		// Note what is NOT changed here: the decision is still a hard failure,
-		// so the entity remains unreadable and undeletable until the policy is
-		// repaired. Letting a repair through would mean authorising an
-		// operation against a policy that cannot be evaluated, which is a
-		// security judgement rather than a bug fix — BACKLOG carries it.
+		// So this is a bug in the binary rather than a state of the data, and
+		// TestBuiltinPolicyCompiles exists to catch it before a process ever
+		// serves a request.
 		return nil, fmt.Errorf("%w for tenant %s collection %q: %w",
 			ErrPolicyUnparseable, tenantID, collection, err)
+	}
+	if len(degraded) > 0 {
+		e.m.compileErrs.Add(1)
+		e.log.Warn("cedar: stored policy layer does not compile; scope frozen except its own repair",
+			zap.String("tenant_id", tenantID.String()),
+			zap.String("collection", collection),
+			zap.Strings("degraded_layers", degraded),
+		)
 	}
 	cp := &compiledPolicy{
 		hash:          hash,
 		policySet:     set,
+		degraded:      degraded,
 		tenantSlug:    slug,
 		perObjectEval: policyReadsPerObjectResourceAttr(set),
 		expiresAt:     time.Now().Add(e.ttl),
@@ -792,6 +799,72 @@ func compile(text string) (*cedar.PolicySet, error) {
 // human replaces it. Registered to FailedPrecondition so the answer names a
 // state the caller can fix rather than an outage they cannot.
 var ErrPolicyUnparseable = errors.New("cedar: stored policy does not compile")
+
+// degradeUnparseableLayers joins the built-in layer with the tenant-authored
+// ones, replacing any layer that does not parse with a freeze over the scope
+// it governs.
+//
+// The freeze is a Cedar rule, not a code path that skips authorization: there
+// is no bypass to get wrong. `forbid` beats every `permit` in Cedar, so the
+// scope stops answering yes to anything — EXCEPT the management action for
+// that same layer, which is carved out so the layer can be replaced.
+//
+// Who may take that carved-out action is deliberately NOT stated here. It is
+// decided by the layers that still compile, which is the recovery hierarchy
+// the layering already implies:
+//
+//	collection layer broken → the tenant layer decides who repairs it
+//	tenant layer broken     → the built-in decides (platform.admin)
+//	built-in broken         → a build-time bug; TestBuiltinPolicyCompiles
+//
+// So the authority to repair is exactly the authority to write that layer
+// normally. Repair IS a write to the layer; what changed is the state of the
+// data, not the principal, and making authority depend on the corruption would
+// be incoherent.
+//
+// Granularity note: the carve-out is the management action, which also covers
+// delete. A finer "replace the policy only" action would need its own entry in
+// the action vocabulary. Carving out management grants nothing new — whoever
+// holds it could delete the entity while the policy was valid — and it beats
+// the alternative, which was an entity nobody could ever remove.
+func (e *Engine) degradeUnparseableLayers(l Layers, tenantID uuid.UUID, collection string) (string, []string) {
+	var degraded []string
+	tenant, collectionText := l.Tenant, l.Collection
+
+	if tenant != "" && layerParses(tenant) != nil {
+		tenant = freezeExcept(ActionManageTenant)
+		degraded = append(degraded, "tenant")
+	}
+	if collectionText != "" && layerParses(collectionText) != nil {
+		collectionText = freezeExcept(ActionManageCollection)
+		degraded = append(degraded, "collection")
+	}
+
+	text := tenant
+	if collectionText != "" {
+		if text != "" {
+			text += "\n"
+		}
+		text += "// --- collection-scoped ---\n" + collectionText
+	}
+	return text, degraded
+}
+
+// layerParses reports whether one tenant-authored layer compiles on its own.
+// Cedar statements are self-contained, so a layer that parses alone parses in
+// the join — which is what lets a broken layer be identified rather than
+// merely suspected.
+func layerParses(text string) error {
+	_, err := cedar.NewPolicySetFromBytes("", []byte(text))
+	return err
+}
+
+// freezeExcept renders the replacement for a layer that will not parse.
+func freezeExcept(action string) string {
+	return "// --- layer did not parse; frozen except its own repair ---\n" +
+		"forbid(principal, action, resource)\n" +
+		"unless { action == Action::\"" + action + "\" };\n"
+}
 
 // Validate parses the policy text and returns the parser error (or nil).
 // Exposed for pre-save UI validation; does not persist or compile into cache.

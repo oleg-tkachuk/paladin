@@ -14,8 +14,8 @@ import (
 // set it to the tenant's real slug (ADR-0012).
 type fakeStore struct{ text, slug string }
 
-func (f fakeStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
-	return f.text, []byte(f.text), f.slug, nil
+func (f fakeStore) Fetch(context.Context, uuid.UUID, string) (Layers, []byte, string, error) {
+	return Layers{Tenant: f.text}, []byte(f.text), f.slug, nil
 }
 func (f fakeStore) Watch(context.Context) (<-chan ChangeEvent, error) { return nil, nil }
 

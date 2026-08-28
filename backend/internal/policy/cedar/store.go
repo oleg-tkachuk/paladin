@@ -18,13 +18,37 @@ import (
 //
 // Effective policy is the concatenation of the tenant's inherited_cedar_policy
 // and the collection's cedar_policy (collection-scoped rules override tenant-scoped).
+// Layers are the tenant-authored policy texts that apply to one scope, kept
+// APART rather than pre-joined.
+//
+// Joining them is the engine's business, not the store's, and the difference
+// is not cosmetic: concatenating first means one layer's syntax error takes
+// the others down with it. A collection whose policy will not parse used to
+// void the tenant's inherited policy for that scope AND the platform's
+// built-in — including the unconditional platform.admin permit, which is what
+// left the entity unreadable, undeletable and unrepairable at once. Separate
+// texts let the engine degrade exactly the layer that is broken.
+//
+// Order is fixed and meaningful: Tenant is inherited by every collection,
+// Collection applies to one. Neither includes the built-in layer, which is a
+// constant in the engine and belongs to no tenant.
+type Layers struct {
+	// Tenant is tenants.inherited_cedar_policy — platform-authored (written by
+	// UpdateTenant under platform.admin, or a policy-only edit by
+	// platform.tenant-provisioner). Empty is normal.
+	Tenant string
+	// Collection is collections.cedar_policy for the requested collection.
+	// Empty when the scope is the tenant itself, or the collection has none.
+	Collection string
+}
+
 type Store interface {
 	// Fetch returns the effective policy text, a content hash, and the
 	// tenant's DB-authoritative slug. The slug is the trusted key for tenant
 	// membership in Cedar (ADR-0012) — never the JWT-supplied one. Empty when
 	// the tenant is unknown or has no slug (legacy); callers fall back to the
 	// tenant UUID for the entity UID.
-	Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (text string, hash []byte, slug string, err error)
+	Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (layers Layers, hash []byte, slug string, err error)
 
 	// Watch emits change events for invalidating compiled caches.
 	// The channel is closed when ctx is cancelled.
@@ -74,7 +98,7 @@ const (
 	watchBackoffMax     = 5 * time.Second
 )
 
-func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (string, []byte, string, error) {
+func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (Layers, []byte, string, error) {
 	const q = `
         SELECT
             COALESCE(t.inherited_cedar_policy, '') AS tpolicy,
@@ -92,16 +116,14 @@ func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collectio
 		// instead of leaking a SQL error as a 500 to the client.
 		if errors.Is(err, pgx.ErrNoRows) {
 			sum := sha256.Sum256(nil)
-			return "", sum[:], "", nil
+			return Layers{}, sum[:], "", nil
 		}
-		return "", nil, "", fmt.Errorf("policy fetch: %w", err)
+		return Layers{}, nil, "", fmt.Errorf("policy fetch: %w", err)
 	}
-	text := tPol
-	if bPol != "" {
-		text += "\n// --- collection-scoped ---\n" + bPol
-	}
-	sum := sha256.Sum256([]byte(text))
-	return text, sum[:], slug, nil
+	// Hashed over both layers with a separator, so a change that moves text
+	// from one layer to the other still invalidates the cache.
+	sum := sha256.Sum256([]byte(tPol + "\x00" + bPol))
+	return Layers{Tenant: tPol, Collection: bPol}, sum[:], slug, nil
 }
 
 func (s *PostgresStore) Watch(ctx context.Context) (<-chan ChangeEvent, error) {

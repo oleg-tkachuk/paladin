@@ -170,9 +170,21 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
 	}
-	merged, _, _, err := h.store.Fetch(ctx, tenantID, collection)
+	layers, _, _, err := h.store.Fetch(ctx, tenantID, collection)
 	if err != nil {
 		return nil, err
+	}
+	// The store hands the layers over separately now, so attribution is read
+	// off the data rather than recovered by splitting a joined string on a
+	// comment marker. The old extractTenantLayer / extractCollectionLayer
+	// pair guessed where one layer ended; a tenant policy that happened to
+	// contain the marker text would have been mis-attributed.
+	merged := layers.Tenant
+	if layers.Collection != "" {
+		if merged != "" {
+			merged += "\n"
+		}
+		merged += "// --- collection-scoped ---\n" + layers.Collection
 	}
 	out := &EffectivePolicyOutput{MergedCedarPolicy: merged}
 	// Stable layer attribution: tenant first, then collection. We do not
@@ -180,29 +192,13 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	// to PostgresStore (slice 7).
 	out.Layers = append(out.Layers, PolicyLayer{
 		Source:      fmt.Sprintf("tenants/%s", tenantID),
-		CedarPolicy: extractTenantLayer(merged),
+		CedarPolicy: layers.Tenant,
 	})
 	if collection != "" {
 		out.Layers = append(out.Layers, PolicyLayer{
 			Source:      fmt.Sprintf("tenants/%s/collections/%s", tenantID, collection),
-			CedarPolicy: extractCollectionLayer(merged),
+			CedarPolicy: layers.Collection,
 		})
 	}
 	return out, nil
-}
-
-const collectionLayerMarker = "// --- collection-scoped ---\n"
-
-func extractTenantLayer(merged string) string {
-	if i := strings.Index(merged, collectionLayerMarker); i >= 0 {
-		return strings.TrimRight(merged[:i], "\n")
-	}
-	return merged
-}
-
-func extractCollectionLayer(merged string) string {
-	if i := strings.Index(merged, collectionLayerMarker); i >= 0 {
-		return merged[i+len(collectionLayerMarker):]
-	}
-	return ""
 }

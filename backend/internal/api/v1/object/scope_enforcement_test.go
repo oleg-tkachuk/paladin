@@ -121,8 +121,8 @@ func (r *getRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool)
 // scope-enforcement built-in decides — exercises the REAL engine end-to-end.
 type permitStore struct{}
 
-func (permitStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
-	return "permit(principal, action, resource);", nil, "", nil
+func (permitStore) Fetch(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
+	return cedar.Layers{Tenant: "permit(principal, action, resource);"}, nil, "", nil
 }
 func (permitStore) Watch(context.Context) (<-chan cedar.ChangeEvent, error) { return nil, nil }
 
