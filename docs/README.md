@@ -61,6 +61,9 @@ For when something is already on fire.
   — partitioning `audit_log` and `idempotency_keys`.
 - [sqs-sink-credentials.md](runbooks/sqs-sink-credentials.md) — SQS
   event-sink credentials, on and off AWS.
+- [no-container-metrics-on-orbstack.md](runbooks/no-container-metrics-on-orbstack.md)
+  — why every `container_*` panel is empty on the dev cluster, and what to
+  use instead.
 
 ## Elsewhere in the repository
 

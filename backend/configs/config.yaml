@@ -368,12 +368,13 @@ cedar:
 # profile (it encodes the capability-model antithesis: agent issuing
 # its own caps, role escalation, login, tenant lifecycle).
 #
-# Env-var overrides (always win over YAML so a Claude Desktop config
-# can pin behaviour without editing cluster YAML):
-#   PALADIN_MCP_STDIO_ENABLED, PALADIN_MCP_STDIO_PROFILE
-#   PALADIN_MCP_HTTP_ENABLED, PALADIN_MCP_HTTP_PROFILE,
-#   PALADIN_MCP_HTTP_ADDR, PALADIN_MCP_HTTP_SESSION_TIMEOUT
-#   PALADIN_ADMIN_URL, PALADIN_DATA_URL, PALADIN_IAM_URL
+# There are NO env-var overrides for this section. A LoadMCP path that
+# read PALADIN_MCP_* and PALADIN_{ADMIN,DATA,IAM}_URL was documented here
+# and shipped, but nothing ever called it: `serve mcp` reads this YAML
+# through the CUE-validated loader like every other role. Setting those
+# variables changed nothing, which is worse than not offering them.
+# PALADIN_{ADMIN,DATA,IAM}_URL do still mean something — to the console
+# BFF, a different process reading its own environment.
 mcp:
   upstreams:
     admin_url: "http://localhost:8090"

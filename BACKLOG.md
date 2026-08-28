@@ -2167,13 +2167,19 @@ of the pipeline._
   configured. This was noticed while trying to establish whether a TLS
   handshake timeout came from CPU starvation in the api pod: the question
   could not be answered, because the data does not exist.
-- **Definition of Done:** Either a source of per-container resource metrics
-  that works here (cadvisor as a DaemonSet, or the metrics-server API), or a
-  note in the observability docs that resource-level questions cannot be
-  answered on OrbStack — so the next person does not spend the time twice.
-- **Blockers:** OrbStack. The same scrape returns full `container_*` data on a
-  normal kubelet, so nothing in the Alloy config needs changing for a real
-  cluster.
+- **Definition of Done:** the documentation half is DONE —
+  [docs/runbooks/no-container-metrics-on-orbstack.md](docs/runbooks/no-container-metrics-on-orbstack.md)
+  records the symptom, the one-command confirmation, what still works, and
+  what not to conclude from an empty graph. What remains is a working source
+  of per-container metrics, and it is deliberately not being done here.
+- **Blockers:** ownership, not difficulty. cAdvisor as a DaemonSet would fix
+  it, but the Alloy install and the VictoriaMetrics stack are shared cluster
+  infrastructure that Paladin neither owns nor deploys — its charts stop at its
+  own namespace, and adding a DaemonSet to someone else's cluster to fix our
+  view of it is not ours to do unilaterally. Raise it with whoever owns the
+  observability stack. Nothing in the Alloy config needs changing for a real
+  cluster: the same scrape returns full `container_*` data on a normal
+  kubelet.
 
 ---
 
@@ -2194,10 +2200,22 @@ of the pipeline._
   The burst has not recurred since — two full e2e runs on later builds logged
   none — so it cannot currently be caught in the act.
 - **Definition of Done:** The client is identified and either corrected or
-  documented. The message now carries `listen_addr`, so the next occurrence
-  says whether it arrived on data (8080) or iam (8085); that halves the search
-  and makes the MCP loader's `http://localhost:8085` default a checkable
-  suspect rather than a guess. `ss -tnp` inside the pod during a burst would
-  finish the job.
-- **Blockers:** it stopped happening. Waiting for a recurrence with the tag
-  attached beats guessing at a client that may already be gone.
+  documented. The message carries `listen_addr`, so the next occurrence says
+  whether it arrived on data (8080) or iam (8085).
+- **Suspects eliminated 2026-08-28**, without waiting for a recurrence:
+  - *The MCP loader's `http://localhost:8085` default.* Cleared, and the code
+    is gone. `config.LoadMCP` / `config.MCPDefaults` were never called by
+    anything — `serve mcp` reads `cfg.MCP.Upstreams` through the main
+    CUE-validated loader — so the default could not have dialled anything.
+    Its own tests were what made it look alive.
+  - *The readiness self-dial* (`dialLocalListener`). It is TLS-aware: it uses
+    a `tls.Dialer` whenever the listener it probes has TLS enabled. Its
+    historical failure mode was the OTHER message ("EOF"), already fixed.
+  - *`kubectl port-forward`*, whose traffic does arrive from 127.0.0.1 and
+    would fit the burst shape. `scripts/e2e-cluster.sh` uses ingress
+    hostnames over https and forwards no ports, so it is not the e2e run —
+    though a hand-run port-forward during that window remains possible and
+    would explain everything.
+- **Blockers:** it stopped happening. What remains is a client that leaves no
+  trace in the tree, so `ss -tnp` inside the pod during a burst is still the
+  step that finishes this — and there is no burst to catch.
