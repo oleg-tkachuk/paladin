@@ -2066,25 +2066,29 @@ of the pipeline._
 
 ---
 
-## The RPC surface gate skips in CI, so it gates nothing there
+## Actions will not start a job: the account, not the code
 
-- **Status:** Open. Surfaced 2026-08-27.
-- **Reason:** `tests/integration/rpc_surface_test.go` is the only thing that
-  covers all 142 RPC declarations at once, and it reaches them over HTTP:
-  `127.0.0.1:8090` / `:8080` / `:8085`. When no stack answers it calls
-  `t.Skip`. `.github/workflows/integration.yml` starts a testcontainers
-  Postgres and nothing else — no `docker compose`, no `paladin-core` — so in CI
-  it has always skipped, silently, and a skipped gate reads exactly like a
-  passing one. It runs locally only for someone who happens to have the e2e
-  compose stack up, which is how it was found.
-  The test anticipated this: `PALADIN_RPC_SURFACE=1` turns the skip into a
-  failure. Nothing sets it.
-- **Definition of Done:** the integration job brings up
-  `frontend/tests/e2e/docker-compose.test.yaml` (it already publishes all
-  three planes on those ports) and sets `PALADIN_RPC_SURFACE=1`, so an
-  unreachable stack fails the job instead of quietly excusing it.
-- **Blockers:** depends on the integration workflow running on Actions at all
-  — see *Branch protection*.
+- **Status:** Blocked (account action — outside this repository). Confirmed
+  2026-08-28 from GitHub's own annotation.
+- **Reason:** Every workflow — Test, Integration, E2E, Security, Capability
+  module — fails with **zero steps executed**. Not a config error, not a flaky
+  runner. The annotation on the check run says it plainly:
+
+      The job was not started because recent account payments have failed
+      or your spending limit needs to be increased.
+
+  So nothing in CI has ever gated anything here. Every green result this
+  repository has seen was produced by a human running the suites by hand, while
+  the workflow files sit in the tree implying otherwise — which is what an
+  integrator would read them as.
+- **Definition of Done:** jobs start. Two routes, both the owner's: restore
+  billing / raise the spending limit, or make the repository public, where
+  Actions minutes are free. The workflows need no change; they are correct and
+  unrun.
+- **Meanwhile:** the gates that matter have local homes that do not depend on
+  Actions — `task verify-all` (unit, lint, build, tagged-suite compile) and
+  `task backend:test:rpc-surface` (the whole-contract gate, stack included).
+  Those are currently the only gates that actually run.
 
 ---
 
@@ -2117,7 +2121,9 @@ of the pipeline._
 
 ## The BFF's rotation bookkeeping is per-process
 
-- **Status:** Deferred (single-replica assumption, already documented).
+- **Status:** Deferred (single-replica assumption, now ENFORCED at chart
+  render time as of 2026-08-28 — helm refuses replicaCount > 1 and any
+  autoscaling that could exceed one, naming bff.ts and this entry).
 - **Reason:** Two maps in `bff.ts` make concurrent token work safe: the dedup
   that collapses identical rotations, and the successor index that lets an
   ExchangeAudience follow a rotation that consumed its token
