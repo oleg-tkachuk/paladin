@@ -70,6 +70,13 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
   -- query ("invalid input value for enum") instead of returning no rows.
   AND (sqlc.narg('storage_layout')::text IS NULL
        OR tenants.storage_layout::text = sqlc.narg('storage_layout')::text)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR tenants.created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR tenants.created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY tenants.id
 LIMIT sqlc.arg('page_size');
 

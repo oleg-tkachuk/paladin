@@ -82,6 +82,13 @@ WHERE (sqlc.narg('after_id')::text IS NULL
   AND (sqlc.narg('enabled')::bool IS NULL OR enabled = sqlc.narg('enabled')::bool)
   AND (sqlc.narg('read_only')::bool IS NULL OR read_only = sqlc.narg('read_only')::bool)
   AND (sqlc.narg('maintenance')::bool IS NULL OR maintenance = sqlc.narg('maintenance')::bool)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR storage_backends.created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR storage_backends.created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY storage_backends.name ASC
 LIMIT sqlc.arg('page_size')::int;
 

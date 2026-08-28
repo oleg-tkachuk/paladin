@@ -1,6 +1,9 @@
 package cel
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // The walk has to hold one line: a predicate either becomes a SQL hint that
 // means exactly what the CEL meant, or it becomes nothing. A hint that is
@@ -205,5 +208,178 @@ func TestExtractPushdownRejectsGarbageWithoutPanicking(t *testing.T) {
 	}
 	if p.Recognised != 0 {
 		t.Errorf("pushed %d predicates out of an unparsable filter", p.Recognised)
+	}
+}
+
+// ─── timestamp ranges ──────────────────────────────────────────────────────
+
+// Timestamp comparisons were the largest remaining hole: every list schema
+// exposes created_at, and a filter made only of one read the whole table a
+// page at a time. AuditPushdown had them for its own schema; this is the same
+// recognition generalised over any timestamp-typed field.
+
+func mustTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	ts, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return ts
+}
+
+func TestPushdownRecognisesTimestampBounds(t *testing.T) {
+	pd, err := ExtractPushdown(StorageBackendSchema,
+		`created_at >= timestamp("2026-01-01T00:00:00Z") && created_at <= timestamp("2026-06-30T23:59:59Z")`)
+	if err != nil {
+		t.Fatalf("ExtractPushdown: %v", err)
+	}
+	gte, lte := pd.TimeHint("created_at")
+	if gte == nil || !gte.Equal(mustTime(t, "2026-01-01T00:00:00Z")) {
+		t.Errorf("gte = %v", gte)
+	}
+	if lte == nil || !lte.Equal(mustTime(t, "2026-06-30T23:59:59Z")) {
+		t.Errorf("lte = %v", lte)
+	}
+	if pd.Recognised != 2 {
+		t.Errorf("Recognised = %d, want 2", pd.Recognised)
+	}
+}
+
+func TestPushdownWidensStrictTimestampBounds(t *testing.T) {
+	// `>` is pushed as `>=`. The pushdown only narrows the candidate set, so
+	// including the boundary instant costs one row that the authoritative CEL
+	// pass then rejects. Pushing the strict form would be the unsafe
+	// direction: it could drop a row the filter accepts.
+	pd, err := ExtractPushdown(StorageBackendSchema, `created_at > timestamp("2026-01-01T00:00:00Z")`)
+	if err != nil {
+		t.Fatalf("ExtractPushdown: %v", err)
+	}
+	gte, lte := pd.TimeHint("created_at")
+	if gte == nil || !gte.Equal(mustTime(t, "2026-01-01T00:00:00Z")) {
+		t.Errorf("strict > did not widen to >=: %v", gte)
+	}
+	if lte != nil {
+		t.Errorf("lte = %v, want unbounded", lte)
+	}
+}
+
+func TestPushdownAcceptsTimestampOperandsInEitherOrder(t *testing.T) {
+	// `timestamp(x) <= created_at` is the same predicate as
+	// `created_at >= timestamp(x)`; CEL does not normalise the order.
+	pd, err := ExtractPushdown(StorageBackendSchema, `timestamp("2026-01-01T00:00:00Z") <= created_at`)
+	if err != nil {
+		t.Fatalf("ExtractPushdown: %v", err)
+	}
+	gte, lte := pd.TimeHint("created_at")
+	if gte == nil || !gte.Equal(mustTime(t, "2026-01-01T00:00:00Z")) {
+		t.Errorf("flipped operands lost the lower bound: gte=%v lte=%v", gte, lte)
+	}
+	if lte != nil {
+		t.Errorf("flipped operands produced an upper bound: %v", lte)
+	}
+}
+
+func TestPushdownIgnoresTimestampBoundsOnNonTimestampFields(t *testing.T) {
+	// display_name is a string; a comparison against it is legal CEL and must
+	// simply not become a SQL range.
+	pd, err := ExtractPushdown(StorageBackendSchema, `display_name >= "m"`)
+	if err != nil {
+		t.Fatalf("ExtractPushdown: %v", err)
+	}
+	if gte, lte := pd.TimeHint("display_name"); gte != nil || lte != nil {
+		t.Errorf("pushed a range over a string field: %v / %v", gte, lte)
+	}
+	if pd.Recognised != 0 {
+		t.Errorf("Recognised = %d, want 0", pd.Recognised)
+	}
+}
+
+func TestPushdownKeepsTheFirstOfDuplicateBounds(t *testing.T) {
+	// Two lower bounds could be merged to the tighter one, but choosing
+	// silently would make the pushed predicate depend on conjunct order. The
+	// in-memory pass applies both regardless, so keeping the first is correct
+	// and stable.
+	pd, err := ExtractPushdown(StorageBackendSchema,
+		`created_at >= timestamp("2026-01-01T00:00:00Z") && created_at >= timestamp("2026-03-01T00:00:00Z")`)
+	if err != nil {
+		t.Fatalf("ExtractPushdown: %v", err)
+	}
+	gte, _ := pd.TimeHint("created_at")
+	if gte == nil || !gte.Equal(mustTime(t, "2026-01-01T00:00:00Z")) {
+		t.Errorf("gte = %v, want the first bound", gte)
+	}
+	if pd.Recognised != 1 {
+		t.Errorf("Recognised = %d, want 1 — the duplicate is not a second predicate", pd.Recognised)
+	}
+}
+
+func TestPushdownIgnoresAMalformedTimestampLiteral(t *testing.T) {
+	pd, err := ExtractPushdown(StorageBackendSchema, `created_at >= timestamp("not-a-time")`)
+	if err != nil {
+		t.Fatalf("ExtractPushdown: %v", err)
+	}
+	if gte, _ := pd.TimeHint("created_at"); gte != nil {
+		t.Errorf("pushed a bound from an unparseable literal: %v", gte)
+	}
+}
+
+// The pushdown's whole safety argument is one-directional: SQL may return
+// rows the CEL then rejects, but it must never withhold a row the CEL would
+// have accepted — the authoritative pass runs after the query and cannot
+// bring back what the query did not fetch. Everything else in this file
+// checks that a predicate is recognised; this checks that recognising it
+// stayed sound, which is the property a future widening of the walk is most
+// likely to break.
+func TestPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
+	base := mustTime(t, "2026-03-01T12:00:00Z")
+	rows := []time.Time{
+		base.Add(-48 * time.Hour),
+		base.Add(-time.Nanosecond),
+		base, // the boundary instant, where a strict bound would differ
+		base.Add(time.Nanosecond),
+		base.Add(48 * time.Hour),
+	}
+	filters := []string{
+		`created_at >= timestamp("2026-03-01T12:00:00Z")`,
+		`created_at > timestamp("2026-03-01T12:00:00Z")`,
+		`created_at <= timestamp("2026-03-01T12:00:00Z")`,
+		`created_at < timestamp("2026-03-01T12:00:00Z")`,
+		`timestamp("2026-03-01T12:00:00Z") <= created_at`,
+		`created_at >= timestamp("2026-02-01T00:00:00Z") && created_at <= timestamp("2026-04-01T00:00:00Z")`,
+	}
+
+	ev := NewEvaluator()
+
+	for _, expr := range filters {
+		t.Run(expr, func(t *testing.T) {
+			pd, err := ExtractPushdown(TenantSchema, expr)
+			if err != nil {
+				t.Fatalf("ExtractPushdown: %v", err)
+			}
+			gte, lte := pd.TimeHint("created_at")
+
+			for _, at := range rows {
+				// What the authoritative pass decides.
+				page := []map[string]any{{
+					"tenant_id": "t", "slug": "s", "display_name": "s",
+					"storage_layout": "shared", "labels": map[string]string{},
+					"created_at": at, "updated_at": at,
+				}}
+				kept, err := FilterPage(ev, TenantSchema, expr, page,
+					func(r map[string]any) map[string]any { return r })
+				if err != nil {
+					t.Fatalf("FilterPage: %v", err)
+				}
+				accepted := len(kept) == 1
+
+				// What the query would have fetched.
+				fetched := (gte == nil || !at.Before(*gte)) && (lte == nil || !at.After(*lte))
+
+				if accepted && !fetched {
+					t.Errorf("row at %s is accepted by the filter but excluded by the pushed bounds [%v, %v]",
+						at.Format(time.RFC3339Nano), gte, lte)
+				}
+			}
+		})
 	}
 }

@@ -3,6 +3,7 @@ package cel
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	celast "github.com/google/cel-go/common/ast"
@@ -33,6 +34,17 @@ type Pushdown struct {
 	// Prefix and Contains hold field.startsWith / field.contains literals.
 	Prefix   map[string]string
 	Contains map[string]string
+
+	// TimeGTE and TimeLTE hold the bounds of `field >= timestamp("…")` and
+	// `field <= timestamp("…")` over timestamp-typed fields. Strict `>` and
+	// `<` are widened to their inclusive forms on purpose: the pushdown only
+	// narrows the candidate set, so including the boundary instant costs at
+	// most one extra row and the authoritative CEL pass excludes it. Doing
+	// the reverse — pushing a strict bound — would drop a row the filter
+	// accepts if the column and the literal compare equal at a precision the
+	// query rounds differently.
+	TimeGTE map[string]time.Time
+	TimeLTE map[string]time.Time
 
 	// Recognised counts the conjuncts that produced a predicate. Zero means
 	// the caller may skip the pushdown entirely.
@@ -144,6 +156,27 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) bool {
 		}
 		return p.setBool(field, false)
 
+	case "_>=_", "_>_", "_<=_", "_<_":
+		// Timestamp ranges. Either operand order: `created_at >= t` and
+		// `t <= created_at` are the same predicate, so a literal on the left
+		// flips the comparison rather than being rejected.
+		args := c.Args()
+		if len(args) != 2 {
+			return false
+		}
+		field, ts, flipped, ok := identAndTimestamp(args[0], args[1])
+		if !ok || fieldType(schema, field) != typeTimestamp {
+			return false
+		}
+		lower := strings.HasPrefix(c.FunctionName(), "_>")
+		if flipped {
+			lower = !lower
+		}
+		if lower {
+			return setTime(&p.TimeGTE, field, ts)
+		}
+		return setTime(&p.TimeLTE, field, ts)
+
 	case "startsWith", "contains":
 		field, ok := identName(c.Target())
 		if !ok || fieldType(schema, field) != typeString {
@@ -218,6 +251,35 @@ func (p *Pushdown) setIn(m *map[string]string, field, lit string) bool {
 // escaped: the authoritative CEL pass still runs, so a dropped hint only
 // widens the scan, and an unescaped one would silently widen it anyway while
 // looking precise.
+// setTime records the FIRST bound seen for a field. A second one on the same
+// side is dropped rather than merged: `a >= X && a >= Y` is expressible as the
+// tighter of the two, but silently choosing it makes the pushdown's answer
+// depend on conjunct order, and the in-memory pass applies both anyway.
+func setTime(m *map[string]time.Time, field string, ts time.Time) bool {
+	if *m == nil {
+		*m = map[string]time.Time{}
+	}
+	if _, dup := (*m)[field]; dup {
+		return false
+	}
+	(*m)[field] = ts
+	return true
+}
+
+// TimeHint returns the inclusive bounds pushed down for a timestamp field.
+// Either may be nil, meaning unbounded on that side.
+func (p Pushdown) TimeHint(field string) (gte *time.Time, lte *time.Time) {
+	if v, ok := p.TimeGTE[field]; ok {
+		t := v
+		gte = &t
+	}
+	if v, ok := p.TimeLTE[field]; ok {
+		t := v
+		lte = &t
+	}
+	return gte, lte
+}
+
 func (p Pushdown) StringHint(field string) (eq *string, like *string) {
 	if v, ok := p.Eq[field]; ok {
 		eq = &v
@@ -259,6 +321,7 @@ const (
 	typeOther celFieldType = iota
 	typeString
 	typeBool
+	typeTimestamp
 )
 
 func fieldType(schema *Schema, field string) celFieldType {
@@ -271,6 +334,8 @@ func fieldType(schema *Schema, field string) celFieldType {
 		return typeString
 	case cel.BoolType:
 		return typeBool
+	case cel.TimestampType:
+		return typeTimestamp
 	default:
 		return typeOther
 	}
@@ -290,6 +355,23 @@ func identAndLiteral(a, b celast.Expr) (string, any, bool) {
 		}
 	}
 	return "", nil, false
+}
+
+// identAndTimestamp accepts a comparison's operands in either order. flipped
+// reports that the field was on the RIGHT, which reverses the comparison's
+// direction for the caller.
+func identAndTimestamp(a, b celast.Expr) (field string, ts time.Time, flipped bool, ok bool) {
+	if name, isIdent := identName(a); isIdent {
+		if t, isTS := timestampLiteral(b); isTS {
+			return name, t, false, true
+		}
+	}
+	if name, isIdent := identName(b); isIdent {
+		if t, isTS := timestampLiteral(a); isTS {
+			return name, t, true, true
+		}
+	}
+	return "", time.Time{}, false, false
 }
 
 func literalValue(e celast.Expr) (any, bool) {

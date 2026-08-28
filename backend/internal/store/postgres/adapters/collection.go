@@ -188,8 +188,10 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		displayEq, displayLike := pd.StringHint("display_name")
 		backendEq, _ := pd.StringHint("storage_backend")
 
+		createdGTE, createdLTE := createdBounds(pd)
 		rows, err := r.q.ListCollections(ctx, pgUUID(args.TenantID), after,
-			nameEq, nameLike, displayEq, displayLike, backendEq, pageSize)
+			nameEq, nameLike, displayEq, displayLike, backendEq,
+			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list collections: %w", err)
 		}

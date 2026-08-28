@@ -153,8 +153,15 @@ WHERE ($1::uuid IS NULL OR tenants.id > $1::uuid)
   -- query ("invalid input value for enum") instead of returning no rows.
   AND ($8::text IS NULL
        OR tenants.storage_layout::text = $8::text)
+  -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND ($9::timestamptz IS NULL
+       OR tenants.created_at >= $9::timestamptz)
+  AND ($10::timestamptz IS NULL
+       OR tenants.created_at <= $10::timestamptz)
 ORDER BY tenants.id
-LIMIT $9
+LIMIT $11
 `
 
 type ListTenantsRow struct {
@@ -168,7 +175,7 @@ type ListTenantsRow struct {
 // The boolean gating is inline-CASE so sqlc emits a single prepared
 // statement; planner uses the partial idx_tenants_active index on
 // the common path.
-func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugEq *string, slugLike *string, displayNameEq *string, displayNameLike *string, storageLayout *string, pageSize int32) ([]ListTenantsRow, error) {
+func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugEq *string, slugLike *string, displayNameEq *string, displayNameLike *string, storageLayout *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error) {
 	rows, err := q.db.Query(ctx, listTenants,
 		afterID,
 		onlyTrashed,
@@ -178,6 +185,8 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTras
 		displayNameEq,
 		displayNameLike,
 		storageLayout,
+		createdAtGte,
+		createdAtLte,
 		pageSize,
 	)
 	if err != nil {

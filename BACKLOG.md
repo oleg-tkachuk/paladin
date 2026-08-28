@@ -2002,25 +2002,32 @@ of the pipeline._
 
 ## List filters push down only the conjuncts SQL can express
 
-- **Status:** Deferred (the remainder needs per-schema work, not a rule).
-- **Reason:** The filterable list RPCs now extract the SQL-expressible subset
-  of the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
+- **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.
+- **Reason:** The filterable list RPCs extract the SQL-expressible subset of
+  the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
   `filter` selects from the table rather than from whichever page the cursor
-  landed on. What the walk understands is the top-level `&&` chain of string
-  equality, `startsWith`, `contains`, and booleans over columns the query
-  carries. Everything else — disjunctions, timestamp comparisons, `labels[…]`,
-  functions — still reaches only the in-memory pass, which means a filter made
-  entirely of those reads the whole table one page at a time. That is correct
-  (paging continues, no row is dropped) and slow.
+  landed on. The walk understands the top-level `&&` chain of string equality,
+  `startsWith`, `contains`, booleans, and — as of 2026-08-28 — `created_at`
+  ranges, threaded into all seven list queries. Strict `>` / `<` are widened
+  to their inclusive forms deliberately: the pushdown may only narrow, so an
+  extra boundary row is free and a missing one is a wrong answer.
+  What still reaches only the in-memory pass: disjunctions, `labels[…]`,
+  functions, and `updated_at` — which is left out on purpose rather than
+  forgotten, since a mutable column pushed into the query can exclude a row
+  that the CEL pass, running microseconds later against a row someone just
+  touched, would have accepted. A filter made entirely of those reads the
+  whole table one page at a time: correct (paging continues, no row is
+  dropped) and slow.
   Two paths are narrower still and worth naming: `ListCollections` has a
   hand-written branch for the (backend, bucket) browser that takes no hints at
   all, and `operations.state` is deliberately not pushed from a filter because
   the column is an enum and casting an arbitrary literal to it makes Postgres
   reject the whole query rather than return no rows.
 - **Definition of Done:** Either the walk covers the rest of the CEL surface
-  each schema exposes — timestamp ranges are the obvious next one, and
-  `auditpushdown.go` already does them for its own schema — or the schemas
-  stop exposing what no query can answer.
+  each schema exposes, or the schemas stop exposing what no query can answer.
+  Whatever is added must hold the invariant
+  `TestPushdownNeverExcludesARowTheFilterAccepts` states: SQL may over-fetch,
+  never under-fetch.
 - **Blockers:** none. Deliberately not solved by rejecting un-pushable filters
   with InvalidArgument: that would make a legal CEL expression an error
   because of an implementation detail of one storage engine, and the shape the

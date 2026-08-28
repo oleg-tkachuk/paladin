@@ -164,18 +164,21 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 	subjectEq, subjectLike := pd.StringHint("subject")
 	displayEq, displayLike := pd.StringHint("display_name")
 	disabled := pd.BoolHint("disabled")
+	createdGTE, createdLTE := createdBounds(pd)
 
 	var rows []sqlc.User
 	if args.TenantID == uuid.Nil {
 		got, err := r.q.ListUsersAll(ctx, pgUUID(afterID),
-			subjectEq, subjectLike, displayEq, displayLike, disabled, limit)
+			subjectEq, subjectLike, displayEq, displayLike, disabled,
+			createdGTE, createdLTE, limit)
 		if err != nil {
 			return nil, "", err
 		}
 		rows = got
 	} else {
 		got, err := r.q.ListUsersByTenant(ctx, pgUUID(args.TenantID), pgUUID(afterID),
-			subjectEq, subjectLike, displayEq, displayLike, disabled, limit)
+			subjectEq, subjectLike, displayEq, displayLike, disabled,
+			createdGTE, createdLTE, limit)
 		if err != nil {
 			return nil, "", err
 		}

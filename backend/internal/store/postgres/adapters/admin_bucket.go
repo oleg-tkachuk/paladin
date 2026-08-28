@@ -276,10 +276,13 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	nameEq, nameLike := pd.StringHint("bucket_id")
 	displayEq, displayLike := pd.StringHint("display_name")
 
+	createdGTE, createdLTE := createdBounds(pd)
+
 	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter,
 		nameEq, nameLike, displayEq, displayLike,
 		pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
 		pd.BoolHint("replication_enabled"),
+		createdGTE, createdLTE,
 		args.AfterBackend, args.AfterName, pageSize)
 	if err != nil {
 		return nil, "", err

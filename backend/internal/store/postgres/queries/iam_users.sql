@@ -65,6 +65,13 @@ WHERE tenant_id = $1
   AND (sqlc.narg('display_name_eq')::text IS NULL OR display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR display_name LIKE sqlc.narg('display_name_like')::text)
   AND (sqlc.narg('disabled')::bool IS NULL OR disabled = sqlc.narg('disabled')::bool)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY id ASC
 LIMIT sqlc.arg('page_size')::int;
 
@@ -87,6 +94,13 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL
   AND (sqlc.narg('display_name_eq')::text IS NULL OR display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR display_name LIKE sqlc.narg('display_name_like')::text)
   AND (sqlc.narg('disabled')::bool IS NULL OR disabled = sqlc.narg('disabled')::bool)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY id ASC
 LIMIT sqlc.arg('page_size')::int;
 

@@ -456,12 +456,14 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 	slugEq, slugLike := pd.StringHint("slug")
 	displayEq, displayLike := pd.StringHint("display_name")
 	layoutEq, _ := pd.StringHint("storage_layout")
+	createdGTE, createdLTE := createdBounds(pd)
 
 	rows, err := r.q.ListTenants(ctx,
 		pgUUID(args.AfterID),
 		args.OnlyTrashed,
 		args.IncludeTrashed,
 		slugEq, slugLike, displayEq, displayLike, layoutEq,
+		createdGTE, createdLTE,
 		pageSize,
 	)
 	if err != nil {

@@ -42,6 +42,13 @@ WHERE tenant_id = $1
   AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
   AND (sqlc.narg('error_message_neq')::text IS NULL
        OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY id
 LIMIT sqlc.arg('page_size');
 
@@ -60,6 +67,13 @@ WHERE tenant_id = $1
   AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
   AND (sqlc.narg('error_message_neq')::text IS NULL
        OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY id DESC
 LIMIT sqlc.arg('page_size');
 

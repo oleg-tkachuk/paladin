@@ -1,6 +1,8 @@
 package adapters
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 )
 
@@ -25,4 +27,24 @@ func hints(schema *cel.Schema, filter string) cel.Pushdown {
 		return cel.Pushdown{}
 	}
 	return pd
+}
+
+// createdBounds converts a pushdown's created_at range into the pgtype pair
+// every List query now takes. A nil bound becomes the zero Timestamptz, which
+// the query reads as SQL NULL and therefore as "unbounded on that side".
+//
+// Only created_at is threaded. Every filterable schema exposes it, it is the
+// bound callers actually write ("everything since the incident"), and it is
+// immutable — an updated_at range pushed into the query could exclude a row
+// that the authoritative CEL pass, running microseconds later against a row
+// someone just touched, would have accepted.
+func createdBounds(pd cel.Pushdown) (gte pgtype.Timestamptz, lte pgtype.Timestamptz) {
+	lo, hi := pd.TimeHint("created_at")
+	if lo != nil {
+		gte = pgTS(*lo)
+	}
+	if hi != nil {
+		lte = pgTS(*hi)
+	}
+	return gte, lte
 }

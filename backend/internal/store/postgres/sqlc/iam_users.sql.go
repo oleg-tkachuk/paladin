@@ -225,15 +225,22 @@ WHERE ($1::uuid IS NULL
   AND ($4::text IS NULL OR display_name = $4::text)
   AND ($5::text IS NULL OR display_name LIKE $5::text)
   AND ($6::bool IS NULL OR disabled = $6::bool)
+  -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND ($7::timestamptz IS NULL
+       OR created_at >= $7::timestamptz)
+  AND ($8::timestamptz IS NULL
+       OR created_at <= $8::timestamptz)
 ORDER BY id ASC
-LIMIT $7::int
+LIMIT $9::int
 `
 
 // Cross-tenant listing for platform.admin. Same NULL-safe after_id
 // pattern as ListUsersByTenant — without the IS-NULL guard the
 // /users page renders empty even when there are rows, because the
 // adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
-func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, pageSize int32) ([]User, error) {
+func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsersAll,
 		afterID,
 		subjectEq,
@@ -241,6 +248,8 @@ func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, subject
 		displayNameEq,
 		displayNameLike,
 		disabled,
+		createdAtGte,
+		createdAtLte,
 		pageSize,
 	)
 	if err != nil {
@@ -290,8 +299,15 @@ WHERE tenant_id = $1
   AND ($5::text IS NULL OR display_name = $5::text)
   AND ($6::text IS NULL OR display_name LIKE $6::text)
   AND ($7::bool IS NULL OR disabled = $7::bool)
+  -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND ($8::timestamptz IS NULL
+       OR created_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL
+       OR created_at <= $9::timestamptz)
 ORDER BY id ASC
-LIMIT $8::int
+LIMIT $10::int
 `
 
 // after_id is NULL on first page (no page token). The IS-NULL guard
@@ -299,7 +315,7 @@ LIMIT $8::int
 // NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
 // Valid:false} → SQL NULL, so the guard is the contract callers
 // rely on.
-func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, pageSize int32) ([]User, error) {
+func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsersByTenant,
 		tenantID,
 		afterID,
@@ -308,6 +324,8 @@ func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, a
 		displayNameEq,
 		displayNameLike,
 		disabled,
+		createdAtGte,
+		createdAtLte,
 		pageSize,
 	)
 	if err != nil {

@@ -245,9 +245,16 @@ WHERE ($1::text IS NULL OR sb.name = $1::text)
   AND ($7::bool IS NULL OR b.versioning_enabled = $7::bool)
   AND ($8::bool IS NULL OR b.object_lock_enabled = $8::bool)
   AND ($9::bool IS NULL OR b.replication_enabled = $9::bool)
-  AND (sb.name, b.name) > ($10::text, $11::text)
+  -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND ($10::timestamptz IS NULL
+       OR b.created_at >= $10::timestamptz)
+  AND ($11::timestamptz IS NULL
+       OR b.created_at <= $11::timestamptz)
+  AND (sb.name, b.name) > ($12::text, $13::text)
 ORDER BY sb.name, b.name
-LIMIT $12
+LIMIT $14
 `
 
 type ListBucketsV2Row struct {
@@ -279,7 +286,7 @@ type ListBucketsV2Row struct {
 // Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 // (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 // below is plain equality so the planner uses the partial index.
-func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
+func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,
 		backendName,
 		ownerTenantID,
@@ -290,6 +297,8 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerT
 		versioningEnabled,
 		objectLockEnabled,
 		replicationEnabled,
+		createdAtGte,
+		createdAtLte,
 		afterBackendID,
 		afterName,
 		pageSize,

@@ -77,6 +77,13 @@ WHERE collections.tenant_id = $1
   AND (sqlc.narg('display_name_eq')::text IS NULL OR collections.display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR collections.display_name LIKE sqlc.narg('display_name_like')::text)
   AND (sqlc.narg('backend_eq')::text IS NULL OR sb.name = sqlc.narg('backend_eq')::text)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR collections.created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR collections.created_at <= sqlc.narg('created_at_lte')::timestamptz)
 ORDER BY collections.name
 LIMIT sqlc.arg('page_size');
 

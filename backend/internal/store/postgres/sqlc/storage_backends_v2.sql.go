@@ -152,8 +152,15 @@ WHERE ($1::text IS NULL
   AND ($8::bool IS NULL OR enabled = $8::bool)
   AND ($9::bool IS NULL OR read_only = $9::bool)
   AND ($10::bool IS NULL OR maintenance = $10::bool)
+  -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND ($11::timestamptz IS NULL
+       OR storage_backends.created_at >= $11::timestamptz)
+  AND ($12::timestamptz IS NULL
+       OR storage_backends.created_at <= $12::timestamptz)
 ORDER BY storage_backends.name ASC
-LIMIT $11::int
+LIMIT $13::int
 `
 
 type ListStorageBackendsRow struct {
@@ -199,7 +206,7 @@ type ListStorageBackendsRow struct {
 // the first page, and a bare `name > NULL` evaluates to NULL → zero rows
 // (the same trap that bit ListUsersByTenant). Keep the
 // `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
-func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, pageSize int32) ([]ListStorageBackendsRow, error) {
+func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error) {
 	rows, err := q.db.Query(ctx, listStorageBackends,
 		afterID,
 		nameEq,
@@ -211,6 +218,8 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, name
 		enabled,
 		readOnly,
 		maintenance,
+		createdAtGte,
+		createdAtLte,
 		pageSize,
 	)
 	if err != nil {

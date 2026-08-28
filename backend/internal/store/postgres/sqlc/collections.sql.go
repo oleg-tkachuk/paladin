@@ -200,8 +200,15 @@ WHERE collections.tenant_id = $1
   AND ($5::text IS NULL OR collections.display_name = $5::text)
   AND ($6::text IS NULL OR collections.display_name LIKE $6::text)
   AND ($7::text IS NULL OR sb.name = $7::text)
+  -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND ($8::timestamptz IS NULL
+       OR collections.created_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL
+       OR collections.created_at <= $9::timestamptz)
 ORDER BY collections.name
-LIMIT $8
+LIMIT $10
 `
 
 type ListCollectionsRow struct {
@@ -210,7 +217,7 @@ type ListCollectionsRow struct {
 	BucketName  string     `json:"bucket_name"`
 }
 
-func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, backendEq *string, pageSize int32) ([]ListCollectionsRow, error) {
+func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
 	rows, err := q.db.Query(ctx, listCollections,
 		tenantID,
 		afterID,
@@ -219,6 +226,8 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, aft
 		displayNameEq,
 		displayNameLike,
 		backendEq,
+		createdAtGte,
+		createdAtLte,
 		pageSize,
 	)
 	if err != nil {

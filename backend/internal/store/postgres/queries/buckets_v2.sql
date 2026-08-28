@@ -89,6 +89,13 @@ WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_n
   AND (sqlc.narg('versioning_enabled')::bool IS NULL OR b.versioning_enabled = sqlc.narg('versioning_enabled')::bool)
   AND (sqlc.narg('object_lock_enabled')::bool IS NULL OR b.object_lock_enabled = sqlc.narg('object_lock_enabled')::bool)
   AND (sqlc.narg('replication_enabled')::bool IS NULL OR b.replication_enabled = sqlc.narg('replication_enabled')::bool)
+  -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
+  -- their inclusive forms: the pushdown may only narrow, so an extra boundary
+  -- row is free and a missing one is not.
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR b.created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR b.created_at <= sqlc.narg('created_at_lte')::timestamptz)
   AND (sb.name, b.name) > (sqlc.arg('after_backend_id')::text, sqlc.arg('after_name')::text)
 ORDER BY sb.name, b.name
 LIMIT sqlc.arg('page_size');

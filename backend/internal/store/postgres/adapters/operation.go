@@ -172,13 +172,15 @@ func (r *OperationRepo) List(
 	// recent operations that happened to contain no failure rendered as "no
 	// failures" while failures sat one page back.
 	errorMessageNeq := pd.NeqHint("error_message")
+	createdGTE, createdLTE := createdBounds(pd)
 
 	// Two queries rather than one with a flipped comparison: the cursor test
 	// has to move with the sort, and sqlc parameterises neither.
 	out := make([]operation.Operation, 0, pageSize)
 	if newestFirst {
 		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-			typeEq, typeLike, errorCodeEq, errorMessageNeq, pageSize)
+			typeEq, typeLike, errorCodeEq, errorMessageNeq,
+			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
 		}
@@ -187,7 +189,8 @@ func (r *OperationRepo) List(
 		}
 	} else {
 		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-			typeEq, typeLike, errorCodeEq, errorMessageNeq, pageSize)
+			typeEq, typeLike, errorCodeEq, errorMessageNeq,
+			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
 		}

@@ -161,9 +161,12 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	providerEq, _ := pd.StringHint("provider")
 	regionEq, _ := pd.StringHint("region")
 
+	createdGTE, createdLTE := createdBounds(pd)
+
 	rows, err := r.q.ListStorageBackends(ctx, afterPtr,
 		nameEq, nameLike, displayEq, displayLike, providerEq, regionEq,
 		pd.BoolHint("enabled"), pd.BoolHint("read_only"), pd.BoolHint("maintenance"),
+		createdGTE, createdLTE,
 		pageSize)
 	if err != nil {
 		return nil, "", err
