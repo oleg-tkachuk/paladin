@@ -2088,48 +2088,63 @@ of the pipeline._
 
 ---
 
-## Cross-tenant token revocation is still out of reach
+## APIToken is addressed by a bare id, and RLS is where that shows
 
-- **Status:** Open (narrowed 2026-08-28). Was: the list answering empty.
-- **Reason:** `APITokenService.List` now refuses a foreign tenant with
-  PermissionDenied and, for a platform admin, sets the acting tenant so RLS
-  returns the rows. Both halves were needed: the permission check alone still
-  left the admitted caller reading an empty page.
-  `Revoke` and `GetUsage` are addressed by token id, not tenant, so neither can
-  set an acting tenant before it knows whose token it is — and RLS will not let
-  it find out. A platform admin who can now SEE another tenant's tokens still
-  cannot revoke one, which is the operation the visibility was for.
-- **Definition of Done:** revoking another tenant's token is possible for a
-  caller Cedar permits, or is refused with a code that says so. Resolving the
-  token's tenant needs a lookup outside the caller's RLS scope; whether that is
-  a privileged query or a redesign of the request shape (naming the tenant
-  alongside the id) is the decision to take.
-- **Blockers:** none technical. It is a decision about whether platform admin is
-  tenant-scoped for this resource — the same question the list raised, now
-  narrowed to writes.
+- **Status:** Open. Reframed 2026-08-28 — it is an addressing defect, not a
+  trust-model question.
+- **Reason:** `APITokenService.List` takes a tenant, so it could be fixed: it
+  refuses a foreign tenant, and sets the acting tenant for a platform admin so
+  RLS returns the rows. `Revoke` and `GetUsage` take a bare token id. To set an
+  acting tenant they must know whose token it is; to find that out they must
+  read the row; RLS will not let them until the acting tenant is set. A
+  platform admin can now SEE another tenant's tokens and still cannot revoke
+  one — the operation the visibility was for.
+  The deadlock is a symptom. Every other resource in this API is addressed by a
+  hierarchical resource name — `tenants/{t}/collections/{c}`,
+  `storageBackends/{b}/buckets/{k}` — which carries its scope. APIToken is the
+  outlier twice over: its RPCs take a bare UUID, and its `name` field means an
+  operator-facing label rather than a resource name.
+  This was previously filed as "is platform.admin tenant-scoped for this
+  resource". It is not that question. The system already answered it:
+  `auth.WithActingTenant` exists precisely to reconcile RLS with a cross-tenant
+  admin AFTER an authorization check. What is missing is an address that
+  carries the scope that mechanism needs.
+- **Definition of Done:** `Revoke` and `GetUsage` are addressed by
+  `tenants/{tenant}/apiTokens/{id}`, and then follow List verbatim — explicit
+  cross-tenant guard, then WithActingTenant. Additive migration: add `name`,
+  deprecate `id`, remove it after.
+- **NOT the fix:** a privileged lookup that resolves the token's tenant outside
+  RLS. That is a second path to data around the enforcement mechanism, added to
+  compensate for an address that does not carry its scope — the same shape as
+  an authz bypass, and rejected for the same reason.
+- **Blockers:** none. It is a contract change, not a decision.
 
 ---
 
-## A tenant's own removal cannot be announced to anyone
+## Terminal tenant events are observed by query, not by subscription
 
-- **Status:** Open (narrowed 2026-08-28). Was: PurgeTenant failing outright.
-- **Reason:** The purge no longer attempts a `paladin.tenant.purged` fan-out,
-  because the outbox cannot carry it — `event_deliveries.tenant_id`,
-  `event_deliveries.subscription_id` and `event_subscriptions.tenant_id` all
-  cascade from the tenant, so the delivery row and the subscription that would
-  receive it are destroyed by the same statement. Attempting it anyway put a
-  foreign-key violation inside the purge transaction and left the tenant in the
-  trash; that is fixed and tested.
-  What remains is the gap the fix exposes rather than creates: nothing is
-  emitted when a tenant is removed. A platform-level consumer — billing
-  reconciliation, an external directory, an archival job — has no signal.
-- **Definition of Done:** a terminal tenant event reaches a subscriber that
-  outlives the tenant. That means a delivery path not keyed on the tenant:
-  platform-scoped subscriptions, or a delivery row whose tenant reference is
-  nullable and set null on cascade.
-- **Blockers:** none technical. It is a question of whether platform-scoped
-  subscriptions are a concept this product wants, which is a bigger answer than
-  the bug that surfaced it.
+- **Status:** Documented 2026-08-28, not a gap. Supersedes an entry that asked
+  for platform-scoped subscriptions.
+- **Reason:** PurgeTenant no longer attempts a `paladin.tenant.purged` fan-out;
+  the outbox cannot carry it, since the delivery row and the subscription that
+  would receive it both cascade from the tenant being removed. The earlier
+  entry read that as a missing capability and proposed a new one — platform-
+  scoped subscriptions, or a nullable tenant reference on deliveries.
+  Both solve the wrong problem. `audit_log` has NO foreign key to `tenants`,
+  survives the purge, and already records it: 522 `PurgeTenant` entries in the
+  dev cluster at the time of writing, alongside 1809 `DeleteTenant`. The
+  platform-level record exists, outlives the tenant, and has an access model.
+  The event system is tenant-scoped by design — subject and audience are the
+  same tenant — and a terminal event has no tenant audience by definition.
+  Adding a platform subscription class would be a SECOND platform-observation
+  mechanism beside a working one, and an expensive one: subscribing across
+  tenants is the right to watch every tenant's lifecycle, with its own authz,
+  filters, retries and audit.
+- **Definition of Done:** nothing here. One mechanism per concern — tenant-level
+  push is events, platform-level observation is the audit log.
+- **If a consumer genuinely needs push** rather than a query, the ask is
+  "stream the audit log", which is a general capability and a different item.
+  It is not a special case of tenant events, and should not be built as one.
 
 ---
 
