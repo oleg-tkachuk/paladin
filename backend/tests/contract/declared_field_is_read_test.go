@@ -89,7 +89,6 @@ type fieldKey struct{ msg, field string }
 // exemptField lists fields a handler legitimately does not read. An entry here
 // is a claim that the absence is CORRECT.
 var exemptField = map[fieldKey]string{
-	{"BatchDeleteObjectsRequest", "permanent"}:            "read only to refuse it — the executor soft-deletes, so permanent=true returns Unimplemented rather than lying",
 	{"InitiateMultipartUploadRequest", "idempotency_key"}: "read by the idempotency interceptor, not the handler — see middleware.idempotencyKey",
 	{"UploadObjectRequest", "idempotency_key"}:            "same as InitiateMultipartUpload",
 }

@@ -1,12 +1,15 @@
 package app
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 	"github.com/oleg-tkachuk/paladin/internal/worker/operations"
+	"go.uber.org/zap"
 )
 
 // BuildBackgroundJobs assembles the worker fan that the `serve worker`
@@ -331,6 +334,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			"BatchDelete": &operations.BatchDeleteExecutor{
 				Objects:     deps.Repos.Object,
 				Transitions: smReaper,
+				// The hard-delete path, shared with the DeleteObject RPC. The
+				// handler is built with no policy engine and no CEL filter on
+				// purpose: out here there is no principal to authorize, and
+				// the executor reaches it only through the narrow
+				// operations.PermanentDeleter interface, which exposes
+				// nothing that would need one. Events are wired because a
+				// permanent delete emits paladin.object.deleted and
+				// paladin.object.purged, and silence would be a regression
+				// against the RPC path.
+				Permanent: newPermanentDeleter(deps, reaperQ, reaperPool, smReaper, l),
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
@@ -385,4 +398,37 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	})
 
 	return out
+}
+
+// newPermanentDeleter builds the object handler the BatchDelete executor uses
+// for hard deletes. It is deliberately partial: no policy engine and no CEL
+// filter, because the worker has no principal to authorize and the executor
+// only ever reaches it through operations.PermanentDeleter, whose single
+// method needs neither. The event producer is real — a permanent delete emits
+// paladin.object.deleted inside the removal transaction and
+// paladin.object.purged once the bytes are reclaimed, and a batch that went
+// quiet where the RPC speaks would be a regression, not a shortcut.
+func newPermanentDeleter(
+	deps *SharedDeps,
+	reaperQ *sqlc.Queries,
+	reaperPool *pgxpool.Pool,
+	sm *statemachine.Transitioner,
+	l *zap.Logger,
+) *object.Handler {
+	h := object.NewHandler(
+		deps.Repos.Object,
+		s3adapter.NewObjectRouter(deps.Registry),
+		nil, // policy: nothing to authorize without a caller
+		nil, // filter: PermanentDelete does not list
+		sm,
+		object.PresignConfig{},
+	)
+	h.SetEventProducer(&worker.Dispatcher{
+		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),
+		Outbox:      worker.PgxOutboxWriter{Pool: reaperPool},
+		Logger:      l.Named("batch-delete-events"),
+		MaxAttempts: 3,
+	})
+	h.SetLogger(l.Named("batch-delete"))
+	return h
 }

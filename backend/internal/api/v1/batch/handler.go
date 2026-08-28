@@ -26,6 +26,14 @@ type BatchDeleteArgs struct {
 	TenantID   uuid.UUID
 	Collection string
 	ObjectIDs  []uuid.UUID
+	// Permanent selects hard deletion — bytes and row — over the default
+	// soft delete, honouring each object's lock exactly as DeleteObject
+	// does. There is deliberately no batch equivalent of
+	// bypass_governance_retention: one call that overrode compliance locks
+	// on up to 10k objects is a different kind of authority from one that
+	// overrides a single object's, and a locked object simply lands in the
+	// per-object failure list instead.
+	Permanent bool
 }
 
 type BatchCopyArgs struct {
@@ -98,16 +106,18 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
-	// Capability gate: BatchDelete spans many objects under one
-	// collection. We assert OpDelete with an empty URI (the prefix-
-	// scope check happens per-row in the worker against
-	// cap.Caveats.ResourcePrefixes — this surface only enforces the
-	// op caveat). Per-row resource gating runs inside the worker.
+	// Capability gate: BatchDelete spans many objects under one collection,
+	// so OpDelete is asserted with an empty URI — the op caveat only.
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, ""); err != nil {
 		return uuid.Nil, err
 	}
-	// Collection-level authorization. Per-object authorization happens inside
-	// the worker on each row (slower but safer).
+	// Collection-level authorization, and the ONLY authorization this batch
+	// gets. The comment here used to promise a per-object Cedar check inside
+	// the worker; the worker has never done one, and batch_copy.go documents
+	// why it deliberately does not — the caveat scope is identical for every
+	// row, so per-row Cedar buys defence in depth at a latency cost across up
+	// to 10k objects. Saying it happens when it does not is worse than either
+	// choice, because a reader counts on a second line of defence.
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject); err != nil {
 		return uuid.Nil, err
 	}

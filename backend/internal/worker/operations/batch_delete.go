@@ -15,12 +15,17 @@ import (
 
 // BatchDeleteExecutor implements the BatchDelete operation type.
 //
-// Reads JSON-encoded batch.BatchDeleteArgs from operation.Metadata,
-// iterates ObjectIDs, performs a soft-delete on each via the state
-// machine. Continues past per-object failures — partial success is
-// the standard batch contract; the response carries success / failure
-// counts and a list of failed IDs so polling clients can retry just
-// those.
+// Reads JSON-encoded batch.BatchDeleteArgs from operation.Metadata and
+// iterates ObjectIDs. Soft-deletes each via the state machine, or — when
+// args.Permanent is set — hard-deletes each through the SAME
+// object.Handler.PermanentDelete the DeleteObject RPC uses, so the DB-then-S3
+// ordering, the purge debt and the object-lock rules have one implementation
+// rather than two. A locked object fails that call and lands in the failure
+// list; there is no batch-wide governance bypass.
+//
+// Continues past per-object failures — partial success is the standard batch
+// contract; the response carries success / failure counts and a list of
+// failed IDs so polling clients can retry just those.
 //
 // Resource-version semantics: we always pass the row's CURRENT
 // resource_version (read fresh inside the loop) to SoftDelete, so a
@@ -30,6 +35,22 @@ import (
 type BatchDeleteExecutor struct {
 	Objects     object.Repository
 	Transitions Transitioner
+
+	// Permanent performs the hard delete. Optional: leave it nil and a
+	// request that asks for one fails the operation outright rather than
+	// silently soft-deleting, which is the shape this whole path exists to
+	// avoid — a caller told its erasure succeeded while the objects sit in
+	// the trash.
+	Permanent PermanentDeleter
+}
+
+// PermanentDeleter is the seam onto object.Handler.PermanentDelete. It is
+// narrow on purpose: the handler the worker holds is built without a policy
+// engine (there is no principal out here to authorize), so this interface is
+// what stops anything in the executor from reaching a method that would need
+// one.
+type PermanentDeleter interface {
+	PermanentDelete(ctx context.Context, tenantID uuid.UUID, obj object.Object, rv int64, bypassGovernance bool) error
 }
 
 // BatchDeleteResponse is what we marshal into operation.Response on
@@ -71,6 +92,10 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 			args.TenantID, op.TenantID)
 	}
 
+	if args.Permanent && e.Permanent == nil {
+		return nil, errors.New("BatchDeleteExecutor: permanent delete requested but no PermanentDeleter wired")
+	}
+
 	resp := BatchDeleteResponse{Total: len(args.ObjectIDs)}
 
 	// Read phase is one batched query: each row's CURRENT
@@ -102,7 +127,15 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 			})
 			continue
 		}
-		if err := e.Transitions.SoftDelete(ctx, obj.ObjectID, obj.ResourceVersion); err != nil {
+		var derr error
+		if args.Permanent {
+			// bypassGovernance is always false here: the override needs a
+			// principal to check the role against, and this runs without one.
+			derr = e.Permanent.PermanentDelete(ctx, args.TenantID, obj, obj.ResourceVersion, false)
+		} else {
+			derr = e.Transitions.SoftDelete(ctx, obj.ObjectID, obj.ResourceVersion)
+		}
+		if err := derr; err != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchDeleteFailure{
 				ObjectID: objectID.String(),

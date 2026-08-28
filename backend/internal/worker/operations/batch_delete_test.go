@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -506,4 +507,141 @@ func TestBatchUpdateTagsValidatesMetadata(t *testing.T) {
 			t.Error("want a wiring error")
 		}
 	})
+}
+
+// ─── permanent delete ──────────────────────────────────────────────────────
+
+// BatchDelete used to refuse permanent=true at the shim, because the executor
+// could only soft-delete and answering "erased" over a soft delete is the one
+// outcome worse than refusing. It hard-deletes now, through the SAME
+// object.Handler.PermanentDelete the DeleteObject RPC calls, so what these
+// tests pin is the routing and the failure contract — the ordering, the purge
+// debt and the lock rules are the shared method's own and are tested there.
+
+type fakePermanentDeleter struct {
+	calls  []uuid.UUID
+	rvs    map[uuid.UUID]int64
+	bypass []bool
+	errs   map[uuid.UUID]error
+}
+
+func newFakePermanentDeleter() *fakePermanentDeleter {
+	return &fakePermanentDeleter{rvs: map[uuid.UUID]int64{}, errs: map[uuid.UUID]error{}}
+}
+
+func (f *fakePermanentDeleter) PermanentDelete(_ context.Context, _ uuid.UUID, obj object.Object, rv int64, bypass bool) error {
+	f.calls = append(f.calls, obj.ObjectID)
+	f.rvs[obj.ObjectID] = rv
+	f.bypass = append(f.bypass, bypass)
+	return f.errs[obj.ObjectID]
+}
+
+func TestBatchDeletePermanentHardDeletesEachObject(t *testing.T) {
+	tenant := uuid.New()
+	id1, id2 := uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []object.Object{
+		{ObjectID: id1, ResourceVersion: 3},
+		{ObjectID: id2, ResourceVersion: 7},
+	}}
+	tr := newFakeTransitions()
+	pd := newFakePermanentDeleter()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd}
+
+	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id1, id2}, Permanent: true,
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp := decodeDeleteResp(t, body); resp.Succeeded != 2 || resp.Failed != 0 {
+		t.Errorf("counts = %+v", resp)
+	}
+	if len(pd.calls) != 2 {
+		t.Fatalf("hard-deleted %d objects, want 2", len(pd.calls))
+	}
+	if len(tr.softArgs) != 0 {
+		t.Error("soft-deleted something on a permanent batch — the caller would be told its erasure succeeded while the objects sit in the trash")
+	}
+	// The same fresh resource_version the soft path uses, so a concurrent
+	// update surfaces as a mismatch rather than being overwritten.
+	if pd.rvs[id1] != 3 || pd.rvs[id2] != 7 {
+		t.Errorf("resource versions = %v", pd.rvs)
+	}
+	for _, b := range pd.bypass {
+		if b {
+			t.Error("bypassed governance retention — the worker has no principal to check the role against")
+		}
+	}
+}
+
+func TestBatchDeletePermanentReportsALockedObjectAndKeepsGoing(t *testing.T) {
+	// A compliance-locked object is exactly the per-object failure the batch
+	// contract exists for: it must not sink the other 9,999.
+	tenant := uuid.New()
+	locked, free := uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []object.Object{
+		{ObjectID: locked, ResourceVersion: 1},
+		{ObjectID: free, ResourceVersion: 1},
+	}}
+	pd := newFakePermanentDeleter()
+	pd.errs[locked] = errors.New("cannot delete: compliance retention until 2030-01-01")
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions(), Permanent: pd}
+
+	body, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{locked, free}, Permanent: true,
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	resp := decodeDeleteResp(t, body)
+	if resp.Succeeded != 1 || resp.Failed != 1 {
+		t.Fatalf("counts = %+v, want one of each", resp)
+	}
+	if len(resp.Failures) != 1 || resp.Failures[0].ObjectID != locked.String() {
+		t.Fatalf("failures = %+v, want the locked object named", resp.Failures)
+	}
+	if !strings.Contains(resp.Failures[0].Reason, "compliance retention") {
+		t.Errorf("reason = %q, want the lock's own explanation", resp.Failures[0].Reason)
+	}
+}
+
+func TestBatchDeletePermanentFailsTheBatchWithNoDeleterWired(t *testing.T) {
+	// Falling back to a soft delete here is the exact lie the Unimplemented
+	// guard used to prevent. A misconfigured worker must fail loudly.
+	tenant := uuid.New()
+	id := uuid.New()
+	repo := &lookupRepo{objs: []object.Object{{ObjectID: id, ResourceVersion: 1}}}
+	tr := newFakeTransitions()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
+
+	_, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id}, Permanent: true,
+	}))
+	if err == nil {
+		t.Fatal("a permanent batch with no deleter wired was accepted")
+	}
+	if len(tr.softArgs) != 0 {
+		t.Error("soft-deleted instead of failing")
+	}
+}
+
+func TestBatchDeleteDefaultsToSoftWhenPermanentIsUnset(t *testing.T) {
+	tenant := uuid.New()
+	id := uuid.New()
+	repo := &lookupRepo{objs: []object.Object{{ObjectID: id, ResourceVersion: 2}}}
+	tr := newFakeTransitions()
+	pd := newFakePermanentDeleter()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd}
+
+	if _, err := e.Execute(context.Background(), mkOp(t, tenant, batch.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id},
+	})); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(pd.calls) != 0 {
+		t.Error("hard-deleted without being asked to")
+	}
+	if tr.softArgs[id] != 2 {
+		t.Errorf("soft delete got rv %d, want 2", tr.softArgs[id])
+	}
 }

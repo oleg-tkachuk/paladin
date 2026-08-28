@@ -1364,6 +1364,49 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		_ = h.versions.OnSoftDelete(ctx, obj)
 		return nil
 	}
+	if err := h.assertBypassAllowed(principal, bypassGovernance); err != nil {
+		return err
+	}
+	return h.PermanentDelete(ctx, tenantID, obj, rv, bypassGovernance)
+}
+
+// assertBypassAllowed gates the governance-retention override. It lives on
+// the RPC side because it is the only part of the permanent delete that needs
+// a principal: BatchDelete's executor runs with no caller on the context, and
+// so never bypasses anything.
+func (h *Handler) assertBypassAllowed(principal *auth.Principal, bypassGovernance bool) error {
+	if !bypassGovernance {
+		return nil
+	}
+	if principal == nil || (!principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin")) {
+		return connect.NewError(connect.CodePermissionDenied,
+			errors.New("bypass_governance_retention requires role lock.governance.bypass or platform.admin"))
+	}
+	return nil
+}
+
+// PermanentDelete removes one object for good: the row and its purge debt and
+// the paladin.object.deleted event in ONE transaction, then the storage bytes,
+// then the settlement and paladin.object.purged. It takes an object already
+// read and already authorized — the caller owns the capability check, the
+// Cedar decision and the bypass role — because there are two callers with
+// different notions of a caller: the DeleteObject RPC, which has a principal,
+// and the BatchDelete executor, which runs asynchronously and has none.
+//
+// Exported for that second caller. The ordering below is subtle enough that a
+// second implementation of it would be a bug waiting to happen, which is the
+// whole reason this is a shared method rather than a copied block.
+func (h *Handler) PermanentDelete(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	obj Object,
+	rv int64,
+	bypassGovernance bool,
+) error {
+	objectID := obj.ObjectID
+	collection := obj.Collection
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
+
 	// Permanent delete. Ordering matters: drop the DB row FIRST, then
 	// the storage bytes. The old order (S3 then DB) could delete the
 	// bytes and then fail the DB delete, leaving a live row pointing at
@@ -1379,10 +1422,6 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 
 	deleteFn := h.repo.HardDeleteTx
 	if bypassGovernance {
-		if !principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin") {
-			return connect.NewError(connect.CodePermissionDenied,
-				errors.New("bypass_governance_retention requires role lock.governance.bypass or platform.admin"))
-		}
 		deleteFn = h.repo.HardDeleteWithBypassTx
 	}
 

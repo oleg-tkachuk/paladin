@@ -219,10 +219,13 @@ type BatchDeleteObjectsRequest struct {
 	// Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
 	Parent   string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Selector *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
-	// NOT SUPPORTED: the batch executor soft-deletes. Setting this returns
-	// Unimplemented rather than quietly soft-deleting — a caller told its
-	// erasure succeeded when the objects are still in the trash is worse off
-	// than one told it cannot be done here. Use DeleteObject per object.
+	// Hard-delete the selected objects — storage bytes and row — instead of
+	// moving them to the trash. Each object's lock is honoured exactly as
+	// DeleteObject honours it, and a locked object lands in the operation's
+	// per-object failure list. There is no batch equivalent of
+	// DeleteObject's bypass_governance_retention: overriding compliance locks
+	// across a whole selection is a different authority from overriding one
+	// object's, and this RPC does not carry it.
 	Permanent     bool `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

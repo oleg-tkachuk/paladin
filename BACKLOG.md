@@ -1997,25 +1997,9 @@ of the pipeline._
   - A deliberately network-touching test is shown to FAIL under it, so the
     control is proven rather than assumed.
 - **Blockers:** none. A judgment call, currently made as "not yet".
----
-## BatchDeleteObjects cannot delete permanently
-
-- **Status:** Deferred (the dangerous half is fixed; the feature is not).
-- **Reason:** The request has a `permanent` flag and the executor always
-  soft-deletes. It used to accept `permanent=true` and soft-delete anyway,
-  which told a caller its erasure had succeeded while the objects sat in the
-  trash — the worst possible answer for a deletion-on-request workflow. It now
-  returns Unimplemented for that flag, so the refusal is honest, but the
-  capability is still missing: callers must fall back to per-object
-  DeleteObject(permanent=true).
-- **Definition of Done:** The executor performs hard deletion (storage bytes +
-  row) when asked, honouring object-lock rules per object exactly as
-  DeleteObject does, and the Unimplemented guard in the shim is removed.
-- **Blockers:** Hard delete currently lives in a TTL-driven housekeeping job
-  rather than an on-demand path; batch would need that logic factored out.
-
 
 ---
+
 ## List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred (the remainder needs per-schema work, not a rule).
