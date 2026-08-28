@@ -2143,39 +2143,33 @@ of the pipeline._
 
 ---
 
-## Seven console pages have never been opened by a test
+## PurgeTenant can be defeated by its own purge event
 
-- **Status:** Open. Measured 2026-08-27.
-- **Reason:** The Playwright suite navigates 27 of the console's 44 routes.
-  Two of the rest are `TabStub` placeholders (`/tenants/:id/policies`,
-  the bucket `replication` tab) and are not gaps. Several more are reached by
-  clicking from a covered page. These seven are opened by nothing:
-  `/upload` (474 lines — uploads in the suite go through presign in the
-  fixtures, never this page), `/storage-backends/:id/buckets/:bucket` (428),
-  `/tenants/:id/audit-log` (311), `/storage-backends/:id` (271),
-  `/tenants/:id/buckets/:backend/:bucket/collections` (229),
-  `/oauth/consent` (158),
-  `/tenants/:id/collections/:name/objects/:id` (27).
-  Four pages have come off this list, and three of the four found something.
-  The collection policy editor: Save stored Cedar the engine cannot compile
-  and wedged the collection permanently. The bucket editor followed it,
-  because a guard proven on one door says nothing about the next. The default
-  route page: an absent binding answered Unknown instead of NotFound, so the
-  page the operator saw was an error toast rather than its own empty state.
-  M2M tokens needed the subsystem switched on in the e2e stack before it
-  could be opened at all — it had been off, which is why nothing had noticed.
-  That is the argument for the remaining seven, and none of it was
-  hypothetical.
-  Next by value: `/storage-backends/:id/buckets/:bucket` is the largest
-  uncovered page at 428 lines, and `/upload` is the only object-ingest path a
-  human actually uses.
-- **Definition of Done:** each page is opened by a test that asserts on
-  something the page is FOR, in the shape of collection-policy.spec.ts:
-  drive the UI, then read the result back through the admin API rather than
-  trusting a toast. Highest value first — the bucket policy editor is the
-  same write path as the collection one, and `/tenants/:id/m2m-tokens` mints
-  credentials.
-- **Blockers:** none. Purely additive.
+- **Status:** Open. Surfaced 2026-08-28; the log line predates it.
+- **Reason:** PurgeTenant removes the tenant row and, in the same transaction,
+  the dispatcher enqueues `paladin.tenant.purged`. The delivery row carries the
+  tenant id and `event_deliveries.tenant_id` is a foreign key to the row that
+  has just been deleted, so the insert fails:
+
+      failed to insert outbox row  event_type=paladin.tenant.purged
+        error=violates foreign key constraint "event_deliveries_tenant_id_fkey"
+
+  The dispatcher treats that as non-fatal and warns, but the failed statement
+  has already poisoned the transaction, and the commit comes back as
+  `tenant: commit unexpectedly resulted in rollback`. The tenant stays in the
+  trash. Observed 16 times across one day of e2e runs, and it is at least part
+  of the mechanism behind the tenants that had piled up there — a purge that
+  reports failure and leaves the row is indistinguishable from a purge nobody
+  ran.
+  Only tenants with an event subscription are affected, which is why it is
+  intermittent rather than total.
+- **Definition of Done:** purging a tenant with subscriptions succeeds. Either
+  the purge event is emitted outside the transaction that deletes the tenant
+  (it describes something already done, so it has no ordering claim on it), or
+  `event_deliveries.tenant_id` gets ON DELETE CASCADE, or the terminal event
+  is exempt from the per-tenant delivery table. The first is the smallest.
+- **Blockers:** none. It needs a decision about where a tenant's last event
+  lives once the tenant does not.
 
 ---
 

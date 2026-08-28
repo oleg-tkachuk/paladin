@@ -723,6 +723,25 @@ export async function seedObject(opts: {
  * That is the same two-step the console does; passing no version used to be
  * accepted and skipped the concurrency check entirely.
  */
+/**
+ * List the object keys in a Collection through the data plane.
+ *
+ * The upload page reports its own progress; that is the console's opinion of
+ * what happened. This is the server's, and it is the one that decides whether
+ * an operator's file exists.
+ */
+export async function objectsOf(
+  tenantId: string,
+  collection: string,
+): Promise<string[]> {
+  const client = createClient(ObjectService, dataTransport());
+  const res = await client.listObjects({
+    parent: `tenants/${tenantId}/collections/${collection}`,
+    page: { pageSize: 200, pageToken: "" },
+  });
+  return res.objects.map((o) => o.key);
+}
+
 export async function softDeleteObject(name: string): Promise<void> {
   const client = createClient(ObjectService, dataTransport());
   const current = await client.getObject({ name });
@@ -1176,6 +1195,23 @@ export async function tenantBudget(tenantId: string): Promise<{
  * "200" and the assertion could never see the difference — a test that could
  * only fail, never pass, for a reason that had nothing to do with the delete.
  */
+/**
+ * Whether a Collection exists in a tenant.
+ *
+ * Prefer this over comparing collectionCount to a number captured earlier.
+ * The suite runs four workers against one shared platform tenant, so the
+ * count moves under a test for reasons that have nothing to do with it —
+ * `before + 1` asserts that no other spec was working at the same moment,
+ * which is not a property of the product.
+ */
+export async function collectionExists(
+  tenantId: string,
+  collection: string,
+): Promise<boolean> {
+  const list = await collectionsOf(tenantId);
+  return list.some((c) => c.collection === collection);
+}
+
 export async function collectionCount(tenantId: string): Promise<number> {
   const client = createClient(CollectionService, adminTransport());
   let total = 0;

@@ -22,7 +22,7 @@ import { loginAsAdmin } from "./fixtures/auth";
 import {
   seedAdminTenantID,
   seedPhysicalBucket,
-  collectionCount,
+  collectionExists,
 } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 import { uniqueSlug } from "./fixtures/unique";
@@ -123,7 +123,6 @@ test.describe("Collections CRUD", () => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
     await seedPhysicalBucket();
-    const before = await collectionCount(tenantId);
 
     await gotoSettled(page, collectionsURL(tenantId));
     await openCreateDialog(page);
@@ -148,8 +147,8 @@ test.describe("Collections CRUD", () => {
     await submit.click({ force: true });
 
     await expect
-      .poll(() => collectionCount(tenantId), { timeout: 20_000 })
-      .toBe(before + 1);
+      .poll(() => collectionExists(tenantId, name), { timeout: 20_000 })
+      .toBe(true);
 
     // Narrow the list before looking for the row — filtering is what an
     // operator does, and it keeps the assertion off a long table.
@@ -162,7 +161,6 @@ test.describe("Collections CRUD", () => {
     const tenantId = await seedAdminTenantID();
     const bucket = await seedPhysicalBucket();
     const collection = await makeCollection({ tenantId, bucket });
-    const before = await collectionCount(tenantId);
 
     await gotoSettled(page, collectionsURL(tenantId));
     await page
@@ -188,7 +186,9 @@ test.describe("Collections CRUD", () => {
     await confirm.click({ force: true });
 
     await expect
-      .poll(() => collectionCount(tenantId), { timeout: 20_000 })
-      .toBe(before - 1);
+      .poll(() => collectionExists(tenantId, collection.collection), {
+        timeout: 20_000,
+      })
+      .toBe(false);
   });
 });
