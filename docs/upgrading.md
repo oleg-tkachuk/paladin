@@ -29,6 +29,45 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — API tokens are addressed by resource name
+
+`APITokenService` was the only service in the API where `name` did not mean a
+resource name, and the only one whose RPCs took a bare uuid.
+
+| Message | Was | Now |
+| --- | --- | --- |
+| `APIToken.name` | the operator's label, e.g. `ci-uploader` | the resource name, `tenants/{tenant}/apiTokens/{id}` |
+| `APIToken.display_name` | — | the label (field 3, formerly `name`) |
+| `Create.tenant_id` | bare uuid | `parent`, `tenants/{tenant}` |
+| `Create.name` | the label | `display_name` |
+| `List.tenant_id` | bare uuid | `parent`, `tenants/{tenant}` |
+| `Revoke.id` | bare uuid | `name`, `tenants/{tenant}/apiTokens/{id}` |
+| `GetUsage.id` | bare uuid | `name`, same shape |
+| `GetUsageResponse.id` | bare uuid | `name`, echoes the request |
+
+**Why it had to change rather than being tidied later.** `api_tokens` carries
+FORCE row-level security keyed on the session tenant. An RPC holding only an id
+cannot scope its query, and cannot discover the tenant either — the row that
+would tell it is the one RLS is hiding. So `Revoke` and `GetUsage` were
+unreachable across tenants by construction: a platform admin could see another
+tenant's tokens and not revoke one, which is the operation the visibility is
+for. Carrying the parent in the address breaks that circle without adding a
+privileged read path around the enforcement mechanism.
+
+**What callers have to change**
+
+- `Create({tenant_id, name})` → `Create({parent: "tenants/<t>", display_name})`.
+- `List({tenant_id})` → `List({parent: "tenants/<t>"})`.
+- `Revoke({id})` → `Revoke({name: "tenants/<t>/apiTokens/<id>"})`.
+- `GetUsage({id})` → same `name` shape; the response field is `name` too.
+- Anything reading `APIToken.name` as a label reads `display_name` now. Note
+  this is the dangerous one for a JSON client: the field still exists and still
+  carries a string, so nothing fails — it just renders a resource name where a
+  label used to be.
+
+`APIToken.id` and `tenant_id` are unchanged and still returned, so a caller
+that wants the raw parts does not have to parse the name.
+
 ## Unreleased — a failed operation fills `Operation.error`, not `Operation.response`
 
 `Operation.result` is a oneof of `google.rpc.Status error` and

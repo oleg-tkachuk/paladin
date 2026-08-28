@@ -53,9 +53,21 @@ service APITokenService {
 // APIToken is the metadata view returned by every RPC. The plaintext
 // is delivered separately as `token` on Create and never elsewhere.
 message APIToken {
+  // Resource name: "tenants/{tenant}/apiTokens/{id}".
+  //
+  // Field 3 used to be `name` meaning the operator's LABEL, which made this
+  // service the only one in the API where `name` was not a resource name — and
+  // left Revoke / GetUsage addressed by a bare uuid that carries no tenant. An
+  // id without its parent cannot be scoped, and under the row-level security on
+  // api_tokens that is not a nuisance but a deadlock: to set the acting tenant
+  // you must know whose token it is, and to learn that you must first read the
+  // row RLS is hiding. The label now lives in display_name.
+  string name = 14 [(google.api.field_behavior) = IDENTIFIER];
   string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
   string tenant_id = 2 [(google.api.field_behavior) = IMMUTABLE];
-  string name = 3 [(google.api.field_behavior) = IDENTIFIER];
+  // display_name is the operator-facing label ("ci-uploader"). Shown in audit
+  // logs. Was `name` until the resource-name conversion.
+  string display_name = 3;
   // prefix is the 8-char display string (first chars of the body
   // after the `paladin_pat_` literal). Operators identify tokens by it.
   string prefix = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
@@ -77,8 +89,10 @@ message APIToken {
 }
 
 message APITokenServiceCreateRequest {
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-  string name = 2 [(buf.validate.field).string.min_len = 1];
+  // Parent: "tenants/{tenant}". Was a bare tenant_id uuid.
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  // display_name is the operator's label for the token, not a resource name.
+  string display_name = 2 [(buf.validate.field).string.min_len = 1];
   // ttl_seconds caps lifetime. 0 → server default (1 year).
   // Application clamps to MaxTTL configured on the issuer.
   int64 ttl_seconds = 3 [(buf.validate.field).int64.gte = 0];
@@ -111,7 +125,10 @@ message APITokenServiceCreateResponse {
 }
 
 message APITokenServiceRevokeRequest {
-  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "tenants/{tenant}/apiTokens/{id}". The tenant segment is what lets the
+  // handler authorise the crossing and then scope the query; a bare id could
+  // do neither.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message APITokenServiceRevokeResponse {
@@ -119,7 +136,8 @@ message APITokenServiceRevokeResponse {
 }
 
 message APITokenServiceListRequest {
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  // Parent: "tenants/{tenant}".
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
   bool include_revoked = 2;
   bool include_expired = 3;
   int32 page_size = 4 [(buf.validate.field).int32.gte = 0];
@@ -140,11 +158,13 @@ message APITokenServiceGetSelfResponse {
 }
 
 message APITokenServiceGetUsageRequest {
-  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "tenants/{tenant}/apiTokens/{id}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message APITokenServiceGetUsageResponse {
-  string id = 1;
+  // Echoes the resource name the usage was read for.
+  string name = 1;
   // limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
   // remaining counters are still returned so UIs can render
   // "uncapped, current rate: N rpm".

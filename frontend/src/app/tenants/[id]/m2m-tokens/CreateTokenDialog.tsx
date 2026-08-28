@@ -110,8 +110,8 @@ export function CreateTokenDialog({
     setCreating(true);
     try {
       const res = await apiTokenClient.create({
-        tenantId,
-        name: name.trim(),
+        parent: `tenants/${tenantId}`,
+        displayName: name.trim(),
         ttlSeconds: BigInt(ttlSeconds ?? 0),
         scopes: scopeList,
         audience: Array.from(audience),

@@ -30,10 +30,18 @@ import (
 // binds to paladin.tenant_id.
 type recordingStore struct {
 	fakeStore
-	sawTenant  uuid.UUID
-	sawActing  uuid.UUID
-	hadActing  bool
-	listCalled bool
+	sawTenant     uuid.UUID
+	sawActing     uuid.UUID
+	hadActing     bool
+	listCalled    bool
+	revokeCalls   int
+	revokedActing uuid.UUID
+}
+
+func (r *recordingStore) Revoke(ctx context.Context, _ uuid.UUID) error {
+	r.revokeCalls++
+	r.revokedActing, _ = auth.ActingTenant(ctx)
+	return nil
 }
 
 func (r *recordingStore) ListByTenant(ctx context.Context, a api_token.ListByTenantArgs) ([]api_token.Token, string, error) {
@@ -45,7 +53,7 @@ func (r *recordingStore) ListByTenant(ctx context.Context, a api_token.ListByTen
 
 func listReq(tenantID uuid.UUID) *connect.Request[adminv1.APITokenServiceListRequest] {
 	return connect.NewRequest(&adminv1.APITokenServiceListRequest{
-		TenantId: tenantID.String(),
+		Parent: "tenants/" + tenantID.String(),
 	})
 }
 
@@ -78,6 +86,55 @@ func TestListAllowsACallerTheirOwnTenant(t *testing.T) {
 	}
 	if store.sawTenant != p.TenantID {
 		t.Errorf("store scoped to %v, want the caller's %v", store.sawTenant, p.TenantID)
+	}
+}
+
+// Revoke was the operation the visibility was FOR, and it was unreachable: a
+// bare token id cannot be scoped, and the row that would reveal its tenant is
+// the one RLS hides. Addressing by tenants/{t}/apiTokens/{id} breaks the
+// circle without a privileged read path around the enforcement mechanism.
+func TestRevokeCrossesTenantsForPlatformAdmin(t *testing.T) {
+	store := &recordingStore{}
+	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
+	target, tokenID := uuid.New(), uuid.New()
+
+	if _, err := h.Revoke(ctxAs("platform.admin"), connect.NewRequest(
+		&adminv1.APITokenServiceRevokeRequest{
+			Name: "tenants/" + target.String() + "/apiTokens/" + tokenID.String(),
+		})); err != nil {
+		t.Fatalf("platform.admin could not revoke another tenant's token: %v", err)
+	}
+	if store.revokedActing != target {
+		t.Errorf("acting tenant at revoke = %v, want %v — without it RLS hides the row and the revoke silently does nothing",
+			store.revokedActing, target)
+	}
+}
+
+func TestRevokeRefusesAForeignTenant(t *testing.T) {
+	store := &recordingStore{}
+	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
+
+	_, err := h.Revoke(ctxAs("tenant.admin"), connect.NewRequest(
+		&adminv1.APITokenServiceRevokeRequest{
+			Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
+		}))
+	if code(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", code(err))
+	}
+	if store.revokeCalls != 0 {
+		t.Error("the store was reached anyway — the refusal must come first")
+	}
+}
+
+func TestRevokeRejectsABareId(t *testing.T) {
+	h := newHandler(&stubIssuer{}, &recordingStore{}, allowAuthorizer{})
+
+	// The old shape. It is refused rather than guessed at: an id without its
+	// parent has no scope, and inferring one is what this change removes.
+	_, err := h.Revoke(ctxAs("platform.admin"), connect.NewRequest(
+		&adminv1.APITokenServiceRevokeRequest{Name: uuid.NewString()}))
+	if code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}
 }
 

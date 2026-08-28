@@ -59,7 +59,7 @@ test.describe("M2M tokens", () => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
     const before = await m2mTokensOf(tenantId);
-    const beforeNames = new Set(before.map((t) => t.name));
+    const beforeNames = new Set(before.map((t) => t.displayName));
 
     await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
@@ -82,18 +82,21 @@ test.describe("M2M tokens", () => {
     // "this token appeared", not "there is exactly one".
     await expect
       .poll(
-        async () => (await m2mTokensOf(tenantId)).some((t) => t.name === name),
+        async () =>
+          (await m2mTokensOf(tenantId)).some((t) => t.displayName === name),
         { timeout: 15_000 },
       )
       .toBe(true);
-    const minted = (await m2mTokensOf(tenantId)).find((t) => t.name === name)!;
+    const minted = (await m2mTokensOf(tenantId)).find(
+      (t) => t.displayName === name,
+    )!;
     expect(beforeNames.has(name)).toBe(false);
     expect(minted.revoked).toBe(false);
     // Audience defaults to the data plane; a token pinned to nothing would be
     // a token that works everywhere.
     expect(minted.audience.length).toBeGreaterThan(0);
 
-    await revokeM2MToken(minted.id);
+    await revokeM2MToken(minted.name);
   });
 
   test("the reveal cannot be dismissed until the secret is acknowledged", async ({
@@ -118,7 +121,7 @@ test.describe("M2M tokens", () => {
     await expect(secretPanel(page)).toHaveCount(0, { timeout: 15_000 });
 
     for (const t of await m2mTokensOf(tenantId)) {
-      if (!t.revoked) await revokeM2MToken(t.id);
+      if (!t.revoked) await revokeM2MToken(t.name);
     }
   });
 
@@ -150,7 +153,7 @@ test.describe("M2M tokens", () => {
       .poll(
         async () => {
           const tokens = await m2mTokensOf(tenantId);
-          return tokens.find((t) => t.name === name)?.revoked;
+          return tokens.find((t) => t.displayName === name)?.revoked;
         },
         { timeout: 15_000 },
       )

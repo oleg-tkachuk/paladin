@@ -35,11 +35,11 @@ export function RevokeTokenDialog({
   const handleRevoke = async () => {
     if (!token) return;
     try {
-      await apiTokenClient.revoke({ id: token.id });
+      await apiTokenClient.revoke({ name: token.name });
       showNotification({
         type: "success",
         title: "Token revoked",
-        message: token.name || token.prefix,
+        message: token.displayName || token.prefix,
       });
       onClose();
       onRevoked();

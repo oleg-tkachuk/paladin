@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -94,9 +95,9 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 		return nil, err
 	}
 
-	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
+	tenantID, err := parseTenantParent(req.Msg.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	// Minting for somebody else's tenant is a platform operation.
@@ -142,7 +143,7 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 
 	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
 		TenantID:     tenantID,
-		Name:         req.Msg.GetName(),
+		Name:         req.Msg.GetDisplayName(),
 		Scopes:       req.Msg.GetScopes(),
 		Roles:        req.Msg.GetRoles(),
 		Audience:     req.Msg.GetAudience(),
@@ -159,14 +160,77 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	}), nil
 }
 
+// parseTokenName decodes "tenants/{tenant}/apiTokens/{id}".
+//
+// The tenant segment is the point of the whole conversion. api_tokens carries
+// FORCE row-level security keyed on the session tenant, so a handler holding
+// only an id cannot scope its query — and cannot learn the tenant either,
+// because the row it would read is the one RLS is hiding. Carrying the parent
+// in the address breaks that circle without a privileged read path around the
+// enforcement mechanism.
+func parseTokenName(name string) (tenantID, tokenID uuid.UUID, err error) {
+	const (
+		tenantPrefix = "tenants/"
+		tokenSep     = "/apiTokens/"
+	)
+	if !strings.HasPrefix(name, tenantPrefix) {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("name %q must start with %q", name, tenantPrefix)
+	}
+	rest := strings.TrimPrefix(name, tenantPrefix)
+	tenantPart, idPart, ok := strings.Cut(rest, tokenSep)
+	if !ok || tenantPart == "" || idPart == "" {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("name %q must be tenants/{tenant}/apiTokens/{id}", name)
+	}
+	tenantID, err = uuid.Parse(tenantPart)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("tenant in %q: %w", name, err)
+	}
+	tokenID, err = uuid.Parse(idPart)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("token id in %q: %w", name, err)
+	}
+	return tenantID, tokenID, nil
+}
+
+// parseTenantParent decodes "tenants/{tenant}".
+func parseTenantParent(parent string) (uuid.UUID, error) {
+	const prefix = "tenants/"
+	if !strings.HasPrefix(parent, prefix) {
+		return uuid.Nil, fmt.Errorf("parent %q must be tenants/{tenant}", parent)
+	}
+	id, err := uuid.Parse(strings.TrimPrefix(parent, prefix))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("tenant in %q: %w", parent, err)
+	}
+	return id, nil
+}
+
+// scopeToTenant is the guard every tenant-addressed RPC on this service runs:
+// refuse the caller who may not cross, then tell RLS about the caller who may.
+// Both halves are needed — a permission check alone still leaves the admitted
+// platform admin reading an empty page, because the session stays bound to
+// their own tenant.
+func scopeToTenant(ctx context.Context, caller *auth.Principal, tenantID uuid.UUID, what string) (context.Context, error) {
+	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("cross-tenant api_token %s denied", what))
+	}
+	return auth.WithActingTenant(ctx, tenantID), nil
+}
+
 // Revoke marks an API token as revoked. Idempotent.
 func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.APITokenServiceRevokeRequest]) (*connect.Response[adminv1.APITokenServiceRevokeResponse], error) {
-	if _, err := h.authorize(ctx, "revoke"); err != nil {
+	caller, err := h.authorize(ctx, "revoke")
+	if err != nil {
 		return nil, err
 	}
-	id, err := uuid.Parse(req.Msg.GetId())
+	tenantID, id, err := parseTokenName(req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ctx, err = scopeToTenant(ctx, caller, tenantID, "revoke")
+	if err != nil {
+		return nil, err
 	}
 	if err := h.store.Revoke(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -181,28 +245,14 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.APIToke
 	if err != nil {
 		return nil, err
 	}
-	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
+	tenantID, err := parseTenantParent(req.Msg.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	// Refuse a foreign tenant explicitly, the way Create already does. Without
-	// this the answer was an empty page: api_tokens carries FORCE row-level
-	// security (`tenant_id = paladin_session_tenant_id()`), so rows outside the
-	// session's tenant are filtered rather than refused, and "you may not see
-	// this" arrived looking exactly like "there is nothing to see". An
-	// operator opening another tenant's M2M page was told it holds no service
-	// credentials when it may hold live ones they came to revoke.
-	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("cross-tenant api_token list denied"))
+	ctx, err = scopeToTenant(ctx, caller, tenantID, "list")
+	if err != nil {
+		return nil, err
 	}
-	// And for the caller who IS allowed across, say so to RLS. Without it the
-	// platform admin the guard above just admitted still reads an empty page,
-	// because the session is still bound to their own tenant. WithActingTenant
-	// is the sanctioned mechanism for exactly this, and its contract is that
-	// it runs AFTER the check that permits the crossing — which is the line
-	// above, and the Cedar decision before it.
-	ctx = auth.WithActingTenant(ctx, tenantID)
 	tokens, next, err := h.store.ListByTenant(ctx, api_token.ListByTenantArgs{
 		TenantID:       tenantID,
 		IncludeRevoked: req.Msg.GetIncludeRevoked(),
@@ -243,12 +293,17 @@ func (h *Handler) GetSelf(ctx context.Context, _ *connect.Request[adminv1.APITok
 // tenant's tokens without a separate per-token authorisation rule.
 // Web UI consumes this from token-detail cards; safe to poll.
 func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.APITokenServiceGetUsageRequest]) (*connect.Response[adminv1.APITokenServiceGetUsageResponse], error) {
-	if _, err := h.authorize(ctx, "read"); err != nil {
+	caller, err := h.authorize(ctx, "read")
+	if err != nil {
 		return nil, err
 	}
-	id, err := uuid.Parse(req.Msg.GetId())
+	tenantID, id, err := parseTokenName(req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ctx, err = scopeToTenant(ctx, caller, tenantID, "read")
+	if err != nil {
+		return nil, err
 	}
 	tok, err := h.store.Get(ctx, id)
 	if err != nil {
@@ -262,7 +317,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.API
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	resp := &adminv1.APITokenServiceGetUsageResponse{
-		Id:                  id.String(),
+		Name:                req.Msg.GetName(),
 		LimitRpm:            int32(tok.RateLimitRPM),
 		CurrentBucketCount:  snap.CurrentBucketCount,
 		PreviousBucketCount: snap.PreviousBucketCount,
@@ -286,9 +341,13 @@ func isNotFound(err error) bool {
 // from the Issuer's return, not from this converter.
 func tokenToProto(t api_token.Token) *adminv1.APIToken {
 	out := &adminv1.APIToken{
+		// The resource name every addressed RPC on this service now takes.
+		// Returned so a caller never has to assemble it, and never has to
+		// carry a bare id that cannot be scoped.
+		Name:         "tenants/" + t.TenantID.String() + "/apiTokens/" + t.ID.String(),
 		Id:           t.ID.String(),
 		TenantId:     t.TenantID.String(),
-		Name:         t.Name,
+		DisplayName:  t.Name,
 		Prefix:       t.Prefix,
 		Roles:        t.Roles,
 		Scopes:       t.Scopes,

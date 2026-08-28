@@ -942,15 +942,18 @@ export async function clearTenantDefaultBinding(
  * That is the strongest cleanup the product allows, and leaving live bearer
  * credentials behind in a shared environment is not an option.
  */
-export async function revokeM2MToken(id: string): Promise<void> {
+export async function revokeM2MToken(name: string): Promise<void> {
   const client = createClient(APITokenService, adminTransport());
-  await client.revoke({ id });
+  await client.revoke({ name });
 }
 
 export async function m2mTokensOf(tenantId: string): Promise<
   {
-    id: string;
+    // The RESOURCE name — tenants/{t}/apiTokens/{id} — which is what Revoke
+    // and GetUsage take. A bare id no longer addresses a token: it carries no
+    // tenant, so it cannot be scoped past row-level security.
     name: string;
+    displayName: string;
     prefix: string;
     audience: string[];
     revoked: boolean;
@@ -958,13 +961,13 @@ export async function m2mTokensOf(tenantId: string): Promise<
 > {
   const client = createClient(APITokenService, adminTransport());
   const res = await client.list({
-    tenantId,
+    parent: `tenants/${tenantId}`,
     includeRevoked: true,
     pageSize: 200,
   });
   return res.apiTokens.map((t) => ({
-    id: t.id,
     name: t.name,
+    displayName: t.displayName,
     prefix: t.prefix,
     audience: t.audience,
     revoked: t.revokedAt !== undefined,

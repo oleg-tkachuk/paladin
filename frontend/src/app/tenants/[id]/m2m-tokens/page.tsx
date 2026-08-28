@@ -84,7 +84,12 @@ export default function M2MTokensPage() {
     queryFn: async ({ signal }) => {
       try {
         const res = await apiTokenClient.list(
-          { tenantId, includeRevoked, includeExpired, pageSize: 100 },
+          {
+            parent: `tenants/${tenantId}`,
+            includeRevoked,
+            includeExpired,
+            pageSize: 100,
+          },
           { signal },
         );
         // Fan-out usage fetches for non-revoked tokens (revoked have no live
@@ -94,7 +99,10 @@ export default function M2MTokensPage() {
           res.apiTokens.map(async (t) => {
             if (isRevoked(t)) return null;
             try {
-              const u = await apiTokenClient.getUsage({ id: t.id }, { signal });
+              const u = await apiTokenClient.getUsage(
+                { name: t.name },
+                { signal },
+              );
               return [
                 t.id,
                 {
@@ -259,7 +267,7 @@ export default function M2MTokensPage() {
                       </span>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {t.name || (
+                      {t.displayName || (
                         <span className="italic text-muted-foreground">
                           (unnamed)
                         </span>
@@ -388,7 +396,7 @@ export default function M2MTokensPage() {
                           variant="ghost"
                           size="icon"
                           className="size-8 opacity-60 group-hover:opacity-100"
-                          aria-label={`Revoke ${t.name || t.prefix}`}
+                          aria-label={`Revoke ${t.displayName || t.prefix}`}
                           onClick={() => setRevokeTarget(t)}
                         >
                           <TrashIcon className="size-4" />

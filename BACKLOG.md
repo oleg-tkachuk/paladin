@@ -2088,36 +2088,28 @@ of the pipeline._
 
 ---
 
-## APIToken is addressed by a bare id, and RLS is where that shows
+## Move the api/v0.4.0 baseline for the token resource-name change
 
-- **Status:** Open. Reframed 2026-08-28 — it is an addressing defect, not a
-  trust-model question.
-- **Reason:** `APITokenService.List` takes a tenant, so it could be fixed: it
-  refuses a foreign tenant, and sets the acting tenant for a platform admin so
-  RLS returns the rows. `Revoke` and `GetUsage` take a bare token id. To set an
-  acting tenant they must know whose token it is; to find that out they must
-  read the row; RLS will not let them until the acting tenant is set. A
-  platform admin can now SEE another tenant's tokens and still cannot revoke
-  one — the operation the visibility was for.
-  The deadlock is a symptom. Every other resource in this API is addressed by a
-  hierarchical resource name — `tenants/{t}/collections/{c}`,
-  `storageBackends/{b}/buckets/{k}` — which carries its scope. APIToken is the
-  outlier twice over: its RPCs take a bare UUID, and its `name` field means an
-  operator-facing label rather than a resource name.
-  This was previously filed as "is platform.admin tenant-scoped for this
-  resource". It is not that question. The system already answered it:
-  `auth.WithActingTenant` exists precisely to reconcile RLS with a cross-tenant
-  admin AFTER an authorization check. What is missing is an address that
-  carries the scope that mechanism needs.
-- **Definition of Done:** `Revoke` and `GetUsage` are addressed by
-  `tenants/{tenant}/apiTokens/{id}`, and then follow List verbatim — explicit
-  cross-tenant guard, then WithActingTenant. Additive migration: add `name`,
-  deprecate `id`, remove it after.
-- **NOT the fix:** a privileged lookup that resolves the token's tenant outside
-  RLS. That is a second path to data around the enforcement mechanism, added to
-  compensate for an address that does not carry its scope — the same shape as
-  an authz bypass, and rejected for the same reason.
-- **Blockers:** none. It is a contract change, not a decision.
+- **Status:** Blocked (operator action — moving a published tag is a release
+  decision, not a coding one). Surfaced 2026-08-28.
+- **Reason:** `APITokenService` now addresses tokens by resource name, which is
+  a deliberate break. docs/upgrading.md carries the entry, which is step 3 of
+  the procedure in that file. Step 4 is not mine: it force-moves the published
+  `api/v0.4.0` and `api/latest` tags, which changes what those tags mean for
+  anyone who pinned them.
+  Until it is done, the `buf breaking` job in `.github/workflows/test.yml`
+  fails against the old baseline — correctly, since the contract did change.
+- **Definition of Done:**
+
+  ```
+  git tag -f -a api/v0.4.0 -m "api tokens addressed by resource name"
+  git tag -f api/latest
+  git push --force origin api/v0.4.0 api/latest
+  ```
+
+  then bump `breaking_against` in the workflow if the tag name changes.
+- **Blockers:** the maintainer's call on whether this rides the existing
+  v0.4.0 baseline or opens a new one.
 
 ---
 

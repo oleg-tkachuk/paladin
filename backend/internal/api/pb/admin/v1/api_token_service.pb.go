@@ -28,10 +28,22 @@ const (
 // APIToken is the metadata view returned by every RPC. The plaintext
 // is delivered separately as `token` on Create and never elsewhere.
 type APIToken struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	TenantId string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Name     string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resource name: "tenants/{tenant}/apiTokens/{id}".
+	//
+	// Field 3 used to be `name` meaning the operator's LABEL, which made this
+	// service the only one in the API where `name` was not a resource name — and
+	// left Revoke / GetUsage addressed by a bare uuid that carries no tenant. An
+	// id without its parent cannot be scoped, and under the row-level security on
+	// api_tokens that is not a nuisance but a deadlock: to set the acting tenant
+	// you must know whose token it is, and to learn that you must first read the
+	// row RLS is hiding. The label now lives in display_name.
+	Name     string `protobuf:"bytes,14,opt,name=name,proto3" json:"name,omitempty"`
+	Id       string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// display_name is the operator-facing label ("ci-uploader"). Shown in audit
+	// logs. Was `name` until the resource-name conversion.
+	DisplayName string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// prefix is the 8-char display string (first chars of the body
 	// after the `paladin_pat_` literal). Operators identify tokens by it.
 	Prefix   string   `protobuf:"bytes,4,opt,name=prefix,proto3" json:"prefix,omitempty"`
@@ -84,6 +96,13 @@ func (*APIToken) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *APIToken) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 func (x *APIToken) GetId() string {
 	if x != nil {
 		return x.Id
@@ -98,9 +117,9 @@ func (x *APIToken) GetTenantId() string {
 	return ""
 }
 
-func (x *APIToken) GetName() string {
+func (x *APIToken) GetDisplayName() string {
 	if x != nil {
-		return x.Name
+		return x.DisplayName
 	}
 	return ""
 }
@@ -176,9 +195,11 @@ func (x *APIToken) GetRateLimitRpm() int32 {
 }
 
 type APITokenServiceCreateRequest struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Parent: "tenants/{tenant}". Was a bare tenant_id uuid.
+	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	// display_name is the operator's label for the token, not a resource name.
+	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// ttl_seconds caps lifetime. 0 → server default (1 year).
 	// Application clamps to MaxTTL configured on the issuer.
 	TtlSeconds int64    `protobuf:"varint,3,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
@@ -235,16 +256,16 @@ func (*APITokenServiceCreateRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *APITokenServiceCreateRequest) GetTenantId() string {
+func (x *APITokenServiceCreateRequest) GetParent() string {
 	if x != nil {
-		return x.TenantId
+		return x.Parent
 	}
 	return ""
 }
 
-func (x *APITokenServiceCreateRequest) GetName() string {
+func (x *APITokenServiceCreateRequest) GetDisplayName() string {
 	if x != nil {
-		return x.Name
+		return x.DisplayName
 	}
 	return ""
 }
@@ -339,8 +360,11 @@ func (x *APITokenServiceCreateResponse) GetToken() string {
 }
 
 type APITokenServiceRevokeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "tenants/{tenant}/apiTokens/{id}". The tenant segment is what lets the
+	// handler authorise the crossing and then scope the query; a bare id could
+	// do neither.
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -375,9 +399,9 @@ func (*APITokenServiceRevokeRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *APITokenServiceRevokeRequest) GetId() string {
+func (x *APITokenServiceRevokeRequest) GetName() string {
 	if x != nil {
-		return x.Id
+		return x.Name
 	}
 	return ""
 }
@@ -419,12 +443,13 @@ func (*APITokenServiceRevokeResponse) Descriptor() ([]byte, []int) {
 }
 
 type APITokenServiceListRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	TenantId       string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	IncludeRevoked bool                   `protobuf:"varint,2,opt,name=include_revoked,json=includeRevoked,proto3" json:"include_revoked,omitempty"`
-	IncludeExpired bool                   `protobuf:"varint,3,opt,name=include_expired,json=includeExpired,proto3" json:"include_expired,omitempty"`
-	PageSize       int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken      string                 `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Parent: "tenants/{tenant}".
+	Parent         string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	IncludeRevoked bool   `protobuf:"varint,2,opt,name=include_revoked,json=includeRevoked,proto3" json:"include_revoked,omitempty"`
+	IncludeExpired bool   `protobuf:"varint,3,opt,name=include_expired,json=includeExpired,proto3" json:"include_expired,omitempty"`
+	PageSize       int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -459,9 +484,9 @@ func (*APITokenServiceListRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *APITokenServiceListRequest) GetTenantId() string {
+func (x *APITokenServiceListRequest) GetParent() string {
 	if x != nil {
-		return x.TenantId
+		return x.Parent
 	}
 	return ""
 }
@@ -627,8 +652,9 @@ func (x *APITokenServiceGetSelfResponse) GetApiToken() *APIToken {
 }
 
 type APITokenServiceGetUsageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "tenants/{tenant}/apiTokens/{id}".
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -663,16 +689,17 @@ func (*APITokenServiceGetUsageRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *APITokenServiceGetUsageRequest) GetId() string {
+func (x *APITokenServiceGetUsageRequest) GetName() string {
 	if x != nil {
-		return x.Id
+		return x.Name
 	}
 	return ""
 }
 
 type APITokenServiceGetUsageResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Echoes the resource name the usage was read for.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
 	// remaining counters are still returned so UIs can render
 	// "uncapped, current rate: N rpm".
@@ -724,9 +751,9 @@ func (*APITokenServiceGetUsageResponse) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *APITokenServiceGetUsageResponse) GetId() string {
+func (x *APITokenServiceGetUsageResponse) GetName() string {
 	if x != nil {
-		return x.Id
+		return x.Name
 	}
 	return ""
 }
@@ -777,11 +804,12 @@ var File_paladin_admin_v1_api_token_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\n" +
-	"'paladin/admin/v1/api_token_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x89\x04\n" +
-	"\bAPIToken\x12\x13\n" +
+	"'paladin/admin/v1/api_token_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xac\x04\n" +
+	"\bAPIToken\x12\x17\n" +
+	"\x04name\x18\x0e \x01(\tB\x03\xe0A\bR\x04name\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12 \n" +
-	"\ttenant_id\x18\x02 \x01(\tB\x03\xe0A\x05R\btenantId\x12\x17\n" +
-	"\x04name\x18\x03 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tB\x03\xe0A\x05R\btenantId\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1b\n" +
 	"\x06prefix\x18\x04 \x01(\tB\x03\xe0A\x03R\x06prefix\x12\x16\n" +
 	"\x06scopes\x18\x05 \x03(\tR\x06scopes\x12\x1a\n" +
 	"\baudience\x18\x06 \x03(\tR\baudience\x12\x14\n" +
@@ -797,10 +825,10 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"created_by\x18\v \x01(\tR\tcreatedBy\x12$\n" +
-	"\x0erate_limit_rpm\x18\f \x01(\x05R\frateLimitRpm\"\x8f\x02\n" +
-	"\x1cAPITokenServiceCreateRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1b\n" +
-	"\x04name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12(\n" +
+	"\x0erate_limit_rpm\x18\f \x01(\x05R\frateLimitRpm\"\x98\x02\n" +
+	"\x1cAPITokenServiceCreateRequest\x12\x1f\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12*\n" +
+	"\fdisplay_name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdisplayName\x12(\n" +
 	"\vttl_seconds\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x12\x16\n" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12$\n" +
@@ -809,12 +837,12 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x05roles\x18\a \x03(\tR\x05roles\"m\n" +
 	"\x1dAPITokenServiceCreateResponse\x126\n" +
 	"\tapi_token\x18\x01 \x01(\v2\x19.paladin.admin.v1.APITokenR\bapiToken\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"8\n" +
-	"\x1cAPITokenServiceRevokeRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x1f\n" +
-	"\x1dAPITokenServiceRevokeResponse\"\xda\x01\n" +
-	"\x1aAPITokenServiceListRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12'\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\";\n" +
+	"\x1cAPITokenServiceRevokeRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x1f\n" +
+	"\x1dAPITokenServiceRevokeResponse\"\xd4\x01\n" +
+	"\x1aAPITokenServiceListRequest\x12\x1f\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12'\n" +
 	"\x0finclude_revoked\x18\x02 \x01(\bR\x0eincludeRevoked\x12'\n" +
 	"\x0finclude_expired\x18\x03 \x01(\bR\x0eincludeExpired\x12$\n" +
 	"\tpage_size\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\bpageSize\x12\x1d\n" +
@@ -826,11 +854,11 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x1f\n" +
 	"\x1dAPITokenServiceGetSelfRequest\"X\n" +
 	"\x1eAPITokenServiceGetSelfResponse\x126\n" +
-	"\tapi_token\x18\x01 \x01(\v2\x19.paladin.admin.v1.APITokenR\bapiToken\":\n" +
-	"\x1eAPITokenServiceGetUsageRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xdf\x02\n" +
-	"\x1fAPITokenServiceGetUsageResponse\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tapi_token\x18\x01 \x01(\v2\x19.paladin.admin.v1.APITokenR\bapiToken\"=\n" +
+	"\x1eAPITokenServiceGetUsageRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe3\x02\n" +
+	"\x1fAPITokenServiceGetUsageResponse\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tlimit_rpm\x18\x02 \x01(\x05R\blimitRpm\x120\n" +
 	"\x14current_bucket_count\x18\x03 \x01(\x03R\x12currentBucketCount\x122\n" +
 	"\x15previous_bucket_count\x18\x04 \x01(\x03R\x13previousBucketCount\x12%\n" +

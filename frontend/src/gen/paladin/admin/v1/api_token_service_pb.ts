@@ -24,7 +24,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_api_token_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CidsZWdhdGUvYWRtaW4vdjEvYXBpX3Rva2VuX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSKOAwoIQVBJVG9rZW4SDwoCaWQYASABKAlCA+BBAxIWCgl0ZW5hbnRfaWQYAiABKAlCA+BBBRIRCgRuYW1lGAMgASgJQgPgQQgSEwoGcHJlZml4GAQgASgJQgPgQQMSDgoGc2NvcGVzGAUgAygJEhAKCGF1ZGllbmNlGAYgAygJEg0KBXJvbGVzGA0gAygJEjMKCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcmV2b2tlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI1CgxsYXN0X3VzZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpjcmVhdGVkX2J5GAsgASgJEhYKDnJhdGVfbGltaXRfcnBtGAwgASgFIswBChxBUElUb2tlblNlcnZpY2VDcmVhdGVSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESFQoEbmFtZRgCIAEoCUIHukgEcgIQARIcCgt0dGxfc2Vjb25kcxgDIAEoA0IHukgEIgIoABIOCgZzY29wZXMYBCADKAkSGgoIYXVkaWVuY2UYBSADKAlCCLpIBZIBAggBEh8KDnJhdGVfbGltaXRfcnBtGAYgASgFQge6SAQaAigAEg0KBXJvbGVzGAcgAygJIlwKHUFQSVRva2VuU2VydmljZUNyZWF0ZVJlc3BvbnNlEiwKCWFwaV90b2tlbhgBIAEoCzIZLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlbhINCgV0b2tlbhgCIAEoCSI0ChxBUElUb2tlblNlcnZpY2VSZXZva2VSZXF1ZXN0EhQKAmlkGAEgASgJQgi6SAVyA7ABASIfCh1BUElUb2tlblNlcnZpY2VSZXZva2VSZXNwb25zZSKbAQoaQVBJVG9rZW5TZXJ2aWNlTGlzdFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIXCg9pbmNsdWRlX3Jldm9rZWQYAiABKAgSFwoPaW5jbHVkZV9leHBpcmVkGAMgASgIEhoKCXBhZ2Vfc2l6ZRgEIAEoBUIHukgEGgIoABISCgpwYWdlX3Rva2VuGAUgASgJImUKG0FQSVRva2VuU2VydmljZUxpc3RSZXNwb25zZRItCgphcGlfdG9rZW5zGAEgAygLMhkubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSIfCh1BUElUb2tlblNlcnZpY2VHZXRTZWxmUmVxdWVzdCJOCh5BUElUb2tlblNlcnZpY2VHZXRTZWxmUmVzcG9uc2USLAoJYXBpX3Rva2VuGAEgASgLMhkubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuIjYKHkFQSVRva2VuU2VydmljZUdldFVzYWdlUmVxdWVzdBIUCgJpZBgBIAEoCUIIukgFcgOwAQEi/QEKH0FQSVRva2VuU2VydmljZUdldFVzYWdlUmVzcG9uc2USCgoCaWQYASABKAkSEQoJbGltaXRfcnBtGAIgASgFEhwKFGN1cnJlbnRfYnVja2V0X2NvdW50GAMgASgDEh0KFXByZXZpb3VzX2J1Y2tldF9jb3VudBgEIAEoAxIWCg53ZWlnaHRlZF9jb3VudBgFIAEoARI0ChB3aW5kb3dfcmVzZXRzX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3VzZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wMqEECg9BUElUb2tlblNlcnZpY2USZwoGQ3JlYXRlEi0ubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUNyZWF0ZVJlcXVlc3QaLi5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVzcG9uc2USZwoGUmV2b2tlEi0ubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZVJldm9rZVJlcXVlc3QaLi5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlUmV2b2tlUmVzcG9uc2USYQoETGlzdBIrLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VMaXN0UmVxdWVzdBosLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VMaXN0UmVzcG9uc2USagoHR2V0U2VsZhIuLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRTZWxmUmVxdWVzdBovLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRTZWxmUmVzcG9uc2USbQoIR2V0VXNhZ2USLy5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0GjAubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFVzYWdlUmVzcG9uc2VCR1pFZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvbGVnYXRlL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtsZWdhdGVhZG1pbnYxYgZwcm90bzM",
+    "CidsZWdhdGUvYWRtaW4vdjEvYXBpX3Rva2VuX3NlcnZpY2UucHJvdG8SD2xlZ2F0ZS5hZG1pbi52MSKkAwoIQVBJVG9rZW4SEQoEbmFtZRgOIAEoCUID4EEIEg8KAmlkGAEgASgJQgPgQQMSFgoJdGVuYW50X2lkGAIgASgJQgPgQQUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKBnByZWZpeBgEIAEoCUID4EEDEg4KBnNjb3BlcxgFIAMoCRIQCghhdWRpZW5jZRgGIAMoCRINCgVyb2xlcxgNIAMoCRIzCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnJldm9rZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoMbGFzdF91c2VkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSEgoKY3JlYXRlZF9ieRgLIAEoCRIWCg5yYXRlX2xpbWl0X3JwbRgMIAEoBSLQAQocQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHQoMZGlzcGxheV9uYW1lGAIgASgJQge6SARyAhABEhwKC3R0bF9zZWNvbmRzGAMgASgDQge6SAQiAigAEg4KBnNjb3BlcxgEIAMoCRIaCghhdWRpZW5jZRgFIAMoCUIIukgFkgECCAESHwoOcmF0ZV9saW1pdF9ycG0YBiABKAVCB7pIBBoCKAASDQoFcm9sZXMYByADKAkiXAodQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVzcG9uc2USLAoJYXBpX3Rva2VuGAEgASgLMhkubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuEg0KBXRva2VuGAIgASgJIjUKHEFQSVRva2VuU2VydmljZVJldm9rZVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIfCh1BUElUb2tlblNlcnZpY2VSZXZva2VSZXNwb25zZSKXAQoaQVBJVG9rZW5TZXJ2aWNlTGlzdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhcKD2luY2x1ZGVfcmV2b2tlZBgCIAEoCBIXCg9pbmNsdWRlX2V4cGlyZWQYAyABKAgSGgoJcGFnZV9zaXplGAQgASgFQge6SAQaAigAEhIKCnBhZ2VfdG9rZW4YBSABKAkiZQobQVBJVG9rZW5TZXJ2aWNlTGlzdFJlc3BvbnNlEi0KCmFwaV90b2tlbnMYASADKAsyGS5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW4SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIh8KHUFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0Ik4KHkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRIsCglhcGlfdG9rZW4YASABKAsyGS5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW4iNwoeQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEi/wEKH0FQSVRva2VuU2VydmljZUdldFVzYWdlUmVzcG9uc2USDAoEbmFtZRgBIAEoCRIRCglsaW1pdF9ycG0YAiABKAUSHAoUY3VycmVudF9idWNrZXRfY291bnQYAyABKAMSHQoVcHJldmlvdXNfYnVja2V0X2NvdW50GAQgASgDEhYKDndlaWdodGVkX2NvdW50GAUgASgBEjQKEHdpbmRvd19yZXNldHNfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAyoQQKD0FQSVRva2VuU2VydmljZRJnCgZDcmVhdGUSLS5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVxdWVzdBouLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VDcmVhdGVSZXNwb25zZRJnCgZSZXZva2USLS5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlUmV2b2tlUmVxdWVzdBouLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VSZXZva2VSZXNwb25zZRJhCgRMaXN0EisubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXF1ZXN0GiwubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXNwb25zZRJqCgdHZXRTZWxmEi4ubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0Gi8ubGVnYXRlLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRJtCghHZXRVc2FnZRIvLmxlZ2F0ZS5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRVc2FnZVJlcXVlc3QaMC5sZWdhdGUuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXNwb25zZUJHWkVnaXRodWIuY29tL29sZWctdGthY2h1ay9sZWdhdGUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO2xlZ2F0ZWFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -40,6 +40,21 @@ export const file_paladin_admin_v1_api_token_service: GenFile =
  */
 export type APIToken = Message<"paladin.admin.v1.APIToken"> & {
   /**
+   * Resource name: "tenants/{tenant}/apiTokens/{id}".
+   *
+   * Field 3 used to be `name` meaning the operator's LABEL, which made this
+   * service the only one in the API where `name` was not a resource name — and
+   * left Revoke / GetUsage addressed by a bare uuid that carries no tenant. An
+   * id without its parent cannot be scoped, and under the row-level security on
+   * api_tokens that is not a nuisance but a deadlock: to set the acting tenant
+   * you must know whose token it is, and to learn that you must first read the
+   * row RLS is hiding. The label now lives in display_name.
+   *
+   * @generated from field: string name = 14;
+   */
+  name: string;
+
+  /**
    * @generated from field: string id = 1;
    */
   id: string;
@@ -50,9 +65,12 @@ export type APIToken = Message<"paladin.admin.v1.APIToken"> & {
   tenantId: string;
 
   /**
-   * @generated from field: string name = 3;
+   * display_name is the operator-facing label ("ci-uploader"). Shown in audit
+   * logs. Was `name` until the resource-name conversion.
+   *
+   * @generated from field: string display_name = 3;
    */
-  name: string;
+  displayName: string;
 
   /**
    * prefix is the 8-char display string (first chars of the body
@@ -130,14 +148,18 @@ export const APITokenSchema: GenMessage<APIToken> =
 export type APITokenServiceCreateRequest =
   Message<"paladin.admin.v1.APITokenServiceCreateRequest"> & {
     /**
-     * @generated from field: string tenant_id = 1;
+     * Parent: "tenants/{tenant}". Was a bare tenant_id uuid.
+     *
+     * @generated from field: string parent = 1;
      */
-    tenantId: string;
+    parent: string;
 
     /**
-     * @generated from field: string name = 2;
+     * display_name is the operator's label for the token, not a resource name.
+     *
+     * @generated from field: string display_name = 2;
      */
-    name: string;
+    displayName: string;
 
     /**
      * ttl_seconds caps lifetime. 0 → server default (1 year).
@@ -227,9 +249,13 @@ export const APITokenServiceCreateResponseSchema: GenMessage<APITokenServiceCrea
 export type APITokenServiceRevokeRequest =
   Message<"paladin.admin.v1.APITokenServiceRevokeRequest"> & {
     /**
-     * @generated from field: string id = 1;
+     * "tenants/{tenant}/apiTokens/{id}". The tenant segment is what lets the
+     * handler authorise the crossing and then scope the query; a bare id could
+     * do neither.
+     *
+     * @generated from field: string name = 1;
      */
-    id: string;
+    name: string;
   };
 
 /**
@@ -262,9 +288,11 @@ export const APITokenServiceRevokeResponseSchema: GenMessage<APITokenServiceRevo
 export type APITokenServiceListRequest =
   Message<"paladin.admin.v1.APITokenServiceListRequest"> & {
     /**
-     * @generated from field: string tenant_id = 1;
+     * Parent: "tenants/{tenant}".
+     *
+     * @generated from field: string parent = 1;
      */
-    tenantId: string;
+    parent: string;
 
     /**
      * @generated from field: bool include_revoked = 2;
@@ -360,9 +388,11 @@ export const APITokenServiceGetSelfResponseSchema: GenMessage<APITokenServiceGet
 export type APITokenServiceGetUsageRequest =
   Message<"paladin.admin.v1.APITokenServiceGetUsageRequest"> & {
     /**
-     * @generated from field: string id = 1;
+     * "tenants/{tenant}/apiTokens/{id}".
+     *
+     * @generated from field: string name = 1;
      */
-    id: string;
+    name: string;
   };
 
 /**
@@ -379,9 +409,11 @@ export const APITokenServiceGetUsageRequestSchema: GenMessage<APITokenServiceGet
 export type APITokenServiceGetUsageResponse =
   Message<"paladin.admin.v1.APITokenServiceGetUsageResponse"> & {
     /**
-     * @generated from field: string id = 1;
+     * Echoes the resource name the usage was read for.
+     *
+     * @generated from field: string name = 1;
      */
-    id: string;
+    name: string;
 
     /**
      * limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
