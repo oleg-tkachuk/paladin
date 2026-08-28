@@ -24,6 +24,17 @@ import (
 // process memory to paper over the race, which is the single thing preventing
 // it from running in more than one replica.
 
+// revokedFamilyToken is a member of a family that was deliberately killed.
+// RevokeRefreshTokenFamily revokes AND clears superseded_at across the family,
+// so a predecessor of the dead head no longer reads as "rotated a moment ago"
+// — which is exactly what used to keep it usable for another thirty seconds.
+func revokedFamilyToken(userID, tenantID uuid.UUID) authstore.RefreshToken {
+	return authstore.RefreshToken{
+		JTI: uuid.New(), FamilyID: uuid.New(), UserID: userID, TenantID: tenantID,
+		ExpiresAt: time.Now().Add(time.Hour), Revoked: true, SupersededAt: nil,
+	}
+}
+
 func supersededToken(userID, tenantID uuid.UUID, ago time.Duration) authstore.RefreshToken {
 	at := time.Now().Add(-ago)
 	return authstore.RefreshToken{
@@ -262,5 +273,91 @@ func TestRefreshTokenWinnerOfTheRaceRotatesNormally(t *testing.T) {
 	}
 	if refresh.revokeFamilies != 0 {
 		t.Error("revoked the family on a normal rotation")
+	}
+}
+
+// ─── the window must close when the session ends ────────────────────────────
+//
+// The grace window reads superseded_at, which is stamped once and never
+// revisited. So a token stayed "recently superseded" even after the family it
+// belonged to was deliberately killed, and the window kept honouring it for
+// the rest of its thirty seconds. Two ways that mattered, both real:
+//
+//   - after a logout, the PREDECESSOR of the revoked head still minted access
+//     tokens. Reproduced against a live stack: log in, load a page (which
+//     rotates), log out, present the pre-rotation token — 200.
+//   - after reuse detection revoked a family on suspicion of theft, every
+//     superseded member of it stayed usable for the same half minute. Worse,
+//     because that revocation exists precisely to stop an attacker.
+//
+// The family's own state is what closes it: a rotation leaves exactly one live
+// head, a logout or a family revoke leaves none.
+
+func TestExchangeAudienceRefusesASupersededTokenOnceTheFamilyIsDead(t *testing.T) {
+	userID, tenantID := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{
+		getErr: authstore.ErrTokenRevoked,
+		// Superseded two seconds ago — well inside the window — but the
+		// session it belonged to has been ended.
+		// A killed family, as the database leaves it: revoked, and
+		// supersession CLEARED, so nothing here reads as a mere rotation.
+		anyTok: revokedFamilyToken(userID, tenantID),
+	}
+	h := exchangeHandler(t, refresh, userID, tenantID)
+
+	_, err := h.ExchangeAudience(context.Background(), ExchangeAudienceInput{
+		RefreshToken:   "the-token-the-logout-was-supposed-to-kill",
+		TargetAudience: auth.AudienceData,
+	})
+	if err == nil {
+		t.Fatal("a logged-out session still minted an access token")
+	}
+	if code(err) != connect.CodeUnauthenticated {
+		t.Fatalf("code = %v, want Unauthenticated", code(err))
+	}
+}
+
+func TestRefreshTokenRefusesASupersededTokenOnceTheFamilyIsDead(t *testing.T) {
+	// Same rule on the rotating path: without it, a logged-out session could
+	// be resumed by presenting the predecessor of its revoked head, and the
+	// answer would be the friendly Aborted meant for a lost race.
+	userID, tenantID := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{
+		getErr: authstore.ErrTokenRevoked,
+		// A killed family, as the database leaves it: revoked, and
+		// supersession CLEARED, so nothing here reads as a mere rotation.
+		anyTok: revokedFamilyToken(userID, tenantID),
+	}
+	h := exchangeHandler(t, refresh, userID, tenantID)
+
+	_, err := h.RefreshToken(context.Background(), RefreshInput{RefreshToken: "rt"})
+	if code(err) != connect.CodeUnauthenticated {
+		t.Fatalf("code = %v, want Unauthenticated", code(err))
+	}
+	if refresh.revokeFamilies != 1 {
+		t.Errorf("family revocations = %d, want 1 — a token presented after its family died is a theft signal", refresh.revokeFamilies)
+	}
+}
+
+func TestSupersessionGraceStillHoldsWhileTheFamilyLives(t *testing.T) {
+	// The property the fix must not cost: an ordinary rotation leaves a live
+	// head, and its predecessor is still honoured inside the window. That is
+	// the two-tab case the whole mechanism exists for.
+	userID, tenantID := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{
+		getErr: authstore.ErrTokenRevoked,
+		anyTok: supersededToken(userID, tenantID, 2*time.Second),
+	}
+	h := exchangeHandler(t, refresh, userID, tenantID)
+
+	out, err := h.ExchangeAudience(context.Background(), ExchangeAudienceInput{
+		RefreshToken:   "rotated-by-a-sibling-a-moment-ago",
+		TargetAudience: auth.AudienceData,
+	})
+	if err != nil {
+		t.Fatalf("the live-family case regressed: %v", err)
+	}
+	if out.AccessToken == "" {
+		t.Error("no access token minted")
 	}
 }

@@ -43,21 +43,19 @@ export async function loginAsAdmin(page: Page): Promise<void> {
 }
 
 /**
- * Sign out via the topbar menu. Used by US1 to reset between
- * acceptance scenarios within the same test; most tests are
- * atomic enough that they don't need this — the per-test
- * browser context is torn down automatically by Playwright.
+ * Sign out through the sidebar control.
  *
- * The exact selector depends on the topbar implementation. If
- * the topbar restructures, update the locator chain here; do
- * NOT bypass to a direct /api/auth/logout call without
- * justifying the FR-003 deviation.
+ * This helper claimed to be "used by US1 to reset between acceptance
+ * scenarios" and was used by nothing — no spec referenced it, and its locator
+ * chain (a "user menu" button, then a menuitem) matched no element on the
+ * page. So the console's logout had no end-to-end coverage at all, which is
+ * how it spent its life revoking nothing on the server while its unit test,
+ * mocking Revoke as succeeding, passed throughout.
+ *
+ * logout.spec.ts now covers it, and asserts the part that matters: the session
+ * is dead SERVER-side afterwards, not merely absent from the browser.
  */
 export async function logout(page: Page): Promise<void> {
-  // The user-menu trigger is in the topbar; the logout item
-  // sits inside its dropdown. We use `getByRole` + text to stay
-  // resilient to layout shuffles.
-  await page.getByRole("button", { name: /user menu|account/i }).click();
-  await page.getByRole("menuitem", { name: /sign out|logout/i }).click();
-  await expect(page).toHaveURL(/\/login/, { timeout: 5_000 });
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
 }

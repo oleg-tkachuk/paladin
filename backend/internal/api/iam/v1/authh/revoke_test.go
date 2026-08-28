@@ -15,7 +15,8 @@ import (
 
 type revokeRecordingRefresh struct {
 	fakeRefresh
-	revoked []uuid.UUID
+	revoked        []uuid.UUID
+	revokedFamilie []uuid.UUID
 }
 
 func (f *revokeRecordingRefresh) Revoke(_ context.Context, jti uuid.UUID) error {
@@ -23,7 +24,17 @@ func (f *revokeRecordingRefresh) Revoke(_ context.Context, jti uuid.UUID) error 
 	return nil
 }
 
-func TestRevokeRevokesTheRefreshTokenByJTI(t *testing.T) {
+func (f *revokeRecordingRefresh) RevokeFamilyOf(_ context.Context, jti uuid.UUID) (int64, error) {
+	f.revokedFamilie = append(f.revokedFamilie, jti)
+	return 1, nil
+}
+
+// Revoke ends the SESSION, and the session is the family: one login starts
+// one, every rotation inherits it. Revoking only the presented jti left every
+// other member live — including the predecessor a page load had just rotated
+// away from, which the supersession window then honoured for another thirty
+// seconds. The user had logged out and the session had not ended.
+func TestRevokeRevokesTheWholeFamilyNotJustTheJTI(t *testing.T) {
 	jti := uuid.New()
 	refresh := &revokeRecordingRefresh{}
 	h := NewHandler(&fakeUsers{}, refresh, &stubMinter{},
@@ -32,8 +43,11 @@ func TestRevokeRevokesTheRefreshTokenByJTI(t *testing.T) {
 	if err := h.Revoke(context.Background(), "a-refresh-token"); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
-	if len(refresh.revoked) != 1 || refresh.revoked[0] != jti {
-		t.Fatalf("revoked %v, want exactly the presented token's jti %v", refresh.revoked, jti)
+	if len(refresh.revokedFamilie) != 1 || refresh.revokedFamilie[0] != jti {
+		t.Fatalf("revoked families %v, want the family of %v", refresh.revokedFamilie, jti)
+	}
+	if len(refresh.revoked) != 0 {
+		t.Errorf("also revoked %v singly — the family call already covers it", refresh.revoked)
 	}
 }
 

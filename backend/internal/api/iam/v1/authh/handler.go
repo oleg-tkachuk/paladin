@@ -415,8 +415,16 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 	}
 	jti, _, _, err := h.parseRefresh(token)
 	if err == nil {
-		// It's a refresh token — revoke by JTI.
-		_ = h.refresh.Revoke(ctx, jti)
+		// Revoke the FAMILY, not the single token. A logout ends the session,
+		// and the session is the family: one login starts one, every rotation
+		// inherits it. Killing only the presented jti left every other member
+		// live — including the predecessor a page load had just rotated away
+		// from, which the supersession window then honoured for another thirty
+		// seconds. The user had logged out and the session had not ended.
+		//
+		// This does NOT touch the user's other logins: each has its own family,
+		// which is the distinction RevokeFamilyOf was built to preserve.
+		_, _ = h.refresh.RevokeFamilyOf(ctx, jti)
 		return nil
 	}
 	// Access tokens are stateless — we can't revoke without a denylist.
@@ -935,10 +943,20 @@ func (h *Handler) onRefreshRaceLost(ctx context.Context, jti, userID uuid.UUID) 
 // withinSupersessionGrace reports whether a revoked token was revoked BY
 // ROTATION and recently enough to still be honoured.
 //
-// Both halves are load-bearing. Without the first, a token revoked at logout
-// or by reuse detection would be accepted for thirty seconds after the
-// revocation meant to stop it. Without the second, supersession would never
-// expire.
+// Both halves are load-bearing, and the first carries more weight than it
+// looks. superseded_at is written by rotation and by nothing else — and it is
+// CLEARED again when the family is deliberately killed, by logout or by reuse
+// detection (see RevokeRefreshTokenFamily). Without that clearing the stamp
+// was write-once, so a predecessor stayed "recently superseded" after its
+// session had ended and this window kept honouring it for the rest of its
+// thirty seconds. Verified on a live stack rather than reasoned about: log in,
+// load a page (which rotates), log out, present the pre-rotation token — 200.
+//
+// Asking the family whether it still had a live member would have been the
+// wrong question: rotation supersedes the old token and inserts the new one in
+// two statements, so there is an instant where a family legitimately has none,
+// and a concurrent sibling would be refused for a race rather than a
+// revocation. Tried, and it broke the two-tab case it was meant to protect.
 func (h *Handler) withinSupersessionGrace(t authstore.RefreshToken) bool {
 	if t.SupersededAt == nil {
 		return false

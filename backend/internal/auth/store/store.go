@@ -102,9 +102,12 @@ type RefreshTokenRepository interface {
 	// caller that needs to ask WHY it was revoked.
 	GetAny(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	// RevokeFamilyOf revokes every still-live token sharing the family of the
-	// given jti — the reuse-detection chain revocation (ADR-0009). Returns the
-	// number of tokens revoked.
+	// RevokeFamilyOf ends a whole session: every token sharing the family of
+	// the given jti (ADR-0009). Reuse detection and logout both use it.
+	//
+	// It also CLEARS supersession across the family, which is what stops the
+	// grace window from honouring a predecessor of a killed session — see the
+	// query's own comment. Returns the number of members affected.
 	RevokeFamilyOf(ctx context.Context, jti uuid.UUID) (int64, error)
 	PurgeExpired(ctx context.Context, olderThan time.Time) (int64, error)
 }

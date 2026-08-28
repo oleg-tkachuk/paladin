@@ -38,12 +38,32 @@ SET revoked = TRUE
 WHERE user_id = $1 AND revoked = FALSE;
 
 -- name: RevokeRefreshTokenFamily :execrows
--- Reuse-detection (ADR-0009): revoke every still-live token in the family of
--- the given id — the compromised chain only, not all the user's sessions.
+-- Kill a whole session: reuse detection (ADR-0009) and logout both land here.
+-- The family of the given id only — the compromised or ended chain, never all
+-- of the user's sessions.
+--
+-- Two effects, and the second is not decoration. Clearing superseded_at across
+-- the family is what tells the supersession grace window that this session was
+-- DELIBERATELY ended rather than merely rotated. That stamp is written once by
+-- rotation and was never revisited, so a predecessor stayed "recently
+-- superseded" after its family was killed and the window kept honouring it for
+-- the rest of its thirty seconds: a logged-out session still minted access
+-- tokens, and so did one that reuse detection had just revoked on suspicion of
+-- theft. Reproduced on a live stack — log in, load a page, log out, present
+-- the pre-rotation token — before it was closed.
+--
+-- Asking a family-liveness question instead would have been wrong: rotation
+-- supersedes the old token and inserts the new one in two statements, so there
+-- is an instant where the family legitimately has no live member, and a
+-- concurrent sibling would have been refused for a race rather than a
+-- revocation. The fact belongs on the row, written by the revocation itself.
+--
+-- Touches already-revoked members too, so the row count is members affected
+-- rather than sessions ended.
 UPDATE refresh_tokens
-SET revoked = TRUE
+SET revoked = TRUE, superseded_at = NULL
 WHERE family_id = (SELECT rt.family_id FROM refresh_tokens AS rt WHERE rt.id = $1)
-  AND revoked = FALSE;
+  AND (revoked = FALSE OR superseded_at IS NOT NULL);
 
 -- name: PurgeExpiredRefreshTokens :execrows
 -- Bounded batch (10k). Worker loops until result is 0.
