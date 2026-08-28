@@ -2088,31 +2088,6 @@ of the pipeline._
 
 ---
 
-## Move the api/v0.4.0 baseline for the token resource-name change
-
-- **Status:** Blocked (operator action — moving a published tag is a release
-  decision, not a coding one). Surfaced 2026-08-28.
-- **Reason:** `APITokenService` now addresses tokens by resource name, which is
-  a deliberate break. docs/upgrading.md carries the entry, which is step 3 of
-  the procedure in that file. Step 4 is not mine: it force-moves the published
-  `api/v0.4.0` and `api/latest` tags, which changes what those tags mean for
-  anyone who pinned them.
-  Until it is done, the `buf breaking` job in `.github/workflows/test.yml`
-  fails against the old baseline — correctly, since the contract did change.
-- **Definition of Done:**
-
-  ```
-  git tag -f -a api/v0.4.0 -m "api tokens addressed by resource name"
-  git tag -f api/latest
-  git push --force origin api/v0.4.0 api/latest
-  ```
-
-  then bump `breaking_against` in the workflow if the tag name changes.
-- **Blockers:** the maintainer's call on whether this rides the existing
-  v0.4.0 baseline or opens a new one.
-
----
-
 ## Terminal tenant events are observed by query, not by subscription
 
 - **Status:** Documented 2026-08-28, not a gap. Supersedes an entry that asked

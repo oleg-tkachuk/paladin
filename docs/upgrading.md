@@ -2,7 +2,7 @@
 
 ## Changing the API contract
 
-`buf breaking` runs in CI against the `api/v0.3.0` tag and **blocks**. Pre-1.0
+`buf breaking` runs in CI against the `api/v0.5.0` tag and **blocks**. Pre-1.0
 the project still breaks compatibility deliberately — see *Project status* in
 the README — so the gate does not forbid it. It forbids doing it by accident.
 
@@ -14,15 +14,22 @@ To land a deliberate breaking change:
    number — gRPC clients survive that, JSON clients do not, and nothing at
    runtime will tell you which you broke.
 3. Note it here, under a heading for the release.
-4. Move the baseline once the change is merged:
+4. Cut the next baseline once the change is merged:
 
    ```
-   git tag -f -a api/v0.4.0 -m "…what changed and why"
+   git tag -a api/v0.5.1 -m "…what changed and why"   # the NEXT number
    git tag -f api/latest
-   git push --force origin api/v0.4.0 api/latest
+   git push origin api/v0.5.1 && git push --force origin api/latest
    ```
 
-   Then bump `breaking_against` in `.github/workflows/test.yml` to the new tag.
+   Then bump `breaking_against` in `.github/workflows/test.yml` to it.
+
+   A new number rather than `-f` on the current one: the tags are the record
+   of what the contract WAS at each point, and force-moving a published tag
+   redefines it under anyone who pinned it. `api/latest` is the only one that
+   moves, which is what its name promises. The tag history — v0.1.0 through
+   v0.5.0 — is what this procedure has actually been doing; the instruction to
+   force-move said otherwise and was wrong.
 
 The baseline is a tag rather than the default branch on purpose: `main` and
 `develop` advance together in this repo, so comparing against `main` compares
