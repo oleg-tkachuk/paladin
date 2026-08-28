@@ -2163,13 +2163,19 @@ of the pipeline._
   ran.
   Only tenants with an event subscription are affected, which is why it is
   intermittent rather than total.
-- **Definition of Done:** purging a tenant with subscriptions succeeds. Either
-  the purge event is emitted outside the transaction that deletes the tenant
-  (it describes something already done, so it has no ordering claim on it), or
-  `event_deliveries.tenant_id` gets ON DELETE CASCADE, or the terminal event
-  is exempt from the per-tenant delivery table. The first is the smallest.
+- **Definition of Done:** purging a tenant with subscriptions succeeds. Note
+  what will NOT work: `event_deliveries.tenant_id` is already
+  `ON DELETE CASCADE`, and moving the insert before the delete only means the
+  cascade removes the row that was just written. A delivery row keyed to the
+  tenant cannot outlive the tenant — that is the schema working as designed.
+  So the event has to leave the transaction: emit `paladin.tenant.purged` after
+  the commit, on a path not foreign-keyed to the tenant, or exempt terminal
+  events from the per-tenant delivery table entirely. The event describes
+  something already done and has no ordering claim on it, so losing
+  transactional atomicity here costs nothing.
 - **Blockers:** none. It needs a decision about where a tenant's last event
-  lives once the tenant does not.
+  lives once the tenant does not — which is the same question ADR-0003's
+  outbox pattern cannot answer for a terminal delete.
 
 ---
 
