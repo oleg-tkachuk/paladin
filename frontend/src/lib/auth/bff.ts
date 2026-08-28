@@ -97,25 +97,31 @@ export function clearSessionCookie(res: NextResponse) {
 // ────────────────────────── RefreshToken dedup ──────────────────────────
 
 /**
- * AuthService.RefreshToken rotates the refresh chain — the supplied
- * token is consumed and a new one is issued. That makes concurrent
- * calls with the same input token catastrophic: the second one sees
- * a "refresh token rejected" because its parent has already been
- * replaced. In the BFF this happens on every page load — /api/auth/me
- * fires from AuthProvider, and the iamTransport interceptor often
- * fires /api/auth/exchange (audience=paladin-iam) at the same instant
- * for an early RPC. Both call RefreshToken; whichever loses the race
- * sees a 401 → AuthContext flips to unauthenticated → tenant badge
- * shows "no tenant" even though the session is valid.
+ * AuthService.RefreshToken rotates the refresh chain — the supplied token is
+ * consumed and a new one is issued — so two concurrent calls carrying the same
+ * token are catastrophic: the loser presents a token the server has already
+ * consumed, which is indistinguishable from RFC-6819 reuse, and the whole
+ * family is revoked. The operator is signed out of a perfectly valid session.
  *
- * Dedup keyed on the incoming refresh-token value: while one
- * rotation is in flight, sibling callers join the same Promise and
- * receive the same new pair. The map self-cleans on settle so a
- * crashed Next.js process doesn't leak memory between requests.
+ * ONE route rotates now: /api/auth/me, once per page load. /api/auth/exchange,
+ * /api/auth/memberships and /api/auth/switch-tenant all used to rotate as
+ * well — each only wanted a short-lived iam access token, which
+ * ExchangeAudience mints without consuming anything. Four rotations of one
+ * cookie per page load became one, and the race this dedup was written for —
+ * /me against the transport's early /exchange — cannot occur at all.
  *
- * Single-instance assumption — fine for dev and small deployments.
- * Multi-replica BFF would need a shared cache (Redis), but that's
- * out of scope until the deployment topology actually changes.
+ * What the dedup still covers is a genuinely concurrent SECOND page load
+ * carrying the same cookie: two tabs opened together, each firing its own /me.
+ * That one is real, and it is also the reason this process is still pinned to
+ * a single replica — the map is in memory, so two replicas do not share it.
+ *
+ * Moving it to the server is the obvious answer and does not work as stated:
+ * refresh tokens are stored hashed, so a server asked to resolve a
+ * just-superseded token cannot hand back its successor's raw value — nobody
+ * has it but the caller that received it. What the server CAN do is rotate
+ * forward from the current head and return that; see BACKLOG before reaching
+ * for Redis, which would buy multi-replica by adding a dependency whose
+ * failure mode is the outage it was meant to prevent.
  */
 
 type RotateResult = {
@@ -128,21 +134,14 @@ type RotateResult = {
 const inflightRotations = new Map<string, Promise<RotateResult>>();
 
 // How long a SUCCESSFUL rotation's result is retained in the dedup map AFTER it
-// settles. The original dedup deleted the entry on settle, so it only collapsed
-// callers that overlapped the in-flight window. But the two BFF rotation entry
-// points — /api/auth/me (AuthProvider) and /api/auth/exchange?audience=paladin-iam
-// (the iam transport, fired by an early iam-plane RPC) — are dispatched by the
-// browser near-simultaneously carrying the SAME cookie, and the browser can't
-// update that cookie between them. Under load they stagger: the first rotates
-// RT1→RT2 and clears the entry; the second then replays the now-consumed RT1.
-// The backend's RefreshToken reads a consumed token as RFC-6819 reuse and
-// revokes the ENTIRE family (RT2 included) — logging the live session out (the
-// "blank page on refresh" symptom; reproduced reliably by the specs/001
-// Playwright suite under parallel workers). Retaining the resolved pair for a
-// grace window lets the staggered sibling JOIN the cached promise and receive
-// RT2 instead of replaying RT1. The key is (audience, token), so the next
-// legitimate rotation (new cookie) uses a different key and is unaffected; a
-// genuine replay outside the window still hits the backend and is detected.
+// settles. Deleting on settle would only collapse callers that overlap the
+// in-flight window, and near-simultaneous requests carrying one cookie tend to
+// stagger rather than overlap: the first rotates RT1→RT2 and clears the entry,
+// the second then replays the now-consumed RT1 and the backend revokes the
+// family. Retaining the resolved pair briefly lets the straggler join the
+// cached promise and receive RT2 instead. The key is (audience, token), so the
+// next legitimate rotation uses a different key and is unaffected; a genuine
+// replay outside the window still reaches the backend and is detected.
 const ROTATION_RESULT_GRACE_MS = 30_000;
 
 // dedupWithGrace runs factory at most once per key for concurrent callers AND
@@ -178,9 +177,8 @@ export function dedupWithGrace<T>(
 // cause". It can now (refresh_tokens.superseded_at), and it honours the former
 // inside a short window, so no client has to remember rotations at all.
 //
-// What remains below is the DEDUP, which is a different problem: two
-// concurrent rotations of the same token, where the second is a genuine second
-// rotation rather than a read. That one still keeps this process single-replica.
+// That fix plus the removal of three redundant rotations is what took this
+// file from two shared-state mechanisms to one.
 
 export async function refreshIamChain(
   refreshToken: string,

@@ -4,8 +4,6 @@ import { AUDIENCES, type Audience } from "@/constants";
 import {
   iamAuthClient,
   readSessionCookie,
-  refreshIamChain,
-  setSessionCookie,
   toAccessTokenDTO,
   type AccessTokenDTO,
 } from "@/lib/auth/bff";
@@ -15,14 +13,16 @@ import {
  * Body: { audience }
  *
  * Returns a fresh access token for the requested audience. Reads the iam
- * refresh-token cookie and either:
+ * refresh-token cookie and calls ExchangeAudience, which mints a short-lived
+ * access token without consuming the chain — for every audience, iam
+ * included. The cookie is never written here.
  *
- *   - audience=paladin-iam: calls RefreshToken (rotates the chain — the new
- *     refresh token replaces the old one in the cookie). This is the
- *     normal "iam access expired" path.
- *   - audience=paladin-data | paladin-admin: calls ExchangeAudience, which
- *     mints a short-lived access token without rotating the iam refresh
- *     chain. Cookie is left untouched.
+ * The iam case used to call RefreshToken instead, on the reasoning that an
+ * expired iam access token is what a refresh is for. But that made a single
+ * page load rotate the chain twice — once here and once in /api/auth/me —
+ * with the browser unable to update the cookie in between, so whichever
+ * request lost read a consumed token. Deriving instead of rotating removes
+ * the second rotation rather than coordinating it.
  */
 
 export const dynamic = "force-dynamic";
@@ -57,36 +57,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   try {
-    if (audience === AUDIENCES.iam) {
-      // iam audience uses RefreshToken (rotates the chain). Routed
-      // through refreshIamChain so this call dedupes against any
-      // concurrent /api/auth/me — both share the same in-flight
-      // rotation and receive the same new pair, instead of fighting
-      // for a single-use refresh token.
-      const tokens = await refreshIamChain(refreshToken, AUDIENCES.iam);
-      const payload: AccessTokenDTO = toAccessTokenDTO(
-        audience,
-        tokens.accessToken,
-        tokens.accessExpiresInSeconds,
-      );
-      const out = NextResponse.json(payload);
-      setSessionCookie(out, tokens.refreshToken, {
-        maxAgeSeconds: tokens.refreshExpiresInSeconds,
-      });
-      return out;
-    }
-
-    // data / admin: ExchangeAudience derives an access token without
-    // touching the refresh chain.
+    // Every audience, iam included, goes through ExchangeAudience. The iam
+    // case used to call RefreshToken instead, which ROTATES the chain — so a
+    // page load fired two rotations of one cookie: this route and
+    // /api/auth/me. That was the race the BFF then spent an in-process index
+    // and a dedup map collapsing. ExchangeAudience mints an iam access token
+    // perfectly well (assertAudienceAllowed permits it outright) and consumes
+    // nothing, so there is no second rotation left to collapse.
     //
-    // Rotation race: a parallel /exchange?audience=paladin-iam call rotates the
-    // chain. If we read `refreshToken` from the cookie before that happened
-    // and call ExchangeAudience after the server consumed it, the server
-    // rejects it — correctly — and the session looks broken while being
-    // perfectly valid. The console then sends the RPC with no token at all,
-    // and the operator sees "missing Authorization header" on a page that has
-    // simply lost a race.
-    //
+    // The session still slides: /api/auth/me rotates once per page load,
+    // which is what advances the chain. This route deriving a token no longer
+    // does, and no longer needs to.
     // Sent as-is. The token may already have been rotated by a sibling request
     // — a browser cannot update its cookie between two requests in flight —
     // and the server tolerates that itself now: a refresh token superseded

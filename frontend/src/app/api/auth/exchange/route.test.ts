@@ -48,21 +48,28 @@ describe("POST /api/auth/exchange", () => {
     expect(res.status).toBe(401);
   });
 
-  it("iam audience rotates the chain via RefreshToken + updates the cookie", async () => {
+  // The iam audience is derived like any other now. It used to rotate, which
+  // is what put two rotations of one cookie on a single page load — this one
+  // and /api/auth/me's — with the browser unable to update the cookie between
+  // them. The assertion that matters is the negative one: this route consumes
+  // nothing and writes no cookie.
+  it("iam audience derives a token without rotating or writing the cookie", async () => {
     h.readSessionCookie.mockResolvedValue("rt-old");
-    h.refreshIamChain.mockResolvedValue({
+    h.exchangeAudience.mockResolvedValue({
       accessToken: "iam-access",
-      refreshToken: "iam-refresh-new",
       accessExpiresInSeconds: 900,
-      refreshExpiresInSeconds: 604800,
     });
     const res = await POST(exchangeReq({ audience: "paladin-iam" }));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.audience).toBe("paladin-iam");
     expect(json.token).toBe("iam-access");
-    expect(h.exchangeAudience).not.toHaveBeenCalled();
-    expect(res.cookies.get(SESSION_COOKIE_NAME)?.value).toBe("iam-refresh-new");
+    expect(h.exchangeAudience).toHaveBeenCalledWith({
+      refreshToken: "rt-old",
+      targetAudience: "paladin-iam",
+    });
+    expect(h.refreshIamChain).not.toHaveBeenCalled();
+    expect(res.cookies.get(SESSION_COOKIE_NAME)).toBeUndefined();
   });
 
   it("data audience derives a token via ExchangeAudience and leaves the cookie untouched", async () => {

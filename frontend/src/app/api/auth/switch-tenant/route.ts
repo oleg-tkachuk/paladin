@@ -4,7 +4,6 @@ import { AUDIENCES, type Audience } from "@/constants";
 import {
   iamAuthClient,
   readSessionCookie,
-  refreshIamChain,
   setSessionCookie,
   toUserDTO,
   toAccessTokenDTO,
@@ -56,13 +55,18 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   try {
-    // Authenticate the switch with a fresh iam access token from the current
-    // session. refreshIamChain (not a raw RefreshToken) so it dedupes against
-    // any parallel /me rotation.
-    const cur = await refreshIamChain(refreshToken, iamAudience);
+    // Authenticate the switch with an iam access token DERIVED from the
+    // current session rather than a rotation of it. SwitchTenant issues its
+    // own token pair below, which replaces the cookie outright, so rotating
+    // first only consumed a link in a chain that was about to be discarded —
+    // while racing whatever else the page held the same cookie open for.
+    const { accessToken } = await iamAuthClient().exchangeAudience({
+      refreshToken,
+      targetAudience: iamAudience,
+    });
     const sw = await iamAuthClient().switchTenant(
       { targetTenantId, requestedAudience: iamAudience },
-      { headers: { Authorization: `Bearer ${cur.accessToken}` } },
+      { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     const tokens = sw.tokens;
     if (!tokens) {
