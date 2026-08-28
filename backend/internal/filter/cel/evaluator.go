@@ -8,6 +8,7 @@ package cel
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/google/cel-go/cel"
@@ -27,6 +28,26 @@ type Schema struct {
 	Name string
 	// Declarations are returned by buildEnv — a concrete wiring lives below.
 	vars map[string]*cel.Type
+}
+
+// Fields returns the variable names this schema declares, sorted.
+//
+// A filter compiles against the SCHEMA and evaluates against a projection —
+// the map a handler builds per row. Nothing connected the two: a schema field
+// with no matching key in the projection produces an expression that compiles
+// happily and then matches nothing, for every row, silently. That is the worst
+// available failure for a filter, because an empty result set is a legitimate
+// answer and the caller cannot tell the difference.
+//
+// Exported so each handler package can assert its own projection covers what
+// its schema promises.
+func (s *Schema) Fields() []string {
+	out := make([]string, 0, len(s.vars))
+	for k := range s.vars {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ObjectSchema is exposed to filters against Object rows.

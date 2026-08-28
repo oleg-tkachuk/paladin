@@ -88,3 +88,56 @@ jobs:
         run: |
           go test -tags=integration -count=1 -timeout=20m \
             ./internal/integration/... ./tests/integration/...
+
+      # ─── RPC surface ────────────────────────────────────────────────────
+      #
+      # rpc_surface_test.go is the only thing that covers all 142 RPC
+      # declarations at once — it walks the protobuf descriptors, so a service
+      # added tomorrow is included the day it is registered. It reaches the
+      # planes over HTTP and t.Skips when none answer, which is what it had
+      # been doing here every single run: this job starts a testcontainers
+      # Postgres and nothing else, so there were no planes to reach, and a
+      # skipped gate reads exactly like a passing one.
+      #
+      # The stack the Playwright suite uses publishes all three planes on the
+      # ports the test defaults to, so bringing it up is the whole fix. Its
+      # images are the two the repo builds; a registry is not involved.
+      - name: Build the images the stack references
+        working-directory: .
+        run: |
+          docker buildx build --load \
+            --tag registry.local/paladin/paladin-core:latest \
+            --file backend/deploy/Dockerfile .
+          docker buildx build --load \
+            --tag registry.local/paladin/paladin-console:latest \
+            --file frontend/deploy/Dockerfile frontend
+
+      - name: Bring up the stack
+        working-directory: .
+        run: |
+          docker compose -p paladin-rpc-surface \
+            -f frontend/tests/e2e/docker-compose.test.yaml up --wait
+
+      # PALADIN_RPC_SURFACE=1 turns the skip into a failure. Without it an
+      # unreachable stack would still be excused, which is the state this step
+      # exists to end.
+      - name: RPC surface gate
+        env:
+          PALADIN_RPC_SURFACE: "1"
+        run: |
+          go test -tags=integration -count=1 -timeout=10m \
+            -run 'Surface|RPC' ./tests/integration/...
+
+      - name: Stack logs on failure
+        if: failure()
+        working-directory: .
+        run: |
+          docker compose -p paladin-rpc-surface \
+            -f frontend/tests/e2e/docker-compose.test.yaml logs --tail 200
+
+      - name: Tear the stack down
+        if: always()
+        working-directory: .
+        run: |
+          docker compose -p paladin-rpc-surface \
+            -f frontend/tests/e2e/docker-compose.test.yaml down -v

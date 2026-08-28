@@ -35,6 +35,33 @@ tasks:
       - go vet -tags=integration ./...
       - go vet -tags=e2e ./...
 
+  rpc-surface:
+    desc: "Run the whole-contract RPC gate against a live stack (brings one up)"
+    dir: "{{.USER_WORKING_DIR}}"
+    cmds:
+      # tests/integration/rpc_surface_test.go is the only check that covers all
+      # 142 RPC declarations at once, enumerated from the protobuf descriptors
+      # rather than a list someone maintains. It reaches the planes over HTTP
+      # and t.Skips when none answer — so for most of its life it has been
+      # skipping, silently, and a skipped gate reads like a passing one.
+      #
+      # It has a home in CI now (integration.yml), but CI is not a place this
+      # repository can rely on: Actions has been refusing to start jobs on
+      # billing grounds, so every workflow fails with zero steps executed. A
+      # gate that only exists in a pipeline nobody can run is not a gate. This
+      # task is the one that works on a laptop.
+      #
+      # PALADIN_RPC_SURFACE=1 turns the skip into a failure: an unreachable
+      # stack fails the task instead of being excused by it.
+      - cmd: |-
+          set -e
+          compose="docker compose -p paladin-rpc-surface -f frontend/tests/e2e/docker-compose.test.yaml"
+          cleanup() { $compose down -v >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          $compose up --wait
+          cd backend && PALADIN_RPC_SURFACE=1 go test -tags=integration -count=1 \
+            -timeout=10m -run 'Surface|RPC' ./tests/integration/...
+
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
     cmds:
