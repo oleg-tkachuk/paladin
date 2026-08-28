@@ -231,8 +231,14 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	stored, err := h.refresh.Get(ctx, jti)
 	if err != nil {
 		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
-		// the whole family and record it before rejecting.
+		// the whole family and record it before rejecting. UNLESS the token
+		// was superseded moments ago, which is not theft but a sibling that
+		// rotated first — see errRotatedBySibling.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
+			if any, gerr := h.refresh.GetAny(ctx, jti); gerr == nil && h.withinSupersessionGrace(any) {
+				h.onRefreshRaceLost(ctx, jti, userID)
+				return nil, errRotatedBySibling
+			}
 			h.onRefreshReuse(ctx, jti, userID, tenantID)
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
@@ -269,6 +275,13 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	// would make this token indistinguishable from one revoked by logout or by
 	// reuse detection, and the tolerance window could not exist.
 	if err := h.refresh.Supersede(ctx, jti); err != nil {
+		// Lost the race: a sibling superseded this token between our read and
+		// our write. The database decided it, so the decision holds across
+		// every replica and nothing had to be shared to reach it.
+		if errors.Is(err, authstore.ErrAlreadyRotated) {
+			h.onRefreshRaceLost(ctx, jti, userID)
+			return nil, errRotatedBySibling
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID)
@@ -888,6 +901,36 @@ func (h *Handler) onRefreshReplayed(ctx context.Context, jti, userID, tenantID u
 // rotating-refresh-token schemes, and it is the price of not keeping the same
 // state in every client that talks to this API.
 const supersessionGrace = 30 * time.Second
+
+// errRotatedBySibling is what a caller gets when its refresh token was traded
+// in by a concurrent request carrying the same cookie — two tabs opened
+// together, each running the console's session bootstrap.
+//
+// Aborted, not Unauthenticated, and the distinction is the whole point. The
+// session is fine; this particular request lost a race and can retry
+// differently. A client that reads Unauthenticated here signs the operator
+// out of a working session, which is exactly the bug this replaced.
+//
+// It is deliberately NOT a rotation. The loser does not get a refresh token —
+// it gets told to ask ExchangeAudience instead, which mints an access token
+// without touching the chain and already tolerates a just-superseded token.
+// So a stolen token that lost its race still cannot obtain one, and reuse
+// detection on this path stays exactly as strict as it was.
+var errRotatedBySibling = connect.NewError(connect.CodeAborted,
+	errors.New("refresh token was rotated by a concurrent request; derive an access token with ExchangeAudience instead"))
+
+// onRefreshRaceLost records a lost rotation race. Info, not Warn: this is an
+// expected outcome of two tabs bootstrapping together, and logging it as a
+// warning taught operators to ignore the log line that also reports theft.
+//
+// No audit event and no family revocation — nothing suspicious happened, and
+// the family is healthy by construction, since the winner is holding its new
+// head.
+func (h *Handler) onRefreshRaceLost(ctx context.Context, jti, userID uuid.UUID) {
+	logger.FromContext(ctx).Info("refresh token rotated by a concurrent request; caller told to exchange instead",
+		zap.String("user_id", userID.String()),
+		zap.String("jti", jti.String()))
+}
 
 // withinSupersessionGrace reports whether a revoked token was revoked BY
 // ROTATION and recently enough to still be honoured.

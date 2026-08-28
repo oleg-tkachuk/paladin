@@ -66,8 +66,19 @@ func (r *RefreshTokenRepo) Revoke(ctx context.Context, jti uuid.UUID) error {
 	return r.q.RevokeRefreshToken(ctx, pgUUID(jti))
 }
 
+// Supersede marks the token as traded in, but only if it is still live. Zero
+// rows updated means another caller got there first — the caller lost a
+// rotation race rather than presenting a stolen token, and ErrAlreadyRotated
+// says so.
 func (r *RefreshTokenRepo) Supersede(ctx context.Context, jti uuid.UUID) error {
-	return r.q.SupersedeRefreshToken(ctx, pgUUID(jti))
+	n, err := r.q.SupersedeRefreshToken(ctx, pgUUID(jti))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return authstore.ErrAlreadyRotated
+	}
+	return nil
 }
 
 // GetAny is Get without the revoked check — the caller decides what a revoked

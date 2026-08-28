@@ -659,7 +659,17 @@ type Querier interface {
 	// Rotation: the holder traded this token for a successor. Distinct from
 	// RevokeRefreshToken so a superseded token can be tolerated briefly (the
 	// holder is racing its own rotation) while a revoked one never is.
-	SupersedeRefreshToken(ctx context.Context, id pgtype.UUID) error
+	//
+	// `revoked = FALSE` is the load-bearing clause, and :execrows is why it can be:
+	// this UPDATE is how the database ARBITRATES a rotation race. Two requests
+	// carrying one live token both read it as valid — the reads cannot see each
+	// other — so without the guard both would supersede it and both would mint a
+	// successor, forking the family into two live chains that reuse detection can
+	// no longer reason about. With it, exactly one caller updates a row; the other
+	// gets zero and knows it lost. That verdict is atomic and it is in the
+	// database, which is what lets any number of BFF replicas rotate safely
+	// without sharing anything.
+	SupersedeRefreshToken(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Drops buckets older than the supplied age. Two buckets per active tenant
 	// are live at any moment; everything older is history nothing reads.
 	SweepTenantRateBuckets(ctx context.Context, olderThanMicros int64) (int64, error)

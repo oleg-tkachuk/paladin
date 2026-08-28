@@ -4,7 +4,6 @@ import { AUDIENCES } from "@/constants";
 
 // bff.ts caches the iam client and the in-flight rotation map in module scope,
 // so each test gets a pristine copy via resetModules + dynamic import.
-// dedupWithGrace itself is covered separately in bff.dedup.test.ts.
 
 const refreshToken = vi.fn();
 
@@ -220,49 +219,24 @@ describe("refreshIamChain", () => {
     );
   });
 
-  // The dedup key is (audience, token): a staggered sibling carrying the same
-  // cookie must join the cached rotation instead of replaying a consumed token.
-  it("collapses concurrent rotations of the same token+audience", async () => {
-    const bff = await loadBff();
-    refreshToken.mockResolvedValue(tokenPair());
-
-    const [a, b] = await Promise.all([
-      bff.refreshIamChain("rt-same", AUDIENCES.iam),
-      bff.refreshIamChain("rt-same", AUDIENCES.iam),
-    ]);
-
-    expect(refreshToken).toHaveBeenCalledTimes(1);
-    expect(a).toEqual(b);
-  });
-
-  // ...but a different audience is a genuinely different exchange and must not
-  // be served the first one's result.
-  it("does not collapse across audiences", async () => {
+  // This function used to collapse concurrent rotations through an in-process
+  // dedup map, so two callers produced one RefreshToken call. It does not any
+  // more, and the assertion is inverted deliberately: every call reaches the
+  // server, because the server is the only place that can decide a rotation
+  // race in a way two replicas agree on. The loser gets Aborted and
+  // /api/auth/me derives an access token instead — see its own tests.
+  it("sends every rotation to the server rather than collapsing them", async () => {
     const bff = await loadBff();
     refreshToken.mockResolvedValue(tokenPair());
 
     await Promise.all([
       bff.refreshIamChain("rt-same", AUDIENCES.iam),
-      bff.refreshIamChain("rt-same", AUDIENCES.data),
+      bff.refreshIamChain("rt-same", AUDIENCES.iam),
     ]);
 
     expect(refreshToken).toHaveBeenCalledTimes(2);
   });
 
-  it("does not collapse across different refresh tokens", async () => {
-    const bff = await loadBff();
-    refreshToken.mockResolvedValue(tokenPair());
-
-    await Promise.all([
-      bff.refreshIamChain("rt-a", AUDIENCES.iam),
-      bff.refreshIamChain("rt-b", AUDIENCES.iam),
-    ]);
-
-    expect(refreshToken).toHaveBeenCalledTimes(2);
-  });
-
-  // A failed rotation must not be cached, or a transient blip would keep
-  // serving the rejection for the whole grace window.
   it("retries after a failed rotation", async () => {
     const bff = await loadBff();
     refreshToken

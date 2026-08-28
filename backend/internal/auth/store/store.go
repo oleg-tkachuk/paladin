@@ -88,6 +88,13 @@ type RefreshTokenRepository interface {
 	// on purpose: revocation for cause must never be tolerated, while a token
 	// its own holder just traded in may be, briefly, by the non-consuming
 	// paths — see ExchangeAudience.
+	//
+	// Returns ErrAlreadyRotated when the token was ALREADY superseded or
+	// revoked, which is how a rotation race is decided: the update is
+	// conditional on the row still being live, so exactly one of two
+	// concurrent callers wins and the other is told so. The loser has not
+	// found a stolen token — it holds a token a sibling traded in moments
+	// ago — so it must not trigger reuse detection.
 	Supersede(ctx context.Context, jti uuid.UUID) error
 
 	// GetAny returns the row whether or not it is revoked. Get refuses a
@@ -127,6 +134,12 @@ var (
 	ErrVersionMismatch = errors.New("auth/store: resource_version mismatch")
 	ErrSubjectTaken    = errors.New("auth/store: subject already exists in tenant")
 	ErrTokenRevoked    = errors.New("auth/store: refresh token revoked")
+	// ErrAlreadyRotated means a conditional Supersede matched no row: the
+	// token was already traded in (or revoked) by the time this caller got
+	// there. Distinct from ErrTokenRevoked, which describes a token found
+	// revoked on READ; this one describes losing a WRITE race, and the
+	// difference matters because only the latter is provably concurrent.
+	ErrAlreadyRotated = errors.New("auth/store: refresh token already rotated")
 )
 
 // Register the IAM store sentinels with the central error→Connect-code mapper

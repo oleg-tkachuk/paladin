@@ -94,34 +94,33 @@ export function clearSessionCookie(res: NextResponse) {
   res.cookies.set(SESSION_COOKIE_NAME, "", baseCookieAttrs(0));
 }
 
-// ────────────────────────── RefreshToken dedup ──────────────────────────
+// ────────────────────────── RefreshToken ──────────────────────────
 
 /**
  * AuthService.RefreshToken rotates the refresh chain — the supplied token is
  * consumed and a new one is issued — so two concurrent calls carrying the same
- * token are catastrophic: the loser presents a token the server has already
- * consumed, which is indistinguishable from RFC-6819 reuse, and the whole
- * family is revoked. The operator is signed out of a perfectly valid session.
+ * token cannot both succeed. One rotates; the other must be told, not guessed
+ * at.
  *
- * ONE route rotates now: /api/auth/me, once per page load. /api/auth/exchange,
- * /api/auth/memberships and /api/auth/switch-tenant all used to rotate as
- * well — each only wanted a short-lived iam access token, which
- * ExchangeAudience mints without consuming anything. Four rotations of one
- * cookie per page load became one, and the race this dedup was written for —
- * /me against the transport's early /exchange — cannot occur at all.
+ * This file used to do the guessing. A dedup map collapsed concurrent
+ * rotations and a successor index let a request follow a chain a sibling had
+ * advanced. Both lived in process memory, and that is the entire reason the
+ * console was pinned to a single replica: two replicas share neither, so a
+ * request routed to the one that did not rotate found nothing to follow and
+ * signed the operator out of a valid session.
  *
- * What the dedup still covers is a genuinely concurrent SECOND page load
- * carrying the same cookie: two tabs opened together, each firing its own /me.
- * That one is real, and it is also the reason this process is still pinned to
- * a single replica — the map is in memory, so two replicas do not share it.
+ * Neither is needed now, because neither question is the client's to answer:
  *
- * Moving it to the server is the obvious answer and does not work as stated:
- * refresh tokens are stored hashed, so a server asked to resolve a
- * just-superseded token cannot hand back its successor's raw value — nobody
- * has it but the caller that received it. What the server CAN do is rotate
- * forward from the current head and return that; see BACKLOG before reaching
- * for Redis, which would buy multi-replica by adding a dependency whose
- * failure mode is the outage it was meant to prevent.
+ *   - Who won? The database. SupersedeRefreshToken is conditional on the row
+ *     still being live, so exactly one caller updates it and the other is told
+ *     it lost (Aborted). Atomic, and shared by every replica already.
+ *   - What does the loser do? Ask for what it actually wanted. Only
+ *     /api/auth/me rotates, and it only rotates to obtain an iam access token;
+ *     ExchangeAudience mints one from a just-superseded token without
+ *     consuming anything. See mintIamAccess in that route.
+ *
+ * So this function is a thin wrapper again, and the process holds no
+ * cross-request state at all.
  */
 
 type RotateResult = {
@@ -131,80 +130,23 @@ type RotateResult = {
   refreshExpiresInSeconds: number;
 };
 
-const inflightRotations = new Map<string, Promise<RotateResult>>();
-
-// How long a SUCCESSFUL rotation's result is retained in the dedup map AFTER it
-// settles. Deleting on settle would only collapse callers that overlap the
-// in-flight window, and near-simultaneous requests carrying one cookie tend to
-// stagger rather than overlap: the first rotates RT1→RT2 and clears the entry,
-// the second then replays the now-consumed RT1 and the backend revokes the
-// family. Retaining the resolved pair briefly lets the straggler join the
-// cached promise and receive RT2 instead. The key is (audience, token), so the
-// next legitimate rotation uses a different key and is unaffected; a genuine
-// replay outside the window still reaches the backend and is detected.
-const ROTATION_RESULT_GRACE_MS = 30_000;
-
-// dedupWithGrace runs factory at most once per key for concurrent callers AND
-// for callers that arrive within graceMs after a SUCCESSFUL settle. Failures
-// are never cached — a rejected attempt is removed immediately so the next
-// caller retries and a genuine reuse/expiry still surfaces. Exported for tests.
-export function dedupWithGrace<T>(
-  map: Map<string, Promise<T>>,
-  key: string,
-  graceMs: number,
-  factory: () => Promise<T>,
-): Promise<T> {
-  const existing = map.get(key);
-  if (existing) return existing;
-  const p = factory();
-  map.set(key, p);
-  p.then(
-    () => {
-      const timer = setTimeout(() => map.delete(key), graceMs);
-      (timer as { unref?: () => void }).unref?.();
-    },
-    () => {
-      map.delete(key);
-    },
-  );
-  return p;
-}
-
-// The rotation-successor index that used to live here is gone. It existed so
-// an ExchangeAudience whose token a sibling rotation had just consumed could
-// follow the chain forward — knowledge this process kept because the server
-// could not tell "rotated a moment ago by its own holder" from "revoked for
-// cause". It can now (refresh_tokens.superseded_at), and it honours the former
-// inside a short window, so no client has to remember rotations at all.
-//
-// That fix plus the removal of three redundant rotations is what took this
-// file from two shared-state mechanisms to one.
-
 export async function refreshIamChain(
   refreshToken: string,
   audience: Audience,
 ): Promise<RotateResult> {
-  const p = dedupWithGrace(
-    inflightRotations,
-    `${audience}::${refreshToken}`,
-    ROTATION_RESULT_GRACE_MS,
-    async () => {
-      const res = await iamAuthClient().refreshToken({
-        refreshToken,
-        requestedAudience: audience,
-      });
-      if (!res.tokens) {
-        throw new Error("IAM RefreshToken returned no token pair");
-      }
-      return {
-        accessToken: res.tokens.accessToken,
-        refreshToken: res.tokens.refreshToken,
-        accessExpiresInSeconds: Number(res.tokens.accessExpiresInSeconds),
-        refreshExpiresInSeconds: Number(res.tokens.refreshExpiresInSeconds),
-      };
-    },
-  );
-  return p;
+  const res = await iamAuthClient().refreshToken({
+    refreshToken,
+    requestedAudience: audience,
+  });
+  if (!res.tokens) {
+    throw new Error("IAM RefreshToken returned no token pair");
+  }
+  return {
+    accessToken: res.tokens.accessToken,
+    refreshToken: res.tokens.refreshToken,
+    accessExpiresInSeconds: Number(res.tokens.accessExpiresInSeconds),
+    refreshExpiresInSeconds: Number(res.tokens.refreshExpiresInSeconds),
+  };
 }
 
 // ────────────────────────── DTO shaping ──────────────────────────

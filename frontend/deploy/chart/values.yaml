@@ -1,3 +1,9 @@
+# The console is stateless. It held per-process refresh-token bookkeeping
+# once, and the chart refused to render a second replica because of it; the
+# rotation race that state papered over is decided in the database now
+# (SupersedeRefreshToken is conditional, so exactly one caller wins), so
+# scaling this out is a plain capacity decision again. One is simply the
+# sensible default.
 replicaCount: 1
 metadata:
   version: ""

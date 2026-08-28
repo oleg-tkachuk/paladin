@@ -2088,45 +2088,6 @@ of the pipeline._
 
 ---
 
-## The BFF's rotation bookkeeping is per-process
-
-- **Status:** Deferred, and now down to ONE mechanism guarding one scenario.
-  The chart still refuses replicaCount > 1 and any autoscaling that could
-  exceed one.
-- **Reason:** Two things once made concurrent token work safe here. The
-  successor index went first (2026-08-28): the server can now tell "rotated a
-  moment ago by its own holder" from "revoked for cause"
-  (`refresh_tokens.superseded_at`) and ExchangeAudience honours the former
-  inside 30s, so no client keeps a rotation index.
-  Then the rotations themselves went from four to one. `/api/auth/exchange`,
-  `/api/auth/memberships` and `/api/auth/switch-tenant` each called
-  RefreshToken — consuming the chain — when all three only wanted a
-  short-lived iam access token, which ExchangeAudience mints without consuming
-  anything (`assertAudienceAllowed` permits the iam audience outright, so the
-  iam case never needed the rotation it was written with). `/api/auth/me` is
-  the only rotation left, once per page load. The race that motivated the
-  dedup — /me against the transport's early /exchange, same cookie, browser
-  unable to update it in between — cannot occur now.
-  What the dedup still covers: two tabs opened together, each firing its own
-  /me with the same cookie. That is real, and being in memory it is what still
-  pins the console to one replica.
-- **Definition of Done:** the two-tab case survives without per-process state.
-  Note what does NOT work, so nobody spends the afternoon: the server cannot
-  resolve a just-superseded token to its successor and hand that back, because
-  refresh tokens are stored hashed — only the caller that received the
-  successor has its raw value. What the server CAN do is treat a
-  superseded-within-grace token presented to RefreshToken as a request to
-  rotate forward from the current head, returning a fresh descendant. That
-  keeps single-use semantics (each stale presentation still burns a link),
-  self-heals when the cookie writes land out of order, and needs no shared
-  cache. It is also a real change to reuse-detection semantics and deserves to
-  be decided deliberately rather than slipped in.
-- **Blockers:** none technical. Redis remains the wrong answer: it buys
-  multi-replica by adding a dependency whose failure mode is the outage it was
-  meant to prevent.
-
----
-
 ## Streaming RPCs are charged one rate-limit token at open
 
 - **Status:** Deferred (matches today's streams; revisit when one is chatty).

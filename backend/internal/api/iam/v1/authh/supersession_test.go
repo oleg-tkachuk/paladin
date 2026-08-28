@@ -139,3 +139,128 @@ func TestRefreshTokenRecordsSupersession(t *testing.T) {
 		t.Fatalf("superseded = %v, want the rotated jti %v — a bare Revoke leaves superseded_at NULL and the grace window never opens", refresh.superseded, jti)
 	}
 }
+
+// ─── the rotation race ──────────────────────────────────────────────────────
+//
+// Two tabs opened together each run the console's session bootstrap, and both
+// carry the same cookie — the browser cannot update it between two requests
+// already in flight. Both therefore present the same live refresh token to
+// RefreshToken, both read it as valid (the reads cannot see each other), and
+// one of them is about to lose.
+//
+// The BFF used to hold an in-process map so the loser could join the winner's
+// result. That map is why the console was pinned to a single replica: two
+// replicas do not share it, and the loser routed to the wrong one was signed
+// out of a working session. The verdict belongs in the database, which is the
+// one thing every replica already shares.
+
+func TestRefreshTokenLoserOfARotationRaceIsToldToExchange(t *testing.T) {
+	userID, tenantID := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{
+		getTok: authstore.RefreshToken{
+			JTI: uuid.New(), FamilyID: uuid.New(), UserID: userID, TenantID: tenantID,
+			ExpiresAt: time.Now().Add(time.Hour),
+		},
+		// The read succeeded — then the conditional UPDATE matched nothing,
+		// because a sibling superseded the row in between.
+		supersedeErr: authstore.ErrAlreadyRotated,
+	}
+	h := exchangeHandler(t, refresh, userID, tenantID)
+
+	_, err := h.RefreshToken(context.Background(), RefreshInput{RefreshToken: "rt"})
+	if err == nil {
+		t.Fatal("a lost race was treated as a successful rotation")
+	}
+	// Aborted, not Unauthenticated: the session is valid and the caller can
+	// retry differently. Unauthenticated here is what signed operators out.
+	if code(err) != connect.CodeAborted {
+		t.Fatalf("code = %v, want Aborted", code(err))
+	}
+	if refresh.revokeFamilies != 0 {
+		t.Error("revoked the family over a lost race — the loser holds a token its own sibling traded in, not a stolen one")
+	}
+	if refresh.inserts != 0 {
+		t.Error("minted a successor after losing the race — the family would have forked into two live chains")
+	}
+}
+
+func TestRefreshTokenReplayOfAJustSupersededTokenIsARaceNotTheft(t *testing.T) {
+	// Same race, arriving a moment later: the sibling's UPDATE has already
+	// landed, so the read itself fails. The answer must be identical — this
+	// is timing, not a different event.
+	userID, tenantID := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{
+		getErr: authstore.ErrTokenRevoked,
+		anyTok: supersededToken(userID, tenantID, 2*time.Second),
+	}
+	h := exchangeHandler(t, refresh, userID, tenantID)
+
+	_, err := h.RefreshToken(context.Background(), RefreshInput{RefreshToken: "rt"})
+	if code(err) != connect.CodeAborted {
+		t.Fatalf("code = %v, want Aborted", code(err))
+	}
+	if refresh.revokeFamilies != 0 {
+		t.Error("revoked the family for a token superseded seconds ago")
+	}
+}
+
+func TestRefreshTokenStillRevokesTheFamilyOnAGenuineReplay(t *testing.T) {
+	// The property the race handling must not cost: a token revoked for cause
+	// — logout, or an earlier reuse detection — has no superseded_at, and a
+	// token superseded long ago is outside the window. Both are theft signals
+	// and both must still kill the family.
+	userID, tenantID := uuid.New(), uuid.New()
+	base := authstore.RefreshToken{
+		JTI: uuid.New(), FamilyID: uuid.New(), UserID: userID, TenantID: tenantID,
+		ExpiresAt: time.Now().Add(time.Hour), Revoked: true,
+	}
+	long := time.Now().Add(-10 * time.Minute)
+
+	for _, tc := range []struct {
+		name string
+		tok  authstore.RefreshToken
+	}{
+		{"revoked for cause, never superseded", base},
+		{"superseded far outside the grace window", func() authstore.RefreshToken {
+			t := base
+			t.SupersededAt = &long
+			return t
+		}()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refresh := &fakeRefresh{getErr: authstore.ErrTokenRevoked, anyTok: tc.tok}
+			h := exchangeHandler(t, refresh, userID, tenantID)
+
+			_, err := h.RefreshToken(context.Background(), RefreshInput{RefreshToken: "rt"})
+			if code(err) != connect.CodeUnauthenticated {
+				t.Fatalf("code = %v, want Unauthenticated", code(err))
+			}
+			if refresh.revokeFamilies != 1 {
+				t.Errorf("family revocations = %d, want 1 — reuse detection went quiet", refresh.revokeFamilies)
+			}
+		})
+	}
+}
+
+func TestRefreshTokenWinnerOfTheRaceRotatesNormally(t *testing.T) {
+	userID, tenantID := uuid.New(), uuid.New()
+	refresh := &fakeRefresh{getTok: authstore.RefreshToken{
+		JTI: uuid.New(), FamilyID: uuid.New(), UserID: userID, TenantID: tenantID,
+		ExpiresAt: time.Now().Add(time.Hour),
+	}}
+	h := exchangeHandler(t, refresh, userID, tenantID)
+
+	out, err := h.RefreshToken(context.Background(), RefreshInput{RefreshToken: "rt"})
+	if err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if out.RefreshToken == "" {
+		t.Error("winner got no successor")
+	}
+	if len(refresh.superseded) != 1 {
+		t.Errorf("supersedes = %d, want 1", len(refresh.superseded))
+	}
+	if refresh.revokeFamilies != 0 {
+		t.Error("revoked the family on a normal rotation")
+	}
+}

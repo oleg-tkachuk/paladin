@@ -104,6 +104,9 @@ type fakeRefresh struct {
 	anyTok         authstore.RefreshToken
 	anyErr         error
 	superseded     []uuid.UUID
+	// supersedeErr stands in for a conditional UPDATE that matched no row —
+	// the database's verdict that this caller lost a rotation race.
+	supersedeErr error
 }
 
 func (f *fakeRefresh) Insert(context.Context, authstore.RefreshToken) error { f.inserts++; return nil }
@@ -115,6 +118,9 @@ func (f *fakeRefresh) Revoke(context.Context, uuid.UUID) error { return nil }
 // supersedes records rotation-supersession separately from revocation for
 // cause — the distinction ExchangeAudience's grace window turns on.
 func (f *fakeRefresh) Supersede(_ context.Context, jti uuid.UUID) error {
+	if f.supersedeErr != nil {
+		return f.supersedeErr
+	}
 	f.superseded = append(f.superseded, jti)
 	return nil
 }
