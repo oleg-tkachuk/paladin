@@ -84,7 +84,16 @@ x-paladin-base: &paladin-base
     PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
     PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
     # ── postgres connection ──────────────────────────────────
-    PALADIN_DATABASE_DSN: postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable
+    # Runtime connects as paladin_app (no BYPASSRLS) so the suite actually
+    # enforces row-level security — see backend/configs/compose.yaml for why
+    # that matters. Migrations still run as the owner via migrate_dsn there.
+    #
+    # The variable used to be PALADIN_DATABASE_DSN, which is not a config path:
+    # koanf resolves PALADIN_* against the known key set and there is no
+    # `database` block — it is `datastores.postgres.dsn`. So that line had
+    # never overridden anything; the value came from the config file all
+    # along, and the two agreed by coincidence.
+    PALADIN_DATASTORES_POSTGRES_DSN: postgres://paladin_app:paladin_app@postgres:5432/paladin?sslmode=disable
 
 services:
   # S3-compatible storage. Pinned to the same MinIO release the CI
@@ -182,9 +191,48 @@ services:
     container_name: paladin-e2e-migrate
     restart: "no"
     command: ["migrate", "--config", "/app/configs/compose.yaml"]
+    environment:
+      # The owner, for this service only. `paladin migrate` opens the runtime
+      # pool before it touches migrate_dsn, and paladin_app cannot log in until
+      # 002 has created it and promote-app-role has given it a password — so
+      # pointing the runtime DSN at the restricted role here is a deadlock,
+      # not a tightening.
+      PALADIN_DATASTORES_POSTGRES_DSN: postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
+
+  # One-shot: gives paladin_app a way to log in.
+  #
+  # 002 creates the role NOLOGIN — production provisions its credential out of
+  # band — so something has to bridge that here. The integration harness does
+  # the same thing (pgharness.promoteAppRole); this is the compose equivalent,
+  # and it is what lets every service below connect as the restricted role
+  # instead of as the owner. Running as the owner is why this stack enforced
+  # no RLS policy at all, and why an RLS migration could pass the whole suite
+  # and then refuse every login on the cluster.
+  promote-app-role:
+    image: postgres:16
+    container_name: paladin-e2e-promote-app-role
+    restart: "no"
+    environment:
+      PGPASSWORD: paladin
+    # dev-only credential, same class as everything else in this file.
+    command:
+      - psql
+      - -h
+      - postgres
+      - -U
+      - paladin
+      - -d
+      - paladin
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - ALTER ROLE paladin_app WITH LOGIN PASSWORD 'paladin_app';
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   # One-shot: provisions the platform admin user (subject =
   # e2e-admin@local, password = e2e-not-a-secret-2026 from env
@@ -195,7 +243,7 @@ services:
     restart: "no"
     command: ["bootstrap", "--config", "/app/configs/compose.yaml"]
     depends_on:
-      migrate:
+      promote-app-role:
         condition: service_completed_successfully
 
   api:

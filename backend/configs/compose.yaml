@@ -56,8 +56,25 @@ admin:
 
 datastores:
   postgres:
-    dsn: "postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable"
-    migrate_dsn: ""    # dev path: same role for runtime + migrate
+    # The runtime connects as paladin_app, NOT as the owner — the same split
+    # production uses, and the reason this file no longer says "dev path: same
+    # role for runtime + migrate".
+    #
+    # It used to. paladin_app has no BYPASSRLS and the owner effectively does
+    # (FORCE aside, it owns every table), so with the owner in this line the
+    # stack never enforced a single row-level-security policy. That is not a
+    # small blind spot: a migration adding RLS to the auth tables passed 108
+    # e2e tests here and then refused every login on the cluster, because the
+    # cluster is the only place that runs as paladin_app. The suite could not
+    # have caught it. Now it can.
+    #
+    # The role is created NOLOGIN by 002 and given a password by the
+    # promote-app-role step in docker-compose.test.yaml, which is where the
+    # dev-only credential lives.
+    dsn: "postgres://paladin_app:paladin_app@postgres:5432/paladin?sslmode=disable"
+    # DDL needs the owner. Empty would fall back to `dsn`, which can no longer
+    # create anything.
+    migrate_dsn: "postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable"
     pool: { max_conns: 10, min_conns: 1, max_conn_lifetime: 30m, max_conn_idle_time: 5m }
     timeouts: { connect: 5s, statement: 30s }
     healthcheck_period: 30s

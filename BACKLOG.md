@@ -986,32 +986,11 @@ open deliberately — each notes why._
   reads AND writes, or a comment in the migration saying why it cannot have
   one; the allow-list entry is deleted, which is the visible act of closing
   the gap.
-- **Blockers:** the verification gap below. Do not attempt this again until
-  the suite can exercise RLS — 014 passed 108 compose e2e tests and a hand
-  audit, and still broke every login on the cluster.
-
-### The e2e suite cannot exercise RLS at all
-
-- **Status:** Open. Surfaced by 014/015 the hard way.
-- **Reason:** The compose stack connects to Postgres as the owning role, so
-  the application never runs as `paladin_app` there and row-level security is
-  never enforced against it. A full green run of the compose e2e — 108 tests —
-  therefore says nothing whatsoever about RLS. That is exactly what happened:
-  014 was verified by hand against a live database AND by a clean 108-test
-  run, and the first thing the cluster did with it was refuse every login.
-  The cluster runs as `paladin_app`, which is why it caught what nothing else
-  could. That makes a 50-minute cluster run the only gate for a whole class of
-  change, and it runs after the fact.
-- **Definition of Done:** one of —
-  - the compose stack's app DSN uses a `paladin_app`-equivalent role, so the
-    existing suite exercises policies (closest to production, and it would
-    have caught this in four minutes rather than fifty); or
-  - an integration test that drives the real auth paths — login, rotation,
-    switch-tenant, memberships — over a pool running as `paladin_app`, which
-    is narrower but needs no change to the compose topology.
-  The second is cheaper and the first is worth more; they are not exclusive.
-- **Blockers:** none. The compose stack already creates the roles the
-  migrations define — the app simply does not use them.
+- **Blockers:** none any more. The compose stack now connects as `paladin_app`
+  rather than as the owner, so the suite enforces policies — proven the hard
+  way: with the 014 image still in place, the new wiring failed at bootstrap
+  in seconds with the same `new row violates row-level security policy` that
+  had taken a 50-minute cluster run to surface.
 
 ### Index candidates considered and rejected (2026-08-18 audit)
 
