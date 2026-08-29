@@ -375,6 +375,19 @@ cedar:
 # variables changed nothing, which is worse than not offering them.
 # PALADIN_{ADMIN,DATA,IAM}_URL do still mean something — to the console
 # BFF, a different process reading its own environment.
+# ─── ingest ────────────────────────────────────────────────────────────────
+#
+# The storage-event receiver role (`serve ingest`). Deliberately NOT spelled
+# out here: it is opt-in and its shape depends entirely on the driver, so the
+# values belong in the per-overlay values file that also carries the broker
+# URL and the shared secret.
+#
+# Every knob still has a default — internal/config/schema.cue declares the
+# block, so an overlay that sets only `enabled` and `driver` gets a working
+# receiver. That was not true before: with no schema block, dedup_ttl and
+# reaper_interval fell to zero, and a zero reaper_interval means the reaper
+# never runs and `ingested_events` grows without bound.
+
 mcp:
   upstreams:
     admin_url: "http://localhost:8090"

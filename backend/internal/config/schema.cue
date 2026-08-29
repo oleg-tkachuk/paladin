@@ -439,6 +439,97 @@ cedar: {
   canonical_collection_euid: bool | *false
 }
 
+// ingest — the storage-event receiver role (`serve ingest`).
+//
+// This block was missing entirely, and its absence was not neutral. With no
+// CUE declaration and nothing in configs/config.yaml, every knob fell back to
+// its Go zero value — including dedup_ttl and reaper_interval, which
+// serve_ingest passes straight through with no fallback and which
+// worker.RunTicker reads as "disabled" when <= 0. So an ingest deployment
+// that did not spell both out never reaped `ingested_events` and the table
+// grew without bound, while the struct's doc comments promised "Default 24h"
+// and "Default 1h" — true of nothing.
+//
+// The defaults below are those comments, finally made real. Declaring them IS
+// a behaviour change for such a deployment: the reaper starts running. That
+// is the intended fix, and it is why this landed on its own rather than with
+// the drift tests that found it.
+ingest: {
+  // Gates the whole subsystem; `serve ingest` fails fast when false.
+  enabled: bool | *false
+  // Which transport adapter starts. Required when enabled.
+  driver:  "webhook" | "nats" | "rabbitmq" | "sqs" | *"webhook"
+
+  // DedupTTL — how long ingested_events rows are retained. Must exceed the
+  // longest broker re-delivery window expected.
+  dedup_ttl:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
+  // ReaperInterval — cadence of the reaper that drops rows older than
+  // dedup_ttl. Zero would disable it, which is what the gap amounted to.
+  reaper_interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+
+  // Honoured only when driver=="webhook".
+  webhook: {
+    addr: string | *"0.0.0.0:8100"
+    // HMAC key the source signs the body with. Empty in dev (the publisher
+    // signs with "" and the check trivially passes); production sets it,
+    // normally through shared_secret_ref.
+    shared_secret:      string | *""
+    shared_secret_ref?: #SecretRef
+    signature_header:   string | *"X-Paladin-Signature"
+    max_body_bytes:     int & >= 1 | *1048576
+    // Slowloris hardening, mirroring the data plane's HTTP server.
+    read_header_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+    read_timeout:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+    write_timeout:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+    idle_timeout:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"60s"
+  }
+
+  // Honoured only when driver=="nats".
+  nats: {
+    url:           string | *""
+    subject:       string | *""
+    queue_group:   string | *""
+    jetstream:     bool | *false
+    durable_name:  string | *""
+    source_format: string | *""
+    token:         string | *""
+    token_ref?:    #SecretRef
+    // Spelled out rather than shared: schema.cue has no #TLS definition, and
+    // inventing one here would change how every other block validates.
+    tls: {
+      enabled:              bool   | *false
+      cert_path:            string | *""
+      key_path:             string | *""
+      ca_path:              string | *""
+      server_name:          string | *""
+      insecure_skip_verify: bool   | *false
+    }
+  }
+
+  // Honoured only when driver=="rabbitmq".
+  rabbitmq: {
+    url:            string | *""
+    url_ref?:       #SecretRef
+    queue:          string | *""
+    prefetch_count: int & >= 0 | *0
+    source_format:  string | *""
+  }
+
+  // Honoured only when driver=="sqs". The canonical AWS S3 → SQS path.
+  sqs: {
+    queue_url:          string | *""
+    region:             string | *""
+    role_arn:           string | *""
+    endpoint:           string | *""
+    max_messages:       int & >= 1 & <= 10 | *10
+    wait_time_seconds:  int & >= 0 & <= 20 | *20
+    visibility_timeout: int & >= 0 | *30
+    // SNS-wrapped notifications arrive as an envelope around the S3 event.
+    unwrap_sns:    bool | *false
+    source_format: string | *""
+  }
+}
+
 mcp: {
   upstreams: {
     admin_url: string | *"http://localhost:8090"

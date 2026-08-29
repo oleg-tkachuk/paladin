@@ -277,12 +277,9 @@ storage:
 // The test exists so a NEW gap fails loudly instead of joining this one
 // unnoticed.
 var schemaGapAllowlist = map[string]string{
-	"ingest": "no `ingest:` block in schema.cue AND none in configs/config.yaml, " +
-		"so every knob falls back to a Go zero value. dedup_ttl and " +
-		"reaper_interval are read raw by serve_ingest with no fallback, and " +
-		"RunTicker treats interval<=0 as 'disabled' — so an ingest deployment " +
-		"that doesn't spell them out silently never reaps ingested_events. " +
-		"See BACKLOG.",
+	// Empty, and it should stay that way. `ingest` was the sole entry and is
+	// declared now; the test refuses a block that is both declared and
+	// allowlisted, so an entry cannot outlive the gap it describes.
 }
 
 // TestGoBlocksAreDeclaredInSchema is the mirror of
@@ -508,4 +505,42 @@ func zeroValuedPaths(v reflect.Value, prefix string) []string {
 		}
 	}
 	return out
+}
+
+// The gap this closes was not "a block is missing from the schema" — it was
+// what that silence did. With no `ingest:` declaration and none in
+// configs/config.yaml, every knob took its Go zero value, and two of them are
+// load-bearing: serve_ingest passes dedup_ttl and reaper_interval straight
+// through with no fallback, and worker.RunTicker reads an interval <= 0 as
+// "disabled". So the reaper never ran and `ingested_events` grew without
+// bound, while the struct comments promised "Default 24h" and "Default 1h".
+//
+// Declaring the block is only half the fix; the half worth a test is that the
+// values actually arrive. A schema block with a typo'd key name would satisfy
+// the drift test above and still leave the zero values in place.
+func TestIngestDefaultsReachTheStruct(t *testing.T) {
+	cfg, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("load the shipped config: %v", err)
+	}
+	if got := cfg.Ingest.DedupTTL; got != 24*time.Hour {
+		t.Errorf("dedup_ttl = %v, want 24h — a zero here retains nothing", got)
+	}
+	if got := cfg.Ingest.ReaperInterval; got != time.Hour {
+		t.Errorf("reaper_interval = %v, want 1h — a zero here disables the reaper", got)
+	}
+	// One value per sub-block, enough to catch a block that parsed but landed
+	// nowhere.
+	if got := cfg.Ingest.Webhook.Addr; got == "" {
+		t.Error("webhook.addr is empty; the webhook driver would bind nothing")
+	}
+	if got := cfg.Ingest.Webhook.SignatureHeader; got != "X-Paladin-Signature" {
+		t.Errorf("signature_header = %q, want X-Paladin-Signature", got)
+	}
+	if got := cfg.Ingest.Webhook.MaxBodyBytes; got <= 0 {
+		t.Errorf("max_body_bytes = %d; a zero cap rejects every payload", got)
+	}
+	if got := cfg.Ingest.SQS.MaxMessages; got <= 0 {
+		t.Errorf("sqs.max_messages = %d; a zero would long-poll for nothing", got)
+	}
 }

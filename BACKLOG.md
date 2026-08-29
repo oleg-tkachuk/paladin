@@ -996,32 +996,6 @@ open deliberately — each notes why._
 
 ## Configuration
 
-### `ingest:` has no CUE schema block — its knobs run on Go zero values
-
-- **Status:** Deferred (real gap, surfaced by the config-drift tests).
-- **Reason:** `Config.Ingest` is a top-level block in types.go, but
-  `internal/config/schema.cue` never declares it and `configs/config.yaml`
-  never sets it. So nothing supplies defaults: every field falls back to its
-  Go zero value. Two of those matter — `cmd/server/serve_ingest.go` passes
-  `cfg.Ingest.ReaperInterval` and `cfg.Ingest.DedupTTL` straight through with
-  no fallback, and `worker.RunTicker` treats `interval <= 0` as "disabled".
-  An ingest deployment that doesn't spell both out therefore never reaps
-  `ingested_events`, and the table grows without bound. The doc comments on
-  the struct say "Default 24h" / "Default 1h", which is true of nothing.
-  Recorded in `schemaGapAllowlist` (internal/config/drift_test.go) so the
-  gap is explicit and a NEW one fails the build.
-- **Definition of Done:**
-  - `ingest:` declared in schema.cue with the defaults the struct comments
-    already promise, mirroring how `worker:` / `dispatcher:` are declared.
-  - The allowlist entry deleted — the test errors if a block is declared AND
-    still allowlisted, so it cannot rot.
-  - Either a documented `ingest:` block in configs/config.yaml, or a note
-    there saying the role is opt-in and configured per-overlay.
-- **Blockers:** none. Deliberately not done in the same pass as the drift
-  tests: injecting defaults where zero values are live today is a behaviour
-  change and belongs in its own commit, measured against a deploy that
-  actually runs the ingest role.
-
 ### MCP `allow_write` was a dead knob that read as a security control
 
 - **Status:** Deferred (schema entry removed; the question it raises is open).
