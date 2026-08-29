@@ -2035,6 +2035,37 @@ of the pipeline._
 
 ---
 
+## The app's wiring is checked statically, not at runtime
+
+- **Status:** Deferred (the static half is DONE — internal/app/wiring_test.go).
+- **Reason:** Every handler takes its event producer through an optional,
+  nil-safe setter, so a deleted wiring line compiles, runs, and silently stops
+  the events. Measured: removing `objH.SetEventProducer(apiDispatcher)` left
+  `go build` clean and every unit AND integration test green, while Paladin
+  would stop telling any subscriber that objects were uploaded, deleted or
+  purged. The integration lifecycle tests cannot catch it — they wire a
+  producer onto a handler they construct themselves, proving the mechanism
+  works once connected, never that the app connects it.
+  `wiring_test.go` closes the measured failure: it discovers the types that
+  define SetEventProducer, finds every handler the app builds from one, and
+  requires the call. Verified by removing each of the ten wiring lines in turn
+  — 10/10 caught. It cannot tell a MIS-wired producer from a correct one, only
+  a missing one.
+- **Definition of Done:** the runtime version. Assemble the real muxes through
+  `app.AssembleAPIMuxes`, make one ordinary request, require the
+  `event_deliveries` row. That also covers wiring to the wrong dispatcher, and
+  the quota and version hooks, which have the same nil-safe shape.
+- **Blockers:** none conceptual; one practical, already scouted. The assembly
+  itself works against a test Postgres — `config.Load` on the shipped
+  `configs/config.yaml` with the DSN overridden, plus one declared storage
+  backend (constructing an S3 client dials nothing), gets as far as serving
+  the mux. The RPC then hangs: something in the shipped middleware chain waits
+  on a dependency a test environment does not have. Finding and trimming that
+  is the remaining work — do not rebuild the config field by field, which
+  drifts from production the moment a default moves.
+
+---
+
 ## Actions will not start a job: the account, not the code
 
 - **Status:** Blocked (account action — outside this repository). Confirmed
