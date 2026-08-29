@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	authh "github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
 	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
@@ -459,5 +460,67 @@ func TestPaths(t *testing.T) {
 	}
 	if p := paths(&fieldmaskpb.FieldMask{}); len(p) != 0 {
 		t.Errorf("an empty mask must yield no paths, got %v", p)
+	}
+}
+
+// ─── user settings projection ───────────────────────────────────────────────
+
+func TestSettingsToProtoKeepsEachStringInItsOwnField(t *testing.T) {
+	// Timezone, Locale and Theme are three adjacent strings that the compiler
+	// cannot tell apart. Crossed, an operator gets someone's idea of a theme
+	// as their timezone — and the console renders it without complaint,
+	// because every value is a legal string.
+	uid, tid := uuid.New(), uuid.New()
+	got, err := settingsToProto(&usersettingsh.Settings{
+		UserID: uid, TenantID: tid,
+		Timezone: "Europe/Kyiv", Locale: "uk-UA", Theme: "dark",
+		Preferences:     []byte(`{"density":"compact"}`),
+		ResourceVersion: 7,
+		CreatedAt:       time.Unix(1000, 0).UTC(),
+		UpdatedAt:       time.Unix(2000, 0).UTC(),
+	})
+	if err != nil {
+		t.Fatalf("settingsToProto: %v", err)
+	}
+	if got.GetTimezone() != "Europe/Kyiv" {
+		t.Errorf("timezone = %q", got.GetTimezone())
+	}
+	if got.GetLocale() != "uk-UA" {
+		t.Errorf("locale = %q", got.GetLocale())
+	}
+	if got.GetTheme() != "dark" {
+		t.Errorf("theme = %q", got.GetTheme())
+	}
+	// Two UUIDs, same shape. Crossed, settings would be looked up under the
+	// tenant's id and every user in the tenant would share one row.
+	if got.GetUserId() != uid.String() || got.GetTenantId() != tid.String() {
+		t.Errorf("ids = %s / %s, want %s / %s",
+			got.GetUserId(), got.GetTenantId(), uid, tid)
+	}
+	if got.GetName() != "users/"+uid.String()+"/settings" {
+		t.Errorf("name = %q", got.GetName())
+	}
+	if got.GetResourceVersion() != "7" {
+		t.Errorf("resourceVersion = %q, want \"7\" — OCC reads this back", got.GetResourceVersion())
+	}
+	if got.GetPreferences().GetFields()["density"].GetStringValue() != "compact" {
+		t.Errorf("preferences = %v", got.GetPreferences())
+	}
+	if !got.GetCreatedAt().AsTime().Equal(time.Unix(1000, 0).UTC()) ||
+		!got.GetUpdatedAt().AsTime().Equal(time.Unix(2000, 0).UTC()) {
+		t.Errorf("timestamps crossed: created=%v updated=%v",
+			got.GetCreatedAt().AsTime(), got.GetUpdatedAt().AsTime())
+	}
+}
+
+func TestSettingsToProtoRefusesUnparseablePreferences(t *testing.T) {
+	// Preferences are stored as raw JSON. Malformed bytes must surface as an
+	// error rather than an empty struct: silently returning no preferences
+	// would have the console overwrite them on the next save.
+	if _, err := settingsToProto(&usersettingsh.Settings{
+		UserID: uuid.New(), TenantID: uuid.New(),
+		Preferences: []byte(`{not json`),
+	}); err == nil {
+		t.Fatal("malformed preferences were accepted as empty")
 	}
 }

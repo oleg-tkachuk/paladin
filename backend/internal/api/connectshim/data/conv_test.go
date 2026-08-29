@@ -14,6 +14,7 @@ import (
 	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
@@ -417,4 +418,139 @@ func TestBadName(t *testing.T) {
 			t.Errorf("code = %v, want PermissionDenied", got)
 		}
 	})
+}
+
+// ─── version, lock and operation projections ────────────────────────────────
+//
+// Three one-way conversions with no test between them. The generic AST check
+// (connectshim/mapping_test.go) proves a shim READS every field on the way IN;
+// nothing watched the way OUT, and these are what a client sees.
+
+func TestLockStateToProtoCarriesAllThreeFacts(t *testing.T) {
+	// Mode, expiry and legal hold are three independent reasons a delete can
+	// be refused. Dropping any one of them shows an operator a lock that is
+	// weaker than the one actually enforced, which is worse than showing none.
+	until := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	got := lockStateToProto(object.ObjectLock{
+		Mode: "COMPLIANCE", RetainUntil: &until, LegalHold: true,
+	})
+	if got.GetMode() != "COMPLIANCE" {
+		t.Errorf("mode = %q", got.GetMode())
+	}
+	if !got.GetRetainUntil().AsTime().Equal(until) {
+		t.Errorf("retainUntil = %v, want %v", got.GetRetainUntil().AsTime(), until)
+	}
+	if !got.GetLegalHold() {
+		t.Error("legal hold was lost — it holds independently of any retention date")
+	}
+}
+
+func TestLockStateToProtoAnswersUnlockedRatherThanNil(t *testing.T) {
+	// The RPC's question is "what is the lock here", and "none" is an answer.
+	// A nil message would read to a client as "unknown", which is a different
+	// claim entirely.
+	got := lockStateToProto(object.ObjectLock{})
+	if got == nil {
+		t.Fatal("unlocked rendered as nil; the caller cannot tell that from an error")
+	}
+	if got.GetMode() != "" || got.GetLegalHold() || got.GetRetainUntil() != nil {
+		t.Errorf("unlocked state is not zero: %+v", got)
+	}
+}
+
+func TestVersionToProtoCarriesTheIdentityAndBody(t *testing.T) {
+	vid, oid := uuid.New(), uuid.New()
+	created := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	got := versionToProto("tenants/t/collections/docs/objects/o", &object.ObjectVersion{
+		VersionID: vid, ObjectID: oid, StoragePath: "docs/a.txt", SizeBytes: 42,
+		ETag: "etag-1", ContentType: "text/plain",
+		Metadata: map[string]string{"k": "v"}, Tags: map[string]string{"env": "prod"},
+		CreatedAt: created, IsCurrent: true,
+	})
+	if got.GetName() != "tenants/t/collections/docs/objects/o/versions/"+vid.String() {
+		t.Errorf("name = %q", got.GetName())
+	}
+	// Two UUIDs side by side: crossed, every version would claim to be its own
+	// object and the history would address nothing.
+	if got.GetVersionId() != vid.String() || got.GetObjectId() != oid.String() {
+		t.Errorf("ids = %s / %s, want %s / %s",
+			got.GetVersionId(), got.GetObjectId(), vid, oid)
+	}
+	if got.GetSizeBytes() != 42 || got.GetEtag() != "etag-1" ||
+		got.GetContentType() != "text/plain" || got.GetStoragePath() != "docs/a.txt" {
+		t.Errorf("body = %+v", got)
+	}
+	if got.GetMetadata()["k"] != "v" || got.GetTags()["env"] != "prod" {
+		t.Errorf("maps crossed or dropped: metadata=%v tags=%v", got.GetMetadata(), got.GetTags())
+	}
+	if !got.GetIsCurrent() || got.GetIsDeleteMarker() {
+		t.Errorf("flags = current:%v marker:%v", got.GetIsCurrent(), got.GetIsDeleteMarker())
+	}
+	if !got.GetCreatedAt().AsTime().Equal(created) {
+		t.Errorf("createdAt = %v", got.GetCreatedAt().AsTime())
+	}
+}
+
+func TestVersionToProtoOmitsEmptySubMessages(t *testing.T) {
+	// A version with no checksum and no lock must carry neither sub-message.
+	// An empty ChecksumDigest reads as "checksummed with the empty algorithm",
+	// and an empty ObjectLockState on a history entry invents a lock.
+	got := versionToProto("p", &object.ObjectVersion{VersionID: uuid.New(), ObjectID: uuid.New()})
+	if got.GetChecksum() != nil {
+		t.Errorf("checksum = %+v, want absent", got.GetChecksum())
+	}
+	if got.GetLock() != nil {
+		t.Errorf("lock = %+v, want absent", got.GetLock())
+	}
+}
+
+func TestVersionToProtoIncludesALockHeldOnlyByLegalHold(t *testing.T) {
+	// A legal hold with no mode and no date is a real lock, and the cheapest
+	// one to lose: every field it travels with is zero.
+	got := versionToProto("p", &object.ObjectVersion{
+		VersionID: uuid.New(), ObjectID: uuid.New(), LegalHold: true,
+	})
+	if got.GetLock() == nil || !got.GetLock().GetLegalHold() {
+		t.Fatalf("legal hold dropped: %+v", got.GetLock())
+	}
+}
+
+func TestDataOperationToProtoMarksOnlyTerminalStatesDone(t *testing.T) {
+	// `Done` is what a polling client waits on. Wrong in one direction it
+	// polls a finished operation forever; wrong in the other it reads a
+	// half-finished result as final.
+	for _, tc := range []struct {
+		state    operation.State
+		wantDone bool
+	}{
+		{operation.StatePending, false},
+		{operation.StateRunning, false},
+		{operation.StateSucceeded, true},
+		{operation.StateFailed, true},
+		{operation.StateCancelled, true},
+	} {
+		t.Run(string(tc.state), func(t *testing.T) {
+			got := dataOperationToProto(&operation.Operation{
+				OperationID: uuid.New(), Type: "BatchDelete", State: tc.state,
+			})
+			if got.GetDone() != tc.wantDone {
+				t.Errorf("done = %v, want %v", got.GetDone(), tc.wantDone)
+			}
+		})
+	}
+}
+
+func TestDataOperationToProtoPutsFailuresInTheErrorArm(t *testing.T) {
+	// The result is a oneof. A failure delivered in the response arm is a
+	// client that reports success with an empty payload.
+	got := dataOperationToProto(&operation.Operation{
+		OperationID: uuid.New(), Type: "BatchDelete", State: operation.StateFailed,
+		ErrorCode: "internal", ErrorMessage: "boom",
+	})
+	if got.GetError() == nil {
+		t.Fatalf("failed operation has no error arm: %+v", got.GetResult())
+	}
+	if got.GetResponse() != nil {
+		t.Error("a failed operation also carried a response")
+	}
 }
