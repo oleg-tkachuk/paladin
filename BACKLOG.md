@@ -979,9 +979,59 @@ open deliberately — each notes why._
     was never asked about. It is at least: `TouchUserLogin` (UPDATE on `users`
     at login), the refresh-token INSERT at login, and the supersede UPDATE
     plus successor INSERT on every rotation — all before a session exists.
-  - So the first task of a redo is to enumerate every INSERT/UPDATE/DELETE on
-    these four tables and classify each as pre-session or scoped. Reads alone
-    are not the question.
+- **The write surface, enumerated 2026-08-30.** This is the step that was
+  skipped. Every INSERT/UPDATE/DELETE on the four tables, with the session
+  tenant each runs under:
+
+  `users`
+  | write | reached from | session tenant | row's tenant | class |
+  |---|---|---|---|---|
+  | CreateUser | UserService.CreateUser | caller's | may be ANOTHER (platform admin may create outside its own tenant) | cross-tenant |
+  | UpdateUser | UpdateUser, GrantScopes, RevokeScopes | caller's | target user's, may be another | cross-tenant |
+  | UpdateUserPasswordHash | userh reset | caller's | target's, may be another | cross-tenant |
+  | UpdateUserPasswordHash | authh ChangePassword | own | own | scoped |
+  | TouchUserLogin | **Login** | **none** | the user's | **pre-session** |
+  | TouchUserLogin | SwitchTenant | current | target | cross-tenant |
+  | DeleteUser | DeleteUser | caller's | target's | cross-tenant |
+
+  `refresh_tokens`
+  | write | reached from | session tenant | class |
+  |---|---|---|---|
+  | InsertRefreshToken | Login → mintPair | none | **pre-session** |
+  | InsertRefreshToken | RefreshToken → mintPair | none | **pre-session** |
+  | InsertRefreshToken | SwitchTenant → mintPair | current | cross-tenant |
+  | InsertRefreshToken | oauth issueTokens | none | **pre-session** |
+  | SupersedeRefreshToken | RefreshToken | none | **pre-session** |
+  | RevokeRefreshToken | oauth tokenRefresh | none | **pre-session** |
+  | RevokeRefreshTokensForUser | ChangePassword | own | scoped |
+  | RevokeRefreshTokenFamily | Revoke (logout) | caller's | scoped |
+  | RevokeRefreshTokenFamily | onRefreshReuse, both callers | none | **pre-session** |
+  | PurgeExpiredRefreshTokens | worker | runs as paladin_migrate (BYPASSRLS) | n/a |
+
+  `user_settings` — Upsert and Delete, both from usersettingsh, both keyed on
+  `p.TenantID` (the caller's own). Genuinely scoped; plain isolation is enough
+  and no pre-auth policy is needed.
+
+  `tenant_default_bindings` — Set and Clear, the admin plane writing for
+  another tenant. Already handled: both call sites run under
+  `auth.WithActingTenant`, which makes them scoped writes to the target.
+
+- **What the table says about the design:**
+  - `refresh_tokens` writes are overwhelmingly pre-session — insert, supersede,
+    revoke, family-revoke. A SELECT-only exemption cannot work here; it needs
+    `FOR ALL` with `paladin_session_tenant_id() IS NULL`, or the table stays
+    exempt with that written down. 014 chose SELECT and this is exactly where
+    it broke.
+  - `users` needs the pre-session write for TouchUserLogin at login, and the
+    whole admin surface writes across tenants. The admin writes can become
+    scoped by wrapping them in `WithActingTenant(target)` — tighter than a
+    pre-auth exemption and the pattern already used for the default bindings —
+    which would leave login as the only pre-session write to admit.
+  - `user_settings` can take the ordinary policy today, on its own merits.
+  - So the four are NOT one change. `user_settings` and
+    `tenant_default_bindings` are ready; `users` needs six call sites wrapped
+    first; `refresh_tokens` needs a decision about whether a pre-auth write
+    exemption is acceptable at all, given the token is the credential.
 - **Definition of Done:** each of the four gets a policy whose exemptions cover
   reads AND writes, or a comment in the migration saying why it cannot have
   one; the allow-list entry is deleted, which is the visible act of closing
