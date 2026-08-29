@@ -14,6 +14,8 @@ package lease
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -129,5 +131,154 @@ func TestClaim_RealSQL_AcquireRenewContend(t *testing.T) {
 	}
 	if ok3 {
 		t.Fatal("a second holder must not acquire a live lease")
+	}
+}
+
+// Run is the loop the claim SQL exists to serve, and nothing exercised it.
+// The unit tests drive the renewer through a fake; the test above drives the
+// SQL directly. Between them sits the orchestration that decides whether two
+// pods ever run the same job at the same time — which is the entire point of
+// a lease, and the one failure that corrupts data rather than merely stopping
+// it.
+
+func leaseWithTiming(t *testing.T, pool *pgxpool.Pool, name string, holder uuid.UUID, ttl, poll time.Duration) *Lease {
+	t.Helper()
+	l, err := New(pool, Config{
+		Name: name, HolderID: holder, HolderMeta: map[string]string{"host": "test"},
+		TTL: ttl, PollInterval: poll, Logger: zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("New lease: %v", err)
+	}
+	return l
+}
+
+func TestRun_OnlyOneHolderRunsTheWork(t *testing.T) {
+	pool := startPostgres(t)
+	name := "run-exclusion-" + uuid.NewString()[:8]
+
+	var mu sync.Mutex
+	inside, maxInside := 0, 0
+	release := make(chan struct{})
+
+	work := func(ctx context.Context, _ int64) error {
+		mu.Lock()
+		inside++
+		if inside > maxInside {
+			maxInside = inside
+		}
+		mu.Unlock()
+		<-release // hold the lease until the test says otherwise
+		mu.Lock()
+		inside--
+		mu.Unlock()
+		return context.Canceled
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	var wg sync.WaitGroup
+	for range 3 {
+		l := leaseWithTiming(t, pool, name, uuid.New(), time.Minute, 50*time.Millisecond)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = l.Run(ctx, work)
+		}()
+	}
+
+	// Give the losers time to poll and be refused several times over.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := inside
+		mu.Unlock()
+		if n > 1 {
+			break // fail fast rather than waiting out the window
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	mu.Lock()
+	peak := maxInside
+	mu.Unlock()
+	if peak != 1 {
+		t.Fatalf("concurrent workers inside the lease = %d, want exactly 1", peak)
+	}
+
+	close(release)
+	cancel()
+	wg.Wait()
+}
+
+func TestRun_ReturnsARealErrorAndSwallowsCancellation(t *testing.T) {
+	// The distinction the loop turns on: a genuine failure from the work must
+	// reach the caller and stop the worker, while a cancellation means "the
+	// lease lapsed or we are shutting down" and must send it back around to
+	// re-claim. Confusing the two either crashes a healthy worker on every
+	// lease handover, or hides a real fault forever behind a retry loop.
+	pool := startPostgres(t)
+	boom := errors.New("the work itself failed")
+
+	l := leaseWithTiming(t, pool, "run-err-"+uuid.NewString()[:8], uuid.New(),
+		time.Minute, 20*time.Millisecond)
+	err := l.Run(context.Background(), func(context.Context, int64) error { return boom })
+	if !errors.Is(err, boom) {
+		t.Fatalf("Run err = %v, want the work's own error", err)
+	}
+
+	// Cancellation instead: Run must loop rather than return, so the only way
+	// out is the parent context.
+	l2 := leaseWithTiming(t, pool, "run-cancel-"+uuid.NewString()[:8], uuid.New(),
+		time.Minute, 20*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	runs := 0
+	done := make(chan error, 1)
+	go func() {
+		done <- l2.Run(ctx, func(context.Context, int64) error {
+			runs++
+			if runs >= 3 {
+				cancel() // let the loop notice the parent is going away
+			}
+			return context.Canceled
+		})
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run err = %v, want context.Canceled once the parent stopped", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run never returned after its parent was cancelled")
+	}
+	if runs < 3 {
+		t.Errorf("work ran %d times; a cancelled run must send the loop back to re-claim", runs)
+	}
+}
+
+func TestRun_ReleasesSoTheNextHolderDoesNotWaitOutTheTTL(t *testing.T) {
+	// The lease TTL is a minute; a pod that finished its work must not make
+	// the next one wait that long. Run releases on the way out, which is what
+	// turns a rolling restart into a handover instead of a stall.
+	pool := startPostgres(t)
+	name := "run-release-" + uuid.NewString()[:8]
+
+	first := leaseWithTiming(t, pool, name, uuid.New(), time.Minute, 20*time.Millisecond)
+	if err := first.Run(context.Background(), func(context.Context, int64) error {
+		return errors.New("stop after one turn")
+	}); err == nil {
+		t.Fatal("expected the work's error")
+	}
+
+	// A fresh holder must acquire immediately, not in a minute.
+	second := leaseWithTiming(t, pool, name, uuid.New(), time.Minute, 20*time.Millisecond)
+	_, _, ok, err := second.claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim after release: %v", err)
+	}
+	if !ok {
+		t.Fatal("the lease was not released; the next holder must wait out the whole TTL")
 	}
 }
