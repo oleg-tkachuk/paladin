@@ -181,7 +181,7 @@ func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, 
 	if err := h.authorize(ctx, p, cedar.ActionReadUserSettings, target); err != nil {
 		return nil, err
 	}
-	s, err := h.repo.Get(ctx, userID)
+	s, err := h.repo.Get(auth.WithActingTenant(ctx, target.TenantID), userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			d := DefaultsFor(userID, target.TenantID)
@@ -209,7 +209,7 @@ func (h *Handler) ListByTenant(ctx context.Context, tenantID uuid.UUID, pageSize
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 100
 	}
-	return h.repo.ListByTenant(ctx, tenantID, pageSize)
+	return h.repo.ListByTenant(auth.WithActingTenant(ctx, tenantID), tenantID, pageSize)
 }
 
 // DeleteForUser drops a user's persisted settings row. The user reverts to
@@ -230,7 +230,7 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 	if err := h.authorize(ctx, p, cedar.ActionManageUserSettings, target); err != nil {
 		return err
 	}
-	if err := h.repo.Delete(ctx, userID); err != nil {
+	if err := h.repo.Delete(auth.WithActingTenant(ctx, target.TenantID), userID); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	return nil

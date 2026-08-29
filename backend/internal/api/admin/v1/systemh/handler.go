@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -156,7 +157,12 @@ func (h *Handler) PlatformStats(ctx context.Context) (*PlatformStatsResult, erro
 	out := &PlatformStatsResult{TenantNames: map[string]TenantName{}}
 
 	if h.pool != nil {
-		cp, err := platformstats.CollectControlPlane(ctx, h.pool)
+		// The census is a cross-tenant aggregate by definition, and its
+		// tenants query joins tenant_default_bindings, which is RLS-covered
+		// as of 016. Without the flag the subquery would see only the
+		// caller's binding and every OTHER tenant would be counted as having
+		// none — a wrong number on a page, with no error anywhere.
+		cp, err := platformstats.CollectControlPlane(auth.WithCrossTenantRead(ctx), h.pool)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}

@@ -1029,9 +1029,18 @@ open deliberately — each notes why._
     which would leave login as the only pre-session write to admit.
   - `user_settings` can take the ordinary policy today, on its own merits.
   - So the four are NOT one change. `user_settings` and
-    `tenant_default_bindings` are ready; `users` needs six call sites wrapped
-    first; `refresh_tokens` needs a decision about whether a pre-auth write
-    exemption is acceptable at all, given the token is the credential.
+    `tenant_default_bindings` shipped separately in 016 and are done.
+    What remains is `users` — six admin call sites to wrap before login is the
+    only pre-session write left — and `refresh_tokens`, which needs a decision
+    about whether a pre-auth WRITE exemption is acceptable at all, given the
+    token is itself the credential. That one is a threat-model question, not a
+    SQL one.
+  - 016 also turned up a reader the write-surface table had missed:
+    `GetDefaultBinding` reads another tenant's row while the admin's session
+    is scoped elsewhere, so the policy filtered it and the console saw "no
+    binding" rather than an error. The suite caught it in three minutes,
+    which is the whole point of the `paladin_app` switch — the same class of
+    mistake cost a 50-minute cluster run last time.
 - **Definition of Done:** each of the four gets a policy whose exemptions cover
   reads AND writes, or a comment in the migration saying why it cannot have
   one; the allow-list entry is deleted, which is the visible act of closing

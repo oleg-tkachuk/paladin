@@ -331,7 +331,11 @@ func (h *Handler) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (*D
 	if err := h.authorize(ctx, cedar.ActionReadTenant, tenantID); err != nil {
 		return nil, err
 	}
-	b, err := h.repo.GetDefaultBinding(ctx, tenantID)
+	// Read the same way it is written: the admin plane asks about ANOTHER
+	// tenant's binding while its own session is scoped elsewhere, so without
+	// this the policy filters the row away and the caller sees "no binding"
+	// rather than an error. Authorization happened above, against the target.
+	b, err := h.repo.GetDefaultBinding(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
 		// MapError, not a raw return: ErrNotFound is registered to
 		// CodeNotFound, but nothing here was calling the mapper, so an absent

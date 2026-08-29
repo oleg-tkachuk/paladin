@@ -52,10 +52,8 @@ var exemptFromRLS = map[string]string{
 	// refresh_tokens was refused and the cluster could not authenticate
 	// anyone. See BACKLOG — the redo needs the pre-auth WRITE surface mapped,
 	// not just the reads.
-	"users":                   "BACKLOG: login writes here too (TouchUserLogin) before any tenant exists; a SELECT-only exemption is not enough",
-	"refresh_tokens":          "BACKLOG: rotation inserts and supersedes rows pre-session; 014 refused the insert and broke login",
-	"user_settings":           "BACKLOG: reverted with the pair above rather than kept on untested luck",
-	"tenant_default_bindings": "BACKLOG: same",
+	"users":          "BACKLOG: login writes here too (TouchUserLogin) before any tenant exists; a SELECT-only exemption is not enough",
+	"refresh_tokens": "BACKLOG: rotation inserts and supersedes rows pre-session; 014 refused the insert and broke login",
 }
 
 // TestEveryTenantScopedTableHasAPolicy enumerates tables with a tenant_id
