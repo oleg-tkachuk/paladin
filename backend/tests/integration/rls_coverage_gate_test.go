@@ -47,13 +47,10 @@ var exemptFromRLS = map[string]string{
 	"oauth_authorization_codes": "pre-auth: the code hash is the credential; ConsumeCode is single-use and atomic",
 	"tenant_slug_history":       "pre-auth: ResolveRenamedSlug authorises against the resolved tenant, not the query",
 
-	// Open questions, recorded in BACKLOG.md under "Tables carrying
-	// tenant_id with no RLS policy". Listed here so the gate passes today
-	// and so that deleting an entry is the visible act of closing the gap.
-	"users":                   "BACKLOG: login reads the row before the tenant is known; needs the api_tokens pre-auth pattern",
-	"refresh_tokens":          "BACKLOG: refresh happens pre-session, same shape as users",
-	"user_settings":           "BACKLOG: subordinate to users; policy waits on the users decision",
-	"tenant_default_bindings": "BACKLOG: written by the admin plane on behalf of another tenant",
+	// users, refresh_tokens, user_settings and tenant_default_bindings were
+	// listed here and are not any more: 014 gives all four a policy. Deleting
+	// those entries was the visible act of closing the gap, which is what
+	// this list is for.
 }
 
 // TestEveryTenantScopedTableHasAPolicy enumerates tables with a tenant_id

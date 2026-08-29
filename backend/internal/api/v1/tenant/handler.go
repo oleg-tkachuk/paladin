@@ -363,7 +363,11 @@ func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, buc
 		return nil, connect.NewError(connect.CodeInternal,
 			errors.New("set default binding: authorized request carries no principal"))
 	}
-	b, err := h.repo.SetDefaultBinding(ctx, tenantID, bucket, p.Subject)
+	// The admin plane writes this row for ANOTHER tenant, and WITH CHECK pins
+	// a write to the session tenant — so the session becomes that tenant for
+	// the duration. Authorization already happened above, against the target.
+	b, err := h.repo.SetDefaultBinding(
+		auth.WithActingTenant(ctx, tenantID), tenantID, bucket, p.Subject)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +380,9 @@ func (h *Handler) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) e
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return err
 	}
-	return h.repo.ClearDefaultBinding(ctx, tenantID)
+	// Same as SetDefaultBinding: a DELETE is checked against USING, which
+	// admits only the session tenant.
+	return h.repo.ClearDefaultBinding(auth.WithActingTenant(ctx, tenantID), tenantID)
 }
 
 // authorize evaluates Cedar against the Tenant resource.

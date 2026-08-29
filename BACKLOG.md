@@ -297,37 +297,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none. Wants an opinion on how far back an operator should be
   able to read a batch job's outcome.
 
-### Tables carrying `tenant_id` with no RLS policy
-
-- **Status:** Blocked (needs the pre-auth read path designed, like `api_tokens` has).
-- **Reason:** `002_roles_and_rls.sql` documents why `tenants` and
-  `storage_backends` have no policy — platform-level, no owning tenant. Four
-  tables carry a `tenant_id` column with no policy and no such note: `users`,
-  `refresh_tokens`, `user_settings`, `tenant_default_bindings`. Silence is not
-  a decision; a reader cannot tell an exemption from an omission.
-  Found while covering `capability_revocations`, which turned out to be a real
-  gap rather than an intended one — a tenant could revoke another tenant's
-  capability (fixed in `004_capability_revocation_rls.sql`).
-  `tests/integration/rls_coverage_gate_test.go` now enumerates the whole set
-  from `pg_policies` and fails on anything not in an explicit allow-list, so
-  the next table added without a policy fails a test rather than a review. It
-  immediately turned up two more the manual sweep had missed
-  (`oauth_authorization_codes`, `tenant_slug_history`) — both legitimate
-  pre-auth reads, now documented as such in the allow-list rather than
-  inferred from silence. `api_token_rate_buckets` has no `tenant_id` column at
-  all, so it is subordinate rather than unprotected.
-- **Definition of Done:**
-  - Each of the five either gets a policy, or gets a comment in the RLS
-    migration saying why it cannot have one.
-  - `users` is the hard case and sets the pattern: login reads the row
-    *before* the tenant is known, which is exactly the constraint `api_tokens`
-    already solves with a second, column-narrowed pre-auth policy. Mirror it
-    rather than inventing a second shape.
-  - `api_token_rate_buckets` is subordinate to `api_tokens`; isolate it
-    through the parent the way `multipart_parts` and `capability_usage` do.
-- **Blockers:** the `users` pre-auth path needs tracing before a policy can be
-  written without breaking login.
-
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational

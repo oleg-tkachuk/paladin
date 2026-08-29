@@ -249,7 +249,15 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: authzScope}); err != nil {
 		return nil, "", err
 	}
-	page, next, err := h.users.List(ctx, authstore.ListUsersArgs{
+	// A scope of Nil is the platform-admin listing that deliberately spans
+	// tenants. users carries an RLS policy now (014), so the read has to say
+	// so — the flag widens SELECT only, and non-admins never reach here with
+	// a Nil scope because it was narrowed to `caller` above.
+	listCtx := ctx
+	if scope == uuid.Nil {
+		listCtx = auth.WithCrossTenantRead(ctx)
+	}
+	page, next, err := h.users.List(listCtx, authstore.ListUsersArgs{
 		TenantID:  scope,
 		PageSize:  in.PageSize,
 		PageToken: in.PageToken,

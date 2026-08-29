@@ -514,7 +514,11 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 		limit = membershipDefaultPageSize
 	}
 	// One extra row to detect a further page without a second query.
-	matches, err := h.users.ListMembershipsBySubject(ctx, cur.Subject, afterCreated, afterID, limit+1)
+	// Memberships are, by definition, the subject's rows in EVERY tenant,
+	// read while the session is scoped to the current one. users is
+	// RLS-covered as of 014, so the read declares itself cross-tenant.
+	matches, err := h.users.ListMembershipsBySubject(
+		auth.WithCrossTenantRead(ctx), cur.Subject, afterCreated, afterID, limit+1)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
@@ -574,7 +578,12 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	// question cannot regress that way, and does not depend on the listing
 	// staying unbounded.
 	var target *authstore.User
-	found, err := h.users.GetBySubject(ctx, targetTenantID, cur.Subject)
+	// The whole point of a switch is to read a row in a DIFFERENT tenant than
+	// the session's. WithActingTenant scopes the connection to the target for
+	// this read, which is tighter than a cross-tenant widening: it sees that
+	// tenant and no other.
+	found, err := h.users.GetBySubject(
+		auth.WithActingTenant(ctx, targetTenantID), targetTenantID, cur.Subject)
 	switch {
 	case err == nil:
 		target = &found
