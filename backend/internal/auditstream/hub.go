@@ -1,8 +1,8 @@
-// Package auditstream is the realtime half of the audit console: migration
-// 050's trigger fires a Postgres NOTIFY ("paladin_audit") for every audit_log
-// insert, the Hub fans those notifications out per tenant in-process, and
-// the SSE handler (sse.go) streams them to the browser. One LISTEN
-// connection per admin pod regardless of subscriber count.
+// Package auditstream is the realtime half of the audit console: audit_log's
+// trigger fires a Postgres NOTIFY ("paladin_audit") for every insert, the Hub
+// fans those notifications out per tenant in-process, and the SSE handler
+// (sse.go) streams them to the browser. One LISTEN connection per admin pod
+// regardless of subscriber count.
 package auditstream
 
 import (
@@ -15,7 +15,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Channel is the NOTIFY channel the trigger baseline (003_triggers.sql)'s trigger fires on.
+// Channel is the NOTIFY channel audit_log's trigger fires on
+// (migrations/013_audit_stream_notify.sql).
 const Channel = "paladin_audit"
 
 // Entry is the compact audit projection carried in the NOTIFY payload —

@@ -301,7 +301,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// Connect). Auth: the same admin-audience bearer the console's RPCs
 	// use, verified inline by the handler; the stream is scoped to the
 	// JWT's tenant claim like ListAuditLog. One LISTEN connection per pod
-	// (the trigger baseline (003_triggers.sql)'s trigger NOTIFYs on every audit_log insert). The hub
+	// (audit_log's trigger NOTIFYs on every insert — migrations/013). The hub
 	// runs on a dedicated context registered with deps.StopWatchers — NOT the
 	// passed `ctx` (context.Background() under fx) — so the held LISTEN
 	// connection is released at shutdown before db.Close(); otherwise
