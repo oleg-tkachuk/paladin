@@ -27,6 +27,7 @@ import (
 	quotahpkg "github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
 	objectkeypkg "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	objectpkg "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -237,4 +238,116 @@ func seedOwnedBucket(t *testing.T, pool *pgxpool.Pool, tenant uuid.UUID, backend
 		backendID, bucketName, tenant); err != nil {
 		t.Fatalf("seed owned bucket: %v", err)
 	}
+}
+
+// deleteOnlyStorage answers the one storage call a permanent delete makes.
+// Everything else would panic, which keeps the test honest about the path it
+// claims to exercise.
+type deleteOnlyStorage struct {
+	objectpkg.Storage
+	deleted int
+}
+
+func (s *deleteOnlyStorage) DeleteObject(context.Context, string, string, uuid.UUID, string, string) error {
+	s.deleted++
+	return nil
+}
+
+// A permanent delete emits TWO events, and they are the ones an operator is
+// most likely to be subscribed to. Both were tested only as far as the outbox
+// — internal/integration/permanent_delete_test.go counts event_deliveries
+// rows — which proves they were enqueued, not that anything can receive them.
+// The join between "the handler enqueued it" and "a subscription matched and
+// the runner delivered it" is where an event type can quietly stop matching
+// the filter it was written for.
+//
+// The two events are also emitted from different places for different
+// reasons: `deleted` rides the row-removal transaction (ADR-0003, so a crash
+// cannot drop it), while `purged` fires only after the storage bytes are
+// actually reclaimed. A test that saw one and not the other would look fine.
+func TestObjectHandler_PermanentDeleteDispatchesDeletedAndPurged(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+	url := runEmbeddedNATSForIntegration(t)
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "object-perm-delete")
+	mustCreateCollection(t, f.h.PoolMigrate, tenant, "docs")
+	objID := mustInsertAvailableObject(t, f.h.PoolMigrate, tenant, "docs", "gone.txt")
+	_ = f.seedNATSSubscription(t, tenant, url, "paladin.events")
+
+	// The shared probe is used for its DISPATCHER (it wires the NATS pool the
+	// runner publishes through); its one-message channel is not what this test
+	// reads, because a permanent delete emits two events.
+	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
+	multi := subscribeAll(t, url, "paladin.events")
+	repo := adapters.NewObjectRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
+	storage := &deleteOnlyStorage{}
+	handler := objectpkg.NewHandler(repo, storage, allowAll{}, nil,
+		statemachine.New(f.h.PoolMigrate), objectpkg.PresignConfig{})
+	handler.SetEventProducer(probe.d)
+
+	ctx := ctxAdmin(t, tenant)
+	obj, err := repo.FindByName(ctx, tenant, "docs", objID.String())
+	if err != nil {
+		t.Fatalf("read the object back: %v", err)
+	}
+
+	if err := handler.PermanentDelete(ctx, tenant, obj, obj.ResourceVersion, false); err != nil {
+		t.Fatalf("PermanentDelete: %v", err)
+	}
+	if storage.deleted != 1 {
+		t.Fatalf("storage deletes = %d, want 1", storage.deleted)
+	}
+
+	// One tick drains both rows, so the shared probe (which asserts exactly
+	// one delivery and buffers one message) cannot be reused here.
+	r := f.outboxRunner(probe.d)
+	if n := f.tickOnce(t, r); n != 2 {
+		t.Fatalf("tick processed = %d, want 2 — a permanent delete owes subscribers both facts", n)
+	}
+
+	got := map[string]bool{}
+	for range 2 {
+		select {
+		case m := <-multi:
+			var env struct {
+				Type     string `json:"type"`
+				TenantID string `json:"tenantid"`
+			}
+			if err := json.Unmarshal(m.Data, &env); err != nil {
+				t.Fatalf("envelope unmarshal: %v (raw: %s)", err, string(m.Data))
+			}
+			if env.TenantID != tenant.String() {
+				t.Errorf("tenantid = %q, want %q", env.TenantID, tenant)
+			}
+			got[env.Type] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for a second event; got %v", got)
+		}
+	}
+	for _, want := range []string{"paladin.object.deleted", "paladin.object.purged"} {
+		if !got[want] {
+			t.Errorf("%s never reached the subscriber; got %v", want, got)
+		}
+	}
+}
+
+// subscribeAll is newLifecycleEventProbe's subscription with room for more
+// than one message. The shared probe buffers a single message because every
+// other lifecycle test emits exactly one event; a permanent delete emits two,
+// and a one-slot channel would drop the second and fail for the wrong reason.
+func subscribeAll(t *testing.T, url, subject string) <-chan *nats.Msg {
+	t.Helper()
+	pc, err := nats.Connect(url, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("probe connect: %v", err)
+	}
+	t.Cleanup(pc.Close)
+	got := make(chan *nats.Msg, 8)
+	if _, err := pc.Subscribe(subject, func(m *nats.Msg) { got <- m }); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := pc.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	return got
 }
