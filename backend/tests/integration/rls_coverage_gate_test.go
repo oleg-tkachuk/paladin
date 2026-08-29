@@ -47,10 +47,15 @@ var exemptFromRLS = map[string]string{
 	"oauth_authorization_codes": "pre-auth: the code hash is the credential; ConsumeCode is single-use and atomic",
 	"tenant_slug_history":       "pre-auth: ResolveRenamedSlug authorises against the resolved tenant, not the query",
 
-	// users, refresh_tokens, user_settings and tenant_default_bindings were
-	// listed here and are not any more: 014 gives all four a policy. Deleting
-	// those entries was the visible act of closing the gap, which is what
-	// this list is for.
+	// Back on the list. 014 gave all four a policy and 015 took it away: the
+	// pre-auth exemption was scoped to SELECT, so login's INSERT into
+	// refresh_tokens was refused and the cluster could not authenticate
+	// anyone. See BACKLOG — the redo needs the pre-auth WRITE surface mapped,
+	// not just the reads.
+	"users":                   "BACKLOG: login writes here too (TouchUserLogin) before any tenant exists; a SELECT-only exemption is not enough",
+	"refresh_tokens":          "BACKLOG: rotation inserts and supersedes rows pre-session; 014 refused the insert and broke login",
+	"user_settings":           "BACKLOG: reverted with the pair above rather than kept on untested luck",
+	"tenant_default_bindings": "BACKLOG: same",
 }
 
 // TestEveryTenantScopedTableHasAPolicy enumerates tables with a tenant_id
