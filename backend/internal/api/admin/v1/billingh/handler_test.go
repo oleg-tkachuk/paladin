@@ -164,3 +164,75 @@ func TestGetTenantSummary_DenyFirst(t *testing.T) {
 		t.Errorf("code = %v, want PermissionDenied", connect.CodeOf(err))
 	}
 }
+
+// granularityStep is four lines and it decides two separate things: how the
+// SQL buckets the series, and — through maxTimeSeriesBuckets — whether a
+// query is refused for being too wide. Only the "hour" branch was exercised,
+// so day and week could have returned any duration at all and the existing
+// test would still pass.
+//
+// The consequence of a wrong step is not a crash. Too small a value refuses
+// legitimate queries; too large a one lets a caller ask for a million buckets
+// of money data. Both look like the feature working.
+
+func TestGranularityStep(t *testing.T) {
+	for _, tc := range []struct {
+		granularity string
+		want        time.Duration
+	}{
+		{"hour", time.Hour},
+		{"day", 24 * time.Hour},
+		{"week", 7 * 24 * time.Hour},
+		// Zero is the sentinel for "not a granularity we bucket by", and the
+		// caller reads it as "skip the cap check" — so it must never be
+		// returned for a supported value, and must be returned for anything
+		// else. date_trunc would happily accept "minute" or "year"; exposing
+		// those is a product call nobody has made.
+		{"minute", 0},
+		{"year", 0},
+		{"", 0},
+	} {
+		t.Run(tc.granularity, func(t *testing.T) {
+			if got := granularityStep(tc.granularity); got != tc.want {
+				t.Errorf("granularityStep(%q) = %v, want %v", tc.granularity, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetTenantTimeSeries_BucketCapAppliesPerGranularity(t *testing.T) {
+	// The cap is a bucket COUNT, so the window that trips it differs by
+	// granularity. A step that is too coarse would let a wide window through;
+	// one too fine would refuse a reasonable one. Both sides, per unit.
+	h := NewHandler(nil, nil, allowAuthorizer{})
+	start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	for _, tc := range []struct {
+		granularity string
+		underCap    time.Duration // ~900 buckets
+		overCap     time.Duration // ~1100 buckets
+	}{
+		{"hour", 900 * time.Hour, 1100 * time.Hour},
+		{"day", 900 * 24 * time.Hour, 1100 * 24 * time.Hour},
+		{"week", 900 * 7 * 24 * time.Hour, 1100 * 7 * 24 * time.Hour},
+	} {
+		t.Run(tc.granularity+"/under", func(t *testing.T) {
+			// Unavailable is the nil-pool short-circuit: the request passed
+			// the cap and went on to look for a database.
+			_, err := h.GetTenantTimeSeries(ctxWithAdmin(t), uuid.New(),
+				start, start.Add(tc.underCap), tc.granularity)
+			if connect.CodeOf(err) != connect.CodeUnavailable {
+				t.Errorf("code = %v, want Unavailable — the cap false-tripped on a legitimate window",
+					connect.CodeOf(err))
+			}
+		})
+		t.Run(tc.granularity+"/over", func(t *testing.T) {
+			_, err := h.GetTenantTimeSeries(ctxWithAdmin(t), uuid.New(),
+				start, start.Add(tc.overCap), tc.granularity)
+			if connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Errorf("code = %v, want InvalidArgument — an over-wide window was accepted",
+					connect.CodeOf(err))
+			}
+		})
+	}
+}
