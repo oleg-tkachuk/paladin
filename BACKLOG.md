@@ -1034,22 +1034,6 @@ open deliberately — each notes why._
 
 ---
 
-### Sidebar badge counts are parked and silently show nothing
-
-- **Status:** Deferred (parked during the proto migration; never resumed).
-- **Reason:** `useSidebarCounts.fetchCounts` returns a zero struct without
-  calling anything — the List/Count request shapes diverged during the proto
-  migration and the hook was parked rather than removed. The sidebar therefore
-  renders no badges at all, which reads as "nothing to see" rather than "not
-  implemented", and the hook keeps a 30s poll loop alive to produce it. It was
-  found as drift: a parked comment in code with no entry here.
-- **Definition of Done:** Either the counts come back — the pushdown work gave
-  the List RPCs a `filter` that selects from the table, so a per-scope count is
-  now expressible — or the hook, its poll and the badge slots go, and the
-  sidebar stops promising a number it does not have.
-- **Blockers:** none. Wants a decision on which counts are worth a query per
-  navigation: objects and trash are scope-dependent, the rest are tenant-wide.
-
 ### The console holds whole tables to search them
 
 - **Status:** Deferred (correct today, does not scale).

@@ -29,7 +29,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
-import { useSidebarCounts, SidebarCounts } from "@/hooks/useSidebarCounts";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -57,7 +56,6 @@ import {
 type NavItem = {
   name: string;
   icon: React.ElementType;
-  countKey?: keyof SidebarCounts;
 } & ({ path: string; tenantTab?: never } | { path?: never; tenantTab: string });
 
 const navigationGroups: Array<{
@@ -111,7 +109,6 @@ const navigationGroups: Array<{
         name: "Tenants",
         path: "/tenants",
         icon: UsersIcon,
-        countKey: "tenants" as keyof SidebarCounts,
       },
       { name: "Users", path: "/users", icon: UserCircleIcon },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
@@ -224,7 +221,6 @@ function SidebarBody({
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const counts = useSidebarCounts();
 
   const displayName = user?.displayName || user?.subject || "—";
   const initials =
@@ -326,11 +322,6 @@ function SidebarBody({
                 if (href === null) return null;
                 const active = isCurrent(href);
                 const Icon = item.icon;
-                const count =
-                  "countKey" in item && item.countKey
-                    ? counts[item.countKey]
-                    : undefined;
-
                 const link = (
                   <Link
                     key={item.name}
@@ -366,18 +357,6 @@ function SidebarBody({
                     {!collapsed && (
                       <>
                         <span className="truncate">{item.name}</span>
-                        {count != null && (
-                          <span
-                            className={cn(
-                              "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ring-1",
-                              active
-                                ? "bg-primary/20 text-primary ring-primary/30"
-                                : "bg-muted text-muted-foreground ring-transparent",
-                            )}
-                          >
-                            {count.toLocaleString()}
-                          </span>
-                        )}
                       </>
                     )}
                   </Link>
@@ -386,14 +365,7 @@ function SidebarBody({
                 return collapsed ? (
                   <Tooltip key={item.name}>
                     <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right">
-                      {item.name}
-                      {count != null && (
-                        <span className="ml-2 font-mono text-muted-foreground">
-                          {count.toLocaleString()}
-                        </span>
-                      )}
-                    </TooltipContent>
+                    <TooltipContent side="right">{item.name}</TooltipContent>
                   </Tooltip>
                 ) : (
                   link
