@@ -1582,7 +1582,8 @@ of the pipeline._
 
 ### `verify-all` does not run the integration suites — one rotted unseen
 
-- **Status:** Open. Surfaced 2026-08-21.
+- **Status:** Narrowed 2026-08-30 — the compile half landed in d011604a
+  (2026-08-27) and this entry had not been trimmed since. Surfaced 2026-08-21.
 - **Reason:** `task verify-all` runs unit tests, lint and the frontend build.
   Both integration suites sit behind the `integration` build tag and run only
   in `.github/workflows/integration.yml`. With CI blocked on the account-wide
@@ -1592,22 +1593,27 @@ of the pipeline._
   failures were production bugs, not stale fixtures: a silent no-op on default
   binding, broken ingest dedup, a charges ledger that could never insert, and
   a dispatcher that treated transient DB errors as permanent failures.
-- **Definition of Done:** either (a) `verify-all` gains a cheap
-  compile-only step — `go vet -tags=integration ./...` — so a suite that stops
-  building fails the local gate in seconds, or (b) a documented, enforced rule
-  that the integration task runs before merge. (a) is the cheaper half and
-  catches the failure mode that actually occurred; it does not catch a suite
-  that compiles but fails, which is what CI is for.
-- **Blockers:** the full suites take ~11 minutes and need Docker, so putting
-  them in `verify-all` outright would make the local gate unusable. That is
-  the reason they are not there, and it is still a good reason.
+- **Definition of Done:** (a) DONE — `backend:test:tagged:compile` runs
+  `go vet -tags=integration ./...` and `go vet -tags=e2e ./...` from
+  `verify-all`, so a suite that stops *building* fails the local gate in
+  seconds. That is the failure mode that actually occurred, both times.
+  (b) remains: a documented, enforced rule that the suites *run* before merge.
+  A compile check cannot catch a suite that builds and fails — the 45 failures
+  and four production bugs above were all in that category, and only an actual
+  run finds them.
+- **Blockers:** for (b), the same account-wide Actions spending limit that let
+  this rot in the first place — see *Actions will not start a job*. Running
+  them in `verify-all` instead is not the answer: ~11 minutes and a Docker
+  daemon would make the local gate unusable, which is why they are not there
+  and is still a good reason.
 
 ---
 
 ### The Go admin e2e suite has no gate at all — it had stopped compiling
 
-- **Status:** Open (the suite is repaired and passing; the gate is what is
-  missing). Surfaced 2026-08-27.
+- **Status:** Narrowed 2026-08-30 — the suite is repaired and passing, and the
+  compile gate landed the day this was written; the *run* gate is what is
+  still missing. Surfaced 2026-08-27.
 - **Reason:** `backend/tests/e2e/admin_api_test.go` sits behind
   `//go:build e2e`, and nothing anywhere runs it — `grep -rn "tags=e2e"` over
   `.github/` and every Taskfile returns nothing. Not a workflow, not
@@ -1634,10 +1640,11 @@ of the pipeline._
   ```
 
 - **Definition of Done:**
-  - A compile-only gate — `go vet -tags=e2e ./...` in `verify-all`, next to
-    the `-tags=integration` step the sibling entry asks for. Seconds of local
+  - A compile-only gate. DONE 2026-08-27 (d011604a): `go vet -tags=e2e ./...`
+    runs from `verify-all` in `backend:test:tagged:compile`, beside the
+    `-tags=integration` step the sibling entry asked for. Seconds of local
     runtime, and it catches exactly the failure that happened here.
-  - A run gate. `.github/workflows/e2e.yml` already builds both images and
+  - A run gate. Still open, and the only thing this entry is now about. `.github/workflows/e2e.yml` already builds both images and
     boots `frontend/tests/e2e/docker-compose.test.yaml`, which publishes the
     admin plane on `:8090` — the one thing this suite needs. A step after the
     Playwright run, with the three env vars above, is close to free; the
