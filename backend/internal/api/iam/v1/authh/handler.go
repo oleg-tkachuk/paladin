@@ -188,7 +188,13 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if err := h.users.TouchLogin(ctx, u.UserID, h.now()); err != nil {
+	// The one write on `users` that had no tenant on the context: login runs
+	// before a session exists. But by this line the credential has been
+	// verified and `u` IS the user, so the tenant is known — pinning it here
+	// costs nothing and removes the last pre-session write from the table.
+	// What login still needs from a policy is a pre-auth READ, to find this
+	// row in the first place; the write no longer needs an exemption.
+	if err := h.users.TouchLogin(auth.WithActingTenant(ctx, u.TenantID), u.UserID, h.now()); err != nil {
 		// Non-fatal — login succeeded.
 		_ = err
 	}
@@ -618,7 +624,10 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if err := h.users.TouchLogin(ctx, target.UserID, h.now()); err != nil {
+	// SwitchTenant stamps last_login_at on the row in the TARGET tenant while
+	// the session is still scoped to the current one — the same shape as the
+	// GetBySubject above it.
+	if err := h.users.TouchLogin(auth.WithActingTenant(ctx, target.TenantID), target.UserID, h.now()); err != nil {
 		_ = err // non-fatal — the switch succeeded
 	}
 	h.auditTenantSwitch(ctx, cur, *target)

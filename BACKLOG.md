@@ -947,109 +947,36 @@ open deliberately — each notes why._
 
 ## Database
 
-### Tables carrying `tenant_id` with no RLS policy
+### `refresh_tokens` has no RLS policy — pre-auth WRITES, not reads
 
-- **Status:** Reopened 2026-08-29. Attempted in 014, reverted in 015 the same
-  day — it broke login on the cluster and 105 of 108 e2e tests failed.
-- **Reason:** `users`, `refresh_tokens`, `user_settings` and
-  `tenant_default_bindings` carry a `tenant_id` column with no policy and no
-  note saying why. Silence is not a decision: a reader cannot tell an
-  exemption from an omission, and the one time this set was audited by hand it
-  hid a real hole (a tenant could revoke another tenant's capability — fixed
-  in 004). `tests/integration/rls_coverage_gate_test.go` enumerates the set
-  from `pg_policies` and fails on anything not explicitly allow-listed, so the
-  gap is recorded rather than inferred.
-- **What 014 got right**, and what a redo should keep:
-  - The three cross-tenant READ paths on `users` were traced and handled, and
-    the handling is still in the tree because it is correct with or without a
-    policy: `WithCrossTenantRead` on the platform-admin `ListUsers` and on
-    `ListMyMemberships`, `WithActingTenant` on `SwitchTenant` (tighter than
-    the flag — it scopes to the target rather than widening to all) and on the
-    default-binding writes.
-  - The policy shape: `USING` admits `paladin_session_cross_tenant()`,
-    `WITH CHECK` never does, so a misplaced flag can show too much and can
-    never cross-write. Verified against a live database.
-- **What it got wrong, and what the redo must do differently:**
-  - The pre-auth exemption was written `FOR SELECT`. Login has no session
-    tenant — that is the point of the path — so `WITH CHECK (tenant_id =
-    paladin_session_tenant_id())` compares against NULL and refuses the INSERT.
-    Error, verbatim: `persist refresh: ERROR: new row violates row-level
-    security policy for table "refresh_tokens" (SQLSTATE 42501)`.
-  - The pre-auth READ surface was mapped carefully; the pre-auth WRITE surface
-    was never asked about. It is at least: `TouchUserLogin` (UPDATE on `users`
-    at login), the refresh-token INSERT at login, and the supersede UPDATE
-    plus successor INSERT on every rotation — all before a session exists.
-- **The write surface, enumerated 2026-08-30.** This is the step that was
-  skipped. Every INSERT/UPDATE/DELETE on the four tables, with the session
-  tenant each runs under:
-
-  `users`
-  | write | reached from | session tenant | row's tenant | class |
-  |---|---|---|---|---|
-  | CreateUser | UserService.CreateUser | caller's | may be ANOTHER (platform admin may create outside its own tenant) | cross-tenant |
-  | UpdateUser | UpdateUser, GrantScopes, RevokeScopes | caller's | target user's, may be another | cross-tenant |
-  | UpdateUserPasswordHash | userh reset | caller's | target's, may be another | cross-tenant |
-  | UpdateUserPasswordHash | authh ChangePassword | own | own | scoped |
-  | TouchUserLogin | **Login** | **none** | the user's | **pre-session** |
-  | TouchUserLogin | SwitchTenant | current | target | cross-tenant |
-  | DeleteUser | DeleteUser | caller's | target's | cross-tenant |
-
-  `refresh_tokens`
-  | write | reached from | session tenant | class |
-  |---|---|---|---|
-  | InsertRefreshToken | Login → mintPair | none | **pre-session** |
-  | InsertRefreshToken | RefreshToken → mintPair | none | **pre-session** |
-  | InsertRefreshToken | SwitchTenant → mintPair | current | cross-tenant |
-  | InsertRefreshToken | oauth issueTokens | none | **pre-session** |
-  | SupersedeRefreshToken | RefreshToken | none | **pre-session** |
-  | RevokeRefreshToken | oauth tokenRefresh | none | **pre-session** |
-  | RevokeRefreshTokensForUser | ChangePassword | own | scoped |
-  | RevokeRefreshTokenFamily | Revoke (logout) | caller's | scoped |
-  | RevokeRefreshTokenFamily | onRefreshReuse, both callers | none | **pre-session** |
-  | PurgeExpiredRefreshTokens | worker | runs as paladin_migrate (BYPASSRLS) | n/a |
-
-  `user_settings` — Upsert and Delete, both from usersettingsh, both keyed on
-  `p.TenantID` (the caller's own). Genuinely scoped; plain isolation is enough
-  and no pre-auth policy is needed.
-
-  `tenant_default_bindings` — Set and Clear, the admin plane writing for
-  another tenant. Already handled: both call sites run under
-  `auth.WithActingTenant`, which makes them scoped writes to the target.
-
-- **What the table says about the design:**
-  - `refresh_tokens` writes are overwhelmingly pre-session — insert, supersede,
-    revoke, family-revoke. A SELECT-only exemption cannot work here; it needs
-    `FOR ALL` with `paladin_session_tenant_id() IS NULL`, or the table stays
-    exempt with that written down. 014 chose SELECT and this is exactly where
-    it broke.
-  - `users` needs the pre-session write for TouchUserLogin at login, and the
-    whole admin surface writes across tenants. The admin writes can become
-    scoped by wrapping them in `WithActingTenant(target)` — tighter than a
-    pre-auth exemption and the pattern already used for the default bindings —
-    which would leave login as the only pre-session write to admit.
-  - `user_settings` can take the ordinary policy today, on its own merits.
-  - So the four are NOT one change. `user_settings` and
-    `tenant_default_bindings` shipped separately in 016 and are done.
-    What remains is `users` — six admin call sites to wrap before login is the
-    only pre-session write left — and `refresh_tokens`, which needs a decision
-    about whether a pre-auth WRITE exemption is acceptable at all, given the
-    token is itself the credential. That one is a threat-model question, not a
-    SQL one.
-  - 016 also turned up a reader the write-surface table had missed:
-    `GetDefaultBinding` reads another tenant's row while the admin's session
-    is scoped elsewhere, so the policy filtered it and the console saw "no
-    binding" rather than an error. The suite caught it in three minutes,
-    which is the whole point of the `paladin_app` switch — the same class of
-    mistake cost a 50-minute cluster run last time.
-- **Definition of Done:** each of the four gets a policy whose exemptions cover
-  reads AND writes, or a comment in the migration saying why it cannot have
-  one; the allow-list entry is deleted, which is the visible act of closing
-  the gap.
-- **Blockers:** none any more. The compose stack now connects as `paladin_app`
-  rather than as the owner, so the suite enforces policies — proven the hard
-  way: with the 014 image still in place, the new wiring failed at bootstrap
-  in seconds with the same `new row violates row-level security policy` that
-  had taken a 50-minute cluster run to surface.
+- **Status:** Open, and the last of the four. `users`, `user_settings` and
+  `tenant_default_bindings` are covered by 016 and 017.
+- **Reason:** Seven of the ten writes on this table happen before a session
+  exists, and not incidentally — a refresh token is presented precisely when
+  there is nothing to scope to. Insert at login, insert and supersede on every
+  rotation, revoke on the OAuth token endpoint, family-revoke from reuse
+  detection: all pre-session. The other three (revoke-for-user on a password
+  change, family-revoke at logout) carry a tenant and would be fine.
+  The three tables that shipped did so because their writes could all be
+  PINNED — each one turned out to know its tenant, and the six admin sites on
+  `users` plus login's own stamp were wrapped in WithActingTenant rather than
+  exempted. That trick does not work here: at login there is no user yet, and
+  at rotation the presented token is the only thing identifying anyone.
+- **Definition of Done:** a decision, then the policy. The options are not
+  equivalent:
+  - a pre-auth WRITE exemption (`paladin_session_tenant_id() IS NULL`), which
+    is narrow in practice — only the unauthenticated auth endpoints reach the
+    table with no tenant — but does mean a connection with no tenant set may
+    insert a row for any tenant;
+  - narrowing that exemption by column grant, the way `api_tokens` narrows its
+    pre-auth read;
+  - a dedicated role for the auth endpoints, so the exemption is carried by
+    the connection rather than by the absence of a GUC;
+  - or leaving it exempt with the reasoning written into the migration, which
+    is a legitimate answer as long as it is a decision rather than a silence.
+- **Blockers:** none technical. This is a threat-model question — the token is
+  itself the credential — and it should be answered deliberately rather than
+  by whoever next touches the file.
 
 ### Index candidates considered and rejected (2026-08-18 audit)
 

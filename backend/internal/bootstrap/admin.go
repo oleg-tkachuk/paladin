@@ -120,6 +120,14 @@ func EnsureAdmin(ctx context.Context, cfg config.BootstrapAdmin, deps Deps) erro
 		displayName = cfg.Subject
 	}
 
+	// Bootstrap runs as a CLI command, not as a request, so nothing has put a
+	// tenant on the context — and `users` carries an RLS policy as of 017,
+	// whose WITH CHECK pins a write to the session tenant. The tenant is the
+	// one this function just ensured exists, so scope the whole block to it.
+	// Without this the very first `paladin bootstrap` on a fresh database
+	// cannot create its own admin.
+	ctx = auth.WithActingTenant(ctx, tenantID)
+
 	existing, err := deps.Users.GetBySubject(ctx, tenantID, cfg.Subject)
 	switch {
 	case errors.Is(err, authstore.ErrNotFound):

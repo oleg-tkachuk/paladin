@@ -38,6 +38,22 @@ func NewHandler(u authstore.UserRepository, policy cedar.Authorizer) *Handler {
 // hasPlatformAdmin/tenant-isolation checks stay as defense-in-depth at the
 // call sites; Cedar adds policy expressivity (tenant.admin permits, etc.)
 // on top.
+// readCtx widens a lookup that cannot name its tenant yet.
+//
+// Every admin operation here starts by fetching a user BY ID ALONE — the
+// tenant is a property of the row, not of the request — so a tenant-scoped
+// read would find nothing before the handler could learn which tenant to
+// scope to. The flag widens SELECT only; the authorization gate on the line
+// after each read is what bounds it, and the write that follows is pinned to
+// the row's own tenant with WithActingTenant.
+//
+// This does not loosen anything: with no policy on `users` today the read is
+// already unrestricted. It keeps that behaviour while letting the writes be
+// pinned, which is the half a policy can actually enforce.
+func readCtx(ctx context.Context) context.Context {
+	return auth.WithCrossTenantRead(ctx)
+}
+
 func (h *Handler) authorize(ctx context.Context, action string, target authstore.User) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
@@ -107,7 +123,7 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	u, err := h.users.Create(ctx, authstore.User{
+	u, err := h.users.Create(auth.WithActingTenant(ctx, in.TenantID), authstore.User{
 		TenantID:     in.TenantID,
 		Subject:      in.Subject,
 		DisplayName:  in.DisplayName,
@@ -128,7 +144,7 @@ func (h *Handler) GetUser(ctx context.Context, id uuid.UUID) (*authstore.User, e
 	if err != nil {
 		return nil, err
 	}
-	u, err := h.users.GetByID(ctx, id)
+	u, err := h.users.GetByID(readCtx(ctx), id)
 	if err != nil {
 		return nil, apiutil.MapError(err)
 	}
@@ -158,7 +174,7 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 	if err != nil {
 		return nil, err
 	}
-	current, err := h.users.GetByID(ctx, in.UserID)
+	current, err := h.users.GetByID(readCtx(ctx), in.UserID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -179,7 +195,7 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 			current.Roles = in.Roles
 		}
 	}
-	updated, err := h.users.Update(ctx, current, in.ExpectedVersion)
+	updated, err := h.users.Update(auth.WithActingTenant(ctx, current.TenantID), current, in.ExpectedVersion)
 	if err != nil {
 		return nil, apiutil.MapError(err)
 	}
@@ -193,7 +209,7 @@ func (h *Handler) DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion 
 	if err != nil {
 		return err
 	}
-	u, err := h.users.GetByID(ctx, id)
+	u, err := h.users.GetByID(readCtx(ctx), id)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
@@ -204,7 +220,7 @@ func (h *Handler) DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion 
 	if err := h.authorize(ctx, cedar.ActionManageUser, u); err != nil {
 		return err
 	}
-	if err := h.users.Delete(ctx, id, expectedVersion); err != nil {
+	if err := h.users.Delete(auth.WithActingTenant(ctx, u.TenantID), id, expectedVersion); err != nil {
 		return apiutil.MapError(err)
 	}
 	return nil
@@ -299,7 +315,7 @@ func userRow(u authstore.User) map[string]any {
 // ─── GrantScopes / RevokeScopes ─────────────────────────────────────────────
 
 func (h *Handler) GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.Scope) (*authstore.User, error) {
-	current, err := h.users.GetByID(ctx, id)
+	current, err := h.users.GetByID(readCtx(ctx), id)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -307,7 +323,7 @@ func (h *Handler) GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.S
 		return nil, err
 	}
 	current.Scopes = mergeScopes(current.Scopes, scopes)
-	updated, err := h.users.Update(ctx, current, 0)
+	updated, err := h.users.Update(auth.WithActingTenant(ctx, current.TenantID), current, 0)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -315,7 +331,7 @@ func (h *Handler) GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.S
 }
 
 func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.Scope) (*authstore.User, error) {
-	current, err := h.users.GetByID(ctx, id)
+	current, err := h.users.GetByID(readCtx(ctx), id)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -323,7 +339,7 @@ func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.
 		return nil, err
 	}
 	current.Scopes = removeScopes(current.Scopes, scopes)
-	updated, err := h.users.Update(ctx, current, 0)
+	updated, err := h.users.Update(auth.WithActingTenant(ctx, current.TenantID), current, 0)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -333,7 +349,7 @@ func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.
 // ─── ResetPassword ──────────────────────────────────────────────────────────
 
 func (h *Handler) ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) (string, error) {
-	current, err := h.users.GetByID(ctx, id)
+	current, err := h.users.GetByID(readCtx(ctx), id)
 	if err != nil {
 		return "", connect.NewError(connect.CodeNotFound, err)
 	}
@@ -347,7 +363,7 @@ func (h *Handler) ResetPassword(ctx context.Context, id uuid.UUID, newPassword s
 	if err != nil {
 		return "", connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err := h.users.UpdatePasswordHash(ctx, id, hash); err != nil {
+	if err := h.users.UpdatePasswordHash(auth.WithActingTenant(ctx, current.TenantID), id, hash); err != nil {
 		return "", connect.NewError(connect.CodeInternal, fmt.Errorf("reset password: %w", err))
 	}
 	return newPassword, nil
