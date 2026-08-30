@@ -69,6 +69,9 @@ tasks:
       # Lint and build do not exercise assertions.
       - task: frontend:node:test
       - task: frontend:lint
+      # Cheap, and it catches a divergence that would otherwise surface as an
+      # image built with a different pnpm than CI and local dev used.
+      - task: deps:check:pnpm
       - task: frontend:node:build
 
   # another-service-style aggregate fan-outs over the real per-component tasks.
@@ -265,6 +268,7 @@ tasks:
     cmds:
       - task: deps:update:go
       - task: deps:update:node
+      - task: deps:update:pnpm
 
   deps:update:go:
     desc: Bump backend Go module deps (minor/patch)
@@ -279,3 +283,21 @@ tasks:
     dir: frontend
     cmds:
       - pnpm update
+
+  deps:update:pnpm:
+    desc: Pin pnpm itself to the latest stable (package.json + Dockerfile)
+    summary: |-
+      `deps:update:node` bumps what pnpm INSTALLS; this bumps pnpm. The
+      version is pinned twice — packageManager in package.json (local dev, and
+      what pnpm/action-setup reads in CI) and ARG PNPM_VERSION in the image
+      build — and the two must agree. Both sat at 11.21.0 while 11.24.0 was
+      current, because nothing updated either.
+      Resolves the version from the npm registry, never from whatever is
+      installed locally, and refuses anything that is not a GA triple.
+    cmds:
+      - ./frontend/scripts/pnpm-pin.sh update
+
+  deps:check:pnpm:
+    desc: Fail if the two pnpm pins disagree
+    cmds:
+      - ./frontend/scripts/pnpm-pin.sh check
