@@ -1883,23 +1883,6 @@ of the pipeline._
 
 ---
 
-## `ObjectRepo.CreateObject` does not classify unique violations
-
-- **Status:** Open, reachability unconfirmed. Surfaced 2026-08-30.
-- **Reason:** `objects` carries `UNIQUE (collection_id, path)` — not partial,
-  so one path per collection, full stop — and `CreateObject` returns
-  `fmt.Errorf("create object: %w", err)` without classifying, the same shape
-  that made a duplicate collection a 500. Whether an ordinary second upload of
-  the same key reaches that INSERT was not established: the upload path may
-  resolve an existing row first, and driving it by hand needs the data plane's
-  own tenant context, which the probe did not get to.
-- **Definition of Done:** determine whether a second UploadObject for an
-  existing key reaches the INSERT. If it does, the answer belongs to the
-  object domain (a new version? a conflict?) and is a product question, not
-  just a mapping. If it does not, map the violation anyway as the race
-  backstop the other adapters have.
-- **Blockers:** none but the question above.
-
 ## List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.
