@@ -55,6 +55,15 @@ tasks:
       # single-node resource/replica tuning, and the ArgoCD-owned secrets
       # (paladin-bootstrap-admin, paladin-s3-credentials) turned OFF so the chart
       # doesn't fight ArgoCD for them. Used automatically when present.
+      #
+      # That default path is maintainer-specific — gitops is a private
+      # sibling checkout, so for anyone else it simply does not exist. What
+      # the caller asked for is kept separate from what we guessed at
+      # (OVERLAY_EXPLICIT): a path the caller named and we cannot find is an
+      # error, while an absent default is a note. Both are said out loud,
+      # because the silent version of this deploys chart defaults — which
+      # re-enable the secrets ArgoCD owns — and looks identical in the log.
+      OVERLAY_EXPLICIT: '{{.OVERLAY | default ""}}'
       OVERLAY: '{{.OVERLAY | default (print "../../gitops/deploy/argocd-apps/applications/overlays/local/values/paladin/" .PROJECT_NAME ".yaml")}}'
     preconditions:
       - sh: command -v helm >/dev/null
@@ -68,10 +77,19 @@ tasks:
       - cmd: |-
           set -euo pipefail
           # Values: explicit VALUES wins; else the sibling gitops overlay
-          # if present; else chart defaults.
+          # if present; else chart defaults. Every branch announces itself.
           vfile="{{.VALUES}}"
-          if [ -z "$vfile" ] && [ -f "{{.OVERLAY}}" ]; then
+          if [ -n "$vfile" ]; then
+            [ -f "$vfile" ] || { echo "VALUES=$vfile: no such file" >&2; exit 1; }
+            echo "[orbstack] using values: $vfile"
+          elif [ -f "{{.OVERLAY}}" ]; then
             vfile="{{.OVERLAY}}"; echo "[orbstack] using overlay: $vfile"
+          elif [ -n "{{.OVERLAY_EXPLICIT}}" ]; then
+            echo "OVERLAY={{.OVERLAY_EXPLICIT}}: no such file" >&2; exit 1
+          else
+            echo "[orbstack] no overlay at {{.OVERLAY}} — installing with chart" \
+                 "defaults. That path is the maintainer's private gitops" \
+                 "checkout; pass OVERLAY=<file> or VALUES=<file> for your own." >&2
           fi
           vflag=""; [ -n "$vfile" ] && vflag="--values $vfile"
           # helm v4's default 'watcher' wait engine hangs on this chart's

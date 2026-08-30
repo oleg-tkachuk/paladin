@@ -1786,25 +1786,6 @@ of the pipeline._
   both branches.
 
 
-### `frontend/tasks/docker.task.yaml` defaults an overlay path into a private repo
-
-- **Status:** Deferred — considered and consciously kept.
-- **Reason:** `OVERLAY` defaults to
-  `../../gitops/deploy/argocd-apps/applications/overlays/local/values/paladin/…`,
-  a sibling repository that is not public. For anyone else that path does
-  not exist, so the task silently falls back or fails depending on the
-  code path. The e2e and compose stacks no longer depend on `gitops`;
-  this deploy helper is the last coupling, and it only affects the
-  maintainer's own cluster deploys.
-- **Definition of Done:** either the default becomes empty (overlay opt-in
-  via `OVERLAY=…`), or the task documents that it is maintainer-specific
-  and exits cleanly when the path is absent.
-- **Blockers:** none. Left as-is deliberately so the maintainer's deploy
-  loop keeps working; revisit if an outside contributor ever needs the
-  Kubernetes deploy tasks.
-
----
-
 ## Documentation
 
 ## Capability module
