@@ -39,8 +39,20 @@ fi
 
 # ─── HTTP helpers ────────────────────────────────────────────────────────────
 
+# call <method> <body> [idempotency-key]
+#
+# Every Create*/Issue* RPC is rejected outright without an Idempotency-Key
+# (middleware/idempotency.go, RequireOnCreate) — the header is not optional
+# and not a nicety. This script had no idea: it sent none, so the very first
+# CreateTenant failed and nothing after it ran.
+#
+# The key is passed in rather than generated here, because it must be the
+# same on every run. A fresh random key each time would re-enter the handler
+# and lean on the create colliding, which happens to work only because
+# `ensure` forgives already_exists; a key derived from the resource identity
+# replays the original response instead, which is what idempotent means.
 call() {
-    local method=$1 body=$2
+    local method=$1 body=$2 idem=${3:-}
     local host="$PALADIN_HOST"
     case "$method" in
         paladin.admin.v1.*) host="$PALADIN_ADMIN_HOST" ;;
@@ -50,13 +62,15 @@ call() {
         -H "Connect-Protocol-Version: 1" \
         -H "Authorization: Bearer $JWT" \
         -H "X-Tenant-ID: $TENANT_ID" \
+        ${idem:+-H "Idempotency-Key: $idem"} \
         -d "$body"
 }
 
+# ensure <label> <method> <body> <idempotency-key>
 ensure() {
-    local label=$1 method=$2 body=$3
+    local label=$1 method=$2 body=$3 idem=$4
     local resp code msg
-    resp=$(call "$method" "$body")
+    resp=$(call "$method" "$body" "$idem")
     code=$(echo "$resp" | jq -r '.code // empty')
     msg=$(echo "$resp" | jq -r '.message // empty')
     if [[ -z "$code" ]] || [[ "$code" == "already_exists" ]] || [[ "$msg" == *"duplicate key"* ]]; then
@@ -188,13 +202,15 @@ echo "─── Bootstrapping dev tenant against $PALADIN_HOST ───"
 ensure "tenant" paladin.admin.v1.TenantService/CreateTenant \
     "$(jq -nc --arg tid "$TENANT_ID" \
         '{tenant_id: $tid,
-          tenant: {slug: "ui-dev", display_name: "UI dev tenant"}}')"
+          tenant: {slug: "ui-dev", display_name: "UI dev tenant"}}')" \
+    "dev-bootstrap-tenant-$TENANT_ID"
 
 ensure "bucket" paladin.admin.v1.BucketService/CreateBucket \
     "$(jq -nc --arg be "$BACKEND_ID" --arg b "$BUCKET_ID" \
         '{parent: ("storageBackends/" + $be),
           bucket_id: $b,
-          bucket: {display_name: "primary"}}')"
+          bucket: {display_name: "primary"}}')" \
+    "dev-bootstrap-bucket-$BACKEND_ID-$BUCKET_ID"
 
 ensure "collection" paladin.admin.v1.CollectionService/CreateCollection \
     "$(jq -nc --arg tid "$TENANT_ID" --arg c "$COLLECTION" \
@@ -206,7 +222,8 @@ ensure "collection" paladin.admin.v1.CollectionService/CreateCollection \
             collection: $c,
             display_name: "default namespace",
             bucket: ("storageBackends/" + $be + "/buckets/" + $b)
-          }}')"
+          }}')" \
+    "dev-bootstrap-collection-$TENANT_ID-$COLLECTION"
 
 # 2. Permissive Cedar policy at both scopes
 patch_tenant_policy

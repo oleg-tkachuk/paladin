@@ -1563,20 +1563,35 @@ mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
 
-### `dev-bootstrap.sh` is repaired but unexercised
+### `dev-bootstrap.sh` works, and nothing runs it
 
-- **Status:** Open. Surfaced 2026-08-21.
+- **Status:** Narrowed 2026-08-30 — it has now been executed against a live
+  backend and it failed on the first call. Surfaced 2026-08-21.
 - **Reason:** the script had been calling `paladin.v1.TenantService` — a proto
   package that has not existed for some time — and sending UpdateTenant's
   fields at the top level after they moved under `tenant`. It could not have
-  worked, which means nobody ran it and nothing noticed. It has been ported to
-  the current contract (AIP-122 create shape, `SetCollectionPolicy`), but only
-  `bash -n` has been run against it; no live backend has executed it.
-- **Definition of Done:** run it against a fresh dev stack and confirm the UI
-  can list tenants, buckets and collections afterwards. Then decide whether it
-  is worth a smoke job — a bootstrap script that silently rots is worse than
-  no bootstrap script, because it is the first thing a new contributor runs.
-- **Blockers:** none; needs a running stack.
+  worked, which means nobody ran it and nothing noticed. Porting it to the
+  current contract was not enough: run against the e2e compose stack on
+  2026-08-30 it stopped on `CreateTenant` with `idempotency: missing
+  Idempotency-Key header`. Every `Create*`/`Issue*` RPC requires that header
+  (`middleware/idempotency.go`, `RequireOnCreate`) and the script sent none,
+  so all three creates and both policy patches were unreachable. Fixed by
+  giving each create a key derived from the resource identity, so a re-run
+  replays rather than colliding. Verified: two consecutive runs both report
+  five ✓, and `ListTenants` / `ListCollections` — the same RPCs the console
+  reads — return the tenant, bucket and collection afterwards.
+- **What this proves about the gate:** `bash -n` was green the entire time the
+  script could not create a single resource. Syntax checking a script that
+  talks to an API tells you nothing about whether the API still accepts what
+  it sends; only running it does.
+- **Definition of Done:** a run gate. The natural home is the e2e workflow,
+  which already boots the compose stack this was verified against — the same
+  blocked-CI dependency as the two entries below. It deliberately does NOT
+  belong in the Playwright suite's own run: that suite seeds its own fixtures
+  and asserts on what exists, so bootstrapping an extra tenant into it would
+  be a test perturbing its neighbours.
+- **Blockers:** the Actions spending limit — see *Actions will not start a
+  job*.
 
 ---
 
