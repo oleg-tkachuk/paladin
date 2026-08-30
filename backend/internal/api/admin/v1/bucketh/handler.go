@@ -567,6 +567,32 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	if err := h.authorize(ctx, actionManageBucket, in.BackendID, in.BucketName, uuid.Nil); err != nil {
 		return err
 	}
+	// Refuse while Collections still bind to this bucket. Without this the
+	// only thing standing in the way is collections_bucket_id_fkey, and a
+	// foreign key is not an API contract: the caller got CodeInternal with a
+	// raw "violates foreign key constraint ... (SQLSTATE 23503)" string, and
+	// the outbox path got further still — MarkDeleting succeeded, then the
+	// reconciler retried a row delete that could never land.
+	//
+	// The count runs cross-tenant deliberately. Buckets are platform-level
+	// and the Collections bound to them are not, so under the RLS pool a
+	// tenant-scoped session counts zero and reports a bucket with other
+	// tenants' data on it as free. Measured, not assumed: as paladin_app with
+	// no session tenant the same count returns 0 where the owner sees 1,
+	// while the FK check — an internal trigger that does not consult RLS —
+	// sees the row either way. The platform.admin / bucket.admin gate above
+	// is what licenses the wider read.
+	refs, err := h.repo.CountCollectionsReferencing(
+		auth.WithCrossTenantRead(ctx), in.BackendID, in.BucketName)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal,
+			fmt.Errorf("count collections on bucket: %w", err))
+	}
+	if refs > 0 {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("bucket %q still has %d collection(s) bound to it; delete them first",
+				in.BucketName, refs))
+	}
 	// Outbox model for deletes (mirrors CreateBucket): the row stays in
 	// place flipped to 'deleting', and the bucket-reconciler worker
 	// drives the physical s3.DeleteBucket then the actual row removal.

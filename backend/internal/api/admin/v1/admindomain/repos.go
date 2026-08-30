@@ -76,6 +76,12 @@ type BucketRepository interface {
 	SetReplication(ctx context.Context, backendID, bucketName string, r BucketReplication, expectedVersion int64) error
 	SetConstraints(ctx context.Context, backendID, bucketName string, c BucketConstraints, expectedVersion int64) error
 	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
+	// CountCollectionsReferencing reports how many Collections bind to this
+	// bucket, across every tenant that owns one. Buckets are platform-level
+	// and their Collections are not, so the caller must run this under a
+	// cross-tenant read — a tenant-scoped session sees zero and concludes
+	// the bucket is free.
+	CountCollectionsReferencing(ctx context.Context, backendID, bucketName string) (int64, error)
 	// BackendEnabled reports whether the named storage backend is enabled.
 	// Returns ErrNotFound when the backend id is unknown. Used by
 	// CreateBucket to refuse binding a bucket to a disabled backend

@@ -1857,6 +1857,26 @@ of the pipeline._
 
 ---
 
+## `internal/api/v1/bucket` is a second bucket handler nothing serves
+
+- **Status:** Open. Surfaced 2026-08-30 while fixing the admin DeleteBucket
+  guard.
+- **Reason:** `bucket.Handler` is never constructed outside its own tests —
+  `grep` for `bucket.NewHandler` over non-test code returns nothing, and every
+  `paladin.admin.v1.BucketService` RPC is served by `admin/v1/bucketh`. Only
+  `bucket.Repository` and `bucket.Provisioner` survive as types `wire` passes
+  around. The package is not harmless dead weight: its `DeleteBucket` carries
+  a `CountCollections` referential guard that the live handler did not, so
+  reading it gave a confident, wrong answer about what production does. That
+  is what happened — the guard was found, believed, and only a live repro
+  showed the delete reaching Postgres and failing on
+  `collections_bucket_id_fkey`.
+- **Definition of Done:** delete the handler half of the package (keeping the
+  `Repository`/`Provisioner` interfaces the adapters and wire depend on), or
+  serve it. Whichever way, one bucket handler.
+- **Blockers:** none. Wants its own change — the package has tests that go
+  with it, and deleting a handler is not a thing to bundle into a bug fix.
+
 ## List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.

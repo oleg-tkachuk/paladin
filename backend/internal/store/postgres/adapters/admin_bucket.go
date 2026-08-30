@@ -422,6 +422,10 @@ func (r *BucketRepoV2) SetConstraints(ctx context.Context, backendID, bucketName
 	return nil
 }
 
+func (r *BucketRepoV2) CountCollectionsReferencing(ctx context.Context, backendID, bucketName string) (int64, error) {
+	return r.q.CountCollectionsReferencingBucket(ctx, backendID, bucketName)
+}
+
 func (r *BucketRepoV2) Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error {
 	return r.deleteWith(ctx, r.q, backendID, bucketName, expectedVersion)
 }
