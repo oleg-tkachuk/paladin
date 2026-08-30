@@ -642,7 +642,12 @@ open deliberately — each notes why._
   RLS-scoped/no-GUC store fails `"subscription deleted"` so the invariant is
   pinned. Faithful "no-GUC" reproduction needs an `paladin_app` pool WITHOUT the
   harness's WithRLS GUC hook — the piece that makes this more than a one-liner.
-- **Blockers:** none — needs the harness to expose a GUC-less `paladin_app` pool.
+- **Blockers:** none, and the stated one is stale (checked 2026-08-30).
+  `pgharness.Harness.PoolAppNoGUC` already exists and its own comment describes
+  exactly this condition: `paladin_app`, no RLS hook, tenant GUC never set, so
+  every policy matches zero rows. Nothing in the tree uses it — the pool was
+  provided for this test and the test was never written. So what remains is
+  the test itself, not the harness work.
 
 ### Event dispatcher: Kafka sink
 
@@ -2002,6 +2007,10 @@ of the pipeline._
   `task backend:test:rpc-surface` (the whole-contract gate, stack included).
   Those are currently the only gates that actually run.
 
+- **Re-checked 2026-08-30:** unchanged. The latest runs (Test, Integration,
+  Security) all report `conclusion: failure` with **zero steps executed** on
+  every job — the same signature, not a new failure. Nothing in the repository
+  can move this.
 ---
 
 ## Terminal tenant events are observed by query, not by subscription
