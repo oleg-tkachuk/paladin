@@ -3,6 +3,7 @@ package objecttag
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -92,6 +93,20 @@ func TestCreateObjectTag(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpTag
 		_, err := h.CreateObjectTag(ctx, CreateArgs{Slug: "s"})
 		wantCode(t, err, connect.CodePermissionDenied)
+	})
+
+	// Same shape as collection.CreateCollection: the repository classifies a
+	// duplicate slug, and the handler used to discard it by wrapping every
+	// failure in a hardcoded CodeInternal. The "repo error → internal" case
+	// below is the other half — MapError's fallback still has to hold, or
+	// this change would have turned every unclassified failure into something
+	// softer than a 500.
+	t.Run("duplicate slug → already exists", func(t *testing.T) {
+		h := NewHandler(&fakeRepo{createFn: func(context.Context, CreateArgs) (ObjectTag, error) {
+			return ObjectTag{}, fmt.Errorf("create object tag: %w", ErrObjectTagExists)
+		}})
+		_, err := h.CreateObjectTag(authedCtx(tid), CreateArgs{TenantID: tid, Slug: "s"})
+		wantCode(t, err, connect.CodeAlreadyExists)
 	})
 
 	t.Run("repo error → internal", func(t *testing.T) {

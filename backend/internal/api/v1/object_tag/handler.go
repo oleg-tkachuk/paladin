@@ -6,7 +6,6 @@ package objecttag
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -70,7 +69,11 @@ func (h *Handler) CreateObjectTag(ctx context.Context, args CreateArgs) (*Object
 	args.TenantID = t
 	ot, err := h.repo.Create(ctx, args)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create object tag: %w", err))
+		// MapError, not a hardcoded Internal — same reason as
+		// collection.CreateCollection: the repository classifies a duplicate
+		// slug as ErrObjectTagExists, and forcing Internal here discarded it.
+		// Unrecognised errors still land on Internal, MapError's fallback.
+		return nil, apiutil.MapError(err)
 	}
 	return &ot, nil
 }
@@ -131,6 +134,12 @@ func (h *Handler) ListObjectTags(ctx context.Context, pageSize int32, pageToken 
 	return h.repo.List(ctx, t, pageSize, pageToken)
 }
 
+// ErrObjectTagExists is returned when a Create is refused because the tenant
+// already has a tag with that slug — UNIQUE (tenant_id, slug). Same reasoning
+// as collection.ErrCollectionExists: a duplicate is an answer, not a fault,
+// and it used to arrive as a raw SQLSTATE 23505 under CodeInternal.
+var ErrObjectTagExists = errors.New("object tag already exists in this tenant")
+
 var ErrVersionMismatch = errors.New("resource_version mismatch")
 
 // Register this package's sentinels with the central error→Connect-code
@@ -138,4 +147,5 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // consistent code instead of a hand-written per-handler if/else.
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+	apiutil.RegisterError(ErrObjectTagExists, connect.CodeAlreadyExists)
 }

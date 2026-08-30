@@ -222,7 +222,17 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 				"bucket_name":  b.BucketName,
 			})
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create collection: %w", err))
+		// MapError, not a hardcoded CodeInternal. The repository classifies
+		// what it can — a duplicate name is ErrCollectionExists — and forcing
+		// Internal here threw that away, so the mapping below the handler was
+		// unreachable and every duplicate came back as a 500 carrying raw
+		// SQLSTATE text. Anything genuinely unrecognised still lands on
+		// Internal, which is MapError's own fallback.
+		//
+		// The prefix is gone with it: the adapter already labels its errors
+		// "create collection: …", and adding a second one produced
+		// "create collection: create collection: ERROR: …".
+		return nil, apiutil.MapError(err)
 	}
 	// writes into the slot the audit mw installed
 	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
@@ -624,6 +634,14 @@ func (h *Handler) authorizeFull(
 var ErrCollectionHasObjects = errors.New(
 	"collection has live objects; remove or move them before deleting")
 
+// ErrCollectionExists is returned when a Create is refused because the tenant
+// already has a Collection by that name — UNIQUE (tenant_id, collection).
+// Trying to create something that is already there is an ordinary answer to
+// an ordinary request, not a server fault: before this existed the caller got
+// `duplicate key value violates unique constraint
+// "collections_tenant_id_name_key" (SQLSTATE 23505)` under CodeInternal.
+var ErrCollectionExists = errors.New("collection already exists in this tenant")
+
 // ErrVersionMismatch is returned when optimistic-concurrency control fails.
 // Repositories should surface it so handlers can map to CodeAborted.
 var ErrVersionMismatch = errors.New("resource_version mismatch")
@@ -638,6 +656,7 @@ func mapVersionErr(err error) error {
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
 	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrCollectionExists, connect.CodeAlreadyExists)
 	// A stored Cedar policy that will not compile is a state of the data, not
 	// a fault of the server. Registered here rather than in the cedar package
 	// because apiutil's registry is the API layer's, and cedar sits below it.

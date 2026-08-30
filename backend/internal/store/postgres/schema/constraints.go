@@ -47,6 +47,18 @@ const (
 	// CollectionsFormat — CHECK accepting multi-segment slash-separated
 	// kebab-case paths (post-the schema baseline (001_initial_schema.sql)).
 	CollectionsFormat = "collections_name_format"
+	// CollectionsNameUnique — UNIQUE (tenant_id, collection). This is the
+	// one a duplicate CreateCollection trips, and until it was matched the
+	// caller got its raw text as CodeInternal.
+	CollectionsNameUnique = "collections_tenant_id_name_key"
+)
+
+// object_tags table constraint names — see the schema baseline
+// (001_initial_schema.sql).
+const (
+	// ObjectTagsSlugUnique — UNIQUE (tenant_id, slug); what a duplicate
+	// CreateObjectTag trips.
+	ObjectTagsSlugUnique = "object_tags_tenant_id_slug_key"
 )
 
 // tenant_default_bindings constraint names — see the schema baseline (001_initial_schema.sql).

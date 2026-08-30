@@ -13,6 +13,7 @@ import (
 
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -74,6 +75,18 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 		args.CedarPolicy,
 		rules,
 	); err != nil {
+		// A name the tenant already uses is an ordinary answer to an ordinary
+		// request. Unmapped it arrived as CodeInternal carrying
+		// `duplicate key value violates unique constraint
+		// "collections_tenant_id_name_key" (SQLSTATE 23505)` — a 500 for the
+		// database working exactly as designed. The delete path in this same
+		// file has classified its constraint since it was written; the create
+		// path never did.
+		if pgerr.Is(err, pgerr.UniqueViolation) &&
+			pgerr.ConstraintIs(err, schema.CollectionsNameUnique) {
+			return objectkey.Collection{}, fmt.Errorf("%w: %q",
+				objectkey.ErrCollectionExists, args.Collection)
+		}
 		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
 	}
 	return r.getWith(ctx, q, args.TenantID, args.Collection)

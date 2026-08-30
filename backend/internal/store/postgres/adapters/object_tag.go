@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 
 	objecttag "github.com/oleg-tkachuk/paladin/internal/api/v1/object_tag"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -34,6 +36,14 @@ func (r *ObjectTagRepo) Create(ctx context.Context, args objecttag.CreateArgs) (
 		args.Description,
 		labels,
 	); err != nil {
+		// Same shape as CollectionRepo.createWith: a slug the tenant already
+		// uses is a duplicate, not a fault, and unmapped it reached the caller
+		// as CodeInternal carrying the raw SQLSTATE 23505.
+		if pgerr.Is(err, pgerr.UniqueViolation) &&
+			pgerr.ConstraintIs(err, schema.ObjectTagsSlugUnique) {
+			return objecttag.ObjectTag{}, fmt.Errorf("%w: %q",
+				objecttag.ErrObjectTagExists, args.Slug)
+		}
 		return objecttag.ObjectTag{}, fmt.Errorf("create object tag: %w", err)
 	}
 	return r.Get(ctx, args.TenantID, args.Slug)

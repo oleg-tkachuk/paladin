@@ -3,6 +3,7 @@ package objectkey
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -241,6 +242,42 @@ func TestCreateCollection(t *testing.T) {
 			TenantID: other, Collection: "k", BackendID: "aws-eu",
 		})
 		wantCode(t, err, connect.CodePermissionDenied)
+	})
+
+	// The repository classifies a duplicate name as ErrCollectionExists. This
+	// is the half that decides whether the caller ever sees it: the handler
+	// used to wrap every failure of the create transaction in a hardcoded
+	// CodeInternal, which threw the classification away and returned a 500
+	// carrying `duplicate key value violates unique constraint
+	// "collections_tenant_id_name_key" (SQLSTATE 23505)`.
+	//
+	// Worth its own test because the adapter-level one cannot see it: that
+	// test asserts the sentinel comes out of the repository, and passes just
+	// as happily while the handler discards it on the way to the client.
+	t.Run("duplicate name → already exists", func(t *testing.T) {
+		h := NewHandler(&fakeRepo{
+			createTxFn: func(context.Context, CreateCollectionArgs) (Collection, error) {
+				return Collection{}, fmt.Errorf("create collection: %w", ErrCollectionExists)
+			},
+		}, allowAll())
+		_, err := h.CreateCollection(authedCtx(tid), CreateCollectionArgs{
+			TenantID: tid, Collection: "k", BackendID: "aws-eu", BucketName: "b",
+		})
+		wantCode(t, err, connect.CodeAlreadyExists)
+	})
+
+	// An error the registry does not know still has to be a 500 — MapError's
+	// fallback, not something the change above quietly widened.
+	t.Run("unclassified failure → internal", func(t *testing.T) {
+		h := NewHandler(&fakeRepo{
+			createTxFn: func(context.Context, CreateCollectionArgs) (Collection, error) {
+				return Collection{}, errors.New("connection reset by peer")
+			},
+		}, allowAll())
+		_, err := h.CreateCollection(authedCtx(tid), CreateCollectionArgs{
+			TenantID: tid, Collection: "k", BackendID: "aws-eu", BucketName: "b",
+		})
+		wantCode(t, err, connect.CodeInternal)
 	})
 
 	t.Run("missing backend_id → invalid argument", func(t *testing.T) {
