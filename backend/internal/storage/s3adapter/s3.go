@@ -402,8 +402,9 @@ func (c *Client) PresignGet(ctx context.Context, args object.PresignGetArgs) (st
 }
 
 func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error) {
+	resolved := c.resolveBucket(bucket)
 	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(c.resolveBucket(bucket)),
+		Bucket: aws.String(resolved),
 		Key:    aws.String(composeKey(tenantID, collection, key)),
 	})
 	if err != nil {
@@ -413,6 +414,19 @@ func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, co
 		// chain, so the operator log keeps the status code, request id and
 		// endpoint that make a HEAD failure diagnosable.
 		if notFound(err) {
+			// ...but only once the container itself is confirmed present.
+			// A HEAD response has no body, so a backend that answers a
+			// missing BUCKET with a bodiless 404 is, at the classifier,
+			// byte-identical to a missing key — and reading that as
+			// "absent" marks every pending object under a broken binding
+			// FAILED. HeadBucket separates the two, and it costs a round
+			// trip only on this path, which in steady state is the rare
+			// one: a HEAD that finds its object never reaches here.
+			if berr := c.confirmBucket(ctx, resolved); berr != nil {
+				return "", 0, "", "", fmt.Errorf(
+					"head: bucket %q unreachable, so the 404 does not mean the object is absent: %w (head object: %w)",
+					resolved, berr, err)
+			}
 			return "", 0, "", "", fmt.Errorf("head: %w: %w", ErrObjectNotFound, err)
 		}
 		return "", 0, "", "", fmt.Errorf("head: %w", err)
@@ -434,6 +448,24 @@ func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, co
 	// SeaweedFS / real S3: no Sequencer from HEAD; leave empty. The event
 	// pipeline supplies it where available.
 	return etag, size, checksum, "", nil
+}
+
+// confirmBucket reports whether the bucket is present and reachable, and is
+// consulted only to qualify a not-found verdict. A nil return licenses
+// ErrObjectNotFound; any error means the 404 is unexplained and the caller
+// must retry rather than decide.
+//
+// Deliberately not cached. The call happens only on the not-found path, so a
+// cache would trade a real correctness signal for a saved round trip on an
+// already-rare branch — and a stale "reachable" entry reintroduces exactly
+// the bug this closes. Revisit only if a workload makes 404s the common case.
+func (c *Client) confirmBucket(ctx context.Context, resolvedBucket string) error {
+	if _, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(resolvedBucket),
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) CopyObject(ctx context.Context, src, dst object.Location) error {

@@ -30,8 +30,9 @@ import (
 // decisions (ReconcilerV2 flips PENDING → FAILED on it, and FAILED objects
 // stop being served and become eligible for reclamation), so anything that
 // might instead be a reachability, credential, or availability problem must
-// stay a plain error and be retried. See notFound for the classification and
-// the one case it cannot separate.
+// stay a plain error and be retried. See notFound for the classification, and
+// Client.Head for the bucket-reachability check that qualifies its one
+// undecidable case before this sentinel is returned.
 var ErrObjectNotFound = errors.New("s3adapter: object not found")
 
 // bucketLevelCodes are S3 error codes that mean "the container is wrong or
@@ -72,12 +73,14 @@ var objectLevelCodes = map[string]struct{}{
 // and matching structurally keeps this working across SDK releases that move
 // or re-wrap those types — the shape is the contract, not the package path.
 //
-// Known limitation, called out because it is a data-safety one: a HEAD has no
+// One case this function cannot decide, by construction: a HEAD has no
 // response body, so a backend that answers a missing *bucket* with a bodiless
-// 404 and no error code is indistinguishable from a missing object at this
-// layer. Step 1 catches every backend that names the code; one that does not
-// would be misread. See BACKLOG for the bucket-reachability guard that closes
-// this properly.
+// 404 and no error code is indistinguishable from a missing object here. Step
+// 1 catches every backend that names the code; one that does not would be
+// misread. That last gap is closed one layer up — Client.Head confirms the
+// bucket with HeadBucket before it lets ErrObjectNotFound out — so a false
+// accept below is caught rather than acted on. This function's job is to be
+// cheap and right whenever the wire carries enough to be right.
 func notFound(err error) bool {
 	if err == nil {
 		return false

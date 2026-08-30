@@ -23,10 +23,18 @@ import (
 // TestHeadWrapsNotFound drives a real aws-sdk-go-v2 client against a backend
 // answering 404 to HEAD, which is the exact wire exchange the reconciler saw
 // 174 times in four minutes while MarkFailed stayed unreachable.
+//
+// The fake 404s the OBJECT HEAD only and lets the bucket HEAD succeed, which
+// is what "this key is gone" actually looks like on the wire. That matters
+// since Head grew its bucket-reachability guard: 404-ing both is now the
+// missing-BUCKET case, and it is asserted separately, as a non-sentinel error,
+// by TestHeadDistinguishesMissingBucketFromMissingObject. So this test is also
+// the proof that the guard does not swallow a genuine absent key — without
+// which the reconciler could never finish an abandoned upload.
 func TestHeadWrapsNotFound(t *testing.T) {
 	f := newFakeS3(t)
-	f.route = func(w http.ResponseWriter, r *http.Request, _, _ string) bool {
-		if r.Method == http.MethodHead {
+	f.route = func(w http.ResponseWriter, r *http.Request, _, key string) bool {
+		if r.Method == http.MethodHead && key != "" {
 			// A HEAD carries no body, so the backend can only signal through
 			// the status line — the case that made the SDK's typed error the
 			// only thing left to classify on.
@@ -92,31 +100,28 @@ func TestHeadDoesNotWrapTransientFailures(t *testing.T) {
 	}
 }
 
-// TestHeadCannotDistinguishMissingBucket pins a KNOWN LIMITATION rather than
-// desired behaviour, because the limitation is not ours to fix at this layer.
+// TestHeadDistinguishesMissingBucketFromMissingObject pins the guard that
+// closes a data-safety hole this test used to merely document.
 //
 // A HEAD response has no body, so aws-sdk-go-v2's HeadObject deserialiser
 // never reads an error code — it synthesises *s3types.NotFound from the 404
 // status alone. A backend answering "that bucket does not exist" therefore
-// arrives here byte-identical to "that key does not exist", even when the
-// server did send a NoSuchBucket code (as this test's fake does, and as this
-// assertion demonstrates).
+// arrives at notFound byte-identical to "that key does not exist", even when
+// the server did send a NoSuchBucket code, as this test's fake does. The
+// classifier cannot separate them and never could; Head resolves it one layer
+// up, by asking HeadBucket before it lets the sentinel out.
 //
-// Consequence, stated plainly: if a bucket binding is wrong or its bucket is
-// deleted, the reconciler will mark that binding's pending-expired objects
-// FAILED. That is bad but recoverable today — nothing reclaims FAILED object
-// bytes (the lifecycle hard-deleter filters on DELETED, and housekeeping's
-// pending_ttl sweep on PENDING), so the rows and the bytes both survive for
-// an operator to re-promote. It stops being recoverable the moment anything
-// starts reaping FAILED. See BACKLOG for the bucket-reachability guard.
+// What that buys: a wrong or deleted bucket binding no longer makes
+// ReconcilerV2 mark the binding's pending-expired objects FAILED. The 404
+// becomes a retryable error, which is what an unexplained 404 is.
 //
-// notFound's bucket-level rejection is still load-bearing: it fires whenever
-// the error does carry a code, which is every path except a bodiless HEAD.
-// TestNotFoundClassifier covers that directly.
-//
-// If someone adds the guard, this test fails — which is the point.
-func TestHeadCannotDistinguishMissingBucket(t *testing.T) {
+// notFound's bucket-level rejection stays load-bearing — it fires whenever the
+// error does carry a code, which is every path except a bodiless HEAD, and it
+// is the cheaper of the two checks. TestNotFoundClassifier covers it directly.
+func TestHeadDistinguishesMissingBucketFromMissingObject(t *testing.T) {
 	f := newFakeS3(t)
+	// Every HEAD 404s — the object HEAD and the guard's bucket HEAD alike.
+	// That is the shape of a vanished bucket.
 	f.route = func(w http.ResponseWriter, r *http.Request, _, _ string) bool {
 		if r.Method == http.MethodHead {
 			writeS3Error(w, http.StatusNotFound, "NoSuchBucket", "no such bucket")
@@ -130,12 +135,25 @@ func TestHeadCannotDistinguishMissingBucket(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error")
 	}
-	if !errors.Is(err, ErrObjectNotFound) {
-		t.Skip("the SDK now distinguishes a bodiless 404 NoSuchBucket — " +
-			"update this test and the BACKLOG entry it points at")
+	if errors.Is(err, ErrObjectNotFound) {
+		t.Fatalf("a missing bucket was reported as a missing object — the "+
+			"reconciler would mark this binding's objects FAILED.\ngot: %v", err)
 	}
-	t.Log("known limitation confirmed: a bodiless 404 NoSuchBucket is " +
-		"indistinguishable from a missing object on HEAD")
+	if !strings.Contains(err.Error(), "unreachable") {
+		t.Errorf("error should say the bucket is unreachable.\ngot: %v", err)
+	}
+
+	// The guard must be the reason, not a coincidence: a bucket-level HEAD
+	// (path-style, so an empty key) has to have been issued.
+	var bucketHeads int
+	for _, r := range f.requestsFor(http.MethodHead, "") {
+		if r.Key == "" {
+			bucketHeads++
+		}
+	}
+	if bucketHeads != 1 {
+		t.Errorf("bucket-level HEAD count = %d, want 1", bucketHeads)
+	}
 }
 
 // TestHeadUnreachableBackendIsNotNotFound covers the transport layer: no
