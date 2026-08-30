@@ -151,7 +151,6 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	repos := wire.Repos{
 		Object:     adapters.NewObjectRepo(db.Queries, pool),
 		Collection: adapters.NewCollectionRepo(db.Queries, pool),
-		Bucket:     adapters.NewBucketRepo(db.Queries),
 		Tenant:     adapters.NewTenantRepo(db.Queries, pool),
 		ObjectTag:  adapters.NewObjectTagRepo(db.Queries),
 		Presign:    adapters.NewPresignRepo(db.Queries, pool),

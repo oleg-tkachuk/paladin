@@ -66,7 +66,6 @@ import (
 type Repos struct {
 	Object     object.Repository
 	Collection objectkey.Repository
-	Bucket     bucket.Repository
 	Tenant     tenant.Repository
 	ObjectTag  objecttag.Repository
 	Presign    presign.Repository

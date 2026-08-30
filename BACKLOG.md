@@ -1836,31 +1836,31 @@ of the pipeline._
 
 ---
 
-## `wire.Repos.Bucket` is assigned and never read
+## `bucketProvisionerAdapter`'s nil branch reports a bucket it never provisioned
 
-- **Status:** Narrowed 2026-08-30 — the handler half is deleted; the repository
-  seam behind it is what is left.
-- **Reason:** `internal/api/v1/bucket` used to carry a full BucketService
-  handler that nothing constructed, while every BucketService RPC was served
-  by `api/admin/v1/bucketh`. It was not inert: its `DeleteBucket` had a
-  referential guard the live handler lacked, so reading it gave a confident
-  wrong answer about production, and the missing guard was only found by a
-  live repro. That handler is gone (the row type, the seams and the
-  version-mismatch sentinel stayed — wire and the adapters speak them).
-  What remains is one layer down. `wire.Repos.Bucket` is populated in
-  `build_deps.go` with `adapters.NewBucketRepo(db.Queries)` and no code reads
-  the field; the deleted handler was its only consumer. So `BucketRepo`, the
-  `Repository` interface and the `CreateArgs`/`UpdateArgs`/`ListArgs` types
-  are reachable only from each other.
-- **Definition of Done:** follow the chain and remove what nothing reads,
-  keeping `Bucket`, `Provisioner` (live — the admin provisioning path binds
-  to it) and `ErrVersionMismatch` with its errmap registration. The check is
-  mechanical: each symbol's remaining references must lead to something the
-  app actually runs, not back into this cluster.
-- **Blockers:** none. Kept separate from the handler deletion on purpose —
-  the handler was actively misleading and worth removing on its own, and
-  unpicking a repository seam across wire, build_deps and the adapters is a
-  different kind of edit with a different way of being wrong.
+- **Status:** Open, latent. Surfaced 2026-08-30 while deleting the dead bucket
+  repository seam.
+- **Reason:** `wire.ProvideBucketHandler` always wraps the storage provisioner
+  in `bucketProvisionerAdapter`, whose methods return nil when the wrapped
+  value is nil. `bucketh` has its own answer for that case — `CodeUnavailable`,
+  "backend provisioning not wired" — and the wrapper makes it unreachable,
+  because the handler now always holds a non-nil provisioner. A caller asking
+  for `provision_on_backend` against an unwired deployment would be told the
+  bucket was provisioned, with no S3 bucket behind it.
+  Unreachable today: `build_deps.go` always supplies
+  `s3adapter.NewProvisionerRouter(registry)`. That is the only thing standing
+  between this and a silent lie, and nothing states it.
+  Same species as the handler deleted in d7c0b184 — a guard that reads as
+  protection and cannot fire — which is why it is written down rather than
+  left as a shrug.
+- **Definition of Done:** either pass the provisioner through unwrapped (the
+  two interfaces are structurally identical, so the bridge is ceremony Go does
+  not need — its own comment says so) and let `bucketh`'s nil handling do its
+  job, or keep the wrapper and make its nil branch return the same
+  `Unavailable`.
+- **Blockers:** none. Not bundled with the seam deletion because that change
+  removed only code nothing referenced, while this one changes what a
+  misconfigured deployment is told.
 
 ## List filters push down only the conjuncts SQL can express
 
