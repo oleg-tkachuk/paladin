@@ -14,13 +14,17 @@
  * Both are checked by listing the tenant's tokens through the admin API.
  * Nothing had opened this page before.
  *
- * Everything happens in the CALLER's own tenant, deliberately. api_tokens
- * carries FORCE row-level security (`tenant_id = paladin_session_tenant_id()`),
- * so a list for any other tenant comes back empty rather than refused — see
- * BACKLOG, "A cross-tenant token list is empty rather than refused". An
- * earlier draft used a fresh tenant and passed only on the compose stack,
- * where the session tenant is unset and a second policy lets everything
- * through. It was testing that configuration, not the product.
+ * Everything happens in the CALLER's own tenant. That is now a choice about
+ * what this spec is for, not a workaround: the handler's `scopeToTenant`
+ * refuses a cross-tenant list with PermissionDenied unless the caller holds
+ * platform.admin, and pins the acting tenant when they do — so a
+ * platform.admin listing another tenant gets that tenant's tokens, verified
+ * against the compose stack on 2026-08-30. The comment that used to sit here
+ * said such a list "comes back empty rather than refused" and pointed at a
+ * BACKLOG entry; the entry is gone because the gap was closed, and the
+ * description outlived it. Cross-tenant behaviour is covered where it belongs,
+ * in apitokenh/list_scoping_test.go, which drives both roles against List and
+ * Revoke directly and asserts the acting tenant the handler hands to RLS.
  */
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
