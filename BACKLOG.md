@@ -986,24 +986,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Card titles are not headings, so sections cannot be navigated
-
-- **Status:** Open. Noticed 2026-08-21 while writing the profile e2e.
-- **Reason:** `CardTitle` renders a `<div>` (`src/components/ui/Card.tsx`).
-  Every section title in the console — Password, Preferences, Identity,
-  Quotas — is therefore invisible to heading navigation, which is how a
-  screen-reader user moves through a page. A sighted user sees structure the
-  markup does not carry.
-- **Definition of Done:** `CardTitle` renders a real heading, with the level
-  chosen by the caller (a `level` prop defaulting to `h3`) so a card inside a
-  section does not outrank the page's `h1`. Then sweep the pages: several
-  currently render their own `<h2>` next to a CardTitle, which would become a
-  duplicate.
-- **Blockers:** none, but it touches every card in the app, so it wants its
-  own change rather than riding along with a feature.
-
----
-
 ### The console holds whole tables to search them
 
 - **Status:** Deferred (correct today, does not scale).

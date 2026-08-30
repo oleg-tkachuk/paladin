@@ -51,9 +51,29 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * A card title is a section heading, so it renders as one.
+ *
+ * It used to be a `<div>`, which meant every section title in the console —
+ * Password, Preferences, Identity, Quotas — was invisible to heading
+ * navigation, the primary way a screen-reader user moves through a page. A
+ * sighted user saw structure the markup did not carry.
+ *
+ * `level` defaults to 2: the shell spends h1 on the page title (PageHeader),
+ * and every card in the console today sits directly under it rather than
+ * inside a subsection, so h2 is the level that neither outranks the page nor
+ * skips a rank. A card nested inside a section that has its own heading
+ * should pass the next level down. Keep the children inline — a heading may
+ * not contain flow content.
+ */
+function CardTitle({
+  className,
+  level = 2,
+  ...props
+}: React.ComponentProps<"h2"> & { level?: 1 | 2 | 3 | 4 | 5 | 6 }) {
+  const Heading = `h${level}` as const;
   return (
-    <div
+    <Heading
       data-slot="card-title"
       className={cn(
         "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
