@@ -1836,32 +1836,6 @@ of the pipeline._
 
 ---
 
-## `bucketProvisionerAdapter`'s nil branch reports a bucket it never provisioned
-
-- **Status:** Open, latent. Surfaced 2026-08-30 while deleting the dead bucket
-  repository seam.
-- **Reason:** `wire.ProvideBucketHandler` always wraps the storage provisioner
-  in `bucketProvisionerAdapter`, whose methods return nil when the wrapped
-  value is nil. `bucketh` has its own answer for that case — `CodeUnavailable`,
-  "backend provisioning not wired" — and the wrapper makes it unreachable,
-  because the handler now always holds a non-nil provisioner. A caller asking
-  for `provision_on_backend` against an unwired deployment would be told the
-  bucket was provisioned, with no S3 bucket behind it.
-  Unreachable today: `build_deps.go` always supplies
-  `s3adapter.NewProvisionerRouter(registry)`. That is the only thing standing
-  between this and a silent lie, and nothing states it.
-  Same species as the handler deleted in d7c0b184 — a guard that reads as
-  protection and cannot fire — which is why it is written down rather than
-  left as a shrug.
-- **Definition of Done:** either pass the provisioner through unwrapped (the
-  two interfaces are structurally identical, so the bridge is ceremony Go does
-  not need — its own comment says so) and let `bucketh`'s nil handling do its
-  job, or keep the wrapper and make its nil branch return the same
-  `Unavailable`.
-- **Blockers:** none. Not bundled with the seam deletion because that change
-  removed only code nothing referenced, while this one changes what a
-  misconfigured deployment is told.
-
 ## List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.

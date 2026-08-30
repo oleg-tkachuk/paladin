@@ -216,13 +216,18 @@ func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, _ config.Config) *b
 }
 
 func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {
-	// admindomain.Provisioner satisfied by the same s3 adapter that backs
-	// storage.Provisioner. We need a small interface adapter — bucketh.Provisioner
-	// has the same shape, so just type-cast/wrap.
+	// storage.Provisioner passes straight through. bucketh.Provisioner and
+	// bucket.Provisioner declare the same two methods, and Go satisfies an
+	// interface structurally, so the wrapper this used to build was ceremony
+	// the language does not need — with one effect that was not ceremony: its
+	// methods returned nil when the wrapped value was nil, so a deployment
+	// with no provisioner was told its bucket had been provisioned. bucketh
+	// answers that case with Unavailable ("backend provisioning not wired"),
+	// on all three of its paths, and wrapping made every one unreachable.
 	// The concrete BucketRepoV2 satisfies bucketh.Repository (domain
 	// interface + ADR-0003 tx seam); Repos.BucketV2 is the pgx-free domain
 	// type, so assert to the wider local interface here.
-	return bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), &bucketProvisionerAdapter{storage.Provisioner}, pe)
+	return bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), storage.Provisioner, pe)
 }
 
 func ProvideQuotaHandler(repos Repos, pe *policy.Engine) *quotah.Handler {
@@ -263,24 +268,4 @@ func ProvideLockHandler(repos Repos, pe policy.Authorizer) *object.LockHandler {
 		return nil
 	}
 	return object.NewLockHandler(repos.Object, repos.ObjectVersion, repos.ObjectLock, pe)
-}
-
-// bucketProvisionerAdapter bridges the v1 bucket.Provisioner interface to
-// the bucketh.Provisioner interface; identical shape, distinct types.
-type bucketProvisionerAdapter struct {
-	v1 bucket.Provisioner
-}
-
-func (a *bucketProvisionerAdapter) CreateBucket(ctx context.Context, backendID, bucketName, region string) error {
-	if a.v1 == nil {
-		return nil
-	}
-	return a.v1.CreateBucket(ctx, backendID, bucketName, region)
-}
-
-func (a *bucketProvisionerAdapter) DeleteBucket(ctx context.Context, backendID, bucketName string) error {
-	if a.v1 == nil {
-		return nil
-	}
-	return a.v1.DeleteBucket(ctx, backendID, bucketName)
 }
