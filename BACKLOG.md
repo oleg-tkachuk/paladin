@@ -1836,6 +1836,39 @@ of the pipeline._
 
 ---
 
+## `gotoSettled` waits for a networkidle that never arrives
+
+- **Status:** Open. Surfaced 2026-08-30 while verifying the environment gate.
+- **Reason:** 21 of ~110 e2e specs fail on a 30s test timeout — every one of
+  them a bucket, object-detail or storage-backends-detail spec, and every one
+  of them navigating through `gotoSettled`, which waits for `networkidle`.
+  The pages are not slow: measured with a probe, the route itself loads in
+  ~70ms and the asserted content is present and visible. What never happens is
+  the idle. Two or three Next.js RSC prefetches — `/trash?_rsc=…`,
+  `/policies?_rsc=…`, `/users?_rsc=…`, and a breadcrumb route — are still
+  in flight eight seconds after load, out of 157 requests the page makes. They
+  are link prefetches for sidebar and breadcrumb destinations, so link-dense
+  pages (the bucket detail tabs, with a deep breadcrumb) hit it and sparser
+  ones do not.
+- **What it is NOT, each checked rather than assumed:**
+  - Not the changes of 2026-08-30. The same spec fails with the backend
+    rebuilt at ee0c06b9, the last commit the suite was reported green on.
+  - Not accumulated state. It fails identically on a stack recreated with
+    `down -v`, and on the four-hour-old one.
+  - Not stale images: reproduced with both planes and the console rebuilt
+    from HEAD.
+  - Not stale sockets from recreated containers, and not the three
+    long-pending `BatchUpdateTags` operations (removed; no change).
+- **Definition of Done:** either find why those prefetch responses never
+  close — an RSC stream a Suspense boundary leaves open is the shape that
+  fits — or stop making `networkidle` the settle condition. The second is
+  cheaper and probably right regardless: `networkidle` is discouraged by
+  Playwright's own docs, and a suite that cannot navigate whenever a page
+  links to enough routes is measuring the router, not the product.
+- **Blockers:** none. Worth doing before the next attempt to read the suite as
+  a pass/fail signal — with this open, "89 passed, 21 failed" says nothing
+  about the product.
+
 ## `wire.Repos.Bucket` is assigned and never read
 
 - **Status:** Narrowed 2026-08-30 — the handler half is deleted; the repository
