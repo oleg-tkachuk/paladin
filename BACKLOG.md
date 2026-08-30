@@ -619,36 +619,6 @@ open deliberately — each notes why._
       validate the cardinality assumption holds for their
       tenant.
 
-### Event dispatcher: RLS regression test for the cross-tenant subscription lookup
-
-- **Status:** Deferred (the bug itself is FIXED — this is the missing regression).
-- **Reason:** The OutboxRunner drains `event_deliveries` cross-tenant on the
-  BYPASSRLS `dispatcherPool`, then per row calls `Store.Get(subID)` to read the
-  sink config. That store was wired to `deps.Repos.EventSub` (the RLS-scoped
-  runtime `paladin_app` pool); the drain loop sets no `paladin.tenant_id` GUC, so RLS
-  hid every subscription and the runner marked **all** deliveries
-  `"subscription deleted"` — the entire sink-delivery path was dead whenever
-  `audit_mirror`/`charge` events (or any real subscription) were live. Found by
-  the first end-to-end delivery test (2026-07-05); fixed in `serve_dispatcher.go`
-  by binding the store to `dispatcherPool` (`adapters.NewEventSubscriptionRepoV2(
-  sqlc.New(dispatcherPool))`). No test caught it because
-  `tests/integration/dispatcher_test.go` wires its store to `PoolMigrate`
-  (BYPASSRLS), masking the exact condition, and the feature was off by default.
-- **Definition of Done:** an integration case (pgharness) that reproduces the
-  production condition — a subscription owned by tenant A, an `event_deliveries`
-  row for it, and an OutboxRunner whose subscription store runs on the RLS
-  `paladin_app` pool with **no** `paladin.tenant_id` GUC — asserting the delivery
-  succeeds (proving the store is BYPASSRLS), and a sibling asserting the
-  RLS-scoped/no-GUC store fails `"subscription deleted"` so the invariant is
-  pinned. Faithful "no-GUC" reproduction needs an `paladin_app` pool WITHOUT the
-  harness's WithRLS GUC hook — the piece that makes this more than a one-liner.
-- **Blockers:** none, and the stated one is stale (checked 2026-08-30).
-  `pgharness.Harness.PoolAppNoGUC` already exists and its own comment describes
-  exactly this condition: `paladin_app`, no RLS hook, tenant GUC never set, so
-  every policy matches zero rows. Nothing in the tree uses it — the pool was
-  provided for this test and the test was never written. So what remains is
-  the test itself, not the harness work.
-
 ### Event dispatcher: Kafka sink
 
 - **Status:** Partially done — core sink SHIPPED 2026-06-30; SASL/SCRAM + TLS/

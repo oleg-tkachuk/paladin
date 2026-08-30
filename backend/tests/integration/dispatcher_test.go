@@ -31,6 +31,8 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
 )
@@ -846,4 +848,108 @@ func runEmbeddedNATSForIntegration(t *testing.T) string {
 		t.Fatalf("embedded nats: not ready")
 	}
 	return srv.ClientURL()
+}
+
+// ─── the subscription store's pool is load-bearing ──────────────────────────
+//
+// The OutboxRunner drains `event_deliveries` cross-tenant on the BYPASSRLS
+// dispatcher pool, then per row calls Store.Get(subID) to read the sink
+// config. That store was once wired to the RLS-scoped runtime pool, and the
+// drain loop sets no tenant GUC — so `paladin_session_tenant_id()` was NULL,
+// event_subscriptions' policy matched zero rows, and every delivery was marked
+// "subscription deleted". The whole sink path was dead whenever any real
+// subscription existed.
+//
+// Nothing caught it. Every other test in this file wires its store to
+// PoolMigrate, which is BYPASSRLS and therefore cannot reproduce the
+// condition, and the feature was off by default. It took an end-to-end
+// delivery test to notice.
+//
+// Both cases use the REAL store — RepoSubscriptionStore over the sqlc adapter,
+// the same construction serve_dispatcher.go makes — rather than this file's
+// direct-SQL stand-in. The wiring IS the subject, so a stand-in would test the
+// wrong object.
+
+func repoSubStore(pool *pgxpool.Pool) worker.SubscriptionStore {
+	return worker.NewRepoSubscriptionStore(
+		adapters.NewEventSubscriptionRepoV2(sqlc.New(pool)))
+}
+
+func TestDispatcher_SubscriptionStoreOnBypassPool_Delivers(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+	rec := newRecorder(http.StatusOK)
+	defer rec.Close()
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "sub-store-bypass")
+	_ = f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
+
+	// The production wiring: the store reads on the same BYPASSRLS pool the
+	// runner drains with.
+	d := f.dispatcher()
+	d.Store = repoSubStore(f.h.PoolMigrate)
+
+	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if n := f.tickOnce(t, f.outboxRunner(d)); n != 1 {
+		t.Fatalf("tick processed = %d, want 1", n)
+	}
+	if got := rec.count(); got != 1 {
+		t.Fatalf("recorder saw %d requests, want 1", got)
+	}
+	rows := f.allDeliveryRows(t, tenant)
+	if len(rows) != 1 || rows[0].Status != "delivered" {
+		t.Fatalf("delivery = %#v, want one delivered", rows)
+	}
+}
+
+func TestDispatcher_SubscriptionStoreOnRLSPoolWithNoGUC_LosesEveryDelivery(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+	rec := newRecorder(http.StatusOK)
+	defer rec.Close()
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "sub-store-rls")
+	_ = f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
+
+	// The two halves run in different processes and only one of them has a
+	// tenant. ENQUEUE happens on an API request, which carries a principal, so
+	// it sees the subscription and writes the delivery row.
+	d := f.dispatcher()
+	d.Store = repoSubStore(f.h.PoolMigrate)
+	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
+		t.Fatalf("enqueued %d rows, want 1 — the setup must produce a row to lose", len(rows))
+	}
+
+	// DRAIN happens in the dispatcher pod, which has no request and therefore
+	// no tenant GUC. This is the regression: `paladin_app` with no hook, so
+	// event_subscriptions' policy matches nothing and the row the enqueue side
+	// just wrote can no longer find its own subscription.
+	d.Store = repoSubStore(f.h.PoolAppNoGUC)
+	if n := f.tickOnce(t, f.outboxRunner(d)); n != 1 {
+		t.Fatalf("tick processed = %d, want 1", n)
+	}
+
+	// The sink is never reached and the row is burned permanently. Nothing
+	// errors and nothing retries, which is why this survived so long.
+	if got := rec.count(); got != 0 {
+		t.Errorf("recorder saw %d requests; the subscription should have been invisible", got)
+	}
+	rows := f.allDeliveryRows(t, tenant)
+	if len(rows) != 1 {
+		t.Fatalf("delivery rows = %d, want 1", len(rows))
+	}
+	if rows[0].Status != "failed" {
+		t.Errorf("status = %q, want failed", rows[0].Status)
+	}
+	if rows[0].LastError != "subscription deleted" {
+		t.Errorf("last_error = %q, want \"subscription deleted\" — the row reads as a "+
+			"deleted subscription when the subscription is merely invisible, which is "+
+			"what made this look like data loss rather than a wiring bug",
+			rows[0].LastError)
+	}
 }
