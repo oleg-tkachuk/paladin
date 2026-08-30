@@ -387,7 +387,13 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 		// tenant has — leaked the raw SQL text as CodeInternal instead of
 		// saying what was wrong.
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
-			return tenant.ErrTenantHasChildren
+			// Name the relation that is actually refusing. The static text
+			// said "object keys or objects", which is the internal name for
+			// collections plus one guess — and the blocker is just as often
+			// `users`, which every tenant has. An operator following that
+			// message went looking in the wrong place; a purge blocked by
+			// users reported collections.
+			return fmt.Errorf("%w: %s", tenant.ErrTenantHasChildren, blockingRelation(err))
 		}
 		return fmt.Errorf("hard-delete tenant: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
@@ -127,5 +128,40 @@ func TestDeleteBucketHeldByANonCollectionIsAConflict(t *testing.T) {
 	}
 	if got := err.Error(); !strings.Contains(got, "tenant_default_bindings") {
 		t.Errorf("the error must name what is holding the bucket.\ngot: %v", got)
+	}
+}
+
+// TestPurgeTenantNamesTheRelationHoldingIt covers the message an operator
+// actually acts on. It used to be a fixed string — "tenant still has object
+// keys or objects" — where "object keys" is the internal name for collections
+// and "objects" was the other half of a guess. The blocker is just as often
+// `users`, which every tenant has, so a purge refused by users sent the
+// operator looking through collections.
+//
+// The relation now comes from the field Postgres fills on the violation, so
+// it is right for every referencing table without a list to maintain — the
+// thing that made the first bucket guard incomplete.
+func TestPurgeTenantNamesTheRelationHoldingIt(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	q := sqlc.New(pool)
+	repo := adapters.NewTenantRepo(q, pool)
+
+	tenantID, _ := mkTenant(t, ctx, pool, "shared")
+	mustExec(t, ctx, pool,
+		`INSERT INTO users (tenant_id, subject, password_hash, roles)
+		 VALUES ($1, 'someone', 'x', '{}')`, tenantID)
+
+	err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		return repo.HardDeleteTx(ctx, tx, tenantID, 0)
+	})
+	if err == nil {
+		t.Fatal("HardDelete on a tenant with a user: want a refusal")
+	}
+	if !strings.Contains(err.Error(), "users") {
+		t.Errorf("the message must name what is holding the tenant.\ngot: %v", err)
+	}
+	if strings.Contains(err.Error(), "object keys") {
+		t.Errorf("the old guess is back.\ngot: %v", err)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
@@ -460,8 +459,7 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 		// first is how the tenant path once leaked raw SQL text.
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
 			return fmt.Errorf("%w: bucket %q is still referenced by %s",
-				admindomain.ErrConflict, bucketName,
-				referencingRelation(pgerr.Constraint(err)))
+				admindomain.ErrConflict, bucketName, blockingRelation(err))
 		}
 		return err
 	}
@@ -469,22 +467,6 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 		return admindomain.ErrVersionMismatch
 	}
 	return nil
-}
-
-// referencingRelation turns a foreign-key constraint name into the relation
-// that owns it. Postgres names them `<table>_<column>_fkey` by default, which
-// is the shape every constraint in this schema has; anything else is returned
-// as-is rather than mangled, because a constraint name an operator can grep
-// for beats a guess.
-func referencingRelation(constraint string) string {
-	if constraint == "" {
-		return "another table"
-	}
-	trimmed := strings.TrimSuffix(constraint, "_fkey")
-	if i := strings.LastIndex(trimmed, "_bucket_id"); i > 0 {
-		return trimmed[:i]
-	}
-	return constraint
 }
 
 // ─── Row → domain helpers ──────────────────────────────────────────────────

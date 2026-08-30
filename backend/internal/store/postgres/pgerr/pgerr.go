@@ -111,6 +111,33 @@ func Constraint(err error) string {
 	return pgErr.ConstraintName
 }
 
+// Table returns the relation Postgres named in the error, or "" when the error
+// is not a Postgres error or carries no table.
+//
+// On a foreign-key violation this is the REFERENCING table — the one holding
+// the row that blocks the delete — which is precisely what an operator needs
+// told and the one thing a constraint name cannot be parsed into. Postgres
+// reports both:
+//
+//	ERROR:  update or delete on table "tenants" violates RESTRICT setting of
+//	        foreign key constraint "users_tenant_id_fkey" on table "users"
+//	TABLE NAME:  users
+//	CONSTRAINT NAME:  users_tenant_id_fkey
+//
+// Deriving "users" from "users_tenant_id_fkey" by stripping suffixes looks
+// easy and is not: the shortest trailing `_..._id` turns
+// buckets_owner_tenant_id_fkey into "buckets_owner", and the longest turns
+// tenant_default_bindings_bucket_id_fkey into "tenant". No purely syntactic
+// rule gets both, because the boundary between table and column is not in the
+// string. Asking for the field Postgres already filled in does.
+func Table(err error) string {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return ""
+	}
+	return pgErr.TableName
+}
+
 // ConstraintIs reports whether err is a Postgres error raised by the named
 // constraint. Convenience for the common `Is(err, k) && Constraint(err) == n`.
 func ConstraintIs(err error, name string) bool {

@@ -1457,8 +1457,14 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
       try {
         await client.purgeTenant({ name: `tenants/${id}` });
       } catch (err) {
+        // Coupled to the server's wording, which is why it is written here
+        // rather than buried: tenant.ErrTenantHasChildren. It used to read
+        // "object keys or objects" — the internal name for collections, plus
+        // a guess — and now names the relation Postgres reported, so a purge
+        // blocked by users says users. If this regex stops matching, teardown
+        // starts throwing on the one outcome it is meant to tolerate.
         const msg = String(err);
-        if (!/object keys or objects/.test(msg)) throw err;
+        if (!/still has rows referencing it/.test(msg)) throw err;
       }
     }),
   );

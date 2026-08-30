@@ -88,3 +88,27 @@ func TestConstraint(t *testing.T) {
 		t.Error("ConstraintIs = false for a matching name")
 	}
 }
+
+// Table is what lets an adapter say which relation is refusing a delete. The
+// constraint name cannot be parsed into it — see the doc comment — so the
+// value has to come from Postgres, and this pins that it is read from the
+// field Postgres fills rather than derived.
+func TestTable(t *testing.T) {
+	err := &pgconn.PgError{
+		Code:           "23503",
+		ConstraintName: "users_tenant_id_fkey",
+		TableName:      "users",
+	}
+	if got := Table(err); got != "users" {
+		t.Errorf("Table = %q, want %q", got, "users")
+	}
+	if got := Table(fmt.Errorf("hard-delete tenant: %w", err)); got != "users" {
+		t.Errorf("wrapped: Table = %q, want %q", got, "users")
+	}
+	if got := Table(errors.New("not a pg error")); got != "" {
+		t.Errorf("non-pg error: Table = %q, want empty", got)
+	}
+	if got := Table(nil); got != "" {
+		t.Errorf("nil: Table = %q, want empty", got)
+	}
+}

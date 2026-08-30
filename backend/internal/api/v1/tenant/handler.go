@@ -1040,7 +1040,7 @@ var ErrDefaultBindingBucketMissing = errors.New(
 // Surfaced as FAILED_PRECONDITION with actionable text rather than a raw
 // Postgres FK-violation string mapped to Internal.
 var ErrTenantHasChildren = errors.New(
-	"tenant still has object keys or objects; delete them before hard-deleting the tenant")
+	"tenant still has rows referencing it; remove them before hard-deleting the tenant")
 
 // Register this package's sentinels with the central error→Connect-code
 // mapper (ADR-0002). Each maps consistently to one code across every RPC,
