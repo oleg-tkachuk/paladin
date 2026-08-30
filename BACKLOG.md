@@ -947,37 +947,6 @@ open deliberately — each notes why._
 
 ## Database
 
-### `refresh_tokens` has no RLS policy — pre-auth WRITES, not reads
-
-- **Status:** Open, and the last of the four. `users`, `user_settings` and
-  `tenant_default_bindings` are covered by 016 and 017.
-- **Reason:** Seven of the ten writes on this table happen before a session
-  exists, and not incidentally — a refresh token is presented precisely when
-  there is nothing to scope to. Insert at login, insert and supersede on every
-  rotation, revoke on the OAuth token endpoint, family-revoke from reuse
-  detection: all pre-session. The other three (revoke-for-user on a password
-  change, family-revoke at logout) carry a tenant and would be fine.
-  The three tables that shipped did so because their writes could all be
-  PINNED — each one turned out to know its tenant, and the six admin sites on
-  `users` plus login's own stamp were wrapped in WithActingTenant rather than
-  exempted. That trick does not work here: at login there is no user yet, and
-  at rotation the presented token is the only thing identifying anyone.
-- **Definition of Done:** a decision, then the policy. The options are not
-  equivalent:
-  - a pre-auth WRITE exemption (`paladin_session_tenant_id() IS NULL`), which
-    is narrow in practice — only the unauthenticated auth endpoints reach the
-    table with no tenant — but does mean a connection with no tenant set may
-    insert a row for any tenant;
-  - narrowing that exemption by column grant, the way `api_tokens` narrows its
-    pre-auth read;
-  - a dedicated role for the auth endpoints, so the exemption is carried by
-    the connection rather than by the absence of a GUC;
-  - or leaving it exempt with the reasoning written into the migration, which
-    is a legitimate answer as long as it is a decision rather than a silence.
-- **Blockers:** none technical. This is a threat-model question — the token is
-  itself the credential — and it should be answered deliberately rather than
-  by whoever next touches the file.
-
 ### Index candidates considered and rejected (2026-08-18 audit)
 
 - **Status:** Deferred — decisions recorded so the audit is not repeated from

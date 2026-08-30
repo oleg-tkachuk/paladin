@@ -415,7 +415,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	// Rotate: revoke the presented refresh before minting a fresh pair (RFC 6749
 	// §6), keeping the same family so the chain stays linked for reuse-detection.
-	if err := h.refresh.Revoke(r.Context(), jti); err != nil {
+	if err := h.refresh.Revoke(auth.WithActingTenant(r.Context(), stored.TenantID), jti); err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "rotation failed")
 		return
 	}
@@ -428,7 +428,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 // console). Best-effort: failures here never change the caller's already
 // decided rejection.
 func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
-	revoked, err := h.refresh.RevokeFamilyOf(ctx, jti)
+	revoked, err := h.refresh.RevokeFamilyOf(auth.WithActingTenant(ctx, tenantID), jti)
 	if h.log != nil {
 		h.log.Warn("oauth refresh token reuse detected; revoked the token family",
 			zap.String("user_id", userID.String()),
@@ -485,7 +485,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint refresh failed")
 		return
 	}
-	if err := h.refresh.Insert(ctx, r2RefreshToken(tokenID, familyID, u, h.now(), refreshExp)); err != nil {
+	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), r2RefreshToken(tokenID, familyID, u, h.now(), refreshExp)); err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "persist refresh failed")
 		return
 	}

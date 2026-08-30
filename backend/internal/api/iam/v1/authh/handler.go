@@ -280,7 +280,7 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	// The distinction is what ExchangeAudience reads below. A bare Revoke here
 	// would make this token indistinguishable from one revoked by logout or by
 	// reuse detection, and the tolerance window could not exist.
-	if err := h.refresh.Supersede(ctx, jti); err != nil {
+	if err := h.refresh.Supersede(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
 		// Lost the race: a sibling superseded this token between our read and
 		// our write. The database decided it, so the decision holds across
 		// every replica and nothing had to be shared to reach it.
@@ -419,7 +419,7 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 	if token == "" {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("token required"))
 	}
-	jti, _, _, err := h.parseRefresh(token)
+	jti, _, tokenTenant, err := h.parseRefresh(token)
 	if err == nil {
 		// Revoke the FAMILY, not the single token. A logout ends the session,
 		// and the session is the family: one login starts one, every rotation
@@ -430,7 +430,7 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 		//
 		// This does NOT touch the user's other logins: each has its own family,
 		// which is the distinction RevokeFamilyOf was built to preserve.
-		_, _ = h.refresh.RevokeFamilyOf(ctx, jti)
+		_, _ = h.refresh.RevokeFamilyOf(auth.WithActingTenant(ctx, tokenTenant), jti)
 		return nil
 	}
 	// Access tokens are stateless — we can't revoke without a denylist.
@@ -862,7 +862,7 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 	if err != nil {
 		return "", "", time.Time{}, time.Time{}, fmt.Errorf("mint refresh: %w", err)
 	}
-	if err := h.refresh.Insert(ctx, authstore.RefreshToken{
+	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), authstore.RefreshToken{
 		JTI:       tokenID,
 		FamilyID:  familyID,
 		UserID:    u.UserID,
@@ -997,7 +997,7 @@ func (h *Handler) withinSupersessionGrace(t authstore.RefreshToken) bool {
 // a read-only path costs real sessions and buys nothing — see
 // onRefreshReplayed.
 func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
-	revoked, err := h.refresh.RevokeFamilyOf(ctx, jti)
+	revoked, err := h.refresh.RevokeFamilyOf(auth.WithActingTenant(ctx, tenantID), jti)
 	logger.FromContext(ctx).Warn("refresh token reuse detected; revoked the token family",
 		zap.String("user_id", userID.String()),
 		zap.Int64("revoked", revoked),
