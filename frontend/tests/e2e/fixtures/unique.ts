@@ -16,6 +16,23 @@
  */
 
 /**
+ * The shape `uniqueSlug` produces, as a matcher.
+ *
+ * It is exported because something has to be able to recognise a seeded row
+ * after the fact — the environment guard counts leftovers with it, and the
+ * suite's prefixes are far too varied to enumerate ("acme", "ok", "obj",
+ * "big", "key", "sse", "e2e-user", plus whatever a caller passes). The
+ * suffix is the part every seeded slug shares, because one function mints
+ * them all.
+ *
+ * That made the convention worth pinning rather than assuming: the guard
+ * asserts a freshly minted slug still matches this before it counts
+ * anything, so changing the generator fails loudly at the start of a run
+ * instead of quietly making the guard blind.
+ */
+export const FIXTURE_SLUG_RE = /-[0-9a-f]{8}$/;
+
+/**
  * Returns `<prefix>-<8 hex chars>`, suitable for slugs (Postgres
  * citext + the regex `^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$` checked
  * in tenant.Handler.validateSlug). Prefix MUST be lowercase /

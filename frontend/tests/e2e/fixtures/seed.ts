@@ -49,7 +49,7 @@ import {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { SEEDED_ADMIN } from "./credentials";
-import { uniqueSlug, uniqueDisplayName } from "./unique";
+import { uniqueSlug, uniqueDisplayName, FIXTURE_SLUG_RE } from "./unique";
 
 // ─── plane base URLs (test stack) ──────────────────────────
 const IAM_URL = process.env.PALADIN_E2E_IAM_URL ?? "http://localhost:8085";
@@ -1370,6 +1370,57 @@ export async function collectionsOf(
     pageToken = res.page?.nextPageToken ?? "";
   } while (pageToken);
   return out;
+}
+
+/**
+ * The point at which leftover fixtures stop being untidy and start being a
+ * source of false failures.
+ *
+ * The suite broke at roughly a hundred tenants, so this is not that number —
+ * it is well below it, deliberately. A guard that fires at the cliff edge
+ * tells you about the crash you are already having; one that fires at 40
+ * tells you the environment is drifting while a `down -v` still costs
+ * nothing. A healthy stack sits near zero between runs, so any figure in
+ * this range means teardown has been missing its work for a while.
+ */
+export const MAX_LEFTOVER_TENANTS = 40;
+
+/**
+ * Counts tenants whose slug carries the shape `uniqueSlug` mints, across
+ * active AND trashed rows — a trashed tenant still holds its slug against the
+ * uniqueness constraint and still renders on /trash, so for this purpose it is
+ * every bit as present as a live one.
+ *
+ * Stops as soon as the threshold is passed rather than counting to the end:
+ * the only question is whether the environment is too full, and on the run
+ * where the answer is yes the exact figure is the least useful thing about
+ * it. `count` is therefore exact only when `exceeded` is false.
+ */
+export async function countFixtureShapedTenants(): Promise<{
+  count: number;
+  exceeded: boolean;
+  sample: string[];
+}> {
+  const client = createClient(TenantService, adminTransport());
+  const sample: string[] = [];
+  let count = 0;
+  let pageToken = "";
+  do {
+    const res = await client.listTenants({
+      page: { pageSize: 200, pageToken },
+      includeTrashed: true,
+    });
+    for (const t of res.tenants) {
+      if (!FIXTURE_SLUG_RE.test(t.slug)) continue;
+      count++;
+      if (sample.length < 5) sample.push(t.slug);
+      if (count > MAX_LEFTOVER_TENANTS) {
+        return { count, exceeded: true, sample };
+      }
+    }
+    pageToken = res.page?.nextPageToken ?? "";
+  } while (pageToken);
+  return { count, exceeded: false, sample };
 }
 
 export async function deleteTenants(tenantIds: string[]): Promise<void> {

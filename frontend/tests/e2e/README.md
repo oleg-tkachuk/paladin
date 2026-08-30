@@ -64,6 +64,7 @@ tests/e2e/
 │   ├── auth.ts            # loginAsAdmin(), logout() — UI-driven
 │   └── seed.ts            # seedTenant, seedBucket, seedCollection,
 │                          # seedCapability — Connect-RPC direct
+├── environment.setup.ts   # runs first, gates the rest — see below
 ├── auth.spec.ts           # US1 — login + AuthGate redirect (4 tests)
 ├── scope.spec.ts          # US2 — scope picker behavior (3 tests)
 ├── buckets.spec.ts        # US3 — bucket → Collection navigation (3 tests)
@@ -71,6 +72,33 @@ tests/e2e/
 ├── trash.spec.ts          # US5 — tenant restore from trash (2 tests)
 └── docker-compose.test.yaml   # 6 services: postgres, migrate,
                                  # bootstrap, api, admin, ui
+```
+
+## The environment gate
+
+`environment.setup.ts` is a Playwright project the `chromium` project depends
+on, so it runs before any browser starts and stops the run if it fails.
+
+It answers one question: is this stack already full of fixtures nobody cleaned
+up? Teardown removes what each test creates, but a run that is aborted
+half-way leaves rows behind, and they accumulate silently. At roughly a
+hundred leftover tenants the suite starts failing — as a scope assertion
+matching the wrong "Switch Target", a trash row that never rendered, a list
+that will not show a tenant just seeded. None of those look like what they
+are, and each fix moves the failure one step earlier.
+
+"Fixture-shaped" means the slug ends in the 8-hex suffix `uniqueSlug` mints
+(`FIXTURE_SLUG_RE` in `fixtures/unique.ts`). Prefixes were the obvious
+candidate and are unusable — the suite seeds `acme`, `ok`, `obj`, `big`,
+`key`, `sse`, `e2e-user` and whatever a caller passes — while the suffix comes
+from one function. Because the count depends on that, the gate's first test
+asserts a freshly minted slug still matches, so changing the generator fails
+loudly instead of quietly blinding the guard.
+
+The gate never deletes anything. To clear a full stack:
+
+```bash
+docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v
 ```
 
 ## The FR-008 test (capabilities.spec.ts T032)

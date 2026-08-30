@@ -86,8 +86,24 @@ export default defineConfig({
 
   // Chromium only per Clarification Q1.
   projects: [
+    // Runs before anything else and gates the rest. Its job is to turn "the
+    // environment is full of leftovers from aborted runs" — which the suite
+    // otherwise reports as three unrelated product-looking failures deep into
+    // the run — into one named failure at second zero. A project rather than
+    // globalSetup so it runs after webServer has the stack up, and so its
+    // failure is a red test with a message rather than a stack trace before
+    // the reporter starts.
+    {
+      name: "environment",
+      testMatch: /environment\.setup\.ts$/,
+    },
     {
       name: "chromium",
+      dependencies: ["environment"],
+      // Without this the guard would also run again inside the browser
+      // project, since a project with no testMatch takes every file in
+      // testDir.
+      testIgnore: /environment\.setup\.ts$/,
       use: {
         ...devices["Desktop Chrome"],
         // Desktop Chrome defaults to 1280x720, and several console forms are

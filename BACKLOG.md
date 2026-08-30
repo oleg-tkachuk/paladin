@@ -261,27 +261,6 @@ the same commit. Treat this file like a runtime invariant.
   checks the existing three.
 - **Blockers:** none; ordering is by whichever incident asks first.
 
-### Nothing notices when the e2e environment fills up from outside the suite
-
-- **Status:** Deferred (the suite no longer contributes; other paths still can).
-- **Reason:** The suite used to leave every tenant, bucket, collection and
-  object it created, and at ~100 tenants it stopped passing — as three
-  unrelated-looking failures (a scope assertion matching the wrong "Switch
-  Target", a trash row that had not rendered, a list that stopped showing a
-  freshly seeded tenant), each fix moving the failure one step earlier. That
-  is fixed: teardown walks the RESTRICT edges and removes what a test created,
-  including rows typed into the console's own dialogs, and a full run now
-  leaves the counts exactly where it found them. What is still missing is a
-  floor under the assumption: an aborted run, a manual experiment, or a
-  half-finished migration can still leave rows, and the suite will keep
-  passing until the pile is large enough to fail in that same misleading way.
-- **Definition of Done:** A check that fails loudly when fixture-shaped rows
-  cross a threshold — run before the suite, so the next person reads "the
-  environment is full" instead of debugging a scope-picker assertion.
-- **Blockers:** none. Wants a definition of "fixture-shaped" that does not
-  also match a real tenant: the `e2e-` / `switch-` prefixes are the obvious
-  candidate, and they are a convention nothing enforces.
-
 ### `housekeeping.operations_ttl` is 14 days because the chart says so
 
 - **Status:** Deferred (a number to agree on, not a defect).
