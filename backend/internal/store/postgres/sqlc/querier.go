@@ -84,8 +84,20 @@ type Querier interface {
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
 	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	//
+	// Every relation that holds a bucket under ON DELETE RESTRICT, counted in one
+	// round trip. The list is not a guess: it is the RESTRICT set as the schema
+	// declares it, and TestBucketReferenceListMatchesSchema (integration) reads
+	// pg_constraint and fails if the two ever diverge. CASCADE dependents
+	// (replication_state, quotas) are deliberately absent — they do not block a
+	// delete, so naming them would only send an operator after rows that will
+	// clean themselves up.
+	//
+	// Rows come back for relations with a zero count too; the caller decides what
+	// to do with those. tenant_storage_migrations carries two of the constraints
+	// (source and target), so it is matched on both columns and reported once.
+	CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
-	CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state NullObjectState) (int64, error)
 	CountPendingMultipartAborts(ctx context.Context) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.

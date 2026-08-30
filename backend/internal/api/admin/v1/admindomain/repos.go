@@ -63,6 +63,13 @@ type BackendRepository interface {
 
 // ─── Bucket repository ──────────────────────────────────────────────────────
 
+// BucketReference is one relation that can hold a bucket back, and how many
+// of its rows currently do.
+type BucketReference struct {
+	Relation string
+	Count    int64
+}
+
 type BucketRepository interface {
 	Create(ctx context.Context, b Bucket) error
 	Get(ctx context.Context, backendID, bucketName string) (Bucket, error)
@@ -76,12 +83,16 @@ type BucketRepository interface {
 	SetReplication(ctx context.Context, backendID, bucketName string, r BucketReplication, expectedVersion int64) error
 	SetConstraints(ctx context.Context, backendID, bucketName string, c BucketConstraints, expectedVersion int64) error
 	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
-	// CountCollectionsReferencing reports how many Collections bind to this
-	// bucket, across every tenant that owns one. Buckets are platform-level
-	// and their Collections are not, so the caller must run this under a
-	// cross-tenant read — a tenant-scoped session sees zero and concludes
-	// the bucket is free.
-	CountCollectionsReferencing(ctx context.Context, backendID, bucketName string) (int64, error)
+	// CountBucketReferences reports, per relation, how many rows hold this
+	// bucket under ON DELETE RESTRICT — every relation that can refuse the
+	// delete. Relations with a zero count are included; the caller filters.
+	//
+	// Buckets are platform-level and almost every relation here is
+	// tenant-scoped, so the caller must run this under a cross-tenant read:
+	// a tenant-scoped session sees zero rows and concludes the bucket is
+	// free, while the foreign-key check — which does not consult RLS —
+	// refuses the delete anyway.
+	CountBucketReferences(ctx context.Context, backendID, bucketName string) ([]BucketReference, error)
 	// BackendEnabled reports whether the named storage backend is enabled.
 	// Returns ErrNotFound when the backend id is unknown. Used by
 	// CreateBucket to refuse binding a bucket to a disabled backend

@@ -9,19 +9,68 @@ import (
 	"context"
 )
 
-const countCollectionsReferencingBucket = `-- name: CountCollectionsReferencingBucket :one
-SELECT count(*)::bigint AS count
-FROM collections c
-JOIN buckets b           ON b.id = c.bucket_id
-JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE sb.name = $1 AND b.name = $2
+const countBucketReferences = `-- name: CountBucketReferences :many
+WITH target AS (
+    SELECT b.id
+    FROM buckets b
+    JOIN storage_backends sb ON sb.id = b.backend_id
+    WHERE sb.name = $1 AND b.name = $2
+)
+SELECT 'collections'::text AS relation, count(*)::bigint AS count
+    FROM collections WHERE bucket_id IN (SELECT id FROM target)
+UNION ALL
+SELECT 'tenant_default_bindings'::text, count(*)::bigint
+    FROM tenant_default_bindings WHERE bucket_id IN (SELECT id FROM target)
+UNION ALL
+SELECT 'tenant_storage_migrations'::text, count(*)::bigint
+    FROM tenant_storage_migrations
+    WHERE source_bucket_id IN (SELECT id FROM target)
+       OR target_bucket_id IN (SELECT id FROM target)
+UNION ALL
+SELECT 'multipart_uploads'::text, count(*)::bigint
+    FROM multipart_uploads WHERE bucket_id IN (SELECT id FROM target)
+UNION ALL
+SELECT 'pending_purges'::text, count(*)::bigint
+    FROM pending_purges WHERE bucket_id IN (SELECT id FROM target)
+UNION ALL
+SELECT 'pending_multipart_aborts'::text, count(*)::bigint
+    FROM pending_multipart_aborts WHERE bucket_id IN (SELECT id FROM target)
 `
 
-func (q *Queries) CountCollectionsReferencingBucket(ctx context.Context, name string, name_2 string) (int64, error) {
-	row := q.db.QueryRow(ctx, countCollectionsReferencingBucket, name, name_2)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+type CountBucketReferencesRow struct {
+	Relation string `json:"relation"`
+	Count    int64  `json:"count"`
+}
+
+// Every relation that holds a bucket under ON DELETE RESTRICT, counted in one
+// round trip. The list is not a guess: it is the RESTRICT set as the schema
+// declares it, and TestBucketReferenceListMatchesSchema (integration) reads
+// pg_constraint and fails if the two ever diverge. CASCADE dependents
+// (replication_state, quotas) are deliberately absent — they do not block a
+// delete, so naming them would only send an operator after rows that will
+// clean themselves up.
+//
+// Rows come back for relations with a zero count too; the caller decides what
+// to do with those. tenant_storage_migrations carries two of the constraints
+// (source and target), so it is matched on both columns and reported once.
+func (q *Queries) CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error) {
+	rows, err := q.db.Query(ctx, countBucketReferences, name, name_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountBucketReferencesRow
+	for rows.Next() {
+		var i CountBucketReferencesRow
+		if err := rows.Scan(&i.Relation, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const createBucket = `-- name: CreateBucket :exec

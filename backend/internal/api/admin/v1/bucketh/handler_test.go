@@ -47,9 +47,9 @@ type fakeRepo struct {
 	// that matters — a tenant-scoped count silently returns zero against
 	// the real RLS pool, so a guard that forgets the widening reads as
 	// "no references" on exactly the buckets it is meant to protect.
-	collectionRefs      int64
-	collectionRefsErr   error
-	collectionRefsCross bool
+	bucketRefs      []admindomain.BucketReference
+	bucketRefsErr   error
+	bucketRefsCross bool
 
 	// List / ListAccessible: configurable return + captured args.
 	listResult []admindomain.Bucket
@@ -148,9 +148,9 @@ func (f *fakeRepo) SetConstraints(context.Context, string, string, admindomain.B
 	return nil
 }
 func (f *fakeRepo) Delete(context.Context, string, string, int64) error { return nil }
-func (f *fakeRepo) CountCollectionsReferencing(ctx context.Context, _, _ string) (int64, error) {
-	f.collectionRefsCross = auth.CrossTenantRead(ctx)
-	return f.collectionRefs, f.collectionRefsErr
+func (f *fakeRepo) CountBucketReferences(ctx context.Context, _, _ string) ([]admindomain.BucketReference, error) {
+	f.bucketRefsCross = auth.CrossTenantRead(ctx)
+	return f.bucketRefs, f.bucketRefsErr
 }
 func (f *fakeRepo) ListPendingProvisions(context.Context, int32, int32) ([]admindomain.BucketProvisionRow, error) {
 	return nil, nil
@@ -386,7 +386,10 @@ func TestDeleteBucket_VersionMismatchAborts(t *testing.T) {
 // got further still: MarkDeleting committed, then the reconciler retried a
 // row delete that could never succeed.
 func TestDeleteBucket_RefusesWhileCollectionsBind(t *testing.T) {
-	repo := &fakeRepo{collectionRefs: 2}
+	repo := &fakeRepo{bucketRefs: []admindomain.BucketReference{
+		{Relation: "collections", Count: 2},
+		{Relation: "tenant_default_bindings", Count: 0},
+	}}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
 	for _, onBackend := range []bool{false, true} {
 		err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin), DeleteBucketInput{
@@ -400,6 +403,37 @@ func TestDeleteBucket_RefusesWhileCollectionsBind(t *testing.T) {
 			t.Errorf("DeleteOnBackend=%v: the caller needs the count to act on.\ngot: %v",
 				onBackend, msg)
 		}
+	}
+}
+
+// TestDeleteBucket_RefusesForANonCollectionHolder is the case the first
+// version of this guard missed, and it is not hypothetical: reproduced
+// against the compose stack on 2026-08-30, a bucket with no collections but
+// one tenant default binding came back as
+// `internal: ... violates foreign key constraint
+// "tenant_default_bindings_bucket_id_fkey" (SQLSTATE 23503)` — the exact
+// error the guard had been added to remove, entering through the door it did
+// not watch.
+//
+// Six relations hold a bucket under RESTRICT. Counting the most obvious one
+// and calling the job done is what made a fixed bug look fixed.
+func TestDeleteBucket_RefusesForANonCollectionHolder(t *testing.T) {
+	repo := &fakeRepo{bucketRefs: []admindomain.BucketReference{
+		{Relation: "collections", Count: 0},
+		{Relation: "tenant_default_bindings", Count: 1},
+	}}
+	h := NewHandler(repo, nil, allowAuthorizer{})
+	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
+		DeleteBucketInput{BackendID: "primary", BucketName: "acme"})
+	if code(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition (%v)", code(err), err)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "tenant_default_bindings") {
+		t.Errorf("the message must name what is holding the bucket, or the "+
+			"operator is back to guessing.\ngot: %v", msg)
+	}
+	if msg := err.Error(); strings.Contains(msg, "0 collections") {
+		t.Errorf("relations with nothing in them must not be listed.\ngot: %v", msg)
 	}
 }
 
@@ -417,7 +451,7 @@ func TestDeleteBucket_CountsReferencesCrossTenant(t *testing.T) {
 		DeleteBucketInput{BackendID: "primary", BucketName: "acme"}); err != nil {
 		t.Fatalf("delete with no references: %v", err)
 	}
-	if !repo.collectionRefsCross {
+	if !repo.bucketRefsCross {
 		t.Error("the reference count ran tenant-scoped; against the RLS pool it " +
 			"would have returned 0 regardless of how many collections bind")
 	}

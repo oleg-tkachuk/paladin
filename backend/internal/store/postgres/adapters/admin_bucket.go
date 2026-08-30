@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
@@ -422,8 +423,16 @@ func (r *BucketRepoV2) SetConstraints(ctx context.Context, backendID, bucketName
 	return nil
 }
 
-func (r *BucketRepoV2) CountCollectionsReferencing(ctx context.Context, backendID, bucketName string) (int64, error) {
-	return r.q.CountCollectionsReferencingBucket(ctx, backendID, bucketName)
+func (r *BucketRepoV2) CountBucketReferences(ctx context.Context, backendID, bucketName string) ([]admindomain.BucketReference, error) {
+	rows, err := r.q.CountBucketReferences(ctx, backendID, bucketName)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]admindomain.BucketReference, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, admindomain.BucketReference{Relation: row.Relation, Count: row.Count})
+	}
+	return out, nil
 }
 
 func (r *BucketRepoV2) Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error {
@@ -438,12 +447,44 @@ func (r *BucketRepoV2) DeleteTx(ctx context.Context, tx pgx.Tx, backendID, bucke
 func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendID, bucketName string, expectedVersion int64) error {
 	rows, err := q.DeleteBucketV2(ctx, backendID, bucketName, expectedVersion)
 	if err != nil {
+		// The handler counts the RESTRICT relations before it gets here, so
+		// reaching this is either a race or a relation the count does not
+		// know about. Either way the caller must not be handed
+		// `violates foreign key constraint … (SQLSTATE 23503)` as an
+		// Internal error, which is exactly what used to happen — the create
+		// path above has mapped these since it was written, the delete path
+		// never did.
+		//
+		// pgerr folds 23503 and 23001 into one Kind: Postgres picks between
+		// them on how the constraint was declared, and matching only the
+		// first is how the tenant path once leaked raw SQL text.
+		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
+			return fmt.Errorf("%w: bucket %q is still referenced by %s",
+				admindomain.ErrConflict, bucketName,
+				referencingRelation(pgerr.Constraint(err)))
+		}
 		return err
 	}
 	if rows == 0 {
 		return admindomain.ErrVersionMismatch
 	}
 	return nil
+}
+
+// referencingRelation turns a foreign-key constraint name into the relation
+// that owns it. Postgres names them `<table>_<column>_fkey` by default, which
+// is the shape every constraint in this schema has; anything else is returned
+// as-is rather than mangled, because a constraint name an operator can grep
+// for beats a guess.
+func referencingRelation(constraint string) string {
+	if constraint == "" {
+		return "another table"
+	}
+	trimmed := strings.TrimSuffix(constraint, "_fkey")
+	if i := strings.LastIndex(trimmed, "_bucket_id"); i > 0 {
+		return trimmed[:i]
+	}
+	return constraint
 }
 
 // ─── Row → domain helpers ──────────────────────────────────────────────────

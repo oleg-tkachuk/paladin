@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -560,6 +561,21 @@ type DeleteBucketInput struct {
 	DeleteOnBackend bool
 }
 
+// heldBy renders the non-empty reference counts as "2 collections, 1
+// tenant_default_bindings", or "" when nothing holds the bucket. Relation
+// names are the table names on purpose: they are what the constraint error
+// would have said, what the operator can query, and what stays true when the
+// API's vocabulary and the schema's drift apart.
+func heldBy(refs []admindomain.BucketReference) string {
+	var parts []string
+	for _, r := range refs {
+		if r.Count > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", r.Count, r.Relation))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
 func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return err
@@ -567,31 +583,40 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	if err := h.authorize(ctx, actionManageBucket, in.BackendID, in.BucketName, uuid.Nil); err != nil {
 		return err
 	}
-	// Refuse while Collections still bind to this bucket. Without this the
-	// only thing standing in the way is collections_bucket_id_fkey, and a
-	// foreign key is not an API contract: the caller got CodeInternal with a
-	// raw "violates foreign key constraint ... (SQLSTATE 23503)" string, and
-	// the outbox path got further still — MarkDeleting succeeded, then the
-	// reconciler retried a row delete that could never land.
+	// Refuse while anything still holds this bucket under ON DELETE RESTRICT.
+	// Without the check the only thing standing in the way is the foreign key
+	// itself, and a foreign key is not an API contract: the caller got
+	// CodeInternal with a raw "violates foreign key constraint ... (SQLSTATE
+	// 23503)" string. The outbox path got further still — MarkDeleting is an
+	// UPDATE, so no constraint objects, and the state commits; the reconciler
+	// then retries a row delete that can never land.
+	//
+	// All six relations, not just collections. The first version of this
+	// guard counted collections alone, which is the most obvious holder and
+	// far from the only one: a bucket with no collections but a tenant
+	// default binding sailed past it and produced the very error the guard
+	// was added to remove. The list lives in the query and is checked against
+	// pg_constraint by an integration test, so adding a seventh relation
+	// fails that test instead of quietly reopening this.
 	//
 	// The count runs cross-tenant deliberately. Buckets are platform-level
-	// and the Collections bound to them are not, so under the RLS pool a
-	// tenant-scoped session counts zero and reports a bucket with other
-	// tenants' data on it as free. Measured, not assumed: as paladin_app with
-	// no session tenant the same count returns 0 where the owner sees 1,
+	// and nearly every relation holding them is tenant-scoped, so under the
+	// RLS pool a tenant-scoped session counts zero and reports a bucket full
+	// of another tenant's data as free. Measured, not assumed: as paladin_app
+	// with no session tenant the same count returns 0 where the owner sees 1,
 	// while the FK check — an internal trigger that does not consult RLS —
 	// sees the row either way. The platform.admin / bucket.admin gate above
 	// is what licenses the wider read.
-	refs, err := h.repo.CountCollectionsReferencing(
+	refs, err := h.repo.CountBucketReferences(
 		auth.WithCrossTenantRead(ctx), in.BackendID, in.BucketName)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,
-			fmt.Errorf("count collections on bucket: %w", err))
+			fmt.Errorf("count references to bucket: %w", err))
 	}
-	if refs > 0 {
+	if held := heldBy(refs); held != "" {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("bucket %q still has %d collection(s) bound to it; delete them first",
-				in.BucketName, refs))
+			fmt.Errorf("bucket %q is still referenced by %s; remove those first",
+				in.BucketName, held))
 	}
 	// Outbox model for deletes (mirrors CreateBucket): the row stays in
 	// place flipped to 'deleting', and the bucket-reconciler worker
