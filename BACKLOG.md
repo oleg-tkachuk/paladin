@@ -1821,27 +1821,6 @@ of the pipeline._
 
 ---
 
-## A duplicate bucket answers FailedPrecondition, not AlreadyExists
-
-- **Status:** Open, small. Surfaced 2026-08-30 alongside the collection and
-  object-tag mappings.
-- **Reason:** `CreateBucket` on an existing (backend, bucket) returns
-  `failed_precondition: admin: conflict: bucket "paladin-e2e" already exists in
-  backend "primary"`. The message is right and the code is not: the adapter
-  maps the unique violation to `admindomain.ErrConflict`, which the registry
-  resolves to FailedPrecondition. A client keying on the code cannot tell
-  "already exists" from any other unmet precondition, which is exactly what
-  CodeAlreadyExists is for — and what the collection and object-tag paths now
-  return for the same situation.
-- **Definition of Done:** either a distinct `ErrAlreadyExists`-backed sentinel
-  for the duplicate case, or `ErrConflict` splits. Whichever way, the three
-  create paths agree.
-- **Blockers:** none. Kept separate because `admindomain.ErrConflict` is used
-  by several adapters and re-coding it is a wider blast radius than the two
-  unmapped creates that were the actual leak.
-
----
-
 ## List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.

@@ -226,8 +226,10 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 				"provision_state": string(got.ProvisionState),
 			})
 	}); err != nil {
-		// ErrConflict (FK / unique violations the repo types) → FailedPrecondition
-		// via the central registry (ADR-0002), so clients see a readable code.
+		// The repo types what it can: a duplicate is ErrAlreadyExists, an
+		// unregistered backend or a live reference is ErrConflict. The central
+		// registry (ADR-0002) turns those into AlreadyExists and
+		// FailedPrecondition respectively.
 		return nil, apiutil.MapError(err)
 	}
 	return &got, nil
@@ -303,9 +305,15 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 				"provision_state": string(got.ProvisionState),
 			})
 	}); err != nil {
-		// Lost a race to a concurrent create (unique violation → ErrConflict):
-		// the bucket now exists, so honour idempotency and report it existing.
-		if errors.Is(err, admindomain.ErrConflict) {
+		// Lost a race to a concurrent create (unique violation →
+		// ErrAlreadyExists): the bucket now exists, so honour idempotency and
+		// report it existing.
+		//
+		// This sentinel moved when the duplicate stopped being ErrConflict.
+		// Matching the old one here would have kept compiling and quietly
+		// broken the race path — the branch that exists precisely because it
+		// is hard to reach on purpose.
+		if errors.Is(err, admindomain.ErrAlreadyExists) {
 			if existing, gerr := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); gerr == nil {
 				return &existing, false, nil
 			}

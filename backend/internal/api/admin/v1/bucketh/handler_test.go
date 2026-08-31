@@ -2,6 +2,7 @@ package bucketh
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -47,6 +48,9 @@ type fakeRepo struct {
 	// that matters — a tenant-scoped count silently returns zero against
 	// the real RLS pool, so a guard that forgets the widening reads as
 	// "no references" on exactly the buckets it is meant to protect.
+	getCalls         int
+	getNotFoundFirst bool
+
 	bucketRefs      []admindomain.BucketReference
 	bucketRefsErr   error
 	bucketRefsCross bool
@@ -101,6 +105,14 @@ type setterArgs struct {
 
 // BucketRepository — meaningful methods.
 func (f *fakeRepo) Get(context.Context, string, string) (admindomain.Bucket, error) {
+	f.getCalls++
+	// EnsureBucket calls Get twice on the race path — once to look before it
+	// writes, once after the write loses. getNotFoundFirst makes the first
+	// call miss so the create is actually attempted; without it the fast
+	// idempotent path returns and the race branch is never reached.
+	if f.getNotFoundFirst && f.getCalls == 1 {
+		return admindomain.Bucket{}, admindomain.ErrNotFound
+	}
 	return f.getBucket, f.getErr
 }
 func (f *fakeRepo) BackendEnabled(context.Context, string) (bool, error) {
@@ -289,12 +301,52 @@ func TestCreateBucket_ProvisionMarksPending(t *testing.T) {
 	}
 }
 
+// The two things the repo can refuse a create for now answer differently,
+// because they call for opposite responses: a duplicate is done, an
+// unregistered backend needs the backend created first. They were both
+// ErrConflict → FailedPrecondition, so a client could only tell them apart by
+// reading the prose.
 func TestCreateBucket_ConflictMapped(t *testing.T) {
-	repo := &fakeRepo{backendEnabled: true, createTxErr: admindomain.ErrConflict}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"unregistered backend", admindomain.ErrConflict, connect.CodeFailedPrecondition},
+		{"duplicate bucket", admindomain.ErrAlreadyExists, connect.CodeAlreadyExists},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeRepo{backendEnabled: true, createTxErr: tc.err}
+			h := NewHandler(repo, nil, allowAuthorizer{})
+			_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
+			if code(err) != tc.want {
+				t.Fatalf("code = %v, want %v", code(err), tc.want)
+			}
+		})
+	}
+}
+
+// EnsureBucket treats a lost create race as success and returns the bucket the
+// winner made. The sentinel it matches on moved with this change, and matching
+// the old one would still compile — so this pins the branch that is, by
+// design, almost impossible to reach on purpose.
+func TestEnsureBucket_LostRaceReturnsTheExistingBucket(t *testing.T) {
+	repo := &fakeRepo{
+		backendEnabled:   true,
+		getNotFoundFirst: true,
+		createTxErr:      fmt.Errorf("wrapped: %w", admindomain.ErrAlreadyExists),
+		getBucket:        admindomain.Bucket{BackendID: "primary", BucketName: "acme"},
+	}
 	h := NewHandler(repo, nil, allowAuthorizer{})
-	_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
-	if code(err) != connect.CodeFailedPrecondition {
-		t.Fatalf("code = %v, want FailedPrecondition (conflict)", code(err))
+	got, created, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
+	if err != nil {
+		t.Fatalf("a lost race must be success, got %v", err)
+	}
+	if created {
+		t.Error("created = true; the winner created it, not this call")
+	}
+	if got == nil || got.BucketName != "acme" {
+		t.Errorf("got %+v, want the existing bucket", got)
 	}
 }
 

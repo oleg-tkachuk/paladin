@@ -97,12 +97,28 @@ func (r *BucketRepoV2) createWith(ctx context.Context, q *sqlc.Queries, b admind
 		// handler can map them to user-friendly Connect codes instead of
 		// leaking raw "buckets_backend_id_fkey (SQLSTATE 23503)" strings.
 		switch pgerr.Classify(err) {
-		case pgerr.ForeignKeyViolation:
-			// Only realistic source is the backend_id FK (storage_backends
-			// row missing).
+		case pgerr.NotNullViolation, pgerr.ForeignKeyViolation:
+			// An unknown backend arrives as NOT NULL, not as a foreign key.
+			// The INSERT resolves the backend through a subselect —
+			// `(SELECT sb.id FROM storage_backends sb WHERE sb.name = $1)` —
+			// which yields NULL when the name matches nothing, so the row is
+			// rejected by `backend_id NOT NULL` (23502) before any FK is
+			// tested. This branch used to match only the FK and carried a
+			// comment saying that was "the only realistic source", so the
+			// friendly message was unreachable and the caller got
+			// `null value in column "backend_id"` as CodeInternal.
+			//
+			// The FK is kept in the match: it is the shape a direct id write
+			// would take, and matching both costs nothing.
 			return fmt.Errorf("%w: backend %q is not registered (run BackendService.CreateBackend or declare it in storage.backends)", admindomain.ErrConflict, b.BackendID)
 		case pgerr.UniqueViolation:
-			return fmt.Errorf("%w: bucket %q already exists in backend %q", admindomain.ErrConflict, b.BucketName, b.BackendID)
+			// AlreadyExists, not Conflict. Both used to be ErrConflict, which
+			// the registry maps to FailedPrecondition — so "this bucket is
+			// already there" and "the backend it names is not registered"
+			// arrived as the same code, and a client could only tell them
+			// apart by reading the prose. They call for opposite responses:
+			// one is done, the other needs the backend created first.
+			return fmt.Errorf("%w: bucket %q already exists in backend %q", admindomain.ErrAlreadyExists, b.BucketName, b.BackendID)
 		}
 		return err
 	}
