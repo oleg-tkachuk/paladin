@@ -1103,6 +1103,42 @@ bootstrap:
 # rbac.secretReader.secretNames below MUST contain `name` (or
 # `existingSecret` when used) or the resolver gets a 403 at startup.
 storage:
+  # ─── S3 credentials, one Secret per backend ──────────────────────────────
+  #
+  # `s3CredentialsSecrets` is a map keyed by the backend id in
+  # `config.storage.backends`. Each entry renders (or references) its own
+  # Secret and makes the configmap template inject that backend's
+  # `auth.access_key_secret` / `auth.secret_key_secret`, which the
+  # K8sSecretResolver reads at startup. RBAC picks up every name
+  # automatically.
+  #
+  #   s3CredentialsSecrets:
+  #     primary:
+  #       existingSecret: paladin-s3-primary   # provisioned by SOPS / ESO / SealedSecret
+  #     secondary:
+  #       create: true
+  #       accessKey: "…"
+  #       secretKey: "…"
+  #
+  # Per backend rather than one shared Secret, because credentials for
+  # different backends are rotated, scoped and sourced independently — and
+  # because the alternative is what this replaced: injection hardcoded to
+  # `primary`, leaving every other backend's keys inline in the ConfigMap,
+  # readable by anyone who can GET a configmap in the namespace.
+  #
+  # Fields per entry: `create` (render a chart-managed Secret),
+  # `existingSecret` (reference one instead; wins over create/name), `name`
+  # (override the default `<fullname>-s3-<backend>`), `accessKey`/`secretKey`
+  # (only used when create is true).
+  #
+  # Inline `auth.access_key` and a SecretRef are mutually exclusive: leave the
+  # inline keys empty for any backend listed here.
+  s3CredentialsSecrets: {}
+
+  # Legacy, still honoured: the singular form means the `primary` entry, and
+  # keeps its historical Secret name so upgrades do not orphan one. An
+  # explicit `primary` key in the map above wins over it. Overlays that opt
+  # out with `create: false` and inline plaintext keep working unchanged.
   s3CredentialsSecret:
     create: true
     name: "paladin-s3-credentials"

@@ -107,3 +107,74 @@ touching the others.
 default
 {{- end -}}
 {{- end -}}
+
+{{/*
+chart.s3CredentialSecrets — the per-backend S3 credential Secrets, resolved.
+
+Returns JSON: { "<backend>": { name, create, existingSecret, accessKey,
+secretKey, active } }. Consumers do `fromJson (include
+"chart.s3CredentialSecrets" .)` and iterate; `active` means "inject a
+SecretRef for this backend and let the resolver GET this Secret".
+
+Why a map at all. The injection used to be hardcoded to `primary`:
+
+    {{- $primary := index $cfg.storage.backends "primary" }}
+
+so a deployment with more than one backend had no way to keep the others'
+credentials out of the ConfigMap — they could only be inlined, in plaintext,
+readable by anyone who can GET a configmap in the namespace. The
+CUE schema always allowed `access_key_secret` on every backend; only the
+chart could not express it. One Secret per backend, so a credential can be
+rotated, scoped or sourced (SOPS / ExternalSecret / SealedSecret) per backend
+rather than all-or-nothing.
+
+`storage.s3CredentialsSecret` (singular) is still honoured and means the
+`primary` entry. Five overlays in this repo and in gitops set it, including
+`create: false` to opt out; they keep working untouched. An explicit
+`primary` key in the new map wins over it.
+
+Default name: the singular carries `paladin-s3-credentials` in values.yaml and
+keeps it, because renaming would orphan Secrets that already exist. Entries in
+the map that name nothing get `<fullname>-s3-<backend>`.
+*/}}
+{{- define "chart.s3CredentialSecrets" -}}
+{{- $out := dict -}}
+{{- $ctx := . -}}
+{{- with .Values.storage -}}
+{{- $specs := dict -}}
+{{- range $backend, $spec := (.s3CredentialsSecrets | default dict) -}}
+{{- $_ := set $specs $backend $spec -}}
+{{- end -}}
+{{- if and .s3CredentialsSecret (not (hasKey $specs "primary")) -}}
+{{- $_ := set $specs "primary" .s3CredentialsSecret -}}
+{{- end -}}
+{{- range $backend, $spec := $specs -}}
+{{- $name := $spec.existingSecret | default $spec.name -}}
+{{- if not $name -}}
+{{- $name = printf "%s-s3-%s" (include "chart.fullname" $ctx) $backend -}}
+{{- end -}}
+{{- /* Booleans built with if, not `or … | ternary`: Go templates' `or`
+       returns its last truthy OPERAND, so `or false "some-secret"` yields a
+       string and ternary rejects it. That shape rendered fine wherever
+       `create` was true and blew up only on the staging convention
+       (create: false + existingSecret), which is exactly the combination
+       this map has to support. */ -}}
+{{- $active := false -}}
+{{- if and $name (or $spec.create $spec.existingSecret) -}}
+{{- $active = true -}}
+{{- end -}}
+{{- $create := false -}}
+{{- if and $spec.create (not $spec.existingSecret) -}}
+{{- $create = true -}}
+{{- end -}}
+{{- $_ := set $out $backend (dict
+      "name" $name
+      "create" $create
+      "existingSecret" ($spec.existingSecret | default "")
+      "accessKey" ($spec.accessKey | default "")
+      "secretKey" ($spec.secretKey | default "")
+      "active" $active) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end -}}

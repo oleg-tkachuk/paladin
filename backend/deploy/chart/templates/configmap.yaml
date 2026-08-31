@@ -35,14 +35,11 @@ data:
     # (e.g. `values-local.yaml`) can simply flip create=false and
     # NOT carry a `null` literal that CUE rejects on optional refs.
     {{- $cfg := deepCopy .Values.config }}
-    {{- with .Values.storage }}
-    {{- if .s3CredentialsSecret }}
-    {{- $secretName := .s3CredentialsSecret.existingSecret | default .s3CredentialsSecret.name -}}
-    {{- if and $secretName (or .s3CredentialsSecret.create .s3CredentialsSecret.existingSecret) -}}
-    {{- $primary := index $cfg.storage.backends "primary" }}
-    {{- $_ := set $primary.auth "access_key_secret" (dict "name" $secretName "key" "access_key") }}
-    {{- $_ := set $primary.auth "secret_key_secret" (dict "name" $secretName "key" "secret_key") }}
-    {{- end -}}
-    {{- end -}}
+    {{- range $backend, $sec := fromJson (include "chart.s3CredentialSecrets" .) }}
+    {{- if and $sec.active (hasKey $cfg.storage.backends $backend) }}
+    {{- $b := index $cfg.storage.backends $backend }}
+    {{- $_ := set $b.auth "access_key_secret" (dict "name" $sec.name "key" "access_key") }}
+    {{- $_ := set $b.auth "secret_key_secret" (dict "name" $sec.name "key" "secret_key") }}
+    {{- end }}
     {{- end }}
     {{- tpl (toYaml $cfg) . | nindent 4 }}
