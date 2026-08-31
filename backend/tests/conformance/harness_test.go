@@ -33,6 +33,7 @@ type target struct {
 	client     *s3adapter.Client
 	tenant     uuid.UUID
 	collection string
+	region     string
 	caps       []capability
 }
 
@@ -55,17 +56,46 @@ func (tg *target) record(name, status, detail string) {
 
 func newTarget(t *testing.T) *target {
 	t.Helper()
+	// Endpoint is how you point at a self-hosted backend. Against real AWS you
+	// set none: the SDK resolves the regional endpoint itself, and supplying
+	// one would pin the suite to a host AWS may move. So the target is "an
+	// endpoint OR an explicit provider", and only the absence of both is a
+	// skip.
 	endpoint := os.Getenv("PALADIN_CONFORMANCE_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("PALADIN_CONFORMANCE_ENDPOINT not set — nothing to conform to")
+	providerEnv := os.Getenv("PALADIN_CONFORMANCE_PROVIDER")
+	if endpoint == "" && providerEnv == "" {
+		t.Skip("neither PALADIN_CONFORMANCE_ENDPOINT nor PALADIN_CONFORMANCE_PROVIDER set — nothing to conform to")
 	}
 	region := os.Getenv("PALADIN_CONFORMANCE_REGION")
 	if region == "" {
 		region = "us-east-1"
 	}
-	provider := os.Getenv("PALADIN_CONFORMANCE_PROVIDER")
+	provider := providerEnv
 	if provider == "" {
 		provider = "unknown"
+	}
+
+	// Path style is right for every self-hosted backend here and wrong for
+	// AWS, which serves virtual-hosted URLs and has been retiring the other
+	// form for years. Defaulting off when no endpoint is set makes the AWS
+	// case work without a flag; PALADIN_CONFORMANCE_PATH_STYLE overrides
+	// either way, for a backend that wants the opposite of its default.
+	pathStyle := endpoint != ""
+	if v := os.Getenv("PALADIN_CONFORMANCE_PATH_STYLE"); v != "" {
+		pathStyle = v == "1" || strings.EqualFold(v, "true")
+	}
+
+	// Static keys when the environment supplies them, the SDK's own chain
+	// otherwise — which is how anyone reaches AWS from a laptop (profile,
+	// SSO, instance role) and the one mode this suite could not express.
+	authMode := "default_chain"
+	access := os.Getenv("PALADIN_CONFORMANCE_ACCESS_KEY")
+	secret := os.Getenv("PALADIN_CONFORMANCE_SECRET_KEY")
+	if access != "" && secret != "" {
+		authMode = "static_keys"
+	}
+	if v := os.Getenv("PALADIN_CONFORMANCE_AUTH_MODE"); v != "" {
+		authMode = v
 	}
 	bucket := os.Getenv("PALADIN_CONFORMANCE_BUCKET")
 	owns := bucket == ""
@@ -79,11 +109,11 @@ func newTarget(t *testing.T) *target {
 		Bucket:         bucket,
 		Region:         region,
 		Endpoint:       endpoint,
-		ForcePathStyle: true,
+		ForcePathStyle: pathStyle,
 		Auth: config.StorageBackendAuth{
-			Mode:      "static_keys",
-			AccessKey: os.Getenv("PALADIN_CONFORMANCE_ACCESS_KEY"),
-			SecretKey: os.Getenv("PALADIN_CONFORMANCE_SECRET_KEY"),
+			Mode:      authMode,
+			AccessKey: access,
+			SecretKey: secret,
 		},
 		PartSizeRaw: "8MB",
 	}
@@ -95,7 +125,7 @@ func newTarget(t *testing.T) *target {
 	}
 	tg := &target{
 		provider: provider, bucket: bucket, ownsBucket: owns, client: c,
-		tenant: uuid.New(), collection: "conf",
+		tenant: uuid.New(), collection: "conf", region: region,
 	}
 	if owns {
 		if err := c.CreateBucket(ctx, "", bucket, region); err != nil {
@@ -118,8 +148,11 @@ func newTarget(t *testing.T) *target {
 func reportProfile(t *testing.T, tg *target) {
 	t.Helper()
 	var b strings.Builder
-	fmt.Fprintf(&b, "\n─── capability profile: %s (%s) ───\n",
-		tg.provider, os.Getenv("PALADIN_CONFORMANCE_ENDPOINT"))
+	where := os.Getenv("PALADIN_CONFORMANCE_ENDPOINT")
+	if where == "" {
+		where = "SDK-resolved endpoint, region " + tg.region
+	}
+	fmt.Fprintf(&b, "\n─── capability profile: %s (%s) ───\n", tg.provider, where)
 	for _, c := range tg.caps {
 		fmt.Fprintf(&b, "  %-26s %-8s %s\n", c.name, c.status, c.detail)
 	}

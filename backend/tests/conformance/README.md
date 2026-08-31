@@ -15,7 +15,28 @@ PALADIN_CONFORMANCE_PROVIDER=minio \
 
 Optional: `PALADIN_CONFORMANCE_REGION` (default `us-east-1`),
 `PALADIN_CONFORMANCE_BUCKET` (default: a fresh `paladin-conf-<hex>` the suite
-creates and removes).
+creates and removes), `PALADIN_CONFORMANCE_PATH_STYLE`,
+`PALADIN_CONFORMANCE_AUTH_MODE`.
+
+## Against real AWS S3
+
+Set no endpoint — the SDK resolves the regional one, and pinning a host is
+how a suite outlives the service it tests:
+
+```bash
+AWS_PROFILE=… PALADIN_CONFORMANCE_PROVIDER=aws PALADIN_CONFORMANCE_REGION=eu-north-1   go test -tags=conformance ./tests/conformance/ -v
+```
+
+Two defaults flip when no endpoint is given, because they are wrong for AWS
+and right for everything self-hosted here: path-style addressing goes off (AWS
+serves virtual-hosted URLs and has been retiring the other form for years),
+and auth falls back to the SDK's own credential chain — profile, SSO, instance
+role — which is how anyone actually reaches AWS. Supplying
+`PALADIN_CONFORMANCE_ACCESS_KEY`/`_SECRET_KEY` still selects static keys.
+
+It creates a bucket, writes a handful of small objects, and removes both. On
+S3 that is a few cents at most, but it IS a real bucket in a real account:
+point it at a scratch account, not production.
 
 ## Why it drives the adapter, not the SDK
 
@@ -76,5 +97,8 @@ adapter's own note ("SeaweedFS / real S3: no Sequencer from HEAD; leave
 empty"). Anything downstream that wants them has to get them from the event
 pipeline, not from a HEAD.
 
-Not yet run against real AWS S3. That is the profile most worth having, since
-it is the one nobody can inspect by reading a container's source.
+Not yet run against real AWS S3 — no credentials were available on the machine
+where the other three were measured. That profile is the one most worth having,
+since it is the only backend here whose behaviour nobody can inspect by reading
+a container's source, and it is the one that decides whether the two findings
+above are quirks of self-hosted implementations or the shape of S3 itself.
