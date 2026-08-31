@@ -829,14 +829,19 @@ config:
         audit_log_ttl: 8760h
         # Terminal operation rows older than this are reaped. 0 disables the
         # reaper, and this key was absent — so it shipped disabled, the
-        # operations table grew without bound, and the console's failed-ops
-        # widget kept showing a failure from three days earlier because
-        # nothing ever aged it out.
+        # 14d: long enough for a post-mortem on a batch job, short enough that
+        # "recent failures" on the console widget means recent. The audit log
+        # keeps the record of the RPC that started the operation for a year
+        # (above); this is the execution detail, which is only interesting
+        # while it is fresh.
         #
-        # 14d is long enough for a post-mortem on a batch job and short enough
-        # that "recent failures" means recent. The audit log keeps the record
-        # of the RPC that started the operation for a year (above); this is
-        # the execution detail, which is only interesting while it is fresh.
+        # This line was originally added while chasing a stale row on the
+        # failed-ops widget, on the belief that an absent key left the reaper
+        # switched off. It did not: CUE supplied 720h and the reaper always
+        # ran, and the stale row was an ascending sort, fixed separately. The
+        # number survived that wrong reason on its own merits and is now the
+        # schema default too, so this line agrees with CUE rather than
+        # overriding it.
         operations_ttl: 336h
         delete_orphaned_parts: false
       refresh_token_reap:

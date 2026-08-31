@@ -261,21 +261,6 @@ the same commit. Treat this file like a runtime invariant.
   checks the existing three.
 - **Blockers:** none; ordering is by whichever incident asks first.
 
-### `housekeeping.operations_ttl` is 14 days because the chart says so
-
-- **Status:** Deferred (a number to agree on, not a defect).
-- **Reason:** schema.cue defaults it to 720h and the chart now sets 336h. The
-  chart value was added while chasing a stale row on the failed-operations
-  widget, on the mistaken belief that the key being absent left the reaper
-  switched off — it did not: CUE supplied 720h and the reaper has always run.
-  The row was on the widget because the listing sorted ascending, which is
-  fixed separately. So 14 days is a retention change nobody has weighed:
-  shorter is friendlier to the widget, longer is friendlier to a post-mortem.
-- **Definition of Done:** Either a deliberate decision recorded next to the
-  value, or the chart line goes and 720h stands.
-- **Blockers:** none. Wants an opinion on how far back an operator should be
-  able to read a batch job's outcome.
-
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational

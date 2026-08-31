@@ -96,8 +96,12 @@ Operations rows are larger than audit rows because the `metadata` and
 
 ### Defaults
 
-- `operations_ttl = 720h` (30 days). Support window for reconstructing
-  what happened around a failed batch.
+- `operations_ttl = 336h` (14 days). Long enough for a post-mortem on a batch
+  job, short enough that the console's "recent failures" widget means recent.
+  The audit log retains the RPC that started the operation for a year
+  (`audit_log_ttl`); this row is the execution detail, which stops being
+  interesting once it is stale. Raise it where batch post-mortems routinely
+  run older than a fortnight — the cost is table size, quantified below.
 
 ### Worked example
 
