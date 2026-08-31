@@ -1439,6 +1439,55 @@ export async function countFixtureShapedTenants(): Promise<{
   return { count, exceeded: false, sample };
 }
 
+/**
+ * How many memberships the login subject may hold before a login is at risk.
+ *
+ * Login without a tenant hint authenticates against the rows
+ * FindUsersBySubjectGlobal returns, and that query caps at five. Past the cap
+ * the real membership can fall outside the candidate set and a correct
+ * password answers "invalid credentials" — which is what happened: a fixture
+ * left one membership per run sharing the operator's subject, and the suite
+ * locked itself out in about five runs.
+ *
+ * Three, not five: the point of a gate is to fire while the environment is
+ * merely drifting. At five the next run is the one that breaks.
+ */
+export const MAX_ADMIN_MEMBERSHIPS = 3;
+
+/**
+ * Counts the memberships held by the subject the suite logs in as.
+ *
+ * This measures the mechanism rather than a symptom. MAX_LEFTOVER_TENANTS
+ * watches fixture-shaped tenants, which is the visible form leftovers usually
+ * take — but the lockout came from duplicate USERS, and the tenant count was
+ * nowhere near its threshold when it happened. A leak that produces
+ * memberships without tenants would pass that check and take the login down
+ * anyway.
+ *
+ * Cross-tenant listing (no parent) is platform-admin only and is exactly what
+ * the login lookup does, so this sees what that sees.
+ */
+export async function countAdminMemberships(): Promise<{
+  subject: string;
+  count: number;
+  tenantIds: string[];
+}> {
+  const client = createClient(UserService, iamAdminTransport());
+  const subject = SEEDED_ADMIN.subject;
+  const tenantIds: string[] = [];
+  let pageToken = "";
+  do {
+    const res = await client.listUsers({
+      page: { pageSize: 200, pageToken },
+    });
+    for (const u of res.users) {
+      if (u.subject === subject) tenantIds.push(u.tenantId);
+    }
+    pageToken = res.page?.nextPageToken ?? "";
+  } while (pageToken);
+  return { subject, count: tenantIds.length, tenantIds };
+}
+
 export async function deleteTenants(tenantIds: string[]): Promise<void> {
   const client = createClient(TenantService, adminTransport());
   const results = await Promise.allSettled(

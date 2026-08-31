@@ -87,6 +87,16 @@ matching the wrong "Switch Target", a trash row that never rendered, a list
 that will not show a tenant just seeded. None of those look like what they
 are, and each fix moves the failure one step earlier.
 
+It runs two counts, and the second exists because the first was not enough.
+Leftover tenants are the visible form the litter takes; the outage came from
+something else. Memberships sharing the login subject accumulated one per run,
+and login without a tenant hint authenticates against at most five candidate
+rows — so past five the real membership was crowded out and a correct password
+was refused. Twenty-two specs failed on login while the tenant count sat
+nowhere near its threshold, which is to say the check that existed would have
+called the environment healthy. The second count measures that mechanism
+directly.
+
 "Fixture-shaped" means the slug ends in the 8-hex suffix `uniqueSlug` mints
 (`FIXTURE_SLUG_RE` in `fixtures/unique.ts`). Prefixes were the obvious
 candidate and are unusable — the suite seeds `acme`, `ok`, `obj`, `big`,

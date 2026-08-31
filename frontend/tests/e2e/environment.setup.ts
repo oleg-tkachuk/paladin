@@ -23,7 +23,9 @@ import { test, expect } from "@playwright/test";
 
 import { FIXTURE_SLUG_RE, uniqueSlug } from "./fixtures/unique";
 import {
+  countAdminMemberships,
   countFixtureShapedTenants,
+  MAX_ADMIN_MEMBERSHIPS,
   MAX_LEFTOVER_TENANTS,
 } from "./fixtures/seed";
 
@@ -54,4 +56,35 @@ test("the environment is not full of leftover fixtures", async () => {
       `(\`docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v\`), ` +
       `or delete them through /trash if the stack is one you cannot drop.`,
   ).toBe(false);
+});
+
+// The check that would have caught the outage this gate was extended for.
+//
+// The leftover tenants above are the visible form the litter usually takes.
+// The damage came from something else: memberships sharing the login
+// subject. Login without a tenant hint authenticates against the five rows
+// FindUsersBySubjectGlobal returns, so once the pile passed five the real
+// membership fell outside the candidate set and a correct password answered
+// "invalid credentials". Twenty-two specs failed on login, and the tenant
+// count at the time was nowhere near its threshold — the existing check would
+// have said the environment was fine.
+//
+// So this measures the mechanism, not a symptom: how many memberships the
+// subject the suite signs in as actually holds.
+test("the login subject has not accumulated memberships", async () => {
+  const { subject, count, tenantIds } = await countAdminMemberships();
+  expect(
+    count,
+    `${subject} holds ${count} memberships (tenants: ${tenantIds
+      .slice(0, 6)
+      .join(", ")}${tenantIds.length > 6 ? ", …" : ""}).\n\n` +
+      `Login without a tenant hint checks the password against at most five ` +
+      `candidate rows, so past that the real membership can be crowded out and ` +
+      `a correct password is refused — the whole suite then fails on login, ` +
+      `which looks like anything but a full environment.\n\n` +
+      `These are leftovers from runs whose teardown did not finish. Clear them ` +
+      `by recreating the compose stack ` +
+      `(\`docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v\`), ` +
+      `or by deleting the extra users through /users on a stack you cannot drop.`,
+  ).toBeLessThanOrEqual(MAX_ADMIN_MEMBERSHIPS);
 });
