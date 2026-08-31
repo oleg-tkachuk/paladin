@@ -265,13 +265,33 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: authzScope}); err != nil {
 		return nil, "", err
 	}
-	// A scope of Nil is the platform-admin listing that deliberately spans
-	// tenants. users carries an RLS policy now (014), so the read has to say
-	// so — the flag widens SELECT only, and non-admins never reach here with
-	// a Nil scope because it was narrowed to `caller` above.
+	// users carries an RLS policy, so a read outside the caller's own tenant
+	// has to say which one it means. Both cross-tenant shapes need saying,
+	// and only the first one did:
+	//
+	//   - scope Nil is the platform-admin listing that spans tenants. The
+	//     flag widens SELECT only, and non-admins never reach here with Nil
+	//     because it was narrowed to `caller` above.
+	//   - a NAMED scope that is not the caller's tenant is the one that was
+	//     missing. The role gate above lets a platform admin through, and
+	//     then the query ran with the session still pinned to the CALLER's
+	//     tenant, so it matched nothing and the RPC answered with an empty
+	//     page. Not an error, not a refusal — the tenant simply looked like
+	//     it had no users.
+	//
+	// That is what made the e2e teardown leak: it lists a tenant's users to
+	// delete them, got an empty page, deleted nothing, reported success, and
+	// left a user behind that then blocked the purge. Those leftovers are
+	// what eventually broke Login (see FindUsersBySubjectGlobal).
+	//
+	// WithActingTenant, not WithCrossTenantRead: the request names one
+	// tenant, so pin to it rather than widening to all of them.
 	listCtx := ctx
-	if scope == uuid.Nil {
+	switch {
+	case scope == uuid.Nil:
 		listCtx = auth.WithCrossTenantRead(ctx)
+	case scope != caller:
+		listCtx = auth.WithActingTenant(ctx, scope)
 	}
 	page, next, err := h.users.List(listCtx, authstore.ListUsersArgs{
 		TenantID:  scope,

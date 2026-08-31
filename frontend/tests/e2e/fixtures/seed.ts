@@ -1276,11 +1276,27 @@ export async function deleteUsersOf(tenantId: string): Promise<void> {
     parent: `tenants/${tenantId}`,
     page: { pageSize: 200, pageToken: "" },
   });
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     page.users.map((u) =>
       client.deleteUser({ name: u.name, resourceVersion: u.resourceVersion }),
     ),
   );
+  // Throw on failure instead of resolving. allSettled was being used as a
+  // shrug: every rejection was dropped, and the caller's own `.catch(() => {})`
+  // dropped whatever was left. A user that could not be deleted then blocked
+  // the tenant purge, so the tenant stayed in the trash with its user — and
+  // those leftovers, all sharing the operator's subject, eventually pushed the
+  // real membership out of Login's five-row candidate set. Nothing reported a
+  // thing until logging in stopped working.
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length > 0) {
+    throw new Error(
+      `deleteUsersOf(${tenantId}): ${failed.length} of ${page.users.length} ` +
+        `user(s) not deleted: ${failed
+          .map((r) => String((r as PromiseRejectedResult).reason).slice(0, 120))
+          .join("; ")}`,
+    );
+  }
 }
 
 /**
@@ -1450,7 +1466,11 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
       // trash after every run that used the membership fixture — its one
       // users row was all it took to refuse the purge.
       await deleteCollections(await collectionsOf(id)).catch(() => {});
-      await deleteUsersOf(id).catch(() => {});
+      // NOT swallowed. This is the step whose silence let the trash fill: a
+      // user left behind blocks the purge, the tenant stays trashed, and its
+      // membership keeps a copy of the operator's subject alive. The rejection
+      // is reported by the loop below, which names the tenant.
+      await deleteUsersOf(id);
       // Purging is still not always reachable — an object under a COMPLIANCE
       // lock cannot be removed by anyone, and that is the product rule
       // working. Trashed is the honest fallback then.

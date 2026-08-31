@@ -106,18 +106,46 @@ LIMIT sqlc.arg('page_size')::int;
 
 -- name: FindUsersBySubjectGlobal :many
 -- Cross-tenant subject lookup for AuthService.Login when the caller supplied
--- no tenant hint. The handler only needs to know whether the subject is
--- unambiguous, so five rows is plenty and the cap keeps a shared subject from
--- turning every login into a full scan.
+-- no tenant hint. The handler checks the password against every row this
+-- returns, so the cap is not just a scan guard: it is the set of memberships
+-- a login can possibly open. That distinction was lost once already — the
+-- comment here used to say "five rows is plenty" because the handler "only
+-- needs to know whether the subject is unambiguous", which stopped being
+-- what the handler does.
+--
+-- What it cost: a test fixture left one membership per run in a trashed
+-- tenant, all sharing the operator's subject. At six rows the real membership
+-- fell outside the cap and the operator was told "invalid credentials" for a
+-- correct password. The suite locked itself out in about five runs.
+--
+-- Two changes keep the cap honest:
+--
+--   - trashed tenants are excluded. You cannot sign in to a tenant that is in
+--     the trash, so a membership there is not a candidate — and it is the
+--     shape leftovers take, since a blocked purge leaves the tenant trashed
+--     and its users in place.
+--   - the order is deterministic and puts the memberships actually in use
+--     first. Without ORDER BY, which five rows came back was whatever the
+--     planner chose. Ordering by last login means the tenant someone signs in
+--     to is first, so the cap truncates memberships they do not use.
+--
+-- A subject live in more than five NON-trashed tenants can still be
+-- truncated. That is a real remaining edge and it is not this cap's to fix:
+-- authenticating against an unbounded candidate list is a bcrypt-per-row
+-- denial of service.
 --
 -- NOT for listing a user's memberships: that needs all of them, in a stable
 -- order — see ListMembershipsBySubject below. The two shared this query once,
--- and the tenant switcher silently hid every membership past the fifth.
-SELECT id, tenant_id, subject, display_name, password_hash,
-       roles, scopes, disabled, resource_version,
-       created_at, updated_at, last_login_at
-FROM users
-WHERE subject = $1
+-- and the tenant switcher silently hid every membership past the fifth. Same
+-- cap, same class of bug, twice.
+SELECT u.id, u.tenant_id, u.subject, u.display_name, u.password_hash,
+       u.roles, u.scopes, u.disabled, u.resource_version,
+       u.created_at, u.updated_at, u.last_login_at
+FROM users u
+JOIN tenants t ON t.id = u.tenant_id
+WHERE u.subject = $1
+  AND t.deleted_at IS NULL
+ORDER BY u.last_login_at DESC NULLS LAST, u.created_at
 LIMIT 5;
 
 -- name: ListMembershipsBySubject :many
