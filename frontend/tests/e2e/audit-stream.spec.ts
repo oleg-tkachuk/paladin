@@ -18,9 +18,9 @@
  * console listens for, since `useAuditStream` subscribes to `audit` and a
  * differently-named frame would arrive and be ignored.
  */
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
-import { seedTenant } from "./fixtures/seed";
 
 declare global {
   interface Window {
@@ -51,7 +51,10 @@ test.describe("Live audit stream", () => {
     );
   });
 
-  test("delivers a real audit event to the browser", async ({ page }) => {
+  test("delivers a real audit event to the browser", async ({
+    page,
+    makeTenant,
+  }) => {
     await loginAsAdmin(page);
 
     // Install the same subscription the console uses: an EventSource on the
@@ -78,7 +81,11 @@ test.describe("Live audit stream", () => {
     // which is the tenant this stream is scoped to. (An anonymous action, a
     // failed login say, carries no tenant and reaches no subscriber by
     // design.)
-    await seedTenant({ slugPrefix: "sse" });
+    // makeTenant, not the raw seedTenant: the maker registers the row so
+    // teardown removes it. Calling the helper directly meant this spec left
+    // one tenant behind on every single run — invisible, because they are
+    // empty and nothing failed, until the pile was large enough to matter.
+    await makeTenant({ slugPrefix: "sse" });
 
     await page.waitForFunction(
       () => (window.__auditFrames?.length ?? 0) > 0,
