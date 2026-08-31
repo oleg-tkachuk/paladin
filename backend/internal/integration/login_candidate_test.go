@@ -4,11 +4,14 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -145,5 +148,59 @@ func TestNamedCrossTenantUserListNeedsTheActingScope(t *testing.T) {
 	if got := count(auth.WithActingTenant(base, target)); got != 1 {
 		t.Errorf("acting as the target sees %d users, want 1 — a teardown "+
 			"reading this would delete nothing and call it success", got)
+	}
+}
+
+// TestCreateBackendTwiceIsAlreadyExists is the runtime half: the adapter has
+// to turn the unique violation into the sentinel, against a real Postgres.
+//
+// And the half that is easy to lose — TestBootstrapStillUpserts — proves the
+// seeding path kept the behaviour it actually needs. Splitting one query into
+// two is only correct if BOTH callers end up with the right one; a refactor
+// that quietly gave bootstrap the plain INSERT would fail every restart after
+// the first, and it would fail in a place nobody watches.
+func TestCreateBackendTwiceIsAlreadyExists(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
+
+	b := admindomain.StorageBackend{
+		BackendID: "be-" + uuid.NewString()[:8],
+		Kind:      "s3-compatible",
+		Endpoint:  "http://x.invalid:3900",
+		Region:    "us-east-1",
+	}
+	if err := repo.Create(ctx, b); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	if err := repo.Create(ctx, b); !errors.Is(err, admindomain.ErrAlreadyExists) {
+		t.Fatalf("second create = %v, want ErrAlreadyExists", err)
+	}
+}
+
+func TestBootstrapStillUpserts(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
+
+	b := admindomain.StorageBackend{
+		BackendID: "be-" + uuid.NewString()[:8],
+		Kind:      "s3-compatible",
+		Endpoint:  "http://first.invalid:3900",
+		Region:    "us-east-1",
+	}
+	if err := repo.Upsert(ctx, b); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	b.Endpoint = "http://second.invalid:3900"
+	if err := repo.Upsert(ctx, b); err != nil {
+		t.Fatalf("second upsert must converge, not refuse: %v", err)
+	}
+	got, err := repo.Get(ctx, b.BackendID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Endpoint != "http://second.invalid:3900" {
+		t.Errorf("endpoint = %q; the seeding path must reconcile YAML onto the row", got.Endpoint)
 	}
 }

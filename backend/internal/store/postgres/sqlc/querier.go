@@ -129,6 +129,22 @@ type Querier interface {
 	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
+	// v2 storage_backends queries — full CRUD over the now-first-class entity.
+	// The Create RPC. A plain INSERT: creating something that already exists is a
+	// unique violation, which the adapter maps to ErrAlreadyExists.
+	//
+	// It used to share the upsert below, and that made Create a blind overwrite —
+	// the one thing UpdateBackend refuses to be. That RPC takes a REQUIRED
+	// resource_version, with "there is no bypass on this RPC by design" written
+	// over it in the proto; routing Create through ON CONFLICT DO UPDATE handed
+	// out exactly that bypass. Worse than the missing OCC: the SET assigns
+	// EXCLUDED wholesale, so a field the caller omitted was not left alone, it was
+	// blanked. Re-running a provisioning script without `cedar_policy` erased the
+	// policy and answered 200.
+	//
+	// Keyed on name, not id: the caller knows the config key ("primary"), and the
+	// uuid is generated here.
+	CreateStorageBackendV2(ctx context.Context, name string, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string, displayName string, publicEndpoint string, forcePathStyle bool, credentialsSecretRef string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
 	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
 	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, name_4 string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
@@ -778,8 +794,15 @@ type Querier interface {
 	// it never fires the bump_rv trigger (no resource_version / updated_at churn)
 	// and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
 	UpsertStorageBackendHealth(ctx context.Context, status BackendHealthStatus, message *string, checkedAt pgtype.Timestamptz, backendName string) error
-	// v2 storage_backends queries — full CRUD over the now-first-class entity.
-	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
+	// Config seeding only (bootstrap/backends.go), where upsert is the right
+	// shape: it reconciles the YAML against the row on every boot, so the write
+	// has to handle "absent" and "drifted" alike. The Create RPC no longer shares
+	// it — two callers, two needs, and one query cannot serve both without giving
+	// the API a silent overwrite.
+	//
+	// `enabled` is deliberately absent from the SET, which is what keeps a backend
+	// an operator disabled from coming back enabled after a restart.
+	//
 	// Keyed on name, not id: the caller knows the config key ("primary"), and the
 	// uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.
 	UpsertStorageBackendV2(ctx context.Context, name string, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string, displayName string, publicEndpoint string, forcePathStyle bool, credentialsSecretRef string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error

@@ -2,6 +2,8 @@ package backendh
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -23,8 +25,14 @@ func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ str
 	return cedar.DecisionAllow, nil
 }
 
-type fakeBackendRepo struct{}
+type fakeBackendRepo struct {
+	// createErr lets a test drive the duplicate path; zero value = success.
+	createErr error
+}
 
+func (f fakeBackendRepo) Create(context.Context, admindomain.StorageBackend) error {
+	return f.createErr
+}
 func (fakeBackendRepo) Upsert(context.Context, admindomain.StorageBackend) error { return nil }
 func (fakeBackendRepo) Get(context.Context, string) (admindomain.StorageBackend, error) {
 	return admindomain.StorageBackend{BackendID: "primary", Kind: "s3-compatible"}, nil
@@ -96,6 +104,42 @@ func TestCreateBackendAllowsPlatformAdmin(t *testing.T) {
 	}
 	if out.BackendID != "primary" {
 		t.Errorf("got %q", out.BackendID)
+	}
+}
+
+// Creating a backend that already exists is AlreadyExists, not a 500 and not a
+// silent overwrite.
+//
+// This RPC used to route through the seeding path's upsert, so a Create on an
+// existing backend rewrote every field with no OCC check and answered 200 —
+// the exact bypass UpdateBackend refuses to offer, since it takes a REQUIRED
+// resource_version and says so in the proto. And because ON CONFLICT SET
+// assigns EXCLUDED wholesale, a field the caller omitted was blanked rather
+// than left alone: re-running a provisioning script without `cedar_policy`
+// erased the policy.
+func TestCreateBackendRefusesADuplicate(t *testing.T) {
+	repo := fakeBackendRepo{createErr: fmt.Errorf("%w: storage backend %q already exists",
+		admindomain.ErrAlreadyExists, "primary")}
+	h := NewHandler(repo, allowAuthorizer{})
+	_, err := h.CreateBackend(ctxWithRoles("platform.admin"), admindomain.StorageBackend{
+		BackendID: "primary", Kind: "s3-compatible",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeAlreadyExists {
+		t.Fatalf("code = %v, want AlreadyExists (%v)", got, err)
+	}
+}
+
+// The other half of dropping the hardcoded CodeInternal: an error the registry
+// does not recognise still has to be a 500, or this change would have quietly
+// softened every unexplained failure.
+func TestCreateBackendUnclassifiedFailureIsInternal(t *testing.T) {
+	repo := fakeBackendRepo{createErr: errors.New("connection reset by peer")}
+	h := NewHandler(repo, allowAuthorizer{})
+	_, err := h.CreateBackend(ctxWithRoles("platform.admin"), admindomain.StorageBackend{
+		BackendID: "primary", Kind: "s3-compatible",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInternal {
+		t.Fatalf("code = %v, want Internal", got)
 	}
 }
 

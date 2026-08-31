@@ -1,7 +1,38 @@
 -- v2 storage_backends queries — full CRUD over the now-first-class entity.
 
+-- name: CreateStorageBackendV2 :exec
+-- The Create RPC. A plain INSERT: creating something that already exists is a
+-- unique violation, which the adapter maps to ErrAlreadyExists.
+--
+-- It used to share the upsert below, and that made Create a blind overwrite —
+-- the one thing UpdateBackend refuses to be. That RPC takes a REQUIRED
+-- resource_version, with "there is no bypass on this RPC by design" written
+-- over it in the proto; routing Create through ON CONFLICT DO UPDATE handed
+-- out exactly that bypass. Worse than the missing OCC: the SET assigns
+-- EXCLUDED wholesale, so a field the caller omitted was not left alone, it was
+-- blanked. Re-running a provisioning script without `cedar_policy` erased the
+-- policy and answered 200.
+--
+-- Keyed on name, not id: the caller knows the config key ("primary"), and the
+-- uuid is generated here.
+INSERT INTO storage_backends (
+    name, kind, endpoint, region, events_enabled, events_target,
+    display_name, public_endpoint, force_path_style,
+    credentials_secret_ref, sse_type, sse_key_id,
+    events_queue_url, events_poll_interval_ms, cedar_policy, provider
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16);
+
 -- name: UpsertStorageBackendV2 :exec
--- Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
+-- Config seeding only (bootstrap/backends.go), where upsert is the right
+-- shape: it reconciles the YAML against the row on every boot, so the write
+-- has to handle "absent" and "drifted" alike. The Create RPC no longer shares
+-- it — two callers, two needs, and one query cannot serve both without giving
+-- the API a silent overwrite.
+--
+-- `enabled` is deliberately absent from the SET, which is what keeps a backend
+-- an operator disabled from coming back enabled after a restart.
+--
 -- Keyed on name, not id: the caller knows the config key ("primary"), and the
 -- uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.
 INSERT INTO storage_backends (

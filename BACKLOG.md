@@ -1836,32 +1836,6 @@ of the pipeline._
 
 ---
 
-## `CreateBackend` is an upsert, and says nothing about it
-
-- **Status:** Open, needs a product call. Surfaced 2026-08-30 while sweeping
-  duplicate-create behaviour.
-- **Reason:** `CreateStorageBackendV2` is `INSERT … ON CONFLICT (name) DO
-  UPDATE`, and its comment says why: it makes re-seeding the registry from
-  `storage.backends` idempotent. The same query backs the public
-  `BackendService.CreateBackend` RPC, so calling Create on a backend that
-  already exists returns 200 and silently rewrites its endpoint, region,
-  credentials ref, SSE settings and Cedar policy. Verified against the compose
-  stack: a Create against `primary` with a different display name returned the
-  new value and bumped resource_version to 2. No OCC guard, no confirmation,
-  and the caller cannot tell a create from an overwrite.
-  The seeding path's need is real; exposing it verbatim on the RPC is what was
-  never decided.
-- **Definition of Done:** decide which of the two the RPC is. If it is a
-  create, it needs its own query without the DO UPDATE, and a duplicate should
-  answer AlreadyExists like collections and buckets now do. If it is
-  deliberately an upsert, the proto should say so and the field mask semantics
-  should be written down — an operator re-running a bootstrap script must not
-  be able to blank a production backend's Cedar policy by omitting it.
-- **Blockers:** none technical. The decision is whose the seeding path is:
-  changing the query affects the registry sync, which runs on every boot.
-
----
-
 ## A duplicate bucket answers FailedPrecondition, not AlreadyExists
 
 - **Status:** Open, small. Surfaced 2026-08-30 alongside the collection and

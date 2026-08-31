@@ -165,8 +165,21 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	if b.Kind == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("kind required"))
 	}
-	if err := h.repo.Upsert(ctx, b); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create backend: %w", err))
+	// Create, not Upsert — and MapError, not a hardcoded Internal.
+	//
+	// This RPC used to route through the seeding path's upsert, so calling it
+	// on an existing backend rewrote every field without an OCC check and
+	// answered 200. UpdateBackend, right next to it, takes a REQUIRED
+	// resource_version and says in the proto that it offers no bypass by
+	// design; this was that bypass. The wholesale ON CONFLICT SET made it
+	// worse than a missing guard: an omitted field was not left alone, it was
+	// blanked, so re-running a provisioning script without `cedar_policy`
+	// erased the policy.
+	//
+	// The hardcoded CodeInternal had to go with it, or ErrAlreadyExists would
+	// have been flattened into a 500 the way a duplicate collection was.
+	if err := h.repo.Create(ctx, b); err != nil {
+		return nil, apiutil.MapError(err)
 	}
 	got, err := h.repo.Get(ctx, b.BackendID)
 	if err != nil {

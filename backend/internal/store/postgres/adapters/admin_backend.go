@@ -69,6 +69,39 @@ func (r *BackendRepoV2) GetTx(ctx context.Context, tx pgx.Tx, backendID string) 
 	return backendFromGetRow(row), nil
 }
 
+// Create inserts a new backend. A name already in use is a duplicate, not an
+// invitation to overwrite: this used to route through Upsert, which made the
+// Create RPC a blind overwrite of every field — including blanking the ones the
+// caller omitted — while UpdateBackend right next to it demands a
+// resource_version and says in the proto that it offers no bypass.
+func (r *BackendRepoV2) Create(ctx context.Context, b admindomain.StorageBackend) error {
+	if err := r.q.CreateStorageBackendV2(ctx,
+		b.BackendID,
+		b.Kind,
+		b.Endpoint,
+		b.Region,
+		b.Events.Enabled,
+		b.Events.Target,
+		b.DisplayName,
+		b.PublicEndpoint,
+		b.ForcePathStyle,
+		b.CredentialsSecretRef,
+		b.SSE.Type,
+		b.SSE.KeyID,
+		b.Events.QueueURL,
+		b.Events.PollInterval.Milliseconds(),
+		b.CedarPolicy,
+		b.Provider,
+	); err != nil {
+		if pgerr.Is(err, pgerr.UniqueViolation) {
+			return fmt.Errorf("%w: storage backend %q already exists",
+				admindomain.ErrAlreadyExists, b.BackendID)
+		}
+		return err
+	}
+	return nil
+}
+
 func (r *BackendRepoV2) Upsert(ctx context.Context, b admindomain.StorageBackend) error {
 	return r.q.UpsertStorageBackendV2(ctx,
 		b.BackendID,

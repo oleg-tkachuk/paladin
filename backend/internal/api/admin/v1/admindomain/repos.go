@@ -19,6 +19,12 @@ var (
 	ErrNotFound        = errors.New("admin: resource not found")
 	ErrVersionMismatch = errors.New("admin: resource_version mismatch")
 	ErrConflict        = errors.New("admin: conflict")
+	// ErrAlreadyExists — a create refused because the resource is already
+	// there. Distinct from ErrConflict, which is FailedPrecondition and means
+	// "some other precondition is unmet": a caller retrying a create needs to
+	// tell "it exists" from "something else is wrong", and the code is the
+	// only part of the answer they can branch on.
+	ErrAlreadyExists = errors.New("admin: already exists")
 )
 
 // Register the admin domain sentinels with the central error→Connect-code
@@ -28,11 +34,16 @@ func init() {
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
 	apiutil.RegisterError(ErrConflict, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrAlreadyExists, connect.CodeAlreadyExists)
 }
 
 // ─── Storage backend repository ─────────────────────────────────────────────
 
 type BackendRepository interface {
+	// Create inserts a NEW backend; a name in use returns ErrAlreadyExists.
+	// Upsert is the seeding path's convergence write and must not be used to
+	// serve the Create RPC — see the query comments.
+	Create(ctx context.Context, b StorageBackend) error
 	Upsert(ctx context.Context, b StorageBackend) error
 	Get(ctx context.Context, backendID string) (StorageBackend, error)
 	// filter is the caller's CEL expression. The repo pushes its
