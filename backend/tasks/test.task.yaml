@@ -34,6 +34,10 @@ tasks:
       # `go vet` rather than `go build`: same compile, plus the vet checks.
       - go vet -tags=integration ./...
       - go vet -tags=e2e ./...
+      # tests/conformance needs a live S3 endpoint and skips without one, so
+      # it never runs in the gate — which is exactly the condition under which
+      # the other two rotted. Same treatment.
+      - go vet -tags=conformance ./...
 
   rpc-surface:
     desc: "Run the whole-contract RPC gate against a live stack (brings one up)"
