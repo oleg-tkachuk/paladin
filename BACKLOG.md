@@ -1527,111 +1527,67 @@ mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
 
-### `dev-bootstrap.sh` works, and nothing runs it
+### The slow gate exists; nothing enforces that anyone runs it
 
-- **Status:** Narrowed 2026-08-30 — it has now been executed against a live
-  backend and it failed on the first call. Surfaced 2026-08-21.
-- **Reason:** the script had been calling `paladin.v1.TenantService` — a proto
-  package that has not existed for some time — and sending UpdateTenant's
-  fields at the top level after they moved under `tenant`. It could not have
-  worked, which means nobody ran it and nothing noticed. Porting it to the
-  current contract was not enough: run against the e2e compose stack on
-  2026-08-30 it stopped on `CreateTenant` with `idempotency: missing
-  Idempotency-Key header`. Every `Create*`/`Issue*` RPC requires that header
-  (`middleware/idempotency.go`, `RequireOnCreate`) and the script sent none,
-  so all three creates and both policy patches were unreachable. Fixed by
-  giving each create a key derived from the resource identity, so a re-run
-  replays rather than colliding. Verified: two consecutive runs both report
-  five ✓, and `ListTenants` / `ListCollections` — the same RPCs the console
-  reads — return the tenant, bucket and collection afterwards.
-- **What this proves about the gate:** `bash -n` was green the entire time the
-  script could not create a single resource. Syntax checking a script that
-  talks to an API tells you nothing about whether the API still accepts what
-  it sends; only running it does.
-- **Definition of Done:** a run gate. The natural home is the e2e workflow,
-  which already boots the compose stack this was verified against — the same
-  blocked-CI dependency as the two entries below. It deliberately does NOT
-  belong in the Playwright suite's own run: that suite seeds its own fixtures
-  and asserts on what exists, so bootstrapping an extra tenant into it would
-  be a test perturbing its neighbours.
-- **Blockers:** the Actions spending limit — see *Actions will not start a
-  job*.
-
----
-
-### `verify-all` does not run the integration suites — one rotted unseen
-
-- **Status:** Narrowed 2026-08-30 — the compile half landed in d011604a
-  (2026-08-27) and this entry had not been trimmed since. Surfaced 2026-08-21.
-- **Reason:** `task verify-all` runs unit tests, lint and the frontend build.
-  Both integration suites sit behind the `integration` build tag and run only
-  in `.github/workflows/integration.yml`. With CI blocked on the account-wide
-  Actions spending limit, nothing ran them for the length of a large refactor
-  — and `backend/tests/integration/` (23 files) stopped compiling entirely
-  without anyone noticing. When it was fixed, 45 tests failed and four of the
-  failures were production bugs, not stale fixtures: a silent no-op on default
-  binding, broken ingest dedup, a charges ledger that could never insert, and
-  a dispatcher that treated transient DB errors as permanent failures.
-- **Definition of Done:** (a) DONE — `backend:test:tagged:compile` runs
-  `go vet -tags=integration ./...` and `go vet -tags=e2e ./...` from
-  `verify-all`, so a suite that stops *building* fails the local gate in
-  seconds. That is the failure mode that actually occurred, both times.
-  (b) remains: a documented, enforced rule that the suites *run* before merge.
-  A compile check cannot catch a suite that builds and fails — the 45 failures
-  and four production bugs above were all in that category, and only an actual
-  run finds them.
-- **Blockers:** for (b), the same account-wide Actions spending limit that let
-  this rot in the first place — see *Actions will not start a job*. Running
-  them in `verify-all` instead is not the answer: ~11 minutes and a Docker
-  daemon would make the local gate unusable, which is why they are not there
-  and is still a good reason.
+- **Status:** Narrowed 2026-09-01 — the gate itself is DONE; only enforcement
+  is left. Surfaced 2026-08-21, and this entry has absorbed two siblings that
+  asked the same question for `dev-bootstrap.sh` and the Go admin e2e suite.
+- **What this replaces:** three entries, each about a suite that compiled and
+  never ran, each parked on the same unreachable CI. They are one problem, and
+  it now has one answer: `task verify-deep` — the Postgres-backed integration
+  suites, then `backend/scripts/verify-stack.sh`, which boots the compose
+  stack once and drives the RPC-surface gate, the Go admin e2e suite and
+  `dev-bootstrap.sh` (twice, so the idempotency keys are actually tested)
+  against it. `verify-all` stays the fast pre-commit gate: ~15 minutes and a
+  Docker daemon do not belong in front of every commit, which is why these
+  suites were not there and is still a good reason.
+- **What the first run found**, within a minute of existing: `CreateTenant`
+  with a default binding could not succeed at all. The create tx ran as the
+  calling platform admin, so the `tenant_default_bindings` insert — keyed to
+  the NEW tenant — hit `WITH CHECK (tenant_id = paladin_session_tenant_id())`
+  and Postgres refused it. Broken since migration 016 turned RLS on for that
+  table, in both spellings (`default_binding` on a shared tenant, and the
+  derived bucket of a dedicated one), invisible because `tenants` and
+  `buckets` carry no RLS and the ordinary no-binding create kept working. The
+  e2e suite had covered it the whole time. Nothing ran the e2e suite.
+- **Definition of Done (remaining):** that a merge cannot happen without the
+  slow gate having run. Today it is a task a person has to remember, which is
+  a weaker claim than the one this entry started with and is the only claim
+  left. The mechanism is a required status check, and that needs jobs to
+  start at all.
+- **Blockers:** the account-wide Actions spending limit — see *Actions will
+  not start a job*. Deliberately NOT wired into `.github/workflows/` ahead of
+  that: a workflow step nobody can execute is unverified code, and this
+  repository has already shipped one of those (a Helm `ternary` that rendered
+  everywhere except the one overlay that mattered).
 
 ---
 
-### The Go admin e2e suite has no gate at all — it had stopped compiling
+### The e2e compose stack cannot run twice on one host
 
-- **Status:** Narrowed 2026-08-30 — the suite is repaired and passing, and the
-  compile gate landed the day this was written; the *run* gate is what is
-  still missing. Surfaced 2026-08-27.
-- **Reason:** `backend/tests/e2e/admin_api_test.go` sits behind
-  `//go:build e2e`, and nothing anywhere runs it — `grep -rn "tags=e2e"` over
-  `.github/` and every Taskfile returns nothing. Not a workflow, not
-  `verify-all`, not even a compile check. This is the failure mode described
-  one entry up for the integration suites, and it produced the same outcome:
-  the file had drifted out of the API it tests and no longer built.
-  `DeleteTenantRequest.Force` and `Bucket.bucket_name` had been removed from
-  the proto (both fields are `reserved` now), so `go test -tags=e2e` failed at
-  compile with five errors. Underneath that sat two more drifts a compile
-  check would NOT have caught: every `Create*` is rejected without an
-  `Idempotency-Key` header, and delete on all four entities is OCC-guarded —
-  collections and buckets take `skip_version_check`, tenants and backends have
-  no bypass at all and need the current `resource_version` read first. A
-  tenant also takes two calls to remove now (`DeleteTenant` trashes,
-  `PurgeTenant` removes), where `force` used to do both.
-- **Repaired 2026-08-27:** 13/13 subtests pass against the Playwright suite's
-  compose stack, and teardown drains every row it creates:
-
-  ```
-  PALADIN_ADMIN_URL=http://localhost:8090 \
-  PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min \
-  PALADIN_JWT_ISSUER=paladin-dev \
-    go test -tags=e2e -count=1 ./tests/e2e/...
-  ```
-
-- **Definition of Done:**
-  - A compile-only gate. DONE 2026-08-27 (d011604a): `go vet -tags=e2e ./...`
-    runs from `verify-all` in `backend:test:tagged:compile`, beside the
-    `-tags=integration` step the sibling entry asked for. Seconds of local
-    runtime, and it catches exactly the failure that happened here.
-  - A run gate. Still open, and the only thing this entry is now about. `.github/workflows/e2e.yml` already builds both images and
-    boots `frontend/tests/e2e/docker-compose.test.yaml`, which publishes the
-    admin plane on `:8090` — the one thing this suite needs. A step after the
-    Playwright run, with the three env vars above, is close to free; the
-    alternative is admitting the suite is manual and saying so in its header
-    comment instead of leaving a run recipe that reads like it is wired up.
-- **Blockers:** none. The run gate depends on the e2e workflow executing on
-  Actions at all, which is the *Playwright e2e suite* entry's remaining item;
-  the compile gate does not depend on anything.
+- **Status:** Deferred (documented and guarded 2026-09-01, not fixed).
+- **Reason:** `frontend/tests/e2e/docker-compose.test.yaml` pins a
+  `container_name:` on every service and publishes fixed host ports (8080,
+  8085, 8090, 3000, 9000). A second `docker compose -p <other>` therefore gets
+  its own network and volumes and then collides on the first container name
+  Docker already holds — the `-p` isolation is nominal. So the Playwright
+  suite and `task verify-deep` cannot run at the same time, and neither can
+  two of either.
+- **What exists instead:** `backend/scripts/verify-stack.sh` detects the
+  collision before it boots anything and refuses with the exact `docker
+  compose … down` line that frees the slot, naming the project that holds it.
+  Refusing rather than reclaiming is deliberate: the stack occupying the slot
+  is usually a developer's own, and a gate that destroys the environment it
+  was invoked from is worse than one that declines to start.
+- **Definition of Done:** the stack composes under any project name — drop the
+  `container_name:` pins and let compose derive them, and make the published
+  ports overridable so a second instance can take a different set. The suites
+  reach the planes by env var already (`PALADIN_ADMIN_URL` and friends), so
+  the change is mostly in the compose file and the two places that hardcode
+  `localhost:8090`.
+- **Blockers:** none — it is scope, not difficulty. Nobody has needed two
+  concurrent stacks badly enough yet, and the guard makes the single-slot
+  reality legible instead of surprising.
 
 ---
 
@@ -1875,10 +1831,13 @@ of the pipeline._
   billing / raise the spending limit, or make the repository public, where
   Actions minutes are free. The workflows need no change; they are correct and
   unrun.
-- **Meanwhile:** the gates that matter have local homes that do not depend on
-  Actions — `task verify-all` (unit, lint, build, tagged-suite compile) and
-  `task backend:test:rpc-surface` (the whole-contract gate, stack included).
-  Those are currently the only gates that actually run.
+- **Meanwhile:** every gate that matters has a local home that does not depend
+  on Actions — `task verify-all` (unit, lint, build, tagged-suite compile) for
+  the fast loop, and `task verify-deep` (integration suites, RPC surface, Go
+  admin e2e, dev-bootstrap) for the slow one. Those are the only gates that
+  actually run, and as of 2026-09-01 they cover everything the workflows do.
+  What is missing is not coverage; it is enforcement — nothing makes a merge
+  wait for them.
 
 - **Re-checked 2026-08-30:** unchanged. The latest runs (Test, Integration,
   Security) all report `conclusion: failure` with **zero steps executed** on

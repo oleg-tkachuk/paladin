@@ -32,7 +32,8 @@ lefthook install                          # wire the hooks into .git/hooks
 
 ```bash
 task e2e-up          # backend + console + Postgres + SeaweedFS, in compose
-task verify-all      # build + test both halves
+task verify-all      # build + test both halves — the fast, pre-commit gate
+task verify-deep     # the slow one: integration suites + live-stack gates
 task --list-all      # everything, across both namespaces
 ```
 
@@ -143,6 +144,13 @@ tooling. They are committed on purpose, and you can ignore all of them.
 - Make sure `task verify-all` passes before you push. CI runs the same
   checks, so a red pipeline usually means a step was skipped locally
   because the tool was not installed.
+- Run `task verify-deep` before you ask for a merge. It needs Docker and
+  takes about fifteen minutes, which is why it is not the pre-commit gate —
+  but it is the only thing that runs the integration suites, the whole-contract
+  RPC gate, the Go admin e2e suite and `dev-bootstrap.sh` against a stack built
+  from your branch. Every one of those has silently rotted at least once while
+  `verify-all` stayed green; a compile check cannot catch a suite that builds
+  and then fails.
 - Keep the diff to one concern. If review surfaces a second one, a
   follow-up PR is better than growing this one.
 - Explain *why* in the description. The what is in the diff.

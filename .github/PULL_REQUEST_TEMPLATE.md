@@ -9,8 +9,11 @@ Which of these actually ran, and what they said. "CI will tell us" is not a
 verification step.
 -->
 
-- [ ] `task verify-all`
-- [ ] `task backend:test:integration` (if the store or middleware changed)
+- [ ] `task verify-all` — the fast gate: unit, lint, build, tagged-suite compile
+- [ ] `task verify-deep` — the slow one: Postgres-backed integration suites,
+      then the RPC surface, the Go admin e2e suite and `dev-bootstrap.sh`
+      against a freshly built stack. ~15 min and a Docker daemon. Skipping it
+      is how a suite that compiles but fails reaches `main`.
 - [ ] `pnpm run test:e2e` (if the console or a plane's wire format changed)
 - [ ] Manual check against a running stack — say what you did
 

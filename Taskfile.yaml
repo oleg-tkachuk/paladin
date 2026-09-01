@@ -74,6 +74,24 @@ tasks:
       - task: deps:check:pnpm
       - task: frontend:node:build
 
+  verify-deep:
+    desc: The gates verify-all deliberately cannot run — Postgres-backed integration suites plus everything that needs a live stack.
+    # verify-all is the pre-commit gate and has to stay in the tens of
+    # seconds, so it runs no Docker and boots no stack. That is a defensible
+    # trade and it is also how three suites rotted unnoticed: they were left
+    # to `.github/workflows/{integration,e2e}.yml`, and Actions has not
+    # executed a step here since it began refusing jobs on billing grounds.
+    #
+    # This is the other half — the slow gate, ~15 minutes and a Docker
+    # daemon, run before a merge rather than before a commit. Nothing in it
+    # is new work; it is the set of suites that already existed and had no
+    # way to be run.
+    cmds:
+      # Testcontainers, not the compose stack — these bring their own
+      # Postgres and are independent of everything below.
+      - task: backend:test:integration
+      - task: backend:test:stack
+
   # another-service-style aggregate fan-outs over the real per-component tasks.
   test:
     desc: Run unit tests for both halves (Go + Vitest).

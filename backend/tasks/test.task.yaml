@@ -41,30 +41,15 @@ tasks:
 
   rpc-surface:
     desc: "Run the whole-contract RPC gate against a live stack (brings one up)"
-    dir: "{{.USER_WORKING_DIR}}"
     cmds:
-      # tests/integration/rpc_surface_test.go is the only check that covers all
-      # 142 RPC declarations at once, enumerated from the protobuf descriptors
-      # rather than a list someone maintains. It reaches the planes over HTTP
-      # and t.Skips when none answer — so for most of its life it has been
-      # skipping, silently, and a skipped gate reads like a passing one.
-      #
-      # It has a home in CI now (integration.yml), but CI is not a place this
-      # repository can rely on: Actions has been refusing to start jobs on
-      # billing grounds, so every workflow fails with zero steps executed. A
-      # gate that only exists in a pipeline nobody can run is not a gate. This
-      # task is the one that works on a laptop.
-      #
-      # PALADIN_RPC_SURFACE=1 turns the skip into a failure: an unreachable
-      # stack fails the task instead of being excused by it.
-      - cmd: |-
-          set -e
-          compose="docker compose -p paladin-rpc-surface -f frontend/tests/e2e/docker-compose.test.yaml"
-          cleanup() { $compose down -v >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          $compose up --wait
-          cd backend && PALADIN_RPC_SURFACE=1 go test -tags=integration -count=1 \
-            -timeout=10m -run 'Surface|RPC' ./tests/integration/...
+      # One phase of the stack gate, not a second boot sequence. The version
+      # that used to live here inlined its own `compose up` and had neither of
+      # the two things that make the result mean anything: it never rebuilt the
+      # image, so it reported on whatever `:latest` happened to be, and it had
+      # no collision preflight, so a developer's own stack made it fail on a
+      # container name after the whole boot. See scripts/verify-stack.sh.
+      - task: :docker:build-local
+      - scripts/verify-stack.sh rpc-surface
 
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
@@ -95,8 +80,41 @@ tasks:
       - golangci-lint run ./...
 
   # ─── E2E + functional ────────────────────────────────────────────────────
+  #
+  # Everything below needs a live stack, and that is exactly why none of it
+  # ran. Three suites — the Go admin e2e tests, the RPC-surface gate and
+  # `dev-bootstrap.sh` — were reachable only by typing a recipe out of a
+  # header comment, so nobody typed it, and all three rotted in silence:
+  # the e2e suite stopped compiling, the surface gate spent its life
+  # t.Skip-ing, and the bootstrap script had been calling a proto package
+  # that no longer existed. `tagged:compile` above catches the first failure
+  # mode in seconds. It cannot catch the other two, because a suite that
+  # builds and then skips — or a script that runs and fails on its first
+  # call — passes a compiler cleanly.
+  #
+  # The remaining half is a run gate, and the backlog parked it on
+  # `.github/workflows/e2e.yml`, which has not executed a step since Actions
+  # started refusing jobs on billing grounds. A gate that exists only in a
+  # pipeline nobody can run is not a gate. So it lives here instead, and the
+  # workflow calls the same task when it comes back.
 
-
+  stack:
+    desc: "Boot the compose stack once and run every gate that needs it (RPC surface + Go e2e + dev-bootstrap)"
+    cmds:
+      # The image, not the working tree, is what the stack runs. `pnpm run
+      # test:e2e` does not rebuild anything and neither does compose, so a
+      # gate that skips this step reports on whatever was built last — which
+      # has already happened once here: a console image built four minutes
+      # before the commit it was read as verifying. Building is the only
+      # thing that makes the result mean anything, so it is not optional and
+      # not a staleness heuristic.
+      - task: :docker:build-local
+      # The body is a script rather than an inline `cmd:` because go-task
+      # renders every command as a Go template first, and the collision
+      # preflight needs `docker ps --format` — whose Go templates go-task
+      # eats before Docker ever sees them. Same reason the security tasks
+      # below are thin wrappers.
+      - scripts/verify-stack.sh
 
   # ─── Security ────────────────────────────────────────────────────────────
   # Each of these shells out to a script in tests/api/security/. Keeping
