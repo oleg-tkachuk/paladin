@@ -183,17 +183,47 @@ func httpClientFor(cmd *cobra.Command) *http.Client {
 		}
 	}
 	// The idempotency middleware rejects Create*/Issue* RPCs without an
-	// Idempotency-Key (RequireOnCreate=true on every plane). Mirror the
-	// frontend transport: stamp a fresh UUID on every outgoing request —
-	// reads ignore the header, mutations need it, and the CLI's idempotency
-	// story is resource-name-keyed (fixturePrefix), not retry-collapse.
+	// Idempotency-Key (RequireOnCreate=true on every plane), and MEMOIZES any
+	// request that carries one whatever its name.
+	//
+	// That second half is why this no longer stamps everything. The previous
+	// version did, on the belief that "reads ignore the header" — they do not.
+	// A List with a key gets its response cached like anything else, so the
+	// seeder was writing a row into idempotency_keys for every read it made,
+	// and never replaying one of them because each key was fresh. Cost with no
+	// benefit; the purger cleaned up after it daily.
 	return &http.Client{Timeout: 30 * time.Second, Transport: idempotencyTransport{base: base}}
 }
 
 type idempotencyTransport struct{ base http.RoundTripper }
 
+// wantsIdempotencyKey mirrors the console's list in
+// frontend/src/lib/connect/transport.ts. Two languages, one classification —
+// if you change one, change the other.
+//
+// The set is the RPCs whose replay MEANS something: resource creations, and
+// the object-lifecycle calls that create a row or backend-side state over a
+// connection that can drop. Reads, OCC-guarded Update*/Set*, and Delete* are
+// out — each is already collapsed by other means.
+func wantsIdempotencyKey(procedure string) bool {
+	idx := strings.LastIndex(procedure, "/")
+	if idx < 0 || idx == len(procedure)-1 {
+		return false
+	}
+	method := procedure[idx+1:]
+	for _, p := range []string{
+		"Create", "Issue", "Delegate", "Grant",
+		"Upload", "Complete", "Initiate", "Copy", "Restore", "Batch",
+	} {
+		if strings.HasPrefix(method, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (t idempotencyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.Header.Get("Idempotency-Key") == "" {
+	if wantsIdempotencyKey(req.URL.Path) && req.Header.Get("Idempotency-Key") == "" {
 		req = req.Clone(req.Context())
 		req.Header.Set("Idempotency-Key", uuid.NewString())
 	}

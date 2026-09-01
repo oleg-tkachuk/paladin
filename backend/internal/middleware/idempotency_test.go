@@ -300,3 +300,61 @@ func TestNoMemoizeOnError(t *testing.T) {
 		t.Fatalf("handler must run on retry after error; got %d calls", svc.calls)
 	}
 }
+
+// A procedure in SkipMethods must not be memoized even when the caller sends a
+// key — the guard that makes it safe for clients to stamp mutations broadly.
+//
+// The hazard is RefreshToken. Refresh tokens rotate: presenting one
+// invalidates it, and presenting a rotated one again is treated as theft
+// (RFC 6819), which revokes the whole family. Replaying a cached response
+// would hand a second caller the already-rotated pair. Nothing reached this
+// before, because no client sent a key on an auth RPC; that stopped being true
+// when the console widened its stamping, and "unreachable" was never the same
+// as "guarded".
+func TestSkipMethodsIsNotMemoized(t *testing.T) {
+	store := newMemStore()
+	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{
+		TTL: time.Minute,
+		SkipMethods: map[string]bool{
+			paladiniamv1connect.HealthServiceGetVersionProcedure: true,
+		},
+	})
+	defer cleanup()
+
+	key := uuid.NewString()
+	for i := 0; i < 2; i++ {
+		req := connect.NewRequest(&iamv1.GetVersionRequest{})
+		req.Header().Set("Idempotency-Key", key)
+		if _, err := client.GetVersion(context.Background(), req); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+
+	if svc.calls != 2 {
+		t.Fatalf("a skipped procedure was memoized: handler ran %d times, want 2", svc.calls)
+	}
+}
+
+// The list the production wiring passes must actually name the credential
+// minters. Asserting the wiring rather than the mechanism: a correct skip
+// implementation pointed at an empty map protects nothing, which is what the
+// config did until this landed.
+func TestCredentialMintersAreSkipped(t *testing.T) {
+	for _, proc := range []string{
+		"/paladin.iam.v1.AuthService/Login",
+		"/paladin.iam.v1.AuthService/RefreshToken",
+		"/paladin.iam.v1.AuthService/ExchangeAudience",
+		"/paladin.iam.v1.AuthService/SwitchTenant",
+	} {
+		if !CredentialMintingProcedures[proc] {
+			t.Errorf("%s is not in CredentialMintingProcedures — a memoized "+
+				"credential is replayable", proc)
+		}
+	}
+	// Capability issuance is deliberately absent: a capability is minted
+	// against a scope the caller names, so collapsing a double-submit onto one
+	// capability is what the key is FOR.
+	if CredentialMintingProcedures["/paladin.admin.v1.CapabilityService/Issue"] {
+		t.Error("CapabilityService/Issue must stay memoizable")
+	}
+}

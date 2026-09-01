@@ -36,34 +36,62 @@ import {
 /**
  * Idempotency-Key auto-injection.
  *
- * Backend enforces an `Idempotency-Key` header on every
- * mutation-shaped RPC (see backend
- * `internal/middleware/idempotency.go`, RequireOnCreate=true on
- * all three planes). The server-side matcher recognises method
- * names with prefix `Create` (AIP-canonical: CreateTenant,
- * CreateBucket, …) AND `Issue` (the token/credential variant:
- * CapabilityService.Issue). A missing header gets rejected with
- * InvalidArgument before the handler runs. To keep call sites
- * unaware of this, the transport auto-injects a fresh UUID on
- * any RPC whose method name starts with either prefix, unless
- * the caller already set one (e.g. an explicit retry that wants
- * to collapse onto the original key).
+ * The header does two different things on the server, and only one of them
+ * looks at the method name (backend `internal/middleware/idempotency.go`):
  *
- * Why UUID v4 (crypto.randomUUID) and not v7: v7 needs an extra
- * dep and the embedded timestamp gives the server nothing useful
- * here — the key is opaque to the server. v4's 122-bit space is
- * more than enough collision-resistance.
+ *   - it is REQUIRED on `Create*` / `Issue*`, rejected with InvalidArgument
+ *     before the handler runs when absent;
+ *   - it is HONOURED on any RPC at all — a request carrying a key gets its
+ *     first response memoized and replayed.
  *
- * Scope: only Create* / Issue*. List/Get/Update/Delete are
- * either idempotent by definition (reads) or already keyed by
- * their resource ID (updates/deletes carry the ID). The two
- * sides MUST stay in sync — if the server adds a new prefix
- * (e.g. "Submit*"), this matcher needs the same update.
+ * So the interesting set is wider than the required one. `UploadObject` is the
+ * case that motivated widening it: a retry after a dropped connection collides
+ * on the (collection, path) unique index and answers AlreadyExists, when what
+ * the caller wants — and what a key delivers — is the original object id and
+ * presigned URL back.
+ *
+ * It is NOT every mutation, and the exclusions are the point:
+ *
+ *   - Reads. Memoizing a List would serve a stale page under a key the caller
+ *     reused, and every Get would write an idempotency row for nothing.
+ *   - `Update*` / `Set*`. Already guarded by `resource_version`: a duplicate
+ *     either writes the same value or fails Aborted. A key adds a row and no
+ *     safety.
+ *   - `Delete*`. Idempotent by nature — the second one finds nothing to do.
+ *   - Credential minting (Login, RefreshToken, ExchangeAudience, SwitchTenant).
+ *     Replaying these is actively wrong: refresh tokens rotate, and a replayed
+ *     response hands back a pair the server has already invalidated. The server
+ *     refuses to memoize them regardless (middleware.CredentialMintingProcedures);
+ *     not sending a key here keeps the two sides saying the same thing.
+ *
+ * A fresh UUID per call, so a transport-level retry of the same request object
+ * collapses. It does NOT collapse two separate user clicks — those are two
+ * calls and get two keys. Making a double-click idempotent needs a key derived
+ * at the call site from the submission, which is a call-site decision, not a
+ * transport one.
  */
+const IDEMPOTENT_PREFIXES = [
+  "Create",
+  "Issue",
+  "Delegate",
+  "Grant",
+  // Object lifecycle: each of these creates a row or backend-side state, and
+  // each is reachable over a connection that can drop mid-flight.
+  "Upload",
+  "Complete",
+  "Initiate",
+  "Copy",
+  "Restore",
+  "Batch",
+];
+
+export function wantsIdempotencyKey(methodName: string): boolean {
+  return IDEMPOTENT_PREFIXES.some((p) => methodName.startsWith(p));
+}
+
 const idempotencyInterceptor: Interceptor = (next) => async (req) => {
-  const name = req.method.name;
   if (
-    (name.startsWith("Create") || name.startsWith("Issue")) &&
+    wantsIdempotencyKey(req.method.name) &&
     !req.header.has("Idempotency-Key")
   ) {
     req.header.set("Idempotency-Key", crypto.randomUUID());

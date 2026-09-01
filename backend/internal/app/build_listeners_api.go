@@ -194,15 +194,32 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 
 	// Shared Idempotency-Key gate (see internal/middleware/idempotency.go).
-	// RequireOnCreate=true rejects any Create* RPC without an
-	// `Idempotency-Key` header. Both data and iam planes opt in:
-	//   - data plane: UploadObject/CompleteObject/... (in the future
-	//     Create* MultipartUpload, etc.) — retries on a flaky network
-	//     must collapse on the same object.
-	//   - iam plane: CreateUser — operator double-click on the admin UI
-	//     must not duplicate users.
+	//
+	// Two behaviours, and only one of them keys off the method name:
+	//
+	//   - ENFORCEMENT. RequireOnCreate=true rejects a Create*/Issue* RPC that
+	//     omits the header. On the iam plane that is CreateUser — an operator
+	//     double-click must not duplicate a user. On the DATA plane it is
+	//     nothing at all: this package has no Create*/Issue* RPC, so the flag
+	//     is inert here. An earlier version of this comment claimed it covered
+	//     UploadObject and CompleteObject; the matcher never looked at those
+	//     names and never has.
+	//
+	//   - MEMOIZE / REPLAY. Any RPC, whatever its name, whose request carries
+	//     an Idempotency-Key. This is what actually serves UploadObject: a
+	//     retry after a dropped connection replays the first response — the
+	//     same object id, the same presigned URL — instead of colliding on the
+	//     (collection, path) unique index and answering AlreadyExists, which
+	//     is what the caller gets today when the client sends no key.
+	//
+	// So the header is worth sending on every mutation, not only on the ones
+	// the server insists on, and the console now does exactly that.
 	idempotencyInterceptor := middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
 		RequireOnCreate: true,
+		// Credential-minting RPCs must not be replayed even when a key is
+		// sent — see middleware.CredentialMintingProcedures for why a
+		// memoized RefreshToken is worse than no memoization at all.
+		SkipMethods: middleware.CredentialMintingProcedures,
 	})
 
 	// OTel: one span per RPC, named from the procedure, plus RED metrics

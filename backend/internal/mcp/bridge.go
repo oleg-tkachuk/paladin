@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -89,6 +90,24 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 				}
 				if capabilityToken != "" {
 					req.Header().Set("X-Paladin-Capability", capabilityToken)
+				}
+				// Idempotency-Key on the calls whose replay means something.
+				//
+				// The bridge sent one on nothing at all, and nothing rejected
+				// it: none of the RPCs it drives is Create*/Issue*, which is
+				// the only shape the server REQUIRES a key on. But it drives
+				// UploadObject, CompleteObject, CopyObject, RestoreObjectVersion
+				// and both multipart halves — every one of which creates state
+				// and answers AlreadyExists on a retry that carries no key.
+				//
+				// This surface makes that worse than most: the caller is an
+				// agent, and an agent retrying a tool call it is unsure about
+				// is normal behaviour, not an exception. A fresh UUID per
+				// attempt only collapses a transport-level retry; a caller
+				// wanting more can set the header itself, which this respects.
+				if wantsIdempotencyKey(req.Spec().Procedure) &&
+					req.Header().Get("Idempotency-Key") == "" {
+					req.Header().Set("Idempotency-Key", uuid.NewString())
 				}
 				return next(ctx, req)
 			}

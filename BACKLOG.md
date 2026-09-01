@@ -1529,6 +1529,33 @@ of the pipeline._
 
 ---
 
+### The idempotency classification lives in three places, in two languages
+
+- **Status:** Deferred (documented 2026-09-01; the copies agree today).
+- **Reason:** Which RPCs carry an `Idempotency-Key` is decided by an identical
+  prefix list in `frontend/src/lib/connect/transport.ts`,
+  `backend/cmd/seed-fixture/main.go` and `backend/internal/mcp/idempotency.go`.
+  Each has a comment telling the reader to change the other two. That is the
+  shape of every divergence this repository has chased — the plane addresses
+  had three spellings, the stack ports had two, and both cost a real debugging
+  session before anyone noticed.
+- **Why it is not one place already:** the natural home is the proto itself.
+  `google.protobuf.MethodOptions.idempotency_level` exists precisely for this
+  and no RPC declares it — checked, zero occurrences across 142. With it
+  declared, the server could require/memoize from the descriptor and every
+  generated client could read the same value instead of pattern-matching
+  names. The pattern-matching is what forced the fix in the first place: the
+  server's rule reads `Create*`/`Issue*`, so `UploadObject` was never covered
+  even though the comment justifying the gate named it.
+- **Definition of Done:** annotate the RPCs with `idempotency_level`
+  (`NO_SIDE_EFFECTS` for reads, `IDEMPOTENT` for the OCC-guarded and delete
+  paths, leaving `IDEMPOTENCY_UNKNOWN` for the ones that need a key); drive the
+  server's requirement and memoization from the descriptor; delete all three
+  prefix lists. `buf breaking` treats the option as non-breaking, so it can
+  land in one pass.
+- **Blockers:** none. It is 142 annotations and a decision per RPC, which is
+  the work — the decisions are the same ones now encoded three times.
+
 ### Drop the deprecated plane-address aliases
 
 - **Status:** Narrowed 2026-09-01 — the unification is DONE; only the removal

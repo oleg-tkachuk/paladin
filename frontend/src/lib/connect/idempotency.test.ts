@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { wantsIdempotencyKey } from "./transport";
 
 // Drives the real client → transport → interceptor chain with a mocked fetch
 // to confirm the idempotencyInterceptor injects an Idempotency-Key on Create*
@@ -41,5 +42,62 @@ describe("idempotencyInterceptor", () => {
       .catch(() => {});
     expect(rpcHeaders, "RPC fetch was never made").not.toBeNull();
     expect(rpcHeaders?.get("Idempotency-Key")).toBeTruthy();
+  });
+});
+
+// The classification is a list, and a list drifts. This pins the decisions
+// that matter rather than the list itself: what must carry a key, and — more
+// importantly — what must not.
+describe("which RPCs carry an Idempotency-Key", () => {
+  it("stamps the RPCs whose replay is meaningful", () => {
+    for (const name of [
+      "CreateTenant",
+      "CreateBucket",
+      "Issue",
+      "Delegate",
+      "GrantScopes",
+      "UploadObject",
+      "CompleteObject",
+      "InitiateMultipartUpload",
+      "CompleteMultipartUpload",
+      "CopyObject",
+      "RestoreObject",
+      "BatchCopyObjects",
+    ]) {
+      expect(wantsIdempotencyKey(name)).toBe(true);
+    }
+  });
+
+  // Replaying a credential is worse than not replaying it. Refresh tokens
+  // rotate; a memoized response hands back a pair the server already
+  // invalidated, and presenting a rotated token is what the theft detector
+  // (RFC 6819) revokes an entire family over. The server refuses to memoize
+  // these too — this keeps the client from asking.
+  it("never stamps a credential-minting RPC", () => {
+    for (const name of [
+      "Login",
+      "RefreshToken",
+      "ExchangeAudience",
+      "SwitchTenant",
+    ]) {
+      expect(wantsIdempotencyKey(name)).toBe(false);
+    }
+  });
+
+  // Not "everything that mutates". These are already collapsed by other
+  // means, and a key would buy a row in the idempotency table and nothing else.
+  it("does not stamp reads, OCC-guarded writes, or deletes", () => {
+    for (const name of [
+      "GetTenant",
+      "ListBuckets",
+      "CountObjects",
+      "UpdateBackend",
+      "SetQuota",
+      "SetBucketPolicy",
+      "DeleteBucket",
+      "DeleteTenant",
+    ]) {
+      expect(wantsIdempotencyKey(name)).toBe(false);
+    }
   });
 });
