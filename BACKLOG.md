@@ -1536,7 +1536,9 @@ of the pipeline._
   never ran, each parked on the same unreachable CI. They are one problem, and
   it now has one answer: `task verify-deep` — the Postgres-backed integration
   suites, then `backend/scripts/verify-stack.sh`, which boots the compose
-  stack once and drives the RPC-surface gate, the Go admin e2e suite and
+  stack once, asserts every plane is ready, and drives the RPC-surface gate,
+  the Go admin e2e suite, the S3 conformance suite (against the stack's own
+  MinIO — it had no endpoint before and so conformed to nothing) and
   `dev-bootstrap.sh` (twice, so the idempotency keys are actually tested)
   against it. `verify-all` stays the fast pre-commit gate: ~15 minutes and a
   Docker daemon do not belong in front of every commit, which is why these

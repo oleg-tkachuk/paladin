@@ -147,10 +147,10 @@ tooling. They are committed on purpose, and you can ignore all of them.
 - Run `task verify-deep` before you ask for a merge. It needs Docker and
   takes about fifteen minutes, which is why it is not the pre-commit gate —
   but it is the only thing that runs the integration suites, the whole-contract
-  RPC gate, the Go admin e2e suite and `dev-bootstrap.sh` against a stack built
-  from your branch. Every one of those has silently rotted at least once while
-  `verify-all` stayed green; a compile check cannot catch a suite that builds
-  and then fails.
+  RPC gate, the Go admin e2e suite, the S3 conformance suite and
+  `dev-bootstrap.sh` against a stack built from your branch. Every one of those
+  has silently rotted at least once while `verify-all` stayed green; a compile
+  check cannot catch a suite that builds and then fails.
 - Keep the diff to one concern. If review surfaces a second one, a
   follow-up PR is better than growing this one.
 - Explain *why* in the description. The what is in the diff.

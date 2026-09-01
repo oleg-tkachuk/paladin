@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # verify-stack.sh — run every gate that needs a live Paladin stack.
 #
-# Boots frontend/tests/e2e/docker-compose.test.yaml once and drives three
-# suites against it: the RPC-surface gate, the Go admin e2e tests, and
+# Boots frontend/tests/e2e/docker-compose.test.yaml once, asserts the planes
+# are ready, and drives four suites against it: the RPC-surface gate, the Go
+# admin e2e tests, the S3 conformance suite (against the stack's MinIO) and
 # dev-bootstrap.sh. Invoked as `task backend:test:stack` (which builds the
 # backend image first) or `task verify-deep` (which adds the Postgres-backed
 # integration suites in front).
 #
-# Why these three live together: each one only ever ran by hand, from a recipe
-# in its own header comment, so none of them ran — and all three rotted. The
-# e2e suite stopped compiling, the surface gate spent its life t.Skip-ing, and
+# What they have in common is that none of them ran. Each was reachable only by
+# typing a recipe out of its own header comment, and every one of them rotted
+# for it: the e2e suite stopped compiling, the surface gate spent its life
+# t.Skip-ing, the conformance suite had no endpoint to conform to, the
+# readiness smoke test was filtered out of the only run that had a stack, and
 # this bootstrap script was calling a proto package that had not existed for
-# months. `task backend:test:tagged:compile` catches the first failure mode in
-# seconds; it cannot catch the other two, because a suite that builds and then
-# skips passes a compiler cleanly.
+# months. `task backend:test:tagged:compile` catches the first of those in
+# seconds; it cannot catch any of the rest, because a suite that builds and
+# then skips passes a compiler cleanly.
 #
 # Usage: verify-stack.sh [phase ...]
 #   phases: rpc-surface | e2e-go | dev-bootstrap   (default: all three)
@@ -28,7 +31,7 @@
 
 set -euo pipefail
 
-ALL_PHASES=(rpc-surface e2e-go dev-bootstrap)
+ALL_PHASES=(rpc-surface e2e-go conformance dev-bootstrap)
 
 requested=("$@")
 [[ ${#requested[@]} -eq 0 ]] && requested=("${ALL_PHASES[@]}")
@@ -79,6 +82,36 @@ phase_e2e_go() {
     fi
     if ! grep -q -- '--- PASS' "$log"; then
         echo "!!! the admin e2e suite ran no tests" >&2
+        return 1
+    fi
+    rm -f "$log"
+}
+
+# The conformance suite states what a storage backend must do for Paladin to
+# work, and it had the same problem as everything else here: it skips without
+# an endpoint, `tagged:compile` says so in as many words ("it never runs in the
+# gate — which is exactly the condition under which the other two rotted"), and
+# nothing supplied one. The stack already publishes MinIO on :9000 under its
+# root credentials, so an endpoint costs nothing and the suite creates and
+# removes its own bucket.
+#
+# This is MinIO conformance, not S3 conformance — the point is to notice when
+# an assertion stops holding anywhere, not to certify AWS. The real-AWS profile
+# is in tests/conformance/README.md and stays a deliberate, credentialed run.
+phase_conformance() {
+    echo ">>> [stack] S3 conformance (MinIO)"
+    local log
+    log=$(mktemp -t paladin-conformance)
+    (cd backend && PALADIN_CONFORMANCE_ENDPOINT=http://localhost:9000 \
+        PALADIN_CONFORMANCE_PROVIDER=minio \
+        PALADIN_CONFORMANCE_ACCESS_KEY=paladin-e2e-access \
+        PALADIN_CONFORMANCE_SECRET_KEY=paladin-e2e-secret-key \
+        PALADIN_CONFORMANCE_PATH_STYLE=true \
+        go test -tags=conformance -count=1 -timeout=10m -v ./tests/conformance/...) | tee "$log"
+    # Same reason as the readiness step: the suite's whole failure mode is
+    # skipping quietly, so "it passed" has to mean "it asserted".
+    if ! grep -q -- '--- PASS' "$log"; then
+        echo "!!! the conformance suite asserted nothing" >&2
         return 1
     fi
     rm -f "$log"
