@@ -1041,6 +1041,90 @@ export async function backendState(backendId: string): Promise<{
   };
 }
 
+/**
+ * The advanced half of a backend — sse, events and cedar_policy.
+ *
+ * Read back through the API rather than asserted in the DOM: the Edit dialog
+ * is write-only for these, and what matters is what the SERVER holds after a
+ * save. The whole hazard they carry is being rewritten by an edit that never
+ * touched them, which no amount of looking at the form can show.
+ */
+export async function backendAdvanced(backendId: string): Promise<{
+  sseType: number;
+  sseKeyId: string;
+  eventsEnabled: boolean;
+  eventsTarget: number;
+  eventsQueueUrl: string;
+  eventsPollMs: number;
+  cedarPolicy: string;
+}> {
+  const b = await backendAdminClient().getBackend({
+    name: `storageBackends/${backendId}`,
+  });
+  const poll = b.events?.pollInterval;
+  return {
+    sseType: b.sse?.type ?? 0,
+    sseKeyId: b.sse?.keyId ?? "",
+    eventsEnabled: b.events?.enabled ?? false,
+    eventsTarget: b.events?.target ?? 0,
+    eventsQueueUrl: b.events?.queueUrl ?? "",
+    eventsPollMs: poll
+      ? Number(poll.seconds) * 1000 + Math.round(poll.nanos / 1_000_000)
+      : 0,
+    cedarPolicy: b.cedarPolicy,
+  };
+}
+
+/**
+ * Set the advanced fields WITHOUT the console, so a test can establish a prior
+ * state the UI must then leave alone. Names each group in the mask, which is
+ * what makes the server write it wholesale.
+ */
+export async function setBackendAdvanced(
+  backendId: string,
+  opts: {
+    sse?: { type: number; keyId: string };
+    events?: {
+      enabled: boolean;
+      target: number;
+      queueUrl: string;
+      pollMs: number;
+    };
+    cedarPolicy?: string;
+  },
+): Promise<void> {
+  const name = `storageBackends/${backendId}`;
+  const current = await backendAdminClient().getBackend({ name });
+  const paths: string[] = [];
+  const backend: Record<string, unknown> = { backendId };
+  if (opts.sse) {
+    paths.push("sse");
+    backend.sse = { type: opts.sse.type, keyId: opts.sse.keyId };
+  }
+  if (opts.events) {
+    paths.push("events");
+    backend.events = {
+      enabled: opts.events.enabled,
+      target: opts.events.target,
+      queueUrl: opts.events.queueUrl,
+      pollInterval: {
+        seconds: BigInt(Math.floor(opts.events.pollMs / 1000)),
+        nanos: (opts.events.pollMs % 1000) * 1_000_000,
+      },
+    };
+  }
+  if (opts.cedarPolicy !== undefined) {
+    paths.push("cedar_policy");
+    backend.cedarPolicy = opts.cedarPolicy;
+  }
+  await backendAdminClient().updateBackend({
+    name,
+    resourceVersion: current.resourceVersion,
+    updateMask: { paths },
+    backend,
+  });
+}
+
 /** Seed a backend that is enabled — the starting state for drain/maintenance
  *  tests, which seedDisabledBackend deliberately does not give. */
 export async function seedEnabledBackend(): Promise<SeededBackend> {
