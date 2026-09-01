@@ -203,25 +203,28 @@ export function useTenants() {
         throw err;
       }
     },
-    [],
+    [bumpRefresh],
   );
 
   // purgeTenant — hard-deletes a soft-deleted row. The server refuses
   // to operate on an active tenant (FAILED_PRECONDITION) so callers
   // must soft-delete first.
-  const purgeTenant = useCallback(async (tenantId: string): Promise<void> => {
-    try {
-      setError(null);
-      await tenantClient.purgeTenant({
-        name: tenantResourceName(tenantId),
-      });
-      setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-      bumpRefresh("tenants");
-    } catch (err) {
-      // Mutation contract (throw-only): caller surfaces via errorMessage().
-      throw err;
-    }
-  }, []);
+  const purgeTenant = useCallback(
+    async (tenantId: string): Promise<void> => {
+      try {
+        setError(null);
+        await tenantClient.purgeTenant({
+          name: tenantResourceName(tenantId),
+        });
+        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+        bumpRefresh("tenants");
+      } catch (err) {
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
+        throw err;
+      }
+    },
+    [bumpRefresh],
+  );
 
   // getTenantStorageMigration returns the tenant's shared->dedicated migration
   // status, or null when none was ever started (NOT_FOUND). See ADR-0011 Phase 3.

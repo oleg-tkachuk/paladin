@@ -288,7 +288,13 @@ export default function BillingPage() {
   const pctOfBudget = max > 0 ? Math.min(100, (total / max) * 100) : 0;
 
   // Time-series derived values for the annotation under the chart.
-  const buckets = timeseries?.buckets ?? [];
+  //
+  // The `?? []` fallback has to be memoized or the three useMemo hooks below
+  // are decorative: on every render with no time series it produces a fresh
+  // array, their dep changes, and each one recomputes. Memoizing on
+  // `timeseries` gives the empty case one stable array for as long as it
+  // stays empty, which is what the hooks were written assuming.
+  const buckets = useMemo(() => timeseries?.buckets ?? [], [timeseries]);
   const tsUnit = timeseries?.unitCode || unit;
   const tsValues = useMemo(() => buckets.map((b) => b.amount), [buckets]);
   const peak = useMemo(() => {

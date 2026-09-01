@@ -41,6 +41,20 @@ const bucketResourceName = (backendId: string, bucketId: string) =>
 export function useCollections() {
   const { user } = useAuth();
   const tenantParent = user?.tenantId ? `tenants/${user.tenantId}` : "";
+  // `bumpRefresh` is deliberately absent from the mutation dep arrays below,
+  // and each one carries a disable comment saying so. The two hook rules want
+  // opposite things here: exhaustive-deps warns that it is missing, and adding
+  // it makes preserve-manual-memoization fail outright ("Could not preserve
+  // existing manual memoization") — an error, not a warning, and one that
+  // switches the React Compiler off for the whole callback.
+  //
+  // Omitting it is safe for the same reason the compiler can drop it: `bump`
+  // is a useCallback with no dependencies inside the provider, and the
+  // no-provider fallback is a module-level constant, so its identity never
+  // changes and there is no stale closure to capture. See
+  // context/RefreshContext.tsx. If that ever stops being true, the disables
+  // below are the places to revisit — and this comment is why they exist
+  // rather than being a blanket rule-off.
   const bumpRefresh = useBumpRefresh();
 
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -155,6 +169,7 @@ export function useCollections() {
         throw err;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
     [tenantParent, user?.tenantId],
   );
 
@@ -186,6 +201,7 @@ export function useCollections() {
         throw err;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
     [user?.tenantId],
   );
 
@@ -243,6 +259,7 @@ export function useCollections() {
         throw err;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
     [user?.tenantId],
   );
 
