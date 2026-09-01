@@ -188,6 +188,20 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		if i.cfg.SkipMethods[method] {
 			return next(ctx, req)
 		}
+		// A declared read is never memoized, whatever header arrives.
+		//
+		// The response to a read is a snapshot, and replaying an old one
+		// answers a question the caller did not ask. Nothing enforced that
+		// before the descriptors carried the claim: a client sending a key on
+		// ListBuckets got its first page back for the rest of the TTL.
+		//
+		// Read from `option idempotency_level = NO_SIDE_EFFECTS`, so it covers
+		// exactly the RPCs whose handlers were checked — see
+		// internal/api/idempotency_contract_test.go, which fails the build if
+		// one of them starts writing.
+		if declaredRead(method) {
+			return next(ctx, req)
+		}
 		key, err := idempotencyKey(req)
 		if err != nil {
 			return nil, err
