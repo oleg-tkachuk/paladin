@@ -168,6 +168,36 @@ export PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min
 export PALADIN_JWT_ISSUER=paladin-dev
 export PALADIN_ADMIN_URL=http://localhost:8090
 
+# Readiness, asserted rather than assumed — and the one place TestSmokeStackReady
+# runs at all.
+#
+# It belongs to the boot, not to a phase: it is the claim every phase below
+# depends on ("all three planes answer /readyz"), so a subset run gets it too,
+# and a failure here names the plane instead of surfacing as a mystery inside
+# whichever suite happened to go first.
+#
+# PALADIN_SMOKE=1 is what makes it a test. Without it the test probes :8080,
+# finds nothing and skips — correct for a bare `go test -tags=integration`,
+# which is why it is written that way. But the phase below filters on
+# `-run 'Surface|RPC'`, which does not match `TestSmokeStackReady`, so between
+# the two halves of verify-deep this test executed nowhere: it skipped in the
+# stackless half and was filtered out of the half that had a stack. A test that
+# runs in neither is exactly what this script was built to make impossible, and
+# it was one of its own blind spots.
+#
+# The PASS assertion is not belt-and-braces: `-run` that matches nothing prints
+# a warning and exits 0, so a rename would turn this step back into the silence
+# it was written to end.
+echo ">>> [stack] readiness (data / iam / admin)"
+smoke_log=$(mktemp -t paladin-smoke)
+(cd backend && PALADIN_SMOKE=1 go test -tags=integration -count=1 \
+    -timeout=2m -v -run TestSmokeStackReady ./tests/integration/...) | tee "$smoke_log"
+if ! grep -q -- '--- PASS: TestSmokeStackReady' "$smoke_log"; then
+    echo "!!! TestSmokeStackReady did not run — has it been renamed?" >&2
+    exit 1
+fi
+rm -f "$smoke_log"
+
 # Iterate ALL_PHASES, not the request, so the order is the script's and not the
 # caller's argument order. Each phase runs in a subshell: phase_rpc_surface cd's
 # into backend/ and the next phase must not inherit that.
