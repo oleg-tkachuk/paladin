@@ -132,7 +132,10 @@ export default defineConfig({
     : {
         command:
           "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up --wait",
-        url: "http://localhost:3000",
+        // Follows the compose file's UI port override, which exists so a second
+        // stack can run beside this one. Hardcoding 3000 here would wait on
+        // whichever stack happened to own that port.
+        url: `http://localhost:${process.env.PALADIN_E2E_PORT_UI ?? "3000"}`,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         stdout: "pipe",

@@ -19,13 +19,14 @@
 # then skips passes a compiler cleanly.
 #
 # Usage: verify-stack.sh [phase ...]
-#   phases: rpc-surface | e2e-go | dev-bootstrap   (default: all three)
+#   phases: rpc-surface | e2e-go | conformance | dev-bootstrap
+#   (default: all four, in that order)
 #
-# A subset still boots the stack and still runs the preflight. It exists so
-# `task backend:test:rpc-surface` can be one phase of this script rather than a
-# second, unguarded copy of the same boot sequence — the copy it replaced had
-# neither the collision check nor the image rebuild, so it quietly tested
-# whatever image happened to be lying around.
+# A subset still boots the stack, runs the preflight and asserts readiness. It
+# exists so `task backend:test:rpc-surface` can be one phase of this script
+# rather than a second, unguarded copy of the same boot sequence — the copy it
+# replaced had neither the collision check nor the image rebuild, so it quietly
+# tested whatever image happened to be lying around.
 #
 # Requires: docker, go, jq, curl. ~5 minutes after the image build.
 
@@ -49,8 +50,30 @@ selected() { [[ " ${requested[*]} " == *" $1 "* ]]; }
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-project=paladin-verify-deep
+project=${PALADIN_VERIFY_PROJECT:-paladin-verify-deep}
 compose=(docker compose -p "$project" -f frontend/tests/e2e/docker-compose.test.yaml)
+
+# Host ports, defaulted to the compose file's own defaults and exported so the
+# compose file, the Go suites and the addresses below all read one set. Override
+# them together to run this beside a Playwright stack:
+#
+#   PALADIN_VERIFY_PROJECT=paladin-alt PALADIN_E2E_PORT_UI=13000 \
+#   PALADIN_E2E_PORT_DATA=18080 PALADIN_E2E_PORT_IAM=18085 \
+#   PALADIN_E2E_PORT_ADMIN=18090 PALADIN_E2E_PORT_S3=19000 \
+#   PALADIN_E2E_PORT_PG=15434  task backend:test:stack
+: "${PALADIN_E2E_PORT_DATA:=8080}"
+: "${PALADIN_E2E_PORT_IAM:=8085}"
+: "${PALADIN_E2E_PORT_ADMIN:=8090}"
+: "${PALADIN_E2E_PORT_S3:=9000}"
+: "${PALADIN_E2E_PORT_UI:=3000}"
+: "${PALADIN_E2E_PORT_PG:=5434}"
+export PALADIN_E2E_PORT_DATA PALADIN_E2E_PORT_IAM PALADIN_E2E_PORT_ADMIN
+export PALADIN_E2E_PORT_S3 PALADIN_E2E_PORT_UI PALADIN_E2E_PORT_PG
+
+data_url="http://localhost:${PALADIN_E2E_PORT_DATA}"
+iam_url="http://localhost:${PALADIN_E2E_PORT_IAM}"
+admin_url="http://localhost:${PALADIN_E2E_PORT_ADMIN}"
+s3_url="http://localhost:${PALADIN_E2E_PORT_S3}"
 
 # ─── phases ──────────────────────────────────────────────────────────────────
 
@@ -102,7 +125,7 @@ phase_conformance() {
     echo ">>> [stack] S3 conformance (MinIO)"
     local log
     log=$(mktemp -t paladin-conformance)
-    (cd backend && PALADIN_CONFORMANCE_ENDPOINT=http://localhost:9000 \
+    (cd backend && PALADIN_CONFORMANCE_ENDPOINT="$s3_url" \
         PALADIN_CONFORMANCE_PROVIDER=minio \
         PALADIN_CONFORMANCE_ACCESS_KEY=paladin-e2e-access \
         PALADIN_CONFORMANCE_SECRET_KEY=paladin-e2e-secret-key \
@@ -146,8 +169,8 @@ phase_dev_bootstrap() {
     # (PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET), not the script's cluster-shaped
     # default — otherwise it registers a bucket row for a bucket that is not
     # there.
-    export PALADIN_HOST=http://localhost:8080
-    export PALADIN_ADMIN_HOST=http://localhost:8090
+    export PALADIN_HOST="$data_url"
+    export PALADIN_ADMIN_HOST="$admin_url"
     export BUCKET_ID=paladin-e2e
     bash frontend/scripts/dev-bootstrap.sh
     bash frontend/scripts/dev-bootstrap.sh
@@ -159,31 +182,38 @@ cleanup() { "${compose[@]}" down -v >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 "${compose[@]}" down -v >/dev/null 2>&1 || true
 
-# Preflight: one stack per host.
+# Preflight: are the ports we are about to publish free?
 #
-# This stack does not isolate by project name, and pretending it does costs a
-# full image build before the collision surfaces. Every service carries a fixed
-# `container_name:` (paladin-e2e-*) and every plane publishes a fixed host port
-# (8080 / 8085 / 8090), so a second `-p` gets its own network and volumes and
-# then fails on the first name Docker already holds.
+# Ports are now the only thing that can collide. The compose file used to pin a
+# `container_name:` on every service too, which made the check "is any
+# paladin-e2e-* container running" and made a second stack impossible at any port
+# — the names are gone, so this asks the question that is actually left.
 #
-# So refuse rather than reclaim. The stack occupying the slot is usually a
-# developer's own — the run that found this had one 22 hours old — and a gate
-# that silently destroys the environment it was invoked from is worse than a
-# gate that declines to start.
-squatters=$(docker ps -a --filter 'name=^paladin-e2e-' \
-    --format '{{.Names}} {{.Label "com.docker.compose.project"}}' |
-    awk -v p="$project" '$2 != p {print}')
-if [[ -n "$squatters" ]]; then
-    owner=$(echo "$squatters" | awk '{print $2; exit}')
+# Still refuse rather than reclaim, and for the same reason: whatever holds the
+# port is usually a developer's own stack — the run that first hit this had one
+# 22 hours old — and a gate that destroys the environment it was invoked from is
+# worse than one that declines to start. The difference is that "use other
+# ports" is now a real answer, so the message says how.
+busy=""
+for port in "$PALADIN_E2E_PORT_DATA" "$PALADIN_E2E_PORT_IAM" \
+    "$PALADIN_E2E_PORT_ADMIN" "$PALADIN_E2E_PORT_S3" "$PALADIN_E2E_PORT_PG"; do
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+        busy+="      :$port — $(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fc 2>/dev/null |
+            sed -n 's/^c//p' | sort -u | tr '\n' ' ')"$'\n'
+    fi
+done
+if [[ -n "$busy" ]]; then
     {
-        echo "!!! the compose stack is already running under another project:"
-        echo "$squatters" | sed 's/^/      /'
+        echo "!!! ports this stack publishes are already in use:"
+        printf '%s' "$busy"
         echo
-        echo "    This compose file pins container_name and host ports, so only"
-        echo "    one instance can exist on a host. Free the slot and re-run:"
+        echo "    Free them, or give this run its own set — the compose file"
+        echo "    takes an override for every published port:"
         echo
-        echo "      docker compose -p $owner -f frontend/tests/e2e/docker-compose.test.yaml down -v"
+        echo "      PALADIN_VERIFY_PROJECT=paladin-alt PALADIN_E2E_PORT_DATA=18080 \\"
+        echo "        PALADIN_E2E_PORT_IAM=18085 PALADIN_E2E_PORT_ADMIN=18090 \\"
+        echo "        PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 \\"
+        echo "        task backend:test:stack"
     } >&2
     exit 1
 fi
@@ -199,7 +229,22 @@ echo ">>> [stack] booting api + admin"
 # Matches backend/configs/compose.yaml (auth.signing_key / auth.issuer).
 export PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min
 export PALADIN_JWT_ISSUER=paladin-dev
-export PALADIN_ADMIN_URL=http://localhost:8090
+export PALADIN_ADMIN_URL="$admin_url"
+# Three suites, three namings for the same three addresses: the Playwright
+# fixtures and the smoke test read PALADIN_E2E_*_URL, the RPC-surface gate reads
+# PALADIN_RPC_*_URL, and the Go admin e2e suite reads PALADIN_ADMIN_URL. Export
+# all of them from the one port block, because the alternative is what actually
+# happened on the first alternate-port run: the surface gate kept its
+# 127.0.0.1:8090 default, reached a kubectl port-forward to the dev CLUSTER, and
+# reported 60 seconds of failures about a deployment it was never meant to
+# touch. Unifying the names is a BACKLOG item; covering all three is the fix
+# that makes this script honest today.
+export PALADIN_E2E_DATA_URL="$data_url"
+export PALADIN_E2E_IAM_URL="$iam_url"
+export PALADIN_E2E_ADMIN_URL="$admin_url"
+export PALADIN_RPC_DATA_URL="$data_url"
+export PALADIN_RPC_IAM_URL="$iam_url"
+export PALADIN_RPC_ADMIN_URL="$admin_url"
 
 # Readiness, asserted rather than assumed — and the one place TestSmokeStackReady
 # runs at all.
@@ -209,7 +254,8 @@ export PALADIN_ADMIN_URL=http://localhost:8090
 # and a failure here names the plane instead of surfacing as a mystery inside
 # whichever suite happened to go first.
 #
-# PALADIN_SMOKE=1 is what makes it a test. Without it the test probes :8080,
+# PALADIN_SMOKE=1 is what makes it a test. Without it the test probes the data
+# plane,
 # finds nothing and skips — correct for a bare `go test -tags=integration`,
 # which is why it is written that way. But the phase below filters on
 # `-run 'Surface|RPC'`, which does not match `TestSmokeStackReady`, so between

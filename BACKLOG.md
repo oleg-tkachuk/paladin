@@ -1543,33 +1543,33 @@ of the pipeline._
 
 ---
 
-### The e2e compose stack cannot run twice on one host
+### Three env-var namings for the same three plane addresses
 
-- **Status:** Deferred (documented and guarded 2026-09-01, not fixed).
-- **Reason:** `frontend/tests/e2e/docker-compose.test.yaml` pins a
-  `container_name:` on every service and publishes fixed host ports (8080,
-  8085, 8090, 3000, 9000). A second `docker compose -p <other>` therefore gets
-  its own network and volumes and then collides on the first container name
-  Docker already holds — the `-p` isolation is nominal. So the Playwright
-  suite and `task verify-deep` cannot run at the same time, and neither can
-  two of either.
-- **What exists instead:** `backend/scripts/verify-stack.sh` detects the
-  collision before it boots anything and refuses with the exact `docker
-  compose … down` line that frees the slot, naming the project that holds it.
-  Refusing rather than reclaiming is deliberate: the stack occupying the slot
-  is usually a developer's own, and a gate that destroys the environment it
-  was invoked from is worse than one that declines to start.
-- **Definition of Done:** the stack composes under any project name — drop the
-  `container_name:` pins and let compose derive them, and make the published
-  ports overridable so a second instance can take a different set. The suites
-  reach the planes by env var already (`PALADIN_ADMIN_URL` and friends), so
-  the change is mostly in the compose file and the two places that hardcode
-  `localhost:8090`.
-- **Blockers:** none — it is scope, not difficulty. Nobody has needed two
-  concurrent stacks badly enough yet, and the guard makes the single-slot
-  reality legible instead of surprising.
-
----
+- **Status:** Deferred (worked around 2026-09-01, not unified).
+- **Reason:** The data / iam / admin plane URLs are configurable three
+  different ways depending on which suite is asking:
+  `PALADIN_E2E_{DATA,IAM,ADMIN}_URL` (Playwright fixtures, and now the Go
+  smoke test), `PALADIN_RPC_{DATA,IAM,ADMIN}_URL` (the RPC-surface gate), and
+  a bare `PALADIN_ADMIN_URL` (the Go admin e2e suite). Nothing ties them
+  together, so setting one set leaves the others on their defaults.
+- **How it surfaced:** the first run of `verify-stack.sh` on overridden ports
+  exported only the `PALADIN_E2E_*` set. The RPC-surface gate kept its
+  `127.0.0.1:8090` default, which on that machine was a `kubectl
+  port-forward` to the dev CLUSTER, and spent 60 seconds reporting
+  "anonymous call returned \"\", want unauthenticated" across the whole admin
+  surface — a transport error against a TLS-only plane, read as an authz
+  failure, about a deployment the gate was never meant to touch. A suite
+  silently testing the wrong target is the same species as a suite silently
+  skipping.
+- **What exists instead:** `verify-stack.sh` exports all three namings from
+  one port block, with a comment saying why.
+- **Definition of Done:** one name per address, read by every suite; the
+  others accepted as deprecated aliases for a release, then dropped. The
+  natural winner is `PALADIN_E2E_*` — it is the set the compose file's own
+  port overrides feed and the one the fixtures already document.
+- **Blockers:** none. It touches three test packages and their READMEs, and
+  wants doing while the reason is fresh rather than after the next time a
+  gate quietly points somewhere else.
 
 ### Playwright e2e suite wired into CI
 

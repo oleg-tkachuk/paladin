@@ -32,6 +32,27 @@
 #   docker compose -p paladin-e2e \
 #       -f frontend/tests/e2e/docker-compose.test.yaml down -v
 #
+# TWO STACKS AT ONCE. Every published host port is an override with today's
+# value as its default, so a second instance needs a different `-p` AND a
+# different port set:
+#
+#   PALADIN_E2E_PORT_UI=13000 PALADIN_E2E_PORT_DATA=18080 \
+#   PALADIN_E2E_PORT_IAM=18085 PALADIN_E2E_PORT_ADMIN=18090 \
+#   PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 \
+#     docker compose -p paladin-alt -f … up --wait
+#
+# Point the suites at it with the PALADIN_E2E_*_URL vars they already read
+# (playwright.config.ts, tests/e2e/fixtures/seed.ts). The presign host follows
+# PALADIN_E2E_PORT_S3 automatically — it has to, because SigV4 covers the Host
+# header and a URL signed for :9000 fails against :19000.
+#
+# There used to be a `container_name:` on every service, which made all of the
+# above impossible: a second project got its own network and volumes and then
+# collided on the first container name Docker already held, whatever ports it
+# was given. Nothing outside this file ever referenced those names — the
+# services address each other by SERVICE name over the compose network, which
+# is project-scoped and unaffected.
+#
 # All env overrides use the PALADIN_ prefix + underscore→dot
 # translation (see backend/internal/config/config.go). The base
 # config file mounted into every backend container is the same
@@ -79,7 +100,7 @@ x-paladin-base: &paladin-base
     #   endpoint        — container DNS, used by the backend itself
     #   public_endpoint — host-reachable, used by the Playwright browser
     PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: ${PALADIN_E2E_S3_ENDPOINT:-http://minio:9000}
-    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:${PALADIN_E2E_PORT_S3:-9000}}
     PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
     PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
     PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
@@ -101,7 +122,6 @@ services:
   # changed the topology and nothing else.
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    container_name: paladin-e2e-minio
     command: ["server", "/data"]
     environment:
       # dev-only credentials — e2e compose only, NEVER reused outside it.
@@ -115,7 +135,7 @@ services:
       # Published because the browser uploads straight to it via a
       # presigned PUT — this is not a debugging convenience, the suite
       # fails without it.
-      - "9000:9000"
+      - "${PALADIN_E2E_PORT_S3:-9000}:9000"
 
   # One-shot: waits for MinIO and creates the bucket, then exits 0.
   #
@@ -125,7 +145,6 @@ services:
   # separate image that has both the client and a shell.
   minio-setup:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
-    container_name: paladin-e2e-minio-setup
     restart: "no"
     environment:
       S3_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
@@ -159,7 +178,6 @@ services:
 
   postgres:
     image: postgres:16
-    container_name: paladin-e2e-postgres
     environment:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
@@ -181,14 +199,13 @@ services:
       # Exposed for ad-hoc debugging from the host. Bind to a
       # non-default port to avoid colliding with the dev-loop
       # compose's 5433 OR a host postgres on 5432.
-      - "5434:5432"
+      - "${PALADIN_E2E_PORT_PG:-5434}:5432"
 
   # One-shot: runs SQL migrations and exits 0. Subsequent
   # services gate on `service_completed_successfully` so they
   # never see a half-migrated schema.
   migrate:
     <<: *paladin-base
-    container_name: paladin-e2e-migrate
     restart: "no"
     command: ["migrate", "--config", "/app/configs/compose.yaml"]
     environment:
@@ -213,7 +230,6 @@ services:
   # and then refuse every login on the cluster.
   promote-app-role:
     image: postgres:16
-    container_name: paladin-e2e-promote-app-role
     restart: "no"
     environment:
       PGPASSWORD: paladin
@@ -239,7 +255,6 @@ services:
   # vars). Idempotent — safe to re-run.
   bootstrap:
     <<: *paladin-base
-    container_name: paladin-e2e-bootstrap
     restart: "no"
     command: ["bootstrap", "--config", "/app/configs/compose.yaml"]
     depends_on:
@@ -248,13 +263,12 @@ services:
 
   api:
     <<: *paladin-base
-    container_name: paladin-e2e-api
     init: true
     restart: on-failure
     command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
     ports:
-      - "8080:8080"  # data
-      - "8085:8085"  # iam
+      - "${PALADIN_E2E_PORT_DATA:-8080}:8080"  # data
+      - "${PALADIN_E2E_PORT_IAM:-8085}:8085"  # iam
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -270,12 +284,11 @@ services:
 
   admin:
     <<: *paladin-base
-    container_name: paladin-e2e-admin
     init: true
     restart: on-failure
     command: ["serve", "admin", "--config", "/app/configs/compose.yaml"]
     ports:
-      - "8090:8090"
+      - "${PALADIN_E2E_PORT_ADMIN:-8090}:8090"
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -286,7 +299,6 @@ services:
     # rebuilds `:latest` in place on every code change, so the
     # test stack always picks up the operator's WIP.
     image: registry.local/paladin/paladin-console:latest
-    container_name: paladin-e2e-ui
     init: true
     restart: on-failure
     environment:
@@ -302,7 +314,7 @@ services:
       # flake source for E2E suites.
       NODE_ENV: production
     ports:
-      - "3000:3000"
+      - "${PALADIN_E2E_PORT_UI:-3000}:3000"
     depends_on:
       # api/admin are distroless and carry no healthcheck (see above),
       # so gate on service_started; the ui's own healthcheck + the

@@ -41,7 +41,28 @@ Two endpoints are configured and they are not interchangeable:
 container DNS, and `public_endpoint` (`http://localhost:9000`) is what
 presigned URLs are signed for, because the browser uploads from the
 host. SigV4 covers the Host header, so swapping them produces a
-signature failure rather than a connection error.
+signature failure rather than a connection error. `public_endpoint`
+follows `PALADIN_E2E_PORT_S3` for the same reason — a URL signed for
+`:9000` fails against a stack published on `:19000`.
+
+## Running two stacks at once
+
+Every published host port is an override with today's value as its
+default, and no service pins a `container_name`, so a second instance
+needs only its own project name and port set:
+
+```bash
+PALADIN_E2E_PORT_UI=13000 PALADIN_E2E_PORT_DATA=18080 \
+PALADIN_E2E_PORT_IAM=18085 PALADIN_E2E_PORT_ADMIN=18090 \
+PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 \
+  docker compose -p paladin-alt -f tests/e2e/docker-compose.test.yaml up --wait
+```
+
+Point the suite at it with the `PALADIN_E2E_*_URL` variables the
+fixtures already read. This is what lets `task verify-deep` run while
+a Playwright stack is up; before the `container_name` pins came out,
+a second project collided on the first name Docker already held no
+matter which ports it was given.
 
 To run against an external S3 endpoint instead — Garage, SeaweedFS, a
 real bucket — set all five variables before `pnpm run test:e2e`:

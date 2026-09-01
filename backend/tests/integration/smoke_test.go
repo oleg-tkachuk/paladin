@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -29,16 +30,32 @@ type probe struct {
 	url  string
 }
 
-// The four planes the e2e compose stack actually runs. `mcp` is absent
+// The three planes the e2e compose stack actually runs. `mcp` is absent
 // deliberately — that file brings up postgres, migrate, bootstrap, api,
 // admin and ui, and leaves the worker / mcp / ingest / dispatcher planes
 // out because the Playwright suite never exercises background jobs. Probing
 // a plane the stack does not start made this test fail the moment a stack
 // was up, which is the one situation it exists for.
-var probes = []probe{
-	{"data", "http://127.0.0.1:8080/readyz"},
-	{"iam", "http://127.0.0.1:8085/readyz"},
-	{"admin", "http://127.0.0.1:8090/readyz"},
+//
+// The addresses are overridable, and by the same PALADIN_E2E_*_URL variables
+// the Playwright fixtures already read (tests/e2e/fixtures/seed.ts). The
+// compose file publishes every host port through an override so two stacks
+// can coexist; a probe hardcoded to :8080 would then be testing the other
+// one, or nothing.
+func planeProbes() []probe {
+	return []probe{
+		{"data", readyzURL("PALADIN_E2E_DATA_URL", "http://127.0.0.1:8080")},
+		{"iam", readyzURL("PALADIN_E2E_IAM_URL", "http://127.0.0.1:8085")},
+		{"admin", readyzURL("PALADIN_E2E_ADMIN_URL", "http://127.0.0.1:8090")},
+	}
+}
+
+// readyzURL builds a plane's /readyz address from an override. envOr lives in
+// rpc_surface_test.go (same package) and returns the raw value, so the trailing
+// slash a URL var is just as likely to carry is stripped here rather than
+// producing a "//readyz" that some routers answer and others do not.
+func readyzURL(envName, fallback string) string {
+	return strings.TrimRight(envOr(envName, fallback), "/") + "/readyz"
 }
 
 // TestSmokeStackReady waits up to 60s for every plane to report ready.
@@ -59,6 +76,7 @@ func TestSmokeStackReady(t *testing.T) {
 	// run without `docker compose up`), skip rather than fail: an unmet
 	// environment precondition is a skip, not a red. Set PALADIN_SMOKE=1 to force
 	// it to run and fail loudly, e.g. in a job that brought the stack up.
+	probes := planeProbes()
 	if os.Getenv("PALADIN_SMOKE") != "1" {
 		probe := &http.Client{Timeout: 1 * time.Second}
 		resp, err := probe.Get(probes[0].url)
