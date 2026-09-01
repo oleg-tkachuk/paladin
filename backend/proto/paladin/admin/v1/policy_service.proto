@@ -16,11 +16,15 @@ service PolicyService {
   // SimulateAuthz answers "would this principal be allowed to take this
   // action against this resource right now?" without performing the action.
   // Useful for UI access-pre-flight and for LLM tools.
-  rpc SimulateAuthz(SimulateAuthzRequest) returns (SimulateAuthzResponse);
+  rpc SimulateAuthz(SimulateAuthzRequest) returns (SimulateAuthzResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetEffectivePolicy returns the merged policy stack for a target
   // (tenant + bucket + collection inheritance), useful for debugging.
-  rpc GetEffectivePolicy(GetEffectivePolicyRequest) returns (GetEffectivePolicyResponse);
+  rpc GetEffectivePolicy(GetEffectivePolicyRequest) returns (GetEffectivePolicyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message ValidateRequest {

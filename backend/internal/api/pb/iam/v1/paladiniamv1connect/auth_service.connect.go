@@ -125,6 +125,7 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+AuthServiceWhoAmIProcedure,
 			connect.WithSchema(authServiceMethods.ByName("WhoAmI")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		changePassword: connect.NewClient[v1.ChangePasswordRequest, v1.ChangePasswordResponse](
@@ -143,6 +144,7 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+AuthServiceListMyMembershipsProcedure,
 			connect.WithSchema(authServiceMethods.ByName("ListMyMemberships")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		switchTenant: connect.NewClient[v1.SwitchTenantRequest, v1.SwitchTenantResponse](
@@ -270,6 +272,7 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceWhoAmIProcedure,
 		svc.WhoAmI,
 		connect.WithSchema(authServiceMethods.ByName("WhoAmI")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceChangePasswordHandler := connect.NewUnaryHandler(
@@ -288,6 +291,7 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceListMyMembershipsProcedure,
 		svc.ListMyMemberships,
 		connect.WithSchema(authServiceMethods.ByName("ListMyMemberships")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceSwitchTenantHandler := connect.NewUnaryHandler(

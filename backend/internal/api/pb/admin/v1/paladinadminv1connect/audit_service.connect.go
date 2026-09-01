@@ -73,18 +73,21 @@ func NewAuditLogServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AuditLogServiceListAuditLogProcedure,
 			connect.WithSchema(auditLogServiceMethods.ByName("ListAuditLog")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getAuditLogEntry: connect.NewClient[v1.GetAuditLogEntryRequest, v1.AuditLogEntry](
 			httpClient,
 			baseURL+AuditLogServiceGetAuditLogEntryProcedure,
 			connect.WithSchema(auditLogServiceMethods.ByName("GetAuditLogEntry")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		exportAuditLog: connect.NewClient[v1.ExportAuditLogRequest, v1.Operation](
 			httpClient,
 			baseURL+AuditLogServiceExportAuditLogProcedure,
 			connect.WithSchema(auditLogServiceMethods.ByName("ExportAuditLog")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -136,18 +139,21 @@ func NewAuditLogServiceHandler(svc AuditLogServiceHandler, opts ...connect.Handl
 		AuditLogServiceListAuditLogProcedure,
 		svc.ListAuditLog,
 		connect.WithSchema(auditLogServiceMethods.ByName("ListAuditLog")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	auditLogServiceGetAuditLogEntryHandler := connect.NewUnaryHandler(
 		AuditLogServiceGetAuditLogEntryProcedure,
 		svc.GetAuditLogEntry,
 		connect.WithSchema(auditLogServiceMethods.ByName("GetAuditLogEntry")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	auditLogServiceExportAuditLogHandler := connect.NewUnaryHandler(
 		AuditLogServiceExportAuditLogProcedure,
 		svc.ExportAuditLog,
 		connect.WithSchema(auditLogServiceMethods.ByName("ExportAuditLog")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.AuditLogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

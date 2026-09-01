@@ -784,14 +784,14 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\x1cSetBackendMaintenanceRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12 \n" +
 	"\vmaintenance\x18\x02 \x01(\bR\vmaintenance\x122\n" +
-	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xba\a\n" +
+	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xc4\a\n" +
 	"\x0eBackendService\x12W\n" +
-	"\rCreateBackend\x12%.paladin.admin.v1.CreateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12Q\n" +
+	"\rCreateBackend\x12%.paladin.admin.v1.CreateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12V\n" +
 	"\n" +
-	"GetBackend\x12\".paladin.admin.v1.GetBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12W\n" +
+	"GetBackend\x12\".paladin.admin.v1.GetBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x01\x12W\n" +
 	"\rUpdateBackend\x12%.paladin.admin.v1.UpdateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12^\n" +
-	"\rDeleteBackend\x12%.paladin.admin.v1.DeleteBackendRequest\x1a&.paladin.admin.v1.DeleteBackendResponse\x12[\n" +
-	"\fListBackends\x12$.paladin.admin.v1.ListBackendsRequest\x1a%.paladin.admin.v1.ListBackendsResponse\x12_\n" +
+	"\rDeleteBackend\x12%.paladin.admin.v1.DeleteBackendRequest\x1a&.paladin.admin.v1.DeleteBackendResponse\x12`\n" +
+	"\fListBackends\x12$.paladin.admin.v1.ListBackendsRequest\x1a%.paladin.admin.v1.ListBackendsResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x11RotateCredentials\x12).paladin.admin.v1.RotateCredentialsRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12X\n" +
 	"\vTestBackend\x12#.paladin.admin.v1.TestBackendRequest\x1a$.paladin.admin.v1.TestBackendResponse\x12_\n" +
 	"\x11SetBackendEnabled\x12).paladin.admin.v1.SetBackendEnabledRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12a\n" +

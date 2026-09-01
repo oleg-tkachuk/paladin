@@ -21,7 +21,9 @@ service TenantService {
   // GetTenant accepts either the UUID or the slug in the resource name.
   // Soft-deleted tenants are returned — check deleted_at — so the trash view
   // can show them.
-  rpc GetTenant(GetTenantRequest) returns (Tenant);
+  rpc GetTenant(GetTenantRequest) returns (Tenant) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateTenant applies update_mask to display_name, labels and
   // inherited_cedar_policy. tenant_id and slug are immutable (use
   // RenameTenantSlug for the latter); resource_version is required and a stale
@@ -35,7 +37,9 @@ service TenantService {
   rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
   // ListTenants excludes soft-deleted tenants unless include_trashed or
   // only_trashed is set.
-  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetInheritedPolicy replaces the Cedar policy every collection and bucket
   // under the tenant inherits. Validated before it is stored — an unparseable
@@ -73,7 +77,9 @@ service TenantService {
 
   // GetTenantStorageMigration returns the current migration status for a
   // tenant, or NOT_FOUND if none was ever started.
-  rpc GetTenantStorageMigration(GetTenantStorageMigrationRequest) returns (StorageMigrationStatus);
+  rpc GetTenantStorageMigration(GetTenantStorageMigrationRequest) returns (StorageMigrationStatus) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
   // renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
@@ -83,7 +89,9 @@ service TenantService {
   // link. Every failure (no rename history, outside the grace window, or
   // read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
   // enumerate slug→tenant mappings.
-  rpc ResolveRenamedSlug(ResolveRenamedSlugRequest) returns (ResolveRenamedSlugResponse);
+  rpc ResolveRenamedSlug(ResolveRenamedSlugRequest) returns (ResolveRenamedSlugResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetTenantDefaultBinding returns the tenant's default (backend, bucket)
   // route used to complete the bare collection name shape (ADR-0010 Phase 3).

@@ -111,6 +111,7 @@ func NewMultipartUploadServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+MultipartUploadServiceListPartsProcedure,
 			connect.WithSchema(multipartUploadServiceMethods.ByName("ListParts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -207,6 +208,7 @@ func NewMultipartUploadServiceHandler(svc MultipartUploadServiceHandler, opts ..
 		MultipartUploadServiceListPartsProcedure,
 		svc.ListParts,
 		connect.WithSchema(multipartUploadServiceMethods.ByName("ListParts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.data.v1.MultipartUploadService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

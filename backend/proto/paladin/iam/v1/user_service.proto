@@ -17,7 +17,9 @@ service UserService {
   // and never again — it is not recoverable from any later read.
   rpc CreateUser(CreateUserRequest) returns (User);
   // GetUser returns the user. The password hash is never included.
-  rpc GetUser(GetUserRequest) returns (User);
+  rpc GetUser(GetUserRequest) returns (User) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateUser applies update_mask to display_name, roles, scopes and disabled.
   // tenant_id is immutable; the password has its own RPC.
   rpc UpdateUser(UpdateUserRequest) returns (User);
@@ -25,7 +27,9 @@ service UserService {
   // belongs to several tenants keeps the others.
   rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
   // ListUsers pages the users in a tenant.
-  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
   // than UpdateUser with a scopes field).

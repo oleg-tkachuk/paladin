@@ -528,14 +528,14 @@ const file_paladin_iam_v1_user_settings_service_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"3\n" +
 	"\x14DeleteForUserRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x17\n" +
-	"\x15DeleteForUserResponse2\xab\x03\n" +
-	"\x13UserSettingsService\x12E\n" +
-	"\aGetMine\x12\x1d.paladin.iam.v1.GetMineRequest\x1a\x1b.paladin.iam.v1.UserSettings\x12K\n" +
+	"\x15DeleteForUserResponse2\xba\x03\n" +
+	"\x13UserSettingsService\x12J\n" +
+	"\aGetMine\x12\x1d.paladin.iam.v1.GetMineRequest\x1a\x1b.paladin.iam.v1.UserSettings\"\x03\x90\x02\x01\x12K\n" +
 	"\n" +
-	"UpdateMine\x12 .paladin.iam.v1.UpdateMineRequest\x1a\x1b.paladin.iam.v1.UserSettings\x12K\n" +
+	"UpdateMine\x12 .paladin.iam.v1.UpdateMineRequest\x1a\x1b.paladin.iam.v1.UserSettings\x12P\n" +
 	"\n" +
-	"GetForUser\x12 .paladin.iam.v1.GetForUserRequest\x1a\x1b.paladin.iam.v1.UserSettings\x12W\n" +
-	"\fListByTenant\x12\".paladin.iam.v1.ListByTenantRequest\x1a#.paladin.iam.v1.ListByTenantResponse\x12Z\n" +
+	"GetForUser\x12 .paladin.iam.v1.GetForUserRequest\x1a\x1b.paladin.iam.v1.UserSettings\"\x03\x90\x02\x01\x12\\\n" +
+	"\fListByTenant\x12\".paladin.iam.v1.ListByTenantRequest\x1a#.paladin.iam.v1.ListByTenantResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\rDeleteForUser\x12#.paladin.iam.v1.DeleteForUserRequest\x1a$.paladin.iam.v1.DeleteForUserResponseBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (

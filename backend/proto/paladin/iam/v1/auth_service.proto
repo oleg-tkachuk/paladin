@@ -25,7 +25,9 @@ service AuthService {
 
   // WhoAmI returns the caller's current Principal — used by SPAs to render
   // identity / role-gated UI without re-decoding the JWT client-side.
-  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ChangePassword updates the caller's password. Local-IdP only.
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
@@ -43,7 +45,9 @@ service AuthService {
   // Under the 1:1-per-tenant user model a "membership" is a users row, so a
   // subject registered in tenants A and B has two memberships with independent
   // roles. Used by the SPA to render the tenant switcher.
-  rpc ListMyMemberships(ListMyMembershipsRequest) returns (ListMyMembershipsResponse);
+  rpc ListMyMemberships(ListMyMembershipsRequest) returns (ListMyMembershipsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SwitchTenant mints a fresh access+refresh pair scoped to a DIFFERENT
   // tenant the caller is already a member of — no password re-check (the

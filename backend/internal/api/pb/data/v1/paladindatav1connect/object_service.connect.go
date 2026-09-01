@@ -186,12 +186,14 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceGetObjectProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("GetObject")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		lookupObject: connect.NewClient[v1.LookupObjectRequest, v1.Object](
 			httpClient,
 			baseURL+ObjectServiceLookupObjectProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("LookupObject")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateObject: connect.NewClient[v1.UpdateObjectRequest, v1.Object](
@@ -228,12 +230,14 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceListObjectsProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("ListObjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		countObjects: connect.NewClient[v1.CountObjectsRequest, v1.CountObjectsResponse](
 			httpClient,
 			baseURL+ObjectServiceCountObjectsProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("CountObjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listObjectVersions: connect.NewClient[v1.ListObjectVersionsRequest, v1.ListObjectVersionsResponse](
@@ -477,12 +481,14 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceGetObjectProcedure,
 		svc.GetObject,
 		connect.WithSchema(objectServiceMethods.ByName("GetObject")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceLookupObjectHandler := connect.NewUnaryHandler(
 		ObjectServiceLookupObjectProcedure,
 		svc.LookupObject,
 		connect.WithSchema(objectServiceMethods.ByName("LookupObject")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceUpdateObjectHandler := connect.NewUnaryHandler(
@@ -519,12 +525,14 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceListObjectsProcedure,
 		svc.ListObjects,
 		connect.WithSchema(objectServiceMethods.ByName("ListObjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceCountObjectsHandler := connect.NewUnaryHandler(
 		ObjectServiceCountObjectsProcedure,
 		svc.CountObjects,
 		connect.WithSchema(objectServiceMethods.ByName("CountObjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceListObjectVersionsHandler := connect.NewUnaryHandler(

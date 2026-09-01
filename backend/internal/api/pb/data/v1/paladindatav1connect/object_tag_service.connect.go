@@ -97,6 +97,7 @@ func NewObjectTagServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ObjectTagServiceListDistinctTagsProcedure,
 			connect.WithSchema(objectTagServiceMethods.ByName("ListDistinctTags")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -175,6 +176,7 @@ func NewObjectTagServiceHandler(svc ObjectTagServiceHandler, opts ...connect.Han
 		ObjectTagServiceListDistinctTagsProcedure,
 		svc.ListDistinctTags,
 		connect.WithSchema(objectTagServiceMethods.ByName("ListDistinctTags")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.data.v1.ObjectTagService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

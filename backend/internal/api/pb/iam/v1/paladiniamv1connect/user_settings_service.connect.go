@@ -86,6 +86,7 @@ func NewUserSettingsServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+UserSettingsServiceGetMineProcedure,
 			connect.WithSchema(userSettingsServiceMethods.ByName("GetMine")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateMine: connect.NewClient[v1.UpdateMineRequest, v1.UserSettings](
@@ -98,12 +99,14 @@ func NewUserSettingsServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+UserSettingsServiceGetForUserProcedure,
 			connect.WithSchema(userSettingsServiceMethods.ByName("GetForUser")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listByTenant: connect.NewClient[v1.ListByTenantRequest, v1.ListByTenantResponse](
 			httpClient,
 			baseURL+UserSettingsServiceListByTenantProcedure,
 			connect.WithSchema(userSettingsServiceMethods.ByName("ListByTenant")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteForUser: connect.NewClient[v1.DeleteForUserRequest, v1.DeleteForUserResponse](
@@ -180,6 +183,7 @@ func NewUserSettingsServiceHandler(svc UserSettingsServiceHandler, opts ...conne
 		UserSettingsServiceGetMineProcedure,
 		svc.GetMine,
 		connect.WithSchema(userSettingsServiceMethods.ByName("GetMine")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	userSettingsServiceUpdateMineHandler := connect.NewUnaryHandler(
@@ -192,12 +196,14 @@ func NewUserSettingsServiceHandler(svc UserSettingsServiceHandler, opts ...conne
 		UserSettingsServiceGetForUserProcedure,
 		svc.GetForUser,
 		connect.WithSchema(userSettingsServiceMethods.ByName("GetForUser")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	userSettingsServiceListByTenantHandler := connect.NewUnaryHandler(
 		UserSettingsServiceListByTenantProcedure,
 		svc.ListByTenant,
 		connect.WithSchema(userSettingsServiceMethods.ByName("ListByTenant")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	userSettingsServiceDeleteForUserHandler := connect.NewUnaryHandler(

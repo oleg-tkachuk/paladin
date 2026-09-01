@@ -24,7 +24,9 @@ service TenantBudgetService {
   // Get returns the current snapshot for a tenant. Returns NOT_FOUND
   // when the tenant has never had a budget configured AND has never
   // been charged — distinct from "configured but unlimited" (cap=0).
-  rpc Get(TenantBudgetServiceGetRequest) returns (TenantBudgetServiceGetResponse);
+  rpc Get(TenantBudgetServiceGetRequest) returns (TenantBudgetServiceGetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Set upserts the cap. ResetSpend=true rolls the accounting period
   // and zeros spent_usd (typical: monthly billing close). false

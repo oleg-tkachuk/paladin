@@ -14,14 +14,20 @@ import "paladin/common/v1/pagination.proto";
 service AuditLogService {
   // ListAuditLog returns audit entries newest-first. The log is append-only:
   // there is no RPC that mutates or deletes an entry.
-  rpc ListAuditLog(ListAuditLogRequest) returns (ListAuditLogResponse);
+  rpc ListAuditLog(ListAuditLogRequest) returns (ListAuditLogResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // GetAuditLogEntry returns a single entry by id, including the full request
   // context recorded at the time.
-  rpc GetAuditLogEntry(GetAuditLogEntryRequest) returns (AuditLogEntry);
+  rpc GetAuditLogEntry(GetAuditLogEntryRequest) returns (AuditLogEntry) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ExportAuditLog emits entries to a sink (S3 object, webhook batch).
   // Returns an Operation whose response contains the export location.
-  rpc ExportAuditLog(ExportAuditLogRequest) returns (Operation);
+  rpc ExportAuditLog(ExportAuditLogRequest) returns (Operation) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message ListAuditLogRequest {

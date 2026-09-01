@@ -108,6 +108,7 @@ func NewAPITokenServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+APITokenServiceGetSelfProcedure,
 			connect.WithSchema(aPITokenServiceMethods.ByName("GetSelf")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUsage: connect.NewClient[v1.APITokenServiceGetUsageRequest, v1.APITokenServiceGetUsageResponse](
@@ -210,6 +211,7 @@ func NewAPITokenServiceHandler(svc APITokenServiceHandler, opts ...connect.Handl
 		APITokenServiceGetSelfProcedure,
 		svc.GetSelf,
 		connect.WithSchema(aPITokenServiceMethods.ByName("GetSelf")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	aPITokenServiceGetUsageHandler := connect.NewUnaryHandler(

@@ -17,7 +17,9 @@ service BucketService {
   rpc CreateBucket(CreateBucketRequest) returns (Bucket);
   // GetBucket returns the bucket, including its versioning, replication and
   // object-lock configuration.
-  rpc GetBucket(GetBucketRequest) returns (Bucket);
+  rpc GetBucket(GetBucketRequest) returns (Bucket) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateBucket applies update_mask; resource_version is required. Versioning,
   // replication and object lock have their own RPCs — they are not settable
   // through this one.
@@ -29,7 +31,9 @@ service BucketService {
   rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
   // ListBuckets returns buckets across every backend, optionally filtered to
   // one.
-  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse);
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
   rpc SetBucketPolicy(SetBucketPolicyRequest) returns (Bucket);
@@ -51,7 +55,9 @@ service BucketService {
 
   // ListAccessibleBuckets is callable by tenant admins. Returns only buckets
   // the caller's principal/scopes are allowed to bind Collections to.
-  rpc ListAccessibleBuckets(ListAccessibleBucketsRequest) returns (ListBucketsResponse);
+  rpc ListAccessibleBuckets(ListAccessibleBucketsRequest) returns (ListBucketsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message CreateBucketRequest {

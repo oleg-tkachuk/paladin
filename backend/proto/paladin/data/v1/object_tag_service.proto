@@ -22,7 +22,9 @@ service ObjectTagService {
   // ListDistinctTags enumerates the distinct tag key→values present across an
   // Collection's live objects, so a UI can populate a tag-facet filter from the
   // whole tenant scope rather than only the objects on the current page.
-  rpc ListDistinctTags(ListDistinctTagsRequest) returns (ListDistinctTagsResponse);
+  rpc ListDistinctTags(ListDistinctTagsRequest) returns (ListDistinctTagsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message ListDistinctTagsRequest {

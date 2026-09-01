@@ -78,6 +78,7 @@ func NewTenantBudgetServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+TenantBudgetServiceGetProcedure,
 			connect.WithSchema(tenantBudgetServiceMethods.ByName("Get")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		set: connect.NewClient[v1.TenantBudgetServiceSetRequest, v1.TenantBudgetServiceSetResponse](
@@ -149,6 +150,7 @@ func NewTenantBudgetServiceHandler(svc TenantBudgetServiceHandler, opts ...conne
 		TenantBudgetServiceGetProcedure,
 		svc.Get,
 		connect.WithSchema(tenantBudgetServiceMethods.ByName("Get")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantBudgetServiceSetHandler := connect.NewUnaryHandler(

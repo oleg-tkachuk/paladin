@@ -18,11 +18,15 @@ service BillingService {
   // GetTenantSummary returns aggregate spend + top-N breakdowns for
   // the supplied period. Defaults to last 30 days when period_start
   // / period_end are unset.
-  rpc GetTenantSummary(GetTenantSummaryRequest) returns (GetTenantSummaryResponse);
+  rpc GetTenantSummary(GetTenantSummaryRequest) returns (GetTenantSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetTenantTimeSeries returns time-bucketed spend for a chart.
   // granularity ∈ {hour, day, week} — server validates.
-  rpc GetTenantTimeSeries(GetTenantTimeSeriesRequest) returns (GetTenantTimeSeriesResponse);
+  rpc GetTenantTimeSeries(GetTenantTimeSeriesRequest) returns (GetTenantTimeSeriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message GetTenantSummaryRequest {

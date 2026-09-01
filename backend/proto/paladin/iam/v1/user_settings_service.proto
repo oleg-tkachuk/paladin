@@ -23,16 +23,22 @@ service UserSettingsService {
   // GetMine returns the calling user's settings, creating nothing: a user who
   // has never saved settings gets the zero value with an empty
   // resource_version.
-  rpc GetMine(GetMineRequest) returns (UserSettings);
+  rpc GetMine(GetMineRequest) returns (UserSettings) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateMine writes the calling user's settings. An empty resource_version
   // means "create"; a non-empty one must match, or the write is Aborted.
   rpc UpdateMine(UpdateMineRequest) returns (UserSettings);
   // GetForUser reads another user's settings. Tenant-admin only — the
   // self-service path is GetMine.
-  rpc GetForUser(GetForUserRequest) returns (UserSettings);
+  rpc GetForUser(GetForUserRequest) returns (UserSettings) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // ListByTenant returns every settings row in the tenant, for an operator
   // auditing what users have configured.
-  rpc ListByTenant(ListByTenantRequest) returns (ListByTenantResponse);
+  rpc ListByTenant(ListByTenantRequest) returns (ListByTenantResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // DeleteForUser removes another user's settings row, resetting them to
   // defaults on next read.
   rpc DeleteForUser(DeleteForUserRequest) returns (DeleteForUserResponse);

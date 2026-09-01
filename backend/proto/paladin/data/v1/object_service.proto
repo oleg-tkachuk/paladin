@@ -29,10 +29,14 @@ service ObjectService {
   // GetObject returns metadata for one object. lock is populated here but left
   // empty by ListObjects — reading it per row would add a join to the
   // pagination hot path.
-  rpc GetObject(GetObjectRequest) returns (Object);
+  rpc GetObject(GetObjectRequest) returns (Object) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // LookupObject resolves an Object by (collection, key) instead of object_id.
-  rpc LookupObject(LookupObjectRequest) returns (Object);
+  rpc LookupObject(LookupObjectRequest) returns (Object) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateObject applies update_mask to metadata, tags and content_type; every
   // other field is server-owned. resource_version is required.
@@ -60,11 +64,15 @@ service ObjectService {
 
   // ListObjects pages a collection newest-first. Soft-deleted objects are
   // excluded unless the request asks for them.
-  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CountObjects returns a count matching the same filters ListObjects
   // accepts, without paging the rows.
-  rpc CountObjects(CountObjectsRequest) returns (CountObjectsResponse);
+  rpc CountObjects(CountObjectsRequest) returns (CountObjectsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ─── Versioning (opt-in per bucket) ──────────────────────────────────────
   // ListObjectVersions returns the immutable history of an object. Empty

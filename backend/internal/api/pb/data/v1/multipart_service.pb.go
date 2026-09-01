@@ -634,13 +634,13 @@ const file_paladin_data_v1_multipart_service_proto_rawDesc = "" +
 	"\x04page\x18\x03 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"w\n" +
 	"\x11ListPartsResponse\x12.\n" +
 	"\x05parts\x18\x01 \x03(\v2\x18.paladin.data.v1.PartInfoR\x05parts\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page2\x94\x04\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page2\x99\x04\n" +
 	"\x16MultipartUploadService\x12z\n" +
 	"\x17InitiateMultipartUpload\x12..paladin.data.v1.InitiateMultipartUploadRequest\x1a/.paladin.data.v1.InitiateMultipartUploadResponse\x12V\n" +
 	"\vPresignPart\x12\".paladin.data.v1.PresignPartRequest\x1a#.paladin.data.v1.PresignPartResponse\x12a\n" +
 	"\x17CompleteMultipartUpload\x12..paladin.data.v1.CompleteMultipartUploadRequest\x1a\x16.paladin.data.v1.Object\x12q\n" +
-	"\x14AbortMultipartUpload\x12+.paladin.data.v1.AbortMultipartUploadRequest\x1a,.paladin.data.v1.AbortMultipartUploadResponse\x12P\n" +
-	"\tListParts\x12 .paladin.data.v1.ListPartsRequest\x1a!.paladin.data.v1.ListPartsResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x14AbortMultipartUpload\x12+.paladin.data.v1.AbortMultipartUploadRequest\x1a,.paladin.data.v1.AbortMultipartUploadResponse\x12U\n" +
+	"\tListParts\x12 .paladin.data.v1.ListPartsRequest\x1a!.paladin.data.v1.ListPartsResponse\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_multipart_service_proto_rawDescOnce sync.Once

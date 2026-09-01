@@ -463,10 +463,10 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"TimeBucket\x125\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\x01R\x06amount\x12!\n" +
-	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount2\xeb\x01\n" +
-	"\x0eBillingService\x12g\n" +
-	"\x10GetTenantSummary\x12(.paladin.admin.v1.GetTenantSummaryRequest\x1a).paladin.admin.v1.GetTenantSummaryResponse\x12p\n" +
-	"\x13GetTenantTimeSeries\x12+.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a,.paladin.admin.v1.GetTenantTimeSeriesResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount2\xf5\x01\n" +
+	"\x0eBillingService\x12l\n" +
+	"\x10GetTenantSummary\x12(.paladin.admin.v1.GetTenantSummaryRequest\x1a).paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12u\n" +
+	"\x13GetTenantTimeSeries\x12+.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a,.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_billing_service_proto_rawDescOnce sync.Once

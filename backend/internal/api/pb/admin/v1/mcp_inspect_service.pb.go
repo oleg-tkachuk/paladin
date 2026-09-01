@@ -1016,11 +1016,11 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x12\n" +
 	"\x04addr\x18\x02 \x01(\tR\x04addr\x12\x18\n" +
 	"\aprofile\x18\x03 \x01(\tR\aprofile\x126\n" +
-	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2\xaa\x02\n" +
-	"\x11MCPInspectService\x12R\n" +
-	"\aInspect\x12\".paladin.admin.v1.MCPInspectRequest\x1a#.paladin.admin.v1.MCPInspectResponse\x12[\n" +
-	"\fListSessions\x12$.paladin.admin.v1.ListSessionsRequest\x1a%.paladin.admin.v1.ListSessionsResponse\x12d\n" +
-	"\x0fGetBridgeStatus\x12'.paladin.admin.v1.GetBridgeStatusRequest\x1a(.paladin.admin.v1.GetBridgeStatusResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2\xb9\x02\n" +
+	"\x11MCPInspectService\x12W\n" +
+	"\aInspect\x12\".paladin.admin.v1.MCPInspectRequest\x1a#.paladin.admin.v1.MCPInspectResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\fListSessions\x12$.paladin.admin.v1.ListSessionsRequest\x1a%.paladin.admin.v1.ListSessionsResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fGetBridgeStatus\x12'.paladin.admin.v1.GetBridgeStatusRequest\x1a(.paladin.admin.v1.GetBridgeStatusResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_mcp_inspect_service_proto_rawDescOnce sync.Once

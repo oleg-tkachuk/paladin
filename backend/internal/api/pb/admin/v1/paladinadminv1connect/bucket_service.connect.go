@@ -130,6 +130,7 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+BucketServiceGetBucketProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("GetBucket")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateBucket: connect.NewClient[v1.UpdateBucketRequest, v1.Bucket](
@@ -148,6 +149,7 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+BucketServiceListBucketsProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("ListBuckets")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setBucketPolicy: connect.NewClient[v1.SetBucketPolicyRequest, v1.Bucket](
@@ -184,6 +186,7 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+BucketServiceListAccessibleBucketsProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("ListAccessibleBuckets")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -317,6 +320,7 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		BucketServiceGetBucketProcedure,
 		svc.GetBucket,
 		connect.WithSchema(bucketServiceMethods.ByName("GetBucket")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceUpdateBucketHandler := connect.NewUnaryHandler(
@@ -335,6 +339,7 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		BucketServiceListBucketsProcedure,
 		svc.ListBuckets,
 		connect.WithSchema(bucketServiceMethods.ByName("ListBuckets")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceSetBucketPolicyHandler := connect.NewUnaryHandler(
@@ -371,6 +376,7 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		BucketServiceListAccessibleBucketsProcedure,
 		svc.ListAccessibleBuckets,
 		connect.WithSchema(bucketServiceMethods.ByName("ListAccessibleBuckets")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.BucketService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

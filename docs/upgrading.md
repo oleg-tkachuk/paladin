@@ -36,6 +36,36 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — 36 read RPCs declare `idempotency_level = NO_SIDE_EFFECTS`
+
+A deliberate breaking change under the procedure above: `buf` puts
+`RPC_SAME_IDEMPOTENCY_LEVEL` in the WIRE category, so declaring the option at
+all trips the gate. Nothing about the request or response bytes changes.
+
+**What it means for a client.** `NO_SIDE_EFFECTS` tells gRPC intermediaries the
+call is safe to retry on their own. For these 36 it is: each was checked
+against its handler, not against its name. If you run a proxy that acts on the
+option, expect it to start retrying these reads — which is the point.
+
+**Why only 36 of 142.** The remainder are unannotated, and
+`IDEMPOTENCY_UNKNOWN` — the default — is the honest value for them: it promises
+nothing. Annotating the rest needs the same per-handler check, and a wrong
+annotation is a wrong wire contract that costs another baseline to fix. Three
+draft classifications built from method-name prefixes each got RPCs wrong
+(`RotateCredentials` is not idempotent; `BatchDeleteObjects` is), and the proto
+comment on `TestBackend` says "Read-only" while the handler persists the probe
+result via `SetHealth`. Names and comments were not a usable source; handlers
+were.
+
+**What keeps it true.** `internal/api/idempotency_contract_test.go` parses
+every handler behind a NO_SIDE_EFFECTS RPC on each build and fails if it
+reaches a write, directly or one hop through a helper. Verified by mutation in
+both shapes.
+
+**Cutting the baseline.** This needs `api/v0.6.0`; see the procedure above.
+Until it is tagged and `breaking_against` bumped, `task verify-all` fails on
+this change by design.
+
 ## Unreleased — API tokens are addressed by resource name
 
 `APITokenService` was the only service in the API where `name` did not mean a

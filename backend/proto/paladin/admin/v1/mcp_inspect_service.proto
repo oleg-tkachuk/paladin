@@ -26,7 +26,9 @@ import "google/api/field_behavior.proto";
 service MCPInspectService {
   // Inspect reports the MCP server's effective configuration: the active
   // profile, the tool catalog it exposes, and the upstream planes it dials.
-  rpc Inspect(MCPInspectRequest) returns (MCPInspectResponse);
+  rpc Inspect(MCPInspectRequest) returns (MCPInspectResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListSessions returns the live MCP streamable-HTTP sessions tracked by the
   // bridge (id, agent, activity counts). Unlike Inspect (config-derived,
@@ -34,7 +36,9 @@ service MCPInspectService {
   // so the admin plane proxies the call to the MCP server's own /sessions
   // endpoint. Returns an empty list when the MCP server is unconfigured or
   // unreachable. Platform-admin only.
-  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetBridgeStatus reports what only the MCP server can answer: whether it
   // can currently reach the planes it proxies to, and how many sessions it
@@ -47,7 +51,9 @@ service MCPInspectService {
   // an operator opens when something is wrong. This call distinguishes them:
   // `reachable` is the bridge's own answer, and `error` says why when it is
   // not. Platform-admin only.
-  rpc GetBridgeStatus(GetBridgeStatusRequest) returns (GetBridgeStatusResponse);
+  rpc GetBridgeStatus(GetBridgeStatusRequest) returns (GetBridgeStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message GetBridgeStatusRequest {}

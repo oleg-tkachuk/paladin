@@ -179,6 +179,7 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceGetTenantProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("GetTenant")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateTenant: connect.NewClient[v1.UpdateTenantRequest, v1.Tenant](
@@ -197,6 +198,7 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceListTenantsProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("ListTenants")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setInheritedPolicy: connect.NewClient[v1.SetInheritedPolicyRequest, v1.Tenant](
@@ -233,12 +235,14 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceGetTenantStorageMigrationProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("GetTenantStorageMigration")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		resolveRenamedSlug: connect.NewClient[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse](
 			httpClient,
 			baseURL+TenantServiceResolveRenamedSlugProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTenantDefaultBinding: connect.NewClient[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding](
@@ -451,6 +455,7 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceGetTenantProcedure,
 		svc.GetTenant,
 		connect.WithSchema(tenantServiceMethods.ByName("GetTenant")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceUpdateTenantHandler := connect.NewUnaryHandler(
@@ -469,6 +474,7 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceListTenantsProcedure,
 		svc.ListTenants,
 		connect.WithSchema(tenantServiceMethods.ByName("ListTenants")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceSetInheritedPolicyHandler := connect.NewUnaryHandler(
@@ -505,12 +511,14 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceGetTenantStorageMigrationProcedure,
 		svc.GetTenantStorageMigration,
 		connect.WithSchema(tenantServiceMethods.ByName("GetTenantStorageMigration")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceResolveRenamedSlugHandler := connect.NewUnaryHandler(
 		TenantServiceResolveRenamedSlugProcedure,
 		svc.ResolveRenamedSlug,
 		connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceGetTenantDefaultBindingHandler := connect.NewUnaryHandler(

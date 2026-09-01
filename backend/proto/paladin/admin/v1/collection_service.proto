@@ -18,7 +18,9 @@ service CollectionService {
   // collection, not two).
   rpc CreateCollection(CreateCollectionRequest) returns (Collection);
   // GetCollection returns the collection and the bucket it is bound to.
-  rpc GetCollection(GetCollectionRequest) returns (Collection);
+  rpc GetCollection(GetCollectionRequest) returns (Collection) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateCollection applies update_mask; resource_version is required. The
   // tenant and the collection name are immutable.
   rpc UpdateCollection(UpdateCollectionRequest) returns (Collection);
@@ -27,7 +29,9 @@ service CollectionService {
   rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
   // ListCollections returns the collections under a tenant, or across all
   // tenants for a platform admin.
-  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetCollectionPolicy replaces the collection's Cedar policy. It composes
   // with — does not replace — the tenant's inherited policy: a request must

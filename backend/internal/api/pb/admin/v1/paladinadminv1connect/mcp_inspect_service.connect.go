@@ -86,18 +86,21 @@ func NewMCPInspectServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+MCPInspectServiceInspectProcedure,
 			connect.WithSchema(mCPInspectServiceMethods.ByName("Inspect")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
 			httpClient,
 			baseURL+MCPInspectServiceListSessionsProcedure,
 			connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getBridgeStatus: connect.NewClient[v1.GetBridgeStatusRequest, v1.GetBridgeStatusResponse](
 			httpClient,
 			baseURL+MCPInspectServiceGetBridgeStatusProcedure,
 			connect.WithSchema(mCPInspectServiceMethods.ByName("GetBridgeStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -162,18 +165,21 @@ func NewMCPInspectServiceHandler(svc MCPInspectServiceHandler, opts ...connect.H
 		MCPInspectServiceInspectProcedure,
 		svc.Inspect,
 		connect.WithSchema(mCPInspectServiceMethods.ByName("Inspect")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPInspectServiceListSessionsHandler := connect.NewUnaryHandler(
 		MCPInspectServiceListSessionsProcedure,
 		svc.ListSessions,
 		connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPInspectServiceGetBridgeStatusHandler := connect.NewUnaryHandler(
 		MCPInspectServiceGetBridgeStatusProcedure,
 		svc.GetBridgeStatus,
 		connect.WithSchema(mCPInspectServiceMethods.ByName("GetBridgeStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.MCPInspectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

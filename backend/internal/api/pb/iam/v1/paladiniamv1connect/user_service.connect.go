@@ -101,6 +101,7 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+UserServiceGetUserProcedure,
 			connect.WithSchema(userServiceMethods.ByName("GetUser")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateUser: connect.NewClient[v1.UpdateUserRequest, v1.User](
@@ -119,6 +120,7 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+UserServiceListUsersProcedure,
 			connect.WithSchema(userServiceMethods.ByName("ListUsers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		grantScopes: connect.NewClient[v1.GrantScopesRequest, v1.User](
@@ -237,6 +239,7 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		UserServiceGetUserProcedure,
 		svc.GetUser,
 		connect.WithSchema(userServiceMethods.ByName("GetUser")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	userServiceUpdateUserHandler := connect.NewUnaryHandler(
@@ -255,6 +258,7 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		UserServiceListUsersProcedure,
 		svc.ListUsers,
 		connect.WithSchema(userServiceMethods.ByName("ListUsers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	userServiceGrantScopesHandler := connect.NewUnaryHandler(

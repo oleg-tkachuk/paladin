@@ -105,6 +105,7 @@ func NewCollectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+CollectionServiceGetCollectionProcedure,
 			connect.WithSchema(collectionServiceMethods.ByName("GetCollection")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateCollection: connect.NewClient[v1.UpdateCollectionRequest, v1.Collection](
@@ -123,6 +124,7 @@ func NewCollectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+CollectionServiceListCollectionsProcedure,
 			connect.WithSchema(collectionServiceMethods.ByName("ListCollections")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setCollectionPolicy: connect.NewClient[v1.SetCollectionPolicyRequest, v1.Collection](
@@ -230,6 +232,7 @@ func NewCollectionServiceHandler(svc CollectionServiceHandler, opts ...connect.H
 		CollectionServiceGetCollectionProcedure,
 		svc.GetCollection,
 		connect.WithSchema(collectionServiceMethods.ByName("GetCollection")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	collectionServiceUpdateCollectionHandler := connect.NewUnaryHandler(
@@ -248,6 +251,7 @@ func NewCollectionServiceHandler(svc CollectionServiceHandler, opts ...connect.H
 		CollectionServiceListCollectionsProcedure,
 		svc.ListCollections,
 		connect.WithSchema(collectionServiceMethods.ByName("ListCollections")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	collectionServiceSetCollectionPolicyHandler := connect.NewUnaryHandler(

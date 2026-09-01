@@ -1902,20 +1902,20 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x10PresignTransport\x12!\n" +
 	"\x1dPRESIGN_TRANSPORT_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESIGN_TRANSPORT_PUT\x10\x01\x12\x1a\n" +
-	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xe5\v\n" +
+	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xf9\v\n" +
 	"\rObjectService\x12Y\n" +
 	"\fUploadObject\x12#.paladin.data.v1.UploadObjectRequest\x1a$.paladin.data.v1.UploadObjectResponse\x12_\n" +
-	"\x0eDownloadObject\x12%.paladin.data.v1.DownloadObjectRequest\x1a&.paladin.data.v1.DownloadObjectResponse\x12E\n" +
-	"\tGetObject\x12 .paladin.data.v1.GetObjectRequest\x1a\x16.paladin.data.v1.Object\x12K\n" +
-	"\fLookupObject\x12#.paladin.data.v1.LookupObjectRequest\x1a\x16.paladin.data.v1.Object\x12K\n" +
+	"\x0eDownloadObject\x12%.paladin.data.v1.DownloadObjectRequest\x1a&.paladin.data.v1.DownloadObjectResponse\x12J\n" +
+	"\tGetObject\x12 .paladin.data.v1.GetObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12P\n" +
+	"\fLookupObject\x12#.paladin.data.v1.LookupObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12K\n" +
 	"\fUpdateObject\x12#.paladin.data.v1.UpdateObjectRequest\x1a\x16.paladin.data.v1.Object\x12O\n" +
 	"\x0eCompleteObject\x12%.paladin.data.v1.CompleteObjectRequest\x1a\x16.paladin.data.v1.Object\x12Y\n" +
 	"\fDeleteObject\x12#.paladin.data.v1.DeleteObjectRequest\x1a$.paladin.data.v1.DeleteObjectResponse\x12M\n" +
 	"\rRestoreObject\x12$.paladin.data.v1.RestoreObjectRequest\x1a\x16.paladin.data.v1.Object\x12G\n" +
 	"\n" +
-	"CopyObject\x12!.paladin.data.v1.CopyObjectRequest\x1a\x16.paladin.data.v1.Object\x12V\n" +
-	"\vListObjects\x12\".paladin.data.v1.ListObjectsRequest\x1a#.paladin.data.v1.ListObjectsResponse\x12Y\n" +
-	"\fCountObjects\x12#.paladin.data.v1.CountObjectsRequest\x1a$.paladin.data.v1.CountObjectsResponse\x12k\n" +
+	"CopyObject\x12!.paladin.data.v1.CopyObjectRequest\x1a\x16.paladin.data.v1.Object\x12[\n" +
+	"\vListObjects\x12\".paladin.data.v1.ListObjectsRequest\x1a#.paladin.data.v1.ListObjectsResponse\"\x03\x90\x02\x01\x12^\n" +
+	"\fCountObjects\x12#.paladin.data.v1.CountObjectsRequest\x1a$.paladin.data.v1.CountObjectsResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x12ListObjectVersions\x12).paladin.data.v1.ListObjectVersionsRequest\x1a*.paladin.data.v1.ListObjectVersionsResponse\x12Z\n" +
 	"\x10GetObjectVersion\x12'.paladin.data.v1.GetObjectVersionRequest\x1a\x1d.paladin.data.v1.ObjectVersion\x12[\n" +
 	"\x14RestoreObjectVersion\x12+.paladin.data.v1.RestoreObjectVersionRequest\x1a\x16.paladin.data.v1.Object\x12`\n" +

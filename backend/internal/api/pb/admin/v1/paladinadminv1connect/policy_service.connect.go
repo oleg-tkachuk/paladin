@@ -78,12 +78,14 @@ func NewPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+PolicyServiceSimulateAuthzProcedure,
 			connect.WithSchema(policyServiceMethods.ByName("SimulateAuthz")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getEffectivePolicy: connect.NewClient[v1.GetEffectivePolicyRequest, v1.GetEffectivePolicyResponse](
 			httpClient,
 			baseURL+PolicyServiceGetEffectivePolicyProcedure,
 			connect.WithSchema(policyServiceMethods.ByName("GetEffectivePolicy")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -141,12 +143,14 @@ func NewPolicyServiceHandler(svc PolicyServiceHandler, opts ...connect.HandlerOp
 		PolicyServiceSimulateAuthzProcedure,
 		svc.SimulateAuthz,
 		connect.WithSchema(policyServiceMethods.ByName("SimulateAuthz")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	policyServiceGetEffectivePolicyHandler := connect.NewUnaryHandler(
 		PolicyServiceGetEffectivePolicyProcedure,
 		svc.GetEffectivePolicy,
 		connect.WithSchema(policyServiceMethods.ByName("GetEffectivePolicy")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.PolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

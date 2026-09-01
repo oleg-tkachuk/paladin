@@ -68,12 +68,14 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetTenantSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetTenantSummary")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTenantTimeSeries: connect.NewClient[v1.GetTenantTimeSeriesRequest, v1.GetTenantTimeSeriesResponse](
 			httpClient,
 			baseURL+BillingServiceGetTenantTimeSeriesProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetTenantTimeSeries")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -117,12 +119,14 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetTenantSummaryProcedure,
 		svc.GetTenantSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetTenantSummary")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetTenantTimeSeriesHandler := connect.NewUnaryHandler(
 		BillingServiceGetTenantTimeSeriesProcedure,
 		svc.GetTenantTimeSeries,
 		connect.WithSchema(billingServiceMethods.ByName("GetTenantTimeSeries")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.BillingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

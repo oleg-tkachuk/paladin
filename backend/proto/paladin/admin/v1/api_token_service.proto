@@ -40,7 +40,9 @@ service APITokenService {
   // JWT or capability instead of an API token. Used by clients that
   // want to display "you are authenticated as token X" without an
   // out-of-band lookup.
-  rpc GetSelf(APITokenServiceGetSelfRequest) returns (APITokenServiceGetSelfResponse);
+  rpc GetSelf(APITokenServiceGetSelfRequest) returns (APITokenServiceGetSelfResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetUsage returns a readonly snapshot of a token's current rate-
   // limit consumption — current/previous bucket counters, the

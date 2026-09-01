@@ -126,6 +126,7 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BackendServiceGetBackendProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("GetBackend")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateBackend: connect.NewClient[v1.UpdateBackendRequest, v1.StorageBackend](
@@ -144,6 +145,7 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BackendServiceListBackendsProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("ListBackends")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		rotateCredentials: connect.NewClient[v1.RotateCredentialsRequest, v1.StorageBackend](
@@ -299,6 +301,7 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		BackendServiceGetBackendProcedure,
 		svc.GetBackend,
 		connect.WithSchema(backendServiceMethods.ByName("GetBackend")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceUpdateBackendHandler := connect.NewUnaryHandler(
@@ -317,6 +320,7 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		BackendServiceListBackendsProcedure,
 		svc.ListBackends,
 		connect.WithSchema(backendServiceMethods.ByName("ListBackends")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceRotateCredentialsHandler := connect.NewUnaryHandler(

@@ -522,11 +522,11 @@ const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\x06layers\x18\x02 \x03(\v2\x1c.paladin.admin.v1.PolicyLayerR\x06layers\"H\n" +
 	"\vPolicyLayer\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12!\n" +
-	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy2\xaf\x02\n" +
+	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy2\xb9\x02\n" +
 	"\rPolicyService\x12O\n" +
-	"\bValidate\x12 .paladin.admin.v1.ValidateRequest\x1a!.paladin.admin.v1.ValidateResponse\x12^\n" +
-	"\rSimulateAuthz\x12%.paladin.admin.v1.SimulateAuthzRequest\x1a&.paladin.admin.v1.SimulateAuthzResponse\x12m\n" +
-	"\x12GetEffectivePolicy\x12*.paladin.admin.v1.GetEffectivePolicyRequest\x1a+.paladin.admin.v1.GetEffectivePolicyResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\bValidate\x12 .paladin.admin.v1.ValidateRequest\x1a!.paladin.admin.v1.ValidateResponse\x12c\n" +
+	"\rSimulateAuthz\x12%.paladin.admin.v1.SimulateAuthzRequest\x1a&.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12GetEffectivePolicy\x12*.paladin.admin.v1.GetEffectivePolicyRequest\x1a+.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_policy_service_proto_rawDescOnce sync.Once

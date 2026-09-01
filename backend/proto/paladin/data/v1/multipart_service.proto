@@ -29,7 +29,9 @@ service MultipartUploadService {
   rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse);
   // ListParts returns the parts recorded for an open session, for a client
   // reconciling after a crash.
-  rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message InitiateMultipartUploadRequest {

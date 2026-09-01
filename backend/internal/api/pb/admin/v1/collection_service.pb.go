@@ -601,13 +601,13 @@ const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"\x1dBindCollectionToBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x1f\n" +
-	"\x06bucket\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket2\xb5\x05\n" +
+	"\x06bucket\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket2\xbf\x05\n" +
 	"\x11CollectionService\x12Y\n" +
-	"\x10CreateCollection\x12(.paladin.admin.v1.CreateCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\x12S\n" +
-	"\rGetCollection\x12%.paladin.admin.v1.GetCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\x12Y\n" +
+	"\x10CreateCollection\x12(.paladin.admin.v1.CreateCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\x12X\n" +
+	"\rGetCollection\x12%.paladin.admin.v1.GetCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\"\x03\x90\x02\x01\x12Y\n" +
 	"\x10UpdateCollection\x12(.paladin.admin.v1.UpdateCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\x12g\n" +
-	"\x10DeleteCollection\x12(.paladin.admin.v1.DeleteCollectionRequest\x1a).paladin.admin.v1.DeleteCollectionResponse\x12d\n" +
-	"\x0fListCollections\x12'.paladin.admin.v1.ListCollectionsRequest\x1a(.paladin.admin.v1.ListCollectionsResponse\x12_\n" +
+	"\x10DeleteCollection\x12(.paladin.admin.v1.DeleteCollectionRequest\x1a).paladin.admin.v1.DeleteCollectionResponse\x12i\n" +
+	"\x0fListCollections\x12'.paladin.admin.v1.ListCollectionsRequest\x1a(.paladin.admin.v1.ListCollectionsResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x13SetCollectionPolicy\x12+.paladin.admin.v1.SetCollectionPolicyRequest\x1a\x1b.paladin.admin.v1.Collection\x12e\n" +
 	"\x16BindCollectionToBucket\x12..paladin.admin.v1.BindCollectionToBucketRequest\x1a\x1b.paladin.admin.v1.CollectionBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
