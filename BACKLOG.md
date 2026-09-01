@@ -247,20 +247,6 @@ the same commit. Treat this file like a runtime invariant.
   dashboard header records, and it has already caught a mistyped regex.
 - **Blockers:** none. Needs traffic, not work.
 
-### Domains still uninstrumented
-
-- **Status:** Deferred (each is small; none is on the critical path today).
-- **Reason:** presign, capability charge and object lock are now counted, and
-  otelconnect gives RED for every RPC. Four domains still emit nothing of their
-  own: storage-backend call latency and errors (an S3 that degrades shows up
-  only as slow RPCs), quota enforcement decisions, login success/failure rates,
-  and idempotency-key hits. None blocks an incident today because the RPC-level
-  signal covers the symptom, but each answers a different "why".
-- **Definition of Done:** a counter per domain with a bounded outcome label,
-  reaching a collector under test the way `internal/metrics/domain_test.go`
-  checks the existing three.
-- **Blockers:** none; ordering is by whichever incident asks first.
-
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational

@@ -47,6 +47,21 @@ type Client struct {
 	mode    object.CompletionMode
 	sseType string // "", "AES256", or "aws:kms"
 	sseKey  string
+	// backendID labels this client's storage-call metrics. A pointer because
+	// the metric middleware is installed inside New, before the id is known —
+	// the registry stamps it right after building. Empty until then, and the
+	// label is omitted rather than guessed. See SetBackendID.
+	backendID *string
+}
+
+// SetBackendID names this client in its storage-call metrics. Called once by
+// whoever built it, immediately after New and before any request uses it:
+// nothing reads the value until an S3 call is in flight, so there is no
+// ordering hazard to guard against.
+func (c *Client) SetBackendID(id string) {
+	if c != nil && c.backendID != nil {
+		*c.backendID = id
+	}
 }
 
 // New builds an S3 client from one storage-backend entry. `backend.Events.Enabled`
@@ -77,12 +92,16 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 		return nil, err
 	}
 
-	// Internal S3 client — direct API calls from inside the cluster.
+	// Internal S3 client — direct API calls from inside the cluster. Every one
+	// of them is counted and timed by the metrics middleware; see metrics.go
+	// for why it lives in the SDK stack rather than around each method.
+	backendID := new(string)
 	s3c := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.UsePathStyle = backend.ForcePathStyle
 		if backend.Endpoint != "" {
 			o.BaseEndpoint = aws.String(backend.Endpoint)
 		}
+		o.APIOptions = append(o.APIOptions, withCallMetrics(backendID))
 	})
 
 	// Presign-only S3 client — points at the public endpoint so that
@@ -112,6 +131,8 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 		mode:    mode,
 		sseType: backend.SSE.Type,
 		sseKey:  backend.SSE.KeyID,
+
+		backendID: backendID,
 	}, nil
 }
 

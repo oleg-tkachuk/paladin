@@ -44,6 +44,7 @@ func BuildBackendProber(ctx context.Context, storage config.Storage, l *zap.Logg
 		if err != nil {
 			return nil, fmt.Errorf("backend prober: build client for %q: %w", id, err)
 		}
+		c.SetBackendID(id)
 		clients[id] = c
 	}
 	return &s3BackendProber{

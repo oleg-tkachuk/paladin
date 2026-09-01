@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -164,14 +165,23 @@ type LoginOutput struct {
 
 func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error) {
 	if in.Subject == "" {
+		metrics.RecordLoginAttempt(ctx, "invalid_argument")
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("subject required"))
 	}
 	if in.Password == "" {
+		metrics.RecordLoginAttempt(ctx, "invalid_argument")
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("password required"))
 	}
 
 	u, err := h.resolveLoginUser(ctx, in)
 	if err != nil {
+		// The outcome is derived from the Connect code rather than passed down
+		// from resolveLoginUser, because that function deliberately returns ONE
+		// generic "invalid credentials" for several distinct failures so as not
+		// to leak whether a subject exists. Reading the code back keeps the
+		// metric on the same side of that line: it can say how many logins
+		// failed, and cannot say which subjects.
+		metrics.RecordLoginAttempt(ctx, loginOutcome(err))
 		return nil, err
 	}
 
@@ -180,13 +190,16 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		audience = auth.AudienceData
 	}
 	if err := h.assertAudienceAllowed(u, audience); err != nil {
+		metrics.RecordLoginAttempt(ctx, "audience_denied")
 		return nil, err
 	}
 
 	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil)
 	if err != nil {
+		metrics.RecordLoginAttempt(ctx, "error")
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	metrics.RecordLoginAttempt(ctx, "ok")
 
 	// The one write on `users` that had no tenant on the context: login runs
 	// before a session exists. But by this line the credential has been
@@ -749,6 +762,22 @@ func (h *Handler) assertAudienceAllowed(u authstore.User, audience string) error
 // for. This replaced the earlier "multiple tenants — supply X-Tenant-Id"
 // InvalidArgument: the login form sends no hint, so a multi-tenant subject
 // could never sign in through the UI at all.
+// loginOutcome maps a resolveLoginUser error to a bounded metric label. It
+// reads the Connect code rather than the message on purpose: the messages are
+// deliberately identical across several failures so nothing leaks whether a
+// subject exists, and a metric label must not be the place that distinction
+// reappears.
+func loginOutcome(err error) string {
+	switch connect.CodeOf(err) {
+	case connect.CodeUnauthenticated:
+		return "invalid_credentials"
+	case connect.CodeInvalidArgument:
+		return "invalid_argument"
+	default:
+		return "error"
+	}
+}
+
 func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstore.User, error) {
 	if in.TenantHint != uuid.Nil {
 		u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)

@@ -61,6 +61,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 const idempotencyHeader = "Idempotency-Key"
@@ -225,6 +226,7 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 			// Preferred: generic factory (no reflection).
 			if f, ok := responseFactories.Load(method); ok {
 				if replay, rerr := f.(responseFactory)(cached); rerr == nil {
+					metrics.RecordIdempotencyLookup(ctx, method, "replayed")
 					return replay, nil
 				}
 				// Reconstruction failure (proto drift / corrupt cache) →
@@ -233,9 +235,18 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 				// Fallback: reflection registry auto-populated on a prior
 				// cache miss for an unregistered method.
 				if replay, rerr := reconstructResponse(respType.(reflect.Type), cached); rerr == nil {
+					metrics.RecordIdempotencyLookup(ctx, method, "replayed")
 					return replay, nil
 				}
 			}
+			// Cached, and not replayable: the handler is about to run for a
+			// key that already succeeded once. Every comment above explains why
+			// that is tolerable, and all of them assume it is RARE — this is
+			// the only outcome here that can produce a duplicate side effect,
+			// and until now nothing counted it.
+			metrics.RecordIdempotencyLookup(ctx, method, "unreplayable")
+		} else {
+			metrics.RecordIdempotencyLookup(ctx, method, "miss")
 		}
 
 		resp, err := next(ctx, req)

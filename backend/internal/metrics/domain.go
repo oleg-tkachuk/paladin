@@ -31,6 +31,22 @@ var (
 	capabilityAmount  metric.Float64Histogram
 
 	objectLockOps metric.Int64Counter
+
+	// The four below answer "why", where otelconnect's RED answers "what".
+	// Each was picked because the RPC-level signal shows the symptom and hides
+	// the cause: a degrading object store looks like slow RPCs, a quota wall
+	// looks like ResourceExhausted with no way to tell an exhausted tenant from
+	// a misconfigured cap, a credential-stuffing run looks like ordinary Login
+	// traffic, and an idempotency cache that stopped replaying looks like
+	// nothing at all until a duplicate side effect turns up.
+	storageCalls   metric.Int64Counter
+	storageSeconds metric.Float64Histogram
+
+	quotaDecisions metric.Int64Counter
+
+	loginAttempts metric.Int64Counter
+
+	idempotencyLookups metric.Int64Counter
 )
 
 func init() {
@@ -73,6 +89,52 @@ func init() {
 			"Object-lock writes by operation (retention|legal_hold), mode and outcome. "+
 				"A COMPLIANCE retention cannot be shortened by anyone, so each one is "+
 				"an irreversible commitment of storage — worth counting on its own."),
+	); err != nil {
+		otel.Handle(err)
+	}
+	if storageCalls, err = meterDomain.Int64Counter(
+		"paladin_storage_calls_total",
+		metric.WithDescription(
+			"Calls to a storage backend by SDK operation and outcome (ok|error). "+
+				"Paladin never proxies bytes, so when an object store degrades the "+
+				"only thing the RPC layer shows is latency it cannot attribute."),
+	); err != nil {
+		otel.Handle(err)
+	}
+	if storageSeconds, err = meterDomain.Float64Histogram(
+		"paladin_storage_call_duration_seconds",
+		metric.WithDescription(
+			"Storage-backend call duration, measured across the whole SDK "+
+				"operation — retries included, because the caller waits for those too."),
+		metric.WithUnit("s"),
+	); err != nil {
+		otel.Handle(err)
+	}
+	if quotaDecisions, err = meterDomain.Int64Counter(
+		"paladin_quota_decisions_total",
+		metric.WithDescription(
+			"Quota enforcement decisions by scope (tenant|bucket) and outcome "+
+				"(allowed|rejected). A tenant at its cap and a tenant with a cap set "+
+				"to the wrong number are the same ResourceExhausted to the RPC layer."),
+	); err != nil {
+		otel.Handle(err)
+	}
+	if loginAttempts, err = meterDomain.Int64Counter(
+		"paladin_login_attempts_total",
+		metric.WithDescription(
+			"Login attempts by outcome (ok|invalid_credentials|audience_denied|"+
+				"invalid_argument|error). The failure RATE is the signal — a "+
+				"credential-stuffing run is ordinary Login traffic to otelconnect."),
+	); err != nil {
+		otel.Handle(err)
+	}
+	if idempotencyLookups, err = meterDomain.Int64Counter(
+		"paladin_idempotency_lookups_total",
+		metric.WithDescription(
+			"Idempotency-key lookups by outcome (replayed|miss|unreplayable). "+
+				"`unreplayable` means the key WAS cached but the response could not "+
+				"be reconstructed, so the handler ran a second time — the one outcome "+
+				"here that can produce a duplicate side effect."),
 	); err != nil {
 		otel.Handle(err)
 	}
@@ -125,4 +187,79 @@ func RecordObjectLock(ctx context.Context, op, mode, outcome string) {
 		attrs = append(attrs, attribute.String("mode", mode))
 	}
 	objectLockOps.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// RecordStorageCall counts one storage-backend call and its duration. op is
+// the SDK operation name (HeadObject, CreateBucket, …); outcome is ok|error.
+//
+// backendID is the label an operator actually needs — "which store is slow" —
+// and it is empty when the client was built outside the registry (the probe
+// path constructs one ad hoc). Omitted rather than defaulted in that case, for
+// the same reason tenant_id is: a made-up value in a dashboard is worse than a
+// missing one.
+func RecordStorageCall(ctx context.Context, backendID, op, outcome string, seconds float64) {
+	if storageCalls == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("op", op),
+		attribute.String("outcome", outcome),
+	}
+	if backendID != "" {
+		attrs = append(attrs, attribute.String("backend_id", backendID))
+	}
+	storageCalls.Add(ctx, 1, metric.WithAttributes(attrs...))
+	if storageSeconds != nil {
+		storageSeconds.Record(ctx, seconds, metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordQuotaDecision counts one enforcement decision. scope is tenant|bucket;
+// outcome is allowed|rejected.
+//
+// Only decisions are counted. A request with no quota row, or one the
+// interceptor does not gate, made no decision — counting those as "allowed"
+// would bury the real allow/reject ratio under traffic the quota system never
+// looked at.
+func RecordQuotaDecision(ctx context.Context, tenantID, scope, outcome string) {
+	if quotaDecisions == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("scope", scope),
+		attribute.String("outcome", outcome),
+	}
+	if tenantID != "" {
+		attrs = append(attrs, attribute.String("tenant_id", tenantID))
+	}
+	quotaDecisions.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// RecordLoginAttempt counts one login by outcome.
+//
+// Deliberately carries no subject and no tenant. The useful signal is the
+// failure rate, and a per-subject label would be both unbounded and a record
+// of who is being targeted — which is exactly the data an attacker would like
+// out of a metrics endpoint.
+func RecordLoginAttempt(ctx context.Context, outcome string) {
+	if loginAttempts == nil {
+		return
+	}
+	loginAttempts.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+// RecordIdempotencyLookup counts one key lookup by outcome:
+// replayed|miss|unreplayable.
+//
+// method is the RPC procedure, which is bounded by the service surface — the
+// KEY is not, and never becomes a label.
+func RecordIdempotencyLookup(ctx context.Context, method, outcome string) {
+	if idempotencyLookups == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{attribute.String("outcome", outcome)}
+	if method != "" {
+		attrs = append(attrs, attribute.String("method", method))
+	}
+	idempotencyLookups.Add(ctx, 1, metric.WithAttributes(attrs...))
 }

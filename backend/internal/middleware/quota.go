@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/resolve"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // QuotaReader is the read-only slice of the QuotaRepository the interceptor
@@ -152,18 +153,29 @@ func (q *QuotaSoftCheck) CheckUpload(ctx context.Context, procedure string, msg 
 	// object. Everything else on the gated list creates one.
 	newObject := procedure != regenerateUploadURLProc
 
+	tenantID := p.TenantID.String()
+
 	// Tenant-quota row absent = unlimited. Other read errors degrade open
 	// (presigns are not blast-radius events).
+	//
+	// Only an actual comparison is counted. A missing quota row made no
+	// decision, and counting it as "allowed" would bury the allow/reject ratio
+	// under traffic the quota system never looked at — the ratio being the
+	// whole reason this metric exists.
 	if quota, err := q.Reader.GetTenant(ctx, p.TenantID); err == nil {
 		if err := checkCaps(quota, "tenant", sizeHint, newObject, q.Headroom); err != nil {
+			metrics.RecordQuotaDecision(ctx, tenantID, "tenant", "rejected")
 			return err
 		}
+		metrics.RecordQuotaDecision(ctx, tenantID, "tenant", "allowed")
 	}
 
 	if quota, ok := q.bucketQuota(ctx, msg); ok {
 		if err := checkCaps(quota, "bucket", sizeHint, newObject, q.Headroom); err != nil {
+			metrics.RecordQuotaDecision(ctx, tenantID, "bucket", "rejected")
 			return err
 		}
+		metrics.RecordQuotaDecision(ctx, tenantID, "bucket", "allowed")
 	}
 	return nil
 }

@@ -65,6 +65,11 @@ func (r *BackendRegistry) For(ctx context.Context, backendID string) (*Client, e
 	if err != nil {
 		return nil, fmt.Errorf("s3 registry: build backend %q: %w", id, err)
 	}
+	// The registry is the only place that knows both the client and its id, so
+	// it is the only place that can label the client's storage-call metrics.
+	// Without this the metric still records — just without a backend_id, which
+	// answers "the object store is slow" and not "which one".
+	c.SetBackendID(id)
 	r.clients[id] = c
 	return c, nil
 }
