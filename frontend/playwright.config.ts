@@ -30,6 +30,13 @@ import { defineConfig, devices } from "@playwright/test";
 // does not own and drives one it did not start.
 const UI_URL = `http://localhost:${process.env.PALADIN_E2E_PORT_UI ?? "3000"}`;
 
+// The compose project name. Overridable for the same reason the ports are: two
+// stacks can coexist now, and they need distinct projects as well as distinct
+// ports. frontend/scripts/verify-e2e.sh reads the same variable to tear down
+// what it started, so a hardcoded name here would leave its teardown aimed at
+// the wrong stack.
+const COMPOSE_PROJECT = process.env.PALADIN_E2E_PROJECT ?? "paladin-e2e";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   // Exclude fixtures from test discovery (they don't contain
@@ -140,8 +147,7 @@ export default defineConfig({
   webServer: process.env.PALADIN_E2E_BASE_URL
     ? undefined
     : {
-        command:
-          "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up --wait",
+        command: `docker compose -p ${COMPOSE_PROJECT} -f tests/e2e/docker-compose.test.yaml up --wait`,
         url: UI_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

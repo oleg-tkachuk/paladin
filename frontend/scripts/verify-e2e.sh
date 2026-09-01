@@ -27,15 +27,40 @@ cd "$root"
 # shellcheck source=SCRIPTDIR/../../scripts/stack-ports.sh
 source "$root/scripts/stack-ports.sh"
 
+# Playwright's webServer BOOTS the stack but does not remove it. Its command is
+# `docker compose up --wait`, which exits as soon as the stack is healthy, so
+# when the run ends there is no process left for Playwright to kill and the
+# containers simply stay. Combined with `reuseExistingServer: !CI` — false
+# here — that leaves the next run of this gate tripping its own preflight on the
+# stack the previous one left behind. Observed exactly that.
+#
+# So the teardown is this script's job, and it runs BEFORE the preflight as well
+# as after: reclaiming our own project is not the same as reclaiming someone
+# else's, and the preflight below still refuses anything that is not ours.
+# `down -v` because the Postgres volume is a tmpfs fixture — a suite that
+# inherits state from the previous run passes for the wrong reason, which is the
+# compose file's own stated reason for the tmpfs.
+compose_project=${PALADIN_E2E_PROJECT:-paladin-e2e}
+# ABSOLUTE path, deliberately. The script cd's into frontend/ before invoking
+# Playwright, so by the time the EXIT trap fires a relative
+# `frontend/tests/e2e/...` no longer resolves — `docker compose` errors, `|| true`
+# swallows it, and the stack survives looking like the teardown ran. That is not
+# a hypothetical: the first version did exactly this, and only a back-to-back
+# double run surfaced it, because the next run's own pre-emptive cleanup hid the
+# leak.
+compose_file="$root/frontend/tests/e2e/docker-compose.test.yaml"
+cleanup() {
+    docker compose -p "$compose_project" -f "$compose_file" down -v >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+cleanup
+
 # The UI port matters here and does not for the backend gate: this is the only
 # gate that opens a browser, so :3000 (or its override) has to be ours. It is
 # passed as an extra rather than added to the shared list for that reason.
 require_free_ports "task verify-e2e" "$PALADIN_E2E_PORT_UI" || exit 1
 
-# Playwright's webServer owns the stack's lifecycle — it boots compose and tears
-# it down — so this script deliberately does NOT bring one up.
-#
-# And it deliberately does not set PALADIN_E2E_BASE_URL either. That variable is
+# This script deliberately does not set PALADIN_E2E_BASE_URL. That variable is
 # the "an external stack is already running" switch: playwright.config.ts turns
 # the webServer block OFF when it is set. Exporting it to carry a port override
 # — which is what the first version of this script did — silently skipped the
@@ -80,10 +105,17 @@ pnpm run test:e2e 2>&1 | tee "$log"
 
 if grep -qE '^ +[0-9]+ flaky' "$log"; then
     echo
-    echo ">>> [e2e] PASSED WITH FLAKE — these needed a retry:" >&2
-    sed -n '/[0-9]* flaky/,/^$/p' "$log" >&2
-    echo "    Re-run them alone before believing either verdict; under load" >&2
-    echo "    this suite times out on specs that are not broken." >&2
+    {
+        echo ">>> [e2e] PASSED WITH FLAKE — these needed a retry:"
+        # From the "N flaky" heading to the "N passed" summary: Playwright lists
+        # the offending specs in between, and the spec NAME is the whole point —
+        # "1 flaky" on its own tells nobody what to look at.
+        awk '/^ +[0-9]+ flaky/{f=1} f{print} f&&/^ +[0-9]+ passed/{exit}' "$log"
+        echo "    Re-run those alone before believing either verdict. Under load"
+        echo "    this suite times out on specs that are not broken: at load"
+        echo "    average 15 it failed three unrelated specs that then passed"
+        echo "    14/14 in twelve seconds on their own."
+    } >&2
 fi
 rm -f "$log"
 
