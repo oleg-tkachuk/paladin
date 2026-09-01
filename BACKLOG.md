@@ -1543,33 +1543,29 @@ of the pipeline._
 
 ---
 
-### Three env-var namings for the same three plane addresses
+### Drop the deprecated plane-address aliases
 
-- **Status:** Deferred (worked around 2026-09-01, not unified).
-- **Reason:** The data / iam / admin plane URLs are configurable three
-  different ways depending on which suite is asking:
-  `PALADIN_E2E_{DATA,IAM,ADMIN}_URL` (Playwright fixtures, and now the Go
-  smoke test), `PALADIN_RPC_{DATA,IAM,ADMIN}_URL` (the RPC-surface gate), and
-  a bare `PALADIN_ADMIN_URL` (the Go admin e2e suite). Nothing ties them
-  together, so setting one set leaves the others on their defaults.
-- **How it surfaced:** the first run of `verify-stack.sh` on overridden ports
-  exported only the `PALADIN_E2E_*` set. The RPC-surface gate kept its
-  `127.0.0.1:8090` default, which on that machine was a `kubectl
-  port-forward` to the dev CLUSTER, and spent 60 seconds reporting
-  "anonymous call returned \"\", want unauthenticated" across the whole admin
-  surface — a transport error against a TLS-only plane, read as an authz
-  failure, about a deployment the gate was never meant to touch. A suite
-  silently testing the wrong target is the same species as a suite silently
-  skipping.
-- **What exists instead:** `verify-stack.sh` exports all three namings from
-  one port block, with a comment saying why.
-- **Definition of Done:** one name per address, read by every suite; the
-  others accepted as deprecated aliases for a release, then dropped. The
-  natural winner is `PALADIN_E2E_*` — it is the set the compose file's own
-  port overrides feed and the one the fixtures already document.
-- **Blockers:** none. It touches three test packages and their READMEs, and
-  wants doing while the reason is fresh rather than after the next time a
-  gate quietly points somewhere else.
+- **Status:** Narrowed 2026-09-01 — the unification is DONE; only the removal
+  of the old names is left.
+- **What landed:** every suite now reads `PALADIN_E2E_{DATA,IAM,ADMIN}_URL`,
+  the set the compose file's port overrides already feed.
+  `scripts/stack-ports.sh` exports only that set, deliberately — if a suite
+  still depended on an alias the gate would fail and name it rather than
+  working by accident, and `task verify-deep` is green, which is the proof.
+- **Why it mattered:** three names for the same three addresses meant setting
+  one left the others on their defaults. That cost a real run: the RPC-surface
+  gate kept its `127.0.0.1:8090` default, which on that machine was a kubectl
+  port-forward to the dev CLUSTER, and reported a minute of authz failures
+  about a deployment nobody had pointed it at. The bare `PALADIN_ADMIN_URL` was
+  worse than merely redundant — it is also the console BFF's own runtime
+  variable (`frontend/deploy/chart/templates/deployment.yaml`), so a test
+  suite and a production config were sharing a name for different things.
+- **Definition of Done:** delete the `PALADIN_RPC_{DATA,IAM,ADMIN}_URL` and
+  `PALADIN_ADMIN_URL` fallbacks from `tests/integration/rpc_surface_test.go` and
+  `tests/e2e/admin_api_test.go`. They exist only so an operator with the old
+  names in a shell profile is not broken by this change.
+- **Blockers:** none. Trigger: the next release, or the first time someone
+  reads the fallback and wonders which name is real.
 
 ### Playwright e2e suite wired into CI
 

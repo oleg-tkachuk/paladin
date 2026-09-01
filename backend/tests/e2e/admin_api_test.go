@@ -8,7 +8,7 @@
 //
 // Run against a deployed cluster:
 //
-//	PALADIN_ADMIN_URL=http://localhost:8090 \
+//	PALADIN_E2E_ADMIN_URL=http://localhost:8090 \
 //	PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min \
 //	PALADIN_JWT_ISSUER=paladin-dev \
 //	go test -tags=e2e ./tests/e2e/...
@@ -16,9 +16,10 @@
 // Or via port-forward:
 //
 //	kubectl port-forward -n paladin svc/paladin-admin 8090:8090
-//	PALADIN_ADMIN_URL=http://localhost:8090 go test -tags=e2e ./tests/e2e/...
+//	PALADIN_E2E_ADMIN_URL=http://localhost:8090 go test -tags=e2e ./tests/e2e/...
 //
-// When PALADIN_ADMIN_URL is unset the test SKIPs — keeps `go test ./...`
+// When PALADIN_E2E_ADMIN_URL is unset (and the deprecated PALADIN_ADMIN_URL with
+// it) the test SKIPs — keeps `go test ./...`
 // green in CI without a cluster.
 //
 // Each test creates its own scoped resources and tears them down on
@@ -49,15 +50,22 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 )
 
-// envOrSkip reads a required env var, t.Skip'ing when absent so the
-// suite is opt-in. Returns the value with whitespace trimmed.
-func envOrSkip(t *testing.T, name string) string {
+// envOrSkip reads the first of `names` that is set, t.Skip'ing when none is so
+// the suite stays opt-in. Returns the value with whitespace trimmed.
+//
+// More than one name because the plane addresses had three spellings across
+// three suites — PALADIN_E2E_*_URL, PALADIN_RPC_*_URL and this one's bare
+// PALADIN_ADMIN_URL — and setting one left the others on their defaults. The
+// first name is canonical; the rest are deprecated aliases kept for a release.
+func envOrSkip(t *testing.T, names ...string) string {
 	t.Helper()
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		t.Skipf("%s not set — set it to enable E2E", name)
+	for _, name := range names {
+		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+			return v
+		}
 	}
-	return v
+	t.Skipf("none of %v set — set the first to enable E2E", names)
+	return ""
 }
 
 // fixture bundles the shared state every subtest reaches for: the
@@ -87,7 +95,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	adminURL := envOrSkip(t, "PALADIN_ADMIN_URL")
+	adminURL := envOrSkip(t, "PALADIN_E2E_ADMIN_URL", "PALADIN_ADMIN_URL")
 	secret := os.Getenv("PALADIN_JWT_SECRET")
 	if secret == "" {
 		secret = "dev-secret-change-me-32-bytes-min"

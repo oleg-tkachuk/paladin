@@ -32,26 +32,27 @@ stack_admin_url="http://localhost:${PALADIN_E2E_PORT_ADMIN}"
 stack_s3_url="http://localhost:${PALADIN_E2E_PORT_S3}"
 stack_ui_url="http://localhost:${PALADIN_E2E_PORT_UI}"
 
-# stack_export_urls — publish the plane addresses under every name a suite in
-# this repository reads.
+# stack_export_urls — publish the plane addresses under the one name every
+# suite reads.
 #
-# Three namings exist for the same three addresses: PALADIN_E2E_*_URL (Playwright
-# fixtures, the Go smoke test), PALADIN_RPC_*_URL (the RPC-surface gate) and a
-# bare PALADIN_ADMIN_URL (the Go admin e2e suite). Setting one set leaves the
-# others on their defaults, which is not a hypothetical: the first
-# alternate-port run exported only the first set, and the surface gate kept its
-# 127.0.0.1:8090 default — a kubectl port-forward to the dev CLUSTER on that
-# machine — then spent a minute reporting authz failures against a deployment it
-# was never pointed at. Unifying the names is a BACKLOG item; until then, one
-# function sets all of them.
+# There used to be three names for the same three addresses: PALADIN_E2E_*_URL
+# (Playwright fixtures, the smoke test), PALADIN_RPC_*_URL (the RPC-surface gate)
+# and a bare PALADIN_ADMIN_URL (the Go admin e2e suite). Setting one set left the
+# others on their defaults, and that cost a real run: exporting only the first
+# left the surface gate on 127.0.0.1:8090, which on that machine was a kubectl
+# port-forward to the dev CLUSTER, so it spent a minute reporting authz failures
+# about a deployment it was never pointed at. A suite silently testing the wrong
+# target is the same species of bug as a suite silently skipping.
+#
+# PALADIN_E2E_*_URL won because it is the set the compose file's port overrides
+# already feed. The other two survive as deprecated aliases inside the suites
+# that used them (see the comments there) for one release; this function
+# deliberately does NOT export them, so if a suite still depends on an alias the
+# gate fails and names it rather than working by accident.
 stack_export_urls() {
     export PALADIN_E2E_DATA_URL="$stack_data_url"
     export PALADIN_E2E_IAM_URL="$stack_iam_url"
     export PALADIN_E2E_ADMIN_URL="$stack_admin_url"
-    export PALADIN_RPC_DATA_URL="$stack_data_url"
-    export PALADIN_RPC_IAM_URL="$stack_iam_url"
-    export PALADIN_RPC_ADMIN_URL="$stack_admin_url"
-    export PALADIN_ADMIN_URL="$stack_admin_url"
 }
 
 # require_free_ports <re-run command> [extra port ...]

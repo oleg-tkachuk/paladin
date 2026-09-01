@@ -52,17 +52,33 @@ type plane struct {
 	audience  string
 }
 
+// planes resolves each plane's base URL.
+//
+// PALADIN_E2E_*_URL is the canonical name — the one the compose file's port
+// overrides feed, the Playwright fixtures read and the smoke test reads.
+// PALADIN_RPC_*_URL is this suite's own older spelling, kept as a deprecated
+// alias for one release.
+//
+// The divergence was not free: a run on overridden ports exported only the
+// canonical set, this suite kept its 127.0.0.1:8090 default, and that address
+// was a kubectl port-forward to a dev CLUSTER on the machine in question — so
+// it spent a minute reporting authz failures about a deployment it was never
+// pointed at. A suite silently testing the wrong target is the same species of
+// bug as a suite silently skipping.
 func planes() []plane {
-	base := func(env, def string) string {
-		if v := os.Getenv(env); v != "" {
+	base := func(canonical, deprecated, def string) string {
+		if v := os.Getenv(canonical); v != "" {
+			return v
+		}
+		if v := os.Getenv(deprecated); v != "" {
 			return v
 		}
 		return def
 	}
 	return []plane{
-		{"paladin.admin.v1.", base("PALADIN_RPC_ADMIN_URL", "http://127.0.0.1:8090"), "paladin-admin"},
-		{"paladin.data.v1.", base("PALADIN_RPC_DATA_URL", "http://127.0.0.1:8080"), "paladin-data"},
-		{"paladin.iam.v1.", base("PALADIN_RPC_IAM_URL", "http://127.0.0.1:8085"), "paladin-iam"},
+		{"paladin.admin.v1.", base("PALADIN_E2E_ADMIN_URL", "PALADIN_RPC_ADMIN_URL", "http://127.0.0.1:8090"), "paladin-admin"},
+		{"paladin.data.v1.", base("PALADIN_E2E_DATA_URL", "PALADIN_RPC_DATA_URL", "http://127.0.0.1:8080"), "paladin-data"},
+		{"paladin.iam.v1.", base("PALADIN_E2E_IAM_URL", "PALADIN_RPC_IAM_URL", "http://127.0.0.1:8085"), "paladin-iam"},
 	}
 }
 

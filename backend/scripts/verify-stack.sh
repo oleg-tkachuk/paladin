@@ -77,7 +77,7 @@ phase_rpc_surface() {
         -timeout=10m -run 'Surface|RPC' ./tests/integration/...
 }
 
-# The suite skips itself when PALADIN_ADMIN_URL is unset, and a skipped suite
+# The suite skips itself when PALADIN_E2E_ADMIN_URL is unset, and a skipped suite
 # prints `ok` — indistinguishable from a passing one at the exit code. The var
 # is exported below so the skip cannot fire; these assertions are what prove it
 # didn't, because "the gate ran and asserted nothing" is the exact state this
