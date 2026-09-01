@@ -1338,23 +1338,23 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\"?\n" +
 	" ClearTenantDefaultBindingRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"#\n" +
-	"!ClearTenantDefaultBindingResponse2\xec\v\n" +
+	"!ClearTenantDefaultBindingResponse2\x8a\f\n" +
 	"\rTenantService\x12M\n" +
 	"\fCreateTenant\x12$.paladin.admin.v1.CreateTenantRequest\x1a\x17.paladin.admin.v1.Tenant\x12L\n" +
-	"\tGetTenant\x12!.paladin.admin.v1.GetTenantRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x01\x12M\n" +
-	"\fUpdateTenant\x12$.paladin.admin.v1.UpdateTenantRequest\x1a\x17.paladin.admin.v1.Tenant\x12[\n" +
-	"\fDeleteTenant\x12$.paladin.admin.v1.DeleteTenantRequest\x1a%.paladin.admin.v1.DeleteTenantResponse\x12]\n" +
-	"\vListTenants\x12#.paladin.admin.v1.ListTenantsRequest\x1a$.paladin.admin.v1.ListTenantsResponse\"\x03\x90\x02\x01\x12Y\n" +
-	"\x12SetInheritedPolicy\x12*.paladin.admin.v1.SetInheritedPolicyRequest\x1a\x17.paladin.admin.v1.Tenant\x12O\n" +
-	"\rRestoreTenant\x12%.paladin.admin.v1.RestoreTenantRequest\x1a\x17.paladin.admin.v1.Tenant\x12X\n" +
-	"\vPurgeTenant\x12#.paladin.admin.v1.PurgeTenantRequest\x1a$.paladin.admin.v1.PurgeTenantResponse\x12U\n" +
+	"\tGetTenant\x12!.paladin.admin.v1.GetTenantRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x01\x12R\n" +
+	"\fUpdateTenant\x12$.paladin.admin.v1.UpdateTenantRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x02\x12`\n" +
+	"\fDeleteTenant\x12$.paladin.admin.v1.DeleteTenantRequest\x1a%.paladin.admin.v1.DeleteTenantResponse\"\x03\x90\x02\x02\x12]\n" +
+	"\vListTenants\x12#.paladin.admin.v1.ListTenantsRequest\x1a$.paladin.admin.v1.ListTenantsResponse\"\x03\x90\x02\x01\x12^\n" +
+	"\x12SetInheritedPolicy\x12*.paladin.admin.v1.SetInheritedPolicyRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x02\x12O\n" +
+	"\rRestoreTenant\x12%.paladin.admin.v1.RestoreTenantRequest\x1a\x17.paladin.admin.v1.Tenant\x12]\n" +
+	"\vPurgeTenant\x12#.paladin.admin.v1.PurgeTenantRequest\x1a$.paladin.admin.v1.PurgeTenantResponse\"\x03\x90\x02\x02\x12U\n" +
 	"\x10RenameTenantSlug\x12(.paladin.admin.v1.RenameTenantSlugRequest\x1a\x17.paladin.admin.v1.Tenant\x12y\n" +
 	"\x1aMigrateTenantStorageLayout\x122.paladin.admin.v1.MigrateTenantStorageLayoutRequest\x1a'.paladin.admin.v1.StorageMigrationStatus\x12|\n" +
 	"\x19GetTenantStorageMigration\x121.paladin.admin.v1.GetTenantStorageMigrationRequest\x1a'.paladin.admin.v1.StorageMigrationStatus\"\x03\x90\x02\x01\x12r\n" +
 	"\x12ResolveRenamedSlug\x12*.paladin.admin.v1.ResolveRenamedSlugRequest\x1a+.paladin.admin.v1.ResolveRenamedSlugResponse\"\x03\x90\x02\x01\x12q\n" +
-	"\x17GetTenantDefaultBinding\x12/.paladin.admin.v1.GetTenantDefaultBindingRequest\x1a%.paladin.admin.v1.TenantDefaultBinding\x12q\n" +
-	"\x17SetTenantDefaultBinding\x12/.paladin.admin.v1.SetTenantDefaultBindingRequest\x1a%.paladin.admin.v1.TenantDefaultBinding\x12\x82\x01\n" +
-	"\x19ClearTenantDefaultBinding\x121.paladin.admin.v1.ClearTenantDefaultBindingRequest\x1a2.paladin.admin.v1.ClearTenantDefaultBindingResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x17GetTenantDefaultBinding\x12/.paladin.admin.v1.GetTenantDefaultBindingRequest\x1a%.paladin.admin.v1.TenantDefaultBinding\x12v\n" +
+	"\x17SetTenantDefaultBinding\x12/.paladin.admin.v1.SetTenantDefaultBindingRequest\x1a%.paladin.admin.v1.TenantDefaultBinding\"\x03\x90\x02\x02\x12\x87\x01\n" +
+	"\x19ClearTenantDefaultBinding\x121.paladin.admin.v1.ClearTenantDefaultBindingRequest\x1a2.paladin.admin.v1.ClearTenantDefaultBindingResponse\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_tenant_service_proto_rawDescOnce sync.Once

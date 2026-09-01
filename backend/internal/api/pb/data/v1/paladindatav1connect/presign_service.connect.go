@@ -67,6 +67,7 @@ func NewPresignServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+PresignServiceRegenerateUploadUrlProcedure,
 			connect.WithSchema(presignServiceMethods.ByName("RegenerateUploadUrl")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		presignDownload: connect.NewClient[v1.PresignDownloadRequest, v1.PresignDownloadResponse](
@@ -115,6 +116,7 @@ func NewPresignServiceHandler(svc PresignServiceHandler, opts ...connect.Handler
 		PresignServiceRegenerateUploadUrlProcedure,
 		svc.RegenerateUploadUrl,
 		connect.WithSchema(presignServiceMethods.ByName("RegenerateUploadUrl")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	presignServicePresignDownloadHandler := connect.NewUnaryHandler(

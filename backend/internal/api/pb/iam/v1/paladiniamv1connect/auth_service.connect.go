@@ -119,6 +119,7 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+AuthServiceRevokeProcedure,
 			connect.WithSchema(authServiceMethods.ByName("Revoke")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		whoAmI: connect.NewClient[v1.WhoAmIRequest, v1.WhoAmIResponse](
@@ -266,6 +267,7 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		AuthServiceRevokeProcedure,
 		svc.Revoke,
 		connect.WithSchema(authServiceMethods.ByName("Revoke")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	authServiceWhoAmIHandler := connect.NewUnaryHandler(

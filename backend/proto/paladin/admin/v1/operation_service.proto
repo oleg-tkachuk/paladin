@@ -18,13 +18,19 @@ service PlatformOperationService {
   // GetOperation returns the current state of a long-running operation. done
   // distinguishes finished from in-flight; result carries either the response
   // or the error.
-  rpc GetOperation(GetOperationRequest) returns (Operation);
+  rpc GetOperation(GetOperationRequest) returns (Operation) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // ListOperations pages the caller's operations, most recent first.
-  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // CancelOperation requests cancellation. It is best-effort: work already
   // committed is not rolled back, and an operation that finished first stays
   // finished.
-  rpc CancelOperation(CancelOperationRequest) returns (Operation);
+  rpc CancelOperation(CancelOperationRequest) returns (Operation) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message Operation {

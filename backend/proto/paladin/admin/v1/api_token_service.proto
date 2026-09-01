@@ -29,11 +29,15 @@ service APITokenService {
   // Revoke marks a token as revoked at NOW(). Idempotent — re-revoking
   // a revoked token is a no-op. Cannot be undone; caller mints a new
   // one to replace.
-  rpc Revoke(APITokenServiceRevokeRequest) returns (APITokenServiceRevokeResponse);
+  rpc Revoke(APITokenServiceRevokeRequest) returns (APITokenServiceRevokeResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // List enumerates tokens for a tenant. Paginated cursor-style. The
   // `token_hash` is never returned; callers see metadata only.
-  rpc List(APITokenServiceListRequest) returns (APITokenServiceListResponse);
+  rpc List(APITokenServiceListRequest) returns (APITokenServiceListResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetSelf introspects the API token attached to the calling request,
   // if any. Returns NOT_FOUND when the request was authenticated via
@@ -49,7 +53,9 @@ service APITokenService {
   // weighted sliding-window count, and when the window rolls. Does
   // NOT bump the bucket; safe to poll from a Web UI dashboard.
   // Returns NOT_FOUND when the token id doesn't exist.
-  rpc GetUsage(APITokenServiceGetUsageRequest) returns (APITokenServiceGetUsageResponse);
+  rpc GetUsage(APITokenServiceGetUsageRequest) returns (APITokenServiceGetUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // APIToken is the metadata view returned by every RPC. The plaintext

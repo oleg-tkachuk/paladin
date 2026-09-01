@@ -41,7 +41,9 @@ service UserSettingsService {
   }
   // DeleteForUser removes another user's settings row, resetting them to
   // defaults on next read.
-  rpc DeleteForUser(DeleteForUserRequest) returns (DeleteForUserResponse);
+  rpc DeleteForUser(DeleteForUserRequest) returns (DeleteForUserResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message UserSettings {

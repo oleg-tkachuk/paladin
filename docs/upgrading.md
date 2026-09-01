@@ -36,6 +36,31 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — 90 of 142 RPCs declare an idempotency_level
+
+Extends the previous entry; the same procedure and the same reasoning. 54 more
+declarations: 44 `IDEMPOTENT` and 10 `NO_SIDE_EFFECTS` on method names that
+exist on two services each.
+
+**What an intermediary may now do.** `IDEMPOTENT` invites a retry on failure.
+Every RPC carrying it is one of three shapes, and a test enforces that: it
+takes `resource_version` (a repeat either writes the same value or loses the
+OCC check and fails Aborted), it removes something (removing what is gone is a
+no-op), or it appears in `idempotentByArgument` with a written reason. An
+earlier draft declared `RotateCredentials` idempotent — two rotations mint two
+credential pairs — and that guard now fails on exactly that.
+
+**Still unannotated: 52.** Most genuinely need an Idempotency-Key and
+`IDEMPOTENCY_UNKNOWN` is the honest value. Fourteen do not: they are reads
+whose handlers hang off receivers the guard's index did not reach
+(`*VersionHandler` and similar). They stay unannotated until each is found and
+checked, because an annotation nothing verifies is the failure this work is
+about. `RestoreObjectVersion` is also held back deliberately — it makes a named
+version current and demotes the previous one, and what a repeat does was not
+clear enough from the code to promise anything.
+
+**Cutting the baseline.** This needs `api/v0.7.0`.
+
 ## Unreleased — 36 read RPCs declare `idempotency_level = NO_SIDE_EFFECTS`
 
 A deliberate breaking change under the procedure above: `buf` puts

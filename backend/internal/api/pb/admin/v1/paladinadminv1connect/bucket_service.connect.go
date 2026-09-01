@@ -137,12 +137,14 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+BucketServiceUpdateBucketProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("UpdateBucket")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		deleteBucket: connect.NewClient[v1.DeleteBucketRequest, v1.DeleteBucketResponse](
 			httpClient,
 			baseURL+BucketServiceDeleteBucketProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("DeleteBucket")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listBuckets: connect.NewClient[v1.ListBucketsRequest, v1.ListBucketsResponse](
@@ -156,30 +158,35 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+BucketServiceSetBucketPolicyProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("SetBucketPolicy")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setLifecycleRules: connect.NewClient[v1.SetLifecycleRulesRequest, v1.Bucket](
 			httpClient,
 			baseURL+BucketServiceSetLifecycleRulesProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("SetLifecycleRules")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setObjectLock: connect.NewClient[v1.SetObjectLockRequest, v1.Bucket](
 			httpClient,
 			baseURL+BucketServiceSetObjectLockProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("SetObjectLock")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setVersioning: connect.NewClient[v1.SetVersioningRequest, v1.Bucket](
 			httpClient,
 			baseURL+BucketServiceSetVersioningProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("SetVersioning")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setReplication: connect.NewClient[v1.SetReplicationRequest, v1.Bucket](
 			httpClient,
 			baseURL+BucketServiceSetReplicationProcedure,
 			connect.WithSchema(bucketServiceMethods.ByName("SetReplication")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listAccessibleBuckets: connect.NewClient[v1.ListAccessibleBucketsRequest, v1.ListBucketsResponse](
@@ -327,12 +334,14 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		BucketServiceUpdateBucketProcedure,
 		svc.UpdateBucket,
 		connect.WithSchema(bucketServiceMethods.ByName("UpdateBucket")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceDeleteBucketHandler := connect.NewUnaryHandler(
 		BucketServiceDeleteBucketProcedure,
 		svc.DeleteBucket,
 		connect.WithSchema(bucketServiceMethods.ByName("DeleteBucket")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceListBucketsHandler := connect.NewUnaryHandler(
@@ -346,30 +355,35 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		BucketServiceSetBucketPolicyProcedure,
 		svc.SetBucketPolicy,
 		connect.WithSchema(bucketServiceMethods.ByName("SetBucketPolicy")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceSetLifecycleRulesHandler := connect.NewUnaryHandler(
 		BucketServiceSetLifecycleRulesProcedure,
 		svc.SetLifecycleRules,
 		connect.WithSchema(bucketServiceMethods.ByName("SetLifecycleRules")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceSetObjectLockHandler := connect.NewUnaryHandler(
 		BucketServiceSetObjectLockProcedure,
 		svc.SetObjectLock,
 		connect.WithSchema(bucketServiceMethods.ByName("SetObjectLock")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceSetVersioningHandler := connect.NewUnaryHandler(
 		BucketServiceSetVersioningProcedure,
 		svc.SetVersioning,
 		connect.WithSchema(bucketServiceMethods.ByName("SetVersioning")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceSetReplicationHandler := connect.NewUnaryHandler(
 		BucketServiceSetReplicationProcedure,
 		svc.SetReplication,
 		connect.WithSchema(bucketServiceMethods.ByName("SetReplication")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	bucketServiceListAccessibleBucketsHandler := connect.NewUnaryHandler(

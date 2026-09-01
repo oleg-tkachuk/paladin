@@ -40,7 +40,9 @@ service ObjectService {
 
   // UpdateObject applies update_mask to metadata, tags and content_type; every
   // other field is server-owned. resource_version is required.
-  rpc UpdateObject(UpdateObjectRequest) returns (Object);
+  rpc UpdateObject(UpdateObjectRequest) returns (Object) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // CompleteObject is no-op for IMPLICIT completion mode and the event has
   // already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
@@ -50,12 +52,16 @@ service ObjectService {
   // RestoreObject brings it back. permanent=true purges it irrecoverably. A
   // locked object refuses deletion unless the caller holds GOVERNANCE bypass
   // and the window is GOVERNANCE, never COMPLIANCE or a legal hold.
-  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // RestoreObject brings a soft-deleted object back to AVAILABLE. Requires the
   // current resource_version: a stale one is Aborted rather than overwriting
   // whatever happened to the row meanwhile.
-  rpc RestoreObject(RestoreObjectRequest) returns (Object);
+  rpc RestoreObject(RestoreObjectRequest) returns (Object) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // CopyObject creates a new object from an existing one, within or across
   // collections. Server-side where the backend supports it; the bytes do not

@@ -74,18 +74,21 @@ func NewOperationServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+OperationServiceGetOperationProcedure,
 			connect.WithSchema(operationServiceMethods.ByName("GetOperation")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listOperations: connect.NewClient[v1.ListOperationsRequest, v1.ListOperationsResponse](
 			httpClient,
 			baseURL+OperationServiceListOperationsProcedure,
 			connect.WithSchema(operationServiceMethods.ByName("ListOperations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cancelOperation: connect.NewClient[v1.CancelOperationRequest, v1.Operation](
 			httpClient,
 			baseURL+OperationServiceCancelOperationProcedure,
 			connect.WithSchema(operationServiceMethods.ByName("CancelOperation")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -138,18 +141,21 @@ func NewOperationServiceHandler(svc OperationServiceHandler, opts ...connect.Han
 		OperationServiceGetOperationProcedure,
 		svc.GetOperation,
 		connect.WithSchema(operationServiceMethods.ByName("GetOperation")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	operationServiceListOperationsHandler := connect.NewUnaryHandler(
 		OperationServiceListOperationsProcedure,
 		svc.ListOperations,
 		connect.WithSchema(operationServiceMethods.ByName("ListOperations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	operationServiceCancelOperationHandler := connect.NewUnaryHandler(
 		OperationServiceCancelOperationProcedure,
 		svc.CancelOperation,
 		connect.WithSchema(operationServiceMethods.ByName("CancelOperation")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.data.v1.OperationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

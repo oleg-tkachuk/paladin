@@ -133,12 +133,14 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BackendServiceUpdateBackendProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("UpdateBackend")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		deleteBackend: connect.NewClient[v1.DeleteBackendRequest, v1.DeleteBackendResponse](
 			httpClient,
 			baseURL+BackendServiceDeleteBackendProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("DeleteBackend")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listBackends: connect.NewClient[v1.ListBackendsRequest, v1.ListBackendsResponse](
@@ -164,18 +166,21 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BackendServiceSetBackendEnabledProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("SetBackendEnabled")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setBackendReadOnly: connect.NewClient[v1.SetBackendReadOnlyRequest, v1.StorageBackend](
 			httpClient,
 			baseURL+BackendServiceSetBackendReadOnlyProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("SetBackendReadOnly")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setBackendMaintenance: connect.NewClient[v1.SetBackendMaintenanceRequest, v1.StorageBackend](
 			httpClient,
 			baseURL+BackendServiceSetBackendMaintenanceProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("SetBackendMaintenance")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -308,12 +313,14 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		BackendServiceUpdateBackendProcedure,
 		svc.UpdateBackend,
 		connect.WithSchema(backendServiceMethods.ByName("UpdateBackend")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceDeleteBackendHandler := connect.NewUnaryHandler(
 		BackendServiceDeleteBackendProcedure,
 		svc.DeleteBackend,
 		connect.WithSchema(backendServiceMethods.ByName("DeleteBackend")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceListBackendsHandler := connect.NewUnaryHandler(
@@ -339,18 +346,21 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		BackendServiceSetBackendEnabledProcedure,
 		svc.SetBackendEnabled,
 		connect.WithSchema(backendServiceMethods.ByName("SetBackendEnabled")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceSetBackendReadOnlyHandler := connect.NewUnaryHandler(
 		BackendServiceSetBackendReadOnlyProcedure,
 		svc.SetBackendReadOnly,
 		connect.WithSchema(backendServiceMethods.ByName("SetBackendReadOnly")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceSetBackendMaintenanceHandler := connect.NewUnaryHandler(
 		BackendServiceSetBackendMaintenanceProcedure,
 		svc.SetBackendMaintenance,
 		connect.WithSchema(backendServiceMethods.ByName("SetBackendMaintenance")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.BackendService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

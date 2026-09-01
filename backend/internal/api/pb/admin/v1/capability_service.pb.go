@@ -1108,13 +1108,13 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PRINCIPAL_KIND_USER\x10\x01\x12\x18\n" +
 	"\x14PRINCIPAL_KIND_AGENT\x10\x02\x12\x1a\n" +
-	"\x16PRINCIPAL_KIND_SERVICE\x10\x032\xb4\x04\n" +
+	"\x16PRINCIPAL_KIND_SERVICE\x10\x032\xc3\x04\n" +
 	"\x11CapabilityService\x12h\n" +
 	"\x05Issue\x12..paladin.admin.v1.CapabilityServiceIssueRequest\x1a/.paladin.admin.v1.CapabilityServiceIssueResponse\x12n\n" +
-	"\bDelegate\x121.paladin.admin.v1.CapabilityServiceDelegateRequest\x1a/.paladin.admin.v1.CapabilityServiceIssueResponse\x12k\n" +
-	"\x06Revoke\x12/.paladin.admin.v1.CapabilityServiceRevokeRequest\x1a0.paladin.admin.v1.CapabilityServiceRevokeResponse\x12e\n" +
-	"\x04List\x12-.paladin.admin.v1.CapabilityServiceListRequest\x1a..paladin.admin.v1.CapabilityServiceListResponse\x12q\n" +
-	"\bGetUsage\x121.paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a2.paladin.admin.v1.CapabilityServiceGetUsageResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\bDelegate\x121.paladin.admin.v1.CapabilityServiceDelegateRequest\x1a/.paladin.admin.v1.CapabilityServiceIssueResponse\x12p\n" +
+	"\x06Revoke\x12/.paladin.admin.v1.CapabilityServiceRevokeRequest\x1a0.paladin.admin.v1.CapabilityServiceRevokeResponse\"\x03\x90\x02\x02\x12j\n" +
+	"\x04List\x12-.paladin.admin.v1.CapabilityServiceListRequest\x1a..paladin.admin.v1.CapabilityServiceListResponse\"\x03\x90\x02\x01\x12v\n" +
+	"\bGetUsage\x121.paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a2.paladin.admin.v1.CapabilityServiceGetUsageResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_capability_service_proto_rawDescOnce sync.Once

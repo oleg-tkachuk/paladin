@@ -85,12 +85,14 @@ func NewObjectTagServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ObjectTagServicePutObjectTagsProcedure,
 			connect.WithSchema(objectTagServiceMethods.ByName("PutObjectTags")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		deleteObjectTags: connect.NewClient[v1.DeleteObjectTagsRequest, v1.DeleteObjectTagsResponse](
 			httpClient,
 			baseURL+ObjectTagServiceDeleteObjectTagsProcedure,
 			connect.WithSchema(objectTagServiceMethods.ByName("DeleteObjectTags")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listDistinctTags: connect.NewClient[v1.ListDistinctTagsRequest, v1.ListDistinctTagsResponse](
@@ -164,12 +166,14 @@ func NewObjectTagServiceHandler(svc ObjectTagServiceHandler, opts ...connect.Han
 		ObjectTagServicePutObjectTagsProcedure,
 		svc.PutObjectTags,
 		connect.WithSchema(objectTagServiceMethods.ByName("PutObjectTags")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectTagServiceDeleteObjectTagsHandler := connect.NewUnaryHandler(
 		ObjectTagServiceDeleteObjectTagsProcedure,
 		svc.DeleteObjectTags,
 		connect.WithSchema(objectTagServiceMethods.ByName("DeleteObjectTags")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectTagServiceListDistinctTagsHandler := connect.NewUnaryHandler(

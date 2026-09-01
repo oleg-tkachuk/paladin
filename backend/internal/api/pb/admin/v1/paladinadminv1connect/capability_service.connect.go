@@ -99,18 +99,21 @@ func NewCapabilityServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+CapabilityServiceRevokeProcedure,
 			connect.WithSchema(capabilityServiceMethods.ByName("Revoke")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		list: connect.NewClient[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse](
 			httpClient,
 			baseURL+CapabilityServiceListProcedure,
 			connect.WithSchema(capabilityServiceMethods.ByName("List")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUsage: connect.NewClient[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse](
 			httpClient,
 			baseURL+CapabilityServiceGetUsageProcedure,
 			connect.WithSchema(capabilityServiceMethods.ByName("GetUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -196,18 +199,21 @@ func NewCapabilityServiceHandler(svc CapabilityServiceHandler, opts ...connect.H
 		CapabilityServiceRevokeProcedure,
 		svc.Revoke,
 		connect.WithSchema(capabilityServiceMethods.ByName("Revoke")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	capabilityServiceListHandler := connect.NewUnaryHandler(
 		CapabilityServiceListProcedure,
 		svc.List,
 		connect.WithSchema(capabilityServiceMethods.ByName("List")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	capabilityServiceGetUsageHandler := connect.NewUnaryHandler(
 		CapabilityServiceGetUsageProcedure,
 		svc.GetUsage,
 		connect.WithSchema(capabilityServiceMethods.ByName("GetUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.CapabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

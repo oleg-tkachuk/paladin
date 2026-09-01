@@ -22,10 +22,14 @@ service UserService {
   }
   // UpdateUser applies update_mask to display_name, roles, scopes and disabled.
   // tenant_id is immutable; the password has its own RPC.
-  rpc UpdateUser(UpdateUserRequest) returns (User);
+  rpc UpdateUser(UpdateUserRequest) returns (User) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteUser removes the user's membership in one tenant. A subject that
   // belongs to several tenants keeps the others.
-  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListUsers pages the users in a tenant.
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -37,7 +41,9 @@ service UserService {
   // RevokeScopes removes the named scopes from the user. Tokens already issued
   // keep their scopes until they expire — this changes what the next token
   // will carry.
-  rpc RevokeScopes(RevokeScopesRequest) returns (User);
+  rpc RevokeScopes(RevokeScopesRequest) returns (User) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // ResetPassword forces a password change on next login. Local IdP only.
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);

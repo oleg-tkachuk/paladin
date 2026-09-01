@@ -112,12 +112,14 @@ func NewCollectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+CollectionServiceUpdateCollectionProcedure,
 			connect.WithSchema(collectionServiceMethods.ByName("UpdateCollection")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		deleteCollection: connect.NewClient[v1.DeleteCollectionRequest, v1.DeleteCollectionResponse](
 			httpClient,
 			baseURL+CollectionServiceDeleteCollectionProcedure,
 			connect.WithSchema(collectionServiceMethods.ByName("DeleteCollection")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listCollections: connect.NewClient[v1.ListCollectionsRequest, v1.ListCollectionsResponse](
@@ -131,12 +133,14 @@ func NewCollectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+CollectionServiceSetCollectionPolicyProcedure,
 			connect.WithSchema(collectionServiceMethods.ByName("SetCollectionPolicy")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		bindCollectionToBucket: connect.NewClient[v1.BindCollectionToBucketRequest, v1.Collection](
 			httpClient,
 			baseURL+CollectionServiceBindCollectionToBucketProcedure,
 			connect.WithSchema(collectionServiceMethods.ByName("BindCollectionToBucket")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -239,12 +243,14 @@ func NewCollectionServiceHandler(svc CollectionServiceHandler, opts ...connect.H
 		CollectionServiceUpdateCollectionProcedure,
 		svc.UpdateCollection,
 		connect.WithSchema(collectionServiceMethods.ByName("UpdateCollection")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	collectionServiceDeleteCollectionHandler := connect.NewUnaryHandler(
 		CollectionServiceDeleteCollectionProcedure,
 		svc.DeleteCollection,
 		connect.WithSchema(collectionServiceMethods.ByName("DeleteCollection")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	collectionServiceListCollectionsHandler := connect.NewUnaryHandler(
@@ -258,12 +264,14 @@ func NewCollectionServiceHandler(svc CollectionServiceHandler, opts ...connect.H
 		CollectionServiceSetCollectionPolicyProcedure,
 		svc.SetCollectionPolicy,
 		connect.WithSchema(collectionServiceMethods.ByName("SetCollectionPolicy")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	collectionServiceBindCollectionToBucketHandler := connect.NewUnaryHandler(
 		CollectionServiceBindCollectionToBucketProcedure,
 		svc.BindCollectionToBucket,
 		connect.WithSchema(collectionServiceMethods.ByName("BindCollectionToBucket")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.CollectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

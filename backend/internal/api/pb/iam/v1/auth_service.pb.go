@@ -1134,11 +1134,11 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"q\n" +
 	"\x14SwitchTenantResponse\x120\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x18.paladin.iam.v1.TokenPairR\x06tokens\x12'\n" +
-	"\x04user\x18\x02 \x01(\v2\x13.paladin.iam.v1.UserR\x04user2\xc7\x05\n" +
+	"\x04user\x18\x02 \x01(\v2\x13.paladin.iam.v1.UserR\x04user2\xcc\x05\n" +
 	"\vAuthService\x12B\n" +
 	"\x05Login\x12\x1b.paladin.iam.v1.LoginRequest\x1a\x1c.paladin.iam.v1.LoginResponse\x12W\n" +
-	"\fRefreshToken\x12\".paladin.iam.v1.RefreshTokenRequest\x1a#.paladin.iam.v1.RefreshTokenResponse\x12E\n" +
-	"\x06Revoke\x12\x1c.paladin.iam.v1.RevokeRequest\x1a\x1d.paladin.iam.v1.RevokeResponse\x12J\n" +
+	"\fRefreshToken\x12\".paladin.iam.v1.RefreshTokenRequest\x1a#.paladin.iam.v1.RefreshTokenResponse\x12J\n" +
+	"\x06Revoke\x12\x1c.paladin.iam.v1.RevokeRequest\x1a\x1d.paladin.iam.v1.RevokeResponse\"\x03\x90\x02\x02\x12J\n" +
 	"\x06WhoAmI\x12\x1c.paladin.iam.v1.WhoAmIRequest\x1a\x1d.paladin.iam.v1.WhoAmIResponse\"\x03\x90\x02\x01\x12]\n" +
 	"\x0eChangePassword\x12$.paladin.iam.v1.ChangePasswordRequest\x1a%.paladin.iam.v1.ChangePasswordResponse\x12c\n" +
 	"\x10ExchangeAudience\x12&.paladin.iam.v1.ExchangeAudienceRequest\x1a'.paladin.iam.v1.ExchangeAudienceResponse\x12k\n" +

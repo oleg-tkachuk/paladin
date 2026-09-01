@@ -21,11 +21,15 @@ service EventSubscriptionService {
   rpc GetSubscription(GetSubscriptionRequest) returns (EventSubscription);
   // UpdateSubscription replaces the filter and sink. resource_version is
   // required. In-flight deliveries already queued are not re-targeted.
-  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (EventSubscription);
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (EventSubscription) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteSubscription stops future deliveries. Events already in the outbox
   // are dropped rather than delivered to a subscription that no longer
   // exists.
-  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse);
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListSubscriptions returns the tenant's subscriptions, disabled ones
   // included.
   rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);

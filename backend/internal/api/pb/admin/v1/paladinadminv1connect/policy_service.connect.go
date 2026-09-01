@@ -72,6 +72,7 @@ func NewPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+PolicyServiceValidateProcedure,
 			connect.WithSchema(policyServiceMethods.ByName("Validate")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		simulateAuthz: connect.NewClient[v1.SimulateAuthzRequest, v1.SimulateAuthzResponse](
@@ -137,6 +138,7 @@ func NewPolicyServiceHandler(svc PolicyServiceHandler, opts ...connect.HandlerOp
 		PolicyServiceValidateProcedure,
 		svc.Validate,
 		connect.WithSchema(policyServiceMethods.ByName("Validate")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	policyServiceSimulateAuthzHandler := connect.NewUnaryHandler(

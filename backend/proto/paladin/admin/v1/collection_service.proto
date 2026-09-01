@@ -23,10 +23,14 @@ service CollectionService {
   }
   // UpdateCollection applies update_mask; resource_version is required. The
   // tenant and the collection name are immutable.
-  rpc UpdateCollection(UpdateCollectionRequest) returns (Collection);
+  rpc UpdateCollection(UpdateCollectionRequest) returns (Collection) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteCollection refuses while the collection still holds objects — the
   // foreign key enforces that, and no flag overrides it.
-  rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
+  rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListCollections returns the collections under a tenant, or across all
   // tenants for a platform admin.
   rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse) {
@@ -36,12 +40,16 @@ service CollectionService {
   // SetCollectionPolicy replaces the collection's Cedar policy. It composes
   // with — does not replace — the tenant's inherited policy: a request must
   // pass both.
-  rpc SetCollectionPolicy(SetCollectionPolicyRequest) returns (Collection);
+  rpc SetCollectionPolicy(SetCollectionPolicyRequest) returns (Collection) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // BindCollectionToBucket / RebindCollection is intentionally distinct from
   // UpdateCollection — re-binding has data-locality implications worth a
   // separate audit entry.
-  rpc BindCollectionToBucket(BindCollectionToBucketRequest) returns (Collection);
+  rpc BindCollectionToBucket(BindCollectionToBucketRequest) returns (Collection) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message CreateCollectionRequest {

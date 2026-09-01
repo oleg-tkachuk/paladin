@@ -105,6 +105,7 @@ func NewMultipartUploadServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+MultipartUploadServiceAbortMultipartUploadProcedure,
 			connect.WithSchema(multipartUploadServiceMethods.ByName("AbortMultipartUpload")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listParts: connect.NewClient[v1.ListPartsRequest, v1.ListPartsResponse](
@@ -202,6 +203,7 @@ func NewMultipartUploadServiceHandler(svc MultipartUploadServiceHandler, opts ..
 		MultipartUploadServiceAbortMultipartUploadProcedure,
 		svc.AbortMultipartUpload,
 		connect.WithSchema(multipartUploadServiceMethods.ByName("AbortMultipartUpload")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	multipartUploadServiceListPartsHandler := connect.NewUnaryHandler(

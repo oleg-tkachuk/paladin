@@ -37,16 +37,22 @@ service CapabilityService {
   // Revoke adds the supplied capability ID to the revocation list.
   // CascadeChildren=true revokes every descendant in the delegation
   // tree. Idempotent — re-revoking a revoked capability is a no-op.
-  rpc Revoke(CapabilityServiceRevokeRequest) returns (CapabilityServiceRevokeResponse);
+  rpc Revoke(CapabilityServiceRevokeRequest) returns (CapabilityServiceRevokeResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // List enumerates capabilities issued to a principal. Cursor-paginated.
-  rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse);
+  rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetUsage returns the runtime counters for a capability:
   // request_count (vs Caveats.max_requests) and spent_amount
   // (vs Caveats.max_budget_amount). Returns NOT_FOUND when the
   // capability has never been used (no requests, no charges).
-  rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse);
+  rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // PrincipalKind discriminates the principal-shape oneof. Mirrors the

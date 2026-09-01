@@ -20,7 +20,9 @@ service CELService {
   // Validate compiles a CEL expression against the EventEnvelope schema and
   // reports errors without storing anything. Used by the console before a
   // subscription filter is saved.
-  rpc Validate(ValidateCELRequest) returns (ValidateCELResponse);
+  rpc Validate(ValidateCELRequest) returns (ValidateCELResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message ValidateCELRequest {

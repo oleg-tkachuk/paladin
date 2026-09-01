@@ -23,12 +23,16 @@ service BucketService {
   // UpdateBucket applies update_mask; resource_version is required. Versioning,
   // replication and object lock have their own RPCs — they are not settable
   // through this one.
-  rpc UpdateBucket(UpdateBucketRequest) returns (Bucket);
+  rpc UpdateBucket(UpdateBucketRequest) returns (Bucket) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteBucket removes the registration. delete_on_backend=true also erases
   // the physical bucket and its contents, which is irreversible.
   // skip_version_check waives the OCC guard and nothing else — the two flags
   // are independent, and only one of them destroys anything.
-  rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
+  rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListBuckets returns buckets across every backend, optionally filtered to
   // one.
   rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
@@ -36,22 +40,32 @@ service BucketService {
   }
 
   // SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
-  rpc SetBucketPolicy(SetBucketPolicyRequest) returns (Bucket);
+  rpc SetBucketPolicy(SetBucketPolicyRequest) returns (Bucket) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
   // single-purpose RPCs to keep audit log entries focused.
-  rpc SetLifecycleRules(SetLifecycleRulesRequest) returns (Bucket);
+  rpc SetLifecycleRules(SetLifecycleRulesRequest) returns (Bucket) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
   // it is one-way: a bucket with object lock on cannot have it turned off,
   // because objects already written under it rely on the guarantee.
-  rpc SetObjectLock(SetObjectLockRequest) returns (Bucket);
+  rpc SetObjectLock(SetObjectLockRequest) returns (Bucket) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // SetVersioning turns object versioning on or off. Turning it off keeps the
   // versions already recorded — it stops new ones being written.
-  rpc SetVersioning(SetVersioningRequest) returns (Bucket);
+  rpc SetVersioning(SetVersioningRequest) returns (Bucket) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // SetReplication configures asynchronous copy to a second backend. Existing
   // objects are not backfilled; replication applies from the moment it is
   // enabled.
-  rpc SetReplication(SetReplicationRequest) returns (Bucket);
+  rpc SetReplication(SetReplicationRequest) returns (Bucket) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // ListAccessibleBuckets is callable by tenant admins. Returns only buckets
   // the caller's principal/scopes are allowed to bind Collections to.

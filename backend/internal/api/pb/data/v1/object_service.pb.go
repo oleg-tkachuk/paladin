@@ -1902,16 +1902,16 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x10PresignTransport\x12!\n" +
 	"\x1dPRESIGN_TRANSPORT_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESIGN_TRANSPORT_PUT\x10\x01\x12\x1a\n" +
-	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xf9\v\n" +
+	"\x16PRESIGN_TRANSPORT_POST\x10\x022\x88\f\n" +
 	"\rObjectService\x12Y\n" +
 	"\fUploadObject\x12#.paladin.data.v1.UploadObjectRequest\x1a$.paladin.data.v1.UploadObjectResponse\x12_\n" +
 	"\x0eDownloadObject\x12%.paladin.data.v1.DownloadObjectRequest\x1a&.paladin.data.v1.DownloadObjectResponse\x12J\n" +
 	"\tGetObject\x12 .paladin.data.v1.GetObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12P\n" +
-	"\fLookupObject\x12#.paladin.data.v1.LookupObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12K\n" +
-	"\fUpdateObject\x12#.paladin.data.v1.UpdateObjectRequest\x1a\x16.paladin.data.v1.Object\x12O\n" +
-	"\x0eCompleteObject\x12%.paladin.data.v1.CompleteObjectRequest\x1a\x16.paladin.data.v1.Object\x12Y\n" +
-	"\fDeleteObject\x12#.paladin.data.v1.DeleteObjectRequest\x1a$.paladin.data.v1.DeleteObjectResponse\x12M\n" +
-	"\rRestoreObject\x12$.paladin.data.v1.RestoreObjectRequest\x1a\x16.paladin.data.v1.Object\x12G\n" +
+	"\fLookupObject\x12#.paladin.data.v1.LookupObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12P\n" +
+	"\fUpdateObject\x12#.paladin.data.v1.UpdateObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x02\x12O\n" +
+	"\x0eCompleteObject\x12%.paladin.data.v1.CompleteObjectRequest\x1a\x16.paladin.data.v1.Object\x12^\n" +
+	"\fDeleteObject\x12#.paladin.data.v1.DeleteObjectRequest\x1a$.paladin.data.v1.DeleteObjectResponse\"\x03\x90\x02\x02\x12R\n" +
+	"\rRestoreObject\x12$.paladin.data.v1.RestoreObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x02\x12G\n" +
 	"\n" +
 	"CopyObject\x12!.paladin.data.v1.CopyObjectRequest\x1a\x16.paladin.data.v1.Object\x12[\n" +
 	"\vListObjects\x12\".paladin.data.v1.ListObjectsRequest\x1a#.paladin.data.v1.ListObjectsResponse\"\x03\x90\x02\x01\x12^\n" +

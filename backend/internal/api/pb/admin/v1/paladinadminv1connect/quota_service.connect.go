@@ -75,12 +75,14 @@ func NewQuotaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+QuotaServiceSetQuotaProcedure,
 			connect.WithSchema(quotaServiceMethods.ByName("SetQuota")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		resetUsage: connect.NewClient[v1.ResetUsageRequest, v1.Quota](
 			httpClient,
 			baseURL+QuotaServiceResetUsageProcedure,
 			connect.WithSchema(quotaServiceMethods.ByName("ResetUsage")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -137,12 +139,14 @@ func NewQuotaServiceHandler(svc QuotaServiceHandler, opts ...connect.HandlerOpti
 		QuotaServiceSetQuotaProcedure,
 		svc.SetQuota,
 		connect.WithSchema(quotaServiceMethods.ByName("SetQuota")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	quotaServiceResetUsageHandler := connect.NewUnaryHandler(
 		QuotaServiceResetUsageProcedure,
 		svc.ResetUsage,
 		connect.WithSchema(quotaServiceMethods.ByName("ResetUsage")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.QuotaService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

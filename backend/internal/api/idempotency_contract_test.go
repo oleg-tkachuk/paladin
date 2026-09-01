@@ -117,6 +117,12 @@ func indexHandlers(t *testing.T) map[string]*pkgIndex {
 	return byPkg
 }
 
+// Any receiver whose type name ends in Handler, not only `*Handler`.
+//
+// ObjectService.GetVersion hangs off *VersionHandler, and the narrower version
+// of this predicate skipped it in silence — the annotation would have been
+// published with nothing checking it. That is the failure mode this whole file
+// exists to prevent, reproduced inside the file itself.
 func isHandlerRecv(fl *ast.FieldList) bool {
 	if len(fl.List) == 0 {
 		return false
@@ -126,7 +132,7 @@ func isHandlerRecv(fl *ast.FieldList) bool {
 		return false
 	}
 	id, ok := star.X.(*ast.Ident)
-	return ok && id.Name == "Handler"
+	return ok && strings.HasSuffix(id.Name, "Handler")
 }
 
 // writesIn reports the write-shaped calls reachable from fn, following one hop
@@ -180,12 +186,15 @@ func TestNoSideEffectRPCsDoNotWrite(t *testing.T) {
 	idx := indexHandlers(t)
 
 	checked := 0
+	var unmatched []string
 	for _, name := range declared {
+		matched := false
 		for _, pkg := range idx {
 			fn, ok := pkg.methods[name]
 			if !ok {
 				continue
 			}
+			matched = true
 			checked++
 			var bad []string
 			for _, w := range writesIn(fn, pkg, 1) {
@@ -200,12 +209,22 @@ func TestNoSideEffectRPCsDoNotWrite(t *testing.T) {
 					name, uniq(bad))
 			}
 		}
+		if !matched {
+			unmatched = append(unmatched, name)
+		}
 	}
-	if checked == 0 {
-		t.Fatalf("matched no handler for any of the %d NO_SIDE_EFFECTS RPCs — "+
-			"the index is not finding them, so this test proves nothing", len(declared))
+	// An RPC whose handler this cannot find is UNGUARDED, and an unguarded
+	// annotation is the thing being guarded against. Failing here rather than
+	// passing quietly is the difference between a check and a decoration.
+	if len(unmatched) > 0 {
+		t.Errorf("declared NO_SIDE_EFFECTS but no handler found, so nothing "+
+			"checked them: %v — either the index misses their receiver shape, or "+
+			"they should not carry the annotation", uniq(unmatched))
 	}
-	t.Logf("checked %d of %d declared NO_SIDE_EFFECTS RPCs against their handlers",
+	// `checked` counts handler bodies, not RPCs: a method name that exists on
+	// two services (GetOperation, List, Validate …) is verified on both, so
+	// this can legitimately exceed len(declared).
+	t.Logf("checked %d handler bodies for %d declared NO_SIDE_EFFECTS RPCs",
 		checked, len(declared))
 }
 
@@ -219,4 +238,88 @@ func uniq(in []string) []string {
 		}
 	}
 	return out
+}
+
+// ─── the IDEMPOTENT half ────────────────────────────────────────────────────
+
+// NO_SIDE_EFFECTS is guarded above by reading the handler. IDEMPOTENT needs a
+// different claim — "repeating this is safe" — and a different check, because
+// nothing about a handler's shape proves it.
+//
+// What does prove it, for this API, is one of two structures:
+//
+//   - the request carries `resource_version`, so a repeat either writes the
+//     same value or loses the OCC check and fails Aborted; or
+//   - the RPC removes something, and removing what is already gone is a no-op.
+//
+// An RPC declared IDEMPOTENT with neither is either misannotated or relies on
+// a third argument nobody wrote down. The exceptions map below is where that
+// third argument goes, one line of reasoning each — not a silencer.
+//
+// This matters because IDEMPOTENT is a wire promise like the other: a proxy
+// may retry on it. Declaring it on RotateCredentials — which an early draft of
+// this work did — invites a retry that mints a second credential pair.
+var idempotentByArgument = map[string]string{
+	// name: why repeating is safe without OCC and without being a removal
+	"EnsureTenantStorage":     "converges on a target state; the name is the contract",
+	"BindCollectionToBucket":  "an upsert of one binding row keyed by (tenant, collection)",
+	"SetTenantDefaultBinding": "upserts the single binding row for a tenant",
+	"RegenerateUploadUrl":     "re-signs a URL for an EXISTING pending row; creates nothing",
+	"PutObjectTags":           "a PUT replaces the whole tag set with the one supplied",
+	"ResetUsage":              "zeroes a counter; zeroing twice lands on zero",
+}
+
+var removalVerb = regexp.MustCompile(`^(Delete|Clear|Abort|Cancel|Revoke|Purge|Remove)`)
+
+func TestIdempotentRPCsAreActuallyRepeatable(t *testing.T) {
+	var checked, declared int
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		if !strings.HasPrefix(string(fd.Package()), "paladin.") {
+			return true
+		}
+		svcs := fd.Services()
+		for i := 0; i < svcs.Len(); i++ {
+			ms := svcs.Get(i).Methods()
+			for j := 0; j < ms.Len(); j++ {
+				m := ms.Get(j)
+				opts, _ := m.Options().(*descriptorpb.MethodOptions)
+				if opts.GetIdempotencyLevel() != descriptorpb.MethodOptions_IDEMPOTENT {
+					continue
+				}
+				declared++
+				name := string(m.Name())
+				if removalVerb.MatchString(name) {
+					checked++
+					continue
+				}
+				if _, ok := idempotentByArgument[name]; ok {
+					checked++
+					continue
+				}
+				if hasField(m.Input(), "resource_version") {
+					checked++
+					continue
+				}
+				t.Errorf("%s.%s declares IDEMPOTENT but is neither a removal, nor "+
+					"OCC-guarded (no resource_version on %s), nor listed in "+
+					"idempotentByArgument with a reason — a proxy may retry it",
+					svcs.Get(i).Name(), name, m.Input().Name())
+			}
+		}
+		return true
+	})
+	if declared == 0 {
+		t.Skip("no RPC declares IDEMPOTENT yet")
+	}
+	t.Logf("checked %d of %d declared IDEMPOTENT RPCs", checked, declared)
+}
+
+func hasField(md protoreflect.MessageDescriptor, name string) bool {
+	fs := md.Fields()
+	for i := 0; i < fs.Len(); i++ {
+		if string(fs.Get(i).Name()) == name {
+			return true
+		}
+	}
+	return false
 }

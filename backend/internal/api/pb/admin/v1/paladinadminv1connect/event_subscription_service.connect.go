@@ -105,12 +105,14 @@ func NewEventSubscriptionServiceClient(httpClient connect.HTTPClient, baseURL st
 			httpClient,
 			baseURL+EventSubscriptionServiceUpdateSubscriptionProcedure,
 			connect.WithSchema(eventSubscriptionServiceMethods.ByName("UpdateSubscription")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		deleteSubscription: connect.NewClient[v1.DeleteSubscriptionRequest, v1.DeleteSubscriptionResponse](
 			httpClient,
 			baseURL+EventSubscriptionServiceDeleteSubscriptionProcedure,
 			connect.WithSchema(eventSubscriptionServiceMethods.ByName("DeleteSubscription")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listSubscriptions: connect.NewClient[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse](
@@ -215,12 +217,14 @@ func NewEventSubscriptionServiceHandler(svc EventSubscriptionServiceHandler, opt
 		EventSubscriptionServiceUpdateSubscriptionProcedure,
 		svc.UpdateSubscription,
 		connect.WithSchema(eventSubscriptionServiceMethods.ByName("UpdateSubscription")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	eventSubscriptionServiceDeleteSubscriptionHandler := connect.NewUnaryHandler(
 		EventSubscriptionServiceDeleteSubscriptionProcedure,
 		svc.DeleteSubscription,
 		connect.WithSchema(eventSubscriptionServiceMethods.ByName("DeleteSubscription")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	eventSubscriptionServiceListSubscriptionsHandler := connect.NewUnaryHandler(

@@ -186,12 +186,14 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceUpdateTenantProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("UpdateTenant")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		deleteTenant: connect.NewClient[v1.DeleteTenantRequest, v1.DeleteTenantResponse](
 			httpClient,
 			baseURL+TenantServiceDeleteTenantProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("DeleteTenant")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		listTenants: connect.NewClient[v1.ListTenantsRequest, v1.ListTenantsResponse](
@@ -205,6 +207,7 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceSetInheritedPolicyProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		restoreTenant: connect.NewClient[v1.RestoreTenantRequest, v1.Tenant](
@@ -217,6 +220,7 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServicePurgeTenantProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("PurgeTenant")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		renameTenantSlug: connect.NewClient[v1.RenameTenantSlugRequest, v1.Tenant](
@@ -255,12 +259,14 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceSetTenantDefaultBindingProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("SetTenantDefaultBinding")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		clearTenantDefaultBinding: connect.NewClient[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse](
 			httpClient,
 			baseURL+TenantServiceClearTenantDefaultBindingProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("ClearTenantDefaultBinding")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -462,12 +468,14 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceUpdateTenantProcedure,
 		svc.UpdateTenant,
 		connect.WithSchema(tenantServiceMethods.ByName("UpdateTenant")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceDeleteTenantHandler := connect.NewUnaryHandler(
 		TenantServiceDeleteTenantProcedure,
 		svc.DeleteTenant,
 		connect.WithSchema(tenantServiceMethods.ByName("DeleteTenant")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceListTenantsHandler := connect.NewUnaryHandler(
@@ -481,6 +489,7 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceSetInheritedPolicyProcedure,
 		svc.SetInheritedPolicy,
 		connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceRestoreTenantHandler := connect.NewUnaryHandler(
@@ -493,6 +502,7 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServicePurgeTenantProcedure,
 		svc.PurgeTenant,
 		connect.WithSchema(tenantServiceMethods.ByName("PurgeTenant")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceRenameTenantSlugHandler := connect.NewUnaryHandler(
@@ -531,12 +541,14 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceSetTenantDefaultBindingProcedure,
 		svc.SetTenantDefaultBinding,
 		connect.WithSchema(tenantServiceMethods.ByName("SetTenantDefaultBinding")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceClearTenantDefaultBindingHandler := connect.NewUnaryHandler(
 		TenantServiceClearTenantDefaultBindingProcedure,
 		svc.ClearTenantDefaultBinding,
 		connect.WithSchema(tenantServiceMethods.ByName("ClearTenantDefaultBinding")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.TenantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

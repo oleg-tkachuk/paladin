@@ -22,11 +22,15 @@ service BackendService {
   // UpdateBackend applies update_mask; resource_version is required. Changing
   // the endpoint of a backend with live buckets does not migrate anything —
   // the objects stay where they are.
-  rpc UpdateBackend(UpdateBackendRequest) returns (StorageBackend);
+  rpc UpdateBackend(UpdateBackendRequest) returns (StorageBackend) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteBackend refuses while buckets still reference it. No flag overrides
   // that — buckets.backend_id is ON DELETE RESTRICT, so the refusal comes from
   // the database. resource_version is required.
-  rpc DeleteBackend(DeleteBackendRequest) returns (DeleteBackendResponse);
+  rpc DeleteBackend(DeleteBackendRequest) returns (DeleteBackendResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListBackends returns every registered backend for the platform; backends
   // are not tenant-scoped.
   rpc ListBackends(ListBackendsRequest) returns (ListBackendsResponse) {
@@ -44,18 +48,24 @@ service BackendService {
   // (setting the current state is a no-op success). OCC-guarded via
   // resource_version. Disabling the configured default backend is
   // refused (FailedPrecondition).
-  rpc SetBackendEnabled(SetBackendEnabledRequest) returns (StorageBackend);
+  rpc SetBackendEnabled(SetBackendEnabledRequest) returns (StorageBackend) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // SetBackendReadOnly flips the backend's read-only "drain" state
   // (migration 047). Idempotent, OCC-guarded via resource_version. Only
   // meaningful on an enabled backend: reads keep working, mutations are
   // refused so an operator can migrate data off before disabling.
-  rpc SetBackendReadOnly(SetBackendReadOnlyRequest) returns (StorageBackend);
+  rpc SetBackendReadOnly(SetBackendReadOnlyRequest) returns (StorageBackend) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // SetBackendMaintenance raises/clears the operator-set, advisory
   // maintenance flag (migration 049). Idempotent, OCC-guarded via
   // resource_version. Advisory — it does not gate operations.
-  rpc SetBackendMaintenance(SetBackendMaintenanceRequest) returns (StorageBackend);
+  rpc SetBackendMaintenance(SetBackendMaintenanceRequest) returns (StorageBackend) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message CreateBackendRequest {

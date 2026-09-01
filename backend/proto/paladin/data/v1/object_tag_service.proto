@@ -15,10 +15,14 @@ service ObjectTagService {
   rpc GetObjectTags(GetObjectTagsRequest) returns (GetObjectTagsResponse);
   // PutObjectTags merges the supplied keys into the object's tags; keys absent
   // from the request are left alone. resource_version is required.
-  rpc PutObjectTags(PutObjectTagsRequest) returns (PutObjectTagsResponse);
+  rpc PutObjectTags(PutObjectTagsRequest) returns (PutObjectTagsResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteObjectTags removes the named keys. Deleting a key that is not set is
   // not an error. resource_version is required.
-  rpc DeleteObjectTags(DeleteObjectTagsRequest) returns (DeleteObjectTagsResponse);
+  rpc DeleteObjectTags(DeleteObjectTagsRequest) returns (DeleteObjectTagsResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListDistinctTags enumerates the distinct tag key→values present across an
   // Collection's live objects, so a UI can populate a tag-facet filter from the
   // whole tenant scope rather than only the objects on the current page.

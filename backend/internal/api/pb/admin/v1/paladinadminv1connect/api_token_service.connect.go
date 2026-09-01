@@ -96,12 +96,14 @@ func NewAPITokenServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+APITokenServiceRevokeProcedure,
 			connect.WithSchema(aPITokenServiceMethods.ByName("Revoke")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		list: connect.NewClient[v1.APITokenServiceListRequest, v1.APITokenServiceListResponse](
 			httpClient,
 			baseURL+APITokenServiceListProcedure,
 			connect.WithSchema(aPITokenServiceMethods.ByName("List")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSelf: connect.NewClient[v1.APITokenServiceGetSelfRequest, v1.APITokenServiceGetSelfResponse](
@@ -115,6 +117,7 @@ func NewAPITokenServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+APITokenServiceGetUsageProcedure,
 			connect.WithSchema(aPITokenServiceMethods.ByName("GetUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -199,12 +202,14 @@ func NewAPITokenServiceHandler(svc APITokenServiceHandler, opts ...connect.Handl
 		APITokenServiceRevokeProcedure,
 		svc.Revoke,
 		connect.WithSchema(aPITokenServiceMethods.ByName("Revoke")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	aPITokenServiceListHandler := connect.NewUnaryHandler(
 		APITokenServiceListProcedure,
 		svc.List,
 		connect.WithSchema(aPITokenServiceMethods.ByName("List")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	aPITokenServiceGetSelfHandler := connect.NewUnaryHandler(
@@ -218,6 +223,7 @@ func NewAPITokenServiceHandler(svc APITokenServiceHandler, opts ...connect.Handl
 		APITokenServiceGetUsageProcedure,
 		svc.GetUsage,
 		connect.WithSchema(aPITokenServiceMethods.ByName("GetUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.APITokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -250,11 +250,11 @@ const file_paladin_data_v1_operation_service_proto_rawDesc = "" +
 	"operations\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\x99\x02\n" +
-	"\x10OperationService\x12N\n" +
-	"\fGetOperation\x12#.paladin.data.v1.GetOperationRequest\x1a\x19.paladin.data.v1.Operation\x12_\n" +
-	"\x0eListOperations\x12%.paladin.data.v1.ListOperationsRequest\x1a&.paladin.data.v1.ListOperationsResponse\x12T\n" +
-	"\x0fCancelOperation\x12&.paladin.data.v1.CancelOperationRequest\x1a\x19.paladin.data.v1.OperationBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xa8\x02\n" +
+	"\x10OperationService\x12S\n" +
+	"\fGetOperation\x12#.paladin.data.v1.GetOperationRequest\x1a\x19.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12d\n" +
+	"\x0eListOperations\x12%.paladin.data.v1.ListOperationsRequest\x1a&.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\x0fCancelOperation\x12&.paladin.data.v1.CancelOperationRequest\x1a\x19.paladin.data.v1.Operation\"\x03\x90\x02\x02BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_operation_service_proto_rawDescOnce sync.Once

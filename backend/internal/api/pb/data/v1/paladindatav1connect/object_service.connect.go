@@ -200,6 +200,7 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceUpdateObjectProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("UpdateObject")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		completeObject: connect.NewClient[v1.CompleteObjectRequest, v1.Object](
@@ -212,12 +213,14 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceDeleteObjectProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("DeleteObject")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		restoreObject: connect.NewClient[v1.RestoreObjectRequest, v1.Object](
 			httpClient,
 			baseURL+ObjectServiceRestoreObjectProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("RestoreObject")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		copyObject: connect.NewClient[v1.CopyObjectRequest, v1.Object](
@@ -495,6 +498,7 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceUpdateObjectProcedure,
 		svc.UpdateObject,
 		connect.WithSchema(objectServiceMethods.ByName("UpdateObject")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceCompleteObjectHandler := connect.NewUnaryHandler(
@@ -507,12 +511,14 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceDeleteObjectProcedure,
 		svc.DeleteObject,
 		connect.WithSchema(objectServiceMethods.ByName("DeleteObject")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceRestoreObjectHandler := connect.NewUnaryHandler(
 		ObjectServiceRestoreObjectProcedure,
 		svc.RestoreObject,
 		connect.WithSchema(objectServiceMethods.ByName("RestoreObject")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceCopyObjectHandler := connect.NewUnaryHandler(

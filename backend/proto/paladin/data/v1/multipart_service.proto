@@ -26,7 +26,9 @@ service MultipartUploadService {
   rpc CompleteMultipartUpload(CompleteMultipartUploadRequest) returns (Object);
   // AbortMultipartUpload discards the session and the parts already uploaded.
   // Safe to call on an already-aborted session.
-  rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse);
+  rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListParts returns the parts recorded for an open session, for a client
   // reconciling after a crash.
   rpc ListParts(ListPartsRequest) returns (ListPartsResponse) {

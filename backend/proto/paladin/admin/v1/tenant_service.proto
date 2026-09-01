@@ -28,13 +28,17 @@ service TenantService {
   // inherited_cedar_policy. tenant_id and slug are immutable (use
   // RenameTenantSlug for the latter); resource_version is required and a stale
   // one is Aborted.
-  rpc UpdateTenant(UpdateTenantRequest) returns (Tenant);
+  rpc UpdateTenant(UpdateTenantRequest) returns (Tenant) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
   // remains recoverable via RestoreTenant within the retention window.
   // There is no flag that skips the trash — removing the row physically
   // is PurgeTenant, a second call that names what it does. Automated
   // cleanups and emergency-purge flows therefore make both calls.
-  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
+  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ListTenants excludes soft-deleted tenants unless include_trashed or
   // only_trashed is set.
   rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {
@@ -44,7 +48,9 @@ service TenantService {
   // SetInheritedPolicy replaces the Cedar policy every collection and bucket
   // under the tenant inherits. Validated before it is stored — an unparseable
   // policy is InvalidArgument, not a tenant that denies everything.
-  rpc SetInheritedPolicy(SetInheritedPolicyRequest) returns (Tenant);
+  rpc SetInheritedPolicy(SetInheritedPolicyRequest) returns (Tenant) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // RestoreTenant clears `deleted_at` on a soft-deleted row, returning
   // it to the active set. Slug + display_name UNIQUE constraints still
@@ -58,7 +64,9 @@ service TenantService {
   // an active tenant (operators have to soft-delete first) so the
   // two-step recovery window is preserved by default. Idempotent on
   // a missing row.
-  rpc PurgeTenant(PurgeTenantRequest) returns (PurgeTenantResponse);
+  rpc PurgeTenant(PurgeTenantRequest) returns (PurgeTenantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // RenameTenantSlug rewrites the tenant's `slug` and rewrites every
   // `Tenant::"<old_slug>"` reference in the tenant's
@@ -100,11 +108,15 @@ service TenantService {
 
   // SetTenantDefaultBinding upserts the tenant's default route. The
   // (backend, bucket) MUST reference an existing bucket.
-  rpc SetTenantDefaultBinding(SetTenantDefaultBindingRequest) returns (TenantDefaultBinding);
+  rpc SetTenantDefaultBinding(SetTenantDefaultBindingRequest) returns (TenantDefaultBinding) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // ClearTenantDefaultBinding removes the tenant's default route; bare
   // collection names for that tenant then fail with FAILED_PRECONDITION.
-  rpc ClearTenantDefaultBinding(ClearTenantDefaultBindingRequest) returns (ClearTenantDefaultBindingResponse);
+  rpc ClearTenantDefaultBinding(ClearTenantDefaultBindingRequest) returns (ClearTenantDefaultBindingResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message CreateTenantRequest {

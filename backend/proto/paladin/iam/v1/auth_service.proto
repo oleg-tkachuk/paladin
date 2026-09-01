@@ -21,7 +21,9 @@ service AuthService {
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
 
   // Revoke invalidates a token (access or refresh). Idempotent.
-  rpc Revoke(RevokeRequest) returns (RevokeResponse);
+  rpc Revoke(RevokeRequest) returns (RevokeResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // WhoAmI returns the caller's current Principal — used by SPAs to render
   // identity / role-gated UI without re-decoding the JWT client-side.

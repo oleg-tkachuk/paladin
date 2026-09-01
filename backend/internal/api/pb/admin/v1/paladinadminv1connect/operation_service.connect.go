@@ -75,18 +75,21 @@ func NewPlatformOperationServiceClient(httpClient connect.HTTPClient, baseURL st
 			httpClient,
 			baseURL+PlatformOperationServiceGetOperationProcedure,
 			connect.WithSchema(platformOperationServiceMethods.ByName("GetOperation")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listOperations: connect.NewClient[v1.ListOperationsRequest, v1.ListOperationsResponse](
 			httpClient,
 			baseURL+PlatformOperationServiceListOperationsProcedure,
 			connect.WithSchema(platformOperationServiceMethods.ByName("ListOperations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cancelOperation: connect.NewClient[v1.CancelOperationRequest, v1.Operation](
 			httpClient,
 			baseURL+PlatformOperationServiceCancelOperationProcedure,
 			connect.WithSchema(platformOperationServiceMethods.ByName("CancelOperation")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -140,18 +143,21 @@ func NewPlatformOperationServiceHandler(svc PlatformOperationServiceHandler, opt
 		PlatformOperationServiceGetOperationProcedure,
 		svc.GetOperation,
 		connect.WithSchema(platformOperationServiceMethods.ByName("GetOperation")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	platformOperationServiceListOperationsHandler := connect.NewUnaryHandler(
 		PlatformOperationServiceListOperationsProcedure,
 		svc.ListOperations,
 		connect.WithSchema(platformOperationServiceMethods.ByName("ListOperations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	platformOperationServiceCancelOperationHandler := connect.NewUnaryHandler(
 		PlatformOperationServiceCancelOperationProcedure,
 		svc.CancelOperation,
 		connect.WithSchema(platformOperationServiceMethods.ByName("CancelOperation")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.PlatformOperationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -15,10 +15,14 @@ service QuotaService {
   rpc GetQuota(GetQuotaRequest) returns (Quota);
   // SetQuota replaces the tenant's limits. Lowering a limit below current usage
   // is allowed — it blocks further growth rather than deleting anything.
-  rpc SetQuota(SetQuotaRequest) returns (Quota);
+  rpc SetQuota(SetQuotaRequest) returns (Quota) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // ResetUsage zeroes the usage counters without touching the limits. For
   // recovering from a drifted counter, not for granting capacity.
-  rpc ResetUsage(ResetUsageRequest) returns (Quota);
+  rpc ResetUsage(ResetUsageRequest) returns (Quota) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message GetQuotaRequest {

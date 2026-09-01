@@ -13,7 +13,9 @@ import "paladin/common/v1/resource.proto";
 service PresignService {
   // RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
   // for when the first URL expired before the client finished.
-  rpc RegenerateUploadUrl(RegenerateUploadUrlRequest) returns (RegenerateUploadUrlResponse);
+  rpc RegenerateUploadUrl(RegenerateUploadUrlRequest) returns (RegenerateUploadUrlResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // PresignDownload issues a time-limited GET URL. TTL is capped by
   // limits.presign.max_ttl; asking for longer is InvalidArgument.
   rpc PresignDownload(PresignDownloadRequest) returns (PresignDownloadResponse);

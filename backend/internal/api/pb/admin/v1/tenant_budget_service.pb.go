@@ -614,10 +614,10 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x05limit\"j\n" +
 	"$TenantBudgetServiceSummarizeResponse\x12B\n" +
-	"\tsummaries\x18\x01 \x03(\v2$.paladin.admin.v1.TenantBudgetSummaryR\tsummaries2\xe4\x02\n" +
+	"\tsummaries\x18\x01 \x03(\v2$.paladin.admin.v1.TenantBudgetSummaryR\tsummaries2\xe9\x02\n" +
 	"\x13TenantBudgetService\x12k\n" +
-	"\x03Get\x12..paladin.admin.v1.TenantBudgetServiceGetRequest\x1a/.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12f\n" +
-	"\x03Set\x12..paladin.admin.v1.TenantBudgetServiceSetRequest\x1a/.paladin.admin.v1.TenantBudgetServiceSetResponse\x12x\n" +
+	"\x03Get\x12..paladin.admin.v1.TenantBudgetServiceGetRequest\x1a/.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12k\n" +
+	"\x03Set\x12..paladin.admin.v1.TenantBudgetServiceSetRequest\x1a/.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12x\n" +
 	"\tSummarize\x124.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a5.paladin.admin.v1.TenantBudgetServiceSummarizeResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (

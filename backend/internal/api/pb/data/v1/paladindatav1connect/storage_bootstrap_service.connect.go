@@ -63,6 +63,7 @@ func NewStorageBootstrapServiceClient(httpClient connect.HTTPClient, baseURL str
 			httpClient,
 			baseURL+StorageBootstrapServiceEnsureTenantStorageProcedure,
 			connect.WithSchema(storageBootstrapServiceMethods.ByName("EnsureTenantStorage")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -99,6 +100,7 @@ func NewStorageBootstrapServiceHandler(svc StorageBootstrapServiceHandler, opts 
 		StorageBootstrapServiceEnsureTenantStorageProcedure,
 		svc.EnsureTenantStorage,
 		connect.WithSchema(storageBootstrapServiceMethods.ByName("EnsureTenantStorage")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.data.v1.StorageBootstrapService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

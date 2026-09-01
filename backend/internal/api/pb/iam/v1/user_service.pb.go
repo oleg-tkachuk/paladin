@@ -695,18 +695,18 @@ const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"F\n" +
 	"\x15ResetPasswordResponse\x12-\n" +
-	"\x12generated_password\x18\x01 \x01(\tR\x11generatedPassword2\xef\x04\n" +
+	"\x12generated_password\x18\x01 \x01(\tR\x11generatedPassword2\xfe\x04\n" +
 	"\vUserService\x12C\n" +
 	"\n" +
 	"CreateUser\x12 .paladin.iam.v1.CreateUserRequest\x1a\x13.paladin.iam.v1.User\x12B\n" +
-	"\aGetUser\x12\x1d.paladin.iam.v1.GetUserRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x01\x12C\n" +
+	"\aGetUser\x12\x1d.paladin.iam.v1.GetUserRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x01\x12H\n" +
 	"\n" +
-	"UpdateUser\x12 .paladin.iam.v1.UpdateUserRequest\x1a\x13.paladin.iam.v1.User\x12Q\n" +
+	"UpdateUser\x12 .paladin.iam.v1.UpdateUserRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x02\x12V\n" +
 	"\n" +
-	"DeleteUser\x12 .paladin.iam.v1.DeleteUserRequest\x1a!.paladin.iam.v1.DeleteUserResponse\x12S\n" +
+	"DeleteUser\x12 .paladin.iam.v1.DeleteUserRequest\x1a!.paladin.iam.v1.DeleteUserResponse\"\x03\x90\x02\x02\x12S\n" +
 	"\tListUsers\x12\x1f.paladin.iam.v1.ListUsersRequest\x1a .paladin.iam.v1.ListUsersResponse\"\x03\x90\x02\x01\x12E\n" +
-	"\vGrantScopes\x12!.paladin.iam.v1.GrantScopesRequest\x1a\x13.paladin.iam.v1.User\x12G\n" +
-	"\fRevokeScopes\x12\".paladin.iam.v1.RevokeScopesRequest\x1a\x13.paladin.iam.v1.User\x12Z\n" +
+	"\vGrantScopes\x12!.paladin.iam.v1.GrantScopesRequest\x1a\x13.paladin.iam.v1.User\x12L\n" +
+	"\fRevokeScopes\x12\".paladin.iam.v1.RevokeScopesRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x02\x12Z\n" +
 	"\rResetPassword\x12#.paladin.iam.v1.ResetPasswordRequest\x1a$.paladin.iam.v1.ResetPasswordResponseBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (

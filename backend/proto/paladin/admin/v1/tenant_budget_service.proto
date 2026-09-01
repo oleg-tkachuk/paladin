@@ -31,7 +31,9 @@ service TenantBudgetService {
   // Set upserts the cap. ResetSpend=true rolls the accounting period
   // and zeros spent_usd (typical: monthly billing close). false
   // adjusts the cap mid-cycle without affecting accumulated spend.
-  rpc Set(TenantBudgetServiceSetRequest) returns (TenantBudgetServiceSetResponse);
+  rpc Set(TenantBudgetServiceSetRequest) returns (TenantBudgetServiceSetResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // Summarize returns every tenant's budget snapshot joined with
   // tenant identity (slug, display_name) + a derived utilisation

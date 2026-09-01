@@ -21,7 +21,9 @@ service StorageBootstrapService {
   // that each requested object-key is bound to (backend_id, bucket) under the
   // caller's tenant. Reuses the same physical bucket-provisioning path as the
   // admin BucketService.CreateBucket(provision_on_backend=true).
-  rpc EnsureTenantStorage(EnsureTenantStorageRequest) returns (EnsureTenantStorageResponse);
+  rpc EnsureTenantStorage(EnsureTenantStorageRequest) returns (EnsureTenantStorageResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message EnsureTenantStorageRequest {

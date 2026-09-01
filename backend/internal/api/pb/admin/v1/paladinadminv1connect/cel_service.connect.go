@@ -61,6 +61,7 @@ func NewCELServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+CELServiceValidateProcedure,
 			connect.WithSchema(cELServiceMethods.ByName("Validate")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -95,6 +96,7 @@ func NewCELServiceHandler(svc CELServiceHandler, opts ...connect.HandlerOption) 
 		CELServiceValidateProcedure,
 		svc.Validate,
 		connect.WithSchema(cELServiceMethods.ByName("Validate")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.CELService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

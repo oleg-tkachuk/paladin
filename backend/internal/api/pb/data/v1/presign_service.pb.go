@@ -250,9 +250,9 @@ const file_paladin_data_v1_presign_service_proto_rawDesc = "" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12/\n" +
 	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"\\\n" +
 	"\x17PresignDownloadResponse\x12A\n" +
-	"\fdownload_url\x18\x01 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\vdownloadUrl2\xe4\x01\n" +
-	"\x0ePresignService\x12n\n" +
-	"\x13RegenerateUploadUrl\x12*.paladin.data.v1.RegenerateUploadUrlRequest\x1a+.paladin.data.v1.RegenerateUploadUrlResponse\x12b\n" +
+	"\fdownload_url\x18\x01 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\vdownloadUrl2\xe9\x01\n" +
+	"\x0ePresignService\x12s\n" +
+	"\x13RegenerateUploadUrl\x12*.paladin.data.v1.RegenerateUploadUrlRequest\x1a+.paladin.data.v1.RegenerateUploadUrlResponse\"\x03\x90\x02\x02\x12b\n" +
 	"\x0fPresignDownload\x12&.paladin.data.v1.PresignDownloadRequest\x1a'.paladin.data.v1.PresignDownloadResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (

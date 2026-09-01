@@ -11,7 +11,9 @@ import "buf/validate/validate.proto";
 // Used heavily by the MCP server and the admin UI.
 service PolicyService {
   // Validate parses + type-checks Cedar text against the Paladin schema.
-  rpc Validate(ValidateRequest) returns (ValidateResponse);
+  rpc Validate(ValidateRequest) returns (ValidateResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SimulateAuthz answers "would this principal be allowed to take this
   // action against this resource right now?" without performing the action.

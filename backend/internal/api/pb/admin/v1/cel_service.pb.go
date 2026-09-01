@@ -168,10 +168,10 @@ const file_paladin_admin_v1_cel_service_proto_rawDesc = "" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
 	"\x04line\x18\x03 \x01(\x05R\x04line\x12\x16\n" +
-	"\x06column\x18\x04 \x01(\x05R\x06column2c\n" +
+	"\x06column\x18\x04 \x01(\x05R\x06column2h\n" +
 	"\n" +
-	"CELService\x12U\n" +
-	"\bValidate\x12#.paladin.admin.v1.ValidateCELRequest\x1a$.paladin.admin.v1.ValidateCELResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"CELService\x12Z\n" +
+	"\bValidate\x12#.paladin.admin.v1.ValidateCELRequest\x1a$.paladin.admin.v1.ValidateCELResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_cel_service_proto_rawDescOnce sync.Once

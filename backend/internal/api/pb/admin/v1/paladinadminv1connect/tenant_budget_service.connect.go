@@ -85,6 +85,7 @@ func NewTenantBudgetServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+TenantBudgetServiceSetProcedure,
 			connect.WithSchema(tenantBudgetServiceMethods.ByName("Set")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		summarize: connect.NewClient[v1.TenantBudgetServiceSummarizeRequest, v1.TenantBudgetServiceSummarizeResponse](
@@ -157,6 +158,7 @@ func NewTenantBudgetServiceHandler(svc TenantBudgetServiceHandler, opts ...conne
 		TenantBudgetServiceSetProcedure,
 		svc.Set,
 		connect.WithSchema(tenantBudgetServiceMethods.ByName("Set")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantBudgetServiceSummarizeHandler := connect.NewUnaryHandler(

@@ -420,11 +420,11 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"operations\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xa7\x02\n" +
-	"\x18PlatformOperationService\x12P\n" +
-	"\fGetOperation\x12$.paladin.admin.v1.GetOperationRequest\x1a\x1a.paladin.admin.v1.Operation\x12a\n" +
-	"\x0eListOperations\x12&.paladin.admin.v1.ListOperationsRequest\x1a'.paladin.admin.v1.ListOperationsResponse\x12V\n" +
-	"\x0fCancelOperation\x12'.paladin.admin.v1.CancelOperationRequest\x1a\x1a.paladin.admin.v1.OperationBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xb6\x02\n" +
+	"\x18PlatformOperationService\x12U\n" +
+	"\fGetOperation\x12$.paladin.admin.v1.GetOperationRequest\x1a\x1a.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x12f\n" +
+	"\x0eListOperations\x12&.paladin.admin.v1.ListOperationsRequest\x1a'.paladin.admin.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n" +
+	"\x0fCancelOperation\x12'.paladin.admin.v1.CancelOperationRequest\x1a\x1a.paladin.admin.v1.Operation\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_operation_service_proto_rawDescOnce sync.Once

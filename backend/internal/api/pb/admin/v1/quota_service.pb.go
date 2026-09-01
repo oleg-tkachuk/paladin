@@ -197,12 +197,12 @@ const file_paladin_admin_v1_quota_service_proto_rawDesc = "" +
 	"updateMask\x124\n" +
 	"\x05quota\x18\x04 \x01(\v2\x16.paladin.admin.v1.QuotaB\x06\xbaH\x03\xc8\x01\x01R\x05quota\"0\n" +
 	"\x11ResetUsageRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xe4\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xee\x01\n" +
 	"\fQuotaService\x12D\n" +
-	"\bGetQuota\x12 .paladin.admin.v1.GetQuotaRequest\x1a\x16.paladin.admin.v1.Quota\x12D\n" +
-	"\bSetQuota\x12 .paladin.admin.v1.SetQuotaRequest\x1a\x16.paladin.admin.v1.Quota\x12H\n" +
+	"\bGetQuota\x12 .paladin.admin.v1.GetQuotaRequest\x1a\x16.paladin.admin.v1.Quota\x12I\n" +
+	"\bSetQuota\x12 .paladin.admin.v1.SetQuotaRequest\x1a\x16.paladin.admin.v1.Quota\"\x03\x90\x02\x02\x12M\n" +
 	"\n" +
-	"ResetUsage\x12\".paladin.admin.v1.ResetUsageRequest\x1a\x16.paladin.admin.v1.QuotaBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"ResetUsage\x12\".paladin.admin.v1.ResetUsageRequest\x1a\x16.paladin.admin.v1.Quota\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_quota_service_proto_rawDescOnce sync.Once

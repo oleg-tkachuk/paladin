@@ -113,6 +113,7 @@ func NewUserSettingsServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+UserSettingsServiceDeleteForUserProcedure,
 			connect.WithSchema(userSettingsServiceMethods.ByName("DeleteForUser")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -210,6 +211,7 @@ func NewUserSettingsServiceHandler(svc UserSettingsServiceHandler, opts ...conne
 		UserSettingsServiceDeleteForUserProcedure,
 		svc.DeleteForUser,
 		connect.WithSchema(userSettingsServiceMethods.ByName("DeleteForUser")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.iam.v1.UserSettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
