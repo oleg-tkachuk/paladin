@@ -14,7 +14,10 @@ verification step.
       then the RPC surface, the Go admin e2e suite, S3 conformance and
       `dev-bootstrap.sh` against a freshly built stack. ~15 min and a Docker daemon. Skipping it
       is how a suite that compiles but fails reaches `main`.
-- [ ] `pnpm run test:e2e` (if the console or a plane's wire format changed)
+- [ ] `task verify-e2e` (if the console or a plane's wire format changed) —
+      Playwright against images rebuilt from your branch. Prefer it over a bare
+      `pnpm run test:e2e`, which rebuilds nothing and so reports on whatever
+      `:latest` happens to be.
 - [ ] Manual check against a running stack — say what you did
 
 ## Checklist

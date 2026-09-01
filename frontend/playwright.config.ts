@@ -24,6 +24,12 @@
  */
 import { defineConfig, devices } from "@playwright/test";
 
+// The compose file publishes the console on PALADIN_E2E_PORT_UI (default 3000)
+// so a second stack can run beside this one. Both the browser's baseURL and the
+// webServer readiness probe have to follow it, or the suite waits on a port it
+// does not own and drives one it did not start.
+const UI_URL = `http://localhost:${process.env.PALADIN_E2E_PORT_UI ?? "3000"}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   // Exclude fixtures from test discovery (they don't contain
@@ -65,7 +71,11 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.PALADIN_E2E_BASE_URL ?? "http://localhost:3000",
+    // PALADIN_E2E_BASE_URL means "an external stack is already running" — it is
+    // what switches the webServer block off below. So it must NOT be set merely
+    // to follow a port override; the default follows PALADIN_E2E_PORT_UI
+    // instead, and the two stay in step.
+    baseURL: process.env.PALADIN_E2E_BASE_URL ?? UI_URL,
     // Failure artifacts per FR-006. Local-only — no upload hook
     // wired in v1.
     screenshot: "only-on-failure",
@@ -132,10 +142,7 @@ export default defineConfig({
     : {
         command:
           "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up --wait",
-        // Follows the compose file's UI port override, which exists so a second
-        // stack can run beside this one. Hardcoding 3000 here would wait on
-        // whichever stack happened to own that port.
-        url: `http://localhost:${process.env.PALADIN_E2E_PORT_UI ?? "3000"}`,
+        url: UI_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         stdout: "pipe",

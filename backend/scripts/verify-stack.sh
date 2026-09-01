@@ -53,27 +53,16 @@ cd "$root"
 project=${PALADIN_VERIFY_PROJECT:-paladin-verify-deep}
 compose=(docker compose -p "$project" -f frontend/tests/e2e/docker-compose.test.yaml)
 
-# Host ports, defaulted to the compose file's own defaults and exported so the
-# compose file, the Go suites and the addresses below all read one set. Override
-# them together to run this beside a Playwright stack:
+# Host ports and the collision check live in scripts/stack-ports.sh, shared with
+# the Playwright gate (frontend/scripts/verify-e2e.sh) because both boot the same
+# compose file. Override them together to run this beside that one:
 #
 #   PALADIN_VERIFY_PROJECT=paladin-alt PALADIN_E2E_PORT_UI=13000 \
 #   PALADIN_E2E_PORT_DATA=18080 PALADIN_E2E_PORT_IAM=18085 \
 #   PALADIN_E2E_PORT_ADMIN=18090 PALADIN_E2E_PORT_S3=19000 \
 #   PALADIN_E2E_PORT_PG=15434  task backend:test:stack
-: "${PALADIN_E2E_PORT_DATA:=8080}"
-: "${PALADIN_E2E_PORT_IAM:=8085}"
-: "${PALADIN_E2E_PORT_ADMIN:=8090}"
-: "${PALADIN_E2E_PORT_S3:=9000}"
-: "${PALADIN_E2E_PORT_UI:=3000}"
-: "${PALADIN_E2E_PORT_PG:=5434}"
-export PALADIN_E2E_PORT_DATA PALADIN_E2E_PORT_IAM PALADIN_E2E_PORT_ADMIN
-export PALADIN_E2E_PORT_S3 PALADIN_E2E_PORT_UI PALADIN_E2E_PORT_PG
-
-data_url="http://localhost:${PALADIN_E2E_PORT_DATA}"
-iam_url="http://localhost:${PALADIN_E2E_PORT_IAM}"
-admin_url="http://localhost:${PALADIN_E2E_PORT_ADMIN}"
-s3_url="http://localhost:${PALADIN_E2E_PORT_S3}"
+# shellcheck source=SCRIPTDIR/../../scripts/stack-ports.sh
+source "$root/scripts/stack-ports.sh"
 
 # ─── phases ──────────────────────────────────────────────────────────────────
 
@@ -125,7 +114,7 @@ phase_conformance() {
     echo ">>> [stack] S3 conformance (MinIO)"
     local log
     log=$(mktemp -t paladin-conformance)
-    (cd backend && PALADIN_CONFORMANCE_ENDPOINT="$s3_url" \
+    (cd backend && PALADIN_CONFORMANCE_ENDPOINT="$stack_s3_url" \
         PALADIN_CONFORMANCE_PROVIDER=minio \
         PALADIN_CONFORMANCE_ACCESS_KEY=paladin-e2e-access \
         PALADIN_CONFORMANCE_SECRET_KEY=paladin-e2e-secret-key \
@@ -169,8 +158,8 @@ phase_dev_bootstrap() {
     # (PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET), not the script's cluster-shaped
     # default — otherwise it registers a bucket row for a bucket that is not
     # there.
-    export PALADIN_HOST="$data_url"
-    export PALADIN_ADMIN_HOST="$admin_url"
+    export PALADIN_HOST="$stack_data_url"
+    export PALADIN_ADMIN_HOST="$stack_admin_url"
     export BUCKET_ID=paladin-e2e
     bash frontend/scripts/dev-bootstrap.sh
     bash frontend/scripts/dev-bootstrap.sh
@@ -182,41 +171,7 @@ cleanup() { "${compose[@]}" down -v >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 "${compose[@]}" down -v >/dev/null 2>&1 || true
 
-# Preflight: are the ports we are about to publish free?
-#
-# Ports are now the only thing that can collide. The compose file used to pin a
-# `container_name:` on every service too, which made the check "is any
-# paladin-e2e-* container running" and made a second stack impossible at any port
-# — the names are gone, so this asks the question that is actually left.
-#
-# Still refuse rather than reclaim, and for the same reason: whatever holds the
-# port is usually a developer's own stack — the run that first hit this had one
-# 22 hours old — and a gate that destroys the environment it was invoked from is
-# worse than one that declines to start. The difference is that "use other
-# ports" is now a real answer, so the message says how.
-busy=""
-for port in "$PALADIN_E2E_PORT_DATA" "$PALADIN_E2E_PORT_IAM" \
-    "$PALADIN_E2E_PORT_ADMIN" "$PALADIN_E2E_PORT_S3" "$PALADIN_E2E_PORT_PG"; do
-    if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-        busy+="      :$port — $(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fc 2>/dev/null |
-            sed -n 's/^c//p' | sort -u | tr '\n' ' ')"$'\n'
-    fi
-done
-if [[ -n "$busy" ]]; then
-    {
-        echo "!!! ports this stack publishes are already in use:"
-        printf '%s' "$busy"
-        echo
-        echo "    Free them, or give this run its own set — the compose file"
-        echo "    takes an override for every published port:"
-        echo
-        echo "      PALADIN_VERIFY_PROJECT=paladin-alt PALADIN_E2E_PORT_DATA=18080 \\"
-        echo "        PALADIN_E2E_PORT_IAM=18085 PALADIN_E2E_PORT_ADMIN=18090 \\"
-        echo "        PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 \\"
-        echo "        task backend:test:stack"
-    } >&2
-    exit 1
-fi
+require_free_ports "task backend:test:stack" || exit 1
 
 # `api admin` rather than the whole file. The console image is the Playwright
 # suite's dependency; none of these gates opens a browser, and requiring a
@@ -229,22 +184,7 @@ echo ">>> [stack] booting api + admin"
 # Matches backend/configs/compose.yaml (auth.signing_key / auth.issuer).
 export PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min
 export PALADIN_JWT_ISSUER=paladin-dev
-export PALADIN_ADMIN_URL="$admin_url"
-# Three suites, three namings for the same three addresses: the Playwright
-# fixtures and the smoke test read PALADIN_E2E_*_URL, the RPC-surface gate reads
-# PALADIN_RPC_*_URL, and the Go admin e2e suite reads PALADIN_ADMIN_URL. Export
-# all of them from the one port block, because the alternative is what actually
-# happened on the first alternate-port run: the surface gate kept its
-# 127.0.0.1:8090 default, reached a kubectl port-forward to the dev CLUSTER, and
-# reported 60 seconds of failures about a deployment it was never meant to
-# touch. Unifying the names is a BACKLOG item; covering all three is the fix
-# that makes this script honest today.
-export PALADIN_E2E_DATA_URL="$data_url"
-export PALADIN_E2E_IAM_URL="$iam_url"
-export PALADIN_E2E_ADMIN_URL="$admin_url"
-export PALADIN_RPC_DATA_URL="$data_url"
-export PALADIN_RPC_IAM_URL="$iam_url"
-export PALADIN_RPC_ADMIN_URL="$admin_url"
+stack_export_urls
 
 # Readiness, asserted rather than assumed — and the one place TestSmokeStackReady
 # runs at all.

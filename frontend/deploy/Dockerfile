@@ -81,6 +81,21 @@ RUN pnpm run build
 # needs, dropped to UID 1001 for non-root execution.
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS runtime
+
+# ARGs do not cross stage boundaries — the builder's copies above are out of
+# scope here and have to be redeclared. Same block as backend/deploy/Dockerfile.
+ARG APP_VERSION=undefined
+ARG GIT_COMMIT_HASH=undefined
+ARG BUILD_TIME=undefined
+
+# Which commit is this image? Until now the answer was "nobody can tell": the
+# console image carried the metadata as ENV inside the build stage and no OCI
+# labels at all, so `docker image inspect` reported no revision. That is the
+# missing half of every stale-image incident in this repository — a Playwright
+# run reported against a console nobody could attribute. `task verify-e2e`
+# prints these before it starts.
+LABEL org.opencontainers.image.title="paladin-console"       org.opencontainers.image.description="Paladin — admin console"       org.opencontainers.image.version="${APP_VERSION}"       org.opencontainers.image.revision="${GIT_COMMIT_HASH}"       org.opencontainers.image.created="${BUILD_TIME}"       org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin"
+
 WORKDIR /app
 
 ENV NODE_ENV=production \

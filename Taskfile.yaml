@@ -72,6 +72,11 @@ tasks:
       # Cheap, and it catches a divergence that would otherwise surface as an
       # image built with a different pnpm than CI and local dev used.
       - task: deps:check:pnpm
+      # Seconds, no Docker. Two files have to agree about six port numbers —
+      # scripts/stack-ports.sh and the compose file — and nothing else would
+      # notice them drifting apart until a gate booted on top of whatever was
+      # already listening.
+      - ./scripts/stack-ports.test.sh
       - task: frontend:node:build
 
   verify-deep:
@@ -91,6 +96,22 @@ tasks:
       # Postgres and are independent of everything below.
       - task: backend:test:integration
       - task: backend:test:stack
+
+  verify-e2e:
+    desc: Playwright suite against a stack built from this branch (needs Docker, ~10 min).
+    # Separate from verify-deep on purpose. This one needs the console image and
+    # a browser; verify-deep boots `api admin` only and never opens one. Keeping
+    # them apart is what lets the backend gate stay runnable without a frontend
+    # build — and, since the compose stack is now isolatable, lets the two run
+    # side by side on different port sets.
+    #
+    # Both images, because the stack runs `:latest` and compose rebuilds
+    # nothing: a Playwright run against yesterday's console is the failure this
+    # repository has already had, twice.
+    cmds:
+      - task: backend:docker:build-local
+      - task: frontend:docker:build-local
+      - frontend/scripts/verify-e2e.sh
 
   # another-service-style aggregate fan-outs over the real per-component tasks.
   test:

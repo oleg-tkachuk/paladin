@@ -34,6 +34,7 @@ lefthook install                          # wire the hooks into .git/hooks
 task e2e-up          # backend + console + Postgres + SeaweedFS, in compose
 task verify-all      # build + test both halves — the fast, pre-commit gate
 task verify-deep     # the slow one: integration suites + live-stack gates
+task verify-e2e      # Playwright, against images built from your branch
 task --list-all      # everything, across both namespaces
 ```
 
@@ -55,7 +56,7 @@ Four tiers, and they run in different places for a reason:
 | --- | --- | --- |
 | Unit | `task backend:test` / `cd frontend && pnpm test` | nothing |
 | Integration | `task backend:test:integration` | Docker (testcontainers spins a real Postgres) |
-| E2E | `cd frontend && pnpm run test:e2e` | Docker (Playwright boots the compose stack) |
+| E2E | `task verify-e2e` | Docker (rebuilds both images, then Playwright boots the compose stack) |
 | Capability module | `cd capability && go test ./...` | nothing, deliberately |
 
 The capability module's isolation is a property CI enforces, not a
@@ -151,6 +152,11 @@ tooling. They are committed on purpose, and you can ignore all of them.
   `dev-bootstrap.sh` against a stack built from your branch. Every one of those
   has silently rotted at least once while `verify-all` stayed green; a compile
   check cannot catch a suite that builds and then fails.
+- Run `task verify-e2e` too if you touched the console or a plane's wire
+  format. Prefer it over a bare `pnpm run test:e2e`: that rebuilds nothing, and
+  the stack runs `:latest`, so the result describes whichever images happen to
+  be on the machine. This repository has twice read a green run as verifying a
+  commit the images did not contain.
 - Keep the diff to one concern. If review surfaces a second one, a
   follow-up PR is better than growing this one.
 - Explain *why* in the description. The what is in the diff.

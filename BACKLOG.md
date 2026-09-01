@@ -1599,6 +1599,20 @@ of the pipeline._
   the browser's presigned PUT to `localhost:9000` passed SigV4 — which is
   the assertion that the two-endpoint split (`endpoint` vs
   `public_endpoint`) exists to make.
+- **2026-09-01 — the suite now has a LOCAL gate, `task verify-e2e`.** Running
+  it was never the hard part; running it against the right images was. The
+  webServer boots the compose stack and rebuilds nothing, and the stack runs
+  `:latest` — so a result described whichever images were lying around, which
+  is not hypothetical twice over: a "108 passed" run on 2026-08-30 was read as
+  verifying a commit whose console image predated it by four minutes, and on
+  2026-09-01 `paladin-console:latest` was two days and three commits stale with
+  a newer console image sitting beside it under a version tag. The task builds
+  both images, refuses to start if the ports are taken (sharing
+  scripts/stack-ports.sh with `verify-deep`, so the two cannot drift), and
+  PRINTS the revision of each image beside HEAD before it runs. The console
+  image carried no OCI labels at all until this landed, so "which commit is
+  this console" had no answer — that is the other half of every stale-image
+  incident here. First green run: 111 passed.
 - **Definition of Done (remaining):**
   - First green run on Actions. Still blocked 2026-08-19: the repository is
     private and its Actions runs fail at startup with zero steps executed
@@ -1813,9 +1827,11 @@ of the pipeline._
   unrun.
 - **Meanwhile:** every gate that matters has a local home that does not depend
   on Actions — `task verify-all` (unit, lint, build, tagged-suite compile) for
-  the fast loop, and `task verify-deep` (integration suites, RPC surface, Go
-  admin e2e, dev-bootstrap) for the slow one. Those are the only gates that
-  actually run, and as of 2026-09-01 they cover everything the workflows do.
+  the fast loop, `task verify-deep` (integration suites, RPC surface, Go admin
+  e2e, S3 conformance, dev-bootstrap) for the slow one, and `task verify-e2e`
+  (Playwright, against freshly built images) for the browser. Those are the
+  only gates that actually run, and as of 2026-09-01 they cover everything the
+  workflows do.
   What is missing is not coverage; it is enforcement — nothing makes a merge
   wait for them.
 
