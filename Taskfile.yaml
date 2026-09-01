@@ -72,6 +72,12 @@ tasks:
       # Cheap, and it catches a divergence that would otherwise surface as an
       # image built with a different pnpm than CI and local dev used.
       - task: deps:check:pnpm
+      # Seconds, no Docker, and the only thing standing between a field rename
+      # and every JSON client of this API. It has lived in
+      # .github/workflows/test.yml since it was written and has never executed
+      # there, which is how forty-five breaking changes accumulated in four
+      # days once already.
+      - ./backend/scripts/proto-breaking.sh
       # Seconds, no Docker. Two files have to agree about six port numbers —
       # scripts/stack-ports.sh and the compose file — and nothing else would
       # notice them drifting apart until a gate booted on top of whatever was
