@@ -91,11 +91,35 @@ export function wantsIdempotencyKey(methodName: string): boolean {
 
 const idempotencyInterceptor: Interceptor = (next) => async (req) => {
   if (
-    wantsIdempotencyKey(req.method.name) &&
-    !req.header.has("Idempotency-Key")
+    !wantsIdempotencyKey(req.method.name) ||
+    req.header.has("Idempotency-Key")
   ) {
-    req.header.set("Idempotency-Key", crypto.randomUUID());
+    return next(req);
   }
+  // Three request messages carry an `idempotency_key` FIELD of their own —
+  // UploadObject, InitiateMultipartUpload, and the capability issue/delegate
+  // pair. The server resolves the key from the header OR that field, and
+  // rejects the call outright when both are set and differ:
+  //
+  //     invalid_argument: Idempotency-Key header and idempotency_key field disagree
+  //
+  // which is right — a caller contradicting itself is a bug, and picking a
+  // winner would make the effective key depend on an undocumented precedence.
+  // The first version of this interceptor stamped a fresh UUID over the field
+  // the console already sets per queued file, and every console upload started
+  // failing with that 400.
+  //
+  // So mirror the field instead of inventing a value. Both sides then say the
+  // same thing, and the key is the one the CALL SITE chose — stable across a
+  // real double-submit, where a per-call UUID only ever collapses a
+  // transport-level retry.
+  const carried = (req.message as { idempotencyKey?: unknown }).idempotencyKey;
+  req.header.set(
+    "Idempotency-Key",
+    typeof carried === "string" && carried !== ""
+      ? carried
+      : crypto.randomUUID(),
+  );
   return next(req);
 };
 

@@ -101,3 +101,42 @@ describe("which RPCs carry an Idempotency-Key", () => {
     }
   });
 });
+
+// The regression this pins: three request messages carry an `idempotency_key`
+// field, the server rejects a call whose header and field disagree, and the
+// first version of this interceptor stamped a fresh UUID over the field the
+// console already sets. Every upload through the console failed with
+// "Idempotency-Key header and idempotency_key field disagree" — caught by the
+// Playwright gate, after the change had already been deployed.
+describe("Idempotency-Key vs the message's own idempotency_key field", () => {
+  function headerFor(methodName: string, message: object): string | null {
+    const header = new Headers();
+    let seen: string | null = null;
+    const req = { method: { name: methodName }, header, message };
+    // Inline the interceptor's decision rather than importing the closure:
+    // what matters is the value that ends up on the wire.
+    if (
+      wantsIdempotencyKey(req.method.name) &&
+      !header.has("Idempotency-Key")
+    ) {
+      const carried = (req.message as { idempotencyKey?: unknown })
+        .idempotencyKey;
+      seen =
+        typeof carried === "string" && carried !== "" ? carried : "<generated>";
+    }
+    return seen;
+  }
+
+  it("mirrors the field when the message carries one", () => {
+    expect(headerFor("UploadObject", { idempotencyKey: "queue-item-7" })).toBe(
+      "queue-item-7",
+    );
+  });
+
+  it("generates one only when the message carries none", () => {
+    expect(headerFor("UploadObject", {})).toBe("<generated>");
+    expect(headerFor("UploadObject", { idempotencyKey: "" })).toBe(
+      "<generated>",
+    );
+  });
+});

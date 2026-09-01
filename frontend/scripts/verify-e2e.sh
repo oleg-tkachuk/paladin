@@ -80,7 +80,12 @@ for image in registry.local/paladin/paladin-core:latest \
     created=$(docker image inspect "$image" --format '{{.Created}}' 2>/dev/null || true)
     echo "      $image  rev=${rev:-<none>}  built=${created:-<missing>}"
 done
-echo "      HEAD                                     rev=$(git rev-parse --short HEAD)"
+# --dirty, because the images are built from the WORKING TREE and the label is
+# stamped from HEAD. Those differ whenever anything is uncommitted, and this
+# line exists precisely so nobody reads a run as being about a commit it was
+# not — a gap it had itself until an uncommitted fix was verified under a label
+# naming the commit that contained the bug.
+echo "      HEAD                                     rev=$(git describe --always --dirty --abbrev=8)"
 
 # Run with the repository's own gate settings rather than its exploratory ones.
 # playwright.config.ts keys both off CI: `workers: CI ? 2 : undefined` and
