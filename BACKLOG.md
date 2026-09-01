@@ -1110,28 +1110,6 @@ open deliberately — each notes why._
   the bucket/tenant RPCs to verify the flow (the lab's ListBuckets/GetTenant are
   currently failing — an environment condition, not a UI regression).
 
-### Backend edit dialog: advanced fields (SSE / events / cedar_policy)
-
-- **Status:** Deferred (metadata edit landed; advanced fields parked).
-- **Reason:** The backend detail page's Edit dialog
-  (`frontend/src/app/storage-backends/[backendId]/BackendActions.tsx`) wires
-  `UpdateBackend` for the mutable metadata fields
-  (`display_name`, `endpoint`, `public_endpoint`, `region`,
-  `force_path_style`). The server's update mask
-  (`backend/internal/store/postgres/adapters/admin_backend.go` `Update`) also
-  accepts `sse`, `events`, and `cedar_policy`, but those are nested
-  sub-messages (SSE config, EventSourceConfig, a Cedar policy body) that each
-  need their own editor UX; the 80% operator edit is the flat metadata, so the
-  advanced fields were left out to keep the dialog focused.
-- **Definition of Done:** Extend the Edit dialog (or add a separate "Advanced"
-  section/tab) with editors for `sse` (type + key id), `events` (enabled /
-  target / queue URL / poll interval), and `cedar_policy` (policy textarea),
-  append the matching mask paths to `UPDATE_BACKEND_MASK` in
-  `frontend/src/hooks/useBackends.ts`, and cover each with a vitest case
-  asserting the mask + sub-message shape. Delete this entry when done.
-- **Blockers:** none — needs a UX call on whether advanced config belongs in
-  the same dialog or a dedicated panel.
-
 ### Migrate `middleware.ts` → `proxy.ts` (Next 16 convention)
 
 - **Status:** Blocked (on a Next.js version that wires `proxy` into the

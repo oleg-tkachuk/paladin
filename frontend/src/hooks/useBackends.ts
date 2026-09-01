@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
+import { DurationSchema, FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { ConnectError } from "@connectrpc/connect";
 
 import { backendClient } from "@/lib/connect/client";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
 import {
+  EventSourceConfigSchema,
+  EventTarget,
+  ServerSideEncryptionSchema,
+  SseType,
   StorageBackendSchema,
   StorageKind,
 } from "@/gen/paladin/admin/v1/types_pb";
@@ -37,22 +41,37 @@ export interface CreateBackendInput {
   credentialsSecretRef: string;
 }
 
-// UpdateBackendInput — the operator-editable metadata fields. Credentials are
-// rotated via rotateCredentials (own RPC + grace window), and enable/drain/
-// maintenance flags have dedicated Set* RPCs, so none of those belong here.
-// Advanced fields (sse, events, cedar_policy) are intentionally out of scope
-// for the edit dialog — tracked in BACKLOG.
+// UpdateBackendInput — the operator-editable fields. Credentials are rotated
+// via rotateCredentials (own RPC + grace window), and enable/drain/maintenance
+// flags have dedicated Set* RPCs, so none of those belong here.
+//
+// The three advanced fields are OPTIONAL, and that is the whole contract:
+// omitted means "leave it alone", present means "write this". See the mask
+// note below for why they cannot simply always be sent.
 export interface UpdateBackendInput {
   displayName: string;
   endpoint: string;
   publicEndpoint: string;
   region: string;
   forcePathStyle: boolean;
+  // Server-side encryption applied at presign time. keyId is required by the
+  // server when type is KMS.
+  sse?: { type: SseType; keyId: string };
+  // Storage-event source. pollIntervalMs is carried as a number here and
+  // converted to a protobuf Duration on the way out.
+  events?: {
+    enabled: boolean;
+    target: EventTarget;
+    queueUrl: string;
+    pollIntervalMs: number;
+  };
+  // Cedar policy attached to the backend itself.
+  cedarPolicy?: string;
 }
 
-// Update always sends the full editable field set + matching mask. The dialog
-// pre-fills current values, so re-sending an unchanged field is a harmless
-// same-value write; a full mask keeps the request deterministic.
+// The flat metadata fields are always sent with a matching mask. The dialog
+// pre-fills current values, so re-sending an unchanged one is a harmless
+// same-value write, and a fixed mask keeps that request deterministic.
 const UPDATE_BACKEND_MASK = [
   "display_name",
   "endpoint",
@@ -60,6 +79,29 @@ const UPDATE_BACKEND_MASK = [
   "region",
   "force_path_style",
 ];
+
+// The advanced fields are NOT in that list, and adding them there would be a
+// bug rather than a simplification.
+//
+// `sse`, `events` and `cedar_policy` are mask-gated as whole groups on the
+// server (adapters/admin_backend.go `Update`): naming "events" in the mask
+// writes enabled, target, queue_url AND poll_interval from the message, in
+// one statement. The flat fields survive a round trip through the form
+// unchanged because they are strings and a bool. A group does not: an enum
+// value this build of the console does not know collapses to UNSPECIFIED, and
+// an absent Duration reads back as zero. So a fixed mask would let "rename the
+// backend" silently clear a KMS key id or an SQS queue URL — a write nobody
+// asked for, on fields whose whole job is to be set once and left alone.
+//
+// Hence: a group is named in the mask only when the caller supplies it, and
+// the dialog supplies it only when its section was actually edited.
+function updateMaskFor(input: UpdateBackendInput): string[] {
+  const paths = [...UPDATE_BACKEND_MASK];
+  if (input.sse !== undefined) paths.push("sse");
+  if (input.events !== undefined) paths.push("events");
+  if (input.cedarPolicy !== undefined) paths.push("cedar_policy");
+  return paths;
+}
 
 export function useBackends(autoFetch: boolean = true) {
   const [backends, setBackends] = useState<StorageBackend[]>([]);
@@ -249,11 +291,36 @@ export function useBackends(autoFetch: boolean = true) {
           publicEndpoint: input.publicEndpoint,
           region: input.region,
           forcePathStyle: input.forcePathStyle,
+          // Only built when supplied — an unset sub-message paired with an
+          // unset mask path is what "leave it alone" looks like on the wire.
+          ...(input.sse !== undefined && {
+            sse: create(ServerSideEncryptionSchema, {
+              type: input.sse.type,
+              keyId: input.sse.keyId,
+            }),
+          }),
+          ...(input.events !== undefined && {
+            events: create(EventSourceConfigSchema, {
+              enabled: input.events.enabled,
+              target: input.events.target,
+              queueUrl: input.events.queueUrl,
+              // Duration is seconds + nanos; the form works in whole
+              // milliseconds, so split rather than truncate to seconds — a
+              // 500ms poll interval must not round to 0.
+              pollInterval: create(DurationSchema, {
+                seconds: BigInt(Math.floor(input.events.pollIntervalMs / 1000)),
+                nanos: (input.events.pollIntervalMs % 1000) * 1_000_000,
+              }),
+            }),
+          }),
+          ...(input.cedarPolicy !== undefined && {
+            cedarPolicy: input.cedarPolicy,
+          }),
         });
         const updated = await backendClient.updateBackend({
           name: `storageBackends/${backendId}`,
           resourceVersion,
-          updateMask: create(FieldMaskSchema, { paths: UPDATE_BACKEND_MASK }),
+          updateMask: create(FieldMaskSchema, { paths: updateMaskFor(input) }),
           backend,
         });
         setBackends((prev) =>

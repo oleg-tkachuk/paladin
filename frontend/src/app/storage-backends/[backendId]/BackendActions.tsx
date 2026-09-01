@@ -26,12 +26,16 @@ import {
 import { useBackends, UpdateBackendInput } from "@/hooks/useBackends";
 import { useNotification } from "@/components/ui/Notification";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import { EventTarget, SseType } from "@/gen/paladin/admin/v1/types_pb";
+import type { Duration } from "@bufbuild/protobuf/wkt";
 import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service_pb";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -241,6 +245,25 @@ function EditBackendDialog({
   );
 }
 
+// Duration ⇄ milliseconds. The form edits a single integer because "poll every
+// N ms" is how the operator thinks about it; the wire type is seconds + nanos.
+function durationToMs(d: Duration | undefined): number {
+  if (!d) return 0;
+  return Number(d.seconds) * 1000 + Math.round(d.nanos / 1_000_000);
+}
+
+const SSE_OPTIONS = [
+  { value: String(SseType.NONE), label: "None" },
+  { value: String(SseType.AES256), label: "AES-256 (SSE-S3)" },
+  { value: String(SseType.KMS), label: "KMS (SSE-KMS)" },
+];
+
+const EVENT_TARGET_OPTIONS = [
+  { value: String(EventTarget.NONE), label: "None" },
+  { value: String(EventTarget.SQS), label: "SQS" },
+  { value: String(EventTarget.REDIS), label: "Redis" },
+];
+
 function EditBackendForm({
   backend,
   onCancel,
@@ -257,6 +280,50 @@ function EditBackendForm({
   const [forcePathStyle, setForcePathStyle] = useState(backend.forcePathStyle);
   const [busy, setBusy] = useState(false);
 
+  // ── advanced: sse / events / cedar_policy ─────────────────────────────
+  //
+  // The originals are captured once, from the backend this form opened on, and
+  // every group is sent only when it differs from them. That is not a
+  // performance nicety — the server writes each of these groups wholesale from
+  // the message when its mask path is named (see useBackends), so sending an
+  // untouched group would rewrite it from whatever the form happened to hold.
+  const original = {
+    sseType: backend.sse?.type ?? SseType.NONE,
+    sseKeyId: backend.sse?.keyId ?? "",
+    eventsEnabled: backend.events?.enabled ?? false,
+    eventsTarget: backend.events?.target ?? EventTarget.NONE,
+    eventsQueueUrl: backend.events?.queueUrl ?? "",
+    eventsPollMs: durationToMs(backend.events?.pollInterval),
+    cedarPolicy: backend.cedarPolicy,
+  };
+
+  const [sseType, setSseType] = useState<SseType>(original.sseType);
+  const [sseKeyId, setSseKeyId] = useState(original.sseKeyId);
+  const [eventsEnabled, setEventsEnabled] = useState(original.eventsEnabled);
+  const [eventsTarget, setEventsTarget] = useState<EventTarget>(
+    original.eventsTarget,
+  );
+  const [eventsQueueUrl, setEventsQueueUrl] = useState(original.eventsQueueUrl);
+  const [eventsPollMs, setEventsPollMs] = useState(
+    String(original.eventsPollMs),
+  );
+  const [cedarPolicy, setCedarPolicy] = useState(original.cedarPolicy);
+
+  const pollMs = Number(eventsPollMs);
+  const pollMsValid = Number.isInteger(pollMs) && pollMs >= 0;
+  // The server rejects KMS without a key id; saying so here beats a round trip
+  // that comes back InvalidArgument.
+  const kmsNeedsKey = sseType === SseType.KMS && sseKeyId.trim() === "";
+
+  const sseDirty =
+    sseType !== original.sseType || sseKeyId !== original.sseKeyId;
+  const eventsDirty =
+    eventsEnabled !== original.eventsEnabled ||
+    eventsTarget !== original.eventsTarget ||
+    eventsQueueUrl !== original.eventsQueueUrl ||
+    pollMs !== original.eventsPollMs;
+  const cedarDirty = cedarPolicy !== original.cedarPolicy;
+
   const submit = async () => {
     setBusy(true);
     try {
@@ -266,6 +333,16 @@ function EditBackendForm({
         publicEndpoint,
         region,
         forcePathStyle,
+        ...(sseDirty && { sse: { type: sseType, keyId: sseKeyId } }),
+        ...(eventsDirty && {
+          events: {
+            enabled: eventsEnabled,
+            target: eventsTarget,
+            queueUrl: eventsQueueUrl,
+            pollIntervalMs: pollMs,
+          },
+        }),
+        ...(cedarDirty && { cedarPolicy }),
       });
     } finally {
       setBusy(false);
@@ -314,12 +391,105 @@ function EditBackendForm({
           />
           Force path-style addressing
         </label>
+
+        {/* Collapsed by default, and in the same dialog rather than a panel of
+            its own: these are fields of the same resource under the same OCC
+            token, so a separate surface would mean a second write that has to
+            re-read resource_version to succeed. */}
+        <details className="rounded-lg border border-input px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium select-none">
+            Advanced
+          </summary>
+          <div className="mt-3 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-sse-type">Server-side encryption</Label>
+              <Select
+                options={SSE_OPTIONS}
+                value={String(sseType)}
+                onChange={(v) => setSseType(Number(v) as SseType)}
+              />
+              {sseType === SseType.KMS && (
+                <div className="space-y-1">
+                  <Label htmlFor="edit-sse-key">KMS key id</Label>
+                  <Input
+                    id="edit-sse-key"
+                    value={sseKeyId}
+                    onChange={(e) => setSseKeyId(e.target.value)}
+                    aria-invalid={kmsNeedsKey}
+                  />
+                  {kmsNeedsKey && (
+                    <p className="text-xs text-destructive">
+                      Required when the type is KMS.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Storage events</Label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={eventsEnabled}
+                  onCheckedChange={(v) => setEventsEnabled(v === true)}
+                />
+                Ingest events from this backend
+              </label>
+              <Select
+                options={EVENT_TARGET_OPTIONS}
+                value={String(eventsTarget)}
+                onChange={(v) => setEventsTarget(Number(v) as EventTarget)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="edit-events-queue">Queue URL</Label>
+                <Input
+                  id="edit-events-queue"
+                  value={eventsQueueUrl}
+                  onChange={(e) => setEventsQueueUrl(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-events-poll">Poll interval (ms)</Label>
+                <Input
+                  id="edit-events-poll"
+                  inputMode="numeric"
+                  value={eventsPollMs}
+                  onChange={(e) => setEventsPollMs(e.target.value)}
+                  aria-invalid={!pollMsValid}
+                />
+                {!pollMsValid && (
+                  <p className="text-xs text-destructive">
+                    Whole milliseconds, zero or more.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="edit-cedar">Cedar policy</Label>
+              <Textarea
+                id="edit-cedar"
+                rows={6}
+                className="font-mono text-xs"
+                value={cedarPolicy}
+                onChange={(e) => setCedarPolicy(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Attached to the backend itself — typically a forbid rule pinning
+                which tenants may bind buckets here.
+              </p>
+            </div>
+          </div>
+        </details>
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
-        <Button onClick={() => void submit()} disabled={busy}>
+        <Button
+          onClick={() => void submit()}
+          disabled={busy || kmsNeedsKey || !pollMsValid}
+        >
           {busy ? "Saving…" : "Save changes"}
         </Button>
       </DialogFooter>

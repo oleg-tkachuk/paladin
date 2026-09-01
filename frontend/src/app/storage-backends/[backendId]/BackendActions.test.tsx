@@ -113,6 +113,66 @@ describe("BackendActions", () => {
     expect(arg.backend.displayName).toBe("Primary EU");
   });
 
+  // The advanced groups are written wholesale by the server when their mask
+  // path is named, so "untouched" has to mean "not sent". The metadata test
+  // above is the other half of this: it asserts the mask is exactly the five
+  // flat paths after an ordinary edit, which is only true while the advanced
+  // sections stay out of it.
+  it("adds cedar_policy to the mask only when the policy is edited", async () => {
+    render(<BackendActions backend={backend} />);
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    const policy = await screen.findByLabelText(/cedar policy/i);
+    await userEvent.type(policy, "forbid(principal,action,resource);");
+    await userEvent.click(
+      screen.getByRole("button", { name: /save changes/i }),
+    );
+
+    await waitFor(() => expect(h.update).toHaveBeenCalledTimes(1));
+    const arg = h.update.mock.calls[0][0];
+    expect(arg.updateMask.paths).toContain("cedar_policy");
+    expect(arg.updateMask.paths).not.toContain("sse");
+    expect(arg.updateMask.paths).not.toContain("events");
+    expect(arg.backend.cedarPolicy).toBe("forbid(principal,action,resource);");
+  });
+
+  it("sends the whole events group once any part of it is touched", async () => {
+    render(<BackendActions backend={backend} />);
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: /ingest events/i }),
+    );
+    const poll = screen.getByLabelText(/poll interval/i);
+    await userEvent.clear(poll);
+    await userEvent.type(poll, "1500");
+    await userEvent.click(
+      screen.getByRole("button", { name: /save changes/i }),
+    );
+
+    await waitFor(() => expect(h.update).toHaveBeenCalledTimes(1));
+    const arg = h.update.mock.calls[0][0];
+    expect(arg.updateMask.paths).toContain("events");
+    expect(arg.backend.events.enabled).toBe(true);
+    // 1500ms is the value a seconds-only conversion loses in either direction.
+    expect(Number(arg.backend.events.pollInterval.seconds)).toBe(1);
+    expect(arg.backend.events.pollInterval.nanos).toBe(500_000_000);
+  });
+
+  it("refuses to save a poll interval that is not whole milliseconds", async () => {
+    render(<BackendActions backend={backend} />);
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    const poll = await screen.findByLabelText(/poll interval/i);
+    await userEvent.clear(poll);
+    await userEvent.type(poll, "1.5s");
+
+    expect(
+      screen.getByRole("button", { name: /save changes/i }),
+    ).toBeDisabled();
+    expect(h.update).not.toHaveBeenCalled();
+  });
+
   it("rotates credentials via RotateCredentials with the new ref + grace", async () => {
     render(<BackendActions backend={backend} />);
     await userEvent.click(
