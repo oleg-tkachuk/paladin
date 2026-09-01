@@ -496,6 +496,28 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.InheritedCedarPolicy == "" {
 		args.InheritedCedarPolicy = renderDefaultPolicy(args.TenantID, args.Slug)
 	}
+	// Act as the tenant being created, not as the caller. Everything this tx
+	// writes belongs to the NEW tenant, and two of those tables are RLS'd
+	// with `WITH CHECK (tenant_id = paladin_session_tenant_id())` — a check
+	// that never admits the cross-tenant flag, by design. Without the swap
+	// the pool stamps the GUC with the platform admin's own tenant and
+	// Postgres refuses the row: the exact failure rls.go's comment
+	// describes, on the one create path that never got the swap.
+	//
+	// It bit `tenant_default_bindings`, so `CreateTenant` with a default
+	// binding — either spelling, `default_binding` on a shared tenant or the
+	// derived bucket of a dedicated one — could not succeed at all since
+	// migration 016 turned RLS on for that table. `tenants` and `buckets`
+	// carry no RLS, which is why the far more common no-binding create kept
+	// working and hid it. The event fan-out below is the second table
+	// (`event_deliveries`), and it was passing only vacuously: a
+	// just-created tenant has no subscriptions, so the insert wrote zero
+	// rows and had nothing for the policy to reject.
+	//
+	// Safe for the rest of the tx: the caller's identity is unchanged (the
+	// `set_by` actor still reads from the principal), authorization already
+	// happened above, and every row written here is keyed to args.TenantID.
+	ctx = auth.WithActingTenant(ctx, args.TenantID)
 	// Create + paladin.tenant.created in one tx (ADR-0003). The event payload
 	// is built from args (== the inserted row), so the row can be enqueued
 	// without a read-back inside the tx; the full row is fetched post-commit
