@@ -89,6 +89,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+SystemServiceGetConfigProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDispatcherStats: connect.NewClient[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse](
@@ -101,6 +102,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+SystemServiceGetPlatformStatsProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("GetPlatformStats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -169,6 +171,7 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		SystemServiceGetConfigProcedure,
 		svc.GetConfig,
 		connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceGetDispatcherStatsHandler := connect.NewUnaryHandler(
@@ -181,6 +184,7 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		SystemServiceGetPlatformStatsProcedure,
 		svc.GetPlatformStats,
 		connect.WithSchema(systemServiceMethods.ByName("GetPlatformStats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

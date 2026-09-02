@@ -18,7 +18,9 @@ service EventSubscriptionService {
   rpc CreateSubscription(CreateSubscriptionRequest) returns (EventSubscription);
   // GetSubscription returns the subscription including its sink configuration;
   // secret references are returned as references, never resolved.
-  rpc GetSubscription(GetSubscriptionRequest) returns (EventSubscription);
+  rpc GetSubscription(GetSubscriptionRequest) returns (EventSubscription) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateSubscription replaces the filter and sink. resource_version is
   // required. In-flight deliveries already queued are not re-targeted.
   rpc UpdateSubscription(UpdateSubscriptionRequest) returns (EventSubscription) {
@@ -32,7 +34,9 @@ service EventSubscriptionService {
   }
   // ListSubscriptions returns the tenant's subscriptions, disabled ones
   // included.
-  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // TestSubscription delivers a synthetic event to the configured sink.
   rpc TestSubscription(TestSubscriptionRequest) returns (TestSubscriptionResponse);

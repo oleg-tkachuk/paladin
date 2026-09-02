@@ -423,11 +423,11 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\x1cCOMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n" +
 	"\x19COMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n" +
-	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x032\xa4\x01\n" +
-	"\rHealthService\x12J\n" +
+	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x032\xae\x01\n" +
+	"\rHealthService\x12O\n" +
 	"\n" +
-	"GetVersion\x12 .paladin.iam.v1.GetVersionRequest\x1a\x1a.paladin.iam.v1.VersionInfo\x12G\n" +
-	"\tGetHealth\x12\x1f.paladin.iam.v1.GetHealthRequest\x1a\x19.paladin.iam.v1.HealthInfoBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"GetVersion\x12 .paladin.iam.v1.GetVersionRequest\x1a\x1a.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12L\n" +
+	"\tGetHealth\x12\x1f.paladin.iam.v1.GetHealthRequest\x1a\x19.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01BCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_health_service_proto_rawDescOnce sync.Once

@@ -79,6 +79,7 @@ func NewObjectTagServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ObjectTagServiceGetObjectTagsProcedure,
 			connect.WithSchema(objectTagServiceMethods.ByName("GetObjectTags")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		putObjectTags: connect.NewClient[v1.PutObjectTagsRequest, v1.PutObjectTagsResponse](
@@ -160,6 +161,7 @@ func NewObjectTagServiceHandler(svc ObjectTagServiceHandler, opts ...connect.Han
 		ObjectTagServiceGetObjectTagsProcedure,
 		svc.GetObjectTags,
 		connect.WithSchema(objectTagServiceMethods.ByName("GetObjectTags")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectTagServicePutObjectTagsHandler := connect.NewUnaryHandler(

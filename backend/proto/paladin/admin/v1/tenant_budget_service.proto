@@ -42,7 +42,9 @@ service TenantBudgetService {
   //
   // Filters keep the wire payload small on platforms with many
   // tenants — typical operator query is "show me anyone over 80 %".
-  rpc Summarize(TenantBudgetServiceSummarizeRequest) returns (TenantBudgetServiceSummarizeResponse);
+  rpc Summarize(TenantBudgetServiceSummarizeRequest) returns (TenantBudgetServiceSummarizeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // TenantBudget is the typed metadata view of a per-tenant aggregate

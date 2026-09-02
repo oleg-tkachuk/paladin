@@ -92,6 +92,7 @@ func NewTenantBudgetServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+TenantBudgetServiceSummarizeProcedure,
 			connect.WithSchema(tenantBudgetServiceMethods.ByName("Summarize")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -165,6 +166,7 @@ func NewTenantBudgetServiceHandler(svc TenantBudgetServiceHandler, opts ...conne
 		TenantBudgetServiceSummarizeProcedure,
 		svc.Summarize,
 		connect.WithSchema(tenantBudgetServiceMethods.ByName("Summarize")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.admin.v1.TenantBudgetService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

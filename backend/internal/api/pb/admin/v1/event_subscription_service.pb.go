@@ -525,13 +525,13 @@ const file_paladin_admin_v1_event_subscription_service_proto_rawDesc = "" +
 	"\tdelivered\x18\x01 \x01(\bR\tdelivered\x12\x1f\n" +
 	"\vstatus_code\x18\x02 \x01(\x05R\n" +
 	"statusCode\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\x94\x05\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\x9e\x05\n" +
 	"\x18EventSubscriptionService\x12d\n" +
-	"\x12CreateSubscription\x12*.paladin.admin.v1.CreateSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\x12^\n" +
-	"\x0fGetSubscription\x12'.paladin.admin.v1.GetSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\x12i\n" +
+	"\x12CreateSubscription\x12*.paladin.admin.v1.CreateSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\x12c\n" +
+	"\x0fGetSubscription\x12'.paladin.admin.v1.GetSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\"\x03\x90\x02\x01\x12i\n" +
 	"\x12UpdateSubscription\x12*.paladin.admin.v1.UpdateSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\"\x03\x90\x02\x02\x12r\n" +
-	"\x12DeleteSubscription\x12*.paladin.admin.v1.DeleteSubscriptionRequest\x1a+.paladin.admin.v1.DeleteSubscriptionResponse\"\x03\x90\x02\x02\x12j\n" +
-	"\x11ListSubscriptions\x12).paladin.admin.v1.ListSubscriptionsRequest\x1a*.paladin.admin.v1.ListSubscriptionsResponse\x12g\n" +
+	"\x12DeleteSubscription\x12*.paladin.admin.v1.DeleteSubscriptionRequest\x1a+.paladin.admin.v1.DeleteSubscriptionResponse\"\x03\x90\x02\x02\x12o\n" +
+	"\x11ListSubscriptions\x12).paladin.admin.v1.ListSubscriptionsRequest\x1a*.paladin.admin.v1.ListSubscriptionsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10TestSubscription\x12(.paladin.admin.v1.TestSubscriptionRequest\x1a).paladin.admin.v1.TestSubscriptionResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (

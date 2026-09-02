@@ -247,12 +247,14 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceListObjectVersionsProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("ListObjectVersions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getObjectVersion: connect.NewClient[v1.GetObjectVersionRequest, v1.ObjectVersion](
 			httpClient,
 			baseURL+ObjectServiceGetObjectVersionProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("GetObjectVersion")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		restoreObjectVersion: connect.NewClient[v1.RestoreObjectVersionRequest, v1.Object](
@@ -277,6 +279,7 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceGetObjectLockProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("GetObjectLock")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -545,12 +548,14 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceListObjectVersionsProcedure,
 		svc.ListObjectVersions,
 		connect.WithSchema(objectServiceMethods.ByName("ListObjectVersions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceGetObjectVersionHandler := connect.NewUnaryHandler(
 		ObjectServiceGetObjectVersionProcedure,
 		svc.GetObjectVersion,
 		connect.WithSchema(objectServiceMethods.ByName("GetObjectVersion")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceRestoreObjectVersionHandler := connect.NewUnaryHandler(
@@ -575,6 +580,7 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceGetObjectLockProcedure,
 		svc.GetObjectLock,
 		connect.WithSchema(objectServiceMethods.ByName("GetObjectLock")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.data.v1.ObjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

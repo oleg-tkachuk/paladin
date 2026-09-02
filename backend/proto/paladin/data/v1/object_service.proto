@@ -83,10 +83,14 @@ service ObjectService {
   // ─── Versioning (opt-in per bucket) ──────────────────────────────────────
   // ListObjectVersions returns the immutable history of an object. Empty
   // when the parent bucket has versioning disabled.
-  rpc ListObjectVersions(ListObjectVersionsRequest) returns (ListObjectVersionsResponse);
+  rpc ListObjectVersions(ListObjectVersionsRequest) returns (ListObjectVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetObjectVersion fetches metadata for a specific version.
-  rpc GetObjectVersion(GetObjectVersionRequest) returns (ObjectVersion);
+  rpc GetObjectVersion(GetObjectVersionRequest) returns (ObjectVersion) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // RestoreObjectVersion makes the named version `current` again. The
   // current version becomes a non-current entry preserving lock state.
@@ -115,7 +119,9 @@ service ObjectService {
   // GetObjectLock reads the current lock state. Returns an empty state — not
   // NOT_FOUND — for an object with no lock, so callers can render "unlocked"
   // without special-casing an error.
-  rpc GetObjectLock(GetObjectLockRequest) returns (ObjectLockState);
+  rpc GetObjectLock(GetObjectLockRequest) returns (ObjectLockState) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ─── Versioning ─────────────────────────────────────────────────────────────

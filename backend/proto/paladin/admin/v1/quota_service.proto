@@ -12,7 +12,9 @@ import "paladin/admin/v1/types.proto";
 // platform/bucket admins; usage is read by tenant admins and end-users.
 service QuotaService {
   // GetQuota returns the tenant's limits and its current usage counters.
-  rpc GetQuota(GetQuotaRequest) returns (Quota);
+  rpc GetQuota(GetQuotaRequest) returns (Quota) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // SetQuota replaces the tenant's limits. Lowering a limit below current usage
   // is allowed — it blocks further growth rather than deleting anything.
   rpc SetQuota(SetQuotaRequest) returns (Quota) {

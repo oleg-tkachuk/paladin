@@ -36,6 +36,40 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — 103 of 142 RPCs declare an idempotency_level
+
+Thirteen more `NO_SIDE_EFFECTS`, and they are the ones the earlier passes said
+were unreachable: `GetHealth`, `GetQuota`, `GetObjectTags`, `GetObjectLock`,
+`GetObjectVersion`, `ListObjectVersions`, `GetSubscription`,
+`ListSubscriptions`, `GetTenantDefaultBinding`, `GetConfig`,
+`GetPlatformStats`, `Summarize`, and `HealthService.GetVersion`.
+
+**Why they were invisible, in three layers.** The guard globbed `handler*.go`,
+a prefix match that never opened `lock_handler.go` or `version_handler.go`. It
+accepted only `*Handler` receivers, while the Connect layer's are `*…Server`.
+And it indexed per package, encoding an assumption the tree does not honour:
+`QuotaService.GetQuota` is a method on `*QuotaServer` that dispatches into
+`H.GetTenantQuota` — a different name, in a different package. Each of the
+three hid the others. Handler bodies actually checked went from 52 to 108.
+
+**The write detector was answering wrongly too.** A probe over what was still
+undeclared reported `RenameTenantSlug`, `Delegate`, `Issue` and
+`MigrateTenantStorageLayout` as writing nothing. They call `Rename`,
+`Delegate`, `Mint` and `Migrate` — words the verb list did not have. Three
+rounds of adding words is the honest measure of a name-based detector: it finds
+what someone thought to name, which is why every annotation is still read by
+hand and this only keeps it true afterwards.
+
+**`DownloadObject` is deliberately NOT annotated.** With the deeper walk it
+reports `RecordPresign` and `ChargeRequest`: it records the presign it issues
+and charges the tenant's quota. It reads like a read and is not one.
+
+**39 remain undeclared, and none of them look like a read** — the census test
+prints the list on every run, so the remaining gap is visible rather than
+inferred.
+
+**Cutting the baseline.** This needs `api/v0.8.0`.
+
 ## Unreleased — 90 of 142 RPCs declare an idempotency_level
 
 Extends the previous entry; the same procedure and the same reasoning. 54 more

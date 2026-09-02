@@ -18,7 +18,9 @@ service SystemService {
   // single YAML blob with all secrets replaced by "***". The shape
   // matches the on-disk config.yaml exactly so an operator can diff
   // what's loaded against what's checked in. Cheap; no DB touch.
-  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetDispatcherStats returns the event dispatcher's operator view:
   // global delivery-queue depth plus a per-subscription breakdown of
@@ -41,7 +43,9 @@ service SystemService {
   // is proxied from the worker pod's BYPASSRLS ops endpoint and
   // degrades to `objects.available=false` when that is unconfigured or
   // unreachable. Read-only, no audit row — it is a dashboard poll.
-  rpc GetPlatformStats(GetPlatformStatsRequest) returns (GetPlatformStatsResponse);
+  rpc GetPlatformStats(GetPlatformStatsRequest) returns (GetPlatformStatsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message GetConfigRequest {}

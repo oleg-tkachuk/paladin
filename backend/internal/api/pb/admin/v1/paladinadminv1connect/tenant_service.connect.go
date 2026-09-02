@@ -253,6 +253,7 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceGetTenantDefaultBindingProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("GetTenantDefaultBinding")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setTenantDefaultBinding: connect.NewClient[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding](
@@ -535,6 +536,7 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceGetTenantDefaultBindingProcedure,
 		svc.GetTenantDefaultBinding,
 		connect.WithSchema(tenantServiceMethods.ByName("GetTenantDefaultBinding")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceSetTenantDefaultBindingHandler := connect.NewUnaryHandler(

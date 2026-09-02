@@ -149,17 +149,28 @@ func (s *memStore) Put(_ context.Context, tenantID uuid.UUID, method, k string, 
 	return nil
 }
 
-// stubSystem implements paladiniamv1connect.SystemServiceHandler with a
-// per-call counter so tests can assert how often the handler ran.
-// GetVersion is the path the memoize test drives; GetHealth is
-// unimplemented (no test exercises it).
+// stubSystem drives the memoize tests through UserSettingsService.UpdateMine,
+// with a per-call counter so they can assert how often the handler ran.
+//
+// It used to drive them through HealthService.GetVersion, and that stopped
+// working the moment GetVersion was annotated NO_SIDE_EFFECTS: the interceptor
+// now refuses to memoize a declared read, which is the feature. One test failed
+// honestly. TWO others — no-header and skip-methods — went on passing, because
+// "the handler ran twice" was suddenly true for a reason that had nothing to do
+// with what they assert. A green test whose mechanism is bypassed is worse than
+// a red one.
+//
+// UpdateMine is chosen for the property that broke the old choice: it is a
+// write, so it will never be annotated a read, and these tests cannot be
+// silently disarmed by the annotation work advancing.
 type stubSystem struct {
+	paladiniamv1connect.UnimplementedUserSettingsServiceHandler
 	mu       sync.Mutex
 	calls    int
 	failOnce bool
 }
 
-func (s *stubSystem) GetVersion(_ context.Context, _ *connect.Request[iamv1.GetVersionRequest]) (*connect.Response[iamv1.VersionInfo], error) {
+func (s *stubSystem) UpdateMine(_ context.Context, _ *connect.Request[iamv1.UpdateMineRequest]) (*connect.Response[iamv1.UserSettings], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
@@ -167,14 +178,10 @@ func (s *stubSystem) GetVersion(_ context.Context, _ *connect.Request[iamv1.GetV
 		s.failOnce = false
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("transient"))
 	}
-	return connect.NewResponse(&iamv1.VersionInfo{
-		Version: "1.2.3",
-		Commit:  "abc1234",
+	return connect.NewResponse(&iamv1.UserSettings{
+		Name:     "users/me/settings",
+		Timezone: "Europe/Kyiv",
 	}), nil
-}
-
-func (s *stubSystem) GetHealth(context.Context, *connect.Request[iamv1.GetHealthRequest]) (*connect.Response[iamv1.HealthInfo], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
 
 // principalInjector wraps the chain with an interceptor that
@@ -195,7 +202,7 @@ func principalInjector(tenantID uuid.UUID) connect.Interceptor {
 	})
 }
 
-func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig) (paladiniamv1connect.HealthServiceClient, *stubSystem, func()) {
+func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig) (paladiniamv1connect.UserSettingsServiceClient, *stubSystem, func()) {
 	t.Helper()
 	tenant := uuid.New()
 	svc := &stubSystem{}
@@ -204,7 +211,7 @@ func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig
 	// interceptor so tenantID is in ctx when Get/Put are called.
 	// Connect's WithInterceptors applies in order — first listed
 	// is outermost.
-	path, handler := paladiniamv1connect.NewHealthServiceHandler(svc,
+	path, handler := paladiniamv1connect.NewUserSettingsServiceHandler(svc,
 		connect.WithInterceptors(
 			principalInjector(tenant),
 			NewIdempotencyInterceptor(store, cfg),
@@ -212,7 +219,7 @@ func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig
 	)
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
-	client := paladiniamv1connect.NewHealthServiceClient(srv.Client(), srv.URL)
+	client := paladiniamv1connect.NewUserSettingsServiceClient(srv.Client(), srv.URL)
 	return client, svc, srv.Close
 }
 
@@ -228,17 +235,17 @@ func TestMemoizeRoundTrip(t *testing.T) {
 	defer cleanup()
 
 	key := uuid.NewString()
-	req := connect.NewRequest(&iamv1.GetVersionRequest{})
+	req := connect.NewRequest(&iamv1.UpdateMineRequest{})
 	req.Header().Set("Idempotency-Key", key)
 
-	first, err := client.GetVersion(context.Background(), req)
+	first, err := client.UpdateMine(context.Background(), req)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
 
-	req2 := connect.NewRequest(&iamv1.GetVersionRequest{})
+	req2 := connect.NewRequest(&iamv1.UpdateMineRequest{})
 	req2.Header().Set("Idempotency-Key", key)
-	second, err := client.GetVersion(context.Background(), req2)
+	second, err := client.UpdateMine(context.Background(), req2)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
@@ -246,7 +253,7 @@ func TestMemoizeRoundTrip(t *testing.T) {
 	if svc.calls != 1 {
 		t.Fatalf("handler must run exactly once on replay; got %d calls", svc.calls)
 	}
-	if first.Msg.Version != second.Msg.Version || first.Msg.Commit != second.Msg.Commit {
+	if first.Msg.Name != second.Msg.Name || first.Msg.Timezone != second.Msg.Timezone {
 		t.Fatalf("replay payload mismatch: %+v vs %+v", first.Msg, second.Msg)
 	}
 }
@@ -259,8 +266,8 @@ func TestNoMemoizeWithoutHeader(t *testing.T) {
 	defer cleanup()
 
 	for range 2 {
-		if _, err := client.GetVersion(context.Background(),
-			connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+		if _, err := client.UpdateMine(context.Background(),
+			connect.NewRequest(&iamv1.UpdateMineRequest{})); err != nil {
 			t.Fatalf("call: %v", err)
 		}
 	}
@@ -282,18 +289,18 @@ func TestNoMemoizeOnError(t *testing.T) {
 	svc.failOnce = true
 
 	key := uuid.NewString()
-	req := connect.NewRequest(&iamv1.GetVersionRequest{})
+	req := connect.NewRequest(&iamv1.UpdateMineRequest{})
 	req.Header().Set("Idempotency-Key", key)
 
 	// First call: handler returns Unavailable — must NOT cache.
-	if _, err := client.GetVersion(context.Background(), req); err == nil {
+	if _, err := client.UpdateMine(context.Background(), req); err == nil {
 		t.Fatal("expected first call to fail")
 	}
 
 	// Second call with same key: must reach handler (retry succeeds).
-	req2 := connect.NewRequest(&iamv1.GetVersionRequest{})
+	req2 := connect.NewRequest(&iamv1.UpdateMineRequest{})
 	req2.Header().Set("Idempotency-Key", key)
-	if _, err := client.GetVersion(context.Background(), req2); err != nil {
+	if _, err := client.UpdateMine(context.Background(), req2); err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 	if svc.calls != 2 {
@@ -316,16 +323,16 @@ func TestSkipMethodsIsNotMemoized(t *testing.T) {
 	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{
 		TTL: time.Minute,
 		SkipMethods: map[string]bool{
-			paladiniamv1connect.HealthServiceGetVersionProcedure: true,
+			paladiniamv1connect.UserSettingsServiceUpdateMineProcedure: true,
 		},
 	})
 	defer cleanup()
 
 	key := uuid.NewString()
 	for i := 0; i < 2; i++ {
-		req := connect.NewRequest(&iamv1.GetVersionRequest{})
+		req := connect.NewRequest(&iamv1.UpdateMineRequest{})
 		req.Header().Set("Idempotency-Key", key)
-		if _, err := client.GetVersion(context.Background(), req); err != nil {
+		if _, err := client.UpdateMine(context.Background(), req); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}

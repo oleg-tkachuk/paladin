@@ -12,7 +12,9 @@ import "paladin/common/v1/pagination.proto";
 // classification systems.
 service ObjectTagService {
   // GetObjectTags returns the object's tag map.
-  rpc GetObjectTags(GetObjectTagsRequest) returns (GetObjectTagsResponse);
+  rpc GetObjectTags(GetObjectTagsRequest) returns (GetObjectTagsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // PutObjectTags merges the supplied keys into the object's tags; keys absent
   // from the request are left alone. resource_version is required.
   rpc PutObjectTags(PutObjectTagsRequest) returns (PutObjectTagsResponse) {

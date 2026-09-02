@@ -69,6 +69,7 @@ func NewQuotaServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+QuotaServiceGetQuotaProcedure,
 			connect.WithSchema(quotaServiceMethods.ByName("GetQuota")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setQuota: connect.NewClient[v1.SetQuotaRequest, v1.Quota](
@@ -133,6 +134,7 @@ func NewQuotaServiceHandler(svc QuotaServiceHandler, opts ...connect.HandlerOpti
 		QuotaServiceGetQuotaProcedure,
 		svc.GetQuota,
 		connect.WithSchema(quotaServiceMethods.ByName("GetQuota")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	quotaServiceSetQuotaHandler := connect.NewUnaryHandler(

@@ -68,12 +68,14 @@ func NewHealthServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+HealthServiceGetVersionProcedure,
 			connect.WithSchema(healthServiceMethods.ByName("GetVersion")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getHealth: connect.NewClient[v1.GetHealthRequest, v1.HealthInfo](
 			httpClient,
 			baseURL+HealthServiceGetHealthProcedure,
 			connect.WithSchema(healthServiceMethods.ByName("GetHealth")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -118,12 +120,14 @@ func NewHealthServiceHandler(svc HealthServiceHandler, opts ...connect.HandlerOp
 		HealthServiceGetVersionProcedure,
 		svc.GetVersion,
 		connect.WithSchema(healthServiceMethods.ByName("GetVersion")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	healthServiceGetHealthHandler := connect.NewUnaryHandler(
 		HealthServiceGetHealthProcedure,
 		svc.GetHealth,
 		connect.WithSchema(healthServiceMethods.ByName("GetHealth")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.iam.v1.HealthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

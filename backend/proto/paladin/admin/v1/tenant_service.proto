@@ -104,7 +104,9 @@ service TenantService {
   // GetTenantDefaultBinding returns the tenant's default (backend, bucket)
   // route used to complete the bare collection name shape (ADR-0010 Phase 3).
   // NOT_FOUND when the tenant has no binding set.
-  rpc GetTenantDefaultBinding(GetTenantDefaultBindingRequest) returns (TenantDefaultBinding);
+  rpc GetTenantDefaultBinding(GetTenantDefaultBindingRequest) returns (TenantDefaultBinding) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetTenantDefaultBinding upserts the tenant's default route. The
   // (backend, bucket) MUST reference an existing bucket.

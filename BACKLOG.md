@@ -1531,7 +1531,8 @@ of the pipeline._
 
 ### The idempotency classification lives in three places, in two languages
 
-- **Status:** Deferred (documented 2026-09-01; the copies agree today).
+- **Status:** Narrowed 2026-09-02 — the proto now carries the answer for 103 of
+  142 RPCs; the three prefix lists are still there and still cannot go yet.
 - **Reason:** Which RPCs carry an `Idempotency-Key` is decided by an identical
   prefix list in `frontend/src/lib/connect/transport.ts`,
   `backend/cmd/seed-fixture/main.go` and `backend/internal/mcp/idempotency.go`.
@@ -1539,22 +1540,28 @@ of the pipeline._
   shape of every divergence this repository has chased — the plane addresses
   had three spellings, the stack ports had two, and both cost a real debugging
   session before anyone noticed.
-- **Why it is not one place already:** the natural home is the proto itself.
-  `google.protobuf.MethodOptions.idempotency_level` exists precisely for this
-  and no RPC declares it — checked, zero occurrences across 142. With it
-  declared, the server could require/memoize from the descriptor and every
-  generated client could read the same value instead of pattern-matching
-  names. The pattern-matching is what forced the fix in the first place: the
-  server's rule reads `Create*`/`Issue*`, so `UploadObject` was never covered
-  even though the comment justifying the gate named it.
-- **Definition of Done:** annotate the RPCs with `idempotency_level`
-  (`NO_SIDE_EFFECTS` for reads, `IDEMPOTENT` for the OCC-guarded and delete
-  paths, leaving `IDEMPOTENCY_UNKNOWN` for the ones that need a key); drive the
-  server's requirement and memoization from the descriptor; delete all three
-  prefix lists. `buf breaking` treats the option as non-breaking, so it can
-  land in one pass.
-- **Blockers:** none. It is 142 annotations and a decision per RPC, which is
-  the work — the decisions are the same ones now encoded three times.
+- **What landed:** 59 RPCs declare `NO_SIDE_EFFECTS` and 44 declare
+  `IDEMPOTENT`, each verified by a guard in
+  `backend/internal/api/idempotency_contract_test.go` — the read guard parses
+  the handler and fails on a reachable write, the idempotent guard requires a
+  removal verb, an OCC `resource_version`, or a written reason. The server
+  reads the descriptor and no longer memoizes a declared read.
+- **What blocks deleting the lists:** the clients would have to treat
+  `IDEMPOTENCY_UNKNOWN` as "needs a key", and 39 RPCs still carry it. That is
+  now the honest residue rather than a backlog — the census test prints them
+  every run and none looks like a read — but a client driven off the descriptor
+  would still be sending keys on RPCs nobody has classified. The remaining work
+  is a decision per RPC on those 39, not more tooling.
+- **Definition of Done:** classify the last 39; then have all three clients read
+  `method.idempotency` from the generated descriptor (connect-es exposes it at
+  runtime; the Go generated code carries it in the file descriptor) and delete
+  the prefix lists.
+- **Correction to the earlier entry:** it claimed `buf breaking` treats
+  `idempotency_level` as non-breaking and the work could land in one pass. Both
+  false. The rule `RPC_SAME_IDEMPOTENCY_LEVEL` is in the WIRE category, so every
+  batch of annotations is a breaking change needing a fresh baseline tag —
+  api/v0.6.0, v0.7.0 and now v0.8.0, one per pass. The gate caught this
+  claim's author.
 
 ### Drop the deprecated plane-address aliases
 

@@ -99,6 +99,7 @@ func NewEventSubscriptionServiceClient(httpClient connect.HTTPClient, baseURL st
 			httpClient,
 			baseURL+EventSubscriptionServiceGetSubscriptionProcedure,
 			connect.WithSchema(eventSubscriptionServiceMethods.ByName("GetSubscription")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateSubscription: connect.NewClient[v1.UpdateSubscriptionRequest, v1.EventSubscription](
@@ -119,6 +120,7 @@ func NewEventSubscriptionServiceClient(httpClient connect.HTTPClient, baseURL st
 			httpClient,
 			baseURL+EventSubscriptionServiceListSubscriptionsProcedure,
 			connect.WithSchema(eventSubscriptionServiceMethods.ByName("ListSubscriptions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		testSubscription: connect.NewClient[v1.TestSubscriptionRequest, v1.TestSubscriptionResponse](
@@ -211,6 +213,7 @@ func NewEventSubscriptionServiceHandler(svc EventSubscriptionServiceHandler, opt
 		EventSubscriptionServiceGetSubscriptionProcedure,
 		svc.GetSubscription,
 		connect.WithSchema(eventSubscriptionServiceMethods.ByName("GetSubscription")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	eventSubscriptionServiceUpdateSubscriptionHandler := connect.NewUnaryHandler(
@@ -231,6 +234,7 @@ func NewEventSubscriptionServiceHandler(svc EventSubscriptionServiceHandler, opt
 		EventSubscriptionServiceListSubscriptionsProcedure,
 		svc.ListSubscriptions,
 		connect.WithSchema(eventSubscriptionServiceMethods.ByName("ListSubscriptions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	eventSubscriptionServiceTestSubscriptionHandler := connect.NewUnaryHandler(

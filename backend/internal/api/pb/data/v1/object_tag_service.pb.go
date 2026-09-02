@@ -550,9 +550,9 @@ const file_paladin_data_v1_object_tag_service_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v22.paladin.data.v1.DeleteObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xab\x03\n" +
-	"\x10ObjectTagService\x12\\\n" +
-	"\rGetObjectTags\x12$.paladin.data.v1.GetObjectTagsRequest\x1a%.paladin.data.v1.GetObjectTagsResponse\x12a\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xb0\x03\n" +
+	"\x10ObjectTagService\x12a\n" +
+	"\rGetObjectTags\x12$.paladin.data.v1.GetObjectTagsRequest\x1a%.paladin.data.v1.GetObjectTagsResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\rPutObjectTags\x12$.paladin.data.v1.PutObjectTagsRequest\x1a%.paladin.data.v1.PutObjectTagsResponse\"\x03\x90\x02\x02\x12j\n" +
 	"\x10DeleteObjectTags\x12'.paladin.data.v1.DeleteObjectTagsRequest\x1a(.paladin.data.v1.DeleteObjectTagsResponse\"\x03\x90\x02\x02\x12j\n" +
 	"\x10ListDistinctTags\x12'.paladin.data.v1.ListDistinctTagsRequest\x1a(.paladin.data.v1.ListDistinctTagsResponse\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"

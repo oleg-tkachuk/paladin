@@ -20,13 +20,17 @@ import "google/api/field_behavior.proto";
 service HealthService {
   // GetVersion returns build metadata embedded in the binary at link time
   // (-ldflags). Cheap, no dependencies touched. Safe to poll.
-  rpc GetVersion(GetVersionRequest) returns (VersionInfo);
+  rpc GetVersion(GetVersionRequest) returns (VersionInfo) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetHealth runs the same per-component checks as /readyz but returns
   // them itemised so the UI can render a per-dependency table. Each
   // component carries its own status + latency so a single slow
   // dependency is identifiable without log scraping.
-  rpc GetHealth(GetHealthRequest) returns (HealthInfo);
+  rpc GetHealth(GetHealthRequest) returns (HealthInfo) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message GetVersionRequest {}

@@ -40,9 +40,16 @@ func TestMethodIdempotencyReadsTheDescriptor(t *testing.T) {
 			"creates an object; the honest default, and the RPC the old name-prefix rule missed",
 		},
 		{
-			"/paladin.iam.v1.HealthService/GetVersion",
+			// DownloadObject rather than HealthService/GetVersion, which this
+			// case used until GetVersion was annotated and broke it. An exemplar
+			// picked for being unannotated has a shelf life; this one is picked
+			// for being unannotABLE. It reads like a read and is not one — it
+			// records the presign it issues and charges the tenant's quota — so
+			// it can never carry NO_SIDE_EFFECTS however far the work proceeds.
+			"/paladin.data.v1.ObjectService/DownloadObject",
 			descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN,
-			"a read, but NOT annotated — unverified must not be mistaken for declared",
+			"named like a read, but records a presign and charges quota — unverified " +
+				"must not be mistaken for declared",
 		},
 		{
 			"/paladin.admin.v1.NoSuchService/NoSuchMethod",
@@ -75,9 +82,9 @@ func TestOnlyNoSideEffectsCountsAsARead(t *testing.T) {
 	if declaredRead("/paladin.data.v1.ObjectService/UploadObject") {
 		t.Error("UploadObject treated as a read; its replay is the whole point of the key")
 	}
-	if declaredRead("/paladin.iam.v1.HealthService/GetVersion") {
-		t.Error("an UNANNOTATED read must not be treated as declared — that would " +
-			"extend the guarantee to RPCs nobody checked")
+	if declaredRead("/paladin.data.v1.ObjectService/DownloadObject") {
+		t.Error("an UNANNOTATED procedure must not be treated as declared — that " +
+			"would extend the guarantee to RPCs nobody checked")
 	}
 }
 
