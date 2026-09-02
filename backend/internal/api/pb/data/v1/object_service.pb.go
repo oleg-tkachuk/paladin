@@ -1902,7 +1902,7 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x10PresignTransport\x12!\n" +
 	"\x1dPRESIGN_TRANSPORT_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESIGN_TRANSPORT_PUT\x10\x01\x12\x1a\n" +
-	"\x16PRESIGN_TRANSPORT_POST\x10\x022\x97\f\n" +
+	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xa6\f\n" +
 	"\rObjectService\x12Y\n" +
 	"\fUploadObject\x12#.paladin.data.v1.UploadObjectRequest\x1a$.paladin.data.v1.UploadObjectResponse\x12_\n" +
 	"\x0eDownloadObject\x12%.paladin.data.v1.DownloadObjectRequest\x1a&.paladin.data.v1.DownloadObjectResponse\x12J\n" +
@@ -1917,10 +1917,10 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\vListObjects\x12\".paladin.data.v1.ListObjectsRequest\x1a#.paladin.data.v1.ListObjectsResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\fCountObjects\x12#.paladin.data.v1.CountObjectsRequest\x1a$.paladin.data.v1.CountObjectsResponse\"\x03\x90\x02\x01\x12p\n" +
 	"\x12ListObjectVersions\x12).paladin.data.v1.ListObjectVersionsRequest\x1a*.paladin.data.v1.ListObjectVersionsResponse\"\x03\x90\x02\x01\x12_\n" +
-	"\x10GetObjectVersion\x12'.paladin.data.v1.GetObjectVersionRequest\x1a\x1d.paladin.data.v1.ObjectVersion\"\x03\x90\x02\x01\x12[\n" +
-	"\x14RestoreObjectVersion\x12+.paladin.data.v1.RestoreObjectVersionRequest\x1a\x16.paladin.data.v1.Object\x12`\n" +
-	"\x12SetObjectRetention\x12).paladin.data.v1.SetObjectRetentionRequest\x1a\x1f.paladin.data.v1.ObjectLockState\x12`\n" +
-	"\x12SetObjectLegalHold\x12).paladin.data.v1.SetObjectLegalHoldRequest\x1a\x1f.paladin.data.v1.ObjectLockState\x12[\n" +
+	"\x10GetObjectVersion\x12'.paladin.data.v1.GetObjectVersionRequest\x1a\x1d.paladin.data.v1.ObjectVersion\"\x03\x90\x02\x01\x12`\n" +
+	"\x14RestoreObjectVersion\x12+.paladin.data.v1.RestoreObjectVersionRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x02\x12e\n" +
+	"\x12SetObjectRetention\x12).paladin.data.v1.SetObjectRetentionRequest\x1a\x1f.paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12e\n" +
+	"\x12SetObjectLegalHold\x12).paladin.data.v1.SetObjectLegalHoldRequest\x1a\x1f.paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12[\n" +
 	"\rGetObjectLock\x12$.paladin.data.v1.GetObjectLockRequest\x1a\x1f.paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (

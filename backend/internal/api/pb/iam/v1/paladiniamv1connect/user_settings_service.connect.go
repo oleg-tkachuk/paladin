@@ -93,6 +93,7 @@ func NewUserSettingsServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+UserSettingsServiceUpdateMineProcedure,
 			connect.WithSchema(userSettingsServiceMethods.ByName("UpdateMine")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		getForUser: connect.NewClient[v1.GetForUserRequest, v1.UserSettings](
@@ -191,6 +192,7 @@ func NewUserSettingsServiceHandler(svc UserSettingsServiceHandler, opts ...conne
 		UserSettingsServiceUpdateMineProcedure,
 		svc.UpdateMine,
 		connect.WithSchema(userSettingsServiceMethods.ByName("UpdateMine")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	userSettingsServiceGetForUserHandler := connect.NewUnaryHandler(

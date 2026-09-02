@@ -129,6 +129,7 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+UserServiceGrantScopesProcedure,
 			connect.WithSchema(userServiceMethods.ByName("GrantScopes")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		revokeScopes: connect.NewClient[v1.RevokeScopesRequest, v1.User](
@@ -142,6 +143,7 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+UserServiceResetPasswordProcedure,
 			connect.WithSchema(userServiceMethods.ByName("ResetPassword")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -270,6 +272,7 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		UserServiceGrantScopesProcedure,
 		svc.GrantScopes,
 		connect.WithSchema(userServiceMethods.ByName("GrantScopes")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	userServiceRevokeScopesHandler := connect.NewUnaryHandler(
@@ -283,6 +286,7 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		UserServiceResetPasswordProcedure,
 		svc.ResetPassword,
 		connect.WithSchema(userServiceMethods.ByName("ResetPassword")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/paladin.iam.v1.UserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

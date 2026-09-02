@@ -28,7 +28,9 @@ service UserSettingsService {
   }
   // UpdateMine writes the calling user's settings. An empty resource_version
   // means "create"; a non-empty one must match, or the write is Aborted.
-  rpc UpdateMine(UpdateMineRequest) returns (UserSettings);
+  rpc UpdateMine(UpdateMineRequest) returns (UserSettings) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // GetForUser reads another user's settings. Tenant-admin only — the
   // self-service path is GetMine.
   rpc GetForUser(GetForUserRequest) returns (UserSettings) {

@@ -160,6 +160,7 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BackendServiceTestBackendProcedure,
 			connect.WithSchema(backendServiceMethods.ByName("TestBackend")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setBackendEnabled: connect.NewClient[v1.SetBackendEnabledRequest, v1.StorageBackend](
@@ -340,6 +341,7 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		BackendServiceTestBackendProcedure,
 		svc.TestBackend,
 		connect.WithSchema(backendServiceMethods.ByName("TestBackend")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	backendServiceSetBackendEnabledHandler := connect.NewUnaryHandler(

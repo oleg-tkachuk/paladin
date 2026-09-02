@@ -37,7 +37,9 @@ service UserService {
 
   // GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
   // than UpdateUser with a scopes field).
-  rpc GrantScopes(GrantScopesRequest) returns (User);
+  rpc GrantScopes(GrantScopesRequest) returns (User) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // RevokeScopes removes the named scopes from the user. Tokens already issued
   // keep their scopes until they expire — this changes what the next token
   // will carry.
@@ -46,7 +48,9 @@ service UserService {
   }
 
   // ResetPassword forces a password change on next login. Local IdP only.
-  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message CreateUserRequest {

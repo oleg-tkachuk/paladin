@@ -261,18 +261,21 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ObjectServiceRestoreObjectVersionProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("RestoreObjectVersion")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setObjectRetention: connect.NewClient[v1.SetObjectRetentionRequest, v1.ObjectLockState](
 			httpClient,
 			baseURL+ObjectServiceSetObjectRetentionProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("SetObjectRetention")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		setObjectLegalHold: connect.NewClient[v1.SetObjectLegalHoldRequest, v1.ObjectLockState](
 			httpClient,
 			baseURL+ObjectServiceSetObjectLegalHoldProcedure,
 			connect.WithSchema(objectServiceMethods.ByName("SetObjectLegalHold")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		getObjectLock: connect.NewClient[v1.GetObjectLockRequest, v1.ObjectLockState](
@@ -562,18 +565,21 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		ObjectServiceRestoreObjectVersionProcedure,
 		svc.RestoreObjectVersion,
 		connect.WithSchema(objectServiceMethods.ByName("RestoreObjectVersion")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceSetObjectRetentionHandler := connect.NewUnaryHandler(
 		ObjectServiceSetObjectRetentionProcedure,
 		svc.SetObjectRetention,
 		connect.WithSchema(objectServiceMethods.ByName("SetObjectRetention")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceSetObjectLegalHoldHandler := connect.NewUnaryHandler(
 		ObjectServiceSetObjectLegalHoldProcedure,
 		svc.SetObjectLegalHold,
 		connect.WithSchema(objectServiceMethods.ByName("SetObjectLegalHold")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectServiceGetObjectLockHandler := connect.NewUnaryHandler(

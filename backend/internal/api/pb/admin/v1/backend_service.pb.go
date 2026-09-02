@@ -784,7 +784,7 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\x1cSetBackendMaintenanceRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12 \n" +
 	"\vmaintenance\x18\x02 \x01(\bR\vmaintenance\x122\n" +
-	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xdd\a\n" +
+	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xe2\a\n" +
 	"\x0eBackendService\x12W\n" +
 	"\rCreateBackend\x12%.paladin.admin.v1.CreateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12V\n" +
 	"\n" +
@@ -792,8 +792,8 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\rUpdateBackend\x12%.paladin.admin.v1.UpdateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12c\n" +
 	"\rDeleteBackend\x12%.paladin.admin.v1.DeleteBackendRequest\x1a&.paladin.admin.v1.DeleteBackendResponse\"\x03\x90\x02\x02\x12`\n" +
 	"\fListBackends\x12$.paladin.admin.v1.ListBackendsRequest\x1a%.paladin.admin.v1.ListBackendsResponse\"\x03\x90\x02\x01\x12_\n" +
-	"\x11RotateCredentials\x12).paladin.admin.v1.RotateCredentialsRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12X\n" +
-	"\vTestBackend\x12#.paladin.admin.v1.TestBackendRequest\x1a$.paladin.admin.v1.TestBackendResponse\x12d\n" +
+	"\x11RotateCredentials\x12).paladin.admin.v1.RotateCredentialsRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12]\n" +
+	"\vTestBackend\x12#.paladin.admin.v1.TestBackendRequest\x1a$.paladin.admin.v1.TestBackendResponse\"\x03\x90\x02\x02\x12d\n" +
 	"\x11SetBackendEnabled\x12).paladin.admin.v1.SetBackendEnabledRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12f\n" +
 	"\x12SetBackendReadOnly\x12*.paladin.admin.v1.SetBackendReadOnlyRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12l\n" +
 	"\x15SetBackendMaintenance\x12-.paladin.admin.v1.SetBackendMaintenanceRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"

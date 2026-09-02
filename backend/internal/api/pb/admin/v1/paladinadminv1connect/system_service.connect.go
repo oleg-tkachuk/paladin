@@ -96,6 +96,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+SystemServiceGetDispatcherStatsProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getPlatformStats: connect.NewClient[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse](
@@ -178,6 +179,7 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		SystemServiceGetDispatcherStatsProcedure,
 		svc.GetDispatcherStats,
 		connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceGetPlatformStatsHandler := connect.NewUnaryHandler(

@@ -1726,10 +1726,10 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\vtotal_bytes\x18\x04 \x01(\x03R\n" +
 	"totalBytes\x12<\n" +
 	"\atenants\x18\x05 \x03(\v2\".paladin.admin.v1.TenantObjectStatsR\atenants\x12+\n" +
-	"\x11tenants_truncated\x18\x06 \x01(\x03R\x10tenantsTruncatedJ\x04\b\x01\x10\x02R\tavailable2\xc5\x02\n" +
+	"\x11tenants_truncated\x18\x06 \x01(\x03R\x10tenantsTruncatedJ\x04\b\x01\x10\x02R\tavailable2\xca\x02\n" +
 	"\rSystemService\x12W\n" +
-	"\tGetConfig\x12!.paladin.admin.v1.GetConfigRequest\x1a\".paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12m\n" +
-	"\x12GetDispatcherStats\x12*.paladin.admin.v1.GetDispatcherStatsRequest\x1a+.paladin.admin.v1.GetDispatcherStatsResponse\x12l\n" +
+	"\tGetConfig\x12!.paladin.admin.v1.GetConfigRequest\x1a\".paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12GetDispatcherStats\x12*.paladin.admin.v1.GetDispatcherStatsRequest\x1a+.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12l\n" +
 	"\x10GetPlatformStats\x12(.paladin.admin.v1.GetPlatformStatsRequest\x1a).paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (

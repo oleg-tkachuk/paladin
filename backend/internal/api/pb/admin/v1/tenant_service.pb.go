@@ -1338,7 +1338,7 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\"?\n" +
 	" ClearTenantDefaultBindingRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"#\n" +
-	"!ClearTenantDefaultBindingResponse2\x8f\f\n" +
+	"!ClearTenantDefaultBindingResponse2\x94\f\n" +
 	"\rTenantService\x12M\n" +
 	"\fCreateTenant\x12$.paladin.admin.v1.CreateTenantRequest\x1a\x17.paladin.admin.v1.Tenant\x12L\n" +
 	"\tGetTenant\x12!.paladin.admin.v1.GetTenantRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x01\x12R\n" +
@@ -1347,8 +1347,8 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\vListTenants\x12#.paladin.admin.v1.ListTenantsRequest\x1a$.paladin.admin.v1.ListTenantsResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\x12SetInheritedPolicy\x12*.paladin.admin.v1.SetInheritedPolicyRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x02\x12O\n" +
 	"\rRestoreTenant\x12%.paladin.admin.v1.RestoreTenantRequest\x1a\x17.paladin.admin.v1.Tenant\x12]\n" +
-	"\vPurgeTenant\x12#.paladin.admin.v1.PurgeTenantRequest\x1a$.paladin.admin.v1.PurgeTenantResponse\"\x03\x90\x02\x02\x12U\n" +
-	"\x10RenameTenantSlug\x12(.paladin.admin.v1.RenameTenantSlugRequest\x1a\x17.paladin.admin.v1.Tenant\x12y\n" +
+	"\vPurgeTenant\x12#.paladin.admin.v1.PurgeTenantRequest\x1a$.paladin.admin.v1.PurgeTenantResponse\"\x03\x90\x02\x02\x12Z\n" +
+	"\x10RenameTenantSlug\x12(.paladin.admin.v1.RenameTenantSlugRequest\x1a\x17.paladin.admin.v1.Tenant\"\x03\x90\x02\x02\x12y\n" +
 	"\x1aMigrateTenantStorageLayout\x122.paladin.admin.v1.MigrateTenantStorageLayoutRequest\x1a'.paladin.admin.v1.StorageMigrationStatus\x12|\n" +
 	"\x19GetTenantStorageMigration\x121.paladin.admin.v1.GetTenantStorageMigrationRequest\x1a'.paladin.admin.v1.StorageMigrationStatus\"\x03\x90\x02\x01\x12r\n" +
 	"\x12ResolveRenamedSlug\x12*.paladin.admin.v1.ResolveRenamedSlugRequest\x1a+.paladin.admin.v1.ResolveRenamedSlugResponse\"\x03\x90\x02\x01\x12v\n" +

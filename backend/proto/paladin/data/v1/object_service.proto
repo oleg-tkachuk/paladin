@@ -94,7 +94,9 @@ service ObjectService {
 
   // RestoreObjectVersion makes the named version `current` again. The
   // current version becomes a non-current entry preserving lock state.
-  rpc RestoreObjectVersion(RestoreObjectVersionRequest) returns (Object);
+  rpc RestoreObjectVersion(RestoreObjectVersionRequest) returns (Object) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
   //
@@ -109,12 +111,16 @@ service ObjectService {
   // protecting today's copy of it.
   // SetObjectRetention applies or extends a retention window on an object's
   // current version. Requires the parent bucket to have object lock enabled.
-  rpc SetObjectRetention(SetObjectRetentionRequest) returns (ObjectLockState);
+  rpc SetObjectRetention(SetObjectRetentionRequest) returns (ObjectLockState) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
   // for as long as it is on, independently of any retention window, and is
   // not subject to the GOVERNANCE bypass.
-  rpc SetObjectLegalHold(SetObjectLegalHoldRequest) returns (ObjectLockState);
+  rpc SetObjectLegalHold(SetObjectLegalHoldRequest) returns (ObjectLockState) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // GetObjectLock reads the current lock state. Returns an empty state — not
   // NOT_FOUND — for an object with no lock, so callers can render "unlocked"

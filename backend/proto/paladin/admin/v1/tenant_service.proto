@@ -73,7 +73,9 @@ service TenantService {
   // inherited_cedar_policy AND in every collection's cedar_policy to
   // `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
   // the supplied resource_version. Returns the renamed Tenant.
-  rpc RenameTenantSlug(RenameTenantSlugRequest) returns (Tenant);
+  rpc RenameTenantSlug(RenameTenantSlugRequest) returns (Tenant) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
   // (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an

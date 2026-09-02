@@ -227,6 +227,7 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+TenantServiceRenameTenantSlugProcedure,
 			connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		migrateTenantStorageLayout: connect.NewClient[v1.MigrateTenantStorageLayoutRequest, v1.StorageMigrationStatus](
@@ -510,6 +511,7 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		TenantServiceRenameTenantSlugProcedure,
 		svc.RenameTenantSlug,
 		connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	tenantServiceMigrateTenantStorageLayoutHandler := connect.NewUnaryHandler(

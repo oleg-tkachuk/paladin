@@ -42,7 +42,9 @@ service BackendService {
   rpc RotateCredentials(RotateCredentialsRequest) returns (StorageBackend);
 
   // TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
-  rpc TestBackend(TestBackendRequest) returns (TestBackendResponse);
+  rpc TestBackend(TestBackendRequest) returns (TestBackendResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 
   // SetBackendEnabled flips the backend's enabled state. Idempotent
   // (setting the current state is a no-op success). OCC-guarded via

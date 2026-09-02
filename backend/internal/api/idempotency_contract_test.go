@@ -63,7 +63,13 @@ var writeVerb = regexp.MustCompile(
 		// finds what someone thought to name. That is why every annotation is read
 		// by hand first and this only has to keep it true afterwards.
 		`Start|Stop|Submit|Charge|Deliver|Commit|Begin|Flush|Import|Move|Upload|` +
-		`Drain|Promote|Demote|Approve|Reject|Complete|Finish|Trigger|Schedule|Exec)`)
+		`Drain|Promote|Demote|Approve|Reject|Complete|Finish|Trigger|Schedule|Exec)` +
+		// The verb must END there — at the end of the name or at the next
+		// capital. Without this it is a bare prefix match, and `Dispatch` swallowed
+		// `DispatcherStats`: an HTTP GET for the dispatcher's stats page, reported
+		// as a write, which is how a genuine read stays undeclared for looking
+		// guilty. `DispatchTx` still matches, because Tx is a new word.
+		`([A-Z]|$)`)
 
 // noSideEffectRPCs collects every method the descriptors declare NO_SIDE_EFFECTS.
 func noSideEffectRPCs(t *testing.T) []string {
@@ -368,6 +374,24 @@ var idempotentByArgument = map[string]string{
 	"RegenerateUploadUrl":     "re-signs a URL for an EXISTING pending row; creates nothing",
 	"PutObjectTags":           "a PUT replaces the whole tag set with the one supplied",
 	"ResetUsage":              "zeroes a counter; zeroing twice lands on zero",
+
+	// Read out of the SQL rather than inferred from the verb, because the verb
+	// is what made RotateCredentials look safe.
+	"SetObjectLegalHold": "ON CONFLICT DO UPDATE SET legal_hold = EXCLUDED.legal_hold — " +
+		"an upsert of one flag to the value supplied",
+	"SetObjectRetention": "the same upsert; a repeat of the same retain_until satisfies " +
+		"the `EXCLUDED.retain_until >= ol.retain_until` guard by equality",
+	"GrantScopes": "mergeScopes dedups by Scope.String(), so this is a set union — " +
+		"granting a scope already held changes nothing",
+	"ResetPassword": "sets the password to the one supplied. The bcrypt hash differs " +
+		"per call because the salt does; WHICH PASSWORD WORKS does not, and that is " +
+		"the observable state",
+	"TestBackend": "probes the backend and overwrites the health row with the result. " +
+		"The row holds the latest probe either way — and note this is exactly the RPC " +
+		"whose proto comment says \"Read-only\" while it writes, which is why it is " +
+		"here and not among the NO_SIDE_EFFECTS",
+	"UpdateMine": "INSERT … ON CONFLICT (user_id) DO UPDATE of one settings row from " +
+		"the masked request",
 }
 
 var removalVerb = regexp.MustCompile(`^(Delete|Clear|Abort|Cancel|Revoke|Purge|Remove)`)

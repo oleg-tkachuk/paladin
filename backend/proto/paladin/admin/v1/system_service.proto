@@ -31,7 +31,9 @@ service SystemService {
   // Empty/zeroed response with `available=false` when the dispatcher
   // ops endpoint is unconfigured or unreachable — the console renders
   // "stats unavailable" rather than erroring.
-  rpc GetDispatcherStats(GetDispatcherStatsRequest) returns (GetDispatcherStatsResponse);
+  rpc GetDispatcherStats(GetDispatcherStatsRequest) returns (GetDispatcherStatsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetPlatformStats returns a cross-tenant census of the control plane:
   // how many tenants / storage backends / buckets / object keys / users

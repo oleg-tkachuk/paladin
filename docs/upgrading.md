@@ -36,6 +36,41 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — 112 of 142 RPCs declare an idempotency_level
+
+Nine more: one read and eight idempotent writes. The remaining 30 are the
+honest residue — every one of them creates, mints, charges or submits, and
+`IDEMPOTENCY_UNKNOWN` is the right answer for all of them.
+
+**`GetDispatcherStats` was never a write.** It was reported as one because the
+verb list matched prefixes, and `Dispatch` swallowed `DispatcherStats` — an
+outbound HTTP GET for the dispatcher's stats page. The verb now has to end at a
+word boundary. A genuine read stayed undeclared for months for looking guilty.
+
+**Two are OCC-guarded**: `RestoreObjectVersion` and `RenameTenantSlug` carry
+`resource_version`, so a repeat writes the same value or fails `Aborted`.
+
+**Six carry a written reason**, each read out of the SQL rather than inferred
+from the verb — which is what made `RotateCredentials` look safe:
+`SetObjectLegalHold` and `SetObjectRetention` are `ON CONFLICT DO UPDATE` to
+the value supplied; `GrantScopes` merges through a dedup keyed on the scope
+string, so it is a set union; `ResetPassword` sets the password to the one
+given (the bcrypt hash differs per call because the salt does, but which
+password works does not); `UpdateMine` upserts one settings row; and
+`TestBackend` re-probes and overwrites the health row — the same RPC whose
+proto comment says "Read-only" while it writes, which is why it is idempotent
+and not a read.
+
+**`RestoreTenant` and `ChangePassword` are deliberately left undeclared.** Both
+converge on state, and both answer a repeat with an error: the restore query is
+`WHERE deleted_at IS NOT NULL`, so a second call touches no row and returns
+`ErrNotTrashed`, and `ChangePassword` checks the old password, which the first
+call already invalidated. A proxy retrying either would report a failure for an
+operation that succeeded. The OCC pair above answer `Aborted`, which is the
+standard "re-read and retry" signal; these two do not.
+
+**Cutting the baseline.** This needs `api/v0.9.0`.
+
 ## Unreleased — 103 of 142 RPCs declare an idempotency_level
 
 Thirteen more `NO_SIDE_EFFECTS`, and they are the ones the earlier passes said
