@@ -34,35 +34,35 @@ import {
  */
 
 /**
- * Idempotency-Key auto-injection.
+ * Idempotency-Key auto-injection, decided by the wire contract.
  *
- * The header does two different things on the server, and only one of them
- * looks at the method name (backend `internal/middleware/idempotency.go`):
+ * This was a prefix list — Create, Issue, Delegate, Grant, Upload, Complete,
+ * Initiate, Copy, Restore, Batch — duplicated verbatim in
+ * `backend/cmd/seed-fixture/main.go` and `backend/internal/mcp/idempotency.go`,
+ * each with a comment telling the reader to change the other two. The proto now
+ * carries the answer as `idempotency_level` on 112 of 142 RPCs, and
+ * `@bufbuild/protobuf` exposes it at runtime as `req.method.idempotency`.
  *
- *   - it is REQUIRED on `Create*` / `Issue*`, rejected with InvalidArgument
- *     before the handler runs when absent;
- *   - it is HONOURED on any RPC at all — a request carrying a key gets its
- *     first response memoized and replayed.
+ * The rule: stamp a key iff the method declares IDEMPOTENCY_UNKNOWN.
  *
- * So the interesting set is wider than the required one. `UploadObject` is the
- * case that motivated widening it: a retry after a dropped connection collides
- * on the (collection, path) unique index and answers AlreadyExists, when what
- * the caller wants — and what a key delivers — is the original object id and
- * presigned URL back.
+ *   - NO_SIDE_EFFECTS changes nothing. A key would write a row in
+ *     idempotency_keys and risk serving a snapshot from up to a TTL ago in
+ *     answer to a question about now.
+ *   - IDEMPOTENT is already safe to repeat — by resource_version, by being a
+ *     removal, or by upserting the value the caller supplied. A key adds a row
+ *     and no safety.
+ *   - IDEMPOTENCY_UNKNOWN is every call whose repeat nobody has promised
+ *     anything about, which is exactly where the key does its work.
  *
- * It is NOT every mutation, and the exclusions are the point:
- *
- *   - Reads. Memoizing a List would serve a stale page under a key the caller
- *     reused, and every Get would write an idempotency row for nothing.
- *   - `Update*` / `Set*`. Already guarded by `resource_version`: a duplicate
- *     either writes the same value or fails Aborted. A key adds a row and no
- *     safety.
- *   - `Delete*`. Idempotent by nature — the second one finds nothing to do.
- *   - Credential minting (Login, RefreshToken, ExchangeAudience, SwitchTenant).
- *     Replaying these is actively wrong: refresh tokens rotate, and a replayed
- *     response hands back a pair the server has already invalidated. The server
- *     refuses to memoize them regardless (middleware.CredentialMintingProcedures);
- *     not sending a key here keeps the two sides saying the same thing.
+ * Two behaviours change, and both are the descriptor being right where the
+ * prefixes were not. `RestoreObjectVersion` no longer gets a key: the `Restore`
+ * prefix swept it in, and it is OCC-guarded. Credential minting — Login,
+ * RefreshToken, ExchangeAudience, SwitchTenant — now DOES get one: the console
+ * used to withhold it because replaying a rotated refresh token is wrong, which
+ * is true and is enforced where it belongs, on the server
+ * (middleware.CredentialMintingProcedures). A key is a caller's de-duplication
+ * token, not a request to cache; the server decides, and for those four it
+ * declines.
  *
  * A fresh UUID per call, so a transport-level retry of the same request object
  * collapses. It does NOT collapse two separate user clicks — those are two
@@ -70,30 +70,17 @@ import {
  * at the call site from the submission, which is a call-site decision, not a
  * transport one.
  */
-const IDEMPOTENT_PREFIXES = [
-  "Create",
-  "Issue",
-  "Delegate",
-  "Grant",
-  // Object lifecycle: each of these creates a row or backend-side state, and
-  // each is reachable over a connection that can drop mid-flight.
-  "Upload",
-  "Complete",
-  "Initiate",
-  "Copy",
-  "Restore",
-  "Batch",
-];
-
-export function wantsIdempotencyKey(methodName: string): boolean {
-  return IDEMPOTENT_PREFIXES.some((p) => methodName.startsWith(p));
+export function wantsIdempotencyKey(method: { idempotency?: number }): boolean {
+  // 0 is IDEMPOTENCY_UNKNOWN in google.protobuf.MethodOptions. A method
+  // descriptor without the field at all is treated the same way: the generated
+  // code always sets it, so `undefined` means the caller passed something that
+  // is not a method descriptor, and defaulting to "send a key" keeps a
+  // mis-wired call safe rather than silently unkeyed.
+  return (method.idempotency ?? 0) === 0;
 }
 
 const idempotencyInterceptor: Interceptor = (next) => async (req) => {
-  if (
-    !wantsIdempotencyKey(req.method.name) ||
-    req.header.has("Idempotency-Key")
-  ) {
+  if (!wantsIdempotencyKey(req.method) || req.header.has("Idempotency-Key")) {
     return next(req);
   }
   // Three request messages carry an `idempotency_key` FIELD of their own —

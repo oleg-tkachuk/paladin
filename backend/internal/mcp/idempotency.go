@@ -1,35 +1,19 @@
 package mcp
 
-import "strings"
+import "github.com/oleg-tkachuk/paladin/internal/rpcmeta"
 
-// wantsIdempotencyKey names the RPCs whose replay is meaningful.
+// wantsIdempotencyKey asks the contract instead of the method name.
 //
-// Mirrors frontend/src/lib/connect/transport.ts and
-// backend/cmd/seed-fixture/main.go. Three copies in two languages is one too
-// many; the classification wants to live in the proto as `idempotency_level`,
-// which is recorded in BACKLOG. Until then: change one, change all three.
+// This was a prefix list — `Create`, `Issue`, `Delegate`, `Grant`, `Upload`,
+// `Complete`, `Initiate`, `Copy`, `Restore`, `Batch` — duplicated verbatim in
+// cmd/seed-fixture and, in TypeScript, in the console's transport, each with a
+// comment telling the reader to change the other two.
 //
-// Excluded on purpose — each is already collapsed by other means, so a key
-// buys a row in idempotency_keys and no safety:
-//   - reads (and memoizing one would serve a stale response);
-//   - Update*/Set*, guarded by resource_version;
-//   - Delete*, idempotent by nature;
-//   - credential minting, which the server refuses to memoize at all
-//     (middleware.CredentialMintingProcedures) because a replayed refresh
-//     token is one the server has already rotated away.
+// The prefixes were not merely duplicated, they were wrong in both directions.
+// `Grant` swept in GrantScopes, which is a set union and needs no key.
+// `Restore` swept in RestoreObjectVersion, which is OCC-guarded. And nothing in
+// the list covered ChangePassword, MigrateTenantStorageLayout or PresignPart,
+// each of which creates state over a connection that can drop.
 func wantsIdempotencyKey(procedure string) bool {
-	idx := strings.LastIndex(procedure, "/")
-	if idx < 0 || idx == len(procedure)-1 {
-		return false
-	}
-	method := procedure[idx+1:]
-	for _, p := range []string{
-		"Create", "Issue", "Delegate", "Grant",
-		"Upload", "Complete", "Initiate", "Copy", "Restore", "Batch",
-	} {
-		if strings.HasPrefix(method, p) {
-			return true
-		}
-	}
-	return false
+	return rpcmeta.NeedsIdempotencyKey(procedure)
 }

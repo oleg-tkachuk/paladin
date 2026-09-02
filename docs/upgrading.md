@@ -36,6 +36,36 @@ The baseline is a tag rather than the default branch on purpose: `main` and
 the tree with itself and passes without checking anything.
 
 
+## Unreleased — clients read the contract; the three prefix lists are gone
+
+No proto change and no wire change. `backend/internal/rpcmeta` answers "is this
+a read" and "should a client stamp an Idempotency-Key" from the descriptor, and
+the console, the seeder, the MCP bridge and the server interceptor all ask it.
+
+**What a client should send, stated once.** Stamp a key iff the method declares
+`IDEMPOTENCY_UNKNOWN`. `NO_SIDE_EFFECTS` changes nothing, so a key buys a row
+in `idempotency_keys` and a chance of serving a stale snapshot. `IDEMPOTENT` is
+already safe to repeat, so a key buys a row and no safety. What is left is
+every call whose repeat nobody has promised anything about.
+
+**Two behaviours change**, and both are the descriptor being right where the
+prefixes were not:
+
+- `RestoreObjectVersion` no longer gets a key. The `Restore` prefix swept it
+  in; it takes `resource_version`, so a repeat writes the same value or fails
+  `Aborted`.
+- Credential minting — `Login`, `RefreshToken`, `ExchangeAudience`,
+  `SwitchTenant` — now does. Clients used to withhold it because replaying a
+  rotated refresh token is wrong. That is true, and it is enforced on the
+  server, which refuses to memoize those four at all
+  (`middleware.CredentialMintingProcedures`). An Idempotency-Key is a caller's
+  de-duplication token, not a request to cache.
+
+If you integrate with Paladin, this is the rule to implement. `buf` puts
+`idempotency_level` in every generated descriptor;
+`@bufbuild/protobuf` exposes it as `method.idempotency`, and the Go runtime as
+`MethodOptions.GetIdempotencyLevel()`.
+
 ## Unreleased — 112 of 142 RPCs declare an idempotency_level
 
 Nine more: one read and eight idempotent writes. The remaining 30 are the

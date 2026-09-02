@@ -56,6 +56,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/rpcmeta"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -199,7 +201,7 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		// exactly the RPCs whose handlers were checked — see
 		// internal/api/idempotency_contract_test.go, which fails the build if
 		// one of them starts writing.
-		if declaredRead(method) {
+		if rpcmeta.IsDeclaredRead(method) {
 			return next(ctx, req)
 		}
 		key, err := idempotencyKey(req)

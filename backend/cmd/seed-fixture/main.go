@@ -66,6 +66,7 @@ import (
 	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
+	"github.com/oleg-tkachuk/paladin/internal/rpcmeta"
 )
 
 const (
@@ -197,29 +198,13 @@ func httpClientFor(cmd *cobra.Command) *http.Client {
 
 type idempotencyTransport struct{ base http.RoundTripper }
 
-// wantsIdempotencyKey mirrors the console's list in
-// frontend/src/lib/connect/transport.ts. Two languages, one classification —
-// if you change one, change the other.
+// wantsIdempotencyKey asks the contract, via internal/rpcmeta.
 //
-// The set is the RPCs whose replay MEANS something: resource creations, and
-// the object-lifecycle calls that create a row or backend-side state over a
-// connection that can drop. Reads, OCC-guarded Update*/Set*, and Delete* are
-// out — each is already collapsed by other means.
+// It was a prefix list duplicated here, in internal/mcp and in the console's
+// transport. See rpcmeta's doc comment for why a name was never able to answer
+// this question.
 func wantsIdempotencyKey(procedure string) bool {
-	idx := strings.LastIndex(procedure, "/")
-	if idx < 0 || idx == len(procedure)-1 {
-		return false
-	}
-	method := procedure[idx+1:]
-	for _, p := range []string{
-		"Create", "Issue", "Delegate", "Grant",
-		"Upload", "Complete", "Initiate", "Copy", "Restore", "Batch",
-	} {
-		if strings.HasPrefix(method, p) {
-			return true
-		}
-	}
-	return false
+	return rpcmeta.NeedsIdempotencyKey(procedure)
 }
 
 func (t idempotencyTransport) RoundTrip(req *http.Request) (*http.Response, error) {

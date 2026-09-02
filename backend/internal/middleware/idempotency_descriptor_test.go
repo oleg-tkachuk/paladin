@@ -13,92 +13,10 @@ import (
 	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
 
-	"google.golang.org/protobuf/types/descriptorpb"
-
 	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 )
-
-// Resolved from the real descriptors, not from a hand-written table: the point
-// of the change is that the proto is the source, so a test asserting against a
-// second copy of the answer would prove nothing about it.
-func TestMethodIdempotencyReadsTheDescriptor(t *testing.T) {
-	cases := []struct {
-		procedure string
-		want      descriptorpb.MethodOptions_IdempotencyLevel
-		why       string
-	}{
-		{
-			"/paladin.admin.v1.BucketService/GetBucket",
-			descriptorpb.MethodOptions_NO_SIDE_EFFECTS,
-			"annotated in api/v0.6.0 after its handler was read",
-		},
-		{
-			"/paladin.data.v1.ObjectService/UploadObject",
-			descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN,
-			"creates an object; the honest default, and the RPC the old name-prefix rule missed",
-		},
-		{
-			// DownloadObject rather than HealthService/GetVersion, which this
-			// case used until GetVersion was annotated and broke it. An exemplar
-			// picked for being unannotated has a shelf life; this one is picked
-			// for being unannotABLE. It reads like a read and is not one — it
-			// records the presign it issues and charges the tenant's quota — so
-			// it can never carry NO_SIDE_EFFECTS however far the work proceeds.
-			"/paladin.data.v1.ObjectService/DownloadObject",
-			descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN,
-			"named like a read, but records a presign and charges quota — unverified " +
-				"must not be mistaken for declared",
-		},
-		{
-			"/paladin.admin.v1.NoSuchService/NoSuchMethod",
-			descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN,
-			"unknown procedure falls back to claiming nothing",
-		},
-		{
-			"malformed-not-a-procedure",
-			descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN,
-			"a string that is not a procedure must not panic or guess",
-		},
-	}
-	for _, c := range cases {
-		if got := methodIdempotency(c.procedure); got != c.want {
-			t.Errorf("%s = %v, want %v (%s)", c.procedure, got, c.want, c.why)
-		}
-	}
-}
-
-// The distinction that decides whether a response may be replayed.
-//
-// IDEMPOTENT means repeating the call is safe — an idempotent write still
-// writes, and replaying its response is legitimate. NO_SIDE_EFFECTS means the
-// response is a snapshot, and handing back an old one answers a question the
-// caller did not ask.
-func TestOnlyNoSideEffectsCountsAsARead(t *testing.T) {
-	if !declaredRead("/paladin.admin.v1.BucketService/GetBucket") {
-		t.Error("an annotated read is not recognised — declared reads would still be memoized")
-	}
-	if declaredRead("/paladin.data.v1.ObjectService/UploadObject") {
-		t.Error("UploadObject treated as a read; its replay is the whole point of the key")
-	}
-	if declaredRead("/paladin.data.v1.ObjectService/DownloadObject") {
-		t.Error("an UNANNOTATED procedure must not be treated as declared — that " +
-			"would extend the guarantee to RPCs nobody checked")
-	}
-}
-
-// The cache must not turn one lookup into the answer for every procedure.
-func TestIdempotencyLookupCachesPerProcedure(t *testing.T) {
-	a := methodIdempotency("/paladin.admin.v1.BucketService/GetBucket")
-	b := methodIdempotency("/paladin.data.v1.ObjectService/UploadObject")
-	if a == b {
-		t.Fatalf("both procedures resolved to %v — the cache is keyed wrongly", a)
-	}
-	if got := methodIdempotency("/paladin.admin.v1.BucketService/GetBucket"); got != a {
-		t.Errorf("second lookup returned %v, first returned %v", got, a)
-	}
-}
 
 // ─── behaviour, not just the predicate ──────────────────────────────────────
 
@@ -169,8 +87,15 @@ func TestDeclaredReadIsNeverMemoized(t *testing.T) {
 }
 
 // The other half, and the reason this is not just "stop memoizing everything":
-// a sibling RPC on the same service, not declared a read, still replays.
-func TestUndeclaredSiblingStillMemoizes(t *testing.T) {
+// a sibling RPC on the same service that is NOT a read still replays.
+//
+// It was TestUndeclaredSiblingStillMemoizes until UpdateMine was declared
+// IDEMPOTENT, at which point the name described a case this service no longer
+// has — UserSettingsService has no undeclared method left. The assertion is
+// better for it: IDEMPOTENT is exactly the level whose responses SHOULD be
+// replayed, since an idempotent write still writes and the key exists to
+// collapse the retry.
+func TestIdempotentSiblingStillMemoizes(t *testing.T) {
 	client, svc, cleanup := newSettingsServer(t, newMemStore())
 	defer cleanup()
 
@@ -184,31 +109,5 @@ func TestUndeclaredSiblingStillMemoizes(t *testing.T) {
 	}
 	if svc.updateCalls != 1 {
 		t.Errorf("UpdateMine ran %d times, want 1 — memoization stopped working", svc.updateCalls)
-	}
-}
-
-// All three levels, decided without going through the descriptors.
-//
-// Necessary because only NO_SIDE_EFFECTS appears in the tree today: a test that
-// resolved real procedures could not distinguish this rule from one that also
-// treated IDEMPOTENT as a read, and a mutation doing exactly that passed the
-// whole suite until this existed.
-func TestOnlyNoSideEffectsForbidsMemoize(t *testing.T) {
-	cases := []struct {
-		level  descriptorpb.MethodOptions_IdempotencyLevel
-		forbid bool
-		why    string
-	}{
-		{descriptorpb.MethodOptions_NO_SIDE_EFFECTS, true,
-			"a read's response is a snapshot; replaying it answers the wrong question"},
-		{descriptorpb.MethodOptions_IDEMPOTENT, false,
-			"repeating is safe, but it still writes — replaying its response is the point"},
-		{descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN, false,
-			"claims nothing, so nothing is forbidden"},
-	}
-	for _, c := range cases {
-		if got := levelForbidsMemoize(c.level); got != c.forbid {
-			t.Errorf("%v forbids memoize = %v, want %v (%s)", c.level, got, c.forbid, c.why)
-		}
 	}
 }
