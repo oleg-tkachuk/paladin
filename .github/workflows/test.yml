@@ -79,13 +79,19 @@ jobs:
       #
       # The check needs an explicit against-tag, not the default branch:
       # main and develop advance together here, so comparing against main
-      # compares the tree with itself and passes vacuously. api/v0.4.0 marks
-      # the contract as published; move it (and re-tag api/latest) when a
-      # breaking change is deliberate and released.
+      # compares the tree with itself and passes vacuously. The api/vX.Y.Z tag
+      # pinned below marks the contract as published.
+      #
+      # Deliberately NOT naming a version in this prose. It said api/v0.4.0 in
+      # three places while the pin had moved twice past it, which is the
+      # comment-drift this file is otherwise careful about: the pin is one line
+      # down and is the only copy that can be stale without anyone noticing,
+      # because scripts/proto-breaking.sh parses it from here rather than
+      # keeping its own.
       #
       # This BLOCKS. Pre-1.0 the project still breaks compatibility on
-      # purpose, and that stays possible — it just has to be deliberate: move
-      # api/v0.4.0 (and api/latest) to the new commit and say so in
+      # purpose, and that stays possible — it just has to be deliberate: cut a
+      # new tag, move api/latest, bump the pin below, and say so in
       # docs/upgrading.md. What is no longer possible is breaking the wire by
       # accident. Forty-five breaking changes accumulated in the four days
       # after the paladin rename, most of them field renames that keep the
@@ -98,7 +104,7 @@ jobs:
           format: false
           push: false
           breaking: true
-          breaking_against: ".git#tag=api/v0.6.0,subdir=backend/proto"
+          breaking_against: ".git#tag=api/v0.7.0,subdir=backend/proto"
 
       - name: Set up buf (for codegen)
         uses: bufbuild/buf-setup-action@v1
