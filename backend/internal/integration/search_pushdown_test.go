@@ -13,7 +13,10 @@ package integration
 import (
 	"context"
 	"fmt"
+
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/google/uuid"
 
@@ -58,9 +61,7 @@ func celFilter(q string) string {
 	return "search.contains(" + celQuote(celpkg.SearchText(q)) + ")"
 }
 
-func TestBackendSearchPushdownNeverDropsAMatch(t *testing.T) {
-	ctx := context.Background()
-	pool := startPostgres(t)
+func subtestBackendSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
 	prefix := "srch-" + uuid.NewString()[:8]
@@ -114,9 +115,7 @@ func celBackends(t *testing.T, filter string, in []admindomain.StorageBackend) [
 	return out
 }
 
-func TestCollectionSearchPushdownNeverDropsAMatch(t *testing.T) {
-	ctx := context.Background()
-	pool := startPostgres(t)
+func subtestCollectionSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	tenantID, _ := mkTenant(t, ctx, pool, "shared")
 
 	const backendID = "srch-coll-be"
@@ -185,9 +184,7 @@ func celCollections(t *testing.T, filter string, in []objectkey.Collection) []ob
 // The bug the field exists to end, for each list: a match that sorts past the
 // page. Both had a TestPushdown_* case for `==` already; neither had one for a
 // search, which is the shape the console actually sends.
-func TestSearchFindsAMatchPastThePage(t *testing.T) {
-	ctx := context.Background()
-	pool := startPostgres(t)
+func subtestBackendPastThePage(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 
 	prefix := "page-" + uuid.NewString()[:8]
 	for i := range 40 {
@@ -210,4 +207,35 @@ func TestSearchFindsAMatchPastThePage(t *testing.T) {
 			"named %s-zzz — the filter selected from the page instead of from "+
 			"the table", len(got), prefix)
 	}
+}
+
+// ONE Postgres for all five, not five.
+//
+// startPostgres runs a fresh container per call — about 55s each on this
+// machine — and these started as five separate Test functions. The package
+// went from 611s to 887s against a 1200s ceiling, which is the same ceiling
+// that failed a verify-deep run earlier the same day when the local task was
+// missing its -timeout. Adding tests should not be the thing that eventually
+// breaks the gate.
+//
+// Sharing is safe because the fixtures do not collide: each subtest seeds
+// under its own backend name or uuid-derived prefix, and each asserts only
+// over rows it created.
+func TestSearchPushdownContract(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+
+	t.Run("buckets", func(t *testing.T) { subtestBucketSearch(t, ctx, pool) })
+	t.Run("backends", func(t *testing.T) { subtestBackendSearch(t, ctx, pool) })
+	t.Run("collections", func(t *testing.T) { subtestCollectionSearch(t, ctx, pool) })
+}
+
+// The other half: a match that sorts past the page, which only a SQL predicate
+// can reach.
+func TestSearchFindsAMatchPastThePage(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+
+	t.Run("buckets", func(t *testing.T) { subtestBucketPastThePage(t, ctx, pool) })
+	t.Run("backends", func(t *testing.T) { subtestBackendPastThePage(t, ctx, pool) })
 }

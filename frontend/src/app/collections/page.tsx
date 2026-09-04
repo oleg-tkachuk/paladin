@@ -275,7 +275,7 @@ export default function CollectionsPage() {
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search Collections by prefix…"
+            placeholder="Search by name or display label…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"

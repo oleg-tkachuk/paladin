@@ -20,7 +20,10 @@ package integration
 import (
 	"context"
 	"fmt"
+
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
@@ -28,9 +31,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-func TestBucketSearchPushdownNeverDropsAMatch(t *testing.T) {
-	ctx := context.Background()
-	pool := startPostgres(t)
+func subtestBucketSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 
 	const backendID = "search-backend"
 	mustExec(t, ctx, pool,
@@ -188,9 +189,7 @@ func celQuote(s string) string {
 // asserts, and buckets had no such case. It is also the one the console change
 // depends on — a picker that sends a filter and reads one page is correct only
 // if SQL, not the CEL pass, did the narrowing.
-func TestBucketSearchFindsAMatchPastThePage(t *testing.T) {
-	ctx := context.Background()
-	pool := startPostgres(t)
+func subtestBucketPastThePage(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 
 	const backendID = "search-page-backend"
 	mustExec(t, ctx, pool,
