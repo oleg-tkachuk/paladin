@@ -53,11 +53,32 @@ tasks:
 
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
+    vars:
+      # Read OUT of the CI workflow rather than written down again, the same
+      # way scripts/proto-breaking.sh takes its baseline tag from test.yml.
+      #
+      # This task said "the CI job runs the same set" and ran it with a
+      # DIFFERENT timeout: CI passes -timeout=20m, this passed none, so Go's
+      # 10m default applied. internal/integration takes ~622s on this machine,
+      # so `task verify-deep` failed on a suite that passes — the local gate
+      # stricter than CI by accident. A gate that goes red without a fault
+      # teaches people to ignore it, which costs the same as one that goes
+      # green without checking.
+      #
+      # An empty match makes `-timeout=` invalid and go test refuses loudly,
+      # which is the right failure: better than silently inheriting 10m again.
+      TIMEOUT:
+        sh: >
+          f="$(git rev-parse --show-toplevel)/.github/workflows/integration.yml";
+          t=$(awk '/-timeout=/{x=$0} index($0,"./internal/integration/..."){print x; exit}' "$f" | grep -oE 'timeout=[0-9]+m' | cut -d= -f2);
+          [ -n "$t" ] || { echo "cannot read -timeout from $f — the CI step moved or was renamed" >&2; exit 1; };
+          echo "$t"
     cmds:
       # BOTH suites. tests/integration/ (pgharness-backed) was previously
       # unreferenced by any task — 62 tests that ran nowhere, local or CI.
-      # The CI job (.github/workflows/integration.yml) runs the same set.
-      - go test -tags=integration -count=1 ./internal/integration/... ./tests/integration/...
+      # The CI job (.github/workflows/integration.yml) runs the same set, and
+      # now with the same timeout, taken from that file.
+      - go test -tags=integration -count=1 -timeout={{.TIMEOUT}} ./internal/integration/... ./tests/integration/...
 
   bench:
     desc: "Run Postgres-backed benchmarks (needs Docker; seeds ~1M rows)"
