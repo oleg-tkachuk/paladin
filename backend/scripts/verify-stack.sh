@@ -178,6 +178,8 @@ require_free_ports "task backend:test:stack" || exit 1
 # frontend build to run backend gates is how a gate acquires a reason to be
 # skipped. compose still pulls in postgres, migrate, promote-app-role,
 # bootstrap and minio as declared dependencies.
+stack_pull_thirdparty frontend/tests/e2e/docker-compose.test.yaml
+
 echo ">>> [stack] booting api + admin"
 "${compose[@]}" up --wait api admin
 

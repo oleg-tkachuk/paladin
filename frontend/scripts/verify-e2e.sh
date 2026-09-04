@@ -69,6 +69,12 @@ require_free_ports "task verify-e2e" "$PALADIN_E2E_PORT_UI" || exit 1
 # this script only has to pass the port through, which sourcing already did.
 stack_export_urls
 
+# Playwright's webServer runs `docker compose up --wait` and pulls nothing
+# first, so a Docker Hub hiccup surfaces there as "No such image" three minutes
+# into a run that has already rebuilt both images. Fail here instead, with the
+# reason.
+stack_pull_thirdparty "$root/frontend/tests/e2e/docker-compose.test.yaml"
+
 echo ">>> [e2e] images under test"
 for image in registry.local/paladin/paladin-core:latest \
     registry.local/paladin/paladin-console:latest; do

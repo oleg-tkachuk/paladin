@@ -102,3 +102,52 @@ require_free_ports() {
     } >&2
     return 1
 }
+
+# ─── third-party images ──────────────────────────────────────────────────────
+
+# Pull the Docker Hub images the stack needs, BEFORE `compose up` reaches for
+# them.
+#
+# `compose up` pulls what is missing on its own, so this is not about fetching —
+# it is about what happens when the fetch fails. On 2026-09-04 a verify-deep run
+# pulled postgres:16 and minio/mc, silently did not pull minio/minio, and then
+# reported:
+#
+#     Error response from daemon: No such image: minio/minio:RELEASE.…
+#
+# which reads as "this image does not exist" and sends the next reader looking
+# for a bad tag or a corrupted store. Both were fine; `docker pull` succeeded by
+# hand on the first try. What actually failed was a concurrent pull, and nothing
+# in the message said so — .github/workflows/e2e.yml already carries a note
+# about Docker Hub rate limits, so this is a known hazard wearing the wrong
+# name.
+#
+# Pulling first means a fetch failure is reported as a fetch failure, once,
+# before three phases of stack boot are stacked on top of it.
+#
+# The service list is here rather than in the two callers for the reason the
+# ports are: two copies of it would drift, and the compose file is the only
+# thing that decides which services carry a remote image. api/admin/ui are
+# deliberately absent — they run registry.local images this repo builds, and
+# `pull` on those fails.
+stack_pull_thirdparty() {
+    local compose_file="${1:?compose file}"
+    local services=(minio minio-setup postgres promote-app-role)
+    echo ">>> [stack] pulling third-party images: ${services[*]}"
+    if docker compose -f "$compose_file" pull --quiet "${services[@]}"; then
+        return 0
+    fi
+    {
+        echo "!!! could not pull the third-party images above."
+        echo
+        echo "    Whatever docker said, it said it about a FETCH — not about a"
+        echo "    stack that is missing an image. Two things it can be:"
+        echo
+        echo "      - the registry refused or timed out. Docker Hub rate-limits"
+        echo "        anonymous pulls and all of these come from there."
+        echo "        Retry, or:  docker login"
+        echo "      - a tag in the compose file is wrong. Then the message above"
+        echo "        names it, and no retry will help."
+    } >&2
+    return 1
+}
