@@ -26,6 +26,14 @@ cd "$root"
 
 # shellcheck source=SCRIPTDIR/../../scripts/stack-ports.sh
 source "$root/scripts/stack-ports.sh"
+# shellcheck source=SCRIPTDIR/../../scripts/stack-disk.sh
+source "$root/scripts/stack-disk.sh"
+
+# Before anything boots. This gate rebuilds both images and runs a stack, and
+# three runs of it in a row once took the Docker VM below kubelet's eviction
+# threshold — tainting the node and leaving every pod in every namespace
+# Pending while the gate itself went green.
+stack_ensure_disk "task verify-e2e" || exit 1
 
 # Playwright's webServer BOOTS the stack but does not remove it. Its command is
 # `docker compose up --wait`, which exits as soon as the stack is healthy, so
