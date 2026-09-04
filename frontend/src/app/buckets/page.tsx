@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { errorMessage } from "@/hooks/errorContract";
@@ -72,6 +72,7 @@ import {
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
 
@@ -134,9 +135,24 @@ export default function BucketsPage() {
   );
 
   // ─── filters + sort ──────────────────────────────────────────────────────
+  //
+  // Search and the backend picker are SERVER-side now. This page used to fetch
+  // every bucket — 859 of them, two requests of 500 — and filter the result in
+  // the browser, so the whole table was pulled to answer a five-character
+  // query. The filter goes to the API instead, as one conjunct over the derived
+  // `search` field so it pushes down to SQL (see src/lib/cel.ts for why it must
+  // not be a disjunction).
   const [search, setSearch] = useState("");
+  // Trails `search` by 300ms so a refetch does not fire per keystroke — the
+  // same shape the objects page uses.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // ─── create ───────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -150,9 +166,20 @@ export default function BucketsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
   const [deleteRemote, setDeleteRemote] = useState(false);
 
+  // One place that knows how to ask, so the Refresh button and the error
+  // retry cannot drift into fetching something other than what is on screen.
+  const refetch = useCallback(
+    () =>
+      fetchBuckets(
+        filterBackend === ALL_BACKENDS ? undefined : filterBackend,
+        searchFilter(debouncedSearch),
+      ),
+    [fetchBuckets, filterBackend, debouncedSearch],
+  );
+
   useEffect(() => {
-    fetchBuckets();
-  }, [fetchBuckets]);
+    void refetch();
+  }, [refetch]);
 
   // Default the create form to the first available backend once the dialog
   // opens and backends have loaded. Render-phase adjust-on-condition — the
@@ -162,19 +189,11 @@ export default function BucketsPage() {
     setNewBackend(backends[0]);
   }
 
+  // Sort only. The two filters that used to live here are server-side now;
+  // re-applying them in the browser would be dead code that quietly disagreed
+  // with the API the day the two definitions of "matches" drifted apart.
   const filtered = useMemo(() => {
     let list = buckets;
-    if (filterBackend !== ALL_BACKENDS) {
-      list = list.filter((b) => b.backendId === filterBackend);
-    }
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (b) =>
-          b.bucketId.toLowerCase().includes(q) ||
-          (b.displayName || "").toLowerCase().includes(q),
-      );
-    }
     if (sort.column && sort.direction) {
       const dir = sort.direction === "asc" ? 1 : -1;
       list = [...list].sort((a, b) => {
@@ -194,7 +213,11 @@ export default function BucketsPage() {
       });
     }
     return list;
-  }, [buckets, filterBackend, search, sort]);
+  }, [buckets, sort]);
+
+  const hasFilters = search.trim() !== "" || filterBackend !== ALL_BACKENDS;
+  // The debounce has not fired yet, or its refetch is still running.
+  const searchPending = search.trim() !== debouncedSearch.trim() || loading;
 
   const handleCreate = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -289,7 +312,7 @@ export default function BucketsPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => fetchBuckets()}
+          onClick={() => void refetch()}
           aria-label="Refresh"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
@@ -352,7 +375,7 @@ export default function BucketsPage() {
                   <ListLoadError
                     what="Buckets"
                     reason={listError}
-                    onRetry={() => void fetchBuckets()}
+                    onRetry={() => void refetch()}
                   />
                 </TableCell>
               </TableRow>
@@ -362,11 +385,21 @@ export default function BucketsPage() {
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <ArchiveBoxIcon className="size-10 opacity-40" />
                     <p className="text-sm">
-                      {search || filterBackend !== ALL_BACKENDS
-                        ? "No buckets match your filters."
-                        : "No buckets yet."}
+                      {/*
+                        Three states, not two. With the filter server-side an
+                        empty table means one of: the debounce has not fired
+                        yet, the request is in flight, or the server really
+                        found nothing. Collapsing the first two into "No
+                        buckets match" tells an operator their bucket is gone
+                        while they are still typing its name.
+                      */}
+                      {searchPending
+                        ? "Searching…"
+                        : hasFilters
+                          ? "No buckets match your filters."
+                          : "No buckets yet."}
                     </p>
-                    {!search && filterBackend === ALL_BACKENDS && (
+                    {!searchPending && !hasFilters && (
                       <Button
                         size="sm"
                         variant="outline"

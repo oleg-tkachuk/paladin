@@ -65,9 +65,22 @@ export function useBuckets() {
         // backend then name. Past that ceiling a bucket was invisible and
         // unselectable everywhere in the console, with nothing on screen
         // saying so; the deployment that crossed 500 buckets started losing
-        // whichever names sorted last. The server-side `filter` is no escape
-        // hatch: ListBuckets evaluates CEL over the page it already read, so
-        // searching cannot reach rows the page never contained.
+        // whichever names sorted last.
+        //
+        // The loop STAYS now that callers send a `filter`, and that is the
+        // point. ListBuckets pushes the SQL-expressible part of a filter into
+        // the query and then re-evaluates the whole expression over the page it
+        // read, so a filter the pushdown cannot express returns a legitimately
+        // sparse page with a next token rather than an error. Paging to the end
+        // is therefore correct for every filter, and the pushdown only decides
+        // how FEW pages that takes — one for a search that narrows in SQL,
+        // as many as today for one that does not. Rendering the first page
+        // instead would make correctness depend on the pushdown recognising the
+        // expression, which is a promise no caller can check.
+        //
+        // (An earlier version of this comment said the filter "is no escape
+        // hatch" because CEL only saw the page. That was true when it was
+        // written and stopped being true when the pushdown landed.)
         //
         // MAX_PAGES bounds a pathological account rather than the normal one;
         // the residual token is still returned so a caller can continue.
