@@ -108,6 +108,14 @@ WHERE (sqlc.narg('after_id')::text IS NULL
   AND (sqlc.narg('name_like')::text IS NULL OR storage_backends.name LIKE sqlc.narg('name_like')::text)
   AND (sqlc.narg('display_name_eq')::text IS NULL OR display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR display_name LIKE sqlc.narg('display_name_like')::text)
+  -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
+  -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
+  -- and Postgres lower() are two Unicode implementations and may disagree, and
+  -- a disagreement here drops a row the authoritative CEL pass accepts. See
+  -- internal/filter/cel/searchtext.go.
+  AND (sqlc.narg('search_like')::text IS NULL
+       OR lower(storage_backends.name COLLATE "C") || chr(10) || lower(coalesce(display_name, '') COLLATE "C")
+          LIKE sqlc.narg('search_like')::text)
   AND (sqlc.narg('provider_eq')::text IS NULL OR provider = sqlc.narg('provider_eq')::text)
   AND (sqlc.narg('region_eq')::text IS NULL OR region = sqlc.narg('region_eq')::text)
   AND (sqlc.narg('enabled')::bool IS NULL OR enabled = sqlc.narg('enabled')::bool)

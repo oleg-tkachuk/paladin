@@ -1,0 +1,209 @@
+//go:build integration
+
+// The `search` field on backends and collections, held to the same contract as
+// the bucket one in bucket_search_pushdown_test.go: SQL narrowing must never
+// drop a row the authoritative CEL pass accepts.
+//
+// Three lists now define `search` three times over — cel.SearchText in Go, a
+// clause per query in SQL, asciiLower in the console — and the only thing
+// stopping them drifting is a test that runs both halves and compares. A drift
+// does not throw; it returns a shorter list.
+package integration
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+)
+
+// The adversarial rows, shared by both lists below: mixed case, a name with no
+// display name, text Go and Postgres fold differently, and both LIKE
+// metacharacters as DATA rather than as pattern.
+var searchFixtures = []struct{ name, display string }{
+	{"prod-logs", "Prod Logs"},
+	{"staging", "STAGING AREA"},
+	{"quiet", ""},
+	{"istanbul-tr", "İstanbul"},
+	{"uber-cache", "Über Cache"},
+	{"pct", "100% done"},
+	{"underscore", "a_b"},
+	// For the separator probe below: a query of "b\nc" is contained in the
+	// joined value and in neither column, so it must match nothing. Without
+	// this pair the fixtures cannot tell chr(10) from chr(32) — a mutation
+	// changing the separator survived until it was added.
+	{"ab", "cd"},
+}
+
+var searchQueries = []string{
+	"prod", "PROD", "Logs", "quiet", "istanbul", "İstanbul",
+	"über", "ÜBER", "100%", "a_b", "b\nc", "", "nosuchthing",
+}
+
+func celFilter(q string) string {
+	if q == "" {
+		return ""
+	}
+	return "search.contains(" + celQuote(celpkg.SearchText(q)) + ")"
+}
+
+func TestBackendSearchPushdownNeverDropsAMatch(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
+
+	prefix := "srch-" + uuid.NewString()[:8]
+	for _, f := range searchFixtures {
+		mustExec(t, ctx, pool,
+			`INSERT INTO storage_backends (name, kind, display_name)
+			 VALUES ($1, 's3-compatible', $2)`,
+			prefix+"-"+f.name, f.display)
+	}
+
+	all, _, err := repo.List(ctx, 1000, "", "")
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	for _, q := range searchQueries {
+		t.Run(q, func(t *testing.T) {
+			filter := celFilter(q)
+			narrowed, _, err := repo.List(ctx, 1000, "", filter)
+			if err != nil {
+				t.Fatalf("list filtered: %v", err)
+			}
+			viaSQL := celBackends(t, filter, narrowed)
+			viaAll := celBackends(t, filter, all)
+			if len(viaSQL) != len(viaAll) {
+				t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
+					"narrowing, %d over every row — ListStorageBackends' search_like "+
+					"clause and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
+			}
+		})
+	}
+}
+
+func celBackends(t *testing.T, filter string, in []admindomain.StorageBackend) []admindomain.StorageBackend {
+	t.Helper()
+	if filter == "" {
+		return in
+	}
+	// A copy: FilterPage compacts in place and `in` is shared by every subtest.
+	in = append([]admindomain.StorageBackend(nil), in...)
+	out, err := celpkg.FilterPage(celpkg.NewEvaluator(), celpkg.StorageBackendSchema, filter, in,
+		func(b admindomain.StorageBackend) map[string]any {
+			return map[string]any{
+				"backend_id":   b.BackendID,
+				"display_name": b.DisplayName,
+				"search":       celpkg.SearchText(b.BackendID, b.DisplayName),
+			}
+		})
+	if err != nil {
+		t.Fatalf("cel filter %q: %v", filter, err)
+	}
+	return out
+}
+
+func TestCollectionSearchPushdownNeverDropsAMatch(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	tenantID, _ := mkTenant(t, ctx, pool, "shared")
+
+	const backendID = "srch-coll-be"
+	mustExec(t, ctx, pool,
+		`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')
+		 ON CONFLICT (name) DO NOTHING`, backendID)
+	bucketID := uuid.New()
+	mustExec(t, ctx, pool,
+		`INSERT INTO buckets (id, backend_id, name, display_name)
+		 SELECT $1, sb.id, 'srch-coll-bucket', 'b' FROM storage_backends sb WHERE sb.name = $2`,
+		bucketID, backendID)
+
+	for _, f := range searchFixtures {
+		mustExec(t, ctx, pool,
+			`INSERT INTO collections (id, tenant_id, name, display_name, bucket_id)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			uuid.New(), tenantID, f.name, f.display, bucketID)
+	}
+
+	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
+	listArgs := func(filter string) objectkey.ListCollectionsArgs {
+		return objectkey.ListCollectionsArgs{TenantID: tenantID, PageSize: 1000, Filter: filter}
+	}
+	all, _, err := repo.List(ctx, listArgs(""))
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	for _, q := range searchQueries {
+		t.Run(q, func(t *testing.T) {
+			filter := celFilter(q)
+			narrowed, _, err := repo.List(ctx, listArgs(filter))
+			if err != nil {
+				t.Fatalf("list filtered: %v", err)
+			}
+			viaSQL := celCollections(t, filter, narrowed)
+			viaAll := celCollections(t, filter, all)
+			if len(viaSQL) != len(viaAll) {
+				t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
+					"narrowing, %d over every row — ListCollections' search_like "+
+					"clause and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
+			}
+		})
+	}
+}
+
+func celCollections(t *testing.T, filter string, in []objectkey.Collection) []objectkey.Collection {
+	t.Helper()
+	if filter == "" {
+		return in
+	}
+	in = append([]objectkey.Collection(nil), in...)
+	out, err := celpkg.FilterPage(celpkg.NewEvaluator(), celpkg.CollectionSchema, filter, in,
+		func(c objectkey.Collection) map[string]any {
+			return map[string]any{
+				"collection":   c.Collection,
+				"display_name": c.DisplayName,
+				"search":       celpkg.SearchText(c.Collection, c.DisplayName),
+			}
+		})
+	if err != nil {
+		t.Fatalf("cel filter %q: %v", filter, err)
+	}
+	return out
+}
+
+// The bug the field exists to end, for each list: a match that sorts past the
+// page. Both had a TestPushdown_* case for `==` already; neither had one for a
+// search, which is the shape the console actually sends.
+func TestSearchFindsAMatchPastThePage(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+
+	prefix := "page-" + uuid.NewString()[:8]
+	for i := range 40 {
+		mustExec(t, ctx, pool,
+			`INSERT INTO storage_backends (name, kind, display_name)
+			 VALUES ($1, 's3-compatible', '')`,
+			fmt.Sprintf("%s-aaa-%03d", prefix, i))
+	}
+	mustExec(t, ctx, pool,
+		`INSERT INTO storage_backends (name, kind, display_name)
+		 VALUES ($1, 's3-compatible', 'The Needle')`, prefix+"-zzz")
+
+	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
+	got, _, err := repo.List(ctx, 5, "", `search.contains("needle")`)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 || got[0].BackendID != prefix+"-zzz" {
+		t.Errorf("first page of a filtered backend list = %d rows, want the one "+
+			"named %s-zzz — the filter selected from the page instead of from "+
+			"the table", len(got), prefix)
+	}
+}

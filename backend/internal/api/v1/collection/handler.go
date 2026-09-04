@@ -520,6 +520,11 @@ func collectionRow(c Collection) map[string]any {
 		"storage_backend": backend,
 		"display_name":    c.DisplayName,
 		"created_at":      c.CreatedAt,
+		// Identical to ListCollections' `search_like` clause. Note this joins
+		// the COLLECTION name, not the storage_backend composite above: the
+		// console's search box offers collection name and display name, and
+		// the SQL narrows on those two columns.
+		"search": celpkg.SearchText(c.Collection, c.DisplayName),
 	}
 }
 

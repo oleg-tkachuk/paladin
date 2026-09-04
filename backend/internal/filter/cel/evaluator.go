@@ -79,6 +79,10 @@ var CollectionSchema = &Schema{
 		"storage_backend": cel.StringType,
 		"display_name":    cel.StringType,
 		"created_at":      cel.TimestampType,
+		// Derived, not a column — see SearchText. One conjunct for a console
+		// search box, because a disjunction over the two name columns pushes
+		// nothing down and would report matches past the first page as absent.
+		"search": cel.StringType,
 	},
 }
 
@@ -117,6 +121,10 @@ var StorageBackendSchema = &Schema{
 		"read_only":    cel.BoolType,
 		"maintenance":  cel.BoolType,
 		"created_at":   cel.TimestampType,
+		// Derived, not a column — see SearchText. One conjunct for a console
+		// search box, because a disjunction over the two name columns pushes
+		// nothing down and would report matches past the first page as absent.
+		"search": cel.StringType,
 	},
 }
 

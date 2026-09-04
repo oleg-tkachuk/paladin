@@ -258,6 +258,9 @@ func backendRow(b admindomain.StorageBackend) map[string]any {
 		"read_only":    b.ReadOnly,
 		"maintenance":  b.Maintenance,
 		"created_at":   b.CreatedAt,
+		// Identical to ListStorageBackends' `search_like` clause; the pushdown
+		// contract holds only while the two spellings agree.
+		"search": celpkg.SearchText(b.BackendID, b.DisplayName),
 	}
 }
 

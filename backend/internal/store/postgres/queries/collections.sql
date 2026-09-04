@@ -76,6 +76,14 @@ WHERE collections.tenant_id = $1
   AND (sqlc.narg('name_like')::text IS NULL OR collections.name LIKE sqlc.narg('name_like')::text)
   AND (sqlc.narg('display_name_eq')::text IS NULL OR collections.display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR collections.display_name LIKE sqlc.narg('display_name_like')::text)
+  -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
+  -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
+  -- and Postgres lower() are two Unicode implementations and may disagree, and
+  -- a disagreement here drops a row the authoritative CEL pass accepts. See
+  -- internal/filter/cel/searchtext.go.
+  AND (sqlc.narg('search_like')::text IS NULL
+       OR lower(collections.name COLLATE "C") || chr(10) || lower(coalesce(collections.display_name, '') COLLATE "C")
+          LIKE sqlc.narg('search_like')::text)
   AND (sqlc.narg('backend_eq')::text IS NULL OR sb.name = sqlc.narg('backend_eq')::text)
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary

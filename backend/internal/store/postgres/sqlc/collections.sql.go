@@ -199,16 +199,24 @@ WHERE collections.tenant_id = $1
   AND ($4::text IS NULL OR collections.name LIKE $4::text)
   AND ($5::text IS NULL OR collections.display_name = $5::text)
   AND ($6::text IS NULL OR collections.display_name LIKE $6::text)
-  AND ($7::text IS NULL OR sb.name = $7::text)
+  -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
+  -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
+  -- and Postgres lower() are two Unicode implementations and may disagree, and
+  -- a disagreement here drops a row the authoritative CEL pass accepts. See
+  -- internal/filter/cel/searchtext.go.
+  AND ($7::text IS NULL
+       OR lower(collections.name COLLATE "C") || chr(10) || lower(coalesce(collections.display_name, '') COLLATE "C")
+          LIKE $7::text)
+  AND ($8::text IS NULL OR sb.name = $8::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($8::timestamptz IS NULL
-       OR collections.created_at >= $8::timestamptz)
   AND ($9::timestamptz IS NULL
-       OR collections.created_at <= $9::timestamptz)
+       OR collections.created_at >= $9::timestamptz)
+  AND ($10::timestamptz IS NULL
+       OR collections.created_at <= $10::timestamptz)
 ORDER BY collections.name
-LIMIT $10
+LIMIT $11
 `
 
 type ListCollectionsRow struct {
@@ -217,7 +225,7 @@ type ListCollectionsRow struct {
 	BucketName  string     `json:"bucket_name"`
 }
 
-func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
+func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
 	rows, err := q.db.Query(ctx, listCollections,
 		tenantID,
 		afterID,
@@ -225,6 +233,7 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, aft
 		nameLike,
 		displayNameEq,
 		displayNameLike,
+		searchLike,
 		backendEq,
 		createdAtGte,
 		createdAtLte,

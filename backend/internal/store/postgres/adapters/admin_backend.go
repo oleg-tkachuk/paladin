@@ -195,9 +195,12 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	regionEq, _ := pd.StringHint("region")
 
 	createdGTE, createdLTE := createdBounds(pd)
+	// Only the `like` half — the derived field exists for a search box, which
+	// emits `contains`. See admin_bucket.go.
+	_, searchLike := pd.StringHint("search")
 
 	rows, err := r.q.ListStorageBackends(ctx, afterPtr,
-		nameEq, nameLike, displayEq, displayLike, providerEq, regionEq,
+		nameEq, nameLike, displayEq, displayLike, searchLike, providerEq, regionEq,
 		pd.BoolHint("enabled"), pd.BoolHint("read_only"), pd.BoolHint("maintenance"),
 		createdGTE, createdLTE,
 		pageSize)

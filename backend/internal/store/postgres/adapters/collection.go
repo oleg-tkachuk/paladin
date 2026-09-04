@@ -202,8 +202,10 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		backendEq, _ := pd.StringHint("storage_backend")
 
 		createdGTE, createdLTE := createdBounds(pd)
+		// Only the `like` half — see admin_bucket.go.
+		_, searchLike := pd.StringHint("search")
 		rows, err := r.q.ListCollections(ctx, pgUUID(args.TenantID), after,
-			nameEq, nameLike, displayEq, displayLike, backendEq,
+			nameEq, nameLike, displayEq, displayLike, searchLike, backendEq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list collections: %w", err)
@@ -236,6 +238,15 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		   AND b.name  = $2
 		   AND ($3::uuid IS NULL OR c.tenant_id = $3)
 		   AND ($4::text IS NULL OR c.name > $4)
+		   -- The derived search field, spelled to match cel.SearchText.
+		   -- (no backticks in this comment: the Go literal around it is one.)
+		   -- This path narrowed on nothing from the filter before, so the same
+		   -- search pushed down on the tenant-wide list and not here — one
+		   -- query fast, its sibling reading every page, for reasons invisible
+		   -- from the caller.
+		   AND ($6::text IS NULL
+		        OR lower(c.name COLLATE "C") || chr(10) || lower(coalesce(c.display_name, '') COLLATE "C")
+		           LIKE $6)
 		 ORDER BY c.tenant_id, c.name
 		 LIMIT $5
 	`
@@ -247,8 +258,12 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	if args.PageToken != "" {
 		afterTok = args.PageToken
 	}
+	var searchTok any
+	if _, like := hints(cel.CollectionSchema, args.Filter).StringHint("search"); like != nil {
+		searchTok = *like
+	}
 	rows, err := r.pool.Query(ctx, filteredQ,
-		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize)
+		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize, searchTok)
 	if err != nil {
 		return nil, "", fmt.Errorf("list collections (filtered): %w", err)
 	}

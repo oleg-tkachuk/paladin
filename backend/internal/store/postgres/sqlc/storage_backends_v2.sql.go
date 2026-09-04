@@ -195,20 +195,28 @@ WHERE ($1::text IS NULL
   AND ($3::text IS NULL OR storage_backends.name LIKE $3::text)
   AND ($4::text IS NULL OR display_name = $4::text)
   AND ($5::text IS NULL OR display_name LIKE $5::text)
-  AND ($6::text IS NULL OR provider = $6::text)
-  AND ($7::text IS NULL OR region = $7::text)
-  AND ($8::bool IS NULL OR enabled = $8::bool)
-  AND ($9::bool IS NULL OR read_only = $9::bool)
-  AND ($10::bool IS NULL OR maintenance = $10::bool)
+  -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
+  -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
+  -- and Postgres lower() are two Unicode implementations and may disagree, and
+  -- a disagreement here drops a row the authoritative CEL pass accepts. See
+  -- internal/filter/cel/searchtext.go.
+  AND ($6::text IS NULL
+       OR lower(storage_backends.name COLLATE "C") || chr(10) || lower(coalesce(display_name, '') COLLATE "C")
+          LIKE $6::text)
+  AND ($7::text IS NULL OR provider = $7::text)
+  AND ($8::text IS NULL OR region = $8::text)
+  AND ($9::bool IS NULL OR enabled = $9::bool)
+  AND ($10::bool IS NULL OR read_only = $10::bool)
+  AND ($11::bool IS NULL OR maintenance = $11::bool)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($11::timestamptz IS NULL
-       OR storage_backends.created_at >= $11::timestamptz)
   AND ($12::timestamptz IS NULL
-       OR storage_backends.created_at <= $12::timestamptz)
+       OR storage_backends.created_at >= $12::timestamptz)
+  AND ($13::timestamptz IS NULL
+       OR storage_backends.created_at <= $13::timestamptz)
 ORDER BY storage_backends.name ASC
-LIMIT $13::int
+LIMIT $14::int
 `
 
 type ListStorageBackendsRow struct {
@@ -254,13 +262,14 @@ type ListStorageBackendsRow struct {
 // the first page, and a bare `name > NULL` evaluates to NULL → zero rows
 // (the same trap that bit ListUsersByTenant). Keep the
 // `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
-func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error) {
+func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error) {
 	rows, err := q.db.Query(ctx, listStorageBackends,
 		afterID,
 		nameEq,
 		nameLike,
 		displayNameEq,
 		displayNameLike,
+		searchLike,
 		providerEq,
 		regionEq,
 		enabled,

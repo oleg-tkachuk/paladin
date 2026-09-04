@@ -346,7 +346,7 @@ type Querier interface {
 	// not a per-event query on the ingest hot path. collections is small per tenant
 	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
 	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
+	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.
@@ -435,7 +435,7 @@ type Querier interface {
 	// the first page, and a bare `name > NULL` evaluates to NULL → zero rows
 	// (the same trap that bit ListUsersByTenant). Keep the
 	// `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
-	ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error)
+	ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error)
 	// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
 	// display_name so the dashboard's BudgetAlerts widget doesn't need a
 	// follow-up read.
