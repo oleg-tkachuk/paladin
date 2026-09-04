@@ -8,6 +8,7 @@ import React, {
   useRef,
 } from "react";
 import { useRouter } from "next/navigation";
+import { celString } from "@/lib/cel";
 import {
   MagnifyingGlassIcon,
   DocumentIcon,
@@ -257,9 +258,15 @@ export function CommandPalette() {
         // silently found nothing rather than one that looked broken. It went
         // unnoticed while ListTenants ignored the field and returned
         // everything.
-        const escaped = searchQuery.trim().replace(/["\\]/g, "\\$&");
-        const tenantFilter = escaped
-          ? `slug.startsWith("${escaped}") || display_name.startsWith("${escaped}")`
+        // celString rather than a third hand-rolled escape. This one handled
+        // the quote and the backslash — the two that matter for a
+        // double-quoted literal — but not a newline, which cannot appear raw
+        // in a CEL string and turns a pasted multi-line query into a parse
+        // error. Three spellings of one job, each getting a different subset
+        // right, is how the objects page ended up with none of them.
+        const term = searchQuery.trim();
+        const tenantFilter = term
+          ? `slug.startsWith(${celString(term)}) || display_name.startsWith(${celString(term)})`
           : "";
 
         const [tenantRes, bucketRes, okRes, backendRes] = await Promise.all([

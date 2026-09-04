@@ -279,7 +279,7 @@ describe("CollectionObjectsPage", () => {
   it("applies a status filter to the CEL filter", async () => {
     render(<CollectionObjectsPage />);
     await userEvent.click(screen.getByText("set status"));
-    await waitFor(() => expect(h.lastOpts?.filter).toBe("state == 'active'"));
+    await waitFor(() => expect(h.lastOpts?.filter).toBe('state == "active"'));
     expect(h.replace).toHaveBeenCalled();
   });
 
@@ -287,7 +287,7 @@ describe("CollectionObjectsPage", () => {
     render(<CollectionObjectsPage />);
     await userEvent.click(screen.getByText("set tag"));
     await waitFor(() =>
-      expect(h.lastOpts?.filter).toContain("tags['env'] == 'prod'"),
+      expect(h.lastOpts?.filter).toContain('tags["env"] == "prod"'),
     );
   });
 
@@ -296,7 +296,7 @@ describe("CollectionObjectsPage", () => {
     await userEvent.click(screen.getByText("set search"));
     // The visible input updates immediately but the filter trails 300ms.
     await waitFor(
-      () => expect(h.lastOpts?.filter).toContain("key.contains('hello')"),
+      () => expect(h.lastOpts?.filter).toContain('key.contains("hello")'),
       { timeout: 1500 },
     );
   });

@@ -5,6 +5,7 @@
 // accumulation, and the data fetch itself stay in the page — they depend on the
 // loaded objects, which this hook never sees.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { celString } from "@/lib/cel";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { getNextSort, type SortState } from "./_view";
@@ -124,18 +125,30 @@ export function useObjectListState(): ObjectListState {
     syncToUrl({ recursive: value ? "true" : undefined });
   };
 
+  // Every literal goes through celString. These three values all come out of
+  // the QUERY STRING — status, tag and search are read from searchParams above
+  // — so they are attacker-supplied text being spliced into an expression the
+  // server compiles.
+  //
+  // What was here: `state == '${status}'` with no escaping at all, and a
+  // `replace(/'/g, …)` for the other two that handled the quote and not the
+  // backslash. A URL ending its status in a backslash escaped the closing
+  // quote; one carrying `x' || true || '` wrote its own conjunct. The blast
+  // radius is small — the filter runs inside the caller's own tenant and
+  // collection, so it can only widen what that caller may already list — but
+  // "small" is not the same as "intended", and a filter nobody can predict is
+  // not a filter.
   const filterParts: string[] = [];
-  if (status) filterParts.push(`state == '${status}'`);
+  if (status) filterParts.push(`state == ${celString(status)}`);
   if (debouncedSearch.length > 2)
-    filterParts.push(`key.contains('${debouncedSearch.replace(/'/g, "\\'")}')`);
+    filterParts.push(`key.contains(${celString(debouncedSearch)})`);
   if (tagFilter) {
     // Split on the FIRST '=' only — tag values may themselves contain '='.
     const eq = tagFilter.indexOf("=");
     if (eq > 0) {
-      const esc = (s: string) => s.replace(/'/g, "\\'");
-      const k = esc(tagFilter.slice(0, eq));
-      const v = esc(tagFilter.slice(eq + 1));
-      filterParts.push(`tags['${k}'] == '${v}'`);
+      filterParts.push(
+        `tags[${celString(tagFilter.slice(0, eq))}] == ${celString(tagFilter.slice(eq + 1))}`,
+      );
     }
   }
   const filter = filterParts.join(" && ");
