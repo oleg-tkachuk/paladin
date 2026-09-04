@@ -115,6 +115,8 @@ WHERE (sqlc.narg('after_id')::text IS NULL
   -- internal/filter/cel/searchtext.go.
   AND (sqlc.narg('search_like')::text IS NULL
        OR lower(storage_backends.name COLLATE "C") || chr(10) || lower(coalesce(display_name, '') COLLATE "C")
+          || chr(10) || lower(coalesce(region, '') COLLATE "C")
+          || chr(10) || lower(coalesce(endpoint, '') COLLATE "C")
           LIKE sqlc.narg('search_like')::text)
   AND (sqlc.narg('provider_eq')::text IS NULL OR provider = sqlc.narg('provider_eq')::text)
   AND (sqlc.narg('region_eq')::text IS NULL OR region = sqlc.narg('region_eq')::text)

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the cross-tenant collections page. Mock the three
@@ -86,5 +86,65 @@ describe("CollectionsPage", () => {
       screen.getByRole("button", { name: /New Collection/i }),
     );
     expect(screen.getByText("Provision Collection")).toBeInTheDocument();
+  });
+});
+
+// The search box on this page did not work.
+//
+// Its contents went straight into `filter`, which the server compiles as CEL,
+// so typing "logs" sent the expression `logs` — an undeclared identifier — and
+// the plane answered InvalidArgument. The list emptied and the operator saw a
+// search that finds nothing. The tenant-scoped collections page carries a
+// comment describing this exact failure; nobody carried the fix across.
+describe("CollectionsPage search", () => {
+  const typeInSearch = (value: string) =>
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText(/search/i), {
+        target: { value },
+      });
+    });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("sends a CEL expression, not the raw box contents", () => {
+    render(<CollectionsPage />);
+    h.fetchCollections.mockClear();
+
+    typeInSearch("logs");
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    const sent = h.fetchCollections.mock.calls.map((c) => c[0]);
+    // The regression: "logs" reaching the plane as a filter.
+    expect(sent).not.toContain("logs");
+    expect(sent.at(-1)).toBe('search.contains("logs")');
+  });
+
+  it("debounces instead of listing once per keystroke", () => {
+    render(<CollectionsPage />);
+    h.fetchCollections.mockClear();
+
+    typeInSearch("l");
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    typeInSearch("lo");
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    typeInSearch("log");
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(h.fetchCollections.mock.calls.filter((c) => c[0])).toHaveLength(0);
+
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    const filtered = h.fetchCollections.mock.calls.filter((c) => c[0]);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0][0]).toBe('search.contains("log")');
   });
 });

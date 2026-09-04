@@ -202,6 +202,8 @@ WHERE ($1::text IS NULL
   -- internal/filter/cel/searchtext.go.
   AND ($6::text IS NULL
        OR lower(storage_backends.name COLLATE "C") || chr(10) || lower(coalesce(display_name, '') COLLATE "C")
+          || chr(10) || lower(coalesce(region, '') COLLATE "C")
+          || chr(10) || lower(coalesce(endpoint, '') COLLATE "C")
           LIKE $6::text)
   AND ($7::text IS NULL OR provider = $7::text)
   AND ($8::text IS NULL OR region = $8::text)

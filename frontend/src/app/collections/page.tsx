@@ -69,6 +69,7 @@ import {
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 
 type SortColumn = "name" | "displayName" | "backendId";
@@ -128,6 +129,7 @@ export default function CollectionsPage() {
 
   // ── search + sort
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   // ── create
@@ -141,9 +143,23 @@ export default function CollectionsPage() {
   // ── delete
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
+  // The box contents used to go STRAIGHT into `filter`, which the server
+  // compiles as CEL. Typing "logs" sent the expression `logs`, an undeclared
+  // identifier, so the plane answered InvalidArgument and the list emptied —
+  // the search box on this page did not work at all. The neighbouring
+  // tenant-scoped page carries a comment describing exactly this failure; it
+  // was never fixed here.
+  //
+  // searchFilter() builds the expression, and the debounce stops a refetch per
+  // keystroke — this fired one list request per character before.
   useEffect(() => {
-    fetchCollections(search);
-  }, [fetchCollections, search]);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    fetchCollections(searchFilter(debouncedSearch));
+  }, [fetchCollections, debouncedSearch]);
 
   useEffect(() => {
     if (createOpen) fetchBuckets(newBackend || undefined);
@@ -204,7 +220,7 @@ export default function CollectionsPage() {
       setNewName("");
       setNewDisplayName("");
       setCreateOpen(false);
-      fetchCollections(search);
+      fetchCollections(searchFilter(debouncedSearch));
     } catch (err) {
       showNotification({
         type: "error",
@@ -268,7 +284,7 @@ export default function CollectionsPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => fetchCollections(search)}
+          onClick={() => fetchCollections(searchFilter(debouncedSearch))}
           aria-label="Refresh"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />

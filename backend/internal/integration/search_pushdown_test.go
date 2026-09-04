@@ -45,6 +45,10 @@ var searchFixtures = []struct{ name, display string }{
 var searchQueries = []string{
 	"prod", "PROD", "Logs", "quiet", "istanbul", "İstanbul",
 	"über", "ÜBER", "100%", "a_b", "b\nc", "", "nosuchthing",
+	// The two columns the backend search covers beyond id and display name.
+	// Without these the four-column join is untested and could shrink to two
+	// without a failure.
+	"eu-north", "s3.example",
 }
 
 func celFilter(q string) string {
@@ -62,9 +66,9 @@ func TestBackendSearchPushdownNeverDropsAMatch(t *testing.T) {
 	prefix := "srch-" + uuid.NewString()[:8]
 	for _, f := range searchFixtures {
 		mustExec(t, ctx, pool,
-			`INSERT INTO storage_backends (name, kind, display_name)
-			 VALUES ($1, 's3-compatible', $2)`,
-			prefix+"-"+f.name, f.display)
+			`INSERT INTO storage_backends (name, kind, display_name, region, endpoint)
+			 VALUES ($1, 's3-compatible', $2, $3, $4)`,
+			prefix+"-"+f.name, f.display, "EU-North-1", "https://S3.Example/"+f.name)
 	}
 
 	all, _, err := repo.List(ctx, 1000, "", "")
@@ -101,7 +105,7 @@ func celBackends(t *testing.T, filter string, in []admindomain.StorageBackend) [
 			return map[string]any{
 				"backend_id":   b.BackendID,
 				"display_name": b.DisplayName,
-				"search":       celpkg.SearchText(b.BackendID, b.DisplayName),
+				"search":       celpkg.SearchText(b.BackendID, b.DisplayName, b.Region, b.Endpoint),
 			}
 		})
 	if err != nil {

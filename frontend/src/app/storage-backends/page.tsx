@@ -11,7 +11,7 @@
 // live behind a row dropdown when needed; the create form is the
 // 80% case for this page.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 
 // backend_id format mirrors the `backend_id` CHECK on the buckets table
@@ -132,7 +133,13 @@ export default function StorageBackendsPage() {
   } = useBackends();
   const { showNotification } = useNotification();
 
+  // Server-side, like /buckets: the page used to fetch every backend and
+  // narrow the array in the browser. The derived `search` field joins the same
+  // four columns this box used to match — id, display name, region, endpoint —
+  // so nothing it used to find has stopped being findable.
   const [search, setSearch] = useState("");
+  // Trails `search` by 300ms so a refetch does not fire per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [drainingId, setDrainingId] = useState<string | null>(null);
   const [maintainingId, setMaintainingId] = useState<string | null>(null);
@@ -332,7 +339,7 @@ export default function StorageBackendsPage() {
     });
     setBulkBusy(false);
     clearSelection();
-    void fetchBackends();
+    void refetch();
   };
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -349,20 +356,29 @@ export default function StorageBackendsPage() {
   });
 
   useEffect(() => {
-    fetchBackends();
-  }, [fetchBackends]);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return backends;
-    return backends.filter(
-      (b) =>
-        b.backendId.toLowerCase().includes(q) ||
-        (b.displayName || "").toLowerCase().includes(q) ||
-        (b.region || "").toLowerCase().includes(q) ||
-        (b.endpoint || "").toLowerCase().includes(q),
-    );
-  }, [backends, search]);
+  // One place that knows how to ask, so the Refresh button and the post-bulk
+  // reload cannot drift into fetching something other than what is on screen.
+  const refetch = useCallback(
+    () => fetchBackends(searchFilter(debouncedSearch)),
+    [fetchBackends, debouncedSearch],
+  );
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  // No client-side narrowing left. Re-adding it would be dead code that
+  // quietly disagreed with the API the day the two definitions of "matches"
+  // drifted apart.
+  const filtered = backends;
+
+  const hasSearch = search.trim() !== "";
+  // The debounce has not fired yet, or its refetch is still running.
+  const searchPending = search.trim() !== debouncedSearch.trim() || loading;
 
   const resetForm = () =>
     setForm({
@@ -459,7 +475,7 @@ export default function StorageBackendsPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => void fetchBackends()}
+          onClick={() => void refetch()}
           aria-label="Refresh"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
@@ -583,11 +599,19 @@ export default function StorageBackendsPage() {
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <CloudIcon className="size-10 opacity-40" />
                     <p className="text-sm">
-                      {search
-                        ? "No backends match your search."
-                        : "No storage backends registered yet."}
+                      {/*
+                        Three states, not two: the debounce has not fired, the
+                        request is in flight, or the server found nothing.
+                        Collapsing the first two into "No backends match" tells
+                        an operator their backend is gone while they type.
+                      */}
+                      {searchPending
+                        ? "Searching…"
+                        : hasSearch
+                          ? "No backends match your search."
+                          : "No storage backends registered yet."}
                     </p>
-                    {!search && (
+                    {!searchPending && !hasSearch && (
                       <Button
                         size="sm"
                         variant="outline"

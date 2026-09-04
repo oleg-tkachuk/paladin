@@ -260,7 +260,14 @@ func backendRow(b admindomain.StorageBackend) map[string]any {
 		"created_at":   b.CreatedAt,
 		// Identical to ListStorageBackends' `search_like` clause; the pushdown
 		// contract holds only while the two spellings agree.
-		"search": celpkg.SearchText(b.BackendID, b.DisplayName),
+		//
+		// FOUR columns, not two. The console's backend search matched id,
+		// display name, region AND endpoint, and a derived field covering only
+		// the first two would have moved that search to the server while
+		// quietly dropping half of what it used to find — the kind of
+		// regression an operator reports as "it stopped finding my backend"
+		// months later.
+		"search": celpkg.SearchText(b.BackendID, b.DisplayName, b.Region, b.Endpoint),
 	}
 }
 

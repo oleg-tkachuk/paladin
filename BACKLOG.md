@@ -936,37 +936,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### The console holds whole tables to search them
-
-- **Status:** Narrowed 2026-09-04 — `/buckets` is done; `useBackends` and
-  `fetchAllCollections` are not.
-- **Reason:** `useBuckets`, `useBackends` and `fetchAllCollections` follow
-  `nextPageToken` to the end and filter in the browser: 859 buckets today, one
-  request per 500, on every picker that offers them.
-- **What landed for buckets:** a derived `search` filter field
-  (`cel.SearchText` in Go, `search_like` in ListBucketsV2, `asciiLower` in
-  `src/lib/cel.ts`), and the page sends the operator's query as a `filter` with
-  a 300ms debounce.
-- **Correction to this entry's earlier claim of "no technical blockers":** there
-  were two, and both are on the critical path for the remaining lists.
-  Disjunction does not push down — `ExtractPushdown` descends `&&` only — so
-  `id.contains(q) || display_name.contains(q)` makes the server read one page,
-  filter it in memory, and report matches past it as absent. And Go's
-  `strings.ToLower` and Postgres' `lower()` are two Unicode implementations
-  that may disagree, so case folding has to be ASCII-only (`COLLATE "C"`) or
-  the pushdown drops rows the filter accepts.
-- **The paging loop stays, deliberately.** This entry's old Definition of Done
-  ("render what comes back") makes correctness depend on the pushdown
-  recognising the expression, which no caller can check. Paging to the end with
-  a filter is correct for every filter; the pushdown only decides how few pages
-  that takes.
-- **Definition of Done:** the same treatment for `useBackends` and
-  `fetchAllCollections` — a `search` field on StorageBackendSchema and
-  CollectionSchema with the matching SQL, and their pickers sending it. The
-  20-page ceiling stays as the backstop it is.
-- **Blockers:** none. The pattern and its tests exist for buckets; the
-  remaining work is applying it twice.
-
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY
 
 - **Status:** Deferred (correct at current scale; revisit on fleet growth).

@@ -1,5 +1,11 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the storage-backends page. useBackends auto-fetches
@@ -248,5 +254,59 @@ describe("StorageBackendsPage", () => {
       expect(h.setBackendMaintenance).toHaveBeenCalledTimes(1),
     );
     expect(h.setBackendMaintenance).toHaveBeenCalledWith("a", true, "1");
+  });
+});
+
+// The backend search moved to the API. It used to fetch every backend and
+// narrow the array in the browser, matching four fields — id, display name,
+// region, endpoint — so the derived `search` field joins the same four. A
+// version covering only id and display name would have shipped as a search
+// that quietly stopped finding backends by region.
+describe("StorageBackendsPage search", () => {
+  const typeInSearch = (value: string) =>
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText(/search/i), {
+        target: { value },
+      });
+    });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("sends the query to the API as one CEL conjunct", () => {
+    render(<StorageBackendsPage />);
+    h.fetchBackends.mockClear();
+
+    typeInSearch("EU-North");
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    const sent = h.fetchBackends.mock.calls.at(-1)?.[0];
+    // ASCII-folded to match the server's search text, and one conjunct: a
+    // disjunction pushes nothing into SQL, so matches past the first page
+    // would come back reported as absent.
+    expect(sent).toBe('search.contains("eu-north")');
+    expect(sent).not.toContain("||");
+  });
+
+  it("debounces instead of listing once per keystroke", () => {
+    render(<StorageBackendsPage />);
+    h.fetchBackends.mockClear();
+
+    typeInSearch("m");
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    typeInSearch("mi");
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(h.fetchBackends.mock.calls.filter((c) => c[0])).toHaveLength(0);
+
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(h.fetchBackends.mock.calls.filter((c) => c[0])).toHaveLength(1);
   });
 });

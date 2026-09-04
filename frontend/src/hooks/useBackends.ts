@@ -109,7 +109,13 @@ export function useBackends(autoFetch: boolean = true) {
   const [error, setError] = useState<string | null>(null);
   const bumpRefresh = useBumpRefresh();
 
-  const fetchBackends = useCallback(async () => {
+  // `filter` is a CEL expression, not a search string — build it with
+  // searchFilter() from @/lib/cel. The loop below stays: ListBackends
+  // re-evaluates the whole filter over the page it read, so an expression the
+  // pushdown cannot express returns a sparse page with a next token rather
+  // than an error, and paging to the end is correct for every filter. The
+  // pushdown only decides how few pages that takes.
+  const fetchBackends = useCallback(async (filter: string = "") => {
     setLoading(true);
     setError(null);
     try {
@@ -126,7 +132,7 @@ export function useBackends(autoFetch: boolean = true) {
       do {
         const res = await backendClient.listBackends({
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-          filter: "",
+          filter,
         });
         acc.push(...res.backends);
         token = res.page?.nextPageToken ?? "";

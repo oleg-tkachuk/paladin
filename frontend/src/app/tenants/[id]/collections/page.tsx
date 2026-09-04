@@ -37,6 +37,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { collectionClient } from "@/lib/connect/client";
+import { searchFilter } from "@/lib/cel";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
@@ -152,21 +153,30 @@ export default function TenantCollectionsPage() {
   );
 
   const [search, setSearch] = useState("");
+  // Trails `search` by 300ms; celFilter is in the react-query key, so without
+  // this every keystroke was its own list request.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // The server takes a CEL expression, not a search string. Sending the raw
   // box contents means "e2e/inv" reaches the plane as an expression and fails
   // to compile ("extraneous input"), so the list comes back empty and the
-  // search looks broken. It went unnoticed while ListCollections ignored the
-  // filter field entirely and returned everything regardless.
+  // search looks broken.
   //
-  // Quote-escape: a collection name may legitimately contain a double quote,
-  // and pasting one would otherwise produce an expression that either fails to
-  // compile or — worse — changes meaning.
-  const celFilter = useMemo(() => {
-    const term = search.trim();
-    if (!term) return "";
-    return `collection.startsWith("${term.replace(/["\\]/g, "\\$&")}")`;
+  // Three things changed when this moved onto searchFilter(). It was
+  // `startsWith`, so "logs" did not find "app-logs". It was case-sensitive, so
+  // "Logs" did not find "app-logs" either. And it looked at the collection
+  // name only, never the display name. All three now match what the other list
+  // pages do, and the escaping lives in one place instead of being spelled
+  // per page.
+  const celFilter = useMemo(
+    () => searchFilter(debouncedSearch),
+    [debouncedSearch],
+  );
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
   }, [search]);
+
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   const listQuery = useQuery({
