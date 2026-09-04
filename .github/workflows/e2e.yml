@@ -98,14 +98,20 @@ jobs:
       # inside that window would surface as a webServer timeout rather than
       # as what it is.
       #
+      # The SAME helper the local gates call, not a second list. This step
+      # named `postgres minio minio-setup` while scripts/stack-ports.sh named
+      # those plus promote-app-role — no consequence today, since
+      # promote-app-role runs postgres:16 too, but two lists that already
+      # disagree by one entry are one tag bump from disagreeing for real.
+      #
       # Services named explicitly rather than a bare `pull`: the paladin-core /
       # paladin-console images were built into the local daemon by the steps
-      # above and exist in no registry, so pulling them fails.
+      # above and exist in no registry, so pulling them fails. That reasoning
+      # lives with the list, in the helper.
       - name: Pre-pull compose images
         run: |
-          docker compose -p paladin-e2e \
-            -f frontend/tests/e2e/docker-compose.test.yaml \
-            pull --quiet postgres minio minio-setup
+          source scripts/stack-ports.sh
+          stack_pull_thirdparty frontend/tests/e2e/docker-compose.test.yaml
 
       - name: Run Playwright suite
         working-directory: frontend
