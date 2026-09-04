@@ -871,6 +871,38 @@ open deliberately — each notes why._
   counts — rather than on inspection.
 - **Blockers:** none; needs a real fleet to measure against.
 
+### The integration suite starts a Postgres per test function
+
+- **Status:** Deferred (works today; the headroom is shrinking).
+- **Reason:** `startPostgres(t)` in `backend/internal/integration` runs a fresh
+  testcontainers Postgres on every call, and there are 96 calls in the package.
+  The suite is the longest thing in `task verify-deep` and it runs against a
+  ceiling: CI passes `-timeout=20m`, and `backend/tasks/test.task.yaml` now
+  reads that value out of the workflow rather than keeping its own.
+- **Measured, in the order the runs happened:** 545s, 611s, then 887s once the
+  `search`-field contract tests landed. 887s is 74% of the 1200s ceiling.
+- **What is NOT established:** that container startup is the whole cost. 96
+  containers in 887s averages ~9s each, and the five tests that arrived between
+  the 611s and 887s runs now execute in 10s TOTAL once consolidated — so the
+  276s jump is not explained by container count alone. Machine load during
+  those runs is an untested confounder. Anyone acting on this should measure
+  before refactoring, not assume.
+- **Why it matters anyway:** the failure mode already happened once. On
+  2026-09-04 the same package hit Go's default 10m timeout, was killed at 601s
+  and dumped goroutines, and the red gate said nothing about the code — it said
+  the local task had no `-timeout`. A suite that grows toward its ceiling will
+  reproduce that, and the next person to hit it will be debugging a test they
+  did not write.
+- **Definition of Done:** one Postgres for the package — a `TestMain` that
+  starts a container, runs the migrations, and hands out per-test schemas or
+  truncations — with the isolation each test currently gets from having its own
+  database preserved. The RLS and multi-tenant tests are the ones that make
+  this non-trivial: several assert behaviour that depends on session state and
+  role membership, so "share the database" has to mean "share it without
+  sharing what they set".
+- **Blockers:** none technical, but it touches 45 test files and its payoff is
+  a number nobody has isolated yet. Measure first.
+
 ### Index-usage tests are pinned to measured table sizes
 
 - **Status:** Deferred (works today; a trap for later).
