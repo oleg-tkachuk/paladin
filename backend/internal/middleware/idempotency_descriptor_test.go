@@ -111,3 +111,60 @@ func TestIdempotentSiblingStillMemoizes(t *testing.T) {
 		t.Errorf("UpdateMine ran %d times, want 1 — memoization stopped working", svc.updateCalls)
 	}
 }
+
+// ─── the skip that must not depend on being wired ───────────────────────────
+
+// stubAuth counts RefreshToken calls. Everything else is Unimplemented.
+type stubAuth struct {
+	paladiniamv1connect.UnimplementedAuthServiceHandler
+	calls int
+}
+
+func (s *stubAuth) RefreshToken(_ context.Context, _ *connect.Request[iamv1.RefreshTokenRequest]) (*connect.Response[iamv1.RefreshTokenResponse], error) {
+	s.calls++
+	return connect.NewResponse(&iamv1.RefreshTokenResponse{
+		Tokens: &iamv1.TokenPair{AccessToken: "a"},
+	}), nil
+}
+
+// An interceptor built with an EMPTY config still refuses to memoize a
+// credential minter.
+//
+// The config here is deliberately the one the ADMIN listener passes — no
+// SkipMethods at all — because that is what a dropped wiring line looks like.
+// Before the constructor merged the list in, this test failed: RefreshToken ran
+// once and the second call got the first response back, which is a refresh pair
+// the server had already rotated away and, presented again, is what RFC 6819
+// theft detection revokes an entire family over.
+//
+// It became reachable when the clients moved onto idempotency_level. Login and
+// RefreshToken declare IDEMPOTENCY_UNKNOWN, so every client stamps them now;
+// previously none did, and the hazard sat behind a door nobody opened.
+func TestCredentialMinterIsSkippedWithoutBeingConfigured(t *testing.T) {
+	svc := &stubAuth{}
+	mux := http.NewServeMux()
+	path, handler := paladiniamv1connect.NewAuthServiceHandler(svc,
+		connect.WithInterceptors(
+			principalInjector(uuid.New()),
+			// No SkipMethods. The point of the test.
+			NewIdempotencyInterceptor(newMemStore(), IdempotencyConfig{TTL: time.Minute}),
+		),
+	)
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := paladiniamv1connect.NewAuthServiceClient(srv.Client(), srv.URL)
+
+	key := uuid.NewString()
+	for i := 0; i < 2; i++ {
+		req := connect.NewRequest(&iamv1.RefreshTokenRequest{RefreshToken: "r"})
+		req.Header().Set("Idempotency-Key", key)
+		if _, err := client.RefreshToken(context.Background(), req); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if svc.calls != 2 {
+		t.Errorf("RefreshToken ran %d times, want 2 — a credential minter was "+
+			"memoized because nobody passed the skip list", svc.calls)
+	}
+}

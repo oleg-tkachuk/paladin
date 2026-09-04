@@ -216,10 +216,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// the server insists on, and the console now does exactly that.
 	idempotencyInterceptor := middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
 		RequireOnCreate: true,
-		// Credential-minting RPCs must not be replayed even when a key is
-		// sent — see middleware.CredentialMintingProcedures for why a
-		// memoized RefreshToken is worse than no memoization at all.
-		SkipMethods: middleware.CredentialMintingProcedures,
+		// No SkipMethods here on purpose. Credential minting is skipped by the
+		// constructor itself, for every caller — a line in this literal was the
+		// only thing protecting RefreshToken from replay, and its removal would
+		// have broken nothing visible. See NewIdempotencyInterceptor.
 	})
 
 	// OTel: one span per RPC, named from the procedure, plus RED metrics

@@ -132,10 +132,34 @@ type IdempotencyConfig struct {
 
 // NewIdempotencyInterceptor returns a Connect interceptor that
 // enforces + memoizes the Idempotency-Key contract.
+// NewIdempotencyInterceptor builds the interceptor. Credential minting is
+// skipped unconditionally, whatever the caller passes.
+//
+// It used to be the caller's job — one `SkipMethods:
+// middleware.CredentialMintingProcedures` line in the API listener's config
+// literal, and nothing anywhere would notice its removal.
+// TestCredentialMintersAreSkipped asserts what is IN the map, not that anyone
+// passed it, and the admin listener already constructs this interceptor
+// without it (correctly: it does not serve AuthService).
+//
+// That gap was unreachable while no client sent a key on an auth RPC. It
+// stopped being unreachable when the clients moved onto idempotency_level:
+// Login and RefreshToken declare IDEMPOTENCY_UNKNOWN, so every client now
+// stamps them, and a dropped wiring line would make a rotated refresh token
+// replayable. A safety property that depends on being remembered at each call
+// site is not a safety property, so it no longer does.
 func NewIdempotencyInterceptor(store IdempotencyStore, cfg IdempotencyConfig) connect.Interceptor {
 	if cfg.TTL == 0 {
 		cfg.TTL = 24 * time.Hour
 	}
+	skip := make(map[string]bool, len(cfg.SkipMethods)+len(CredentialMintingProcedures))
+	for p := range cfg.SkipMethods {
+		skip[p] = true
+	}
+	for p := range CredentialMintingProcedures {
+		skip[p] = true
+	}
+	cfg.SkipMethods = skip
 	return &idempotencyInterceptor{store: store, cfg: cfg}
 }
 
