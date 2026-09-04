@@ -152,7 +152,14 @@ test.describe("Collections CRUD", () => {
 
     // Narrow the list before looking for the row — filtering is what an
     // operator does, and it keeps the assertion off a long table.
-    await page.getByPlaceholder(/Search Collections by prefix/i).fill(name);
+    //
+    // The filter is server-side and debounced now, so the assertion below has
+    // to outlast 300ms plus a round trip; its 15s timeout does. The locator
+    // used to name the old placeholder, "Search Collections by prefix", and
+    // both tests in this file failed the moment that text changed — which is
+    // the coupling working, not a surprise: a placeholder is user-visible
+    // copy, and a test that spells it out is asserting the copy.
+    await page.getByPlaceholder(/search by name/i).fill(name);
     await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
   });
 
@@ -163,9 +170,7 @@ test.describe("Collections CRUD", () => {
     const collection = await makeCollection({ tenantId, bucket });
 
     await gotoSettled(page, collectionsURL(tenantId));
-    await page
-      .getByPlaceholder(/Search Collections by prefix/i)
-      .fill(collection.collection);
+    await page.getByPlaceholder(/search by name/i).fill(collection.collection);
 
     const row = page
       .getByRole("row")
