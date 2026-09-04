@@ -294,8 +294,14 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 
 	createdGTE, createdLTE := createdBounds(pd)
 
+	// Only the `like` half: the derived `search` field exists for a search
+	// box, which emits `contains`. An `==` over a newline-joined concatenation
+	// is not something anyone types, so it falls through to the CEL pass —
+	// wider read, same answer.
+	_, searchLike := pd.StringHint("search")
+
 	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter,
-		nameEq, nameLike, displayEq, displayLike,
+		nameEq, nameLike, displayEq, displayLike, searchLike,
 		pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
 		pd.BoolHint("replication_enabled"),
 		createdGTE, createdLTE,

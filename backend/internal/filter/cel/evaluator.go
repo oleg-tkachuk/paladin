@@ -133,6 +133,31 @@ var PhysicalBucketSchema = &Schema{
 		"replication_enabled": cel.BoolType,
 		"owner_tenant_id":     cel.StringType,
 		"created_at":          cel.TimestampType,
+		// A derived field, not a column: lower(bucket_id) + "\n" +
+		// lower(display_name). It exists so a console search box has ONE
+		// conjunct to send.
+		//
+		// The alternative it replaces is `bucket_id.contains(q) ||
+		// display_name.contains(q)`, and that shape is a trap here. The
+		// pushdown walker descends `&&` only, so a disjunction pushes nothing;
+		// the server then reads a full page, filters it in memory, and answers
+		// with the matches THAT PAGE happened to hold. A caller who trusted
+		// that answer would be told a bucket does not exist because it sorted
+		// past row 500.
+		//
+		// One conjunct pushes down, so the narrowing happens in SQL and the
+		// page the server reads already holds the matches.
+		//
+		// Case is folded on both sides because the console's client-side
+		// search always did (`toLowerCase().includes(…)`), and moving that
+		// behaviour to the server without folding would have quietly made
+		// search case-sensitive.
+		//
+		// The separator is "\n" rather than " ": a query can only match across
+		// the boundary by containing the separator, and a newline cannot be
+		// typed into a search input. So this matches exactly what the browser
+		// matched — id OR display name — and nothing else.
+		"search": cel.StringType,
 	},
 }
 
@@ -459,6 +484,13 @@ func init() {
 // cursor from the surviving rows would skip everything that was filtered out.
 //
 // An empty expression returns the page untouched, without compiling anything.
+//
+// THE PAGE IS FILTERED IN PLACE. The result aliases the caller's backing array
+// and the surviving rows are compacted into its front, so the input slice is
+// unusable afterwards. Every production caller passes a page it then discards,
+// which is why this has never mattered; it cost an afternoon in a test that
+// filtered one fixture twice and got a row reported twice and a match reported
+// missing. Copy first if the input is needed again.
 func FilterPage[T any](
 	e *Evaluator, schema *Schema, expr string, page []T, row func(T) map[string]any,
 ) ([]T, error) {

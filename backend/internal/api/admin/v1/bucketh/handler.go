@@ -387,6 +387,11 @@ func bucketRow(b admindomain.Bucket) map[string]any {
 		"replication_enabled": b.Replication.Enabled,
 		"owner_tenant_id":     owner,
 		"created_at":          b.CreatedAt,
+		// Must stay identical to the SQL in ListBucketsV2's `search_like`
+		// clause. They are two spellings of one definition, and the pushdown
+		// contract — narrow only, never drop a row CEL accepts — holds only
+		// while they agree. TestSearchFieldMatchesSQLDefinition pins them.
+		"search": celpkg.SearchText(b.BucketName, b.DisplayName),
 	}
 }
 

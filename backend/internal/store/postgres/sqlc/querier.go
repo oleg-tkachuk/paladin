@@ -320,7 +320,7 @@ type Querier interface {
 	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 	// (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 	// below is plain equality so the planner uses the partial index.
-	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
+	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.

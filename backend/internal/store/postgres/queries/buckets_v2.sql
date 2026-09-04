@@ -86,6 +86,14 @@ WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_n
   AND (sqlc.narg('name_like')::text IS NULL OR b.name LIKE sqlc.narg('name_like')::text)
   AND (sqlc.narg('display_name_eq')::text IS NULL OR b.display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR b.display_name LIKE sqlc.narg('display_name_like')::text)
+  -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
+  -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
+  -- and Postgres lower() are two Unicode implementations and may disagree, and
+  -- a disagreement here drops a row the authoritative CEL pass accepts. See
+  -- internal/filter/cel/searchtext.go.
+  AND (sqlc.narg('search_like')::text IS NULL
+       OR lower(b.name COLLATE "C") || chr(10) || lower(coalesce(b.display_name, '') COLLATE "C")
+          LIKE sqlc.narg('search_like')::text)
   AND (sqlc.narg('versioning_enabled')::bool IS NULL OR b.versioning_enabled = sqlc.narg('versioning_enabled')::bool)
   AND (sqlc.narg('object_lock_enabled')::bool IS NULL OR b.object_lock_enabled = sqlc.narg('object_lock_enabled')::bool)
   AND (sqlc.narg('replication_enabled')::bool IS NULL OR b.replication_enabled = sqlc.narg('replication_enabled')::bool)
