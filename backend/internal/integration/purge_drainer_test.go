@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -176,5 +178,59 @@ func TestPurgeDrainerRetriesUntilSuccess(t *testing.T) {
 	}
 	if deleter.calls != 2 {
 		t.Errorf("storage delete called %d times, want 2 (one failure, one success)", deleter.calls)
+	}
+}
+
+// failingSubscriptionStore makes Dispatcher.DispatchTx fail, which is the only
+// way to reach the emit branch of the drainer: Events is a *Dispatcher, and
+// its Store is the one seam already in it.
+type failingSubscriptionStore struct{}
+
+func (failingSubscriptionStore) List(context.Context, admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	return nil, "", errors.New("subscription store unavailable")
+}
+
+func (failingSubscriptionStore) Get(context.Context, uuid.UUID) (admindomain.EventSubscription, error) {
+	return admindomain.EventSubscription{}, errors.New("subscription store unavailable")
+}
+
+// The bytes are gone but the announcement failed: the whole tick must roll
+// back, leaving the debt owed, rather than settling silently.
+//
+// The code states the reason — "an unannounced purge is worse than a repeated
+// one, and the repeat is free (idempotent DELETE)" — and nothing checked it.
+// Mutation testing found the branch: inverting `if err := w.emitPurged(…); err
+// != nil` survived both the package suite and this integration suite, so a
+// build that settled the debt without announcing it would have shipped.
+//
+// What that costs downstream: a consumer of paladin.object.purged is told the
+// bytes still exist. The comment on emitPurged says a consumer "can rely on
+// the bytes being gone" — the inverse, silently settling, breaks a promise the
+// API makes.
+func TestPurgeDrainerKeepsDebtWhenTheAnnouncementFails(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+	id := seedPurgeDebt(t, ctx, pool, f)
+
+	// Storage succeeds — the bytes ARE reclaimed — and only the emit fails.
+	// That is the ordering that makes this dangerous: a settle here would
+	// record work as announced that nobody heard about.
+	d := &worker.PurgeDrainer{
+		Pool: pool, Q: sqlc.New(pool),
+		Storage:   &scriptedDeleter{},
+		Events:    &worker.Dispatcher{Store: failingSubscriptionStore{}, Logger: zap.NewNop()},
+		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
+	}
+	d.Sweep(ctx)
+
+	if got := purgeRowCount(t, ctx, pool, id); got != 1 {
+		t.Fatalf("debt rows = %d, want 1 — the announcement failed, so the tick "+
+			"must roll back; settling here loses the only record that the purge "+
+			"was never announced", got)
+	}
+	if got := purgedEventCount(t, ctx, pool, f.tenantID); got != 0 {
+		t.Errorf("paladin.object.purged rows = %d, want 0 — the emit failed, so "+
+			"nothing may have been written", got)
 	}
 }

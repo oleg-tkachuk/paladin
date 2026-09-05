@@ -93,11 +93,31 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) {
 		w.log().Warn("purge drainer: list due", zap.Error(err))
 		return
 	}
+	// A row whose settlement must not stand aborts the whole tick.
+	//
+	// drainOne used to return nothing, and its `return` on a failed
+	// announcement exited drainOne — not Sweep — so the commit below ran
+	// anyway and persisted the DeletePendingPurge that had already executed
+	// in this transaction. The debt settled, the event was never emitted, and
+	// the row was gone, so no later tick could retry it. The comment there
+	// said the tick rolls back; nothing did.
+	rollback := false
 	for _, r := range rows {
 		if ctx.Err() != nil {
 			return
 		}
-		w.drainOne(ctx, tx, r)
+		if err := w.drainOne(ctx, tx, r); err != nil {
+			rollback = true
+			break
+		}
+	}
+	if rollback {
+		// The deferred Rollback does the work. Every settlement in this tick
+		// is discarded, including ones that succeeded — which is the trade the
+		// emit branch already chose: an unannounced purge is worse than a
+		// repeated one, and the repeat is free because the storage DELETE is
+		// idempotent.
+		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		// Nothing is lost: uncommitted settlements mean the debt rows stay,
@@ -112,7 +132,14 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) {
 // is safe in LifecycleHardDeleter and NOT safe in the API handler: there is no
 // live row to strand. The row this debt describes was deleted before the debt
 // was ever written.
-func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow) {
+// drainOne reclaims one object's bytes and settles its debt.
+//
+// A non-nil error means THIS TICK MUST NOT COMMIT: the row's settlement is
+// already written to the transaction and standing it up without the
+// announcement is the failure the emit branch exists to prevent. A storage
+// failure is not one of those — it records attempts and last_error, which are
+// writes that MUST survive, so it returns nil.
+func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow) error {
 	purgeID := uuid.UUID(r.ID.Bytes)
 	tenantID := uuid.UUID(r.TenantID.Bytes)
 	logger := w.log().With(
@@ -127,12 +154,16 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		backoff := w.backoffFor(r.Attempts)
 		if rerr := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.ID, ptrTo(err.Error()),
 			pgtype.Interval{Microseconds: backoff.Microseconds(), Valid: true}); rerr != nil {
+			// nil, not rerr: nothing was settled for this row, so the tick
+			// may still commit whatever the other rows achieved.
 			logger.Warn("purge drainer: reschedule failed", zap.Error(rerr))
-			return
+			return nil
 		}
 		logger.Warn("purge drainer: storage delete failed; will retry",
 			zap.Duration("retry_in", backoff), zap.Error(err))
-		return
+		// nil on purpose: the attempts/last_error write above MUST survive,
+		// and the debt row is untouched.
+		return nil
 	}
 
 	// Settle and announce on the same tx. paladin.object.purged is emitted ONLY
@@ -141,16 +172,17 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 	// being gone.
 	if _, err := w.Q.WithTx(tx).DeletePendingPurge(ctx, r.ID); err != nil {
 		logger.Warn("purge drainer: settle failed", zap.Error(err))
-		return
+		return err
 	}
 	if err := w.emitPurged(ctx, tx, tenantID, r); err != nil {
 		// Roll the whole tick back rather than settle silently: an
 		// unannounced purge is worse than a repeated one, and the repeat is
 		// free (idempotent DELETE).
 		logger.Warn("purge drainer: emit paladin.object.purged failed", zap.Error(err))
-		return
+		return err
 	}
 	logger.Info("purged")
+	return nil
 }
 
 // emitPurged enqueues paladin.object.purged on the caller's tx. Shape mirrors
