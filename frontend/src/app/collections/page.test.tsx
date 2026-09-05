@@ -12,6 +12,9 @@ const h = vi.hoisted(() => ({
   fetchBuckets: vi.fn(),
   fetchBackends: vi.fn(),
   showNotification: vi.fn(),
+  // The page renders ListLoadError; without `error` here that branch never
+  // runs and the guard is untested. Same omission as /tenants had.
+  error: null as string | null,
 }));
 
 vi.mock("@/hooks/useCollections", () => ({
@@ -19,6 +22,7 @@ vi.mock("@/hooks/useCollections", () => ({
     collections: [],
     nextPageToken: "",
     loading: false,
+    error: h.error,
     fetchCollections: h.fetchCollections,
     createCollection: h.createCollection,
     deleteCollection: h.deleteCollection,
@@ -146,5 +150,28 @@ describe("CollectionsPage search", () => {
     const filtered = h.fetchCollections.mock.calls.filter((c) => c[0]);
     expect(filtered).toHaveLength(1);
     expect(filtered[0][0]).toBe('search.contains("log")');
+  });
+});
+
+// The ListLoadError branch, which existed and had never run.
+describe("CollectionsPage load failure", () => {
+  afterEach(() => {
+    h.error = null;
+  });
+
+  it("says the list is unknown, not empty", () => {
+    h.error = "unavailable: connection refused";
+    render(<CollectionsPage />);
+    expect(
+      screen.getByText(
+        /could not be loaded — this list is unknown, not empty/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No Collections yet.")).not.toBeInTheDocument();
+  });
+
+  it("still says 'none yet' when the list really is empty", () => {
+    render(<CollectionsPage />);
+    expect(screen.getByText("No Collections yet.")).toBeInTheDocument();
   });
 });

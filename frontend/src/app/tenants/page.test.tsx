@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -10,7 +10,15 @@ const h = vi.hoisted(() => ({
   updateTenant: vi.fn(),
   deleteTenant: vi.fn(),
   showNotification: vi.fn(),
-  state: { tenants: [] as Array<Record<string, unknown>>, loading: false },
+  // `error` belongs here because the PAGE reads it — it renders ListLoadError.
+  // Without it the double returns undefined, that branch never runs, and a
+  // correctly written guard sits untested. Which is how the same branch came
+  // to be missing entirely on /storage-backends.
+  state: {
+    tenants: [] as Array<Record<string, unknown>>,
+    loading: false,
+    error: null as string | null,
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -22,6 +30,7 @@ vi.mock("@/hooks/useTenants", () => ({
   useTenants: () => ({
     tenants: h.state.tenants,
     loading: h.state.loading,
+    error: h.state.error,
     fetchTenants: vi.fn(),
     createTenant: h.createTenant,
     updateTenantMetadata: h.updateTenant,
@@ -152,5 +161,29 @@ describe("TenantsPage", () => {
     await waitFor(() =>
       expect(h.deleteTenant).toHaveBeenCalledWith("t-1", "7"),
     );
+  });
+});
+
+// The ListLoadError branch, which existed and had never run: the double did
+// not supply `error`, so every test took the empty-state path.
+describe("TenantsPage load failure", () => {
+  afterEach(() => {
+    h.state.error = null;
+  });
+
+  it("says the list is unknown, not empty", () => {
+    h.state.error = "unavailable: connection refused";
+    render(<TenantsPage />);
+    expect(
+      screen.getByText(
+        /could not be loaded — this list is unknown, not empty/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No tenants yet.")).not.toBeInTheDocument();
+  });
+
+  it("still says 'none yet' when the list really is empty", () => {
+    render(<TenantsPage />);
+    expect(screen.getByText("No tenants yet.")).toBeInTheDocument();
   });
 });
