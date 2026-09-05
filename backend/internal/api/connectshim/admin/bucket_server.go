@@ -17,7 +17,7 @@ import (
 
 type BucketServer struct {
 	paladinadminv1connect.UnimplementedBucketServiceHandler
-	H *bucketh.Handler
+	H bucketHandler
 }
 
 func NewBucketServer(h *bucketh.Handler) *BucketServer { return &BucketServer{H: h} }

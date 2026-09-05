@@ -28,7 +28,7 @@ type defaultBindingSource interface {
 
 type CollectionServer struct {
 	paladinadminv1connect.UnimplementedCollectionServiceHandler
-	H        *objectkey.Handler
+	H        collectionHandler
 	bindings defaultBindingSource
 }
 

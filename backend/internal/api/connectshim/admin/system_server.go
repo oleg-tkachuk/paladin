@@ -18,10 +18,18 @@ import (
 // connectshim coverage test sees a gated call site.
 type SystemServer struct {
 	paladinadminv1connect.UnimplementedSystemServiceHandler
-	H *systemh.Handler
+	H systemHandler
 }
 
 func NewSystemServer(h *systemh.Handler) *SystemServer {
+	// H is an interface, so a nil *systemh.Handler assigned straight into it
+	// would produce a NON-nil interface value and the `s.H == nil`
+	// disabled-subsystem checks below would silently stop firing — the
+	// RPCs would panic on a nil receiver instead of answering
+	// CodeUnavailable. Leave the field zero instead.
+	if h == nil {
+		return &SystemServer{}
+	}
 	return &SystemServer{H: h}
 }
 

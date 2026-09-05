@@ -22,7 +22,7 @@ import (
 
 type AuditServer struct {
 	paladinadminv1connect.UnimplementedAuditLogServiceHandler
-	H *audith.Handler
+	H auditHandler
 }
 
 func NewAuditServer(h *audith.Handler) *AuditServer { return &AuditServer{H: h} }

@@ -16,7 +16,7 @@ import (
 
 type BackendServer struct {
 	paladinadminv1connect.UnimplementedBackendServiceHandler
-	H *backendh.Handler
+	H backendHandler
 }
 
 func NewBackendServer(h *backendh.Handler) *BackendServer { return &BackendServer{H: h} }

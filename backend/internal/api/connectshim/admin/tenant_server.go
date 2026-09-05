@@ -21,7 +21,7 @@ import (
 // TenantServer wraps the existing v1 tenant.Handler under the new admin proto.
 type TenantServer struct {
 	paladinadminv1connect.UnimplementedTenantServiceHandler
-	H *tenant.Handler
+	H tenantHandler
 }
 
 func NewTenantServer(h *tenant.Handler) *TenantServer { return &TenantServer{H: h} }

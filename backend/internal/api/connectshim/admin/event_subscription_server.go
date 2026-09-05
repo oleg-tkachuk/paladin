@@ -19,7 +19,7 @@ import (
 
 type EventSubscriptionServer struct {
 	paladinadminv1connect.UnimplementedEventSubscriptionServiceHandler
-	H *eventsubh.Handler
+	H eventSubscriptionHandler
 	// Tenants resolves the slug form of a subscription's resource name.
 	// Subscriptions are RLS-isolated, so the handler needs the tenant's id
 	// before it can read the row — see eventsubh.Handler.Get.

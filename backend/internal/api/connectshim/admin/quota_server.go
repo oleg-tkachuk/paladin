@@ -18,7 +18,7 @@ import (
 
 type QuotaServer struct {
 	paladinadminv1connect.UnimplementedQuotaServiceHandler
-	H *quotah.Handler
+	H quotaHandler
 }
 
 func NewQuotaServer(h *quotah.Handler) *QuotaServer { return &QuotaServer{H: h} }

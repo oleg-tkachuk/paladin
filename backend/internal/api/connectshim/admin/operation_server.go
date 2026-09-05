@@ -18,7 +18,7 @@ import (
 
 type OperationServer struct {
 	paladinadminv1connect.UnimplementedPlatformOperationServiceHandler
-	H *operation.Handler
+	H operationHandler
 }
 
 func NewOperationServer(h *operation.Handler) *OperationServer { return &OperationServer{H: h} }

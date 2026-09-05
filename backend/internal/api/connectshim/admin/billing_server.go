@@ -20,13 +20,21 @@ import (
 // handler, this adapter only translates wire types.
 type BillingServer struct {
 	paladinadminv1connect.UnimplementedBillingServiceHandler
-	H *billingh.Handler
+	H billingHandler
 }
 
 // NewBillingServer wires the handler. h may be nil — callers that
 // reach a nil-H server get CodeUnavailable (matches the
 // TenantBudgetServer disabled-subsystem shape).
 func NewBillingServer(h *billingh.Handler) *BillingServer {
+	// H is an interface, so a nil *billingh.Handler assigned straight into it
+	// would produce a NON-nil interface value and the `s.H == nil`
+	// disabled-subsystem checks below would silently stop firing — the
+	// RPCs would panic on a nil receiver instead of answering
+	// CodeUnavailable. Leave the field zero instead.
+	if h == nil {
+		return &BillingServer{}
+	}
 	return &BillingServer{H: h}
 }
 

@@ -14,7 +14,7 @@ import (
 
 type PolicyServer struct {
 	paladinadminv1connect.UnimplementedPolicyServiceHandler
-	H *policyh.Handler
+	H policyHandler
 }
 
 func NewPolicyServer(h *policyh.Handler) *PolicyServer { return &PolicyServer{H: h} }
