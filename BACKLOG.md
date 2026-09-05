@@ -890,6 +890,31 @@ open deliberately — each notes why._
   "the right error came back".
 - **Blockers:** none. Three cases, and the shape is written down.
 
+### internal/worker: most error branches are held by nothing
+
+- **Status:** Deferred (measured, partially addressed).
+- **What the measurement says:** 37% of mutations caught, the lowest of any
+  package measured — and it has 23 test files for 24 source files, so the
+  count of tests says nothing about what they hold.
+- **Not a denominator artifact.** The obvious explanation is that these
+  branches live in `internal/integration` instead, and for
+  `internal/capability/postgres` that was true. Checked here: mutating
+  `purge_drainer.go`'s emitPurged error branch survives the integration suite
+  too. These are genuinely unheld.
+- **What was fixed:** the retry-budget normalisations in `maxAttemptsFor`,
+  where a configured zero stayed zero and `attempts+1 >= max` then dead-lettered
+  every event on its FIRST attempt; and the Kafka mTLS guard, where `||` flipped
+  to `&&` skips the keypair load entirely and builds a TLS transport carrying no
+  client certificate — a silent downgrade of the authentication an operator
+  configured.
+- **What is left:** the DB-backed branches — purge_drainer, bucket_reconciler,
+  partition_maintainer, replication, and the outbox delivery loop. Each needs a
+  transaction and a failing dependency, so they belong in internal/integration.
+  The `attempts+1 >= max` boundary is among them: asserting it against a
+  hand-written table re-implements the expression and passes whatever the code
+  says, which is why dispatcher_limits_test.go says so instead of pretending.
+- **Blockers:** none, but it is integration-test work, not unit-test work.
+
 ### Mutation testing: how to read what it says
 
 - **Status:** Deferred (the tool is in the repo; this is the note that goes
