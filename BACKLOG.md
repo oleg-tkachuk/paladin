@@ -967,6 +967,39 @@ open deliberately — each notes why._
   says, which is why dispatcher_limits_test.go says so instead of pretending.
 - **Blockers:** none, but it is integration-test work, not unit-test work.
 
+### platformstats: the census thresholds live in SQL text and nothing asserts them
+
+- **Status:** Deferred (measured 2026-09-06; the two pure functions are now
+  held, the rest is integration work).
+- **What the measurement says:** 52% caught against the right denominator —
+  `internal/integration`'s TestCollectControlPlane / TestCollectRLS, not the
+  package's own tests, which did not exist. 17 of the 19 survivors are inside
+  SQL **string literals**: the boundary operators of the quota and expiry
+  FILTER clauses.
+- **Why that matters more than the percentage.** The code states the contract
+  in its own comment — "A cap of 0 means 'no cap' throughout the schema, hence
+  the `> 0` guard on every term". Relaxing one `> 0` to `>= 0` makes an absent
+  cap count as a cap of zero, and since usage is always `>= 0`, every uncapped
+  tenant is reported AT its limit. The Platform Stats page then shows a fleet
+  in breach. The neighbouring comment about the `::float8` casts being
+  load-bearing ("without them Postgres rounds 0.9 to 1 and near-limit silently
+  becomes at-limit") shows someone already reasoned about these boundaries.
+  Nothing checks them.
+- **The same shape covers the expiry windows:** `expires_at >= now()` versus
+  `> now()`, and `< now() + interval` versus `<=`, decide which capabilities
+  and API tokens are counted live, expiring, or expired.
+- **Definition of done:** rows placed exactly ON each boundary — a quota whose
+  usage equals its cap, a cap of zero, a token expiring at now() — asserted
+  through the existing integration tests. Unit tests cannot reach these: every
+  collector takes a *pgxpool.Pool, a concrete third-party type, so the seam
+  trick used on the three connectshim planes does not apply here.
+- **Two survivors are equivalent and deliberately left:** sortTenants' `>`
+  inside an `if a != b` guard, and sortStates' `&&` over a stateOrder with four
+  distinct values. Both checked by running the mutated comparator over a spread
+  of inputs.
+- **Blockers:** none, but it is integration-test work, like the
+  internal/worker remainder.
+
 ### Mutation testing: how to read what it says
 
 - **Status:** Deferred (the tool is in the repo; this is the note that goes
