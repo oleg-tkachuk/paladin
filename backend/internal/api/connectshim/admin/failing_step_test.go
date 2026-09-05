@@ -101,3 +101,24 @@ func TestCreateCollection_RoutesThroughTheDefaultBinding(t *testing.T) {
 			"that as a created collection it can never address")
 	}
 }
+
+// The mirror of the cancel case: the cancel lands and the re-read fails. A
+// dropped check there answers the caller with a zero-valued Operation — id
+// 00000000-…, state unset — for an operation that was in fact cancelled. The
+// caller cannot tell that from an operation it is not allowed to see.
+type cancelSucceedsGetFails struct{ failingOperation }
+
+func (cancelSucceedsGetFails) CancelOperation(context.Context, uuid.UUID) error { return nil }
+
+func TestCancelOperation_ReportsAFailedReread(t *testing.T) {
+	srv := &OperationServer{H: cancelSucceedsGetFails{}}
+	_, err := srv.CancelOperation(context.Background(), connect.NewRequest(&pb.CancelOperationRequest{
+		Name: "operations/" + uuid.NewString(),
+	}))
+	if err == nil {
+		t.Fatal("the re-read failed and the shim answered with an empty operation")
+	}
+	if !errors.Is(err, errBoom) {
+		t.Errorf("error %v is not the re-read's", err)
+	}
+}

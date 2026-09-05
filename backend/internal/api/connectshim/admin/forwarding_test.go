@@ -1,8 +1,10 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -11,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
 	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 
@@ -244,5 +247,155 @@ func TestDomainConvertersTolerateNil(t *testing.T) {
 	}
 	if got := tenantDomainToProto(nil); got != nil {
 		t.Errorf("tenantDomainToProto(nil) = %v, want nil", got)
+	}
+}
+
+// A cursor that decodes to the zero value is a cursor that pages forever from
+// the start. decodeAuditCursor answers zero for anything it cannot read, so
+// the difference between "unreadable" and "read correctly" is invisible unless
+// something checks what came out — inverting either parse check survived.
+type recordingAudit struct {
+	failingAudit
+	args admindomain.ListAuditArgs
+}
+
+func (r *recordingAudit) ListAuditLog(_ context.Context, args admindomain.ListAuditArgs, _ string) ([]admindomain.AuditEntry, string, error) {
+	r.args = args
+	return nil, "", nil
+}
+
+func TestListAuditLog_DecodesTheCursor(t *testing.T) {
+	at := time.Date(2026, 5, 4, 3, 2, 1, 0, time.UTC)
+	id := uuid.New()
+	h := &recordingAudit{}
+	srv := &AuditServer{H: h}
+
+	_, err := srv.ListAuditLog(context.Background(), connect.NewRequest(&pb.ListAuditLogRequest{
+		Page: &commonv1.PageRequest{PageToken: at.Format(time.RFC3339Nano) + "/" + id.String()},
+	}))
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if !h.args.AfterAt.Equal(at) || h.args.AfterID != id {
+		t.Errorf("cursor decoded to (%v, %v), want (%v, %v) — an unreadable cursor "+
+			"silently becomes the zero value, so paging restarts at the top and "+
+			"the reader sees the same entries again",
+			h.args.AfterAt, h.args.AfterID, at, id)
+	}
+}
+
+type recordingBucketCreate struct {
+	failingBucket
+	in bucketh.CreateBucketInput
+}
+
+func (r *recordingBucketCreate) CreateBucket(_ context.Context, in bucketh.CreateBucketInput) (*admindomain.Bucket, error) {
+	r.in = in
+	return &admindomain.Bucket{}, nil
+}
+
+func TestCreateBucket_ForwardsTheOwnerTenant(t *testing.T) {
+	owner := uuid.New()
+	h := &recordingBucketCreate{}
+	srv := &BucketServer{H: h}
+
+	_, err := srv.CreateBucket(context.Background(), connect.NewRequest(&pb.CreateBucketRequest{
+		Parent: "storageBackends/primary", BucketId: "b1",
+		Bucket: &pb.Bucket{OwnerTenantId: owner.String()},
+	}))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if h.in.Bucket.OwnerTenantID != owner {
+		t.Errorf("owner_tenant_id did not reach the handler (%v) — the bucket is "+
+			"created unowned and the response reports the owner that was asked for",
+			h.in.Bucket.OwnerTenantID)
+	}
+}
+
+type recordingTenant struct {
+	failingTenant
+	args tenant.CreateTenantArgs
+}
+
+func (r *recordingTenant) CreateTenant(_ context.Context, args tenant.CreateTenantArgs) (*tenant.Tenant, error) {
+	r.args = args
+	return &tenant.Tenant{}, nil
+}
+
+// Labels are marshalled only when there are some. Marshalling an empty map
+// instead writes the JSON object "{}" where the column should hold NULL —
+// no error, and every later read has to treat the two as the same thing.
+func TestCreateTenant_LeavesAbsentLabelsUnset(t *testing.T) {
+	t.Run("no labels", func(t *testing.T) {
+		h := &recordingTenant{}
+		srv := &TenantServer{H: h}
+		_, err := srv.CreateTenant(context.Background(), connect.NewRequest(&pb.CreateTenantRequest{
+			TenantId: uuid.NewString(), Tenant: &pb.Tenant{DisplayName: "Acme"},
+		}))
+		if err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		if h.args.Labels != nil {
+			t.Errorf("labels marshalled to %q for a request that carried none", h.args.Labels)
+		}
+	})
+
+	t.Run("with labels", func(t *testing.T) {
+		h := &recordingTenant{}
+		srv := &TenantServer{H: h}
+		_, err := srv.CreateTenant(context.Background(), connect.NewRequest(&pb.CreateTenantRequest{
+			TenantId: uuid.NewString(),
+			Tenant:   &pb.Tenant{DisplayName: "Acme", Labels: map[string]string{"tier": "gold"}},
+		}))
+		if err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		if !bytes.Contains(h.args.Labels, []byte("gold")) {
+			t.Errorf("labels did not reach the handler: %q", h.args.Labels)
+		}
+	})
+}
+
+// parseQuotaName's bucket case checks the shape AND the three fixed segments.
+// Loosening the conjunction lets any five-segment name through as a bucket
+// quota, so "a/b/c/d/e" would be answered with a quota for backend "b",
+// bucket "d" — a number for a bucket nobody named.
+func TestGetQuota_RejectsAFiveSegmentNameThatIsNotABucketQuota(t *testing.T) {
+	srv := &QuotaServer{H: &recordingQuota{}}
+	_, err := srv.GetQuota(context.Background(), connect.NewRequest(&pb.GetQuotaRequest{
+		Name: "a/b/c/d/e",
+	}))
+	if err == nil {
+		t.Fatal("a name that is not a quota name was accepted")
+	}
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", err)
+	}
+}
+
+// unlimited_only and threshold_pct are mutually exclusive only when the
+// threshold is non-zero — zero is the field's absent value, and rejecting it
+// would refuse the plain "show me the unlimited tenants" query.
+func TestSummarize_UnlimitedOnlyWithNoThresholdIsAllowed(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	_, err := srv.Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+		UnlimitedOnly: true, // ThresholdPct left at zero: absent, not "0%"
+	}))
+	if err != nil {
+		t.Fatalf("unlimited_only with no threshold was refused: %v", err)
+	}
+}
+
+func TestSummarize_RejectsUnlimitedOnlyWithAThreshold(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	_, err := srv.Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+		UnlimitedOnly: true, ThresholdPct: 80,
+	}))
+	if err == nil {
+		t.Fatal("two mutually exclusive filters were accepted together")
+	}
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
