@@ -15,12 +15,12 @@ import (
 
 type ObjectServer struct {
 	paladindatav1connect.UnimplementedObjectServiceHandler
-	H        *object.Handler
+	H        objectHandler
 	Versions *object.VersionHandler // optional; nil → versioning RPCs return Unimplemented
 	Locks    *object.LockHandler    // optional; nil → object-lock RPCs return Unimplemented
 }
 
-func NewObjectServer(h *object.Handler, versions *object.VersionHandler) *ObjectServer {
+func NewObjectServer(h objectHandler, versions *object.VersionHandler) *ObjectServer {
 	return &ObjectServer{H: h, Versions: versions}
 }
 

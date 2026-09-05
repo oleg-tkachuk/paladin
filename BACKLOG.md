@@ -871,29 +871,27 @@ open deliberately — each notes why._
   counts — rather than on inspection.
 - **Blockers:** none; needs a real fleet to measure against.
 
-### connectshim error paths have no seam to test through
+### connectshim: two more handler fields still have no seam
 
-- **Status:** Deferred (the branches are trivial; the seam is not).
-- **Reason:** A mutation run over `internal/api/connectshim/data` produced 12
-  survivors and 11 of them are the same shape — `if err != nil { return nil,
-  err }` after a call into the domain handler. One was checked by hand against
-  the WHOLE non-stack unit suite (`go test ./internal/...`) and survived it, so
-  nothing below the slow gate holds them.
-- **Why a test cannot be written today:** `ObjectServer.H` is a concrete
-  `*object.Handler`, not an interface, so a failing double cannot be injected.
-  Standing up a real handler needs a repo, storage and a database — which is
-  what the integration suite already does, and why the branches are covered
-  there and nowhere cheaper.
-- **What the failure would look like:** a shim that swallowed a handler error
-  and returned an empty success answers a client with 200 and no data. That is
-  worth one test, not twelve — the branches are passthroughs and a test per
-  branch is ceremony.
-- **Definition of Done:** an interface seam for the handler on the data shim
-  (the admin shim already takes `AuditWriter` this way), and ONE representative
-  test that a handler error reaches the caller as an error rather than an empty
-  response.
-- **Blockers:** none technical. It touches every constructor in the package,
-  which is why it is not a drive-by.
+- **Status:** Narrowed 2026-09-05 — `ObjectServer.H` is done; `Versions` and
+  `Locks` are not.
+- **What landed:** an `objectHandler` interface declared by the consumer, with
+  a compile-time assertion that `*object.Handler` still satisfies it. The field
+  type changed and no caller of `NewObjectServer` did, because Go interfaces
+  are implicit. One table-driven test drives seven RPCs through a handler that
+  fails every call and requires the error to reach the caller wrapping the
+  original — a test per passthrough branch would be ceremony.
+- **What is left:** `ObjectServer.Versions` (*object.VersionHandler) and
+  `ObjectServer.Locks` (*object.LockHandler), three methods each, and the five
+  other servers in the package — BatchServer, MultipartServer, ObjectTagServer,
+  PresignServer, OperationServer, StorageBootstrapServer — each holding its own
+  concrete handler.
+- **Verified:** the mutations that survived the original run on lines 72, 114
+  and 155 are now caught; 272 and 287 still survive, and they belong to
+  `Versions`.
+- **Definition of Done:** the same treatment per field. It is mechanical now
+  that the shape exists.
+- **Blockers:** none.
 
 ### Mutation testing: the denominator has to match the package
 
