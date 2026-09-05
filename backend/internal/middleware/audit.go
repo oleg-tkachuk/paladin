@@ -17,12 +17,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 )
 
 // auditBeforeKey carries a pre-mutation snapshot stashed by a handler so the
@@ -113,8 +115,21 @@ func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if a.shouldSkip(req.Spec().Procedure) {
 			return resp, err
 		}
-		// Best-effort audit write; never block or fail the RPC on insert errors.
-		_ = a.write(ctx, req, err)
+		// Best-effort in the sense that it never blocks or fails the RPC — NOT
+		// in the sense that nobody is told. This is the compliance trail (SOC 2
+		// / ISO 27001 / PCI), written synchronously and crash-durably per
+		// ADR-0004, and its error was discarded here with `_ =`. A failing
+		// insert stopped the trail with no error, no metric and no log line:
+		// the one failure mode that makes an audit log worse than none, because
+		// its absence reads as "nothing happened".
+		//
+		// Error, not Warn. An audit write that fails is a defect with an
+		// external consequence, and the rate of these is something someone
+		// should be paged about.
+		if werr := a.write(ctx, req, err); werr != nil {
+			logger.FromContext(ctx).Error("audit entry not written",
+				zap.String("rpc", req.Spec().Procedure), zap.Error(werr))
+		}
 		return resp, err
 	}
 }

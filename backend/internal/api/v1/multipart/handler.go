@@ -20,8 +20,10 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"go.uber.org/zap"
 )
 
 type Storage interface {
@@ -317,12 +319,25 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	// Suppressed errors: drift gets corrected by the nightly accounting job;
 	// a transient failure must not undo a successful state transition.
 	if changed && h.quota != nil {
-		_ = h.quota.OnObjectPromoted(ctx, sess.TenantID, size)
+		if err := h.quota.OnObjectPromoted(ctx, sess.TenantID, size); err != nil {
+			// Suppressed on purpose — a transient accounting failure must not
+			// undo a successful state transition, and the nightly job corrects
+			// drift. Logged because that correction is invisible otherwise:
+			// without a line here, "usage looks wrong" has no trail back to
+			// the writes that were never counted.
+			logger.FromContext(ctx).Warn("quota not credited for promoted object",
+				zap.String("tenant_id", sess.TenantID.String()),
+				zap.Int64("size", size), zap.Error(err))
+		}
 	}
 	if err := h.repo.DeleteSession(ctx, args.UploadID); err != nil {
-		// Session delete failure is non-fatal — the object is AVAILABLE.
-		// Cleanup can happen via TTL sweep.
-		_ = err
+		// Non-fatal — the object is AVAILABLE and the TTL sweep will collect
+		// the row. Logged because "the sweep will get it" is an assumption:
+		// if this fails for every upload, sessions accumulate until the sweep
+		// is the only thing keeping the table finite, and nothing else would
+		// say so.
+		logger.FromContext(ctx).Warn("multipart session not deleted after complete",
+			zap.String("upload_id", args.UploadID), zap.Error(err))
 	}
 	return nil
 }
@@ -363,7 +378,11 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
-		_ = err
+		// Same as the complete path: the abort succeeded, so this must not
+		// fail the RPC — but a systematic failure leaves rows behind, and
+		// silence is what makes that invisible.
+		logger.FromContext(ctx).Warn("multipart session not deleted after abort",
+			zap.String("upload_id", uploadID), zap.Error(err))
 	}
 	return nil
 }

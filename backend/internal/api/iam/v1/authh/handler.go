@@ -208,8 +208,12 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 	// What login still needs from a policy is a pre-auth READ, to find this
 	// row in the first place; the write no longer needs an exemption.
 	if err := h.users.TouchLogin(auth.WithActingTenant(ctx, u.TenantID), u.UserID, h.now()); err != nil {
-		// Non-fatal — login succeeded.
-		_ = err
+		// Non-fatal — login succeeded and must not be undone by a bookkeeping
+		// write. But last_login_at is what an audit answers "when did this
+		// account last sign in" with, so it failing silently turns a
+		// compliance field into a lie nobody can date.
+		logger.FromContext(ctx).Warn("last_login_at not stamped on login",
+			zap.String("user_id", u.UserID.String()), zap.Error(err))
 	}
 
 	return &LoginOutput{
@@ -641,7 +645,9 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	// the session is still scoped to the current one — the same shape as the
 	// GetBySubject above it.
 	if err := h.users.TouchLogin(auth.WithActingTenant(ctx, target.TenantID), target.UserID, h.now()); err != nil {
-		_ = err // non-fatal — the switch succeeded
+		// Non-fatal — the switch succeeded. Same reasoning as the login path.
+		logger.FromContext(ctx).Warn("last_login_at not stamped on tenant switch",
+			zap.String("user_id", target.UserID.String()), zap.Error(err))
 	}
 	h.auditTenantSwitch(ctx, cur, *target)
 

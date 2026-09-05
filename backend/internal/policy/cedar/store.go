@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 )
 
 // Store fetches compiled Cedar policy text for a given (tenant, collection) scope
@@ -166,7 +169,12 @@ func (s *PostgresStore) watchLoop(ctx context.Context, conn *pgxpool.Conn, ch ch
 		if ctx.Err() != nil {
 			return // clean shutdown
 		}
-		_ = err // non-nil: the connection dropped mid-watch — reconnect.
+		// Expected when the connection simply dropped, and NOT expected for
+		// anything else — a permission change or a missing channel would spin
+		// this loop reconnecting forever. Which of the two it is can only be
+		// told from the error, and until now nothing wrote it down.
+		logger.FromContext(ctx).Warn("cedar policy watch dropped; reconnecting",
+			zap.Error(err))
 
 		conn = s.relisten(ctx)
 		if conn == nil {

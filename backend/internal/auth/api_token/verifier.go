@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 )
 
 // VerifierConfig wires the verifier.
@@ -95,7 +99,14 @@ func (v *Verifier) Verify(ctx context.Context, plaintext, audience string) (*Tok
 	// the verified tenant to satisfy the api_tokens RLS policy; failure is
 	// ignored (never fails the verify).
 	if v.cfg.TouchLastUsed {
-		_ = v.cfg.Store.TouchLastUsed(ctx, tok.ID, tok.TenantID, now)
+		if err := v.cfg.Store.TouchLastUsed(ctx, tok.ID, tok.TenantID, now); err != nil {
+			// Never fails the verify — a bookkeeping write must not lock
+			// someone out. But last_used_at is how a stale token is found and
+			// revoked, so a silent failure turns the column into a claim that
+			// every token is in active use.
+			logger.FromContext(ctx).Warn("api token last_used_at not stamped",
+				zap.String("token_id", tok.ID.String()), zap.Error(err))
+		}
 	}
 
 	return &tok, nil
