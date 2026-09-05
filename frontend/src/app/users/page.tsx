@@ -29,6 +29,7 @@ import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
@@ -125,12 +126,6 @@ export default function UsersPage() {
         <Button onClick={() => setCreateOpen(true)}>New user</Button>
       </div>
 
-      {error && (
-        <Card>
-          <div className="p-4 text-xs text-destructive">{error}</div>
-        </Card>
-      )}
-
       <Card className="p-0">
         <Table>
           <TableHeader>
@@ -152,6 +147,21 @@ export default function UsersPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : error ? (
+              // The error used to be a banner ABOVE this table while the table
+              // itself still said "No users yet". Both were on screen at once,
+              // and the eye goes to the table — which was asserting the list is
+              // empty when it is unknown. One statement, in the place the rows
+              // would have been, matching /buckets and /tenants.
+              <TableRow>
+                <TableCell colSpan={6} className="h-32 text-center">
+                  <ListLoadError
+                    what="Users"
+                    reason={error}
+                    onRetry={refreshUsers}
+                  />
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-32 text-center">

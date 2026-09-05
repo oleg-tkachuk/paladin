@@ -18,12 +18,17 @@ const h = vi.hoisted(() => ({
   setBackendMaintenance: vi.fn(() => Promise.resolve({})),
   showNotification: vi.fn(),
   backends: [] as unknown[],
+  // The double used to omit `error` because the PAGE omitted it — a mock that
+  // mirrors its caller instead of the hook it stands for cannot catch a field
+  // the caller forgot, which is exactly what happened here.
+  error: null as string | null,
 }));
 
 vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({
     backends: h.backends,
     loading: false,
+    error: h.error,
     fetchBackends: h.fetchBackends,
     createBackend: h.createBackend,
     setBackendEnabled: h.setBackendEnabled,
@@ -308,5 +313,41 @@ describe("StorageBackendsPage search", () => {
       vi.advanceTimersByTime(400);
     });
     expect(h.fetchBackends.mock.calls.filter((c) => c[0])).toHaveLength(1);
+  });
+});
+
+// A list that FAILED must not render as a list that is empty.
+//
+// /buckets already refuses to tell that lie — "No buckets yet" for a failed
+// call invites the operator to create something that exists. This page took
+// every field from useBackends except `error`, so a failed list said "No
+// storage backends registered yet", and a second registration points a second
+// row at the same store.
+describe("StorageBackendsPage load failure", () => {
+  afterEach(() => {
+    h.error = null;
+  });
+
+  it("says the list is unknown, not empty", () => {
+    h.error = "unavailable: connection refused";
+    render(<StorageBackendsPage />);
+
+    expect(
+      screen.getByText(
+        /could not be loaded — this list is unknown, not empty/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No storage backends registered yet."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still says 'none yet' when the list really is empty", () => {
+    // The other half: without this, hiding the empty state entirely would
+    // pass the assertion above and break the page for a fresh install.
+    render(<StorageBackendsPage />);
+    expect(
+      screen.getByText("No storage backends registered yet."),
+    ).toBeInTheDocument();
   });
 });

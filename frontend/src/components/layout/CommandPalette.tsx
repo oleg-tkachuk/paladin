@@ -46,6 +46,9 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  // Sources whose list call failed on the last search. Empty on success, and
+  // reset by the early return for an empty query below.
+  const [failedSources, setFailedSources] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const router = useRouter();
@@ -207,6 +210,7 @@ export function CommandPalette() {
     async (searchQuery: string) => {
       if (!searchQuery) {
         setSearchResults([]);
+        setFailedSources([]);
         return;
       }
 
@@ -276,13 +280,30 @@ export function CommandPalette() {
         // quietly dropped the cases people use it for.
         const filter = searchFilter(searchQuery);
 
+        // Which sources answered, and which did not.
+        //
+        // The per-source .catch() is right — one slow or broken plane must not
+        // take the whole palette down — but returning an empty list from it
+        // made a failure indistinguishable from "nothing matched". An operator
+        // typing a bucket name they can see in another tab was told, in
+        // silence, that it does not exist. The comment a few lines up already
+        // described this failure for the raw-query case and it was never fixed
+        // for the transport case.
+        const failed: string[] = [];
+        const fellOver =
+          <T,>(source: string, empty: T) =>
+          (): T => {
+            failed.push(source);
+            return empty;
+          };
+
         const [tenantRes, bucketRes, okRes, backendRes] = await Promise.all([
           tenantClient
             .listTenants({
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
               filter,
             })
-            .catch(() => ({ tenants: [] })),
+            .catch(fellOver("tenants", { tenants: [] })),
           bucketClient
             .listBuckets({
               parent: "",
@@ -290,21 +311,22 @@ export function CommandPalette() {
               filter,
               ownerTenantId: "",
             })
-            .catch(() => ({ buckets: [] })),
+            .catch(fellOver("buckets", { buckets: [] })),
           collectionClient
             .listCollections({
               parent: "",
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
               filter,
             })
-            .catch(() => ({ collections: [] })),
+            .catch(fellOver("collections", { collections: [] })),
           backendClient
             .listBackends({
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
               filter,
             })
-            .catch(() => ({ backends: [] })),
+            .catch(fellOver("backends", { backends: [] })),
         ]);
+        setFailedSources(failed);
 
         // No client-side narrowing. The four calls above are filtered by the
         // server, and a second definition of "matches" in the browser can only
@@ -552,6 +574,21 @@ export function CommandPalette() {
           className="max-h-[60vh] overflow-y-auto p-3 scrollbar-hide"
           ref={scrollContainerRef}
         >
+          {/*
+            Shown whenever a source fell over, NOT only when the result list is
+            empty. Three planes answering and one failing still produces a
+            partial answer presented as a complete one — the same lie as the
+            empty case, just harder to notice, because results on screen read
+            as "the search worked".
+          */}
+          {failedSources.length > 0 && (
+            <div
+              role="status"
+              className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+            >
+              Incomplete — {failedSources.join(", ")} did not respond.
+            </div>
+          )}
           {displayedResults.length > 0 ? (
             displayedResults.map((result, index) => (
               <button
@@ -623,11 +660,22 @@ export function CommandPalette() {
                 <MagnifyingGlassIcon className="w-8 h-8 text-slate-700" />
               </div>
               <div>
+                {/*
+                  "No matches" is only true when every source answered. With
+                  one of them down the honest statement is that the answer is
+                  incomplete — otherwise the palette tells an operator their
+                  bucket does not exist while the plane that holds it is
+                  simply unreachable.
+                */}
                 <p className="text-sm font-bold text-slate-400">
-                  No matches found for &ldquo;{query}&rdquo;
+                  {failedSources.length > 0
+                    ? "No matches among the sources that answered"
+                    : `No matches found for \u201c${query}\u201d`}
                 </p>
                 <p className="text-xs text-slate-600 uppercase tracking-wider mt-1">
-                  Try searching for something else
+                  {failedSources.length > 0
+                    ? "The banner above names which"
+                    : "Try searching for something else"}
                 </p>
               </div>
             </div>

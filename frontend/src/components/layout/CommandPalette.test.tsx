@@ -13,15 +13,30 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 // empty parameter tuple, so `calls.at(-1)?.[0]` is a type error — and the
 // filter this file exists to assert lives in exactly that argument.
 type ListReq = { filter?: string };
+// The row type is declared too, not inferred from `[]`. An empty literal infers
+// never[], so a test returning a populated list — which the partial-failure
+// cases below must — does not type-check against its own mock.
+type Rows = Record<string, unknown>[];
 const h = vi.hoisted(() => ({
-  listTenants: vi.fn((_req: ListReq) => Promise.resolve({ tenants: [] })),
-  listBuckets: vi.fn((_req: ListReq) => Promise.resolve({ buckets: [] })),
-  listCollections: vi.fn((_req: ListReq) =>
-    Promise.resolve({ collections: [] }),
+  listTenants: vi.fn(
+    (_req: ListReq): Promise<{ tenants: Record<string, unknown>[] }> =>
+      Promise.resolve({ tenants: [] }),
   ),
-  listBackends: vi.fn((_req: ListReq) => Promise.resolve({ backends: [] })),
+  listBuckets: vi.fn(
+    (_req: ListReq): Promise<{ buckets: Record<string, unknown>[] }> =>
+      Promise.resolve({ buckets: [] }),
+  ),
+  listCollections: vi.fn(
+    (_req: ListReq): Promise<{ collections: Record<string, unknown>[] }> =>
+      Promise.resolve({ collections: [] }),
+  ),
+  listBackends: vi.fn(
+    (_req: ListReq): Promise<{ backends: Record<string, unknown>[] }> =>
+      Promise.resolve({ backends: [] }),
+  ),
   push: vi.fn(),
 }));
+export type { Rows };
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: h.push }) }));
 vi.mock("@/context/ActionsContext", () => ({
@@ -94,5 +109,71 @@ describe("CommandPalette search", () => {
     });
     expect(h.listTenants).not.toHaveBeenCalled();
     expect(h.listBuckets).not.toHaveBeenCalled();
+  });
+});
+
+// A source that falls over must not look like a source that found nothing.
+//
+// Each call carries its own .catch() so one broken plane cannot take the whole
+// palette down — that part is right. Returning an empty list from it was not:
+// an operator typing a bucket name they can see in another tab was told, in
+// silence, that it does not exist.
+describe("CommandPalette partial failures", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    h.listTenants.mockClear();
+    h.listBuckets.mockClear();
+    h.listCollections.mockClear();
+    h.listBackends.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    h.listBackends.mockImplementation(() => Promise.resolve({ backends: [] }));
+  });
+
+  it("names the source that did not answer", async () => {
+    h.listBackends.mockImplementation(() =>
+      Promise.reject(new Error("unavailable")),
+    );
+    render(<CommandPalette />);
+    openAndType("acme");
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /backends did not respond/i,
+    );
+  });
+
+  it("says so even when the other sources returned rows", async () => {
+    // The harder case: results on screen read as "the search worked", so a
+    // failure with no banner is the same lie, only harder to notice.
+    h.listBackends.mockImplementation(() =>
+      Promise.reject(new Error("unavailable")),
+    );
+    h.listTenants.mockImplementation(() =>
+      Promise.resolve({
+        tenants: [{ tenantId: "t-1", slug: "acme", displayName: "Acme" }],
+      }),
+    );
+    render(<CommandPalette />);
+    openAndType("acme");
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/did not respond/i);
+    h.listTenants.mockImplementation(() => Promise.resolve({ tenants: [] }));
+  });
+
+  it("shows nothing when every source answered", async () => {
+    render(<CommandPalette />);
+    openAndType("acme");
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

@@ -26,6 +26,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useBackends, CreateBackendInput } from "@/hooks/useBackends";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { useNotification } from "@/components/ui/Notification";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -130,6 +131,7 @@ export default function StorageBackendsPage() {
     setBackendEnabled,
     setBackendReadOnly,
     setBackendMaintenance,
+    error: listError,
   } = useBackends();
   const { showNotification } = useNotification();
 
@@ -593,6 +595,22 @@ export default function StorageBackendsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : listError ? (
+              // "No storage backends registered yet" for a list that FAILED is
+              // the same lie /buckets already refuses to tell, with a worse
+              // ending: it invites the operator to register a backend that
+              // exists, and a second registration points a second row at the
+              // same store. The hook exposed `error` all along; this page took
+              // every other field from it.
+              <TableRow>
+                <TableCell colSpan={8} className="h-48 text-center">
+                  <ListLoadError
+                    what="Storage backends"
+                    reason={listError}
+                    onRetry={() => void refetch()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-48 text-center">
