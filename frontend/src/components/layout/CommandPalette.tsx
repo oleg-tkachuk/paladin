@@ -306,17 +306,12 @@ export function CommandPalette() {
             .catch(() => ({ backends: [] })),
         ]);
 
-        const q = searchQuery.toLowerCase();
-        const matches = (s: string) => s.toLowerCase().includes(q);
-
+        // No client-side narrowing. The four calls above are filtered by the
+        // server, and a second definition of "matches" in the browser can only
+        // hide rows the API deliberately returned. It already had: the backend
+        // search field covers the endpoint, and this filter did not, so a match
+        // on an endpoint came back from the plane and was dropped here.
         const tenantResults: SearchResult[] = tenantRes.tenants
-          .filter(
-            (t) =>
-              !q ||
-              matches(t.slug || "") ||
-              matches(t.displayName || "") ||
-              matches(t.tenantId),
-          )
           .slice(0, 5)
           .map((t) => {
             const handle = t.slug || t.tenantId;
@@ -336,13 +331,6 @@ export function CommandPalette() {
         );
 
         const backendResults: SearchResult[] = backendRes.backends
-          .filter(
-            (b) =>
-              !q ||
-              matches(b.backendId) ||
-              matches(b.displayName || "") ||
-              matches(b.region || ""),
-          )
           .slice(0, 4)
           .map((b) => ({
             id: `backend-${b.backendId}`,
@@ -357,13 +345,6 @@ export function CommandPalette() {
           }));
 
         const bucketResults: SearchResult[] = bucketRes.buckets
-          .filter(
-            (b) =>
-              !q ||
-              matches(b.bucketId) ||
-              matches(b.displayName || "") ||
-              matches(b.backendId),
-          )
           .slice(0, 5)
           .map((b) => ({
             id: `bucket-${b.backendId}-${b.bucketId}`,
@@ -378,9 +359,6 @@ export function CommandPalette() {
           }));
 
         const okResults: SearchResult[] = okRes.collections
-          .filter(
-            (o) => !q || matches(o.collection) || matches(o.displayName || ""),
-          )
           .slice(0, 5)
           .map((o) => {
             const tslug = tenantSlugByID.get(o.tenantId) || o.tenantId;

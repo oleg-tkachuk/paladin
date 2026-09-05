@@ -9,11 +9,17 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 // empty filter narrows nothing at all — so every query read one page and the
 // browser filtered it. A tenant sorting past the ceiling could not be found by
 // typing its name, and nothing on screen said the list was cut.
+// The request argument is declared, not inferred: `vi.fn(() => …)` has an
+// empty parameter tuple, so `calls.at(-1)?.[0]` is a type error — and the
+// filter this file exists to assert lives in exactly that argument.
+type ListReq = { filter?: string };
 const h = vi.hoisted(() => ({
-  listTenants: vi.fn(() => Promise.resolve({ tenants: [] })),
-  listBuckets: vi.fn(() => Promise.resolve({ buckets: [] })),
-  listCollections: vi.fn(() => Promise.resolve({ collections: [] })),
-  listBackends: vi.fn(() => Promise.resolve({ backends: [] })),
+  listTenants: vi.fn((_req: ListReq) => Promise.resolve({ tenants: [] })),
+  listBuckets: vi.fn((_req: ListReq) => Promise.resolve({ buckets: [] })),
+  listCollections: vi.fn((_req: ListReq) =>
+    Promise.resolve({ collections: [] }),
+  ),
+  listBackends: vi.fn((_req: ListReq) => Promise.resolve({ backends: [] })),
   push: vi.fn(),
 }));
 
@@ -67,7 +73,7 @@ describe("CommandPalette search", () => {
       ["collections", h.listCollections],
       ["backends", h.listBackends],
     ] as const) {
-      const arg = fn.mock.calls.at(-1)?.[0] as { filter?: string } | undefined;
+      const arg = fn.mock.calls.at(-1)?.[0];
       expect(arg?.filter, `${name} was not given the filter`).toBe(want);
       // A disjunction pushes nothing into SQL. This is the shape that made the
       // palette a first-page search.
