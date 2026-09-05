@@ -871,6 +871,29 @@ open deliberately — each notes why._
   counts — rather than on inspection.
 - **Blockers:** none; needs a real fleet to measure against.
 
+### connectshim/admin has no seam and 4% of its branches held
+
+- **Status:** Deferred (one guard fixed; the layer is not).
+- **Reason:** A mutation run scored 4% — the lowest of any package measured.
+  Same cause as connectshim/data before its seams: every server holds a
+  concrete `*Handler`, so no failing double can be injected and the error
+  branches are reachable only from the slow gate.
+- **What was fixed without a seam:** the Cedar-policy guard. `requireCompilable
+  Policy` had its own test; whether the ELEVEN servers that take Cedar text
+  actually call it had none, and inverting any call site survived. A guard
+  nobody applies is decoration, and the stake is authorisation: policy text
+  that does not compile, stored on a tenant or bucket, is a rule that cannot be
+  evaluated as written. Testable without a seam because the guard runs BEFORE
+  the handler — the tests pass a nil handler, so a guard that stops applying
+  panics instead of quietly passing.
+- **What is left:** the seams, per the shape in connectshim/data (one interface
+  per server, declared by the consumer, constructor keeps concrete types — see
+  the typed-nil trap recorded there). Two survivors worth naming:
+  `event_subscription_server.go`'s `if m.GetParent() != ""`, where inverting it
+  means a request that names a tenant does NOT narrow to it, and
+  `quota_server.go`'s tenant-vs-bucket dispatch.
+- **Blockers:** none. Mechanical, and larger than the data shim: 14 files.
+
 ### connectshim/data: three error branches out of 83 still unheld
 
 - **Status:** Deferred (80 of 83 hold; the rest are second-order).
