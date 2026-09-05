@@ -259,6 +259,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		connect.WithCodec(codec.StrictJSON{}),
 		connect.WithInterceptors(
 			otelInt,
+			// Outermost after tracing, and BEFORE auth on purpose: connect
+			// applies the first-listed interceptor outermost, so anything
+			// installed after auth cannot see auth's own rejections — and a
+			// wave of failed authentications leaving no log line was the
+			// widest part of this gap. Failures only; successes are otel's job.
+			middleware.LogOutcome(l),
 			// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
 			// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
 			// establishes the principal. Both paths land a principal before RequireAudience.
@@ -299,6 +305,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		connect.WithCodec(codec.StrictJSON{}),
 		connect.WithInterceptors(
 			otelInt,
+			// Outermost after tracing, and BEFORE auth on purpose: connect
+			// applies the first-listed interceptor outermost, so anything
+			// installed after auth cannot see auth's own rejections — and a
+			// wave of failed authentications leaving no log line was the
+			// widest part of this gap. Failures only; successes are otel's job.
+			middleware.LogOutcome(l),
 			auth.NewPermissiveInterceptor(verifierIAM,
 				"Login",
 				"RefreshToken",

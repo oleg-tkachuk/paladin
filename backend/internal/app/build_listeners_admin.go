@@ -183,6 +183,12 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		connect.WithCodec(codec.StrictJSON{}),
 		connect.WithInterceptors(
 			otelInt,
+			// Outermost after tracing, and BEFORE auth on purpose: connect
+			// applies the first-listed interceptor outermost, so anything
+			// installed after auth cannot see auth's own rejections — and a
+			// wave of failed authentications leaving no log line was the
+			// widest part of this gap. Failures only; successes are otel's job.
+			middleware.LogOutcome(l),
 			// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
 			// API-token interceptor below can authenticate them. Without this the
 			// JWT verifier rejects the bearer first with "jwt: malformed token" and
