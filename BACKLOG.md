@@ -894,6 +894,35 @@ open deliberately — each notes why._
   named survivor, mutate that line.
 - **Blockers:** none.
 
+### connectshim/iam: exhausted, with three equivalent mutants left
+
+- **Status:** Deferred (the seam and the tests landed; this entry records why
+  the score stops at 96%).
+- **What landed:** an interface per handler-backed server — Auth, User,
+  UserSettings; SystemServer has no handler — a table over all 21 RPCs
+  asserting a handler failure reaches the caller wrapping the original, plus
+  cases for the parsing, forwarding and SUCCESS paths a failing double cannot
+  reach. 78% after the seam alone, 96% after those.
+- **Not a sample, unlike the admin entry above:** a budget of 90 produced only
+  70 mutations, so the operator set is exhausted. Every non-equivalent
+  mutation in this package is caught.
+- **The three that remain, each proved equivalent by running the mutated
+  predicate against its boundary input rather than by argument:**
+  `parseUserResourceName`'s `len(name) <= len(prefix)` and
+  `parseTenantParent`'s `len(parent) <= len(prefix)` (at exactly the prefix
+  length the mutant falls through to a uuid.Parse of the empty string, which
+  fails the same way), and `indexOf(body, "/settings") >= 0` (at index 0 the
+  untruncated body fails the same parse). All three differ only in the error
+  MESSAGE; a test that pinned the prose would be brittle and would hold no
+  behaviour.
+- **Worth knowing about the plane:** `ListUsers` maps an unparseable `parent`
+  to uuid.Nil and treats it as the deliberate cross-tenant listing, so
+  `tenants/{typo}` silently widens scope instead of erroring. The handler
+  enforces the role, so this is not a privilege hole — but "empty" and
+  "malformed" are not distinguished. Left as-is: changing it is a behaviour
+  decision, not a test gap.
+- **Blockers:** none.
+
 ### connectshim/data: three error branches out of 83 still unheld
 
 - **Status:** Deferred (80 of 83 hold; the rest are second-order).

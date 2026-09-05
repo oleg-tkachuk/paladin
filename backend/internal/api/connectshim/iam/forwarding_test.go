@@ -10,6 +10,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 
 	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
@@ -252,4 +253,79 @@ func TestGetHealth_WithoutAHandlerReportsHealthy(t *testing.T) {
 	if resp.Msg.GetRole() != "core" {
 		t.Errorf("role %q", resp.Msg.GetRole())
 	}
+}
+
+func (o *okUserSettings) GetForUser(context.Context, uuid.UUID) (*usersettingsh.Settings, error) {
+	return &usersettingsh.Settings{UserID: uuid.New(), TenantID: uuid.New()}, nil
+}
+
+// GetForUser and ListByTenant run the same conversion as GetMine, and each
+// checks it separately. Inverting any one of those checks turns that RPC's
+// SUCCESSFUL reads into CodeInternal — invisible to a double that only fails.
+func TestUserSettings_GetForUserAndListSucceed(t *testing.T) {
+	srv := &UserSettingsServer{H: &settingsWithRows{}}
+	ctx := context.Background()
+
+	if _, err := srv.GetForUser(ctx, connect.NewRequest(&pb.GetForUserRequest{
+		Name: "users/" + uuid.NewString(),
+	})); err != nil {
+		t.Errorf("GetForUser on well-formed settings: %v", err)
+	}
+
+	resp, err := srv.ListByTenant(ctx, connect.NewRequest(&pb.ListByTenantRequest{
+		Parent: "tenants/" + uuid.NewString(),
+	}))
+	if err != nil {
+		t.Fatalf("ListByTenant on well-formed settings: %v", err)
+	}
+	if len(resp.Msg.GetSettings()) != 1 {
+		t.Errorf("the listing carried %d rows, want 1 — the conversion runs per "+
+			"row, so an empty result never exercises it", len(resp.Msg.GetSettings()))
+	}
+}
+
+// ListByTenant converts inside a loop; an empty result would skip it entirely.
+type settingsWithRows struct{ okUserSettings }
+
+func (settingsWithRows) ListByTenant(context.Context, uuid.UUID, int32) ([]usersettingsh.Settings, error) {
+	return []usersettingsh.Settings{{UserID: uuid.New(), TenantID: uuid.New()}}, nil
+}
+
+// WhoAmI reads tenant_slug off the JWT principal and deliberately surfaces
+// empty rather than 5xx when there is none. Inverting that check reads the
+// slug from a nil principal — a panic on the very path the guard exists to
+// protect — and drops the slug when a principal IS present, which sends the
+// console back for a GetTenant lookup on every page.
+func TestWhoAmI_SurfacesTheTenantSlugFromThePrincipal(t *testing.T) {
+	srv := &AuthServer{H: whoAmIOK{}}
+
+	t.Run("with a principal", func(t *testing.T) {
+		ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
+			Subject: "tester", TenantSlug: "acme-corp",
+		})
+		resp, err := srv.WhoAmI(ctx, connect.NewRequest(&pb.WhoAmIRequest{}))
+		if err != nil {
+			t.Fatalf("whoami: %v", err)
+		}
+		if resp.Msg.GetTenantSlug() != "acme-corp" {
+			t.Errorf("tenant_slug came back %q", resp.Msg.GetTenantSlug())
+		}
+	})
+
+	t.Run("without one — empty, not a failure", func(t *testing.T) {
+		resp, err := srv.WhoAmI(context.Background(), connect.NewRequest(&pb.WhoAmIRequest{}))
+		if err != nil {
+			t.Fatalf("whoami without a principal: %v", err)
+		}
+		if resp.Msg.GetTenantSlug() != "" {
+			t.Errorf("tenant_slug came back %q with no principal in context",
+				resp.Msg.GetTenantSlug())
+		}
+	})
+}
+
+type whoAmIOK struct{ failingAuth }
+
+func (whoAmIOK) WhoAmI(context.Context, string) (*authh.WhoAmIOutput, error) {
+	return &authh.WhoAmIOutput{}, nil
 }
