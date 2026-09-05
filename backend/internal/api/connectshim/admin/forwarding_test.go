@@ -399,3 +399,36 @@ func TestSummarize_RejectsUnlimitedOnlyWithAThreshold(t *testing.T) {
 		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
+
+// Subscriptions are RLS-isolated, so a listing that does not narrow to the
+// tenant in the parent is a listing scoped by whatever the handler defaults
+// to. Inverting this check survived an eighty-mutation sample and had to be
+// hit deliberately — a reminder that a sampled score is not a proof about any
+// particular line.
+type recordingSubs struct {
+	failingEventSubscription
+	args admindomain.ListEventSubscriptionsArgs
+}
+
+func (r *recordingSubs) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	r.args = args
+	return nil, "", nil
+}
+
+func TestListSubscriptions_NarrowsToTheParentTenant(t *testing.T) {
+	tenantID := uuid.New()
+	h := &recordingSubs{}
+	srv := &EventSubscriptionServer{H: h, Tenants: failingTenant{}}
+
+	_, err := srv.ListSubscriptions(context.Background(), connect.NewRequest(&pb.ListSubscriptionsRequest{
+		Parent: "tenants/" + tenantID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if h.args.TenantID != tenantID {
+		t.Errorf("the listing was scoped to %v, not the tenant the caller named — "+
+			"a request for one tenant's subscriptions answered from another's",
+			h.args.TenantID)
+	}
+}
