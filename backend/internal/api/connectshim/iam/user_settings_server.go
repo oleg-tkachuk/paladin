@@ -26,7 +26,7 @@ import (
 // the request lands here; we read auth.Principal via the domain handler.
 type UserSettingsServer struct {
 	paladiniamv1connect.UnimplementedUserSettingsServiceHandler
-	H *usersettingsh.Handler
+	H userSettingsHandler
 }
 
 func NewUserSettingsServer(h *usersettingsh.Handler) *UserSettingsServer {

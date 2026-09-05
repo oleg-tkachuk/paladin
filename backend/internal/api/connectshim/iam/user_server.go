@@ -18,7 +18,7 @@ import (
 
 type UserServer struct {
 	paladiniamv1connect.UnimplementedUserServiceHandler
-	H *userh.Handler
+	H userHandler
 }
 
 func NewUserServer(h *userh.Handler) *UserServer { return &UserServer{H: h} }

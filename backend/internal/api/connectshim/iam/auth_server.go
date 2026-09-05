@@ -17,7 +17,7 @@ import (
 // AuthServer bridges generated Connect handlers to authh.Handler.
 type AuthServer struct {
 	paladiniamv1connect.UnimplementedAuthServiceHandler
-	H *authh.Handler
+	H authHandler
 }
 
 func NewAuthServer(h *authh.Handler) *AuthServer { return &AuthServer{H: h} }
