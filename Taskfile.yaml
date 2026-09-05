@@ -98,6 +98,18 @@ tasks:
     # is new work; it is the set of suites that already existed and had no
     # way to be run.
     cmds:
+      # Disk FIRST, before anything consumes any.
+      #
+      # This check used to live inside verify-stack.sh, which runs after the
+      # image build and after the integration suite — so it measured at the
+      # worst moment in the gate rather than a representative one. On its
+      # first real run it read 9GiB, refused, and the machine settled at 14GiB
+      # a few minutes later once testcontainers finished cleaning up: a true
+      # reading of a transient, which is a false alarm all the same.
+      #
+      # Here it reads a steady state and, more to the point, refusing here
+      # actually prevents the consumption instead of reporting it afterwards.
+      - ./scripts/require-disk.sh "task verify-deep"
       # Testcontainers, not the compose stack — these bring their own
       # Postgres and are independent of everything below.
       - task: backend:test:integration
@@ -115,6 +127,8 @@ tasks:
     # nothing: a Playwright run against yesterday's console is the failure this
     # repository has already had, twice.
     cmds:
+      # Same reasoning as verify-deep: before the image builds, not after.
+      - ./scripts/require-disk.sh "task verify-e2e"
       - task: backend:docker:build-local
       - task: frontend:docker:build-local
       - frontend/scripts/verify-e2e.sh

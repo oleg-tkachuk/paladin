@@ -33,15 +33,19 @@ stack_free_gib() {
 
 # Make room if there is not enough, and say so either way.
 #
-#   stack_ensure_disk "task verify-e2e" [min_gib] [target_gib]
+#   stack_ensure_disk "task verify-e2e" <min_gib> <target_gib>
 #
 # Reclaims before refusing, because a gate that stops with "free some space"
 # when it could have freed the space itself is a gate people learn to work
 # around.
 stack_ensure_disk() {
     local what="${1:?what is asking}"
-    local min_gib="${2:-12}"
-    local target_gib="${3:-20}"
+    # Both required, no defaults. Defaults here plus explicit values in
+    # scripts/require-disk.sh would be two homes for one number, which is the
+    # drift this repo keeps paying for — six port numbers in two files, three
+    # idempotency prefix lists, a CI timeout the local task did not share.
+    local min_gib="${2:?minimum free GiB}"
+    local target_gib="${3:?reclaim target GiB}"
 
     local free
     free=$(stack_free_gib)

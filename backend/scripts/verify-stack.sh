@@ -63,11 +63,6 @@ compose=(docker compose -p "$project" -f frontend/tests/e2e/docker-compose.test.
 #   PALADIN_E2E_PORT_PG=15434  task backend:test:stack
 # shellcheck source=SCRIPTDIR/../../scripts/stack-ports.sh
 source "$root/scripts/stack-ports.sh"
-# shellcheck source=SCRIPTDIR/../../scripts/stack-disk.sh
-source "$root/scripts/stack-disk.sh"
-
-stack_ensure_disk "task verify-deep" || exit 1
-
 # ─── phases ──────────────────────────────────────────────────────────────────
 
 # The only check that covers all RPC declarations at once, enumerated from the
