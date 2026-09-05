@@ -462,13 +462,16 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 	slugEq, slugLike := pd.StringHint("slug")
 	displayEq, displayLike := pd.StringHint("display_name")
 	layoutEq, _ := pd.StringHint("storage_layout")
+	// Only the `like` half — the derived field exists for a search box, which
+	// emits `contains`. See admin_bucket.go.
+	_, searchLike := pd.StringHint("search")
 	createdGTE, createdLTE := createdBounds(pd)
 
 	rows, err := r.q.ListTenants(ctx,
 		pgUUID(args.AfterID),
 		args.OnlyTrashed,
 		args.IncludeTrashed,
-		slugEq, slugLike, displayEq, displayLike, layoutEq,
+		slugEq, slugLike, displayEq, displayLike, searchLike, layoutEq,
 		createdGTE, createdLTE,
 		pageSize,
 	)

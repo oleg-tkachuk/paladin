@@ -990,6 +990,14 @@ func tenantRow(t Tenant) map[string]any {
 		"labels":         labels,
 		"created_at":     t.CreatedAt,
 		"updated_at":     t.UpdatedAt,
+		// Identical to ListTenants' `search_like` clause; the pushdown
+		// contract holds only while the two spellings agree.
+		// The id is in here because the command palette matches it: an operator
+		// pastes a tenant UUID out of a log line to find the tenant. A derived
+		// field that covered slug and display name only would have moved that
+		// search to the server while dropping the case people actually use it
+		// for.
+		"search": celpkg.SearchText(t.TenantID.String(), t.Slug, t.DisplayName),
 	}
 }
 

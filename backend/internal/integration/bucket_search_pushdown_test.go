@@ -132,7 +132,7 @@ func celFilterBuckets(t *testing.T, filter string, in []admindomain.Bucket) []ad
 			return map[string]any{
 				"bucket_id":    b.BucketName,
 				"display_name": b.DisplayName,
-				"search":       celpkg.SearchText(b.BucketName, b.DisplayName),
+				"search":       celpkg.SearchText(b.BucketName, b.DisplayName, b.BackendID),
 			}
 		})
 	if err != nil {

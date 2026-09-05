@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from "react";
 import { useRouter } from "next/navigation";
-import { celString } from "@/lib/cel";
+import { searchFilter } from "@/lib/cel";
 import {
   MagnifyingGlassIcon,
   DocumentIcon,
@@ -258,29 +258,36 @@ export function CommandPalette() {
         // silently found nothing rather than one that looked broken. It went
         // unnoticed while ListTenants ignored the field and returned
         // everything.
-        // celString rather than a third hand-rolled escape. This one handled
-        // the quote and the backslash — the two that matter for a
-        // double-quoted literal — but not a newline, which cannot appear raw
-        // in a CEL string and turns a pasted multi-line query into a parse
-        // error. Three spellings of one job, each getting a different subset
-        // right, is how the objects page ended up with none of them.
-        const term = searchQuery.trim();
-        const tenantFilter = term
-          ? `slug.startsWith(${celString(term)}) || display_name.startsWith(${celString(term)})`
-          : "";
+        // ONE filter for all four, built by searchFilter().
+        //
+        // What was here: a disjunction over slug and display_name for tenants,
+        // and `filter: ""` for the other three. Both halves were wrong in the
+        // same way. A disjunction pushes nothing into SQL — the server's
+        // pushdown descends `&&` only — so it read one page and filtered it in
+        // memory; and the empty filters read a page and left the narrowing to
+        // the browser. Either way the palette searched the FIRST page of each
+        // resource, so a tenant sorting past the ceiling could not be found by
+        // typing its name, and nothing on screen said the list was cut.
+        //
+        // The derived `search` field is one conjunct, so it pushes down, and it
+        // covers what this palette matches: the tenant id, the bucket's backend
+        // id, a backend's region. Those were added to the field for this
+        // caller — moving the search to the server without them would have
+        // quietly dropped the cases people use it for.
+        const filter = searchFilter(searchQuery);
 
         const [tenantRes, bucketRes, okRes, backendRes] = await Promise.all([
           tenantClient
             .listTenants({
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-              filter: tenantFilter,
+              filter,
             })
             .catch(() => ({ tenants: [] })),
           bucketClient
             .listBuckets({
               parent: "",
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-              filter: "",
+              filter,
               ownerTenantId: "",
             })
             .catch(() => ({ buckets: [] })),
@@ -288,13 +295,13 @@ export function CommandPalette() {
             .listCollections({
               parent: "",
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-              filter: "",
+              filter,
             })
             .catch(() => ({ collections: [] })),
           backendClient
             .listBackends({
               page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-              filter: "",
+              filter,
             })
             .catch(() => ({ backends: [] })),
         ]);

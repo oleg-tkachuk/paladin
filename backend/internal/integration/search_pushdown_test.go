@@ -13,6 +13,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
 	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -225,6 +227,7 @@ func TestSearchPushdownContract(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 
+	t.Run("tenants", func(t *testing.T) { subtestTenantSearch(t, ctx, pool) })
 	t.Run("buckets", func(t *testing.T) { subtestBucketSearch(t, ctx, pool) })
 	t.Run("backends", func(t *testing.T) { subtestBackendSearch(t, ctx, pool) })
 	t.Run("collections", func(t *testing.T) { subtestCollectionSearch(t, ctx, pool) })
@@ -238,4 +241,69 @@ func TestSearchFindsAMatchPastThePage(t *testing.T) {
 
 	t.Run("buckets", func(t *testing.T) { subtestBucketPastThePage(t, ctx, pool) })
 	t.Run("backends", func(t *testing.T) { subtestBackendPastThePage(t, ctx, pool) })
+}
+
+func subtestTenantSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
+
+	prefix := "srch" + uuid.NewString()[:8]
+	for _, f := range searchFixtures {
+		// Tenant slugs are constrained; the fixture names are slug-safe apart
+		// from the separator probe pair, which is what it is for.
+		slug := prefix + "-" + strings.ReplaceAll(f.name, "_", "-")
+		// tenants_display_name_format requires 1..255 characters, so the
+		// shared fixtures' empty-display-name row cannot exist here. That is a
+		// real difference from buckets and backends, not a workaround: this
+		// table has no such state to get wrong, and substituting a placeholder
+		// keeps the row without pretending the empty case was covered.
+		display := f.display
+		if display == "" {
+			display = "no display"
+		}
+		mustExec(t, ctx, pool,
+			`INSERT INTO tenants (id, slug, display_name, storage_layout)
+			 VALUES ($1, $2, $3, 'shared')`,
+			uuid.New(), slug, display)
+	}
+
+	all, _, err := repo.List(ctx, tenant.ListTenantsArgs{PageSize: 1000})
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	for _, q := range searchQueries {
+		t.Run(q, func(t *testing.T) {
+			filter := celFilter(q)
+			narrowed, _, err := repo.List(ctx, tenant.ListTenantsArgs{PageSize: 1000, Filter: filter})
+			if err != nil {
+				t.Fatalf("list filtered: %v", err)
+			}
+			viaSQL := celTenants(t, filter, narrowed)
+			viaAll := celTenants(t, filter, all)
+			if len(viaSQL) != len(viaAll) {
+				t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
+					"narrowing, %d over every row — ListTenants' search_like clause "+
+					"and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
+			}
+		})
+	}
+}
+
+func celTenants(t *testing.T, filter string, in []tenant.Tenant) []tenant.Tenant {
+	t.Helper()
+	if filter == "" {
+		return in
+	}
+	in = append([]tenant.Tenant(nil), in...)
+	out, err := celpkg.FilterPage(celpkg.NewEvaluator(), celpkg.TenantSchema, filter, in,
+		func(x tenant.Tenant) map[string]any {
+			return map[string]any{
+				"slug":         x.Slug,
+				"display_name": x.DisplayName,
+				"search":       celpkg.SearchText(x.TenantID.String(), x.Slug, x.DisplayName),
+			}
+		})
+	if err != nil {
+		t.Fatalf("cel filter %q: %v", filter, err)
+	}
+	return out
 }

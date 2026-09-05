@@ -391,7 +391,9 @@ func bucketRow(b admindomain.Bucket) map[string]any {
 		// clause. They are two spellings of one definition, and the pushdown
 		// contract — narrow only, never drop a row CEL accepts — holds only
 		// while they agree. TestSearchFieldMatchesSQLDefinition pins them.
-		"search": celpkg.SearchText(b.BucketName, b.DisplayName),
+		// Includes the backend id: the command palette matches on it, and a
+		// bucket is as often identified by where it lives as by its own name.
+		"search": celpkg.SearchText(b.BucketName, b.DisplayName, b.BackendID),
 	}
 }
 

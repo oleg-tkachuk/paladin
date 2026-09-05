@@ -105,6 +105,12 @@ var TenantSchema = &Schema{
 		"labels":         cel.MapType(cel.StringType, cel.StringType),
 		"created_at":     cel.TimestampType,
 		"updated_at":     cel.TimestampType,
+		// Derived, not a column — see SearchText. One conjunct for a search
+		// box, because a disjunction over slug and display_name pushes nothing
+		// down: the command palette sent exactly that shape and read a single
+		// page, so a tenant sorting past the page ceiling could not be found
+		// by typing its name.
+		"search": cel.StringType,
 	},
 }
 

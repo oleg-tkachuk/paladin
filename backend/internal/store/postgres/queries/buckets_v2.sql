@@ -92,7 +92,9 @@ WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_n
   -- a disagreement here drops a row the authoritative CEL pass accepts. See
   -- internal/filter/cel/searchtext.go.
   AND (sqlc.narg('search_like')::text IS NULL
-       OR lower(b.name COLLATE "C") || chr(10) || lower(coalesce(b.display_name, '') COLLATE "C")
+       OR lower(b.name COLLATE "C") || chr(10)
+          || lower(coalesce(b.display_name, '') COLLATE "C") || chr(10)
+          || lower(sb.name COLLATE "C")
           LIKE sqlc.narg('search_like')::text)
   AND (sqlc.narg('versioning_enabled')::bool IS NULL OR b.versioning_enabled = sqlc.narg('versioning_enabled')::bool)
   AND (sqlc.narg('object_lock_enabled')::bool IS NULL OR b.object_lock_enabled = sqlc.narg('object_lock_enabled')::bool)

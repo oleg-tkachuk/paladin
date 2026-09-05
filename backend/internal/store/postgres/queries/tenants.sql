@@ -65,6 +65,16 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
   AND (sqlc.narg('slug_like')::text IS NULL OR tenants.slug LIKE sqlc.narg('slug_like')::text)
   AND (sqlc.narg('display_name_eq')::text IS NULL OR tenants.display_name = sqlc.narg('display_name_eq')::text)
   AND (sqlc.narg('display_name_like')::text IS NULL OR tenants.display_name LIKE sqlc.narg('display_name_like')::text)
+  -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
+  -- ASCII-only folding via COLLATE "C": Go's strings.ToLower and Postgres
+  -- lower() are two Unicode implementations and may disagree, and a
+  -- disagreement here drops a row the authoritative CEL pass accepts. See
+  -- internal/filter/cel/searchtext.go.
+  AND (sqlc.narg('search_like')::text IS NULL
+       OR lower(tenants.id::text COLLATE "C") || chr(10)
+          || lower(tenants.slug COLLATE "C") || chr(10)
+          || lower(coalesce(tenants.display_name, '') COLLATE "C")
+          LIKE sqlc.narg('search_like')::text)
   -- Compared as text on purpose: the literal comes from a caller's filter, and
   -- casting an arbitrary string to the enum makes Postgres reject the whole
   -- query ("invalid input value for enum") instead of returning no rows.

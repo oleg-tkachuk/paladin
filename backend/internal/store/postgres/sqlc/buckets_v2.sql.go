@@ -248,7 +248,9 @@ WHERE ($1::text IS NULL OR sb.name = $1::text)
   -- a disagreement here drops a row the authoritative CEL pass accepts. See
   -- internal/filter/cel/searchtext.go.
   AND ($7::text IS NULL
-       OR lower(b.name COLLATE "C") || chr(10) || lower(coalesce(b.display_name, '') COLLATE "C")
+       OR lower(b.name COLLATE "C") || chr(10)
+          || lower(coalesce(b.display_name, '') COLLATE "C") || chr(10)
+          || lower(sb.name COLLATE "C")
           LIKE $7::text)
   AND ($8::bool IS NULL OR b.versioning_enabled = $8::bool)
   AND ($9::bool IS NULL OR b.object_lock_enabled = $9::bool)
