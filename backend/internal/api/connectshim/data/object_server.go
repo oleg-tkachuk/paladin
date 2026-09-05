@@ -16,19 +16,39 @@ import (
 type ObjectServer struct {
 	paladindatav1connect.UnimplementedObjectServiceHandler
 	H        objectHandler
-	Versions *object.VersionHandler // optional; nil → versioning RPCs return Unimplemented
-	Locks    *object.LockHandler    // optional; nil → object-lock RPCs return Unimplemented
+	Versions versionHandler // optional; nil → versioning RPCs return Unimplemented
+	Locks    lockHandler    // optional; nil → object-lock RPCs return Unimplemented
 }
 
-func NewObjectServer(h objectHandler, versions *object.VersionHandler) *ObjectServer {
-	return &ObjectServer{H: h, Versions: versions}
+// The CONSTRUCTOR takes concrete types while the FIELDS are interfaces, and
+// that asymmetry is deliberate.
+//
+// ProvideVersionHandler and ProvideLockHandler return a typed nil pointer when
+// the feature is off. Assigned straight into an interface field that becomes a
+// NON-nil interface holding a nil pointer, so `s.Locks != nil` is true and the
+// shim calls a method on a nil receiver. Verified: it panics, turning "object
+// lock is disabled, answer Unimplemented" into a dead server.
+//
+// Taking the concrete type here is what makes the nil detectable. Tests inject
+// through the fields, which is where the seam is needed.
+func NewObjectServer(h *object.Handler, versions *object.VersionHandler) *ObjectServer {
+	s := &ObjectServer{H: h}
+	if versions != nil {
+		s.Versions = versions
+	}
+	return s
 }
 
 // WithLocks wires the object-lock handler. Separate from the constructor
 // because object lock is opt-in per deployment and every existing caller of
 // NewObjectServer predates it.
 func (s *ObjectServer) WithLocks(locks *object.LockHandler) *ObjectServer {
-	s.Locks = locks
+	// Concrete parameter, guarded assignment — see NewObjectServer. A typed
+	// nil here would make s.Locks non-nil and every object-lock RPC panic on a
+	// deployment that has the feature off.
+	if locks != nil {
+		s.Locks = locks
+	}
 	return s
 }
 

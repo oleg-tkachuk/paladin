@@ -871,27 +871,28 @@ open deliberately — each notes why._
   counts — rather than on inspection.
 - **Blockers:** none; needs a real fleet to measure against.
 
-### connectshim: two more handler fields still have no seam
+### connectshim: the other five servers still have no seam
 
-- **Status:** Narrowed 2026-09-05 — `ObjectServer.H` is done; `Versions` and
-  `Locks` are not.
-- **What landed:** an `objectHandler` interface declared by the consumer, with
-  a compile-time assertion that `*object.Handler` still satisfies it. The field
-  type changed and no caller of `NewObjectServer` did, because Go interfaces
-  are implicit. One table-driven test drives seven RPCs through a handler that
-  fails every call and requires the error to reach the caller wrapping the
-  original — a test per passthrough branch would be ceremony.
-- **What is left:** `ObjectServer.Versions` (*object.VersionHandler) and
-  `ObjectServer.Locks` (*object.LockHandler), three methods each, and the five
-  other servers in the package — BatchServer, MultipartServer, ObjectTagServer,
-  PresignServer, OperationServer, StorageBootstrapServer — each holding its own
-  concrete handler.
-- **Verified:** the mutations that survived the original run on lines 72, 114
-  and 155 are now caught; 272 and 287 still survive, and they belong to
-  `Versions`.
-- **Definition of Done:** the same treatment per field. It is mechanical now
-  that the shape exists.
-- **Blockers:** none.
+- **Status:** Narrowed 2026-09-05 — ObjectServer is done, all three of its
+  handler fields; the other five servers are not.
+- **What landed:** `objectHandler`, `versionHandler` and `lockHandler`,
+  declared by the consumer, with compile-time assertions that the production
+  types still satisfy them. Every error branch in object_server.go is now held:
+  35 of 35 mutations caught, from 24 of 35 before the tables were completed.
+- **What is left:** BatchServer, MultipartServer, ObjectTagServer,
+  PresignServer, OperationServer and StorageBootstrapServer, each holding its
+  own concrete handler.
+- **Read this before repeating it:** the constructor takes CONCRETE types while
+  the fields are interfaces, and that asymmetry is not an oversight.
+  ProvideVersionHandler and ProvideLockHandler return a typed nil when the
+  feature is off; assigned straight into an interface field it becomes a
+  non-nil interface holding a nil pointer, `s.Locks != nil` is true, and the
+  shim calls a method on a nil receiver. That panics — it was reproduced, not
+  reasoned about — and would turn "object lock is disabled, answer
+  Unimplemented" into a dead server. TestDisabledFeaturesAnswerUnimplemented
+  RatherThanPanicking pins it.
+- **Blockers:** none. Mechanical now that the shape and its trap are written
+  down.
 
 ### Mutation testing: the denominator has to match the package
 

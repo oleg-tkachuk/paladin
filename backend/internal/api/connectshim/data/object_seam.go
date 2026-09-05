@@ -39,3 +39,29 @@ type objectHandler interface {
 // interface could drift from the handler and the failure would land at every
 // call site instead of here.
 var _ objectHandler = (*object.Handler)(nil)
+
+// versionHandler and lockHandler are the same seam for the two optional fields
+// on ObjectServer. Both stay nil in a deployment that has not enabled the
+// feature, and the shim answers Unimplemented — so the interface value being
+// nil is a supported state, not a wiring bug.
+//
+// Split into three interfaces rather than one because the fields are three
+// separate handlers wired independently. A single combined interface would
+// force a test double to implement methods it has no business knowing about,
+// and would make `Locks == nil` unrepresentable.
+type versionHandler interface {
+	ListVersions(ctx context.Context, in object.ListVersionsInput) ([]object.ObjectVersion, string, error)
+	GetVersion(ctx context.Context, name string) (*object.ObjectVersion, error)
+	RestoreVersion(ctx context.Context, name, resourceVersion string) (*object.Object, error)
+}
+
+type lockHandler interface {
+	SetRetention(ctx context.Context, in object.SetRetentionInput) (object.ObjectLock, error)
+	SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (object.ObjectLock, error)
+	GetLock(ctx context.Context, collection, objectID string) (object.ObjectLock, error)
+}
+
+var (
+	_ versionHandler = (*object.VersionHandler)(nil)
+	_ lockHandler    = (*object.LockHandler)(nil)
+)
