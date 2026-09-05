@@ -40,6 +40,7 @@ func TestScopeMatch(t *testing.T) {
 	wildcard := []Scope{{Type: ScopeWildcard}}
 	tenantOnly := []Scope{{Type: ScopeTenant, Value: "t1"}}
 	bucketOnly := []Scope{{Type: ScopeBucket, Value: "paladin-archive"}}
+	backendOnly := []Scope{{Type: ScopeBackend, Value: "primary"}}
 	collection := []Scope{{Type: ScopeCollection, Value: "paladin-archive/photos"}}
 
 	cases := []struct {
@@ -55,6 +56,13 @@ func TestScopeMatch(t *testing.T) {
 		{"bucket scope misses on wrong bucket", bucketOnly, ResourceClaim{BucketName: "paladin-uploads"}, false},
 		{"collection scope requires both bucket and key", collection, ResourceClaim{BucketName: "paladin-archive", Collection: "photos"}, true},
 		{"collection scope misses without bucket", collection, ResourceClaim{Collection: "photos"}, false},
+		// ScopeBackend had no case at all, which mutation testing found: the
+		// branch that matches it survived being inverted. A capability scoped
+		// to one backend is what stops a token minted for the staging store
+		// from reaching production, so "untested" is the wrong state for it.
+		{"backend scope hits", backendOnly, ResourceClaim{BackendID: "primary"}, true},
+		{"backend scope misses on another backend", backendOnly, ResourceClaim{BackendID: "secondary"}, false},
+		{"backend scope misses when the claim names no backend", backendOnly, ResourceClaim{TenantID: "t1"}, false},
 		{"empty scopes deny", nil, ResourceClaim{TenantID: "t1"}, false},
 	}
 	for _, tc := range cases {
