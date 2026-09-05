@@ -15,7 +15,7 @@ import (
 // aud=data API token can reach it.
 type StorageBootstrapServer struct {
 	paladindatav1connect.UnimplementedStorageBootstrapServiceHandler
-	H *storagebootstrap.Handler
+	H storageBootstrapHandler
 }
 
 func NewStorageBootstrapServer(h *storagebootstrap.Handler) *StorageBootstrapServer {

@@ -21,7 +21,7 @@ import (
 // JWT tenant context).
 type OperationServer struct {
 	paladindatav1connect.UnimplementedOperationServiceHandler
-	H *operation.Handler
+	H operationHandler
 }
 
 func NewOperationServer(h *operation.Handler) *OperationServer { return &OperationServer{H: h} }

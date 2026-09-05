@@ -19,7 +19,7 @@ import (
 // dictionary) — that lives in the admin plane only.
 type ObjectTagServer struct {
 	paladindatav1connect.UnimplementedObjectTagServiceHandler
-	H *object.Handler
+	H objectTagHandler
 }
 
 func NewObjectTagServer(h *object.Handler) *ObjectTagServer { return &ObjectTagServer{H: h} }

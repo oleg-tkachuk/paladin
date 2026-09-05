@@ -12,7 +12,7 @@ import (
 
 type PresignServer struct {
 	paladindatav1connect.UnimplementedPresignServiceHandler
-	H *presign.Handler
+	H presignHandler
 }
 
 func NewPresignServer(h *presign.Handler) *PresignServer { return &PresignServer{H: h} }

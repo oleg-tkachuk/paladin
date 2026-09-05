@@ -19,7 +19,7 @@ import (
 
 type MultipartServer struct {
 	paladindatav1connect.UnimplementedMultipartUploadServiceHandler
-	H *multipart.Handler
+	H multipartHandler
 }
 
 func NewMultipartServer(h *multipart.Handler) *MultipartServer { return &MultipartServer{H: h} }

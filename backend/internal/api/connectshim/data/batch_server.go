@@ -14,7 +14,7 @@ import (
 
 type BatchServer struct {
 	paladindatav1connect.UnimplementedBatchServiceHandler
-	H *batch.Handler
+	H batchHandler
 }
 
 func NewBatchServer(h *batch.Handler) *BatchServer { return &BatchServer{H: h} }
