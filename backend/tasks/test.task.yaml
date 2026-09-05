@@ -80,6 +80,29 @@ tasks:
       # now with the same timeout, taken from that file.
       - go test -tags=integration -count=1 -timeout={{.TIMEOUT}} ./internal/integration/... ./tests/integration/...
 
+  mutate:
+    desc: "Mutation testing over one package: how much of it do the tests hold?"
+    summary: |-
+      Applies one behaviour-changing edit at a time and runs the tests. A
+      mutation the tests do NOT notice is code the suite does not hold.
+
+        task backend:test:mutate -- ./internal/auth 'internal/auth/*.go' 25
+
+      For a DB-backed package the default denominator is wrong — its own tests
+      cannot reach the branches, and reporting them as gaps sends someone to
+      write tests for behaviour internal/integration already covers. Pass the
+      suite that does cover it:
+
+        task backend:test:mutate -- ./internal/capability/... \
+          'internal/capability/postgres/*.go' 15 \
+          --test-cmd 'go test -tags=integration -count=1 -run Capability ./internal/integration/'
+
+      Not part of any gate. It rewrites source in place, takes minutes per
+      package, and its output is a list of questions rather than a pass or a
+      fail — see scripts/mutate.py for how to read it.
+    cmds:
+      - ./scripts/mutate.py {{.CLI_ARGS}}
+
   bench:
     desc: "Run Postgres-backed benchmarks (needs Docker; seeds ~1M rows)"
     cmds:

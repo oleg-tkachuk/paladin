@@ -890,29 +890,29 @@ open deliberately — each notes why._
   "the right error came back".
 - **Blockers:** none. Three cases, and the shape is written down.
 
-### Mutation testing: the denominator has to match the package
+### Mutation testing: how to read what it says
 
-- **Status:** Deferred (a note for whoever runs it next, not work to schedule).
-- **Reason:** A mechanical mutation harness over five packages found real gaps
-  — the JWT verifier with no test file, the unauthenticated allow-list with
-  none, the validation interceptor with none. It also produced survivors that
-  were not gaps at all.
-- **The trap:** running only a package's own tests is the wrong denominator for
-  anything DB-backed. `internal/capability/postgres` showed 8 survivors; one
-  was checked against `internal/integration` and is CAUGHT there. Reporting
-  those as untested would have sent someone to write tests for behaviour that
-  is already held.
-- **The other trap:** a glob that matches no files yields "0 caught, 0
-  survived" and a percentage. `internal/capability` did exactly that — its code
-  lives in a subpackage. A harness that prints a score for an empty set is the
-  same failure it exists to find.
-- **Definition of Done:** if this is worth keeping as a repo tool, it needs the
-  test command as a parameter (so a DB-backed package can be measured against
-  the suite that actually covers it) and a hard failure on an empty candidate
-  set. Both are one-liners; neither is in the throwaway script that produced
-  today's numbers.
-- **Blockers:** none. It is a judgement call whether a rough harness belongs in
-  the repo at all.
+- **Status:** Deferred (the tool is in the repo; this is the note that goes
+  with it).
+- **What exists:** `backend/scripts/mutate.py`, run as
+  `task backend:test:mutate -- <pkg> <glob> <budget> [--test-cmd …]`. Not part
+  of any gate: it rewrites source in place, takes minutes per package, and its
+  output is a list of questions rather than a pass or a fail.
+- **The denominator is the argument that matters.** Running a package's own
+  tests is the wrong measure for anything DB-backed.
+  `internal/capability/postgres` showed 8 survivors and the one checked by hand
+  is caught by `internal/integration`. Reporting those as gaps sends someone to
+  write tests for behaviour that is already held. `--test-cmd` exists for that,
+  and a filter that matches the wrong test names produces a 0% which is also
+  not a finding.
+- **A survivor is a question, not a defect.** The useful ones are guards whose
+  whole purpose is to refuse something — that is where this found the JWT
+  verifier with no test file, the unauthenticated allow-list with none, and the
+  validation interceptor with none.
+- **Line numbers shift when a file is edited.** Comparing "line 72 survived"
+  across two runs of a file changed in between compares different lines. Take a
+  score from one pass.
+- **Blockers:** none. It is a tool, not scheduled work.
 
 ### The integration suite starts a Postgres per test function
 
