@@ -967,38 +967,40 @@ open deliberately — each notes why._
   says, which is why dispatcher_limits_test.go says so instead of pretending.
 - **Blockers:** none, but it is integration-test work, not unit-test work.
 
-### platformstats: the census thresholds live in SQL text and nothing asserts them
+### platformstats: what remains is unkillable, not untested
 
-- **Status:** Deferred (measured 2026-09-06; the two pure functions are now
-  held, the rest is integration work).
-- **What the measurement says:** 52% caught against the right denominator —
-  `internal/integration`'s TestCollectControlPlane / TestCollectRLS, not the
-  package's own tests, which did not exist. 17 of the 19 survivors are inside
-  SQL **string literals**: the boundary operators of the quota and expiry
-  FILTER clauses.
-- **Why that matters more than the percentage.** The code states the contract
-  in its own comment — "A cap of 0 means 'no cap' throughout the schema, hence
-  the `> 0` guard on every term". Relaxing one `> 0` to `>= 0` makes an absent
-  cap count as a cap of zero, and since usage is always `>= 0`, every uncapped
-  tenant is reported AT its limit. The Platform Stats page then shows a fleet
-  in breach. The neighbouring comment about the `::float8` casts being
-  load-bearing ("without them Postgres rounds 0.9 to 1 and near-limit silently
-  becomes at-limit") shows someone already reasoned about these boundaries.
-  Nothing checks them.
-- **The same shape covers the expiry windows:** `expires_at >= now()` versus
-  `> now()`, and `< now() + interval` versus `<=`, decide which capabilities
-  and API tokens are counted live, expiring, or expired.
-- **Definition of done:** rows placed exactly ON each boundary — a quota whose
-  usage equals its cap, a cap of zero, a token expiring at now() — asserted
-  through the existing integration tests. Unit tests cannot reach these: every
-  collector takes a *pgxpool.Pool, a concrete third-party type, so the seam
-  trick used on the three connectshim planes does not apply here.
-- **Two survivors are equivalent and deliberately left:** sortTenants' `>`
-  inside an `if a != b` guard, and sortStates' `&&` over a stateOrder with four
-  distinct values. Both checked by running the mutated comparator over a spread
-  of inputs.
-- **Blockers:** none, but it is integration-test work, like the
-  internal/worker remainder.
+- **Status:** Deferred (the reachable gaps are closed; this entry records the
+  ceiling and one lesson about reading a score).
+- **What landed:** the quota census boundaries — ten rows seeded by a loop over
+  the four caps, each sitting exactly ON a threshold — and the exclusivity
+  contract of the two credential censuses. Every comparison on all ten quota
+  cap lines was mutated by hand, both directions, and all eighteen fail. 52%
+  to 73% measured; the residue is described below and does not move.
+- **The nine that remain are timestamp comparisons against `now()`**:
+  `expires_at > now()` versus `>=`, and `<= now() + interval` versus `<`, in
+  the capability and API-token censuses. These are NOT equivalent mutants —
+  the behaviour genuinely differs — but only for a row whose expires_at equals
+  the comparison instant to the microsecond. `now()` is transaction start
+  time and the census runs in its own transaction, so a test cannot place a
+  row there: by the time the INSERT commits, the clock has moved. Unkillable
+  through this interface rather than untested. A test claiming to hold them
+  would be the false guard this whole line of work exists to remove.
+- **Two more are equivalent** and were proved so by running the mutated
+  comparator over a spread of inputs: sortTenants' `>` inside an `if a != b`
+  guard, and sortStates' `&&` over four distinct order values.
+- **What the timestamp filters CAN be held by, and now are:** their structure.
+  Whether a revoked-and-expired row counts once or twice, whether never_used
+  and by_principal_kind restrict to live rows — none of that depends on the
+  instant, and all of it was unheld. The mutation harness never asked about it
+  because its operators only rewrite comparisons; the gap was real anyway.
+  Worth generalising: a score says nothing about the classes of defect its
+  operator set cannot express.
+- **The lesson that cost three passes:** the four quota caps are written as one
+  SQL fragment and read as a single rule, so covering two of the four terms
+  feels like covering the rule. It was wrong twice — first for near-limit, then
+  for at-limit — and each time a re-measurement had to point at the gap. The
+  test now seeds by loop so a missing term is impossible rather than unlikely.
+- **Blockers:** none.
 
 ### Mutation testing: how to read what it says
 
