@@ -59,35 +59,33 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 			usage[0], usage[1], usage[2], usage[3])
 	}
 
-	// A: no caps at all, but real usage. Usage tracking only — nothing is
-	//    enforced, so it is neither at nor near a limit, and it does not
-	//    count as having limits. This is the row that fails if any `> 0`
-	//    guard is relaxed to `>= 0`.
+	// Four caps, two thresholds each. Seeded as a loop rather than by hand:
+	// the first version of this test covered the near threshold for two of
+	// the four caps, and the second still missed one of the four at-limit
+	// terms. The caps are written as one SQL fragment and read as a single
+	// rule, so covering some of them FEELS like covering the rule — twice
+	// that feeling was wrong, and a mutation run had to say so both times.
+	// A loop makes a missing term impossible rather than merely unlikely.
+	const cap0 = 1000
+	for i := range 4 {
+		var caps, atUsage, nearUsage [4]int64
+		caps[i] = cap0
+		atUsage[i] = cap0            // exactly at the cap — the comparison is >=
+		nearUsage[i] = cap0 * 9 / 10 // exactly 90% — nearLimitRatio is 0.9
+		quota(caps, atUsage)
+		quota(caps, nearUsage)
+	}
+
+	// No caps at all, but real usage: tracking only, nothing enforced. This
+	// is the row that fails if any `> 0` guard is relaxed to `>= 0`, because
+	// usage is never negative and every uncapped row would then read as at
+	// its limit.
 	quota([4]int64{0, 0, 0, 0}, [4]int64{100, 5, 100, 5})
 
-	// B: usage EQUALS the byte cap. At limit — the comparison is `>=`.
-	quota([4]int64{1000, 0, 0, 0}, [4]int64{1000, 0, 0, 0})
-
-	// C: usage is exactly 90% of the object-count cap. Near limit, not at it.
-	quota([4]int64{0, 1000, 0, 0}, [4]int64{0, 900, 0, 0})
-
-	// D: the per-day byte cap, reached exactly. At limit.
-	quota([4]int64{0, 0, 1000, 0}, [4]int64{0, 0, 1000, 0})
-
-	// E: the per-day object cap, at exactly 90%. Near limit.
-	quota([4]int64{0, 0, 0, 1000}, [4]int64{0, 0, 0, 900})
-
-	// G, H: the byte caps at exactly 90%. The first pass of this test put a
-	//    row on the near threshold for the two COUNT caps only, and the two
-	//    byte terms stayed unheld — four near-limit terms need four rows, and
-	//    a mutation run said so.
-	quota([4]int64{1000, 0, 0, 0}, [4]int64{900, 0, 0, 0})
-	quota([4]int64{0, 0, 1000, 0}, [4]int64{0, 0, 900, 0})
-
-	// F: one below the near threshold — 899 of 1000 is 89.9%. Capped, but
-	//    neither near nor at. Without this row, "near" could start anywhere
-	//    below 90% and nothing would object.
-	quota([4]int64{1000, 0, 0, 0}, [4]int64{899, 0, 0, 0})
+	// One below the near threshold — 899 of 1000 is 89.9%. Capped, but
+	// neither near nor at. Without it, "near" could start anywhere lower and
+	// nothing would object.
+	quota([4]int64{cap0, 0, 0, 0}, [4]int64{899, 0, 0, 0})
 
 	got, err := platformstats.CollectRLS(ctx, pool)
 	if err != nil {
@@ -95,20 +93,22 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	}
 	q, bq := got.Quotas, base.Quotas
 
-	assertDelta(t, "quotas.total", bq.Total, q.Total, 8)
-	assertDelta(t, "quotas.tenant_scoped", bq.TenantScoped, q.TenantScoped, 8)
+	assertDelta(t, "quotas.total", bq.Total, q.Total, 10)
+	assertDelta(t, "quotas.tenant_scoped", bq.TenantScoped, q.TenantScoped, 10)
 	assertDelta(t, "quotas.bucket_scoped", bq.BucketScoped, q.BucketScoped, 0)
 
 	// A has every cap at zero and must not count as limited.
-	assertDelta(t, "quotas.with_limits", bq.WithLimits, q.WithLimits, 7)
+	assertDelta(t, "quotas.with_limits", bq.WithLimits, q.WithLimits, 9)
 
 	// B and D sit exactly on a cap; near-limit excludes at-limit, so C and E
 	// are the only near rows and A and F are neither.
-	assertDelta(t, "quotas.at_limit", bq.AtLimit, q.AtLimit, 2)
+	assertDelta(t, "quotas.at_limit", bq.AtLimit, q.AtLimit, 4)
 	assertDelta(t, "quotas.near_limit", bq.NearLimit, q.NearLimit, 4)
 
-	// The accounting sums cover tenant-scoped rows only: 100+1000+900+899
-	// bytes and 5+900 objects across the eight rows above.
+	// The accounting sums cover tenant-scoped rows only. Bytes: the
+	// total_bytes at/near pair (1000+900), the uncapped row (100) and the
+	// 89.9% row (899). Objects: the object_count pair (1000+900) and the
+	// uncapped row (5). The per-day columns feed neither sum.
 	assertDelta(t, "quotas.usage_total_bytes", bq.UsageTotalBytes, q.UsageTotalBytes, 2899)
-	assertDelta(t, "quotas.usage_object_count", bq.UsageObjectCount, q.UsageObjectCount, 905)
+	assertDelta(t, "quotas.usage_object_count", bq.UsageObjectCount, q.UsageObjectCount, 1905)
 }
