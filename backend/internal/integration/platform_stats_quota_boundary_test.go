@@ -77,6 +77,13 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	// E: the per-day object cap, at exactly 90%. Near limit.
 	quota([4]int64{0, 0, 0, 1000}, [4]int64{0, 0, 0, 900})
 
+	// G, H: the byte caps at exactly 90%. The first pass of this test put a
+	//    row on the near threshold for the two COUNT caps only, and the two
+	//    byte terms stayed unheld — four near-limit terms need four rows, and
+	//    a mutation run said so.
+	quota([4]int64{1000, 0, 0, 0}, [4]int64{900, 0, 0, 0})
+	quota([4]int64{0, 0, 1000, 0}, [4]int64{0, 0, 900, 0})
+
 	// F: one below the near threshold — 899 of 1000 is 89.9%. Capped, but
 	//    neither near nor at. Without this row, "near" could start anywhere
 	//    below 90% and nothing would object.
@@ -88,20 +95,20 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	}
 	q, bq := got.Quotas, base.Quotas
 
-	assertDelta(t, "quotas.total", bq.Total, q.Total, 6)
-	assertDelta(t, "quotas.tenant_scoped", bq.TenantScoped, q.TenantScoped, 6)
+	assertDelta(t, "quotas.total", bq.Total, q.Total, 8)
+	assertDelta(t, "quotas.tenant_scoped", bq.TenantScoped, q.TenantScoped, 8)
 	assertDelta(t, "quotas.bucket_scoped", bq.BucketScoped, q.BucketScoped, 0)
 
 	// A has every cap at zero and must not count as limited.
-	assertDelta(t, "quotas.with_limits", bq.WithLimits, q.WithLimits, 5)
+	assertDelta(t, "quotas.with_limits", bq.WithLimits, q.WithLimits, 7)
 
 	// B and D sit exactly on a cap; near-limit excludes at-limit, so C and E
 	// are the only near rows and A and F are neither.
 	assertDelta(t, "quotas.at_limit", bq.AtLimit, q.AtLimit, 2)
-	assertDelta(t, "quotas.near_limit", bq.NearLimit, q.NearLimit, 2)
+	assertDelta(t, "quotas.near_limit", bq.NearLimit, q.NearLimit, 4)
 
-	// The accounting sums cover tenant-scoped rows only: 100+1000+899 bytes
-	// and 5+900 objects across the six rows above.
-	assertDelta(t, "quotas.usage_total_bytes", bq.UsageTotalBytes, q.UsageTotalBytes, 1999)
+	// The accounting sums cover tenant-scoped rows only: 100+1000+900+899
+	// bytes and 5+900 objects across the eight rows above.
+	assertDelta(t, "quotas.usage_total_bytes", bq.UsageTotalBytes, q.UsageTotalBytes, 2899)
 	assertDelta(t, "quotas.usage_object_count", bq.UsageObjectCount, q.UsageObjectCount, 905)
 }
