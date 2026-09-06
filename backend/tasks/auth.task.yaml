@@ -1,5 +1,7 @@
 version: "3"
 
+silent: true
+
 # Auth-adjacent dev helpers. The actual JWT minting lives in
 # scripts/auth-mint-jwt.sh — keeping bash out of YAML.
 

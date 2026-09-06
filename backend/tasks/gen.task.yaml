@@ -1,5 +1,7 @@
 version: "3"
 
+silent: true
+
 # Code generation. Order matters: mockery first so it can run against
 # whatever interfaces the generator emits in subsequent steps; buf
 # before go generate so the protoc-generated files exist when go
@@ -8,10 +10,11 @@ version: "3"
 tasks:
   all:
     desc: "Regenerate every kind of code we ship (mocks, proto, sqlc)"
-    deps: [":core:tools:basic"]
+    preconditions:
+      - sh: command -v buf >/dev/null
+        msg: "buf is not installed — brew install bufbuild/buf/buf"
     cmds:
-      - task: ":core:banner"
-        vars: { MESSAGE: "regenerating code (mocks → proto → go generate → sqlc)" }
+      - echo "▸ paladin-core · gen · regenerating code (mocks → proto → go generate → sqlc)"
       - go run github.com/vektra/mockery/v3 --config=.mockery.yaml
       - task: proto
       - go generate ./...

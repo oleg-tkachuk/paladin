@@ -1,5 +1,12 @@
 version: "3"
 
+# The suites the shared library does not cover: everything that needs Docker, a
+# live stack, or a run long enough that it cannot sit in the commit gate.
+# Plain unit tests, lint, coverage and the tagged-compile check come from the
+# library's go module (`task go:test`, `task go:lint`, …).
+
+silent: true
+
 # Test task surface. The previous file wrapped `go test` in
 # `eval "$(minikube docker-env)"` which had no effect on go test —
 # Minikube's docker env affects `docker` invocations, not the Go
@@ -10,35 +17,6 @@ version: "3"
 tasks:
   # ─── Go ──────────────────────────────────────────────────────────────────
 
-  unit:
-    desc: "Run unit tests"
-    cmds:
-      - go test ./...
-
-  tagged:compile:
-    desc: "Compile-check the build-tagged suites (no Docker, no cluster, seconds)"
-    cmds:
-      # The `integration` and `e2e` suites are invisible to `go build ./...`,
-      # `go vet ./...` and `go test ./...` — a build tag excludes them from all
-      # three. So they rot in complete silence, and they have, twice:
-      #
-      #   - tests/e2e/ stopped compiling when DeleteTenantRequest.Force and
-      #     Bucket.bucket_name were removed (found 2026-08-27, five errors).
-      #   - internal/integration/ stopped compiling when the operations widget
-      #     fix (c14798c3) added newestFirst to OperationRepo.List (found the
-      #     same day, in the same sweep, one error).
-      #
-      # Neither needed a database, a stack or a browser to catch — only a
-      # compiler that was allowed to look. This is that, and it is why it runs
-      # in verify-all while the suites themselves (Docker, ~11 min) do not.
-      # `go vet` rather than `go build`: same compile, plus the vet checks.
-      - go vet -tags=integration ./...
-      - go vet -tags=e2e ./...
-      # tests/conformance needs a live S3 endpoint and skips without one, so
-      # it never runs in the gate — which is exactly the condition under which
-      # the other two rotted. Same treatment.
-      - go vet -tags=conformance ./...
-
   rpc-surface:
     desc: "Run the whole-contract RPC gate against a live stack (brings one up)"
     cmds:
@@ -48,7 +26,7 @@ tasks:
       # image, so it reported on whatever `:latest` happened to be, and it had
       # no collision preflight, so a developer's own stack made it fail on a
       # container name after the whole boot. See scripts/verify-stack.sh.
-      - task: :docker:build-local
+      - task: :release:image:build
       - scripts/verify-stack.sh rpc-surface
 
   integration:
@@ -108,40 +86,6 @@ tasks:
     cmds:
       - go test -tags=integration -run='^$' -bench=. -benchtime=20x -timeout=600s ./internal/integration/... ./tests/integration/...
 
-  coverage:
-    desc: "Run unit tests with coverage; HTML report → coverage/cover.html"
-    cmds:
-      - cmd: |-
-          mkdir -p coverage
-          go test -coverprofile=coverage/cover.out ./...
-          go tool cover -html=coverage/cover.out -o coverage/cover.html
-      - task: ":core:banner"
-        vars: { MESSAGE: "coverage report → coverage/cover.html" }
-
-  lint:
-    desc: "Run golangci-lint"
-    cmds:
-      - golangci-lint run ./...
-
-  # ─── E2E + functional ────────────────────────────────────────────────────
-  #
-  # Everything below needs a live stack, and that is exactly why none of it
-  # ran. Three suites — the Go admin e2e tests, the RPC-surface gate and
-  # `dev-bootstrap.sh` — were reachable only by typing a recipe out of a
-  # header comment, so nobody typed it, and all three rotted in silence:
-  # the e2e suite stopped compiling, the surface gate spent its life
-  # t.Skip-ing, and the bootstrap script had been calling a proto package
-  # that no longer existed. `tagged:compile` above catches the first failure
-  # mode in seconds. It cannot catch the other two, because a suite that
-  # builds and then skips — or a script that runs and fails on its first
-  # call — passes a compiler cleanly.
-  #
-  # The remaining half is a run gate, and the backlog parked it on
-  # `.github/workflows/e2e.yml`, which has not executed a step since Actions
-  # started refusing jobs on billing grounds. A gate that exists only in a
-  # pipeline nobody can run is not a gate. So it lives here instead, and the
-  # workflow calls the same task when it comes back.
-
   stack:
     desc: "Boot the compose stack once and run every gate that needs it (RPC surface + Go e2e + dev-bootstrap)"
     cmds:
@@ -152,7 +96,7 @@ tasks:
       # before the commit it was read as verifying. Building is the only
       # thing that makes the result mean anything, so it is not optional and
       # not a staleness heuristic.
-      - task: :docker:build-local
+      - task: :release:image:build
       # The body is a script rather than an inline `cmd:` because go-task
       # renders every command as a Go template first, and the collision
       # preflight needs `docker ps --format` — whose Go templates go-task
@@ -195,7 +139,7 @@ tasks:
   all:
     desc: "Run lint + unit + integration + security"
     cmds:
-      - task: lint
-      - task: unit
+      - task: :go:lint
+      - task: :go:test
       - task: integration
       - task: security

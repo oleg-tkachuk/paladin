@@ -1,192 +1,139 @@
 version: "3"
 
-# silent: true at file scope keeps tasks free of repeated `silent: true`
-# declarations. Individual tasks that NEED output still get it via
-# explicit echo / printf inside their cmds.
+# paladin-core — the backend (API, admin and IAM planes).
+#
+# The release chain and the Go gates come from the shared task library. What
+# stays here is what only exists in this tree: the codegen chain, the suites
+# that need Docker or a live stack, the seed fixture, and the OrbStack
+# no-registry path.
+
 silent: true
 
 vars:
+  # Shared task library — github.com/oleg-tkachuk/taskfiles.
+  # Publish it and this becomes:
+  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git/'
+  #   TASKLIB_REF: '?ref=v3.3.0'
+  TASKLIB: ../../taskfiles
+  TASKLIB_REF: ""
+
   PROJECT_NAME: paladin-core
-  COMPOSE_FILE: ./deploy/docker-compose.yaml
-  DEPLOY_INFO_ENV_FILE: ./deploy/info.env
-  # Relative to DOCKER_CONTEXT (repo root), not to backend/ — the image
-  # build needs the sibling capability module in its context.
+  IMAGE_NAMESPACE: paladin
+  K8S_NAMESPACE: paladin
+  # The local OrbStack cluster by default; override to target another.
+  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  # `api/*` tags version the proto contract, not this image: they carry a `/`
+  # that is invalid in a Docker tag, and a contract bump must not restamp a
+  # release.
+  VERSION_TAG_EXCLUDE: 'api/*'
+  # The shared buildx builder this repo builds through; its cache is separate
+  # from the default builder's and needs pruning by name.
+  BUILDX_BUILDER: lean
+  # The image needs the sibling capability module, so it builds from the repo
+  # root while the chart still packages from this directory.
   DOCKERFILE: ./backend/deploy/Dockerfile
   DOCKER_CONTEXT: ..
-  CHART_DIR: ./deploy/chart
-  TIMEZONE: Europe/Kyiv
-  K8S_NAMESPACE: paladin
-  # Kube context for every kubectl / helm task (k8s:* + deploy-orbstack).
-  # Defaults to the local OrbStack cluster; override with `K8S_CONTEXT=<ctx>`.
-  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
+  DOCKER_BUILD_FLAGS: --network=host
+  COMPOSE_FILE: ./deploy/docker-compose.yaml
 
-  # OCI Registry — derived from GLOBAL_REGISTRY, the single source of
-  # truth in the root Taskfile (threaded here via the deploy fan-out, or
-  # defaulting to registry.local for a standalone `cd backend && task
-  # deploy`). Image pushes land at OCI_REGISTRY/IMAGE_NAMESPACE/
-  # PROJECT_NAME:VERSION; Helm chart pushes at CHART_REPO/PROJECT_NAME
-  # :VERSION (separate /charts path, no collision).
-  #
-  # IMAGE_NAMESPACE is the registry sub-path under which all Paladin images
-  # live; the Helm chart's values.yaml and the ArgoCD overlay both pin
-  # this prefix, so the push path here MUST match or Pods
-  # ImagePullBackOff with a 404.
-  # The two derived vars reference GLOBAL_REGISTRY rather than repeating its
-  # default, which is what they used to do: the same `default "registry.local"`
-  # appeared three times, so re-pointing the repo at another registry meant
-  # finding all three and changing them together.
-  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
-  OCI_REGISTRY: '{{.GLOBAL_REGISTRY}}'
-  IMAGE_NAMESPACE: paladin
-  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY}}/charts'
-
-# Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
-# pins `dir: .` so relative paths inside the sub-Taskfiles resolve from
-# the repo root. ROOT is forwarded for the few tasks that emit absolute
-# paths in messages. `svc:` is the shared image+chart push chain
-# (tasks/_service.task.yaml, version.sh-stamped) used by `deploy`.
 includes:
-  core: { taskfile: tasks/_core.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  chart: { taskfile: tasks/chart.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  docker: { taskfile: tasks/docker.task.yaml, vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  test:   { taskfile: tasks/test.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  gen:    { taskfile: tasks/gen.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  k8s:    { taskfile: tasks/k8s.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  auth:   { taskfile: tasks/auth.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  svc:
-    taskfile: ../tasks/_service.task.yaml
-    dir: .
-    vars:
-      PROJECT_NAME: paladin-core
-      IMAGE_NAMESPACE: paladin
-      # DOCKER_CONTEXT is the repo root, not backend/: the binary depends on
-      # the nested capability module at capability/, which a backend-only
-      # context cannot reach. BUILD_CONTEXT stays '.' — the Helm chart still
-      # packages from backend/, and conflating the two breaks helm package.
-      DOCKERFILE: ./backend/deploy/Dockerfile
-      DOCKER_CONTEXT: ..
-      BUILD_CONTEXT: .
-      CHART_DIR: ./deploy/chart
-      K8S_NAMESPACE: paladin
-      GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}"
+  release:   { taskfile: '{{.TASKLIB}}/release{{.TASKLIB_REF}}', dir: . }
+  k8s:       { taskfile: '{{.TASKLIB}}/k8s{{.TASKLIB_REF}}', dir: . }
+  go:    { taskfile: '{{.TASKLIB}}/go{{.TASKLIB_REF}}', dir: . }
+  # OrbStack shares the host's image store, so a build is already visible to
+  # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
+  local: { taskfile: '{{.TASKLIB}}/runtime/orbstack{{.TASKLIB_REF}}', dir: . }
+  gen:   { taskfile: tasks/gen.task.yaml, dir: . }
+  auth:  { taskfile: tasks/auth.task.yaml, dir: . }
+  test:  { taskfile: tasks/test.task.yaml, dir: . }
 
 tasks:
   default:
-    desc: "List every available task (descriptions + namespaces)"
+    desc: "List every available task"
     cmds:
       - task --list-all
 
-  # ─── Deploy / release ────────────────────────────────────────────────────
-  # `deploy` is the registry-push pipeline (build → tag → push image +
-  # chart). The previous `deploy-local` flow (build straight into the
-  # Minikube Docker daemon, skip chart packaging) was removed — every
-  # cluster install now goes through the registry, so there's only one
-  # path to maintain.
   deploy:
-    desc: "Build, tag, and push image + Helm chart to the OCI registry"
+    desc: "Verify the chart, then publish image + chart to the OCI registry"
     cmds:
-      # Gate before any push: the chart must lint clean AND render
-      # without the multi-doc separator bug (see tasks/chart.task.yaml).
-      # Catching this here means a regression can never escape to OCI.
-      - task: chart:verify
-      # Refresh deploy/info.env from version.sh so the compose / orbstack
-      # paths (which read it) reflect the same version the registry push
-      # uses. The registry image+chart push itself is the shared chain,
-      # version-stamped by tasks/version.sh — no info.env dependency.
-      - task: metadata:write
-      - task: svc:deploy
+      - task: release:deploy
 
-  deploy-orbstack:
-    desc: "Build into OrbStack's shared Docker store + direct helm install (no registry)"
+  deploy-local:
+    desc: "Build and helm-install into the local cluster — no registry"
+    aliases: [deploy-orbstack]
     cmds:
-      - task: docker:deploy-orbstack
+      - task: release:image:build
+      - task: local:install
 
-  metadata:write:
-    # Shared writer (tasks/write-info-env.sh) — single source for both
-    # backend + frontend info.env; was copy-pasted and drifted (see BACKLOG).
-    desc: "Write APP_VERSION (from version.sh) + GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
-    internal: true
+  build:
+    desc: "Compile the binaries into ./bin"
     cmds:
-      - cmd: >-
-          OCI_REGISTRY='{{.OCI_REGISTRY}}' PROJECT_NAME='{{.PROJECT_NAME}}'
-          bash "$(git rev-parse --show-toplevel)/tasks/write-info-env.sh"
-          '{{.DEPLOY_INFO_ENV_FILE}}' '{{.TIMEZONE}}'
-
-  # ─── Local stack ─────────────────────────────────────────────────────────
-  up:
-    desc: "Start the local stack (postgres + seaweedfs + service) via docker compose"
-    cmds:
-      - task: docker:up
-
-  # ─── Codegen / tests ─────────────────────────────────────────────────────
-  generate:
-    desc: "Regenerate all generated code (mocks, proto, sqlc)"
-    cmds:
-      - task: gen:all
+      - task: go:build
 
   test:
     desc: "Run unit tests"
     cmds:
-      - task: test:unit
+      - task: go:test
 
-  # ─── Convenience aliases (kept for muscle memory) ────────────────────────
+  lint:
+    desc: "Run golangci-lint"
+    cmds:
+      - task: go:lint
+
   restart:
-    desc: "Alias for k8s:restart — rolls the deployment in K8S_NAMESPACE"
+    desc: "Roll the deployment in {{.K8S_NAMESPACE}}"
     cmds:
       - task: k8s:restart
 
-  # ─── Seed-fixture (UI/UX populated state) ────────────────────────────────
-  # Build-and-run the seed-fixture CLI from source so a fresh checkout
-  # never has to know about a separate binary install. The CLI itself
-  # refuses to run against URLs that don't smell like a dev cluster
-  # unless PALADIN_FIXTURE_OK=1 — that's where the production guard lives;
-  # the Taskfile just makes the entrypoint ergonomic.
-  # From OUTSIDE the cluster the CLI's default URLs (ingress DNS) often
-  # don't resolve, so seed:up/down port-forward the admin + api Services
-  # themselves, point the CLI at localhost (which the dev guard accepts),
-  # and tear the forwards down on exit — no hand-pasted URLs. Override the
-  # target via K8S_CONTEXT / K8S_NAMESPACE; FLAVOUR=demo|load|stress, COUNT=N.
-  seed:up:
-    desc: "Apply the fixture (idempotent) — auto port-forwards the planes"
+  generate:
+    desc: "Regenerate mocks, proto stubs and sqlc bindings"
     cmds:
-      - task: _seed:run
-        vars:
-          ACTION: up
-          FLAVOUR: '{{.FLAVOUR | default "demo"}}'
-          COUNT: "{{.COUNT}}"
+      - task: gen:all
+
+  up:
+    desc: "Start the local compose stack (postgres + seaweedfs + service)"
+    deps: [release:metadata]
+    cmds:
+      - >-
+        docker compose --progress={{.PROGRESS | default "auto"}}
+        -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}}
+        --env-file ./deploy/info.env up -d --build
+
+  # ─── seed fixture ───────────────────────────────────────────────────────────
+  # Applies (or removes) the demo fixture against a running cluster. Both
+  # directions port-forward the three planes themselves, so neither needs a
+  # terminal already holding them open.
+  seed:up:
+    desc: "Apply the demo fixture (idempotent)"
+    cmds:
+      - task: _seed
+        vars: { ACTION: up, FLAVOUR: '{{.FLAVOUR | default "demo"}}', COUNT: "{{.COUNT}}" }
 
   seed:down:
-    desc: "Remove the fixture — auto port-forwards the planes"
+    desc: "Remove the demo fixture"
     cmds:
-      - task: _seed:run
-        vars:
-          ACTION: down
-          FLAVOUR: '{{.FLAVOUR | default "demo"}}'
-          COUNT: ""
+      - task: _seed
+        vars: { ACTION: down, FLAVOUR: '{{.FLAVOUR | default "demo"}}' }
 
-  _seed:run:
+  _seed:
     internal: true
     cmds:
       - cmd: |-
           set -eu
-          ctx="${K8S_CONTEXT:-orbstack}"
-          ns="${K8S_NAMESPACE:-paladin}"
+          ctx='{{.K8S_CONTEXT}}'; ns='{{.K8S_NAMESPACE}}'
           pids=""
-          cleanup() { kill $pids 2>/dev/null || true; }
-          # task's shell (mvdan/sh) implements only the EXIT trap; it fires
-          # on normal exit AND when the run is interrupted, so the forwards
-          # never outlive the CLI.
-          trap cleanup EXIT
+          trap 'kill $pids 2>/dev/null || true' EXIT
           kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-admin 18090:8090 >/dev/null 2>&1 & pids="$pids $!"
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api 18085:8085 >/dev/null 2>&1 & pids="$pids $!"
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api 18080:8080 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api   18085:8085 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api   18080:8080 >/dev/null 2>&1 & pids="$pids $!"
           for p in 18090 18085 18080; do
             ok=0
             for _ in $(seq 1 40); do
-              if curl -sk -m 1 -o /dev/null "https://localhost:$p/" 2>/dev/null; then ok=1; break; fi
+              curl -sk -m 1 -o /dev/null "https://localhost:$p/" 2>/dev/null && { ok=1; break; }
               sleep 0.5
             done
-            [ "$ok" = 1 ] || { echo "[seed] port-forward :$p never became ready (context=$ctx ns=$ns)" >&2; exit 1; }
+            [ "$ok" = 1 ] || { echo "✖ seed · port-forward :$p never became ready (context=$ctx ns=$ns)" >&2; exit 1; }
           done
           go run ./cmd/seed-fixture {{.ACTION}} \
             --flavour={{.FLAVOUR}} {{if .COUNT}}--count={{.COUNT}}{{end}} \
@@ -194,3 +141,4 @@ tasks:
             --iam-url=https://localhost:18085 \
             --data-url=https://localhost:18080 \
             --insecure-tls
+      - echo "✔ paladin-core · fixture {{.ACTION}} ({{.FLAVOUR}})"

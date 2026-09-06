@@ -1,123 +1,94 @@
 version: "3"
 
-# silent: true at file scope keeps tasks free of repeated `silent: true`
-# declarations. Individual tasks that NEED output still get it via
-# explicit echo / printf inside their cmds.
+# paladin-console — the operator UI (Next.js).
+#
+# Release chain and Node gates come from the shared task library; the OrbStack
+# no-registry path is shared with the backend through ../tasks/orbstack.task.yaml.
+
 silent: true
 
 vars:
+  # Shared task library — github.com/oleg-tkachuk/taskfiles.
+  # Publish it and this becomes:
+  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git/'
+  #   TASKLIB_REF: '?ref=v3.3.0'
+  TASKLIB: ../../taskfiles
+  TASKLIB_REF: ""
+
   PROJECT_NAME: paladin-console
-  DEPLOY_INFO_ENV_FILE: ./deploy/info.env
-  DOCKERFILE: ./deploy/Dockerfile
-  CHART_DIR: ./deploy/chart
-  TIMEZONE: Europe/Kyiv
-  K8S_NAMESPACE: paladin
-  # Kube context for every kubectl / helm task (k8s:* + deploy-orbstack).
-  # Defaults to the local OrbStack cluster; override with `K8S_CONTEXT=<ctx>`.
-  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
-
-  # OCI registry. GLOBAL_REGISTRY is the single source of truth — set in the
-  # root Taskfile and threaded here by the deploy fan-out, defaulting to
-  # registry.local for a standalone `cd frontend && task deploy`. The two
-  # derived vars below reference it rather than repeating its default, which
-  # is what they used to do: the same `default "registry.local"` appeared
-  # three times, so pointing the repo at another registry meant finding all
-  # three and changing them together.
-  #
-  # Image pushes land at OCI_REGISTRY/IMAGE_NAMESPACE/PROJECT_NAME:TAG; chart
-  # pushes at CHART_REPO/PROJECT_NAME:CHART_VERSION — a separate /charts path
-  # under the same registry, so the two never collide.
-  #
-  # IMAGE_NAMESPACE is pinned by the chart's values.yaml AND the ArgoCD
-  # overlay, so the push path here MUST match both or Pods ImagePullBackOff
-  # with a 404.
-  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
-  OCI_REGISTRY: '{{.GLOBAL_REGISTRY}}'
   IMAGE_NAMESPACE: paladin
-  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY}}/charts'
+  K8S_NAMESPACE: paladin
+  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  # `api/*` tags version the proto contract, not this image: they carry a `/`
+  # that is invalid in a Docker tag, and a contract bump must not restamp a
+  # release.
+  VERSION_TAG_EXCLUDE: 'api/*'
+  # The shared buildx builder this repo builds through; its cache is separate
+  # from the default builder's and needs pruning by name.
+  BUILDX_BUILDER: lean
+  DOCKERFILE: ./deploy/Dockerfile
+  DOCKER_BUILD_FLAGS: --network=host
+  # This app is pinned to npm through package-lock.json.
+  PM: npm
 
-# Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
-# pins `dir: .` so relative paths inside the sub-Taskfiles resolve from
-# the repo root. ROOT is forwarded for the few tasks that emit absolute
-# paths in messages. `svc:` is the shared image+chart push chain
-# (tasks/_service.task.yaml, version.sh-stamped) used by `deploy`.
 includes:
-  core:   { taskfile: tasks/_core.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  docker: { taskfile: tasks/docker.task.yaml, vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  k8s:    { taskfile: tasks/k8s.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  node:   { taskfile: tasks/node.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
-  svc:
-    taskfile: ../tasks/_service.task.yaml
-    dir: .
-    vars:
-      PROJECT_NAME: paladin-console
-      IMAGE_NAMESPACE: paladin
-      DOCKERFILE: ./deploy/Dockerfile
-      BUILD_CONTEXT: .
-      CHART_DIR: ./deploy/chart
-      K8S_NAMESPACE: paladin
-      GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}"
+  release:   { taskfile: '{{.TASKLIB}}/release{{.TASKLIB_REF}}', dir: . }
+  k8s:       { taskfile: '{{.TASKLIB}}/k8s{{.TASKLIB_REF}}', dir: . }
+  node:  { taskfile: '{{.TASKLIB}}/node{{.TASKLIB_REF}}', dir: . }
+  # OrbStack shares the host's image store, so a build is already visible to
+  # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
+  local: { taskfile: '{{.TASKLIB}}/runtime/orbstack{{.TASKLIB_REF}}', dir: . }
 
 tasks:
   default:
-    desc: "List every available task (descriptions + namespaces)"
+    desc: "List every available task"
     cmds:
       - task --list-all
 
-  # ─── Deploy / release ────────────────────────────────────────────────────
-  # `deploy` is the registry-push pipeline (build → tag → push image +
-  # chart). The previous `deploy-local` flow (build straight into the
-  # Minikube Docker daemon, skip chart packaging) was removed — every
-  # cluster install now goes through the registry, so there's only one
-  # path to maintain.
   deploy:
-    desc: "Build, tag, and push image + Helm chart to the OCI registry"
+    desc: "Verify the chart, then publish image + chart to the OCI registry"
     cmds:
-      # Refresh deploy/info.env from version.sh for the orbstack path;
-      # the registry image+chart push is the shared version.sh-stamped
-      # chain (svc:deploy).
-      - task: metadata:write
-      - task: svc:deploy
+      - task: release:deploy
 
-  deploy-orbstack:
-    desc: "Build into OrbStack's shared Docker store + direct helm install (no registry)"
+  deploy-local:
+    desc: "Build and helm-install into the local cluster — no registry"
+    aliases: [deploy-orbstack]
     cmds:
-      - task: docker:deploy-orbstack
+      - task: release:image:build
+      - task: local:install
 
-  metadata:write:
-    # Shared writer (tasks/write-info-env.sh) — single source for both
-    # backend + frontend info.env; was copy-pasted and drifted (see BACKLOG).
-    desc: "Write APP_VERSION (from version.sh) + GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
-    internal: true
-    cmds:
-      - cmd: >-
-          OCI_REGISTRY='{{.OCI_REGISTRY}}' PROJECT_NAME='{{.PROJECT_NAME}}'
-          bash "$(git rev-parse --show-toplevel)/tasks/write-info-env.sh"
-          '{{.DEPLOY_INFO_ENV_FILE}}' '{{.TIMEZONE}}'
-
-  # ─── Node / dev workflow ─────────────────────────────────────────────────
   dev:
-    desc: "Run the Next.js development server on port 3000"
+    desc: "Run the Next.js development server"
     cmds:
       - task: node:dev
 
   install:
-    desc: "Install npm dependencies (npm ci with lockfile)"
+    desc: "Install dependencies from package-lock.json"
     cmds:
       - task: node:install
 
+  build:
+    desc: "Build the production bundle"
+    cmds:
+      - task: node:build
+
+  test:
+    desc: "Run the Vitest suite"
+    cmds:
+      - task: node:test
+
   lint:
-    desc: "Run ESLint over src/"
+    desc: "Run ESLint"
     cmds:
       - task: node:lint
 
   generate:
-    desc: "Regenerate Connect-RPC stubs from ../paladin/proto"
+    desc: "Regenerate the Connect-RPC TypeScript stubs"
     cmds:
       - task: node:generate
 
-  # ─── Convenience aliases (kept for muscle memory) ────────────────────────
   restart:
-    desc: "Alias for k8s:restart — rolls the deployment in K8S_NAMESPACE"
+    desc: "Roll the deployment in {{.K8S_NAMESPACE}}"
     cmds:
       - task: k8s:restart

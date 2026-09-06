@@ -55,3 +55,6 @@ backend/cmd/seed-fixture/main.go.bak
 # task on every `task deploy`. Versions and timestamps go to git via
 # tags + commit history, not via a tracked file.
 **/deploy/info.env
+
+# Task's fingerprint cache and remote-Taskfile cache.
+.task/
