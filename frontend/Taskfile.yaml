@@ -11,7 +11,7 @@ vars:
   # Shared task library — github.com/oleg-tkachuk/taskfiles.
   # Publish it and this becomes:
   #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git/'
-  #   TASKLIB_REF: '?ref=v3.4.0'
+  #   TASKLIB_REF: '?ref=v1.0.0'
   TASKLIB: ../../taskfiles
   TASKLIB_REF: ""
 
