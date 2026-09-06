@@ -13,7 +13,7 @@ vars:
   # Shared task library — github.com/oleg-tkachuk/taskfiles.
   # Consuming it from the registry instead of this checkout:
   #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//'
-  #   TASKLIB_REF: '?ref=v1.0.0'
+  #   TASKLIB_REF: '?ref=v1.1.0'
   # The include lines do not change: an undeclared TASKLIB_REF renders as
   # nothing, which is what makes this checkout work without one.
   TASKLIB: ../../taskfiles/
