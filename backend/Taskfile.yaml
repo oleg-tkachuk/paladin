@@ -31,9 +31,11 @@ vars:
   # The shared buildx builder this repo builds through; its cache is separate
   # from the default builder's and needs pruning by name.
   BUILDX_BUILDER: lean
-  # The image needs the sibling capability module, so it builds from the repo
-  # root while the chart still packages from this directory.
-  DOCKERFILE: ./backend/deploy/Dockerfile
+  # The image needs the sibling capability module, so the build context is the
+  # repo root while the chart still packages from this directory. `--file` is
+  # resolved from the working directory, not from the context, so the
+  # Dockerfile path stays relative to this component.
+  DOCKERFILE: ./deploy/Dockerfile
   DOCKER_CONTEXT: ..
   DOCKER_BUILD_FLAGS: --network=host
   COMPOSE_FILE: ./deploy/docker-compose.yaml
