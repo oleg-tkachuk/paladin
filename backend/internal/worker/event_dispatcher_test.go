@@ -955,3 +955,38 @@ func TestOutboxRunnerMaxAttempts(t *testing.T) {
 		}
 	}
 }
+
+// Every worker in this package spells its defaults the same way: a
+// configured zero means "unset, use the default". Relaxing one `<= 0` to
+// `< 0` lets a real zero through, and a zero is never a usable value for any
+// of them — a zero backoff retries instantly and forever, a zero batch claims
+// no rows, a zero attempt budget dead-letters on the first try.
+//
+// That last one is not hypothetical: it is recorded in this package's history
+// as a fixed bug, which is why the defaulting is worth holding rather than
+// assumed. The existing backoff test sets both fields explicitly and so never
+// reaches the default branch.
+func TestOutboxRunnerBackoff_DefaultsWhenUnset(t *testing.T) {
+	unset := &OutboxRunner{} // BaseBackoff and MaxBackoff both zero
+	configured := &OutboxRunner{BaseBackoff: time.Second, MaxBackoff: time.Hour}
+
+	if got := unset.backoffFor(1); got != 5*time.Second {
+		t.Errorf("first attempt with no BaseBackoff = %v, want the 5s default — "+
+			"a zero base retries with no delay at all", got)
+	}
+	if got := configured.backoffFor(1); got != time.Second {
+		t.Errorf("a configured BaseBackoff was overridden: %v", got)
+	}
+
+	// The cap defaults too, and it has to bite before the doubling runs away:
+	// 5s * 2^19 is over two weeks.
+	if got := unset.backoffFor(20); got != time.Hour {
+		t.Errorf("attempt 20 with no MaxBackoff = %v, want the 1h cap", got)
+	}
+
+	// Doubling between the two, so the default does not quietly flatten the
+	// curve into a constant.
+	if a, b := unset.backoffFor(2), unset.backoffFor(3); b != 2*a {
+		t.Errorf("backoff %v then %v — the curve is not doubling", a, b)
+	}
+}
