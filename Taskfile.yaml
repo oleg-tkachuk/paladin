@@ -24,7 +24,7 @@ vars:
   # OrbStack cluster; both components redeclare the same default so a
   # standalone `cd backend && task …` behaves identically.
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
-  TASKLIB: ../taskfiles
+  TASKLIB: ../taskfiles/
 
 includes:
   backend:
@@ -40,15 +40,15 @@ includes:
   # of truth — it builds the backend services and mounts the frontend as the
   # console container, with a build context resolving to ../../frontend.
   stack:
-    taskfile: '{{.TASKLIB}}/compose'
+    taskfile: '{{.TASKLIB}}compose{{.TASKLIB_REF}}'
     dir: .
     vars: { COMPOSE_FILE: ./backend/deploy/docker-compose.yaml, PROJECT_NAME: paladin }
   argocd:
-    taskfile: '{{.TASKLIB}}/argocd'
+    taskfile: '{{.TASKLIB}}argocd{{.TASKLIB_REF}}'
     dir: .
     vars: { K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
   all:
-    taskfile: '{{.TASKLIB}}/monorepo'
+    taskfile: '{{.TASKLIB}}monorepo{{.TASKLIB_REF}}'
     dir: .
     vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
 
