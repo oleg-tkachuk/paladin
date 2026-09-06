@@ -942,64 +942,40 @@ open deliberately — each notes why._
   "the right error came back".
 - **Blockers:** none. Three cases, and the shape is written down.
 
-### internal/worker: most error branches are held by nothing
+### internal/worker: what is left really is integration work — but less than claimed
 
-- **Status:** Deferred (measured, partially addressed).
-- **What the measurement says:** 37% of mutations caught, the lowest of any
-  package measured — and it has 23 test files for 24 source files, so the
-  count of tests says nothing about what they hold.
-- **Not a denominator artifact.** The obvious explanation is that these
-  branches live in `internal/integration` instead, and for
-  `internal/capability/postgres` that was true. Checked here: mutating
-  `purge_drainer.go`'s emitPurged error branch survives the integration suite
-  too. These are genuinely unheld.
-- **What was fixed:** the retry-budget normalisations in `maxAttemptsFor`,
-  where a configured zero stayed zero and `attempts+1 >= max` then dead-lettered
-  every event on its FIRST attempt; and the Kafka mTLS guard, where `||` flipped
-  to `&&` skips the keypair load entirely and builds a TLS transport carrying no
-  client certificate — a silent downgrade of the authentication an operator
-  configured.
-- **What is left:** the DB-backed branches — purge_drainer, bucket_reconciler,
-  partition_maintainer, replication, and the outbox delivery loop. Each needs a
-  transaction and a failing dependency, so they belong in internal/integration.
-  The `attempts+1 >= max` boundary is among them: asserting it against a
-  hand-written table re-implements the expression and passes whatever the code
-  says, which is why dispatcher_limits_test.go says so instead of pretending.
-- **Blockers:** none, but it is integration-test work, not unit-test work.
-
-### platformstats: what remains is unkillable, not untested
-
-- **Status:** Deferred (the reachable gaps are closed; this entry records the
-  ceiling and one lesson about reading a score).
-- **What landed:** the quota census boundaries — ten rows seeded by a loop over
-  the four caps, each sitting exactly ON a threshold — and the exclusivity
-  contract of the two credential censuses. Every comparison on all ten quota
-  cap lines was mutated by hand, both directions, and all eighteen fail. 52%
-  to 73% measured; the residue is described below and does not move.
-- **The nine that remain are timestamp comparisons against `now()`**:
-  `expires_at > now()` versus `>=`, and `<= now() + interval` versus `<`, in
-  the capability and API-token censuses. These are NOT equivalent mutants —
-  the behaviour genuinely differs — but only for a row whose expires_at equals
-  the comparison instant to the microsecond. `now()` is transaction start
-  time and the census runs in its own transaction, so a test cannot place a
-  row there: by the time the INSERT commits, the clock has moved. Unkillable
-  through this interface rather than untested. A test claiming to hold them
-  would be the false guard this whole line of work exists to remove.
-- **Two more are equivalent** and were proved so by running the mutated
-  comparator over a spread of inputs: sortTenants' `>` inside an `if a != b`
-  guard, and sortStates' `&&` over four distinct order values.
-- **What the timestamp filters CAN be held by, and now are:** their structure.
-  Whether a revoked-and-expired row counts once or twice, whether never_used
-  and by_principal_kind restrict to live rows — none of that depends on the
-  instant, and all of it was unheld. The mutation harness never asked about it
-  because its operators only rewrite comparisons; the gap was real anyway.
-  Worth generalising: a score says nothing about the classes of defect its
-  operator set cannot express.
-- **The lesson that cost three passes:** the four quota caps are written as one
-  SQL fragment and read as a single rule, so covering two of the four terms
-  feels like covering the rule. It was wrong twice — first for near-limit, then
-  for at-limit — and each time a re-measurement had to point at the gap. The
-  test now seeds by loop so a missing term is impossible rather than unlikely.
+- **Status:** Deferred (partially addressed; this entry corrects its own earlier
+  diagnosis).
+- **The correction.** This entry used to say the remaining branches "need a
+  transaction and a failing dependency, so they belong in
+  internal/integration". That was true of the outbox runner and wrong of three
+  other files. BucketReconciler takes interfaces for everything it touches and
+  had no test file at all; ReplicationWorker and StaleOperationReclaimer are
+  likewise fully seamed and were half-held. None of that needed Postgres. The
+  earlier 37% was also measured against the package's own tests alone; with
+  the worker-related integration tests in the denominator it is 47%.
+- **What landed since:** the bucket reconciler's provision and delete paths,
+  including the two branches whose only observable is the log level that tells
+  an operator whether a bucket can ever succeed (held via zaptest/observer,
+  the pattern already used in internal/middleware); and one half each of two
+  disjunctive guards that no test could see, the sharper being a bucket with
+  replication DISABLED but a destination configured, which under `&&` copies a
+  tenant's objects into another bucket against configuration.
+- **What is genuinely left, and why it is integration work:** OutboxRunner
+  holds a concrete `*pgxpool.Pool`, so its tick, depth sampling, mark-delivered
+  and mark-failed paths cannot be driven without a database. Five survivors
+  live there, including the `attempts+1 >= max` dead-letter boundary this entry
+  has always named. Asserting that against a hand-written table re-implements
+  the expression and passes whatever the code says — it needs rows.
+- **Untested and unmeasured, worth its own pass:** `sink_nats.go` is 481 lines
+  with no test file, while its three sibling sinks (kafka, rabbitmq, sqs) all
+  have several. NATS is the live pipeline in this deployment. The asymmetry
+  says what got covered was what was easy to cover, not what runs.
+- **Lesson, third instance in this file:** two of the three fixes here were
+  "one half of a pattern". The disabled-bucket test set both halves of a
+  disjunction at once; the reconciler's log test covered the provision path and
+  not its identical delete twin. A guard written as one expression reads as one
+  thing, and covering part of it feels like covering it.
 - **Blockers:** none.
 
 ### Mutation testing: how to read what it says
