@@ -21,12 +21,12 @@ output:
 
 pre-commit:
   parallel: true
-  commands:
+  jobs:
     # ─── Repo-wide ──────────────────────────────────────────────────
 
     # Block accidental commits of compiled binaries (ELF / Mach-O).
     # Cheap byte-test, runs on every staged file regardless of half.
-    forbid-binaries:
+    - name: forbid-binaries
       tags: [security, hygiene]
       run: |
         set -euo pipefail
@@ -40,7 +40,7 @@ pre-commit:
 
     # Secret scanning runs once at repo root so .gitleaks.toml lives
     # alongside it (allowlist paths are repo-relative).
-    gitleaks:
+    - name: gitleaks
       tags: [security]
       run: |
         if command -v gitleaks >/dev/null 2>&1; then
@@ -49,7 +49,7 @@ pre-commit:
 
     # ─── Backend (Go) ───────────────────────────────────────────────
 
-    backend-sqlc:
+    - name: backend-sqlc
       root: backend/
       tags: [go, sqlc]
       glob: "{sqlc.yaml,sqlc.yml,sqlc.json,internal/store/postgres/queries/*.sql}"
@@ -62,13 +62,13 @@ pre-commit:
           exit 1
         fi
 
-    backend-gofmt:
+    - name: backend-gofmt
       root: backend/
       tags: [go, fmt]
       glob: "*.go"
       run: gofmt -w {staged_files} && git add {staged_files}
 
-    backend-goimports:
+    - name: backend-goimports
       root: backend/
       tags: [go, fmt]
       glob: "*.go"
@@ -77,13 +77,13 @@ pre-commit:
           goimports -w {staged_files} && git add {staged_files}
         fi
 
-    backend-govet:
+    - name: backend-govet
       root: backend/
       tags: [go, lint]
       glob: "*.go"
       run: go vet ./...
 
-    backend-buf-lint:
+    - name: backend-buf-lint
       root: backend/
       tags: [proto, lint]
       glob: "proto/**/*.proto"
@@ -94,13 +94,13 @@ pre-commit:
 
     # ─── Frontend (Next.js / TS) ────────────────────────────────────
 
-    frontend-eslint:
+    - name: frontend-eslint
       root: frontend/
       tags: [ui, lint]
       glob: "*.{js,jsx,ts,tsx}"
       run: npx eslint {staged_files}
 
-    frontend-prettier:
+    - name: frontend-prettier
       root: frontend/
       tags: [ui, fmt]
       glob: "*.{js,jsx,ts,tsx,css,scss,json,md}"
@@ -108,8 +108,8 @@ pre-commit:
 
 pre-push:
   parallel: true
-  commands:
-    backend-test:
+  jobs:
+    - name: backend-test
       root: backend/
       tags: [go, test]
       run: go test ./... -count=1
@@ -117,7 +117,7 @@ pre-push:
     # Curated golangci set (see backend/.golangci.yaml). Skipped if the
     # binary isn't installed locally so a fresh clone can still push; CI
     # always runs it pinned.
-    backend-golangci:
+    - name: backend-golangci
       root: backend/
       tags: [go, lint]
       run: |
@@ -132,24 +132,29 @@ pre-push:
     # the separator onto the previous line and silently dropping
     # every resource after the first one. Runs only when chart files
     # change so non-chart pushes don't pay the helm-template cost.
-    backend-chart-verify:
+    - name: backend-chart-verify
       root: backend/
       tags: [chart, lint]
       glob: "deploy/chart/**/*"
       run: task chart:verify
 
-    frontend-tsc:
+    - name: frontend-tsc
       root: frontend/
       tags: [ui, typecheck]
       run: npx tsc --noEmit
 
 commit-msg:
-  commands:
-    conventional-commits:
+  jobs:
+    - name: conventional-commits
       run: |
         set -euo pipefail
-        file="${1:-}"
-        [ -z "$file" ] && file="$(git rev-parse --git-path COMMIT_EDITMSG 2>/dev/null || true)"
+        # {1} is lefthook's template for the hook's first argument — the path
+        # to the message file git is about to use. A bare `$1` is NOT set
+        # inside a `run:` block, so the previous form always fell through to
+        # COMMIT_EDITMSG and checked the wrong file whenever the hook was
+        # invoked with an explicit path (`lefthook run commit-msg <file>`).
+        file="{1}"
+        [ -f "$file" ] || file="$(git rev-parse --git-path COMMIT_EDITMSG 2>/dev/null || true)"
         [ -f "$file" ] || exit 0
 
         first_line="$(head -n1 "$file" | tr -d '\r')"
