@@ -11,11 +11,11 @@ silent: true
 
 vars:
   # Shared task library — github.com/oleg-tkachuk/taskfiles.
-  # Publish it and this becomes:
-  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git/'
-  #   TASKLIB_REF: '?ref=v1.0.0'
+  # Consuming it from the registry instead of this checkout:
+  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//'
+  #   TASKLIB_TAG: v1.0.0
+  # and each include becomes '{{.TASKLIB}}<module>?ref={{.TASKLIB_TAG}}'.
   TASKLIB: ../../taskfiles
-  TASKLIB_REF: ""
 
   PROJECT_NAME: paladin-core
   IMAGE_NAMESPACE: paladin
@@ -38,12 +38,12 @@ vars:
   COMPOSE_FILE: ./deploy/docker-compose.yaml
 
 includes:
-  release:   { taskfile: '{{.TASKLIB}}/release{{.TASKLIB_REF}}', dir: . }
-  k8s:       { taskfile: '{{.TASKLIB}}/k8s{{.TASKLIB_REF}}', dir: . }
-  go:    { taskfile: '{{.TASKLIB}}/go{{.TASKLIB_REF}}', dir: . }
+  release:   { taskfile: '{{.TASKLIB}}/release', dir: . }
+  k8s:       { taskfile: '{{.TASKLIB}}/k8s', dir: . }
+  go:    { taskfile: '{{.TASKLIB}}/go', dir: . }
   # OrbStack shares the host's image store, so a build is already visible to
   # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
-  local: { taskfile: '{{.TASKLIB}}/runtime/orbstack{{.TASKLIB_REF}}', dir: . }
+  local: { taskfile: '{{.TASKLIB}}/runtime/orbstack', dir: . }
   gen:   { taskfile: tasks/gen.task.yaml, dir: . }
   auth:  { taskfile: tasks/auth.task.yaml, dir: . }
   test:  { taskfile: tasks/test.task.yaml, dir: . }
