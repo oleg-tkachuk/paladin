@@ -54,10 +54,15 @@ func TestMaxAttemptsNormalisation(t *testing.T) {
 	}
 }
 
-// NOT TESTED HERE, deliberately: the `attempts+1 >= max` boundary in
-// deliverAndMark. A test asserting `attempts+1 >= max` against a hand-written
-// table would re-implement the expression and pass no matter what the code
-// says — which is the shape this file exists to catch, and it was written that
-// way once before being deleted. Reaching the real boundary needs the delivery
-// loop and a transaction; it belongs in internal/integration and is recorded
-// in BACKLOG.
+// NOT TESTED HERE, deliberately: the `attempts+1 >= max` boundary. A test
+// asserting that expression against a hand-written table would re-implement it
+// and pass no matter what the code says — which is the shape this file exists
+// to catch, and it was written that way once before being deleted. Reaching
+// the real boundary needs the delivery loop and a transaction.
+//
+// It IS held now, by TestDispatcher_MaxAttemptsTransitionsToFailed in
+// tests/integration. That took extracting the rule into
+// OutboxRunner.markDeliveryFailed first: it had been written out separately at
+// four call sites — the single-row path plus one per batched sink family — and
+// the integration test only ever drove the HTTP one. A mutation run found the
+// NATS copy could be relaxed from >= to > with every test still passing.

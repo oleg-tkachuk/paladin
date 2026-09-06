@@ -961,12 +961,24 @@ open deliberately — each notes why._
   disjunctive guards that no test could see, the sharper being a bucket with
   replication DISABLED but a destination configured, which under `&&` copies a
   tenant's objects into another bucket against configuration.
-- **What is genuinely left, and why it is integration work:** OutboxRunner
-  holds a concrete `*pgxpool.Pool`, so its tick, depth sampling, mark-delivered
-  and mark-failed paths cannot be driven without a database. Five survivors
-  live there, including the `attempts+1 >= max` dead-letter boundary this entry
-  has always named. Asserting that against a hand-written table re-implements
-  the expression and passes whatever the code says — it needs rows.
+- **The dead-letter boundary is DONE, and the reason it looked open is worth
+  keeping.** `attempts+1 >= max` decides whether an event is retried or dropped
+  forever. It was written out at FOUR call sites — the single-row path plus one
+  per batched sink family — and the integration test only ever drove the HTTP
+  one, so the other three copies could each be relaxed from `>=` to `>` with
+  every test passing. A mutation run found the NATS copy; chasing it found the
+  duplication. The rule now lives once, in
+  `OutboxRunner.markDeliveryFailed`, and the existing
+  TestDispatcher_MaxAttemptsTransitionsToFailed holds it for all four sinks
+  (verified by mutating the single remaining copy).
+- **What is still genuinely left, and why it is integration work:**
+  OutboxRunner holds a concrete `*pgxpool.Pool`, so its tick, depth sampling
+  and mark-delivered paths cannot be driven without a database. The remaining
+  survivors live there.
+- **A denominator trap specific to this repo:** there are TWO integration
+  suites, `internal/integration` and `tests/integration`, and the dispatcher's
+  own tests are in the second. A measurement whose --test-cmd names only the
+  first reports branches as unheld that the other suite covers. Name both.
 - **Untested and unmeasured, worth its own pass:** `sink_nats.go` is 481 lines
   with no test file, while its three sibling sinks (kafka, rabbitmq, sqs) all
   have several. NATS is the live pipeline in this deployment. The asymmetry

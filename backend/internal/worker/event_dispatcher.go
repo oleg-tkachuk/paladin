@@ -993,9 +993,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 
 		// Failure path: bump attempts, schedule next attempt, or mark
 		// terminal failure when the sub's max-attempts budget is spent.
-		max := r.maxAttemptsFor(sub)
-		permanent := p.attempts+1 >= max
-		r.markFailed(ctx, tx, p.id, p.attempts, status, deliverErr.Error(), permanent)
+		r.markDeliveryFailed(ctx, tx, sub, p.id, p.attempts, status, deliverErr)
 	}
 
 	for key, queued := range sqsGroups {
@@ -1010,9 +1008,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 					return 0, err
 				}
 			} else {
-				max := r.maxAttemptsFor(q.sub)
-				permanent := q.row.attempts+1 >= max
-				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
+				r.markDeliveryFailed(ctx, tx, q.sub, q.row.id, q.row.attempts, 0, derr)
 			}
 		}
 	}
@@ -1029,9 +1025,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 					return 0, err
 				}
 			} else {
-				max := r.maxAttemptsFor(q.item.Sub)
-				permanent := q.row.attempts+1 >= max
-				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
+				r.markDeliveryFailed(ctx, tx, q.item.Sub, q.row.id, q.row.attempts, 0, derr)
 			}
 		}
 	}
@@ -1048,9 +1042,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 					return 0, err
 				}
 			} else {
-				max := r.maxAttemptsFor(q.item.Sub)
-				permanent := q.row.attempts+1 >= max
-				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
+				r.markDeliveryFailed(ctx, tx, q.item.Sub, q.row.id, q.row.attempts, 0, derr)
 			}
 		}
 	}
@@ -1078,6 +1070,28 @@ func (r *OutboxRunner) markDelivered(ctx context.Context, tx pgx.Tx, id uuid.UUI
 		return fmt.Errorf("mark delivered: %w", err)
 	}
 	return nil
+}
+
+// markDeliveryFailed records one failed delivery attempt and decides, from the
+// subscription's own budget, whether this attempt was the last.
+//
+// The rule lives here once because it decides whether an event is retried or
+// dropped forever, and it used to be written out at each of the four call
+// sites below — the single-row path plus one per batched sink family. Four
+// copies of a boundary is how a boundary drifts: a test that holds the HTTP
+// path says nothing about the NATS one, which is exactly what a mutation run
+// found (the copy in the NATS branch could be relaxed from >= to > with every
+// test still passing).
+func (r *OutboxRunner) markDeliveryFailed(
+	ctx context.Context,
+	tx pgx.Tx,
+	sub admindomain.EventSubscription,
+	id uuid.UUID,
+	attempts, statusCode int,
+	deliverErr error,
+) {
+	permanent := attempts+1 >= r.maxAttemptsFor(sub)
+	r.markFailed(ctx, tx, id, attempts, statusCode, deliverErr.Error(), permanent)
 }
 
 // markFailed bumps attempts, records the error, and either schedules
