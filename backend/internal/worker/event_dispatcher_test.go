@@ -722,6 +722,14 @@ func TestParseNatsCredentials_Schemes(t *testing.T) {
 		{"jwt:onlyjwt", true, false}, // missing '+<seed>' half → error
 		{"unknown:x", true, false},
 		{"noscheme", true, false},
+		// The half-empty forms. NatsConnPool.get dials only after this
+		// returns, so any of these coming back as a nil option with no error
+		// would connect ANONYMOUSLY to a cluster the operator configured
+		// credentials for.
+		{":s3cret", true, false},   // empty scheme
+		{"nkey:", true, false},     // scheme with no seed
+		{"jwt:+seed", true, false}, // empty jwt half
+		{"jwt:abc+", true, false},  // empty seed half
 	}
 	for _, c := range cases {
 		opt, err := parseNatsCredentials(c.ref)
@@ -730,6 +738,12 @@ func TestParseNatsCredentials_Schemes(t *testing.T) {
 		}
 		if c.wantNil && opt != nil {
 			t.Errorf("ref=%q: expected nil option, got %v", c.ref, opt)
+		}
+		// An error must never arrive alongside a usable option: get() checks
+		// the error, but a caller that looked at the option first would dial
+		// with a credential the parser rejected.
+		if c.wantErr && opt != nil {
+			t.Errorf("ref=%q: rejected, yet returned a usable option", c.ref)
 		}
 	}
 

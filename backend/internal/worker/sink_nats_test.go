@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nats-io/nkeys"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
@@ -31,65 +30,6 @@ func natsSub(t *testing.T, kind, url, subject, creds string) admindomain.EventSu
 	}
 }
 
-// Every malformed credential must come back as an error, because
-// NatsConnPool.get dials only after this returns. A form that parsed to a nil
-// option without an error would connect ANONYMOUSLY to a cluster the operator
-// configured credentials for — no failure to see, just an unauthenticated
-// publisher.
-func TestParseNatsCredentials(t *testing.T) {
-	seed, err := nkeys.CreateUser()
-	if err != nil {
-		t.Fatalf("generate nkey: %v", err)
-	}
-	rawSeed, err := seed.Seed()
-	if err != nil {
-		t.Fatalf("export seed: %v", err)
-	}
-
-	for _, tc := range []struct {
-		name    string
-		ref     string
-		wantOpt bool
-		wantErr bool
-	}{
-		{"empty is anonymous, not an error", "", false, false},
-		{"token", "token:s3cret", true, false},
-		{"nkey with a real seed", "nkey:" + string(rawSeed), true, false},
-		{"jwt with a bare seed", "jwt:abc+" + string(rawSeed), true, false},
-		{"jwt tolerating an nkey prefix", "jwt:abc+nkey:" + string(rawSeed), true, false},
-
-		{"no scheme separator", "s3cret", false, true},
-		{"empty scheme", ":s3cret", false, true},
-		{"unknown scheme", "basic:user:pass", false, true},
-		{"token with no value", "token:", false, true},
-		{"nkey with no seed", "nkey:", false, true},
-		{"nkey with a seed that is not one", "nkey:not-a-seed", false, true},
-		{"jwt with no separator", "jwt:abc", false, true},
-		{"jwt with an empty jwt half", "jwt:+" + string(rawSeed), false, true},
-		{"jwt with an empty seed half", "jwt:abc+", false, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			opt, err := parseNatsCredentials(tc.ref)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("parsed %q without an error — the pool would dial "+
-						"this cluster unauthenticated", tc.ref)
-				}
-				if opt != nil {
-					t.Error("an error came back alongside a usable option")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if (opt != nil) != tc.wantOpt {
-				t.Errorf("option present = %v, want %v", opt != nil, tc.wantOpt)
-			}
-		})
-	}
-}
-
 // The pool key is what stops two subscriptions on the same cluster from
 // sharing a connection when they authenticate as different principals.
 func TestPoolKey_SeparatesByCredentials(t *testing.T) {
@@ -109,64 +49,47 @@ func TestPoolKey_SeparatesByCredentials(t *testing.T) {
 }
 
 // natsGroupTarget decides which rows are batched together, and
-// deliverNATSBatch resolves the connection from the FIRST item on the
-// stated assumption that "all items share url + credentials_ref by
-// construction". That assumption is only true while the grouping key carries
-// the credentials — otherwise a batch mixes two auth principals and every
-// row after the first publishes under the wrong one.
-func TestNatsGroupTarget(t *testing.T) {
+// deliverNATSBatch resolves the connection from the FIRST item, on the stated
+// assumption that "all items share url + credentials_ref by construction".
+// That assumption holds only while the grouping key carries the credentials —
+// otherwise a batch mixes two auth principals and every row after the first
+// publishes under the wrong one.
+//
+// TestNATSGroupTarget in sink_batch_test.go already covers the url and
+// sink-kind cases. These are the three it does not: credentials, a missing
+// subject, and a config that does not parse.
+func TestNatsGroupTarget_SeparatesByCredentials(t *testing.T) {
 	const url = "nats://broker.internal:4222"
 
-	t.Run("groups by connection identity, credentials included", func(t *testing.T) {
-		a, okA := natsGroupTarget(natsSub(t, "nats", url, "events", "token:a"))
-		b, okB := natsGroupTarget(natsSub(t, "nats", url, "events", "token:b"))
-		if !okA || !okB {
-			t.Fatal("a well-formed nats subscription was not groupable")
-		}
-		if a == b {
-			t.Error("subscriptions with different credentials landed in one " +
-				"batch; the batch dials once, so the second principal's events " +
-				"publish over the first's connection")
-		}
-		if a != poolKey(url, "token:a") {
-			t.Errorf("the group key %q is not the pool key — rows would be "+
-				"batched by one identity and connected by another", a)
-		}
-	})
-
-	t.Run("same target groups together", func(t *testing.T) {
-		a, _ := natsGroupTarget(natsSub(t, "nats", url, "events", "token:a"))
-		b, _ := natsGroupTarget(natsSub(t, "nats", url, "other-subject", "token:a"))
-		if a != b {
-			t.Error("two subscriptions on one connection did not group; the " +
-				"batching gains nothing")
-		}
-	})
-
-	for _, tc := range []struct {
-		name string
-		sub  admindomain.EventSubscription
-	}{
-		{"a non-nats sink", natsSub(t, "kafka", url, "events", "")},
-		{"no url", natsSub(t, "nats", "", "events", "")},
-		{"no subject", natsSub(t, "nats", url, "", "")},
-	} {
-		t.Run("not groupable: "+tc.name, func(t *testing.T) {
-			if _, ok := natsGroupTarget(tc.sub); ok {
-				t.Error("returned a group key for a subscription it cannot deliver")
-			}
-		})
+	a, okA := natsGroupTarget(natsSub(t, "nats", url, "events", "token:a"))
+	b, okB := natsGroupTarget(natsSub(t, "nats", url, "events", "token:b"))
+	if !okA || !okB {
+		t.Fatal("a well-formed nats subscription was not groupable")
 	}
+	if a == b {
+		t.Error("subscriptions with different credentials landed in one batch; " +
+			"the batch dials once, so the second principal's events publish " +
+			"over the first's connection")
+	}
+	if a != poolKey(url, "token:a") {
+		t.Errorf("the group key %q is not the pool key — rows would be batched "+
+			"by one identity and connected by another", a)
+	}
+}
 
-	t.Run("not groupable: unparseable sink config", func(t *testing.T) {
-		sub := admindomain.EventSubscription{
-			SubscriptionID: uuid.New(), SinkKind: "nats",
-			SinkConfig: []byte("{not json"),
-		}
-		if _, ok := natsGroupTarget(sub); ok {
-			t.Error("returned a group key for a config that does not parse")
-		}
-	})
+func TestNatsGroupTarget_RefusesIncompleteConfigs(t *testing.T) {
+	const url = "nats://broker.internal:4222"
+
+	if _, ok := natsGroupTarget(natsSub(t, "nats", url, "", "")); ok {
+		t.Error("a subscription with no subject was grouped; there is nowhere " +
+			"to publish it")
+	}
+	unparseable := admindomain.EventSubscription{
+		SubscriptionID: uuid.New(), SinkKind: "nats", SinkConfig: []byte("{not json"),
+	}
+	if _, ok := natsGroupTarget(unparseable); ok {
+		t.Error("returned a group key for a config that does not parse")
+	}
 }
 
 // The comment on natsDedupID states the invariant: the JetStream Nats-Msg-Id
