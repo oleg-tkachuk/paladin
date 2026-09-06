@@ -191,7 +191,30 @@ def main() -> int:
         return 3
 
     total = caught + survived
-    pct = (100 * caught / total) if total else 0
+
+    # A run that scored nothing is not a 0% run — it is a run that measured
+    # nothing, and printing a percentage for it is the same failure this tool
+    # exists to find. It happens when the test command itself cannot start:
+    # --test-cmd is split with shlex and executed WITHOUT a shell, so a `&&`
+    # or a pipe in it becomes an argument to go test, every mutation "fails to
+    # build", and the report reads 0% as though the tests held nothing.
+    # Chain commands with `sh -c '...'` instead.
+    if total == 0:
+        print(f"\n!! nothing was scored: all {skipped} mutations failed to build. "
+              f"Usually the test command cannot run at all rather than the "
+              f"mutations being invalid — check it in isolation first:\n     {cmd}",
+              file=sys.stderr)
+        return 4
+
+    # Mutations that do not compile are honest (a swap can be ill-typed), but a
+    # majority of them means the denominator is suspect and the percentage is
+    # computed over whatever survived the wreckage.
+    if skipped > total:
+        print(f"\n!! {skipped} of {skipped + total} mutations failed to build — "
+              f"more than were scored. Treat the percentage below as unreliable "
+              f"until that is explained.", file=sys.stderr)
+
+    pct = 100 * caught / total
     print(f"\n=== {args.package}: caught {caught}, survived {survived}, "
           f"did not compile {skipped} (not counted) — {pct:.0f}%")
     for path, line, rule, text in survivors:
