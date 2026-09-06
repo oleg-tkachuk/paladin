@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -54,5 +55,28 @@ func TestStaleOperationReclaimer_DisabledByZeroInterval(t *testing.T) {
 	}
 	if len(repo.calls) != 0 {
 		t.Error("disabled reclaimer still called the store")
+	}
+}
+
+// The guard is a disjunction — a zero interval OR no repo disables the job —
+// and the existing test above exercises only the interval half. Inverting the
+// repo half makes a fully-configured reclaimer return immediately and never
+// tick: abandoned operations then show in the console as running forever,
+// which is the exact failure this worker exists to end.
+//
+// The observable is the return: a configured reclaimer enters RunTicker and
+// comes back with the context's error, while a disabled one returns nil.
+func TestStaleOperationReclaimer_ConfiguredRunnerActuallyRuns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	w := &StaleOperationReclaimer{
+		Repo:     &countingReclaimRepo{calls: make(chan time.Duration, 1)},
+		Interval: time.Minute,
+	}
+	if err := w.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("Run = %v, want context.Canceled — a configured reclaimer that "+
+			"returns nil never entered its loop, and nothing reclaims the "+
+			"operations stuck at RUNNING", err)
 	}
 }

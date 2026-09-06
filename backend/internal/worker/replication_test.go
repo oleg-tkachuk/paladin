@@ -160,3 +160,60 @@ func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
 	}
 	w.tick(context.Background()) // should not panic
 }
+
+// The skip guard is a disjunction: replication off OR no destination. The
+// disabled-bucket test above sets BOTH halves true, so it cannot tell the
+// operators apart — joining them with && still skips that bucket and the
+// mutation survives.
+//
+// Isolating a half is not enough on its own either: the fixture has to be one
+// that WOULD copy if the guard let it through. The first attempt at this test
+// used a bucket with no bindings and no objects, so nothing was copied whether
+// the guard fired or not, and it passed against the mutant as happily as
+// against the real code.
+//
+// So this starts from the copying fixture and changes exactly one field.
+func TestReplicationWorkerSkipsADisabledBucketThatWouldOtherwiseCopy(t *testing.T) {
+	tenantID := uuid.Must(uuid.NewV7())
+	now := time.Now()
+	committed := now.Add(-30 * time.Second)
+
+	src := &fakeReplSource{
+		buckets: []admindomain.Bucket{{
+			BackendID:  "primary",
+			BucketName: "paladin-archive",
+			Replication: admindomain.BucketReplication{
+				// The only difference from the copying test: replication is
+				// off, while a valid destination is still configured. Under
+				// && this bucket replicates, copying a tenant's objects into
+				// another bucket against the configuration that forbids it.
+				Enabled:           false,
+				DestinationBucket: "storageBackends/secondary/buckets/paladin-archive-dr",
+			},
+		}},
+		bindings: map[string][]CollectionBinding{
+			"primary/paladin-archive": {{TenantID: tenantID, Collection: "k"}},
+		},
+	}
+	objs := &fakeObjIter{rows: []LifecycleObjectRow{
+		{ObjectID: uuid.Must(uuid.NewV7()), State: "AVAILABLE", CommittedAt: &committed},
+	}}
+	rep := &fakeReplicator{}
+	w := &ReplicationWorker{
+		Buckets:        src,
+		Objects:        objs,
+		Replicator:     rep,
+		LookbackWindow: time.Hour,
+		Now:            func() time.Time { return now },
+		watermarks:     map[string]time.Time{},
+	}
+
+	w.tick(context.Background())
+
+	rep.mu.Lock()
+	defer rep.mu.Unlock()
+	if len(rep.copies) != 0 {
+		t.Errorf("%d objects were replicated out of a bucket whose replication "+
+			"is disabled", len(rep.copies))
+	}
+}
