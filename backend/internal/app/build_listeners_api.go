@@ -534,7 +534,7 @@ func dialLocalListener(ctx context.Context, addr string, useTLS bool) error {
 	d := net.Dialer{Timeout: 2 * time.Second}
 
 	if useTLS {
-		td := &tls.Dialer{NetDialer: &d, Config: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // dialling ourselves; identity is not what this probes
+		td := &tls.Dialer{NetDialer: &d, Config: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- dialling ourselves; identity is not what this probes
 		conn, err := td.DialContext(ctx, "tcp", target)
 		if err != nil {
 			return fmt.Errorf("not accepting TLS on port %s: %w", port, err)

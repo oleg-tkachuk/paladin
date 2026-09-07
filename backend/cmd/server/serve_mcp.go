@@ -458,7 +458,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	go func() { //nolint:gosec // G118: detached ctx is intentional — parent ctx is already canceled at shutdown time
+	go func() { // #nosec G118 -- detached ctx is intentional; the parent ctx is already canceled at shutdown time
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaultShutdownGrace)
 		defer cancel()
