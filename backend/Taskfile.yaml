@@ -55,7 +55,17 @@ includes:
       BUF_TEMPLATE: proto/buf.gen.yaml
       GENERATED_DIRS: internal/api/pb
       PROTO_FORBID: proto/internal
-  auth:  { taskfile: tasks/auth.task.yaml, dir: . }
+  auth:
+    taskfile: '{{.TASKLIB}}auth{{.TASKLIB_REF}}'
+    dir: .
+    vars:
+      JWT_ISS: paladin-dev
+      JWT_AUD: paladin-api
+      JWT_TTL_SECONDS: "6048000"
+      # platform.admin in dot form — the hyphen form is a different role
+      # and gets no cross-tenant access. The tenant claim is what the
+      # per-tenant RPCs read; drop it for a platform-only token.
+      JWT_CLAIMS: '{"roles":["platform.admin"],"tenant":"3a823fd4-0b3d-4ce2-a280-93b8d75cc07b"}'
   test:  { taskfile: tasks/test.task.yaml, dir: . }
 
 tasks:
