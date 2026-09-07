@@ -12,12 +12,10 @@ silent: true
 vars:
   # Shared task library — github.com/oleg-tkachuk/taskfiles.
   # Consuming it from the registry instead of this checkout:
-  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//'
-  #   TASKLIB_REF: '?ref=v2.2.0'
-  # The include lines do not change: an undeclared TASKLIB_REF renders as
-  # nothing, which is what makes this checkout work without one.
-  TASKLIB: ../../taskfiles/
-
+  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v2.2.1'
+  # That one line is the whole switch — the includes below name a module and
+  # nothing else.
+  TASKLIB: '../../taskfiles/%s'
   PROJECT_NAME: paladin-core
   IMAGE_NAMESPACE: paladin
   K8S_NAMESPACE: paladin
@@ -41,14 +39,14 @@ vars:
   COMPOSE_FILE: ./deploy/docker-compose.yaml
 
 includes:
-  release:   { taskfile: '{{.TASKLIB}}release{{.TASKLIB_REF}}', dir: . }
-  k8s:       { taskfile: '{{.TASKLIB}}k8s{{.TASKLIB_REF}}', dir: . }
-  go:    { taskfile: '{{.TASKLIB}}go{{.TASKLIB_REF}}', dir: . }
+  release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }
+  k8s:       { taskfile: '{{printf .TASKLIB "k8s"}}', dir: . }
+  go:    { taskfile: '{{printf .TASKLIB "go"}}', dir: . }
   # OrbStack shares the host's image store, so a build is already visible to
   # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
-  local: { taskfile: '{{.TASKLIB}}runtime/orbstack{{.TASKLIB_REF}}', dir: . }
+  local: { taskfile: '{{printf .TASKLIB "runtime/orbstack"}}', dir: . }
   codegen:
-    taskfile: '{{.TASKLIB}}codegen{{.TASKLIB_REF}}'
+    taskfile: '{{printf .TASKLIB "codegen"}}'
     dir: .
     vars:
       BUF_INPUT: proto
@@ -56,7 +54,7 @@ includes:
       GENERATED_DIRS: internal/api/pb
       PROTO_FORBID: proto/internal
   auth:
-    taskfile: '{{.TASKLIB}}auth{{.TASKLIB_REF}}'
+    taskfile: '{{printf .TASKLIB "auth"}}'
     dir: .
     vars:
       JWT_ISS: paladin-dev
