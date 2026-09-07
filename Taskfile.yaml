@@ -26,6 +26,16 @@ vars:
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
   TASKLIB: '../taskfiles/%s'
 includes:
+  # Repo-wide scans from the shared library. Not wired into this repo's own
+  # aggregates on purpose: the tasks are here to be run, not to change what
+  # an existing gate already does.
+  sec:
+    taskfile: '{{printf .TASKLIB "security"}}'
+    dir: .
+    vars:
+      BASE: develop
+      GO_MODULES: >-
+        capability backend
   backend:
     taskfile: backend/Taskfile.yaml
     dir: backend
