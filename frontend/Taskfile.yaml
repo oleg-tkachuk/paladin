@@ -10,7 +10,7 @@ silent: true
 vars:
   # Shared task library — github.com/oleg-tkachuk/taskfiles.
   # Consuming it from the registry instead of this checkout:
-  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v3.0.0'
+  #   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v3.1.0'
   # That one line is the whole switch — the includes below name a module and
   # nothing else.
   TASKLIB: '../../taskfiles/%s'
