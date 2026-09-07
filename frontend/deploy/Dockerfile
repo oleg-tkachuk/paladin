@@ -24,7 +24,7 @@
 # both in lockstep — see renovate.json. Bump the tag and digest together.
 ARG NODE_VERSION=26
 # renovate: datasource=npm depName=pnpm
-ARG PNPM_VERSION=11.25.0
+ARG PNPM_VERSION=12.3.4
 
 # -----------------------------------------------------------------------------
 # Stage 1 — deps. Pinned to BUILDPLATFORM so a multi-arch run doesn't
