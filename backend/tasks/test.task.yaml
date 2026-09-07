@@ -84,7 +84,10 @@ tasks:
   bench:
     desc: "Run Postgres-backed benchmarks (needs Docker; seeds ~1M rows)"
     cmds:
-      - go test -tags=integration -run='^$' -bench=. -benchtime=20x -timeout=600s ./internal/integration/... ./tests/integration/...
+      - task: ":go:bench"
+        vars:
+          GO_BENCH_PKG: "./internal/integration/... ./tests/integration/..."
+          GO_BENCH_FLAGS: "-benchtime=20x -timeout=600s"
 
   stack:
     desc: "Boot the compose stack once and run every gate that needs it (RPC surface + Go e2e + dev-bootstrap)"
