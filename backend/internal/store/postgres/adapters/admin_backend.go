@@ -237,7 +237,7 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 		})
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		next = out[len(out)-1].BackendID
 	}
 	return out, next, nil

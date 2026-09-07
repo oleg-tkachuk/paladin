@@ -189,7 +189,7 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 		out = append(out, userFromSQLC(row))
 	}
 	var next string
-	if int32(len(out)) == limit && len(out) > 0 {
+	if len(out) == int(limit) && len(out) > 0 {
 		next = out[len(out)-1].UserID.String()
 	}
 	return out, next, nil

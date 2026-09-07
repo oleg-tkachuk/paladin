@@ -103,7 +103,7 @@ func (r *ObjectTagRepo) List(ctx context.Context, tenantID uuid.UUID, pageSize i
 		out = append(out, ObjectTagFromSQLC(row.ObjectTag))
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		next = out[len(out)-1].Slug
 	}
 	return out, next, nil

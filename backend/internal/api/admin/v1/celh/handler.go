@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"connectrpc.com/connect"
 
@@ -57,8 +58,8 @@ func (h *Handler) Validate(ctx context.Context, req *connect.Request[pb.Validate
 		return connect.NewResponse(&pb.ValidateCELResponse{
 			Valid:   false,
 			Message: ce.Message,
-			Line:    int32(ce.Line),
-			Column:  int32(ce.Column),
+			Line:    safecast.Int32(ce.Line),
+			Column:  safecast.Int32(ce.Column),
 		}), nil
 	}
 	// Defence in depth — CompileFirstError always returns *CompileError

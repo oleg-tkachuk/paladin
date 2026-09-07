@@ -119,7 +119,7 @@ func (w *LifecycleHardDeleter) Sweep(ctx context.Context) {
 		}
 		// If we pulled fewer than the batch, the queue is drained;
 		// don't issue another no-op SELECT.
-		if int32(len(rows)) < w.BatchSize {
+		if len(rows) < int(w.BatchSize) {
 			return
 		}
 	}

@@ -125,7 +125,7 @@ func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid
 		last := rows[len(rows)-1]
 		afterID = last.ID
 		// Short page → no more rows.
-		if int32(len(rows)) < it.pageSize {
+		if len(rows) < int(it.pageSize) {
 			return nil
 		}
 	}

@@ -92,7 +92,7 @@ func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSi
 		out = append(out, v)
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		last := out[len(out)-1]
 		next = encodeVersionCursor(last.CreatedAt, last.VersionID)
 	}

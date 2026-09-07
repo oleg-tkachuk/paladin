@@ -314,7 +314,7 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 		out = append(out, bucketFromV2RowList(row))
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		last := out[len(out)-1]
 		next = last.BackendID + "/" + last.BucketName
 	}
@@ -334,7 +334,7 @@ func (r *BucketRepoV2) ListAccessible(ctx context.Context, tenantID uuid.UUID, p
 		out = append(out, bucketFromV2RowAccessible(row))
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		last := out[len(out)-1]
 		next = last.BackendID + "/" + last.BucketName
 	}

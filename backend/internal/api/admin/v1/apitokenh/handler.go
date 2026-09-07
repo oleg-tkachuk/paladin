@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"strings"
 	"time"
 
@@ -318,7 +319,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.API
 	}
 	resp := &adminv1.APITokenServiceGetUsageResponse{
 		Name:                req.Msg.GetName(),
-		LimitRpm:            int32(tok.RateLimitRPM),
+		LimitRpm:            safecast.Int32(tok.RateLimitRPM),
 		CurrentBucketCount:  snap.CurrentBucketCount,
 		PreviousBucketCount: snap.PreviousBucketCount,
 		WeightedCount:       snap.WeightedCount,
@@ -355,7 +356,7 @@ func tokenToProto(t api_token.Token) *adminv1.APIToken {
 		ExpiresAt:    timestamppb.New(t.ExpiresAt),
 		CreatedAt:    timestamppb.New(t.CreatedAt),
 		CreatedBy:    t.CreatedBy,
-		RateLimitRpm: int32(t.RateLimitRPM),
+		RateLimitRpm: safecast.Int32(t.RateLimitRPM),
 	}
 	if t.RevokedAt != nil {
 		out.RevokedAt = timestamppb.New(*t.RevokedAt)

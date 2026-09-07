@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"time"
 
 	"connectrpc.com/connect"
@@ -457,7 +458,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	defer cancel()
 	start := time.Now()
 	perr := h.prober.Probe(pctx, got)
-	out := &TestBackendOutput{LatencyMs: int32(time.Since(start).Milliseconds())}
+	out := &TestBackendOutput{LatencyMs: safecast.Int32From64(time.Since(start).Milliseconds())}
 	status := "ok"
 	if perr != nil {
 		out.Reachable = false

@@ -231,7 +231,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	// filtered rows on the next page. A full page (len(rows)==pageSize)
 	// means more may exist; a short page means the keyset is exhausted.
 	var next string
-	if int32(len(rows)) == pageSize && len(rows) > 0 {
+	if len(rows) == int(pageSize) && len(rows) > 0 {
 		next = uuid.UUID(rows[len(rows)-1].Object.ID.Bytes).String()
 	}
 	return out, next, nil
@@ -291,7 +291,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 				return matched, false, nil
 			}
 		}
-		if int32(len(rows)) < pageSize {
+		if len(rows) < int(pageSize) {
 			return matched, true, nil
 		}
 	}

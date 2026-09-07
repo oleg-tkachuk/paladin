@@ -74,7 +74,7 @@ func (r *EventSubscriptionRepoV2) List(ctx context.Context, args admindomain.Lis
 		out = append(out, eventSubFromSQLC(row))
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		next = out[len(out)-1].SubscriptionID.String()
 	}
 	return out, next, nil

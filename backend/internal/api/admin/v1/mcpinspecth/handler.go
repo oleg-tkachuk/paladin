@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"net"
 	"net/http"
 	"net/url"
@@ -443,7 +444,7 @@ func (h *Handler) GetBridgeStatus(
 			continue
 		}
 		out.Reachable = true
-		out.Sessions = int32(st.Sessions)
+		out.Sessions = safecast.Int32(st.Sessions)
 		out.CheckedAt = timestamppb.New(st.CheckedAt)
 		for _, u := range st.Upstreams {
 			out.Upstreams = append(out.Upstreams, &adminv1.MCPUpstreamHealth{

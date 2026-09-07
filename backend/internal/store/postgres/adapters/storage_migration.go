@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -48,7 +49,7 @@ func migFromSQLC(m sqlc.TenantStorageMigration,
 }
 
 func (r *StorageMigrationRepo) ListActive(ctx context.Context, limit int) ([]worker.StorageMigration, error) {
-	rows, err := r.q.ListActiveStorageMigrations(ctx, int32(limit))
+	rows, err := r.q.ListActiveStorageMigrations(ctx, safecast.Int32(limit))
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +107,7 @@ func (r *StorageMigrationRepo) SetCopying(ctx context.Context, tenantID uuid.UUI
 func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]worker.ObjectRef, error) {
 	var out []worker.ObjectRef
 	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
-		rows, e := q.MigrationListTenantObjects(ctx, pgUUID(tenantID), afterCollection, afterKey, int32(limit))
+		rows, e := q.MigrationListTenantObjects(ctx, pgUUID(tenantID), afterCollection, afterKey, safecast.Int32(limit))
 		if e != nil {
 			return e
 		}

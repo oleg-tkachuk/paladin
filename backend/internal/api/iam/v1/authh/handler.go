@@ -546,7 +546,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 		return nil, "", connect.NewError(connect.CodeInternal, err)
 	}
 	var next string
-	if int32(len(matches)) > limit {
+	if len(matches) > int(limit) {
 		matches = matches[:limit]
 		last := matches[len(matches)-1]
 		next = encodeMembershipCursor(last.CreatedAt, last.UserID)

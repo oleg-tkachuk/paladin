@@ -215,7 +215,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 			out = append(out, collectionFromSQLC(row.Collection, row.BackendName, row.BucketName))
 		}
 		var next string
-		if int32(len(out)) == pageSize && len(out) > 0 {
+		if len(out) == int(pageSize) && len(out) > 0 {
 			next = out[len(out)-1].Collection
 		}
 		return out, next, nil
@@ -287,7 +287,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		return nil, "", fmt.Errorf("list collections: rows err: %w", err)
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		next = out[len(out)-1].Collection
 	}
 	return out, next, nil

@@ -263,7 +263,7 @@ LIMIT  $%d;
 	}
 
 	nextCursor := ""
-	if int32(len(out)) > limit {
+	if len(out) > int(limit) {
 		out = out[:limit]
 		// Seek past the last row RETURNED, not past the overflow row we
 		// fetched to detect the next page — the overflow row belongs to

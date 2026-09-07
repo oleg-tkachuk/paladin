@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
@@ -115,7 +116,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			s3adapter.NewProvisionerRouter(deps.Registry),
 			worker.BucketReconcilerConfig{
 				Interval:  cfg.Worker.Jobs.Reconciler.Interval,
-				BatchSize: int32(cfg.Worker.Jobs.Reconciler.BatchSize),
+				BatchSize: safecast.Int32(cfg.Worker.Jobs.Reconciler.BatchSize),
 			},
 			l.Named("bucket-reconciler"),
 		)
@@ -214,7 +215,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Q:          reaperQ,
 			Storage:    s3adapter.NewMultipartRouter(deps.Registry),
 			Interval:   cfg.Worker.Jobs.PurgeDrain.Interval,
-			BatchSize:  int32(cfg.Worker.Jobs.PurgeDrain.BatchSize),
+			BatchSize:  safecast.Int32(cfg.Worker.Jobs.PurgeDrain.BatchSize),
 			MaxBackoff: cfg.Worker.Jobs.PurgeDrain.MaxBackoff,
 			Logger:     l.Named("multipart-abort-drainer"),
 		})
@@ -273,7 +274,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Storage:    s3adapter.NewObjectRouter(deps.Registry),
 			Events:     purgeEvents,
 			Interval:   cfg.Worker.Jobs.PurgeDrain.Interval,
-			BatchSize:  int32(cfg.Worker.Jobs.PurgeDrain.BatchSize),
+			BatchSize:  safecast.Int32(cfg.Worker.Jobs.PurgeDrain.BatchSize),
 			MaxBackoff: cfg.Worker.Jobs.PurgeDrain.MaxBackoff,
 			Logger:     l.Named("purge-drainer"),
 		})

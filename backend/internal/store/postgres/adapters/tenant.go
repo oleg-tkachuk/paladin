@@ -485,7 +485,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 		out = append(out, t)
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		next = out[len(out)-1].TenantID.String()
 	}
 	return out, next, nil

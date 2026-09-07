@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -492,7 +493,7 @@ func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
-		MaxRequests:            int32(c.MaxRequests),
+		MaxRequests:            safecast.Int32(c.MaxRequests),
 		MaxBudgetAmount:        c.MaxBudgetAmount,
 		UnitCode:               unit,
 		AllowTaintedRead:       c.AllowTaintedRead,

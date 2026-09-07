@@ -155,7 +155,7 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 		out = append(out, auditEntryFromModel(row.AuditLog))
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		last := out[len(out)-1]
 		next = last.At.UTC().Format(time.RFC3339Nano) + "/" + last.EntryID.String()
 	}

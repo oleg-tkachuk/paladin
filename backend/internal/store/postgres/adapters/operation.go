@@ -199,7 +199,7 @@ func (r *OperationRepo) List(
 		}
 	}
 	var next string
-	if int32(len(out)) == pageSize && len(out) > 0 {
+	if len(out) == int(pageSize) && len(out) > 0 {
 		next = out[len(out)-1].OperationID.String()
 	}
 	return out, next, nil
