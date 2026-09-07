@@ -28,8 +28,6 @@ vars:
   BUILDX_BUILDER: lean
   DOCKERFILE: ./deploy/Dockerfile
   DOCKER_BUILD_FLAGS: --network=host
-  # This app is pinned to npm through package-lock.json.
-  PM: npm
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }

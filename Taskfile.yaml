@@ -29,11 +29,22 @@ includes:
   # Repo-wide scans from the shared library. Not wired into this repo's own
   # aggregates on purpose: the tasks are here to be run, not to change what
   # an existing gate already does.
+  pnpm:
+    taskfile: '{{printf .TASKLIB "pnpm"}}'
+    dir: .
+    vars: { PNPM_APPS: frontend }
   sec:
     taskfile: '{{printf .TASKLIB "security"}}'
     dir: .
     vars:
       BASE: develop
+      # trivy 0.74 does not pick .trivyignore.yaml up on its own.
+      TRIVY_FLAGS: --ignorefile .trivyignore.yaml
+      # sqlc, protobuf and mock output is not written by hand and not reviewed
+      # as source; gosec reads its SQL string constants as hardcoded
+      # credentials. Excluding it drops 141 of 188 findings, all of them noise,
+      # and leaves the ones in code somebody wrote.
+      GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
       GO_MODULES: >-
         capability backend
   backend:

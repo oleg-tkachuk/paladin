@@ -1,0 +1,17 @@
+vulnerabilities:
+  - id: GO-2026-5932
+    statement: >-
+      An advisory that golang.org/x/crypto/openpgp is unmaintained, with no
+      fixed version to move to. Nothing here imports it: govulncheck, which
+      resolves reachability rather than presence, reports "0 vulnerabilities in
+      packages you import". Revisit if that ever stops being true.
+
+secrets:
+  - id: jwt-token
+    paths:
+      - "frontend/configs/config.yaml.localhost"
+    statement: >-
+      A dev-only fallback Bearer token, signed with the public placeholder
+      secret the config documents two lines above it and minted with a 24h
+      expiry, so it has been dead since the day it was committed. Scoped to
+      this one path so a real JWT anywhere else still fails the scan.
