@@ -47,7 +47,14 @@ includes:
   # OrbStack shares the host's image store, so a build is already visible to
   # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
   local: { taskfile: '{{.TASKLIB}}runtime/orbstack{{.TASKLIB_REF}}', dir: . }
-  gen:   { taskfile: tasks/gen.task.yaml, dir: . }
+  codegen:
+    taskfile: '{{.TASKLIB}}codegen{{.TASKLIB_REF}}'
+    dir: .
+    vars:
+      BUF_INPUT: proto
+      BUF_TEMPLATE: proto/buf.gen.yaml
+      GENERATED_DIRS: internal/api/pb
+      PROTO_FORBID: proto/internal
   auth:  { taskfile: tasks/auth.task.yaml, dir: . }
   test:  { taskfile: tasks/test.task.yaml, dir: . }
 
@@ -92,7 +99,7 @@ tasks:
   generate:
     desc: "Regenerate mocks, proto stubs and sqlc bindings"
     cmds:
-      - task: gen:all
+      - task: codegen:all
 
   up:
     desc: "Start the local compose stack (postgres + seaweedfs + service)"
