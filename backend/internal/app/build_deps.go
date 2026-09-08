@@ -220,6 +220,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	// API-token subsystem — additive; same disabled-by-default rule.
 	apiTok, err := BuildAPITokenBundle(cfg.APIToken, cfg.Auth.SigningKey, l, deps)
 	if err != nil {
+		deps.StopWatchers() // same reason as the capability branch above
 		return nil, fmt.Errorf("app: api_token bundle: %w", err)
 	}
 	deps.APIToken = apiTok
