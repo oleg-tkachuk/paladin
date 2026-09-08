@@ -187,3 +187,88 @@ func TestEmitUploaded_NilProducerIsANoOp(t *testing.T) {
 		t.Errorf("emitUploaded with no producer = %v, want nil", err)
 	}
 }
+
+// tenantRecorder captures the pgtype.UUID the handler passes down, which the
+// other fakes discard.
+type tenantRecorder struct {
+	fakeLookup
+	gotLookupTenant pgtype.UUID
+	gotBindTenant   pgtype.UUID
+}
+
+func (r *tenantRecorder) LookupObjectByKey(_ context.Context, t pgtype.UUID, collection, key string) (sqlc.LookupObjectByKeyRow, error) {
+	r.lookupCalled = true
+	r.gotLookupTenant = t
+	r.gotCollection, r.gotKey = collection, key
+	return sqlc.LookupObjectByKeyRow{}, pgx.ErrNoRows
+}
+
+func (r *tenantRecorder) GetCollection(_ context.Context, t pgtype.UUID, _ string) (sqlc.GetCollectionRow, error) {
+	r.gotBindTenant = t
+	return r.binding, r.bindingErr
+}
+
+// The tenant has to reach the queries as a *valid* pgtype.UUID. Marked
+// invalid it is SQL NULL, and `WHERE tenant_id = $1` matches nothing — so
+// every event in the deployment resolves to "no such object" and is skipped
+// as the documented upload race. The pipeline stays green while ingesting
+// nothing at all.
+func TestHandle_PassesAValidTenantDown(t *testing.T) {
+	tenant := uuid.New()
+	r := &tenantRecorder{}
+	r.resolveErr = pgx.ErrNoRows
+	h := &PromoteHandler{Lookup: r, Logger: zap.NewNop()}
+
+	if err := h.Handle(context.Background(), uploadedEvent(tenant, "docs", "a.txt")); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if !r.gotLookupTenant.Valid {
+		t.Fatal("object lookup received an invalid tenant uuid — SQL NULL matches no row")
+	}
+	if uuid.UUID(r.gotLookupTenant.Bytes) != tenant {
+		t.Errorf("lookup tenant = %v, want %v", uuid.UUID(r.gotLookupTenant.Bytes), tenant)
+	}
+}
+
+func TestObjectResourceName_PassesAValidTenantDown(t *testing.T) {
+	tenant := uuid.New()
+	r := &tenantRecorder{}
+	r.binding = sqlc.GetCollectionRow{BackendName: "primary", BucketName: "bkt"}
+	h := &PromoteHandler{Lookup: r, Logger: zap.NewNop()}
+
+	_ = h.objectResourceName(context.Background(), tenant.String(), "docs", "a.txt")
+	if !r.gotBindTenant.Valid {
+		t.Fatal("binding lookup received an invalid tenant uuid")
+	}
+	if uuid.UUID(r.gotBindTenant.Bytes) != tenant {
+		t.Errorf("binding tenant = %v, want %v", uuid.UUID(r.gotBindTenant.Bytes), tenant)
+	}
+}
+
+// The first switch arm needs all three conditions. Relaxed to a disjunction,
+// a clean resolve that matched no prefix — ("", nil), which is what the query
+// returns for a tenant with no collection covering the tail — takes the
+// rewrite branch instead of the keep-the-split one, and the collection is
+// blanked to "" while the key keeps a leading segment. The lookup then misses
+// for a reason that looks identical to an unknown object.
+func TestHandle_EmptyPrefixWithNoErrorKeepsSourceSplit(t *testing.T) {
+	f := &fakeLookup{resolveReturn: "", resolveErr: nil}
+	h := &PromoteHandler{Lookup: f, Logger: zap.NewNop()}
+
+	if err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt")); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if f.gotCollection != "docs" || f.gotKey != "a.txt" {
+		t.Errorf("split = (%q, %q), want the source's (docs, a.txt)", f.gotCollection, f.gotKey)
+	}
+}
+
+// A handler wired without a logger is the shape every other component in this
+// package tolerates, and Handle reaches for one on its first line.
+func TestHandle_NilLoggerIsSafe(t *testing.T) {
+	f := &fakeLookup{resolveErr: pgx.ErrNoRows}
+	h := &PromoteHandler{Lookup: f} // no Logger
+	if err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt")); err != nil {
+		t.Fatalf("Handle with a nil logger: %v", err)
+	}
+}
