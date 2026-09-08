@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -95,5 +96,61 @@ func TestRenameRecordsSlugHistory(t *testing.T) {
 	}
 	if _, found, _ := repo.LookupRenamedSlug(ctx, "acme", time.Nanosecond); found {
 		t.Errorf("lookup with sub-window age returned found=true (grace window not enforced)")
+	}
+}
+
+// TestRenameRejectsStaleVersion holds the OCC guard in Rename. The test above
+// always passes the current resource_version, so the comparison was never
+// exercised with a stale one — inverted, it would refuse every legitimate
+// rename and accept every concurrent one, and the slug is the tenant's
+// identity in every Cedar policy that names it.
+func TestRenameRejectsStaleVersion(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+
+	id := uuid.New()
+	mustExec(t, ctx, pool,
+		`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
+		id, "stale-occ", "Stale OCC")
+
+	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
+
+	var rv int64
+	if err := pool.QueryRow(ctx,
+		`SELECT resource_version FROM tenants WHERE id = $1`, id,
+	).Scan(&rv); err != nil {
+		t.Fatalf("read resource_version: %v", err)
+	}
+
+	if _, err := repo.Rename(ctx, tenantapi.RenameTenantSlugArgs{
+		TenantID: id, NewSlug: "stale-occ-renamed", ExpectedVersion: rv + 1,
+	}); !errors.Is(err, tenantapi.ErrVersionMismatch) {
+		t.Fatalf("rename with a stale version: err = %v, want ErrVersionMismatch", err)
+	}
+
+	// The refusal has to be complete: no slug change, no history row, no
+	// version bump. A guard that returns the error after writing is worse
+	// than none, because the caller retries against a tenant already renamed.
+	var slug string
+	var nowRV int64
+	if err := pool.QueryRow(ctx,
+		`SELECT slug, resource_version FROM tenants WHERE id = $1`, id,
+	).Scan(&slug, &nowRV); err != nil {
+		t.Fatalf("re-read tenant: %v", err)
+	}
+	if slug != "stale-occ" {
+		t.Errorf("slug = %q after a refused rename, want stale-occ", slug)
+	}
+	if nowRV != rv {
+		t.Errorf("resource_version = %d after a refused rename, want %d", nowRV, rv)
+	}
+	var history int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM tenant_slug_history WHERE tenant_id = $1`, id,
+	).Scan(&history); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if history != 0 {
+		t.Errorf("slug history rows = %d after a refused rename, want 0", history)
 	}
 }
