@@ -152,9 +152,7 @@ func (r *OperationRepo) List(
 	ctx context.Context, tenantID uuid.UUID, state *operation.State,
 	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool,
 ) ([]operation.Operation, string, error) {
-	if pageSize <= 0 {
-		pageSize = 50
-	}
+	pageSize = pageSizeOrDefault(pageSize)
 	var ns sqlc.NullOperationState
 	if state != nil {
 		ns = sqlc.NullOperationState{OperationState: sqlc.OperationState(string(*state)), Valid: true}

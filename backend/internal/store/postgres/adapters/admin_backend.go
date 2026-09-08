@@ -173,9 +173,7 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 }
 
 func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filter string) ([]admindomain.StorageBackend, string, error) {
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 50
-	}
+	pageSize = pageSizeOrDefault(pageSize)
 	// Empty string ⇒ NULL cursor ⇒ "from the beginning". The SQL
 	// guards `id > $1 OR $1 IS NULL` (canonical IS-NULL-OR pattern;
 	// matches the rule applied to every cursor query in this

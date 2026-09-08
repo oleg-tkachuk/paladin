@@ -259,10 +259,7 @@ func (r *BucketRepoV2) getWith(ctx context.Context, q *sqlc.Queries, backendID, 
 }
 
 func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArgs) ([]admindomain.Bucket, string, error) {
-	pageSize := args.PageSize
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 50
-	}
+	pageSize := pageSizeOrDefault(args.PageSize)
 	var backendFilter *string
 	if args.BackendID != "" {
 		v := args.BackendID
@@ -322,9 +319,7 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 }
 
 func (r *BucketRepoV2) ListAccessible(ctx context.Context, tenantID uuid.UUID, pageSize int32, afterBackend, afterName string) ([]admindomain.Bucket, string, error) {
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 50
-	}
+	pageSize = pageSizeOrDefault(pageSize)
 	rows, err := r.q.ListAccessibleBuckets(ctx, pgUUID(tenantID), afterBackend, afterName, pageSize)
 	if err != nil {
 		return nil, "", err

@@ -61,9 +61,7 @@ func (r *ObjectVersionRepo) Get(ctx context.Context, versionID uuid.UUID) (objec
 }
 
 func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSize int32, pageToken string) ([]object.ObjectVersion, string, error) {
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 50
-	}
+	pageSize = pageSizeOrDefault(pageSize)
 	var (
 		afterAt pgtype.Timestamptz
 		afterID pgtype.UUID

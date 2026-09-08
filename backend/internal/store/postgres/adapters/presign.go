@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/presign"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
@@ -65,33 +64,5 @@ func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID strin
 // 002) and drain gates are enforced here so a presign URL is never issued
 // against a backend that can't serve the op.
 func (r *PresignRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
-	const q = `
-		SELECT sb.name, bk.name, sb.enabled, sb.read_only, bk.provision_state
-		FROM collections c
-		JOIN buckets bk          ON bk.id = c.bucket_id
-		JOIN storage_backends sb ON sb.id = bk.backend_id
-		WHERE c.tenant_id = $1 AND c.name = $2`
-	var (
-		backendID      string
-		bucket         string
-		enabled        bool
-		readOnly       bool
-		provisionState string
-	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
-		if isNoRows(err) {
-			return "", "", fmt.Errorf("collection %q not found", collection)
-		}
-		return "", "", fmt.Errorf("lookup bucket: %w", err)
-	}
-	if !enabled {
-		return "", "", object.ErrBackendDisabled
-	}
-	if write && readOnly {
-		return "", "", object.ErrBackendReadOnly
-	}
-	if write && provisionState != "ready" {
-		return "", "", object.ErrBucketProvisioning
-	}
-	return backendID, bucket, nil
+	return resolveBucket(ctx, r.pool, tenantID, collection, write)
 }

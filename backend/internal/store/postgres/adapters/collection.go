@@ -177,10 +177,7 @@ func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collect
 }
 
 func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollectionsArgs) ([]objectkey.Collection, string, error) {
-	pageSize := args.PageSize
-	if pageSize <= 0 {
-		pageSize = 50
-	}
+	pageSize := pageSizeOrDefault(args.PageSize)
 
 	// Fast path: the sqlc-generated query handles (tenant_id, after,
 	// page_size) — used when no (backend, bucket) filter is set. The

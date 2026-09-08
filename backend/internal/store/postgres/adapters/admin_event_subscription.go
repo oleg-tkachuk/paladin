@@ -49,10 +49,7 @@ func (r *EventSubscriptionRepoV2) Get(ctx context.Context, id uuid.UUID) (admind
 }
 
 func (r *EventSubscriptionRepoV2) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
-	pageSize := args.PageSize
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 50
-	}
+	pageSize := pageSizeOrDefault(args.PageSize)
 	var tenant pgtype.UUID
 	if args.TenantID != uuid.Nil {
 		tenant = pgUUIDOptional(args.TenantID)

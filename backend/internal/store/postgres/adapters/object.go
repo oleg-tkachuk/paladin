@@ -157,10 +157,7 @@ func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args o
 }
 
 func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArgs) ([]object.Object, string, error) {
-	pageSize := args.PageSize
-	if pageSize <= 0 {
-		pageSize = 50
-	}
+	pageSize := pageSizeOrDefault(args.PageSize)
 	var afterID uuid.UUID
 	if args.PageToken != "" {
 		id, err := uuid.Parse(args.PageToken)
@@ -385,40 +382,9 @@ func (r *ObjectRepo) ListDistinctTags(
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
 func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
-	// JOIN storage_backends so a disabled backend is refused at the single
-	// resolution chokepoint (feature 002) — zero extra round trip. The
-	// read_only (drain) state is split by operation class here (migration
-	// 047): a mutation (`write`) against a read-only backend is refused;
-	// reads still resolve.
-	const q = `
-		SELECT sb.name, bk.name, sb.enabled, sb.read_only, bk.provision_state
-		FROM collections c
-		JOIN buckets bk          ON bk.id = c.bucket_id
-		JOIN storage_backends sb ON sb.id = bk.backend_id
-		WHERE c.tenant_id = $1 AND c.name = $2`
-	var (
-		backendID      string
-		bucket         string
-		enabled        bool
-		readOnly       bool
-		provisionState string
-	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
-		if isNoRows(err) {
-			return "", "", fmt.Errorf("collection %q not found", collection)
-		}
-		return "", "", fmt.Errorf("lookup bucket: %w", err)
-	}
-	if !enabled {
-		return "", "", object.ErrBackendDisabled
-	}
-	if write && readOnly {
-		return "", "", object.ErrBackendReadOnly
-	}
-	if write && provisionState != "ready" {
-		return "", "", object.ErrBucketProvisioning
-	}
-	return backendID, bucket, nil
+	// The query and the three gates live in bucket_resolver.go, shared with
+	// the presign and multipart repos.
+	return resolveBucket(ctx, r.pool, tenantID, collection, write)
 }
 
 // LookupBucketMeta returns the bucket binding plus versioning + lock flags
@@ -473,14 +439,8 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		}
 		return object.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}
-	if !enabled {
-		return object.BucketMeta{}, object.ErrBackendDisabled
-	}
-	if write && readOnly {
-		return object.BucketMeta{}, object.ErrBackendReadOnly
-	}
-	if write && provisionState != "ready" {
-		return object.BucketMeta{}, object.ErrBucketProvisioning
+	if err := bucketOpAllowed(write, enabled, readOnly, provisionState); err != nil {
+		return object.BucketMeta{}, err
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
 		meta.VersioningEnabled = v

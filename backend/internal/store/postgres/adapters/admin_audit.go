@@ -121,10 +121,7 @@ func (r *AuditRepoV2) Get(ctx context.Context, entryID uuid.UUID) (admindomain.A
 }
 
 func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
-	pageSize := args.PageSize
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 50
-	}
+	pageSize := pageSizeOrDefault(args.PageSize)
 
 	// Optional predicates ride the canonical sqlc OR-NULL idiom: pass
 	// nil / zero-valued pgtype to opt out, the query's

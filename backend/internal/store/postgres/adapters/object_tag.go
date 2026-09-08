@@ -87,9 +87,7 @@ func (r *ObjectTagRepo) Delete(ctx context.Context, tenantID uuid.UUID, slug str
 }
 
 func (r *ObjectTagRepo) List(ctx context.Context, tenantID uuid.UUID, pageSize int32, afterSlug string) ([]objecttag.ObjectTag, string, error) {
-	if pageSize <= 0 {
-		pageSize = 50
-	}
+	pageSize = pageSizeOrDefault(pageSize)
 	var after *string
 	if afterSlug != "" {
 		after = &afterSlug

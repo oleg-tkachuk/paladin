@@ -452,10 +452,7 @@ func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID 
 }
 
 func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]tenant.Tenant, string, error) {
-	pageSize := args.PageSize
-	if pageSize <= 0 {
-		pageSize = 50
-	}
+	pageSize := pageSizeOrDefault(args.PageSize)
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
 	// stays authoritative, these only narrow the scan.
 	pd := hints(cel.TenantSchema, args.Filter)
