@@ -98,9 +98,15 @@ func TestDisabledSubsystemHandlers(t *testing.T) {
 					}
 					// The message names the flag an operator flips. A
 					// subsystem named without its flag sends them looking.
-					if msg := ce.Message(); !strings.Contains(msg, tc.subsystem) || !strings.Contains(msg, tc.flag) {
+					// The message is the operator's instruction: which
+					// subsystem, which flag, and which way to set it.
+					msg := ce.Message()
+					if !strings.Contains(msg, tc.subsystem) || !strings.Contains(msg, tc.flag) {
 						t.Errorf("%s message = %q, want it to name both %q and %q",
 							m.Name, msg, tc.subsystem, tc.flag)
+					}
+					if !strings.Contains(msg, tc.flag+"=true") {
+						t.Errorf("%s message = %q, want it to say to set %s=true", m.Name, msg, tc.flag)
 					}
 				})
 			}

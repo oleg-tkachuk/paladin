@@ -262,3 +262,94 @@ func TestBuildBackgroundJobs_AuditRetentionKeepsForever(t *testing.T) {
 		}
 	}
 }
+
+// The reapers are cross-tenant and run with no request principal, so binding
+// them to the RLS-scoped runtime pool makes every one of them a no-op: with
+// no paladin.tenant_id set, RLS matches zero rows and the job reports success
+// having done nothing. This is not hypothetical — the comment on the pool
+// selection records ReconcilerV2 sitting in exactly that state for weeks.
+//
+// The selection is two lines of `if deps.X != nil`, and inverting either one
+// reinstates the incident. Handing in three distinct pointers makes which
+// pool each job received directly observable.
+func TestBuildBackgroundJobs_ReapersBindToTheBypassRLSPool(t *testing.T) {
+	runtimePool := &pgxpool.Pool{}
+	reaperPool := &pgxpool.Pool{}
+	partitionPool := &pgxpool.Pool{}
+
+	cfg := config.Config{}
+	cfg.Worker.Jobs.PurgeDrain.Interval = time.Second
+	cfg.Worker.Jobs.Housekeeping.HardDeleteAfter = time.Hour
+
+	deps := &SharedDeps{
+		Cfg:           cfg,
+		Logger:        zap.NewNop(),
+		Pool:          runtimePool,
+		ReaperPool:    reaperPool,
+		PartitionPool: partitionPool,
+	}
+
+	var sawDrainer, sawDeleter, sawPartitions bool
+	for _, j := range BuildBackgroundJobs(deps) {
+		switch job := j.(type) {
+		case *worker.PurgeDrainer:
+			sawDrainer = true
+			if job.Pool != reaperPool {
+				t.Errorf("PurgeDrainer.Pool is not the reaper pool (runtime pool: %v)", job.Pool == runtimePool)
+			}
+		case *worker.LifecycleHardDeleter:
+			sawDeleter = true
+			if job.Pool != reaperPool {
+				t.Errorf("LifecycleHardDeleter.Pool is not the reaper pool (runtime pool: %v)", job.Pool == runtimePool)
+			}
+		case *worker.PartitionMaintainer:
+			sawPartitions = true
+			// The maintainer is the one job that runs DDL, which the
+			// least-privilege reaper role cannot do.
+			if job.DB != partitionPool {
+				t.Errorf("PartitionMaintainer.DB is not the partition pool (reaper: %v, runtime: %v)",
+					job.DB == reaperPool, job.DB == runtimePool)
+			}
+		}
+	}
+	if !sawDrainer || !sawDeleter || !sawPartitions {
+		t.Fatalf("expected all three jobs to be built (drainer=%v deleter=%v partitions=%v)",
+			sawDrainer, sawDeleter, sawPartitions)
+	}
+
+	// The documented degradation: no reaper pool means fall back to the
+	// runtime pool rather than crash, and serve_worker warns. Asserted so the
+	// fallback stays a fallback and does not become the normal path.
+	deps.ReaperPool = nil
+	deps.PartitionPool = nil
+	for _, j := range BuildBackgroundJobs(deps) {
+		if job, ok := j.(*worker.PurgeDrainer); ok && job.Pool != runtimePool {
+			t.Errorf("with no reaper pool, PurgeDrainer.Pool = %p, want the runtime pool", job.Pool)
+		}
+		if job, ok := j.(*worker.PartitionMaintainer); ok && job.DB != runtimePool {
+			t.Error("with neither reaper nor partition pool, PartitionMaintainer.DB should degrade to the runtime pool")
+		}
+	}
+}
+
+// Both subsystem purgers need a bundle AND a non-zero interval. The bundle
+// half is asserted above; this is the interval half, which is the same
+// zero-means-off shape as the gates and is not implied by it.
+func TestBuildBackgroundJobs_SubsystemPurgersNeedANonZeroInterval(t *testing.T) {
+	deps := &SharedDeps{
+		Cfg:        config.Config{}, // both intervals zero
+		Logger:     zap.NewNop(),
+		Pool:       &pgxpool.Pool{},
+		ReaperPool: &pgxpool.Pool{},
+		Capability: &CapabilityBundle{},
+		APIToken:   &APITokenBundle{},
+	}
+	for _, j := range BuildBackgroundJobs(deps) {
+		switch j.(type) {
+		case *worker.CapabilityPurger:
+			t.Error("CapabilityPurger built with a zero interval")
+		case *worker.APITokenPurger:
+			t.Error("APITokenPurger built with a zero interval")
+		}
+	}
+}
