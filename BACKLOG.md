@@ -990,6 +990,33 @@ open deliberately — each notes why._
   thing, and covering part of it feels like covering it.
 - **Blockers:** none.
 
+### The bucket resolver is copied into three repos, and the gates are policy
+
+- **Status:** Deferred (the coverage gap is closed; the duplication is not).
+- **What is duplicated:** `LookupBucket` is a byte-identical 28-line body in
+  `ObjectRepo`, `PresignRepo` and `MultipartRepo` — same query, same three
+  gates (backend disabled, backend draining, bucket not yet provisioned) — and
+  a fourth copy of the gates is inlined in `ObjectRepo.LookupBucketMeta`
+  alongside a richer query. All four live in
+  `backend/internal/store/postgres/adapters`.
+- **Why it was found:** `TestBackendDisabled_ResolverGate` and
+  `TestBackendReadOnly_ResolverGate` describe themselves as covering "EVERY
+  object/presign/multipart op", but both drive only `ObjectRepo`. Deleting the
+  read-only gate from `PresignRepo` and the provisioning gate from
+  `MultipartRepo` left the whole integration suite green.
+  `TestResolverGates_AllThreeRepos` now drives all three through the same
+  fixture and fails on either deletion.
+- **Why the copies matter unequally:** a presigned PUT hands the client a URL
+  it uses against the backend directly. A gate that stops refusing there is not
+  caught downstream by the API, because there is no downstream.
+- **Definition of Done:** one resolver — the query and the three gates in a
+  single function the three repos call — so a policy change cannot land in one
+  copy and miss two. The test above is the precondition for doing it safely and
+  keeps passing unchanged afterwards.
+- **Blockers:** none technical. It is a refactor of the hottest path in the
+  data plane, so it wants its own change rather than riding along with a test
+  commit.
+
 ### Mutation testing: how to read what it says
 
 - **Status:** Deferred (the tool is in the repo; this is the note that goes

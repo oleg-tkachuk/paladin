@@ -407,3 +407,106 @@ func seedBackend(t *testing.T, pool *pgxpool.Pool, id string) {
 		t.Fatalf("seed backend %q: %v", id, err)
 	}
 }
+
+// TestResolverGates_AllThreeRepos closes the gap the two tests above leave
+// open. Their comments claim the gate covers "EVERY object/presign/multipart
+// op", but both drive only ObjectRepo — and the resolver is not shared: the
+// same 28-line body, query and all three gates, is copied verbatim into
+// PresignRepo.LookupBucket and MultipartRepo.LookupBucket.
+//
+// The uncovered copies are the ones with the least recourse. A presigned PUT
+// hands the client a URL it uses against the backend directly, so a drift in
+// that copy is not caught later by the API — there is no later. This drives
+// all three through the same fixture and the same three states, so a copy
+// that stops refusing fails here.
+func TestResolverGates_AllThreeRepos(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	q := sqlc.New(h.PoolMigrate)
+
+	resolvers := []struct {
+		name   string
+		lookup func(context.Context, uuid.UUID, string, bool) (string, string, error)
+	}{
+		{"object", adapters.NewObjectRepo(q, h.PoolMigrate).LookupBucket},
+		{"presign", adapters.NewPresignRepo(q, h.PoolMigrate).LookupBucket},
+		{"multipart", adapters.NewMultipartRepo(q, h.PoolMigrate).LookupBucket},
+	}
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "three-tenant")
+	seedBackend(t, h.PoolMigrate, "three-be")
+	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "three-be", "three-bucket", "docs")
+	be := adapters.NewBackendRepoV2(q, h.PoolMigrate)
+
+	setFlag := func(t *testing.T, set func(rv int64) error) {
+		t.Helper()
+		cur, err := be.Get(ctx, "three-be")
+		if err != nil {
+			t.Fatalf("get backend: %v", err)
+		}
+		if err := set(cur.ResourceVersion); err != nil {
+			t.Fatalf("set backend flag: %v", err)
+		}
+	}
+	setProvisionState := func(t *testing.T, state string) {
+		t.Helper()
+		if _, err := h.PoolMigrate.Exec(ctx,
+			`UPDATE buckets SET provision_state = $1 WHERE name = 'three-bucket'`, state); err != nil {
+			t.Fatalf("set provision_state=%s: %v", state, err)
+		}
+	}
+
+	// Baseline: an enabled, writable, ready bucket resolves for every repo,
+	// so a later refusal is the gate firing and not a broken fixture.
+	for _, r := range resolvers {
+		for _, write := range []bool{false, true} {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", write); err != nil {
+				t.Fatalf("%s baseline (write=%v): %v", r.name, write, err)
+			}
+		}
+	}
+
+	t.Run("disabled refuses both classes", func(t *testing.T) {
+		setFlag(t, func(rv int64) error { return be.SetEnabled(ctx, "three-be", false, rv) })
+		defer setFlag(t, func(rv int64) error { return be.SetEnabled(ctx, "three-be", true, rv) })
+
+		for _, r := range resolvers {
+			for _, write := range []bool{false, true} {
+				_, _, err := r.lookup(ctx, tenantID, "docs", write)
+				if !errors.Is(err, object.ErrBackendDisabled) {
+					t.Errorf("%s disabled (write=%v): err=%v, want ErrBackendDisabled", r.name, write, err)
+				}
+			}
+		}
+	})
+
+	t.Run("read-only refuses writes only", func(t *testing.T) {
+		setFlag(t, func(rv int64) error { return be.SetReadOnly(ctx, "three-be", true, rv) })
+		defer setFlag(t, func(rv int64) error { return be.SetReadOnly(ctx, "three-be", false, rv) })
+
+		for _, r := range resolvers {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
+				t.Errorf("%s drained (write): err=%v, want ErrBackendReadOnly", r.name, err)
+			}
+			// Reads keep resolving — a drain that stopped serving reads
+			// would be an outage, not a drain.
+			if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {
+				t.Errorf("%s drained (read): err=%v, want success", r.name, err)
+			}
+		}
+	})
+
+	t.Run("pending provisioning refuses writes only", func(t *testing.T) {
+		setProvisionState(t, "pending")
+		defer setProvisionState(t, "ready")
+
+		for _, r := range resolvers {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBucketProvisioning) {
+				t.Errorf("%s pending (write): err=%v, want ErrBucketProvisioning", r.name, err)
+			}
+			if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {
+				t.Errorf("%s pending (read): err=%v, want success", r.name, err)
+			}
+		}
+	})
+}
