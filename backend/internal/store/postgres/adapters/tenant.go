@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 
 	"github.com/google/uuid"
@@ -173,16 +174,25 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 }
 
 // actorFromContext extracts the caller subject for the audit-style
-// `set_by` column on tenant_default_bindings. Falls back to empty
-// string when auth isn't established (test paths) — the column is
-// NOT NULL with a ” default at the DB level.
+// `set_by` column on tenant_default_bindings. Falls back to the empty
+// string when no principal is established — bootstrap and seed paths
+// create tenants with no caller, and the column is NOT NULL with an
+// empty default at the DB level.
+//
+// This used to read ctx.Value(struct{}{}) and assert to a local
+// `interface{ GetSubject() string }`, on the stated grounds of avoiding a
+// circular import. It could not match: auth stores the principal under its
+// own unexported principalKey{}, which is a different type, and *Principal
+// has a Subject field and no GetSubject method — so both the lookup and the
+// assertion failed, and every binding created with the tenant recorded an
+// empty actor. There is no cycle to avoid; this package already imports
+// internal/auth for the user repository.
 func actorFromContext(ctx context.Context) string {
-	// Lazy import path — keep this adapter free of circular deps.
-	type principal interface{ GetSubject() string }
-	if p, ok := ctx.Value(struct{}{}).(principal); ok {
-		return p.GetSubject()
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return p.Subject
 }
 
 func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
