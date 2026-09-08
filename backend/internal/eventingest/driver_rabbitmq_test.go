@@ -29,11 +29,22 @@ type recordingAck struct {
 	nacks    int
 	rejects  int
 	requeued bool
+	// multiple records the batch flag. Ack(multiple=true) acknowledges every
+	// outstanding delivery up to this tag, so a stray true discards messages
+	// the worker never saw — the same lost-event outcome as acking a failure,
+	// reached by a different route.
+	multiple bool
 }
 
-func (r *recordingAck) Ack(uint64, bool) error { r.acks++; return nil }
-func (r *recordingAck) Nack(_ uint64, _, requeue bool) error {
+func (r *recordingAck) Ack(_ uint64, multiple bool) error {
+	r.acks++
+	r.multiple = multiple
+	return nil
+}
+
+func (r *recordingAck) Nack(_ uint64, multiple, requeue bool) error {
 	r.nacks++
+	r.multiple = multiple
 	r.requeued = requeue
 	return nil
 }
@@ -106,6 +117,12 @@ func TestRabbitMQDriver_AcknowledgementContract(t *testing.T) {
 			}
 			if (tc.wantNacks > 0 || tc.wantRejects > 0) && ack.requeued != tc.wantRequeue {
 				t.Errorf("requeue = %v, want %v — %s", ack.requeued, tc.wantRequeue, tc.why)
+			}
+			// Every path settles exactly the delivery in hand. Batching would
+			// settle everything the broker has outstanding, including messages
+			// still in flight through the worker.
+			if ack.multiple {
+				t.Errorf("settled with multiple=true; that discards every outstanding delivery, not just this one")
 			}
 		})
 	}
