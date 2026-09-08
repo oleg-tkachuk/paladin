@@ -990,6 +990,29 @@ open deliberately — each notes why._
   thing, and covering part of it feels like covering it.
 - **Blockers:** none.
 
+### The page-size clamp is duplicated eleven times; two are held
+
+- **Status:** Deferred (the shape is proven load-bearing and held at two
+  sites; the other nine want fixtures).
+- **What it is:** every List in
+  `backend/internal/store/postgres/adapters` normalises with
+  `if pageSize <= 0 { pageSize = 50 }` — eleven copies, in `admin_backend.go`,
+  `admin_bucket.go` (twice), `admin_audit.go`, `admin_event_subscription.go`,
+  `collection.go`, `object.go`, `object_version.go`, `object_tag.go`,
+  `operation.go` and `tenant.go`.
+- **Why it is not defensive:** the admin shims forward
+  `req.Msg.GetPage().GetPageSize()` unchanged, and an unset `page` message is a
+  zero. The clamp is the only thing between "the client omitted page_size" and
+  `LIMIT 0` — relaxed to `< 0` it still compiles, still reads as a bounds
+  check, and hands back an empty page for a table with rows in it. Verified by
+  making exactly that edit: both held sites returned 0 rows.
+- **Definition of Done:** either the remaining nine get the same
+  zero-means-default assertion `TestListPageSizeZeroMeansDefault` makes for
+  buckets and backends, or the normalisation moves into one helper the eleven
+  call — at which point one test covers all of them.
+- **Blockers:** none. Each site needs its own seeded rows, which is the whole
+  cost.
+
 ### The bucket resolver is copied into three repos, and the gates are policy
 
 - **Status:** Deferred (the coverage gap is closed; the duplication is not).
