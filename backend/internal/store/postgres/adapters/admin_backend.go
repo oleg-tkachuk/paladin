@@ -172,6 +172,53 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 	}
 }
 
+// backendFromListRow is backendFromGetRow over the list query's row type. The
+// two queries select the same columns into two sqlc structs, so the mapping
+// is duplicated rather than shared; TestBackendRowMappersAgree holds them to
+// the same output.
+//
+// This used to be a struct literal inlined in List, and it had drifted:
+// maintenance, health_status, health_message and health_checked_at were
+// selected by the query and dropped by the mapper, so every backend in a
+// listing reported itself as not in maintenance with no health ever recorded,
+// while a Get on the same backend reported the truth. An operator scanning
+// the console for the backend they had just drained saw nothing marked.
+func backendFromListRow(row sqlc.ListStorageBackendsRow) admindomain.StorageBackend {
+	return admindomain.StorageBackend{
+		BackendID:            row.Name,
+		DisplayName:          row.DisplayName,
+		Kind:                 row.Kind,
+		Provider:             row.Provider,
+		Endpoint:             row.Endpoint,
+		PublicEndpoint:       row.PublicEndpoint,
+		Region:               row.Region,
+		ForcePathStyle:       row.ForcePathStyle,
+		CredentialsSecretRef: row.CredentialsSecretRef,
+		SSE: admindomain.ServerSideEncryption{
+			Type:  row.SseType,
+			KeyID: row.SseKeyID,
+		},
+		Events: admindomain.EventSourceConfig{
+			Enabled:      row.EventsEnabled,
+			Target:       row.EventsTarget,
+			QueueURL:     row.EventsQueueUrl,
+			PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
+		},
+		CedarPolicy:                   row.CedarPolicy,
+		Enabled:                       row.Enabled,
+		ReadOnly:                      row.ReadOnly,
+		Maintenance:                   row.Maintenance,
+		HealthStatus:                  string(row.HealthStatus),
+		HealthMessage:                 row.HealthMessage,
+		HealthCheckedAt:               timeFrom(row.HealthCheckedAt),
+		PreviousCredentialsSecretRef:  row.PreviousCredentialsSecretRef,
+		PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
+		ResourceVersion:               row.ResourceVersion,
+		CreatedAt:                     timeFrom(row.CreatedAt),
+		UpdatedAt:                     timeFrom(row.UpdatedAt),
+	}
+}
+
 func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filter string) ([]admindomain.StorageBackend, string, error) {
 	pageSize = pageSizeOrDefault(pageSize)
 	// Empty string ⇒ NULL cursor ⇒ "from the beginning". The SQL
@@ -207,32 +254,7 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	}
 	out := make([]admindomain.StorageBackend, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, admindomain.StorageBackend{
-			BackendID:            row.Name,
-			DisplayName:          row.DisplayName,
-			Kind:                 row.Kind,
-			Provider:             row.Provider,
-			Endpoint:             row.Endpoint,
-			PublicEndpoint:       row.PublicEndpoint,
-			Region:               row.Region,
-			ForcePathStyle:       row.ForcePathStyle,
-			CredentialsSecretRef: row.CredentialsSecretRef,
-			SSE:                  admindomain.ServerSideEncryption{Type: row.SseType, KeyID: row.SseKeyID},
-			Events: admindomain.EventSourceConfig{
-				Enabled:      row.EventsEnabled,
-				Target:       row.EventsTarget,
-				QueueURL:     row.EventsQueueUrl,
-				PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
-			},
-			CedarPolicy:                   row.CedarPolicy,
-			Enabled:                       row.Enabled,
-			ReadOnly:                      row.ReadOnly,
-			PreviousCredentialsSecretRef:  row.PreviousCredentialsSecretRef,
-			PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
-			ResourceVersion:               row.ResourceVersion,
-			CreatedAt:                     timeFrom(row.CreatedAt),
-			UpdatedAt:                     timeFrom(row.UpdatedAt),
-		})
+		out = append(out, backendFromListRow(row))
 	}
 	var next string
 	if len(out) == int(pageSize) && len(out) > 0 {
