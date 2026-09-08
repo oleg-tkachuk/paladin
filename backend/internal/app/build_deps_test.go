@@ -101,3 +101,50 @@ func TestBuildSharedDeps_RefusesBeforeTouchingTheDatabase(t *testing.T) {
 		})
 	}
 }
+
+// The watcher registry is the mechanism the fix above depends on, and every
+// shutdown path is required to go through it. Its contract is three claims in
+// two doc comments — nil-safe, idempotent, releases everything — and each one
+// is load-bearing: a shutdown path that panics or that cancels only some
+// watchers leaves pgxpool.Close blocked exactly as a missing call would.
+func TestSharedDeps_WatcherRegistry(t *testing.T) {
+	t.Run("nil-safe on both sides", func(t *testing.T) {
+		// Called at construction time, before there is anything to register
+		// on. A panic here fails a boot that was about to succeed.
+		var nilDeps *SharedDeps
+		nilDeps.RegisterWatcherStop(func() {})
+		nilDeps.StopWatchers()
+
+		deps := &SharedDeps{}
+		deps.RegisterWatcherStop(nil)
+		deps.StopWatchers() // a nil cancel must not have been stored
+	})
+
+	t.Run("cancels every registered watcher", func(t *testing.T) {
+		deps := &SharedDeps{}
+		calls := make([]int, 0, 3)
+		for i := range 3 {
+			deps.RegisterWatcherStop(func() { calls = append(calls, i) })
+		}
+		deps.StopWatchers()
+		if len(calls) != 3 {
+			t.Fatalf("cancelled %d of 3 watchers %v — the ones missed still hold a connection", len(calls), calls)
+		}
+	})
+
+	t.Run("idempotent", func(t *testing.T) {
+		deps := &SharedDeps{}
+		var n int
+		deps.RegisterWatcherStop(func() { n++ })
+
+		deps.StopWatchers()
+		deps.StopWatchers()
+		// Shutdown paths overlap — App.Shutdown and a test cleanup can both
+		// reach here — and a context cancel called twice is harmless, but a
+		// second pass over a list that was never cleared would be a slow leak
+		// of whatever a future cancel does.
+		if n != 1 {
+			t.Errorf("cancel ran %d times across two StopWatchers calls, want 1", n)
+		}
+	})
+}
