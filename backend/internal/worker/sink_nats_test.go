@@ -11,11 +11,15 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
 
-// sink_nats.go was 481 lines with no test file, while the three sibling sinks
-// — kafka, rabbitmq, sqs — each have several, and NATS is the live pipeline in
-// this deployment. What follows covers the parts that need no broker: the
-// credential parser, the connection-pool key, and the two identifiers that
-// decide whether a consumer sees an event once or twice.
+// The parts of sink_nats.go that need no broker: the connection-pool key, the
+// two identifiers that decide whether a consumer sees an event once or twice,
+// and the envelope fields a consumer routes on.
+//
+// Coverage of this file is spread wider than it looks, which is worth knowing
+// before reading a line count as a gap: `parseNatsCredentials` and the
+// auth round-trips live in event_dispatcher_test.go, the batch path in
+// sink_batch_test.go, and the publish paths in tests/integration
+// (jetstream_sink_test.go, dispatcher_test.go) against embedded servers.
 
 func natsSub(t *testing.T, kind, url, subject, creds string) admindomain.EventSubscription {
 	t.Helper()
@@ -121,4 +125,29 @@ func TestNatsDedupIDMatchesTheEnvelopeID(t *testing.T) {
 			t.Error("the fallback is not the subscription id")
 		}
 	})
+}
+
+// The envelope's `id` is held above, against the JetStream dedup id. These are
+// the fields a consumer filters and routes on, and `time` is the one with a
+// failure mode that survives review: At is normalised with .UTC() before
+// formatting, so an event stamped in a non-UTC zone must not ship its local
+// wall clock under a `Z` suffix — or a consumer ordering by time gets an event
+// hours out of sequence, with nothing malformed to notice.
+func TestCloudEventEnvelope_TimeIsNormalisedToUTC(t *testing.T) {
+	sub := natsSub(t, "nats", "nats://x:4222", "events", "")
+	at := time.Date(2026, 9, 10, 1, 2, 3, 456789000, time.FixedZone("UTC+3", 3*3600))
+	env := (&Dispatcher{}).newCloudEventEnvelope(sub, Event{
+		ID: "row-7", Type: "paladin.object.uploaded", At: at,
+	})
+
+	if env.Time != "2026-09-09T22:02:03.456789Z" {
+		t.Errorf("time = %q, want the same instant in UTC with nanoseconds", env.Time)
+	}
+	if env.SpecVersion != "1.0" || env.DataContentType != "application/json" {
+		t.Errorf("specversion/datacontenttype = %q/%q, want 1.0/application/json",
+			env.SpecVersion, env.DataContentType)
+	}
+	if env.Source != natsDefaultSource {
+		t.Errorf("source = %q, want %q", env.Source, natsDefaultSource)
+	}
 }

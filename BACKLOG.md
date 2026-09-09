@@ -979,10 +979,29 @@ open deliberately — each notes why._
   suites, `internal/integration` and `tests/integration`, and the dispatcher's
   own tests are in the second. A measurement whose --test-cmd names only the
   first reports branches as unheld that the other suite covers. Name both.
-- **Untested and unmeasured, worth its own pass:** `sink_nats.go` is 481 lines
-  with no test file, while its three sibling sinks (kafka, rabbitmq, sqs) all
-  have several. NATS is the live pipeline in this deployment. The asymmetry
-  says what got covered was what was easy to cover, not what runs.
+- **`sink_nats.go` was measured 2026-09-10, and this bullet was wrong.** It
+  claimed the file had no test file and that coverage had gone to what was easy
+  rather than what runs. A 30-mutation sample against the package's own tests
+  alone scores 87%, and of the four survivors two are held by `tests/integration`
+  (the denominator trap this entry documents two bullets down), one is an
+  equivalent mutant, and one was a real assertion weakness now fixed. Reading a
+  line count as a gap is what produced the claim: coverage of this file lives in
+  four files plus two suites — `parseNatsCredentials` and the auth round-trips in
+  event_dispatcher_test.go, the batch path in sink_batch_test.go, the publish
+  paths in tests/integration against embedded NATS and JetStream servers.
+- **Still genuinely open on the NATS sink, and deliberately left:**
+  `NatsConnPool.Statuses` strips the credentials label from its keys with
+  `i >= 0`; relaxing it to `i > 0` leaks that label into the operator-facing
+  status map, but only for a pool key whose URL is empty, and all three paths
+  into the pool (`deliverNATS`, `natsGroupTarget`, and the warmup scan in
+  cmd/server/serve_dispatcher.go) refuse an empty URL first. Unkillable without
+  fabricating a state the code prevents.
+- **A fourth hand-written copy of `poolKey`** sits in
+  cmd/server/serve_dispatcher.go (`key := cfg.URL + "\x00" + cfg.CredentialsRef`),
+  because `poolKey` is unexported and that file is package main. It is used only
+  to dedup warmup targets locally, so drift would mis-dedup rather than
+  misroute — but it is the same rule written twice, and the session that found
+  it chose not to widen the package's API for one caller.
 - **Lesson, third instance in this file:** two of the three fixes here were
   "one half of a pattern". The disabled-bucket test set both halves of a
   disjunction at once; the reconciler's log test covered the provision path and

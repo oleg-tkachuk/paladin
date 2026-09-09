@@ -31,6 +31,27 @@ func kafkaBatchItems(t *testing.T, n int, cfg kafkaSinkConfig) []kafkaBatchItem 
 	return items
 }
 
+// assertAllRowsDelivered checks each row is RECORDED as delivered, not merely
+// absent. A missing key in map[uuid.UUID]error also reads as nil on a plain
+// lookup, so `out[id] != nil` cannot tell "published and flushed" from "never
+// recorded" — and both batch sinks have an early `return out` that skips the
+// flush and these entries together. That path passed the weaker check in both
+// tests.
+func assertAllRowsDelivered(t *testing.T, out map[uuid.UUID]error, rows []uuid.UUID) {
+	t.Helper()
+	for _, id := range rows {
+		outcome, recorded := out[id]
+		if !recorded {
+			t.Errorf("row %s is absent from the result; the caller cannot tell it "+
+				"from a row that was never attempted", id)
+			continue
+		}
+		if outcome != nil {
+			t.Errorf("row %s outcome = %v, want nil", id, outcome)
+		}
+	}
+}
+
 func TestDeliverKafkaBatch_OneCallPerGroup(t *testing.T) {
 	fake := &fakeKafka{}
 	d, _ := kafkaTestDispatcher(fake)
@@ -44,11 +65,11 @@ func TestDeliverKafkaBatch_OneCallPerGroup(t *testing.T) {
 	if len(fake.msgs) != 3 {
 		t.Fatalf("messages written = %d, want 3", len(fake.msgs))
 	}
+	rowIDs := make([]uuid.UUID, 0, len(items))
 	for _, it := range items {
-		if out[it.RowID] != nil {
-			t.Errorf("row %s outcome = %v, want nil", it.RowID, out[it.RowID])
-		}
+		rowIDs = append(rowIDs, it.RowID)
 	}
+	assertAllRowsDelivered(t, out, rowIDs)
 }
 
 func TestDeliverKafkaBatch_PartialFailureMapsPerRow(t *testing.T) {
@@ -141,11 +162,11 @@ func TestDeliverNATSBatch_PublishesAllOverOneConnection(t *testing.T) {
 
 	out := d.deliverNATSBatch(context.Background(), items)
 
+	rowIDs := make([]uuid.UUID, 0, len(items))
 	for _, it := range items {
-		if out[it.RowID] != nil {
-			t.Errorf("row %s outcome = %v, want nil", it.RowID, out[it.RowID])
-		}
+		rowIDs = append(rowIDs, it.RowID)
 	}
+	assertAllRowsDelivered(t, out, rowIDs)
 	seen := 0
 	deadline := time.After(3 * time.Second)
 	for seen < 3 {
