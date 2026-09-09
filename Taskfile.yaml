@@ -113,6 +113,11 @@ tasks:
       # we ship, so they encode what we set rather than what the chart
       # supports. Three keys the templates read were already refused by them.
       - python3 ./scripts/chart-reads.py
+      # The NetworkPolicies are off in every values file we ship, so nothing
+      # above renders them. The baseline denies both directions for every pod,
+      # which makes a role with no policy of its own cut off rather than
+      # merely exposed — worth more than a syntax check.
+      - python3 ./scripts/chart-netpol.py
       - task: frontend:build
 
   verify-deep:

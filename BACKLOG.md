@@ -1710,26 +1710,6 @@ of the pipeline._
 
 ---
 
-### The NetworkPolicy templates render under no values file we ship
-
-- **Status:** Deferred — surfaced 2026-09-09 while wiring the chart gates.
-- **Reason:** `backend/deploy/chart/templates/networkpolicy.yaml` is 10 KB of
-  per-role default-deny policy gated on `networkPolicies.enabled`, which is
-  false in all five shipped values files ("needs an enforcing CNI"). Every
-  chart gate we have — `helm lint`, the render/separator gate, and
-  `scripts/chart-values.test.sh`, which renders each values file — therefore
-  renders zero NetworkPolicies. A template error in it would reach a cluster
-  before anything noticed, and the flow matrix it encodes has never been
-  rendered, let alone applied.
-- **Definition of Done:** the policies render in at least one checked
-  configuration — either a values file that enables them, or a fixture the
-  values gate renders alongside the shipped ones.
-- **Blockers:** none technically; the question is whether to ship an overlay
-  that turns them on somewhere, which needs a cluster with an enforcing CNI to
-  be worth more than a compile check.
-
----
-
 ### CI publishes the charts without running any chart gate
 
 - **Status:** Deferred — surfaced 2026-09-09.

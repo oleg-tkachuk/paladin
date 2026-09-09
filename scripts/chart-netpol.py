@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Check the backend chart's NetworkPolicies against the guarantees they claim.
+
+`networkPolicies.enabled` is false in every values file we ship — it needs an
+enforcing CNI — so these 266 lines of template were rendered by nothing: not
+`helm lint`, not the render gate, not chart-values.test.sh. A template error in
+them would have reached the first cluster that turned them on.
+
+Rendering is the cheap half. The half worth asserting is the one that fails
+catastrophically and silently: the baseline policy denies both directions for
+every pod of the release, so a role with no policy of its own is not "less
+protected", it is **cut off entirely** — no DNS, no Postgres, no ingress. Add a
+role tomorrow, turn policies on, and that pod is dead with nothing in the chart
+saying why. So the role set is derived from the rendered Deployments and
+compared, rather than listed here where it would go stale.
+
+    python3 scripts/chart-netpol.py
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+# Off by default and not enabled by any values file, so the gate sets them
+# itself — together with every role, since a role that is off renders no policy
+# and would otherwise leave a hole in what this checks.
+ROLES = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
+
+
+def render(chart: Path) -> list[dict]:
+    # yq, not jq: helm emits YAML and jq parses only JSON, so `jq .` on a
+    # rendered chart fails at the first `key: value`. yq is the only new tool
+    # this gate needs.
+    where = {"helm": "https://helm.sh/docs/intro/install/",
+             "yq": "https://github.com/mikefarah/yq#install"}
+    for tool, url in where.items():
+        if not shutil.which(tool):
+            print(f"!!! {tool} is not installed; the NetworkPolicies went unchecked — {url}",
+                  file=sys.stderr)
+            sys.exit(1)
+    cmd = ["helm", "template", "netpoltest", str(chart), "--set", "networkPolicies.enabled=true"]
+    for role in ROLES:
+        cmd += ["--set", f"deployments.{role}.enabled=true"]
+    out = subprocess.run(cmd, capture_output=True, text=True)
+    if out.returncode != 0:
+        print("!!! the chart does not render with networkPolicies.enabled=true", file=sys.stderr)
+        print("      " + out.stderr.strip().replace("\n", "\n      "), file=sys.stderr)
+        sys.exit(1)
+    asjson = subprocess.run(["yq", "ea", "-o=json", "-I=0", "[.]", "-"],
+                            input=out.stdout, capture_output=True, text=True, check=True)
+    return [d for d in json.loads(asjson.stdout) if d]
+
+
+def component(doc: dict) -> str | None:
+    """The role a document is about. NetworkPolicy selects pods through
+    `podSelector`, a Deployment through `selector` — the label is the same."""
+    spec = doc.get("spec") or {}
+    sel = (spec.get("podSelector") or spec.get("selector") or {}).get("matchLabels") or {}
+    return sel.get("app.kubernetes.io/component")
+
+
+def egress_has_dns(doc: dict) -> bool:
+    for rule in doc["spec"].get("egress") or []:
+        if not rule:  # `- {}` — allow all, DNS included
+            return True
+        ports = {p.get("port") for p in rule.get("ports") or []}
+        if 53 in ports:
+            return True
+    return False
+
+
+def main() -> int:
+    root = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                               capture_output=True, text=True, check=True).stdout.strip())
+    docs = render(root / "backend/deploy/chart")
+
+    policies = [d for d in docs if d.get("kind") == "NetworkPolicy"]
+    deployed = {component(d) for d in docs if d.get("kind") == "Deployment"} - {None}
+    problems: list[str] = []
+
+    if not policies:
+        problems.append("no NetworkPolicy rendered at all, with networkPolicies.enabled=true")
+    if not deployed:
+        problems.append("no Deployment rendered — the role comparison below checks nothing")
+
+    baseline = [p for p in policies if p["metadata"]["name"].endswith("-default-deny")]
+    if len(baseline) != 1:
+        problems.append(f"expected exactly one default-deny baseline, found {len(baseline)}")
+    else:
+        types = set(baseline[0]["spec"].get("policyTypes") or [])
+        if types != {"Ingress", "Egress"}:
+            problems.append(f"the baseline denies {sorted(types) or 'nothing'}, not both directions")
+        for direction in ("ingress", "egress"):
+            if baseline[0]["spec"].get(direction):
+                problems.append(f"the baseline carries {direction} rules; it must allow nothing")
+
+    covered = {component(p) for p in policies} - {None}
+    for role in sorted(deployed - covered):
+        problems.append(
+            f"role {role!r} has a Deployment but no NetworkPolicy — the baseline denies "
+            f"both directions, so this pod would have no DNS, no database and no ingress"
+        )
+    for role in sorted(covered - deployed):
+        problems.append(f"a NetworkPolicy selects {role!r}, which this chart does not deploy")
+
+    for p in policies:
+        role = component(p)
+        if role is None:
+            continue
+        if not egress_has_dns(p):
+            problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
+
+    if problems:
+        print("!!! backend: the rendered NetworkPolicies break what they promise", file=sys.stderr)
+        for problem in problems:
+            print(f"      {problem}", file=sys.stderr)
+        return 1
+    print(f"backend: {len(policies)} NetworkPolicies render; "
+          f"{len(covered)} roles covered, baseline denies both directions")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
