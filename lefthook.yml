@@ -140,11 +140,25 @@ pre-push:
     # the separator onto the previous line and silently dropping
     # every resource after the first one. Runs only when chart files
     # change so non-chart pushes don't pay the helm-template cost.
+    #
+    # The glob is repo-relative even though `root` is set: `root` only
+    # picks the working directory, and a pattern containing a slash is
+    # matched against the path git reports. A `deploy/chart/**/*` here
+    # matches nothing, which is how this job sat dead — pointing at a
+    # task name that does not exist — without anyone's push going red.
+    # (Patterns with no slash, like the `*.go` jobs above, match on the
+    # basename and are unaffected.)
     - name: backend-chart-verify
       root: backend/
       tags: [chart, lint]
-      glob: "deploy/chart/**/*"
-      run: task chart:verify
+      glob: "backend/deploy/chart/**/*"
+      run: task release:chart:verify
+
+    - name: frontend-chart-verify
+      root: frontend/
+      tags: [chart, lint]
+      glob: "frontend/deploy/chart/**/*"
+      run: task release:chart:verify
 
     - name: frontend-tsc
       root: frontend/

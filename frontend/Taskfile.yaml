@@ -28,6 +28,13 @@ vars:
   BUILDX_BUILDER: lean
   DOCKERFILE: ./deploy/Dockerfile
   DOCKER_BUILD_FLAGS: --network=host
+  # Floor for the chart render gate — it fails when the chart renders fewer
+  # resources than this. The library default is 1, which against a chart that
+  # renders 4 can only fire once every template has stopped rendering; the
+  # gate exists for the case where one silently stops. A floor, not an
+  # equality: adding a resource is free, removing one is a deliberate edit
+  # here.
+  CHART_MIN_RESOURCES: "4"
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }
