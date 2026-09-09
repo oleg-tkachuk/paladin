@@ -95,3 +95,34 @@ func TestAdversarial_CrossTenantRolePermitStillAllowed(t *testing.T) {
 		t.Fatal("platform.admin cross-tenant reach was denied — role permits must not depend on membership")
 	}
 }
+
+// The JWT slug is optional during the rollout, and membership deliberately
+// anchors on the DB-authoritative slug rather than the claimed one — so a
+// principal carrying only its trusted tenant UUID is still a member of that
+// tenant. The positive control above sets both fields, which leaves the
+// outer membership guard (`p.TenantID != uuid.Nil || p.TenantSlug != ""`)
+// unexercised in its first arm.
+//
+// Requiring both instead of either denies every token minted without a
+// tenant_slug claim. That is a deny-where-allow — an outage for those
+// callers rather than a hole — and it would present as Cedar refusing
+// members access to their own tenant for no visible reason.
+func TestAdversarial_MemberWithoutAClaimedSlugIsStillAMember(t *testing.T) {
+	b := uuid.New()
+	member := &Principal{Subject: "u", TenantID: b, Roles: []string{"tenant.user"}} // no TenantSlug
+	if got := decide(t, bravoMemberPolicy, "bravo", member, &Resource{TenantID: b, Collection: "k"}); got != DecisionAllow {
+		t.Fatal("a member whose token carries no tenant_slug was denied on its own tenant; " +
+			"membership anchors on the authoritative slug, not the claimed one")
+	}
+}
+
+// The mirror of it: carrying only a slug and no trusted UUID must not confer
+// membership anywhere. The UUID is the trusted half, and a token with just a
+// string could otherwise claim any tenant it names.
+func TestAdversarial_SlugWithoutATrustedUUIDIsNotAMember(t *testing.T) {
+	b := uuid.New()
+	claimant := &Principal{Subject: "u", TenantSlug: "bravo", Roles: []string{"tenant.user"}} // no TenantID
+	if got := decide(t, bravoMemberPolicy, "bravo", claimant, &Resource{TenantID: b, Collection: "k"}); got == DecisionAllow {
+		t.Fatal("a principal with no trusted tenant UUID satisfied a member permit by naming the slug")
+	}
+}
