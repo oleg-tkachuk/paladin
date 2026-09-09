@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 )
@@ -244,4 +245,79 @@ func postJSON(h *Handler, path string, body string) *httptest.ResponseRecorder {
 	r.Header.Set("Content-Type", "application/json")
 	h.handleRegister(rec, r)
 	return rec
+}
+
+// mintRefresh produces a validly-signed IAM refresh token the decoder
+// accepts, carrying whatever user and tenant the caller names — which is the
+// point: the claims and the stored user are two separate sources, and the
+// rotation guard is what makes them agree.
+func mintRefresh(t *testing.T, userID, tenantID uuid.UUID) string {
+	t.Helper()
+	iss, err := issuer.New(issuer.Config{
+		Issuer: "paladin", SigningKey: []byte(testSigningKey),
+		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("issuer: %v", err)
+	}
+	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{
+		Subject: userID.String(), TenantID: tenantID, UserID: userID,
+		TokenID: uuid.Must(uuid.NewV7()),
+	})
+	if err != nil {
+		t.Fatalf("mint refresh: %v", err)
+	}
+	return rt
+}
+
+// Rotation re-checks the owner on every refresh, and the check is a
+// three-armed disjunction. The tenant arm is the one that matters most: the
+// tenant comes from the token's claims and the user from the database, and
+// without that comparison a validly-signed refresh naming another tenant
+// mints a fresh access token scoped to a tenant its owner does not belong to.
+//
+// Deactivation has to bite here too — a refresh token outlives the session,
+// so a disabled user who never logs out keeps rotating indefinitely.
+func TestToken_RefreshRechecksTheOwner(t *testing.T) {
+	newFixture := func(t *testing.T, u authstore.User) *Handler {
+		t.Helper()
+		store := newMemStore()
+		store.clients[publicClient().ClientID] = publicClient()
+		return testHandler(t, store, &memRefresh{}, u)
+	}
+	exchange := func(h *Handler, rt string) int {
+		return postForm(h, "/oauth/token", url.Values{
+			"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"}, "refresh_token": {rt},
+		}).Code
+	}
+
+	t.Run("matching owner rotates", func(t *testing.T) {
+		u := sampleUser()
+		if got := exchange(newFixture(t, u), mintRefresh(t, u.UserID, u.TenantID)); got != http.StatusOK {
+			t.Fatalf("status = %d, want 200 — a valid refresh must rotate", got)
+		}
+	})
+
+	t.Run("a tenant the user does not belong to is refused", func(t *testing.T) {
+		u := sampleUser()
+		other := uuid.New()
+		if got := exchange(newFixture(t, u), mintRefresh(t, u.UserID, other)); got == http.StatusOK {
+			t.Fatal("a refresh naming another tenant rotated; the access token would be scoped to it")
+		}
+	})
+
+	t.Run("a disabled owner is refused", func(t *testing.T) {
+		u := sampleUser()
+		u.Disabled = true
+		if got := exchange(newFixture(t, u), mintRefresh(t, u.UserID, u.TenantID)); got == http.StatusOK {
+			t.Fatal("a disabled user rotated a refresh token")
+		}
+	})
+
+	t.Run("an unknown owner is refused", func(t *testing.T) {
+		u := sampleUser()
+		if got := exchange(newFixture(t, u), mintRefresh(t, uuid.New(), u.TenantID)); got == http.StatusOK {
+			t.Fatal("a refresh naming a user that does not exist rotated")
+		}
+	})
 }
