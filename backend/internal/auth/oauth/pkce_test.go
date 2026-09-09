@@ -76,3 +76,53 @@ func TestNormalizeMethod(t *testing.T) {
 		t.Error("S256 must pass through unchanged (case-sensitive)")
 	}
 }
+
+// The unreserved set is RFC 7636's ALPHA / DIGIT / "-" / "." / "_" / "~", and
+// the existing charset cases are all built from repeated "a" — so the upper
+// bound of each range was never exercised. Narrowing one is a single
+// character change that compiles and reads correctly: `c >= '0' && c < '9'`
+// rejects the digit 9.
+//
+// That is not a narrow failure. A verifier is 43+ random characters from a
+// 66-character alphabet, so roughly half of all of them contain any given
+// character — meaning about half of every client's authorisation attempts
+// would fail the charset check, with the server reporting a malformed
+// verifier for one that is perfectly legal.
+func TestValidateVerifier_RangeBoundaries(t *testing.T) {
+	// 42 filler characters plus the one under test keeps every case at the
+	// minimum legal length, so a rejection can only be the charset.
+	const filler = 42
+
+	accepted := map[string]byte{
+		"first upper": 'A', "last upper": 'Z',
+		"first lower": 'a', "last lower": 'z',
+		"first digit": '0', "last digit": '9',
+		"dash": '-', "dot": '.', "underscore": '_', "tilde": '~',
+	}
+	for name, c := range accepted {
+		t.Run("accepts "+name, func(t *testing.T) {
+			v := strings.Repeat("a", filler) + string(c)
+			if err := ValidateVerifier(v); err != nil {
+				t.Errorf("ValidateVerifier(…%q) = %v, want nil — %c is unreserved", c, err, c)
+			}
+		})
+	}
+
+	// The characters immediately outside each range. These are the ones a
+	// widened bound would let through, and they are exactly the interesting
+	// ones: '/' and ':' bracket the digits, '@' and '[' bracket the uppers.
+	rejected := map[string]byte{
+		"below digits": '/', "above digits": ':',
+		"below upper": '@', "above upper": '[',
+		"below lower": '`', "above lower": '{',
+		"space": ' ', "plus": '+', "slash-ish": '%',
+	}
+	for name, c := range rejected {
+		t.Run("rejects "+name, func(t *testing.T) {
+			v := strings.Repeat("a", filler) + string(c)
+			if err := ValidateVerifier(v); !errors.Is(err, ErrPKCEVerifierCharset) {
+				t.Errorf("ValidateVerifier(…%q) err = %v, want ErrPKCEVerifierCharset", c, err)
+			}
+		})
+	}
+}
