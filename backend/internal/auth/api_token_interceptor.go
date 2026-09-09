@@ -323,9 +323,12 @@ func extractAPIToken(xlegate, authz string) string {
 }
 
 // mapAPITokenErr translates verifier sentinel errors to connect.Error.
-// All denial paths use CodeUnauthenticated rather than PermissionDenied:
-// API tokens are an *authentication* primitive (proves who you are);
-// authorisation gates (scopes / Cedar) live downstream.
+// The token's own gates — malformed, unknown, expired, revoked — answer
+// "who are you" and map to CodeUnauthenticated; API tokens are an
+// *authentication* primitive and the authorisation gates (scopes /
+// Cedar) live downstream. Audience is the exception and maps to
+// CodePermissionDenied: the caller is identified, the token is simply
+// not minted for this plane.
 func mapAPITokenErr(err error) error {
 	switch {
 	case errors.Is(err, api_token.ErrTokenMalformed):

@@ -1710,6 +1710,25 @@ of the pipeline._
 
 ---
 
+### API-token verify latency is not recorded for streaming RPCs
+
+- **Status:** Deferred — surfaced 2026-09-09 while covering the streaming
+  interceptor path; deferred because closing it changes what the metric
+  measures, which is a decision rather than a gap in coverage.
+- **Reason:** `WrapUnary` times the verify and calls `recordVerifyDuration`
+  with the tenant and the outcome. `WrapStreamingHandler` calls neither, so
+  API-token verification on every streaming RPC is invisible: no latency, no
+  success/failure split, no tenant attribution. The rate-limit metrics are
+  shared (both paths reach them through `rateLimitGate`), so the gap is
+  specific to verify. Whether it was deliberate is not recorded anywhere.
+- **Definition of Done:** either the streaming path records the same metric —
+  and the histogram's meaning is restated to cover both call kinds — or the
+  asymmetry is written down where the reader of `WrapStreamingHandler` sees it.
+- **Blockers:** none; it needs a decision on whether one histogram should mix
+  unary and streaming verifies or carry a label separating them.
+
+---
+
 ### The NetworkPolicy templates render under no values file we ship
 
 - **Status:** Deferred — surfaced 2026-09-09 while wiring the chart gates.
