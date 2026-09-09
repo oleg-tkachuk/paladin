@@ -19,6 +19,9 @@
         },
         "targetCPUUtilizationPercentage": {
           "type": "integer"
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": "integer"
         }
       },
       "type": "object"
@@ -203,8 +206,11 @@
         "enabled": {
           "type": "boolean"
         },
+        "maxUnavailable": {
+          "type": ["integer", "string"]
+        },
         "minAvailable": {
-          "type": "integer"
+          "type": ["integer", "string"]
         }
       },
       "type": "object"

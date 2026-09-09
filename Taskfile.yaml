@@ -109,6 +109,10 @@ tasks:
       # schemas still refuse anything — and renders every values file, not
       # only the defaults the chart's own gate looks at.
       - ./scripts/chart-values.test.sh
+      # The other direction: the schemas were generated from the values files
+      # we ship, so they encode what we set rather than what the chart
+      # supports. Three keys the templates read were already refused by them.
+      - python3 ./scripts/chart-reads.py
       - task: frontend:build
 
   verify-deep:
