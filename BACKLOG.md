@@ -1710,6 +1710,31 @@ of the pipeline._
 
 ---
 
+### Nothing checks that the values schema permits what the templates read
+
+- **Status:** Deferred — surfaced 2026-09-09; every instance found that day was
+  fixed, the recurrence is what is deferred.
+- **Reason:** `values.schema.json` was generated from the values files we ship,
+  so it encodes what we happen to set, not what the chart supports. That is
+  narrower, and the gap is silent in the direction that hurts: an operator
+  setting a key the templates read gets `additional properties … not allowed`
+  at deploy time. Found this way: `deployments.<role>` had five different
+  shapes for one thing the templates treat uniformly (`autoscaling` was legal
+  on `api` alone, `resources` and `nodeSelector` on none of them);
+  `targetMemoryUtilizationPercentage` was read and refused; and six objects
+  shipped as `{}` had been closed to *no keys at all* — `defaults.affinity`,
+  `jobs.*.resources`, `storage.s3CredentialsSecrets` and two on the console.
+- **Definition of Done:** the gate compares what the templates dereference
+  against what the schema admits. The audit that found these was a throwaway
+  script mapping each template local (`$spec`, `$defaults`, `$auto`, …) to its
+  schema node — durable only if that map stops being hand-written, which is
+  the actual problem.
+- **Blockers:** none; the cost is building the map from the templates rather
+  than by hand, and a hand-written one is the second source of truth this
+  schema already avoids for `config`.
+
+---
+
 ### Drop the deprecated plane-address aliases
 
 - **Status:** Narrowed 2026-09-01 — the unification is DONE; only the removal
