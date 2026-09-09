@@ -996,6 +996,14 @@ open deliberately — each notes why._
   into the pool (`deliverNATS`, `natsGroupTarget`, and the warmup scan in
   cmd/server/serve_dispatcher.go) refuse an empty URL first. Unkillable without
   fabricating a state the code prevents.
+- **Five files in the package still have no test file named after them**
+  (`capability_purger`, `metrics`, `multipart_abort_drainer`, `multipart_reaper`,
+  `reconciler`). That is a signal, not a finding — the same signal was wrong
+  about `sink_nats.go`, whose coverage lives in four other files. Two of the
+  seven that looked untested on 2026-09-10 turned out to be genuinely untested
+  and now have tests (`api_token_purger`, `tenant_rate_bucket_sweeper`); the
+  rest are unmeasured. What settles each is a mutation run naming both
+  integration suites in --test-cmd, not a line count.
 - **A fourth hand-written copy of `poolKey`** sits in
   cmd/server/serve_dispatcher.go (`key := cfg.URL + "\x00" + cfg.CredentialsRef`),
   because `poolKey` is unexported and that file is package main. It is used only
