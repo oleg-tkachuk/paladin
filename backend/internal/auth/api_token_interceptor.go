@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -245,31 +246,57 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 	return ce
 }
 
+// authenticate runs the whole API-token gate for one request: extract the
+// token, verify it, meter the verify, apply the rate limit, and derive the
+// identity. It returns the context the handler should run under, or a
+// connect.Error to short-circuit with.
+//
+// Both wrappers share this instead of each carrying a copy. They carried
+// copies, and the copies drifted: only the unary one recorded the verify
+// histogram, so `paladin.api_token.verify.duration_ms` quietly meant "unary
+// calls only" while its own description claimed end-to-end verify latency —
+// invisible in exactly the direction that matters, since a streaming verify
+// could be pathological and never appear. Nothing in this sequence is
+// call-kind-specific: the verify happens once, at stream open, and is the
+// same digest lookup either way. What differs between the two wrappers is
+// where the headers come from and how they return, and that is now all that
+// differs.
+//
+// No token is not a failure. The context comes back unchanged with a nil
+// error so the request defers to whatever authenticates it downstream.
+func (i *apiTokenInterceptor) authenticate(ctx context.Context, hdr http.Header) (context.Context, error) {
+	token := extractAPIToken(hdr.Get(HeaderAPIToken), hdr.Get("Authorization"))
+	if token == "" {
+		return ctx, nil
+	}
+	start := time.Now()
+	t, verr := i.verifier.Verify(ctx, token, i.audience)
+	// Tenant attribution: only known on success. On failure the
+	// metric is recorded with empty tenant_id; cardinality stays
+	// bounded.
+	var tenantID string
+	if t != nil {
+		tenantID = t.TenantID.String()
+	}
+	recordVerifyDuration(ctx, float64(time.Since(start).Microseconds())/1000.0, tenantID, verr == nil)
+	if verr != nil {
+		return ctx, mapAPITokenErr(verr)
+	}
+	if err := i.rateLimitGate(ctx, t); err != nil {
+		return ctx, err
+	}
+	idCtx, err := i.withTokenIdentity(ctx, t)
+	if err != nil {
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	return idCtx, nil
+}
+
 func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		token := extractAPIToken(req.Header().Get(HeaderAPIToken), req.Header().Get("Authorization"))
-		if token == "" {
-			return next(ctx, req)
-		}
-		start := time.Now()
-		t, verr := i.verifier.Verify(ctx, token, i.audience)
-		// Tenant attribution: only known on success. On failure the
-		// metric is recorded with empty tenant_id; cardinality stays
-		// bounded.
-		var tenantID string
-		if t != nil {
-			tenantID = t.TenantID.String()
-		}
-		recordVerifyDuration(ctx, float64(time.Since(start).Microseconds())/1000.0, tenantID, verr == nil)
-		if verr != nil {
-			return nil, mapAPITokenErr(verr)
-		}
-		if err := i.rateLimitGate(ctx, t); err != nil {
-			return nil, err
-		}
-		idCtx, err := i.withTokenIdentity(ctx, t)
+		idCtx, err := i.authenticate(ctx, req.Header())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeUnauthenticated, err)
+			return nil, err
 		}
 		return next(idCtx, req)
 	}
@@ -281,20 +308,9 @@ func (i *apiTokenInterceptor) WrapStreamingClient(next connect.StreamingClientFu
 
 func (i *apiTokenInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		token := extractAPIToken(conn.RequestHeader().Get(HeaderAPIToken), conn.RequestHeader().Get("Authorization"))
-		if token == "" {
-			return next(ctx, conn)
-		}
-		t, err := i.verifier.Verify(ctx, token, i.audience)
+		idCtx, err := i.authenticate(ctx, conn.RequestHeader())
 		if err != nil {
-			return mapAPITokenErr(err)
-		}
-		if err := i.rateLimitGate(ctx, t); err != nil {
 			return err
-		}
-		idCtx, err := i.withTokenIdentity(ctx, t)
-		if err != nil {
-			return connect.NewError(connect.CodeUnauthenticated, err)
 		}
 		return next(idCtx, conn)
 	}
