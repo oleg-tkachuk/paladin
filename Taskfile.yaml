@@ -103,6 +103,11 @@ tasks:
       # the compose file — and nothing else would notice them drifting apart
       # until a gate booted on top of whatever was already listening.
       - ./scripts/stack-ports.test.sh
+      # A mistyped chart value renders the default and exits 0, so the
+      # operator reads their own YAML back as applied while the cluster
+      # runs something else. The schemas close that; this checks the
+      # schemas still refuse anything.
+      - ./scripts/chart-schema.test.sh
       - task: frontend:build
 
   verify-deep:
