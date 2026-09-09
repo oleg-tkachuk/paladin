@@ -990,6 +990,28 @@ open deliberately — each notes why._
   thing, and covering part of it feels like covering it.
 - **Blockers:** none.
 
+### `Pushdown.Recognised` is written by three extractors and read by none
+
+- **Status:** Deferred (harmless today; it distorts every measurement of the
+  package and documents an optimisation that does not exist).
+- **What it is:** all three pushdown extractors in `backend/internal/filter/cel`
+  maintain a `Recognised` counter, documented as "counts the conjuncts that
+  produced a predicate. Zero means the caller may skip the pushdown entirely."
+  No caller does. Outside the package's own tests nothing reads the field —
+  the adapters take the predicate maps and the time bounds and ignore it.
+- **Why it matters beyond dead weight:** every extractor returns a bool whose
+  only effect is incrementing that counter, so roughly two thirds of the
+  package's mutation survivors are `return false` flipped to `return true` —
+  mutations that change no predicate, no query and no result. The score reads
+  as a coverage gap and is not one, and a future reader chasing it would write
+  tests asserting a counter rather than behaviour.
+- **Definition of Done:** either a caller actually skips the pushdown when
+  `Recognised == 0` (the documented optimisation — the adapters currently
+  build the bounds unconditionally), or the field and the bool returns come
+  out and the extractors become `func(...)` with no result.
+- **Blockers:** none. It is exported, so removing it is an API change within
+  the module; the only consumers are in-repo.
+
 ### Mutation testing: how to read what it says
 
 - **Status:** Deferred (the tool is in the repo; this is the note that goes
