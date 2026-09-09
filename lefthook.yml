@@ -60,12 +60,21 @@ pre-commit:
     - name: backend-sqlc
       root: backend/
       tags: [go, sqlc]
-      glob: "{sqlc.yaml,sqlc.yml,sqlc.json,internal/store/postgres/queries/*.sql}"
+      # Repo-relative, like every glob here that starts with literal text —
+      # see the note on backend-chart-verify. A pattern is matched against
+      # the path git reports, and only a leading wildcard can absorb the
+      # `backend/` in front of it, which is why `*.go` above needs no prefix
+      # and this needed one to match anything at all.
+      glob: "backend/{sqlc.yaml,sqlc.yml,sqlc.json,internal/store/postgres/queries/*.sql}"
       run: |
         set -euo pipefail
         command -v sqlc >/dev/null 2>&1 || exit 0
         sqlc generate
-        if ! git diff --quiet; then
+        # Scoped to sqlc's own output (`out:` in sqlc.yaml). A bare
+        # `git diff --quiet` answers "is the worktree clean", which is a
+        # different question and a false alarm on any partially staged
+        # commit — harmless only while this job was unreachable.
+        if ! git diff --quiet -- internal/store/postgres/sqlc; then
           echo "ERROR: sqlc generated files are out of date. Run 'task gen:all' and commit."
           exit 1
         fi
@@ -94,7 +103,7 @@ pre-commit:
     - name: backend-buf-lint
       root: backend/
       tags: [proto, lint]
-      glob: "proto/**/*.proto"
+      glob: "backend/proto/**/*.proto"
       run: |
         if command -v buf >/dev/null 2>&1; then
           buf lint proto
