@@ -118,6 +118,9 @@ tasks:
       # which makes a role with no policy of its own cut off rather than
       # merely exposed — worth more than a syntax check.
       - python3 ./scripts/chart-netpol.py
+      # Last on purpose: toolchain drift is the least urgent thing in this
+      # list, and running it earlier would mask a real test failure behind it.
+      - ./scripts/brewfile.test.sh
       - task: frontend:build
 
   verify-deep:

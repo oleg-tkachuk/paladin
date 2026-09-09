@@ -67,6 +67,11 @@ stream to `go get`; see
 Needs Docker and [Task](https://taskfile.dev). Nothing else — no cluster,
 no credentials to arrange.
 
+Running the gates is a different matter: `task verify-all` shells out to Go,
+helm, buf, yq and more. [`brew bundle`](Brewfile) installs that set, and the
+Brewfile says which tools are pinned elsewhere instead (`sqlc` by `go.mod`,
+`pnpm` by corepack) and why.
+
 ```bash
 task e2e-up          # every plane + Postgres + storage + the console
 ```
