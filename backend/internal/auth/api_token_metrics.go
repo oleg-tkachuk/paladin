@@ -40,7 +40,7 @@ func initAPITokenMetrics() {
 
 		apiTokVerifyDuration, _ = meter.Float64Histogram(
 			"paladin.api_token.verify.duration_ms",
-			metric.WithDescription("End-to-end api_token verify latency including argon2id, in milliseconds."),
+			metric.WithDescription("End-to-end api_token verify latency, unary and streaming, in milliseconds."),
 			metric.WithUnit("ms"),
 		)
 		apiTokRLDecisions, _ = meter.Int64Counter(

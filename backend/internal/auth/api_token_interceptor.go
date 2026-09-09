@@ -57,7 +57,7 @@ func WithAPIToken(ctx context.Context, t *api_token.Token) context.Context {
 //   - Also accepts `X-Paladin-API-Token` for clients that already use
 //     Authorization for an OIDC bearer.
 //
-//   - Verification = DB lookup + argon2id compare (slow). The Verifier
+//   - Verification = one indexed lookup by HMAC digest. The Verifier
 //     handles its own caching strategy if any; the interceptor doesn't.
 //
 // audience is the plane label this interceptor is mounted on

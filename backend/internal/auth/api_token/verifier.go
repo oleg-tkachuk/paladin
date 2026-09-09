@@ -59,9 +59,10 @@ func NewVerifier(cfg VerifierConfig) (*Verifier, error) {
 // interceptor can map them to connect.Error codes:
 //
 //   - ErrTokenMalformed   — token doesn't start with `paladin_pat_` or too short.
-//   - ErrTokenNotFound    — prefix lookup matched no rows OR every row
-//     failed argon2id-compare. Same error to avoid
-//     leaking "valid prefix, wrong tail".
+//   - ErrTokenNotFound    — the digest matched no row. A wrong plaintext
+//     hashes to a digest nothing carries, so this is
+//     also what a bad token looks like — no "valid
+//     prefix, wrong tail" to leak.
 //   - ErrTokenExpired     — past expires_at (with leeway).
 //   - ErrTokenRevoked     — row.revoked_at is set.
 //   - ErrAudienceMismatch — token.Audience does not include the calling
