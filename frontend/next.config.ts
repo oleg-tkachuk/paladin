@@ -63,9 +63,11 @@ const nextConfig: NextConfig = {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
   env: {
-    PALADIN_GRPC_URL:
-      process.env.PALADIN_GRPC_URL ||
-      yamlConfig.runtimeConfig.public.paladin.upstreamUrl,
+    // PALADIN_GRPC_URL used to be set here from the config file's
+    // paladin.upstreamUrl. Nothing read it — in either repo — while the BFF
+    // reached its upstreams through PALADIN_DATA_URL / _IAM_ / _ADMIN_, which
+    // the chart sets directly.
+    //
     // NEXT_PUBLIC_* prefix is required for client-side access — without
     // it Next.js strips the var from the browser bundle and the
     // values render as undefined at runtime.

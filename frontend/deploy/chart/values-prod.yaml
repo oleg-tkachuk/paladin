@@ -39,16 +39,6 @@ topologySpreadConstraints:
       matchLabels:
         app.kubernetes.io/name: paladin-console
 
-config:
-  runtimeConfig:
-    public:
-      oidc:
-        authority: "https://authentik.example.com/application/o/paladin-console/"
-        clientId: "<prod-oidc-client-id>"
-        redirectUri: "https://paladin.example.com/auth/callback"
-        postLogoutRedirectUri: "https://paladin.example.com/"
-        disableAuth: false
-
 traefik:
   hosts:
     - paladin.example.com

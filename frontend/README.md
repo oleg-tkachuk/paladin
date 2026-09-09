@@ -25,17 +25,22 @@ pnpm install
 pnpm dev            # http://localhost:3000
 ```
 
-`configs/config.yaml` points the BFF at its upstreams. The defaults are
-in-cluster service DNS, so for a locally running backend you will want to
-override `runtimeConfig.public.paladin.upstreamUrl` and the
-`admin` / `iam` URLs.
+The BFF reaches its upstreams through `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and
+`PALADIN_ADMIN_URL`; each falls back to an in-cluster service name, so point them
+at a locally running backend by setting them in your shell. `configs/config.yaml`
+used to carry those URLs and no longer does — nothing read them from there.
 
 ## Authentication in development
 
-`oidc.disableAuth: true` in the dev config turns off browser-side auth,
-and the BFF falls back to `runtimeConfig.public.auth.devToken` when
-`localStorage.paladin_token` is empty. **`devToken` ships empty on purpose** —
-it is served to the browser, and this repository is public.
+The console sends whatever bearer sits in `localStorage.paladin_token`, which you
+set through its own `/config` page. There is no browser-side OIDC flow and no
+`disableAuth` switch in the code — the dev config's `oidc` block described a
+design that never landed and has been removed.
+
+`configs/config.yaml`'s `auth.devToken` has one reader left,
+`scripts/dev-bootstrap.sh`, which greps it for a JWT to seed a local stack with.
+**It ships empty on purpose** — this repository is public, so a committed token
+is a token everyone holds.
 
 Mint one for your stack and paste it into the console's `/config` page:
 
@@ -63,8 +68,8 @@ frontend/
 │   ├── components/       shared UI (shadcn/ui + Tailwind)
 │   ├── gen/              GENERATED Connect-ES stubs — do not hand-edit
 │   ├── lib/              client helpers, auth plumbing, formatting
-│   └── config.ts         loads configs/config.yaml, validated with zod
-├── configs/config.yaml   runtime config, read server-side at boot
+│   └── config.ts         loads configs/config.yaml (uiMetadata only), via zod
+├── configs/config.yaml   dev-bootstrap's JWT; the app reads only uiMetadata
 ├── tests/e2e/            Playwright suite + its compose stack
 └── deploy/               Dockerfile and Helm chart
 ```

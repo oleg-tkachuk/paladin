@@ -37,26 +37,3 @@ tls:
     enabled: false
   existingSecret: traefik-tls
 
-config:
-  runtimeConfig:
-    public:
-      oidc:
-        # Local cluster has no working Authentik most of the time;
-        # disable browser-side auth so the BFF accepts any request.
-        disableAuth: true
-      auth:
-        # DEV ONLY. Fallback Bearer token used when localStorage.paladin_token is
-        # empty. Left EMPTY on purpose: this repository is public, so a
-        # committed JWT is a JWT everyone holds — and the value is served to
-        # the browser, which makes it a credential with no confidentiality
-        # left at all.
-        #
-        # Mint one for your own local cluster and pass it at install time:
-        #
-        #     TOKEN=$(cd <paladin-repo> && task backend:auth:mint-token)
-        #     helm upgrade --install paladin-console . -f values-local.yaml \
-        #       --set-string 'config.runtimeConfig.public.auth.devToken='"$TOKEN"
-        #
-        # Acceptable only on a local cluster — never in any environment
-        # reachable by real users.
-        devToken: ""

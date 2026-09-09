@@ -5,16 +5,6 @@
 
 replicaCount: 2
 
-config:
-  runtimeConfig:
-    public:
-      oidc:
-        authority: "https://authentik.dev.example/application/o/paladin-console/"
-        clientId: "<dev-oidc-client-id>"
-        redirectUri: "https://paladin.dev.example/auth/callback"
-        postLogoutRedirectUri: "https://paladin.dev.example/"
-        disableAuth: false
-
 traefik:
   hosts:
     - paladin.dev.example

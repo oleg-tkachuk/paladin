@@ -70,6 +70,7 @@
               "properties": {
                 "auth": {
                   "additionalProperties": false,
+                  "description": "accepted and ignored: src/config.ts no longer reads this. Kept so an overlay outside this repository does not fail validation over it.",
                   "properties": {
                     "devToken": {
                       "type": "string"
@@ -79,6 +80,7 @@
                 },
                 "paladin": {
                   "additionalProperties": false,
+                  "description": "accepted and ignored: src/config.ts no longer reads this. Kept so an overlay outside this repository does not fail validation over it.",
                   "properties": {
                     "baseUrl": {
                       "type": "string"
@@ -94,6 +96,7 @@
                 },
                 "oidc": {
                   "additionalProperties": false,
+                  "description": "accepted and ignored: src/config.ts no longer reads this. Kept so an overlay outside this repository does not fail validation over it.",
                   "properties": {
                     "authority": {
                       "type": "string"

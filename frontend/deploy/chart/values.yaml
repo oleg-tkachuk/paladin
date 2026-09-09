@@ -235,27 +235,14 @@ podDisruptionBudget:
 
 # ─── App config (templated into the ConfigMap) ─────────────────────────────
 #
-# Defaults here are PROD-SAFE. The dev cluster opt-ins (disableAuth,
-# pre-minted dev JWT) live in values-local.yaml. Never restore dev
-# defaults here — a future operator who installs the chart with just
-# `helm install` MUST get a deployment that's not silently insecure.
-config:
-  runtimeConfig:
-    public:
-      paladin:
-        baseUrl: "/api/paladin"
-        upstreamUrl: "http://paladin-core.paladin.svc.cluster.local:8080"
-        timeoutMs: 5000
-      oidc:
-        # No issuer / clientId defaults — every env overlay MUST set.
-        # disableAuth=false in prod; only the local overlay flips it
-        # true for dev convenience.
-        authority: ""
-        clientId: ""
-        redirectUri: ""
-        postLogoutRedirectUri: ""
-        scope: "openid profile email"
-        disableAuth: false
-      # `auth.devToken` is NOT set here — see values-local.yaml. The
-      # token would be exposed to the browser via runtimeConfig.public,
-      # so committing a literal here is a real disclosure path.
+# Empty, and the ConfigMap it renders now carries nothing the console reads.
+# It used to hold `paladin`, `oidc` and `auth` subtrees; none of them was ever
+# read by any code. The console authenticates through the backend's IAM plane
+# (there is no OIDC client library in the bundle), the BFF reaches its upstreams
+# through the PALADIN_*_URL env vars the deployment sets, and the build metadata
+# the UI does show is threaded in as Docker build args.
+#
+# The key stays, and so does the ConfigMap, because overlays outside this repo
+# mount it. Anything an overlay sets here is accepted and ignored — src/config.ts
+# is deliberately non-strict so that cannot fail a build.
+config: {}

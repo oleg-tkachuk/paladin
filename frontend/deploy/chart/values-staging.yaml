@@ -16,16 +16,6 @@ autoscaling:
   maxReplicas: 4
   targetCPUUtilizationPercentage: 70
 
-config:
-  runtimeConfig:
-    public:
-      oidc:
-        authority: "https://authentik.staging.example/application/o/paladin-console/"
-        clientId: "<staging-oidc-client-id>"
-        redirectUri: "https://paladin.staging.example/auth/callback"
-        postLogoutRedirectUri: "https://paladin.staging.example/"
-        disableAuth: false
-
 traefik:
   hosts:
     - paladin.staging.example

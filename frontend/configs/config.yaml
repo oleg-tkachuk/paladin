@@ -1,30 +1,24 @@
+# Local dev config for the console.
+#
+# Almost nothing here is read any more. `src/config.ts` keeps one subtree —
+# `uiMetadata` — and even that is a fallback: the version, commit and build time
+# the UI shows come from APP_VERSION / GIT_COMMIT_HASH / BUILD_TIME, which
+# deploy/Dockerfile threads in as build args. The BFF reaches its upstreams
+# through PALADIN_DATA_URL / PALADIN_IAM_URL / PALADIN_ADMIN_URL, not from here.
+#
+# `auth.devToken` has exactly one reader left: scripts/dev-bootstrap.sh, which
+# greps this file for a JWT to call the backend with. The app does not read it —
+# the console's own bearer lives in localStorage under `paladin_token`, pasted in
+# through the /config page.
 runtimeConfig:
   public:
-    paladin:
-      baseUrl: "/api/paladin"
-      upstreamUrl: "http://paladin-core.paladin.svc.cluster.local:8080"
-      timeoutMs: 5000
-    oidc:
-      authority: ""
-      clientId: ""
-      redirectUri: ""
-      postLogoutRedirectUri: ""
-      scope: "openid profile email"
-      disableAuth: true
     auth:
-      # DEV ONLY. Fallback Bearer token used when localStorage.paladin_token is
-      # empty. The value is served to the browser, so it must NEVER be set in
-      # a production build — and it is deliberately left empty here rather
-      # than committed, because this repository is public: a checked-in JWT is
-      # a JWT everyone has.
-      #
-      # Mint your own for a local stack (prints a token valid for the
-      # committed dev signing key):
+      # DEV ONLY, and left EMPTY on purpose: this repository is public, so a
+      # committed JWT is a JWT everyone holds. Mint your own for a local stack:
       #
       #     task backend:auth:mint-token
       #
-      # Then paste it into the console's /config page (it is stored in
-      # localStorage as `paladin_token`). There is no env-var override for this
-      # key — the loader reads this file only (src/config.ts) — so setting it
-      # here means editing a tracked file: keep that edit out of your commits.
+      # Roles must use the dotted form (`platform.admin`). The hyphenated
+      # spelling parses and then fails every Cedar check, which reads exactly
+      # like a permissions bug.
       devToken: ""

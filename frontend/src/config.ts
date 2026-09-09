@@ -39,58 +39,49 @@ const buildTime = resolveMeta(
   new Date().toISOString(),
 );
 
-const configSchema = z.object({
-  runtimeConfig: z.object({
-    public: z.object({
-      paladin: z
+// Only what something reads. The schema used to carry `paladin`, `oidc` and
+// `auth` subtrees as well; nothing in the app ever read them. `oidc.authority`
+// / `clientId` were for a browser-side OIDC flow that never landed (there is no
+// OIDC client library in package.json, and the console authenticates through
+// the backend's IAM plane), and `auth.devToken` was read by nothing while being
+// shipped into a ConfigMap — a comment warned it reached the browser, which it
+// could not, because no code fetched it.
+//
+// uiMetadata is the one live subtree, and even it is a fallback: the defaults
+// below read APP_VERSION / GIT_COMMIT_HASH / BUILD_TIME, which deploy/Dockerfile
+// threads in as build args, and next.config.ts bakes the result into
+// NEXT_PUBLIC_UI_* at build time.
+//
+// Deliberately NOT `.strict()`: zod drops unknown keys, and that is what lets a
+// values overlay still send the removed subtrees without failing the build. A
+// strict schema here would reject a config this code no longer cares about.
+export const configSchema = z.object({
+  runtimeConfig: z
+    .object({
+      public: z
         .object({
-          baseUrl: z.string().default("/api/paladin"),
-          upstreamUrl: z.string().default("http://localhost:8082"),
-          timeoutMs: z.number().default(5000),
+          uiMetadata: z
+            .object({
+              service: z.string().default("paladin-console"),
+              version: z.string().default(appVersion),
+              gitSha: z.string().default(gitSha),
+              buildTime: z.string().default(buildTime),
+            })
+            .default({
+              service: "paladin-console",
+              version: appVersion,
+              gitSha: gitSha,
+              buildTime: buildTime,
+            }),
+          configPath: z.string().default("unknown"),
         })
-        .default({
-          baseUrl: "/api/paladin",
-          upstreamUrl: "http://localhost:8082",
-          timeoutMs: 5000,
-        }),
-      oidc: z
-        .object({
-          authority: z.string().default(""),
-          clientId: z.string().default(""),
-          redirectUri: z.string().default(""),
-          postLogoutRedirectUri: z.string().default(""),
-          scope: z.string().default("openid profile email"),
-          disableAuth: z.boolean().default(false),
-        })
-        .default({
-          authority: "",
-          clientId: "",
-          redirectUri: "",
-          postLogoutRedirectUri: "",
-          scope: "openid profile email",
-          disableAuth: false,
-        }),
-      auth: z
-        .object({
-          devToken: z.string().default(""),
-        })
-        .default({ devToken: "" }),
-      uiMetadata: z
-        .object({
-          service: z.string().default("paladin-console"),
-          version: z.string().default(appVersion),
-          gitSha: z.string().default(gitSha),
-          buildTime: z.string().default(buildTime),
-        })
-        .default({
-          service: "paladin-console",
-          version: appVersion,
-          gitSha: gitSha,
-          buildTime: buildTime,
-        }),
-      configPath: z.string().default("unknown"),
-    }),
-  }),
+        .prefault({}),
+      // `.prefault`, not `.default`: zod 4's default takes the OUTPUT type, so a
+      // partial `{}` is a type error, while prefault seeds the INPUT and lets the
+      // leaf defaults fill themselves in. Every level being optional is the point
+      // — a ConfigMap rendered from an empty `config:` must parse, not warn.
+    })
+    .prefault({}),
 });
 
 export const loadConfig = () => {
@@ -120,8 +111,12 @@ export const loadConfig = () => {
         if (result.success) {
           return result.data;
         } else {
+          // Logged, not thrown: every field in the schema is optional now and
+          // its one live subtree falls back to the build-arg metadata, so a
+          // rejected file costs the console nothing it was using. Say that,
+          // rather than leaving a bare stack trace that reads like an outage.
           console.error(
-            `[Config] Validation failed for ${path}:`,
+            `[Config] ${path} does not match the expected shape; continuing on defaults:`,
             result.error,
           );
         }

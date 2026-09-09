@@ -1710,6 +1710,35 @@ of the pipeline._
 
 ---
 
+### The console's ConfigMap outlived what read it
+
+- **Status:** Deferred (the code side is done; what is left needs a repository
+  this session was told not to touch). Surfaced 2026-09-10.
+- **What was removed:** `paladin`, `oidc` and `auth` from the console's config
+  schema, the chart's own values files, and `PALADIN_GRPC_URL` from
+  next.config.ts. None of it was read by any code. `oidc.authority` /
+  `clientId` described a browser-side OIDC flow that never landed — there is no
+  OIDC client library in the bundle, and the console authenticates through the
+  backend's IAM plane — and `PALADIN_GRPC_URL` was written in one place and read
+  in none, in either repository.
+- **Reason it is not finished:** the chart still renders a ConfigMap from
+  `config:` (now `{}`), and `values.schema.json` still accepts the three removed
+  subtrees, because the ArgoCD overlay in `gitops` sets two of them and mounts
+  the ConfigMap at `/app/configs`. Dropping either would refuse that overlay and
+  leave the app `Unknown` in ArgoCD — the exact failure the values schema caused
+  when it first shipped. The schema marks them "accepted and ignored".
+- **Definition of Done:** the overlay stops setting `config.runtimeConfig.public`
+  and stops mounting the ConfigMap; then the ConfigMap template, the `config:`
+  key, its schema subtree and the loader's cluster search path all go.
+- **Worth knowing while it lasts:** the overlay ships a live dev JWT in
+  `config.runtimeConfig.public.auth.devToken`, so it sits in a ConfigMap in the
+  cluster. Nothing reads it — the console's bearer comes from
+  `localStorage.paladin_token`. The chart comment claiming the value "is served
+  to the browser" was describing a path that does not exist.
+- **Blockers:** a change in `gitops`, which is not this repository.
+
+---
+
 ### CI publishes the charts without running any chart gate
 
 - **Status:** Deferred — surfaced 2026-09-09.
