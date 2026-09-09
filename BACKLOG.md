@@ -1710,6 +1710,26 @@ of the pipeline._
 
 ---
 
+### The NetworkPolicy templates render under no values file we ship
+
+- **Status:** Deferred — surfaced 2026-09-09 while wiring the chart gates.
+- **Reason:** `backend/deploy/chart/templates/networkpolicy.yaml` is 10 KB of
+  per-role default-deny policy gated on `networkPolicies.enabled`, which is
+  false in all five shipped values files ("needs an enforcing CNI"). Every
+  chart gate we have — `helm lint`, the render/separator gate, and
+  `scripts/chart-values.test.sh`, which renders each values file — therefore
+  renders zero NetworkPolicies. A template error in it would reach a cluster
+  before anything noticed, and the flow matrix it encodes has never been
+  rendered, let alone applied.
+- **Definition of Done:** the policies render in at least one checked
+  configuration — either a values file that enables them, or a fixture the
+  values gate renders alongside the shipped ones.
+- **Blockers:** none technically; the question is whether to ship an overlay
+  that turns them on somewhere, which needs a cluster with an enforcing CNI to
+  be worth more than a compile check.
+
+---
+
 ### Nothing checks that the values schema permits what the templates read
 
 - **Status:** Deferred — surfaced 2026-09-09; every instance found that day was
@@ -1732,6 +1752,21 @@ of the pipeline._
 - **Blockers:** none; the cost is building the map from the templates rather
   than by hand, and a hand-written one is the second source of truth this
   schema already avoids for `config`.
+
+---
+
+### CI publishes the charts without running any chart gate
+
+- **Status:** Deferred — surfaced 2026-09-09.
+- **Reason:** `.github/workflows/release.yaml` is one job: semantic-release,
+  build and push both images, then `helm package` + `helm push` both charts.
+  Nothing in it lints, renders or schema-checks a chart. The enforcement is
+  entirely local — the lefthook `*-chart-verify` jobs and `verify-all` — and
+  both are skippable with `--no-verify`.
+- **Definition of Done:** the release job refuses to package a chart that has
+  not passed `release:chart:verify` and `scripts/chart-values.test.sh`.
+- **Blockers:** the same account-wide Actions spending limit as the entry
+  above — a workflow step nobody can execute is unverified code.
 
 ---
 

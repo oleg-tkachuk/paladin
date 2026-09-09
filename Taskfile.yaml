@@ -106,8 +106,9 @@ tasks:
       # A mistyped chart value renders the default and exits 0, so the
       # operator reads their own YAML back as applied while the cluster
       # runs something else. The schemas close that; this checks the
-      # schemas still refuse anything.
-      - ./scripts/chart-schema.test.sh
+      # schemas still refuse anything — and renders every values file, not
+      # only the defaults the chart's own gate looks at.
+      - ./scripts/chart-values.test.sh
       - task: frontend:build
 
   verify-deep:

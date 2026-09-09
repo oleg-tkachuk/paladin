@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# chart-schema.test.sh — every chart's values.schema.json must accept the
-# values files we ship and reject a key that does not exist.
+# chart-values.test.sh — the values files we ship must be accepted by their
+# chart's schema, must be refused when a key does not exist, and must each
+# render as a well-formed multi-document stream.
 #
 # A mistyped chart value is silent. `deployments.api.replica: 5` renders
 # `replicas: 2` — the default — and `helm template` exits 0, so the operator
@@ -10,6 +11,13 @@
 # The schema closes that, and this closes the schema: a schema nobody has
 # watched reject anything is indistinguishable from one that accepts
 # everything.
+#
+# Every check here runs once per values file, on purpose. The chart's own
+# `chart:verify` renders the defaults and nothing else, which is how a broken
+# prod-only template stayed green: backend renders 25 resources under
+# values.yaml and 33 under values-prod.yaml, so six kinds — Certificate, HPA,
+# IngressRoute, PrometheusRule, ServersTransport, ServiceMonitor — were
+# reachable by no gate at all.
 #
 # Runs from `task verify-all` — seconds, no cluster.
 
@@ -37,10 +45,25 @@ for chart in "${charts[@]}"; do
     # 1. The shipped values must all pass. A schema that rejects prod is worse
     #    than none: it fails at deploy time, on the environment that matters.
     for values in "$chart"/values*.yaml; do
-        if ! helm template schematest "$chart" -f "$values" >/dev/null 2>"$tmp/err"; then
+        if ! helm template schematest "$chart" -f "$values" >"$tmp/render.yaml" 2>"$tmp/err"; then
             {
                 echo "!!! $name: $(basename "$values") does not satisfy values.schema.json"
                 sed 's/^/      /' "$tmp/err"
+            } >&2
+            exit 1
+        fi
+
+        # 1b. …and must render as separate documents. A `{{- ... -}}` that
+        #     strips the newline before a `---` glues the separator onto the
+        #     previous line (`automountServiceAccountToken: true---`); every
+        #     YAML parser then reads the stream as one document and drops
+        #     every resource after the first. The chart ships, the cluster
+        #     runs a fraction of it, and helm reports nothing wrong.
+        if grep -qE '[^[:space:]]---' "$tmp/render.yaml"; then
+            {
+                echo "!!! $name: $(basename "$values") renders a glued document separator"
+                echo "      kubectl and ArgoCD drop every resource after the first."
+                grep -nE '[^[:space:]]---' "$tmp/render.yaml" | sed 's/^/      /'
             } >&2
             exit 1
         fi
@@ -55,5 +78,5 @@ for chart in "${charts[@]}"; do
         exit 1
     fi
 
-    echo "$name: $(ls "$chart"/values*.yaml | wc -l | tr -d ' ') values files accepted, unknown keys refused"
+    echo "$name: $(ls "$chart"/values*.yaml | wc -l | tr -d ' ') values files accepted, unknown keys refused, separators intact"
 done
