@@ -49,6 +49,12 @@ backend:
     # deployments.dispatcher.service.ports). Surfaces in the BFF
     # /api/health/all aggregator alongside api/admin/worker/mcp.
     dispatcher: "http://paladin-core-dispatcher.paladin.svc.cluster.local:8099"
+    # ingest exposes /system/health.json on 8100 — the ingest webhook
+    # addr (cfg.Ingest.Webhook.Addr), bound for ops regardless of driver:
+    # the webhook driver serves receiver routes there, and the nats /
+    # rabbitmq drivers bind the same addr ops-only (see the backend's
+    # serve_ingest.go::runIngestOpsServer).
+    ingest: "http://paladin-core-ingest.paladin.svc.cluster.local:8100"
 
 # Extra environment variables appended to the UI container's env block.
 # Use for knobs the chart doesn't model first-class. Common cases:

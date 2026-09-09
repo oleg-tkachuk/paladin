@@ -41,6 +41,9 @@
             "iam": {
               "type": "string"
             },
+            "ingest": {
+              "type": "string"
+            },
             "mcp": {
               "type": "string"
             },

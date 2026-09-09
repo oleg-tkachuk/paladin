@@ -80,6 +80,8 @@ spec:
               value: {{ .Values.backend.urls.mcp | quote }}
             - name: PALADIN_DISPATCHER_URL
               value: {{ .Values.backend.urls.dispatcher | quote }}
+            - name: PALADIN_INGEST_URL
+              value: {{ .Values.backend.urls.ingest | quote }}
             {{- /*
               PALADIN_HEALTH_SNAPSHOT_TOKEN — shared secret the BFF /api/health/all
               aggregator forwards (as X-Health-Token) to each backend's
