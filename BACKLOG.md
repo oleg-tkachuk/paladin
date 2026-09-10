@@ -1792,21 +1792,6 @@ of the pipeline._
 
 ---
 
-### CI publishes the charts without running any chart gate
-
-- **Status:** Deferred — surfaced 2026-09-09.
-- **Reason:** `.github/workflows/release.yaml` is one job: semantic-release,
-  build and push both images, then `helm package` + `helm push` both charts.
-  Nothing in it lints, renders or schema-checks a chart. The enforcement is
-  entirely local — the lefthook `*-chart-verify` jobs and `verify-all` — and
-  both are skippable with `--no-verify`.
-- **Definition of Done:** the release job refuses to package a chart that has
-  not passed `release:chart:verify` and `scripts/chart-values.test.sh`.
-- **Blockers:** the same account-wide Actions spending limit as the entry
-  above — a workflow step nobody can execute is unverified code.
-
----
-
 ### Drop the deprecated plane-address aliases
 
 - **Status:** Narrowed 2026-09-01 — the unification is DONE; only the removal

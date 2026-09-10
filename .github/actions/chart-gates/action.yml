@@ -1,0 +1,91 @@
+name: Chart gates
+description: >
+  Run every chart check this repository has: helm lint, the values-file gate
+  (all five values files accepted, an unknown key refused, no glued document
+  separator), the schema-vs-templates gate (the schema admits everything the
+  templates read), and the NetworkPolicy gate (the policies render, every
+  deployed role has one, the baseline denies both directions).
+
+  A composite action rather than a job, because two workflows need it for
+  different reasons: `test.yml` wants the feedback on a pull request, and
+  `release.yaml` must not package a chart that has not passed. Duplicating
+  the steps would let the two drift, and the release half is the one nobody
+  would notice going stale.
+
+  Tool versions are pinned deliberately. These gates compare rendered output,
+  so a floating helm or yq changes what CI checks with no commit of ours in
+  between — the same drift that had the generated clients and the linter
+  failing on this repository the day this was written.
+inputs:
+  helm-version:
+    description: helm release to install.
+    required: false
+    default: v4.3.0
+  yq-version:
+    description: mikefarah/yq release to install.
+    required: false
+    default: v4.53.6
+runs:
+  using: composite
+  steps:
+    - name: Set up Helm
+      uses: azure/setup-helm@v5.0.1
+      with:
+        version: ${{ inputs.helm-version }}
+
+    - name: Install yq
+      shell: bash
+      run: |
+        set -euo pipefail
+        # The runner image ships a yq, but not a version this repository chose.
+        # chart-netpol.py reads rendered YAML through it, so pin what parses.
+        sudo curl -fsSL -o /usr/local/bin/yq \
+          "https://github.com/mikefarah/yq/releases/download/${{ inputs.yq-version }}/yq_linux_amd64"
+        sudo chmod +x /usr/local/bin/yq
+        yq --version
+
+    - name: helm lint
+      shell: bash
+      run: |
+        set -euo pipefail
+        for chart in backend/deploy/chart frontend/deploy/chart; do
+          helm lint "$chart"
+        done
+
+    - name: Values files match their schema
+      shell: bash
+      run: ./scripts/chart-values.test.sh
+
+    - name: Schema admits what the templates read
+      shell: bash
+      run: python3 ./scripts/chart-reads.py
+
+    - name: NetworkPolicies hold what they promise
+      shell: bash
+      run: python3 ./scripts/chart-netpol.py
+
+    # The one check `task release:chart:verify` does that the scripts above do
+    # not. That task cannot run here — it comes from the shared taskfiles
+    # library, which CI has no checkout of — so its resource floor is applied
+    # directly. The floor is READ from the component's Taskfile rather than
+    # repeated here: it is a number that has to match what the chart renders,
+    # and two copies of such a number disagree eventually.
+    - name: A chart still renders as many resources as it declares
+      shell: bash
+      run: |
+        set -euo pipefail
+        for component in backend frontend; do
+          floor=$(yq -r '.vars.CHART_MIN_RESOURCES' "$component/Taskfile.yaml")
+          if [ -z "$floor" ] || [ "$floor" = "null" ]; then
+            echo "!!! $component/Taskfile.yaml declares no CHART_MIN_RESOURCES;" \
+                 "the drop check below would assert nothing" >&2
+            exit 1
+          fi
+          got=$(helm template floorcheck "$component/deploy/chart" | grep -c '^kind:')
+          if [ "$got" -lt "$floor" ]; then
+            echo "!!! $component: renders $got resources, floor is $floor —" \
+                 "the signature of a template that stopped rendering" >&2
+            exit 1
+          fi
+          echo "$component: renders $got resources (floor $floor)"
+        done

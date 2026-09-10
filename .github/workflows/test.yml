@@ -136,6 +136,18 @@ jobs:
             exit 1
           fi
 
+  # The same gates the release workflow runs before it publishes, here for the
+  # feedback: a chart that stops rendering should fail on the pull request that
+  # broke it, not at the next release. Shared as a composite action so the two
+  # cannot drift.
+  charts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - uses: ./.github/actions/chart-gates
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

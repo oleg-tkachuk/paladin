@@ -31,7 +31,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs before anything is published, and the release job depends on it. The
+  # charts used to go to the registry with no chart check anywhere in CI: the
+  # gates existed, but only in `task verify-all`, which a release does not run
+  # and `--no-verify` skips. A chart that does not render is worse than a late
+  # release, so this gates the whole job — images and the GitHub Release
+  # included — rather than only the `helm push` at the end.
+  charts:
+    name: Chart gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - uses: ./.github/actions/chart-gates
+
   release:
+    needs: [charts]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -154,6 +170,11 @@ jobs:
       - name: Set up Helm
         if: steps.semantic.outputs.new_release_published == 'true'
         uses: azure/setup-helm@v5.0.1
+        with:
+          # Pinned, like the gate job's: an unpinned action installs whatever
+          # helm released most recently, so the tool that packages a release
+          # could change between two runs with no commit of ours in between.
+          version: v4.3.0
 
       - name: Package and push the charts
         if: steps.semantic.outputs.new_release_published == 'true'
