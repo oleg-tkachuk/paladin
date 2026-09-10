@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0 # full history scan
 
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.3.0
 
       # Both images FROM golang/node alpine bases on Docker Hub; authenticate
       # when the secrets exist so the base-image pulls don't 429 (no-op

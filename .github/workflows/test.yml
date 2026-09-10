@@ -114,8 +114,13 @@ jobs:
           breaking_against: ".git#tag=api/v0.9.0,subdir=backend/proto"
 
       - name: Set up buf (for codegen)
-        uses: bufbuild/buf-setup-action@v1
+        # buf-action, not buf-setup-action: the latter has no Node 24 release,
+        # and this repository already runs buf-action twice above. `setup_only`
+        # makes it do what the old action did — put the pinned buf on PATH and
+        # run nothing.
+        uses: bufbuild/buf-action@v1
         with:
+          setup_only: true
           version: 1.71.0
           github_token: ${{ github.token }}
 
@@ -159,7 +164,7 @@ jobs:
 
       - name: Set up pnpm
         # Version comes from frontend/package.json "packageManager".
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6.1.0
         with:
           package_json_file: frontend/package.json
 
