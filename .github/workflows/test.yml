@@ -57,10 +57,17 @@ jobs:
       - name: golangci-lint
         # The action caches the linter binary + analysis cache and retries the
         # download, instead of a bare `go install` that re-fetches every run and
-        # fails the job on a transient network blip. Pinned to the same v2.12.2.
+        # fails the job on a transient network blip.
+        #
+        # The version is not free to lag: golangci-lint refuses to load a config
+        # when the Go it was BUILT with is older than the `go` directive in
+        # go.mod ("can't load config: the Go language version (go1.26) ... is
+        # lower than the targeted Go version (1.27.0)"). That is what this job
+        # failed on — invisibly to `task verify-all`, which uses whatever
+        # golangci-lint the developer has. Bumping go.mod means checking this.
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
           working-directory: backend
 
       - name: go test
