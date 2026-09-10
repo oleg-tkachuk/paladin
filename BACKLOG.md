@@ -1699,6 +1699,32 @@ mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
 
+### CI runs again, and the workflows disagree with the local gate
+
+- **Status:** Deferred — the four failures found on 2026-09-10 are fixed; what
+  is left is the disagreement that let them accumulate.
+- **What happened:** three entries in this file assume GitHub Actions cannot
+  start (the account-wide spending limit). That stopped being true. Runs
+  execute, and three workflows were failing on `develop` with nobody looking,
+  because the documentation said there was nothing to look at.
+- **Each failure was invisible to `task verify-all` by construction:**
+  golangci-lint refused to load its config because the version the workflow
+  pins was built with an older Go than go.mod targets — locally the developer's
+  own newer binary passes; the generated TS client drifted a patch version
+  behind the lockfile, which only the CI drift check compares; `capability/` had
+  an unformatted file, and every lefthook Go job is `root: backend/` while
+  `verify-all` reached backend and frontend only; and a base-image CVE needs a
+  built image, which the fast gate does not build.
+- **Still divergent:** the security workflow does not pass `--ignorefile`, so
+  `.trivyignore.yaml` applies to `task sec:*` locally and to nothing in CI. A
+  suppression a reviewer approves in that file is therefore not the suppression
+  CI honours.
+- **Definition of Done:** every check CI runs is reachable from a local task,
+  or is documented here as deliberately CI-only with the reason.
+- **Blockers:** none.
+
+---
+
 ### The slow gate exists; nothing enforces that anyone runs it
 
 - **Status:** Narrowed 2026-09-01 — the gate itself is DONE; only enforcement

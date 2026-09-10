@@ -83,7 +83,7 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 // TTL / NotBefore are required; the issuer fills in ID, IssuedAt,
 // ExpiresAt, Issuer, Generation when not supplied.
 type IssueRequest struct {
-	Subject    Principal
+	Subject Principal
 	// IssuedBy is the principal REQUESTING the capability — an operator for a
 	// root issuance, the parent's holder for a delegation. Distinct from
 	// Subject, which is who the capability authorises. Required: a capability
