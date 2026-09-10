@@ -43,7 +43,6 @@ vars:
   # equality: adding a resource is free, removing one is a deliberate edit
   # here.
   CHART_MIN_RESOURCES: "25"
-  COMPOSE_FILE: ./deploy/docker-compose.yaml
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }

@@ -27,6 +27,14 @@ vars:
   # from the default builder's and needs pruning by name.
   BUILDX_BUILDER: lean
   DOCKERFILE: ./deploy/Dockerfile
+  # Declared, not defaulted, and the difference was a real bug: a var a
+  # component leaves unset falls through to whatever a SIBLING include
+  # declared. backend sets DOCKER_CONTEXT to `..`, so from the repo root
+  # `task frontend:release:image:build` built the console with the repo root
+  # as its context and failed on a COPY of frontend/pnpm-workspace.yaml —
+  # while the same task from frontend/ worked. scripts/taskfile-vars.test.sh
+  # keeps the two var sets identical so the fall-through has nothing to find.
+  DOCKER_CONTEXT: .
   DOCKER_BUILD_FLAGS: --network=host
   # Floor for the chart render gate — it fails when the chart renders fewer
   # resources than this. The library default is 1, which against a chart that

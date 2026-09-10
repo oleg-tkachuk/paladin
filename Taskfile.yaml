@@ -132,6 +132,11 @@ tasks:
       # Last on purpose: toolchain drift is the least urgent thing in this
       # list, and running it earlier would mask a real test failure behind it.
       - ./scripts/brewfile.test.sh
+      # Task does not isolate an included file's vars from its siblings, so a
+      # name declared on one component only is silently inherited by the other.
+      # That shipped: the console image built with the repo root as its docker
+      # context from anywhere but frontend/, and took verify-e2e down with it.
+      - ./scripts/taskfile-vars.test.sh
       - task: frontend:build
 
   verify-capability:
