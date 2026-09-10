@@ -60,10 +60,14 @@ async function pickOption(
   await trigger.click({ force: true });
   const option = page.getByRole("option").filter({ hasText: name }).first();
   await expect(option).toBeVisible({ timeout: 10_000 });
-  // The option lives in the Select's popover — an overlay, like the dropdown
-  // and dialog below, so the same rule applies: wait for it to settle rather
-  // than force a click through the animation.
-  await option.click({ timeout: 20_000 });
+  // Forced, unlike the dropdown menu item and the confirm dialog further down.
+  // Unforcing this one was tried and reverted: `creating a Collection makes it
+  // appear in the list` started failing on the poll for the collection to
+  // exist, which is what a click that opens the list without selecting from it
+  // looks like from the outside. The rule those two follow was written for
+  // Radix dropdown items and dialogs; a Select option in this form is neither,
+  // and the evidence for extending it here was a resemblance, not a finding.
+  await option.click({ force: true });
   // Wait for the list to close rather than for the trigger's text: the label
   // is composed ("<id> — <display name>") and which option the list offers
   // first is not this test's business. What matters is that a choice landed,
