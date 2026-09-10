@@ -149,9 +149,8 @@ type UpdateTenantRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Tenant          *Tenant                `protobuf:"bytes,4,opt,name=tenant,proto3" json:"tenant,omitempty"`
@@ -441,9 +440,8 @@ type SetInheritedPolicyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CedarPolicy     string `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -636,9 +634,8 @@ type RenameTenantSlugRequest struct {
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// resource_version — current tenant version, OCC-guarded.
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// new_slug — kebab-case, validated by the same rules as
 	// CreateTenantRequest.slug. Uniqueness enforced by the database.

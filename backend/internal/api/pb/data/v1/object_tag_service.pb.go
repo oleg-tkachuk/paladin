@@ -292,9 +292,8 @@ type PutObjectTagsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// Replaces the entire tag set.
 	Tags          map[string]string `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -401,9 +400,8 @@ type DeleteObjectTagsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// If empty, all tags are removed; otherwise only the listed keys.
 	Keys          []string `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`

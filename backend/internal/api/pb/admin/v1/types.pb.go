@@ -646,17 +646,15 @@ type Bucket struct {
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Outbox status of the underlying physical bucket. One of:
-	//
-	//	"ready"           — DB row + backend bucket are in sync.
-	//	"pending"         — handler accepted CreateBucket; backend
-	//	                    provisioning still in flight.
-	//	"failed"          — provisioning hit a non-retryable error;
-	//	                    provision_error carries the message.
-	//	"deleting"        — handler accepted DeleteBucket; backend
-	//	                    teardown still in flight.
-	//	"deletion_failed" — deletion hit a non-retryable error;
-	//	                    provision_error carries the message.
-	//
+	//   "ready"           — DB row + backend bucket are in sync.
+	//   "pending"         — handler accepted CreateBucket; backend
+	//                       provisioning still in flight.
+	//   "failed"          — provisioning hit a non-retryable error;
+	//                       provision_error carries the message.
+	//   "deleting"        — handler accepted DeleteBucket; backend
+	//                       teardown still in flight.
+	//   "deletion_failed" — deletion hit a non-retryable error;
+	//                       provision_error carries the message.
 	// Clients should treat anything other than "ready" as "do not bind /
 	// upload to this bucket yet"; the row stays visible so admin tooling
 	// can render progress or surface a stuck operation.
@@ -2170,15 +2168,14 @@ type HttpSink struct {
 	// Server applies exponential backoff up to max_attempts.
 	MaxAttempts int32 `protobuf:"varint,3,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
 	// Wire format for the POST body:
-	//
-	//	"" / "cloudevents" → a CloudEvents 1.0 envelope (Content-Type
-	//	                     application/cloudevents+json), identical to what
-	//	                     the NATS / SQS / RabbitMQ / Kafka sinks emit. This
-	//	                     is the DEFAULT — HTTP is symmetric with the brokers.
-	//	"raw"              → the legacy bare Event JSON (Content-Type
-	//	                     application/json), for a webhook subscriber that
-	//	                     predates the default flip and still parses the old
-	//	                     shape.
+	//   "" / "cloudevents" → a CloudEvents 1.0 envelope (Content-Type
+	//                        application/cloudevents+json), identical to what
+	//                        the NATS / SQS / RabbitMQ / Kafka sinks emit. This
+	//                        is the DEFAULT — HTTP is symmetric with the brokers.
+	//   "raw"              → the legacy bare Event JSON (Content-Type
+	//                        application/json), for a webhook subscriber that
+	//                        predates the default flip and still parses the old
+	//                        shape.
 	Format        string `protobuf:"bytes,4,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2550,7 +2547,6 @@ type NatsSink struct {
 	//     materialisation; v1 ships token only)
 	//   - `jwt:<plaintext>`: JWT + nkey credential file (BACKLOG —
 	//     same materialisation gap)
-	//
 	// Format is `<scheme>:<value>` to keep one string field, parsed
 	// server-side. Validation rejects unknown schemes.
 	CredentialsRef string `protobuf:"bytes,3,opt,name=credentials_ref,json=credentialsRef,proto3" json:"credentials_ref,omitempty"`

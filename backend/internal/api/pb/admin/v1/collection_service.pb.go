@@ -134,9 +134,8 @@ type UpdateCollectionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion    string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask         *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	CollectionResource *Collection            `protobuf:"bytes,4,opt,name=collection_resource,json=collectionResource,proto3" json:"collection_resource,omitempty"`
@@ -437,9 +436,8 @@ type SetCollectionPolicyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CedarPolicy     string `protobuf:"bytes,3,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -501,9 +499,8 @@ type BindCollectionToBucketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// Target bucket resource name.
 	Bucket        string `protobuf:"bytes,3,opt,name=bucket,proto3" json:"bucket,omitempty"`

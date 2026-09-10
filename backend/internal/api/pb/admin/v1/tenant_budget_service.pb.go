@@ -229,10 +229,9 @@ type TenantBudgetServiceSetRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// OCC, required. Two operators editing the same cap used to race with
-	//
-	//	last-write-wins and neither was told; the loser's change vanished while
-	//	its UI reported success. Pass the version from a prior Get; "0" asserts
-	//	no budget row exists yet, and is itself a conflict if one does.
+	//   last-write-wins and neither was told; the loser's change vanished while
+	//   its UI reported success. Pass the version from a prior Get; "0" asserts
+	//   no budget row exists yet, and is itself a conflict if one does.
 	ResourceVersion string `protobuf:"bytes,6,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	// max_budget_amount is the new cap. 0 = unlimited. Field number
 	// unchanged (wire-compatible with previous max_budget_usd).

@@ -381,11 +381,10 @@ type RestoreObjectVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: expected_version=0 disables the check in SQL, so an
-	//
-	//	absent guard would restore over a concurrent change instead of
-	//	failing. This is the CURRENT object's version, not the version being
-	//	restored — the console takes it from the object the versions tab is
-	//	showing.
+	//   absent guard would restore over a concurrent change instead of
+	//   failing. This is the CURRENT object's version, not the version being
+	//   restored — the console takes it from the object the versions tab is
+	//   showing.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -992,10 +991,9 @@ type DeleteObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind delete
-	//
-	//	(expected_version=0 disables the check in SQL). permanent and
-	//	bypass_governance_retention widen what is destroyed; neither is an
-	//	opt-out of the concurrency check.
+	//   (expected_version=0 disables the check in SQL). permanent and
+	//   bypass_governance_retention widen what is destroyed; neither is an
+	//   opt-out of the concurrency check.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	Permanent       bool   `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	// Only honored when the caller has GOVERNANCE bypass (role
@@ -1292,10 +1290,9 @@ type RestoreObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: expected_version=0 disables the check in SQL, so an
-	//
-	//	absent guard would restore over a concurrent change instead of
-	//	failing. The console reads the version from the trash listing,
-	//	which shows it in a Version column.
+	//   absent guard would restore over a concurrent change instead of
+	//   failing. The console reads the version from the trash listing,
+	//   which shows it in a Version column.
 	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

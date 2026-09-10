@@ -125,9 +125,8 @@ type UpdateBackendRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// OCC, required: an absent guard would silently become a blind overwrite
-	//
-	//	(expected_version=0 disables the check in SQL). Read the current version
-	//	first; there is no bypass on this RPC by design.
+	//   (expected_version=0 disables the check in SQL). Read the current version
+	//   first; there is no bypass on this RPC by design.
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	Backend         *StorageBackend        `protobuf:"bytes,4,opt,name=backend,proto3" json:"backend,omitempty"`
