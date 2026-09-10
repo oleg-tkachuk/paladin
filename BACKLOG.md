@@ -1883,104 +1883,39 @@ of the pipeline._
 - **Blockers:** none remaining that are outside the maintainer's control.
 
 
-### Branch protection on `main` and `develop` — require status checks
+### Branch protection — required checks are on `main`, deliberately not `develop`
 
-- **Status:** Partially done — deletion/force-push/linear-history applied
-  2026-06-28 and now also reproducible-as-code (2026-07-26); required status
-  checks still deferred.
-- **2026-07-26 update:** the non-required settings are now version-controlled in
-  [`.github/scripts/apply-repo-settings.sh`](.github/scripts/apply-repo-settings.sh)
-  — it sets `delete_branch_on_merge=false` and creates a **ruleset** (not classic
-  branch protection) forbidding deletion of `main`/`develop`. Ruleset over
-  classic protection on purpose: classic branch protection needs a **paid** plan
-  for a private repo, so if the plan lapsed with the billing failure below the
-  2026-06-28 rules would have silently dropped — whereas rulesets work on free
-  private repos and layer additively (they never clobber any classic protection
-  still in place). Must be run by the repo owner (`gh auth login`), since a
-  sandboxed session has no GitHub auth. Separately, CI rate-limit flakiness (the
-  "fails, passes on retry" class) was hardened this commit: optional Docker Hub
-  auth (`.github/actions/dockerhub-login`) across the image-pulling jobs, the
-  Trivy DB pointed at the ECR Public mirror, ryuk disabled for testcontainers,
-  and `golangci-lint-action` for a cached/retried linter install.
-- **Reason:** The non-blocking half landed via the API on both branches:
-  force-pushes disabled, branch deletion blocked, linear history required,
-  `enforce_admins` on. The **required status checks** half
-  (`backend`, `frontend`, `gitleaks`, `trivy-fs`) is intentionally still OFF
-  because every Actions run currently fails at startup (0 steps executed) —
-  the signature of an exhausted private-repo Actions minutes / spending
-  limit. Requiring red checks would block all merges and direct pushes.
-- **Confirmed 2026-08-19** against the live repository: the five most recent
-  runs on `claude/open-source-prep-85tasf` (Test, E2E, Integration, Security,
-  Capability module) all end `failure` after 5–7 seconds, and
-  `…/actions/runs/<id>/jobs` reports each job with an EMPTY `steps` array —
-  the jobs never start, so this is not a code failure and no log exists to
-  read. The repository is still `"private": true`, so the free-minutes
-  argument below has not taken effect yet: **publishing the repository is
-  the unblock, and until then nothing on Actions can go green.** Everything
-  the pipeline would check is green locally (`task verify-all`, integration,
-  e2e 18/18), so the gap is quota, not correctness.
-- **The quota is not this repository's doing.** Billing usage for August 2026
-  (`/users/oleg-tkachuk/settings/billing/usage`) puts the account at 4734.7
-  Actions Linux minutes, of which **`paladin` accounts for 109.0 —
-  2.3%**. `another-project` (2781.7) and `gitops` (1752.0) are 96% between
-  them. The spending limit is account-wide, so this repository is blocked by
-  neighbours rather than by anything it runs. Do NOT come here to trim
-  Paladin's CI: 109 minutes a month is already nothing, and halving it would
-  change the date this unblocks by zero days.
-  The money line is gross $28.41, free-tier discount $18.41 (= 3068 minutes,
-  i.e. the Pro plan's 3000/month), net **$10.00**. July was the same shape:
-  4674.7 minutes, net exactly $10.00. Two consecutive months landing on the
-  same round number is a spending ceiling being hit, not usage that happens
-  to match — the limit itself is not readable via the API (the budgets
-  endpoints 404 and the old billing ones are 410 Gone), so this is inferred
-  from the figures rather than quoted.
-  Options, in the order they actually help: publish the repository (public
-  repos consume no quota at all, so this stops recurring and is already the
-  plan); raise the spending limit (unblocks every private repo at once, and
-  costs); or wait for the 1st (free minutes reset, but the ceiling was
-  reached in both July and August, so it returns).
-- **Definition of Done:** once Actions runs go green, add
-  `required_status_checks` (strict) for the four check contexts. Use the
-  dedicated sub-resource endpoint so the already-applied protections
-  (force-push off, deletion off, linear history, enforce_admins) are
-  preserved — a full `PUT …/protection` would clobber them:
-
-  ```bash
-  for br in main develop; do
-    gh api -X PATCH "repos/oleg-tkachuk/paladin/branches/$br/protection/required_status_checks" \
-      --input - <<'JSON'
-  { "strict": true,
-    "checks": [ {"context":"backend"}, {"context":"frontend"},
-                {"context":"gitleaks"}, {"context":"trivy-fs"} ] }
-  JSON
-  done
-  ```
-
-  If the PATCH 404s ("required status checks not enabled"), the contexts
-  have never been set on that branch — set them once via the full
-  `PUT …/protection` (echo the current protection back in + add the
-  `required_status_checks` block), then PATCH thereafter. Verified check
-  contexts = the job ids: test.yml → `backend`, `frontend`; security.yml →
-  `gitleaks`, `trivy-fs`, `trivy-image` (DoD covers the first four; add
-  `trivy-image` only if image scans should gate too).
-- **2026-08-19 update:** `apply-repo-settings.sh` now composes the ruleset
-  with `jq` and takes `REQUIRE_CHECKS=1` to add the four contexts, so
-  turning them on is one env var rather than a hand-written API call. The
-  script also enables private vulnerability reporting (SECURITY.md links
-  to the advisory form, which 404s without it) and Dependabot alerts. It
-  still leaves visibility alone — flipping a repository public is a
-  one-way door and belongs to a human.
-- **Blockers:** GitHub Actions billing — every run failed with `steps=0`
-  and "The job was not started because recent account payments have
-  failed or your spending limit needs to be increased" (re-verified
-  2026-06-30). **Publishing the repository dissolves this**: Actions
-  minutes are free on public repositories, so the account-level spending
-  limit stops applying. What remains after that is not a blocker but a
-  precondition — confirm a run actually goes green on each of the four
-  contexts before requiring them, because `enforce_admins` is on and a
-  required check that never reports blocks every merge and direct push on
-  both branches.
-
+- **Status:** Done for `main` (2026-09-10). `develop` is excluded by decision,
+  not by obstacle.
+- **What is live now**, confirmed against the API rather than assumed — the
+  previous version of this entry described a ruleset that did not exist:
+  - classic protection on BOTH branches: `enforce_admins`, no force-push,
+    linear history required (applied 2026-06-28, still in place);
+  - ruleset `protect-main-develop`: deletion blocked on both;
+  - ruleset `require-checks-main`: `backend`, `frontend`, `gitleaks`,
+    `trivy-fs` required on `main`, strict (the branch must be current with the
+    base before a merge counts).
+- **Why `develop` is out.** A required check blocks direct pushes, not only
+  merges: the commit being pushed carries no check runs, so there is nothing
+  for the rule to pass and a pull request becomes the only route. That is the
+  right trade for a release branch and the wrong one for a branch pushed to
+  many times a day. Set `CHECKS_REFS` in
+  [`apply-repo-settings.sh`](.github/scripts/apply-repo-settings.sh) if that
+  changes.
+- **Why only four of the eight green contexts.** `e2e`, `postgres-backed`,
+  `standalone` and `trivy-image` stay advisory until their runtimes on public
+  runners are known. A required check that routinely times out is worse than
+  one that is merely advisory.
+- **The old blocker is gone.** This entry spent months asserting that Actions
+  could not run — an account-wide spending limit, every run failing with
+  `steps=0`. Runs execute again, and on 2026-09-10 all eight contexts went
+  green on `a30614a9`. That is what unblocked this, and the assertion had
+  outlived its truth by long enough that three workflows were failing on
+  `develop` with nobody looking, because this file said there was nothing to
+  look at.
+- **What is left:** requiring checks on `develop` if the workflow ever moves to
+  pull requests, and promoting the four slower contexts once their runtimes are
+  measured. Neither is blocked.
 
 ## Documentation
 

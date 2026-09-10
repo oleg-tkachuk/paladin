@@ -36,6 +36,13 @@
 #
 #     REQUIRE_CHECKS=1 .github/scripts/apply-repo-settings.sh
 #
+# They land on `main` ALONE, in a ruleset of their own. A required check on a
+# branch blocks the direct pushes to it as well as the merges: the commit being
+# pushed has no check runs yet, so there is nothing for the rule to pass, and
+# the only route left is a pull request. That is the right trade for a release
+# branch and the wrong one for `develop`, which is pushed to many times a day
+# here. Override with CHECKS_REFS if that stops being true.
+#
 # Verify a run has actually gone green on each context first — the names
 # below are the check-run names GitHub reports, which are the JOB ids in
 # the workflow files, not the workflow names.
@@ -44,7 +51,11 @@ set -euo pipefail
 
 REPO="${REPO:-oleg-tkachuk/paladin}"
 RULESET_NAME="protect-main-develop"
+CHECKS_RULESET_NAME="require-checks-main"
 REQUIRE_CHECKS="${REQUIRE_CHECKS:-0}"
+# Space-separated refs the required checks apply to. Deliberately narrower than
+# the deletion rule above, which covers both branches.
+CHECKS_REFS="${CHECKS_REFS:-refs/heads/main}"
 
 # Job ids from .github/workflows/*. None of these jobs sets `name:`, so the
 # check-run context equals the job id. Keep in sync when a job is renamed:
@@ -95,24 +106,6 @@ echo "==> Ensuring branch ruleset for main + develop"
 # add { "type": "non_fast_forward" }.
 rules=$(jq -n '[{ "type": "deletion" }]')
 
-if [ "$REQUIRE_CHECKS" = "1" ]; then
-  echo "    including required status checks: ${REQUIRED_CONTEXTS[*]}"
-  # strict_required_status_checks_policy: a PR must be up to date with the
-  # base before merging, so a check cannot pass against a stale tree.
-  checks=$(printf '%s\n' "${REQUIRED_CONTEXTS[@]}" \
-    | jq -R '{ context: . }' \
-    | jq -s '{
-        type: "required_status_checks",
-        parameters: {
-          strict_required_status_checks_policy: true,
-          required_status_checks: .
-        }
-      }')
-  rules=$(jq -n --argjson base "$rules" --argjson add "$checks" '$base + [$add]')
-else
-  echo "    required status checks NOT applied (set REQUIRE_CHECKS=1 once CI is green)"
-fi
-
 payload=$(jq -n \
   --arg name "$RULESET_NAME" \
   --argjson rules "$rules" \
@@ -129,15 +122,52 @@ payload=$(jq -n \
      rules: $rules
    }')
 
-existing_id=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name==\"$RULESET_NAME\") | .id" 2>/dev/null | head -n1 || true)
-if [ -n "$existing_id" ]; then
-  echo "    updating existing ruleset #$existing_id"
-  printf '%s' "$payload" | gh api -X PUT "repos/$REPO/rulesets/$existing_id" --input - \
-    --jq '"    " + .name + " -> " + .enforcement'
+upsert_ruleset() {
+  local name="$1" body="$2" id
+  id=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name==\"$name\") | .id" 2>/dev/null | head -n1 || true)
+  if [ -n "$id" ]; then
+    echo "    updating existing ruleset #$id"
+    printf '%s' "$body" | gh api -X PUT "repos/$REPO/rulesets/$id" --input - \
+      --jq '"    " + .name + " -> " + .enforcement'
+  else
+    echo "    creating ruleset"
+    printf '%s' "$body" | gh api -X POST "repos/$REPO/rulesets" --input - \
+      --jq '"    " + .name + " -> " + .enforcement'
+  fi
+}
+
+upsert_ruleset "$RULESET_NAME" "$payload"
+
+# Required status checks live in their own ruleset because a ruleset carries a
+# single ref condition for every rule it holds, and these apply to a narrower
+# set of branches than the deletion rule above.
+if [ "$REQUIRE_CHECKS" = "1" ]; then
+  echo "==> Ensuring required status checks on: $CHECKS_REFS"
+  echo "    contexts: ${REQUIRED_CONTEXTS[*]}"
+  # strict_required_status_checks_policy: the branch must be up to date with
+  # the base before merging, so a check cannot pass against a stale tree.
+  checks_rule=$(printf '%s\n' "${REQUIRED_CONTEXTS[@]}" \
+    | jq -R '{ context: . }' \
+    | jq -s '{
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: true,
+          required_status_checks: .
+        }
+      }')
+  checks_payload=$(jq -n \
+    --arg name "$CHECKS_RULESET_NAME" \
+    --argjson rule "$checks_rule" \
+    --args '{
+       name: $name,
+       target: "branch",
+       enforcement: "active",
+       conditions: { ref_name: { include: $ARGS.positional, exclude: [] } },
+       rules: [$rule]
+     }' $CHECKS_REFS)
+  upsert_ruleset "$CHECKS_RULESET_NAME" "$checks_payload"
 else
-  echo "    creating ruleset"
-  printf '%s' "$payload" | gh api -X POST "repos/$REPO/rulesets" --input - \
-    --jq '"    " + .name + " -> " + .enforcement'
+  echo "==> Required status checks NOT applied (set REQUIRE_CHECKS=1 once CI is green)"
 fi
 
 echo "Done."
