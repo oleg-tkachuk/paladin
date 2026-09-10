@@ -96,6 +96,17 @@ ARG BUILD_TIME=undefined
 # prints these before it starts.
 LABEL org.opencontainers.image.title="paladin-console"       org.opencontainers.image.description="Paladin — admin console"       org.opencontainers.image.version="${APP_VERSION}"       org.opencontainers.image.revision="${GIT_COMMIT_HASH}"       org.opencontainers.image.created="${BUILD_TIME}"       org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin"
 
+# The base image lags alpine's own repository on security patches: node:26-alpine
+# currently ships libcrypto3/libssl3 3.5.7-r0 while alpine 3.24 has published
+# 3.5.8-r0 for CVE-2026-14456 (openssl DoS, HIGH). Bumping the digest above does
+# not help — the newest node:26-alpine still carries 3.5.7-r0, checked before
+# writing this — so the patch has to come from apk.
+#
+# Two named packages, not a blanket `apk upgrade`: the digest pin above exists
+# for reproducibility, and this narrows what varies between builds to the thing
+# a scanner is failing on. Drop it once the base image catches up.
+RUN apk upgrade --no-cache libcrypto3 libssl3
+
 WORKDIR /app
 
 ENV NODE_ENV=production \
