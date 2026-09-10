@@ -31,14 +31,14 @@ lefthook install                          # wire the hooks into .git/hooks
 ## Getting a stack up
 
 ```bash
-task e2e-up          # backend + console + Postgres + SeaweedFS, in compose
+task stack:up          # backend + console + Postgres + SeaweedFS, in compose
 task verify-all      # build + test both halves — the fast, pre-commit gate
 task verify-deep     # the slow one: integration suites + live-stack gates
 task verify-e2e      # Playwright, against images built from your branch
 task --list-all      # everything, across both namespaces
 ```
 
-`task e2e-up` needs nothing but Docker. If it asks you for a credential or
+`task stack:up` needs nothing but Docker. If it asks you for a credential or
 a cluster, that is a bug — please report it.
 
 Per-half loops:

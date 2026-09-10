@@ -47,7 +47,13 @@ vars:
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }
-  k8s:       { taskfile: '{{printf .TASKLIB "k8s"}}', dir: . }
+  # uninstall and upgrade are excluded: ArgoCD owns both releases in every
+  # cluster this repository targets, so a helm write from here either gets
+  # reverted on the next sync or deletes workloads out from under it.
+  k8s:
+    taskfile: '{{printf .TASKLIB "k8s"}}'
+    dir: .
+    excludes: [uninstall, upgrade]
   go:    { taskfile: '{{printf .TASKLIB "go"}}', dir: . }
   # OrbStack shares the host's image store, so a build is already visible to
   # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
@@ -115,15 +121,6 @@ tasks:
     desc: "Regenerate mocks, proto stubs and sqlc bindings"
     cmds:
       - task: codegen:all
-
-  up:
-    desc: "Start the local compose stack (postgres + seaweedfs + service)"
-    deps: [release:metadata]
-    cmds:
-      - >-
-        docker compose --progress={{.PROGRESS | default "auto"}}
-        -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}}
-        --env-file ./deploy/info.env up -d --build
 
   # ─── seed fixture ───────────────────────────────────────────────────────────
   # Applies (or removes) the demo fixture against a running cluster. Both

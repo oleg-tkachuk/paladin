@@ -79,7 +79,7 @@ closed with a pointer here.
 - **The admin console's `/config` page accepting a pasted token.** That is
   its purpose in a development build.
 - Missing security headers, cookie flags or TLS settings on a stack
-  brought up by `task e2e-up`. The compose stack is a development
+  brought up by `task stack:up`. The compose stack is a development
   convenience and is not hardened; report these against the Helm charts,
   which are the deployment path we intend people to use.
 

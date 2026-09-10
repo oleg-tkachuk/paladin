@@ -14,7 +14,7 @@ Against a full local stack (backend planes, Postgres, storage, and this
 console, all in compose) — from the repository root:
 
 ```bash
-task e2e-up
+task stack:up
 ```
 
 Against a backend you are already running, with hot reload:

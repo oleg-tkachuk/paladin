@@ -91,7 +91,7 @@ for it.
 go build ./...                     # from backend/
 task backend:test                  # unit
 task backend:test:integration      # testcontainers Postgres, needs Docker
-task backend:test:lint             # golangci-lint, curated set in .golangci.yaml
+task backend:lint                  # golangci-lint, curated set in .golangci.yaml
 task backend:generate              # proto + sqlc + mocks
 ```
 
@@ -99,7 +99,7 @@ The full compose stack — every plane, Postgres, SeaweedFS, and the
 console — comes up from the repository root:
 
 ```bash
-task e2e-up
+task stack:up
 ```
 
 ### Not `go install`-able

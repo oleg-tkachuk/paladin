@@ -17,7 +17,7 @@ func weakSecretConfig() Config {
 
 func TestWeakSecretGateIsSilentInDisposableEnvs(t *testing.T) {
 	// The committed defaults MUST keep working on a laptop — a gate that
-	// breaks `task e2e-up` gets disabled, not fixed.
+	// breaks `task stack:up` gets disabled, not fixed.
 	for env := range disposableEnvs {
 		c := minimalValidConfig()
 		c.App.Env = env

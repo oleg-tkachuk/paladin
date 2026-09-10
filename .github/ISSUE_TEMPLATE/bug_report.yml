@@ -47,7 +47,7 @@ body:
       label: Reproduction
       description: >
         Commands, a request sequence, a config fragment, or a failing test.
-        A reproduction against `task e2e-up` is the most useful kind,
+        A reproduction against `task stack:up` is the most useful kind,
         because it is the stack everyone has.
       render: shell
 

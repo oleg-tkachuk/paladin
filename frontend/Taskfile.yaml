@@ -38,8 +38,21 @@ vars:
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }
-  k8s:       { taskfile: '{{printf .TASKLIB "k8s"}}', dir: . }
-  node:  { taskfile: '{{printf .TASKLIB "node"}}', dir: . }
+  # uninstall and upgrade are excluded: ArgoCD owns both releases in every
+  # cluster this repository targets, so a helm write from here either gets
+  # reverted on the next sync or deletes workloads out from under it.
+  k8s:
+    taskfile: '{{printf .TASKLIB "k8s"}}'
+    dir: .
+    excludes: [uninstall, upgrade]
+  # test:e2e is excluded, not merely unused: it runs Playwright against
+  # whatever images are lying around, and the suite's whole point is that a
+  # green run against a stale console is worse than no run. `task verify-e2e`
+  # at the root builds both images first and is the only supported entry.
+  node:
+    taskfile: '{{printf .TASKLIB "node"}}'
+    dir: .
+    excludes: [test:e2e]
   # OrbStack shares the host's image store, so a build is already visible to
   # the cluster; swap this line for runtime/minikube, runtime/kind, … elsewhere.
   local: { taskfile: '{{printf .TASKLIB "runtime/orbstack"}}', dir: . }

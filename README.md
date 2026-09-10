@@ -73,15 +73,15 @@ Brewfile says which tools are pinned elsewhere instead (`sqlc` by `go.mod`,
 `pnpm` by corepack) and why.
 
 ```bash
-task e2e-up          # every plane + Postgres + storage + the console
+task stack:up          # every plane + Postgres + storage + the console
 ```
 
 The console comes up on <http://localhost:3002> (host 3002 → container 3000),
 the data plane on `:8080`, admin on `:8090`.
 
 ```bash
-task e2e-down        # stop, keep volumes
-task e2e-clean       # stop and drop volumes
+task stack:down        # stop, keep volumes
+task stack:reset       # stop and drop volumes
 ```
 
 Verifying a change:

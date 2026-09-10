@@ -5,6 +5,11 @@ version: "3"
 #
 #   task                 every task across both halves
 #   task verify-all      the commit gate — seconds, no Docker
+#
+# Aggregates that only forwarded to one namespaced task are gone: the library
+# already names them. `task test` / `task lint` are `all:test` / `all:lint`
+# (the monorepo module's fan-out), `deploy:backend` is `backend:deploy`, and
+# `images:gc` is `backend:release:image:gc`. One name per thing.
 #   task verify-deep     the merge gate — Postgres-backed suites, ~15 min
 #   task deploy          publish both components to the registry
 #   task backend:test    forwards into backend's Taskfile
@@ -175,18 +180,6 @@ tasks:
       - task: frontend:release:image:build
       - frontend/scripts/verify-e2e.sh
 
-  test:
-    desc: "Run unit tests for both halves"
-    cmds:
-      - task: backend:test
-      - task: frontend:test
-
-  lint:
-    desc: "Lint both halves"
-    cmds:
-      - task: backend:lint
-      - task: frontend:lint
-
   gen:
     desc: "Run codegen for both halves"
     cmds:
@@ -203,16 +196,6 @@ tasks:
     cmds:
       - task: all:deploy
 
-  deploy:backend:
-    desc: "Publish the backend alone"
-    cmds:
-      - task: backend:deploy
-
-  deploy:frontend:
-    desc: "Publish the console alone"
-    cmds:
-      - task: frontend:deploy
-
   deploy:sync:
     desc: "Hard-refresh the paladin-core / paladin-console ArgoCD apps after a deploy"
     # The prefix is deliberately narrow: a bare `paladin` would also match the
@@ -222,13 +205,6 @@ tasks:
         vars: { APP_PREFIX: "paladin-core" }
       - task: argocd:refresh
         vars: { APP_PREFIX: "paladin-console" }
-
-  # ═══ housekeeping ═══════════════════════════════════════════════════════════
-
-  images:gc:
-    desc: "Reclaim BuildKit and docker disk after heavy build bursts"
-    cmds:
-      - task: backend:release:image:gc
 
   # ═══ dependency bumps ═══════════════════════════════════════════════════════
   deps:update:
