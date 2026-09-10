@@ -36,7 +36,7 @@ test.describe("US5 — Tenant restore from trash", () => {
     await (async () => {
       const item = page.getByRole("menuitem", { name: /Delete tenant/ });
       await expect(item).toBeVisible({ timeout: 15_000 });
-      await item.click({ force: true });
+      await item.click({ timeout: 20_000 });
     })();
 
     // Confirm in the AlertDialog. There are two matching
@@ -96,7 +96,7 @@ test.describe("US5 — Tenant restore from trash", () => {
     await (async () => {
       const item = page.getByRole("menuitem", { name: /Delete tenant/ });
       await expect(item).toBeVisible({ timeout: 15_000 });
-      await item.click({ force: true });
+      await item.click({ timeout: 20_000 });
     })();
     await page.getByRole("button", { name: /^Delete tenant$/ }).click();
 

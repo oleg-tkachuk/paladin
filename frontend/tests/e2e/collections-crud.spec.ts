@@ -60,7 +60,10 @@ async function pickOption(
   await trigger.click({ force: true });
   const option = page.getByRole("option").filter({ hasText: name }).first();
   await expect(option).toBeVisible({ timeout: 10_000 });
-  await option.click({ force: true });
+  // The option lives in the Select's popover — an overlay, like the dropdown
+  // and dialog below, so the same rule applies: wait for it to settle rather
+  // than force a click through the animation.
+  await option.click({ timeout: 20_000 });
   // Wait for the list to close rather than for the trigger's text: the label
   // is composed ("<id> — <display name>") and which option the list offers
   // first is not this test's business. What matters is that a choice landed,
@@ -179,16 +182,24 @@ test.describe("Collections CRUD", () => {
 
     await row.getByRole("button", { name: /Actions/i }).click({ force: true });
 
+    // NOT forced, unlike the row trigger above — see the same sequence in
+    // event-subscriptions.spec.ts, where this exact failure was diagnosed and
+    // fixed. The menu item and the confirm below live in overlays that animate
+    // in, and forcing clicks them mid-transform, when their box can still be
+    // outside the viewport. Actionability is the wait an animation needs; the
+    // long timeout covers "slow under load", which is what force was reached
+    // for. This test failed on CI runs whose commits touched no application
+    // code at all, three times in ten runs.
     const deleteItem = page.getByRole("menuitem", { name: /Delete/i });
     await expect(deleteItem).toBeVisible({ timeout: 15_000 });
-    await deleteItem.click({ force: true });
+    await deleteItem.click({ timeout: 20_000 });
 
     // The confirm dialog names what is about to go, because a Collection is
     // the binding every object under it resolves through.
     await expect(page.getByText(/Delete this Collection\?/i)).toBeVisible();
     const confirm = page.getByRole("button", { name: /^Delete Collection$/ });
     await expect(confirm).toBeVisible({ timeout: 15_000 });
-    await confirm.click({ force: true });
+    await confirm.click({ timeout: 20_000 });
 
     await expect
       .poll(() => collectionExists(tenantId, collection.collection), {

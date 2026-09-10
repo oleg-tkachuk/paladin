@@ -145,7 +145,7 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     await (async () => {
       const item = page.getByRole("menuitem", { name: /Revoke/ });
       await expect(item).toBeVisible({ timeout: 15_000 });
-      await item.click({ force: true });
+      await item.click({ timeout: 20_000 });
     })();
 
     // Confirm in the dialog. The dialog footer has a
