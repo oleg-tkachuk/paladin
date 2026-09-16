@@ -25,7 +25,7 @@
 #
 # not-brew: pnpm        — corepack, from `packageManager` in frontend/package.json.
 #                         That version is already pinned twice (package.json and
-#                         the image build) with `task deps:check:pnpm` asserting
+#                         the image build) with `task pnpm:pin:check` asserting
 #                         the pair agrees. A third pin is one more to disagree.
 
 # ─── the commit gate: task verify-all ───────────────────────────────────────

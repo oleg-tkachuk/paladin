@@ -5,14 +5,15 @@ version: "3"
 #
 #   task                 every task across both halves
 #   task verify-all      the commit gate — seconds, no Docker
-#
-# Aggregates that only forwarded to one namespaced task are gone: the library
-# already names them. `task test` / `task lint` are `all:test` / `all:lint`
-# (the monorepo module's fan-out), `deploy:backend` is `backend:deploy`, and
-# `images:gc` is `backend:release:image:gc`. One name per thing.
 #   task verify-deep     the merge gate — Postgres-backed suites, ~15 min
 #   task deploy          publish both components to the registry
 #   task backend:test    forwards into backend's Taskfile
+#
+# Aggregates that only forwarded to one namespaced task are gone: the library
+# already names them. `task test` / `task lint` are `all:test` / `all:lint`
+# (the monorepo module's fan-out), `deploy:backend` is `backend:deploy`,
+# `images:gc` is `backend:release:image:gc`, and the pnpm pin is
+# `pnpm:pin:check` / `pnpm:pin:update`. One name per thing.
 #
 # The release chain, the language gates, the compose stack and the ArgoCD
 # refresh come from the shared task library
@@ -37,7 +38,14 @@ includes:
   pnpm:
     taskfile: '{{printf .TASKLIB "pnpm"}}'
     dir: .
-    vars: { PNPM_APPS: frontend }
+    # The version is pinned twice and the two must agree: packageManager in
+    # frontend/package.json, which is also what CI reads, and ARG PNPM_VERSION
+    # in the image build, which runs before there is a package manager to read
+    # the first one. Both sat a release behind for months because nothing
+    # updated either.
+    vars:
+      PNPM_APPS: frontend
+      PNPM_DOCKERFILES: frontend/deploy/Dockerfile
   sec:
     taskfile: '{{printf .TASKLIB "security"}}'
     dir: .
@@ -76,6 +84,13 @@ includes:
     taskfile: '{{printf .TASKLIB "monorepo"}}'
     dir: .
     vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+  # The third Go tree. It is a library with no image and no chart, so it is not
+  # a monorepo component and carries no Taskfile of its own — the library's go
+  # module aimed at its directory is the whole surface it needs.
+  capability:
+    taskfile: '{{printf .TASKLIB "go"}}'
+    dir: capability
+    vars: { PROJECT_NAME: capability }
 
 tasks:
   default:
@@ -140,20 +155,14 @@ tasks:
       - task: frontend:build
 
   verify-capability:
-    desc: "gofmt + vet + test the capability module (the third Go tree)"
-    dir: capability
+    desc: "gofmt + lint + test the capability module (the third Go tree)"
+    # golangci-lint rather than the bare `go vet` this replaces: govet is one of
+    # its default linters, so the check only widens, and the module is clean
+    # under it today.
     cmds:
-      - cmd: |-
-          set -eu
-          out="$(gofmt -l . || true)"
-          if [ -n "$out" ]; then
-            echo "!!! capability: gofmt needed on:" >&2
-            printf '      %s\n' $out >&2
-            exit 1
-          fi
-      - go vet ./...
-      - go test ./...
-      - echo "capability · gofmt, vet and tests pass"
+      - task: capability:fmt:check
+      - task: capability:lint
+      - task: capability:test
 
   verify-deep:
     desc: "The gates verify-all cannot run: Postgres-backed suites and everything needing a live stack"
@@ -217,22 +226,6 @@ tasks:
     cmds:
       - task: backend:go:deps:update
       - task: frontend:node:deps:update
-      - task: deps:update:pnpm
-
-  deps:update:pnpm:
-    desc: "Pin pnpm itself to the latest stable (package.json + the image build)"
-    summary: |-
-      deps:update bumps what the package manager installs; this bumps the
-      package manager. The version is pinned twice — packageManager in
-      package.json, which is also what CI reads, and ARG PNPM_VERSION in the
-      image build — and the two must agree. Both sat a release behind for
-      months because nothing updated either. Resolves from the registry, never
-      from whatever happens to be installed, and refuses anything that is not a
-      GA triple.
-    cmds:
-      - ./frontend/scripts/pnpm-pin.sh update
-
-  deps:check:pnpm:
-    desc: "Fail when the two pnpm pins disagree"
-    cmds:
-      - ./frontend/scripts/pnpm-pin.sh check
+      # deps:update bumps what the package manager installs; pnpm:pin:update
+      # bumps the package manager, in both places it is pinned.
+      - task: pnpm:pin:update
