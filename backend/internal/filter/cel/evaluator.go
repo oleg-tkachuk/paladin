@@ -11,12 +11,12 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types"
 )
 
 // Program is re-exported so callers outside this package don't need to import
-// google/cel-go directly just to hold a compiled handle.
+// cel-go directly just to hold a compiled handle.
 type Program = cel.Program
 
 // Schema describes the variable names and types exposed to filter authors.

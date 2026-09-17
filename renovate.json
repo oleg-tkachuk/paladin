@@ -13,12 +13,6 @@
   "prHourlyLimit": 2,
   "packageRules": [
     {
-      "matchManagers": ["gomod"],
-      "matchPackageNames": ["github.com/google/cel-go"],
-      "allowedVersions": "<=0.31.0",
-      "description": "cel-go v0.32.0 renamed its module path to cel.dev/cel-go, so anything past v0.31.0 fails to resolve under the old path — the error reads like a broken dependency but is a rename. Switching to the new path is only worth doing once buf.build/go/protovalidate follows: until then it would put two copies of CEL in the binary. Revisit when protovalidate requires cel.dev/cel-go."
-    },
-    {
       "matchManagers": ["dockerfile", "docker-compose"],
       "groupName": "container base images",
       "automerge": false

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/cel-go/cel"
-	celast "github.com/google/cel-go/common/ast"
+	"cel.dev/cel-go/cel"
+	celast "cel.dev/cel-go/common/ast"
 )
 
 // Pushdown is the SQL-expressible subset of a CEL filter over any Schema.

@@ -18,7 +18,7 @@ import (
 	"context"
 	"time"
 
-	celpkg "github.com/google/cel-go/cel"
+	celpkg "cel.dev/cel-go/cel"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 

@@ -3,7 +3,7 @@ package cel
 import (
 	"fmt"
 
-	celast "github.com/google/cel-go/common/ast"
+	celast "cel.dev/cel-go/common/ast"
 )
 
 // ObjectPushdown is the SQL-expressible subset of a CEL filter over
