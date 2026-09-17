@@ -18,7 +18,13 @@ import (
 
 // minioImage pins the same MinIO release the e2e workflow uses, for a
 // reproducible pull.
-const minioImage = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
+//
+// quay.io, not Docker Hub: MinIO withdrew both minio/minio and minio/mc from
+// Docker Hub, and the repositories now 404 there. The pull fails as "pull
+// access denied ... may require 'docker login'", which reads like a
+// credentials problem and is not one — no login recovers a repository that is
+// gone. quay.io carries the identical tag.
+const minioImage = "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z"
 
 // startMinio brings up a single-node MinIO and returns its S3 endpoint plus
 // the root credentials.

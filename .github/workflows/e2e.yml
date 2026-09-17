@@ -39,9 +39,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The image builds FROM golang/node alpine bases and the stack pulls
-      # minio/minio + minio/mc — all Docker Hub. Authenticate when the secrets
-      # exist to avoid anonymous-pull 429s (no-op otherwise).
+      # The image builds FROM golang/node alpine bases on Docker Hub.
+      # Authenticate when the secrets exist to avoid anonymous-pull 429s
+      # (no-op otherwise). MinIO is no longer among them — it moved to
+      # quay.io, which does not rate-limit anonymous pulls.
       - name: Docker Hub login (optional)
         uses: ./.github/actions/dockerhub-login
         with:

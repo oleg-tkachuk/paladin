@@ -143,8 +143,8 @@ stack_pull_thirdparty() {
         echo "    Whatever docker said, it said it about a FETCH — not about a"
         echo "    stack that is missing an image. Two things it can be:"
         echo
-        echo "      - the registry refused or timed out. Docker Hub rate-limits"
-        echo "        anonymous pulls and all of these come from there."
+        echo "      - the registry refused or timed out. Docker Hub"
+        echo "        rate-limits anonymous pulls; postgres comes from there."
         echo "        Retry, or:  docker login"
         echo "      - a tag in the compose file is wrong. Then the message above"
         echo "        names it, and no retry will help."
