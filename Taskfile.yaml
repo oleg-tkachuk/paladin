@@ -45,7 +45,7 @@ includes:
     # updated either.
     vars:
       PNPM_APPS: frontend
-      PNPM_DOCKERFILES: frontend/deploy/Dockerfile
+      PNPM_PIN_FILES: frontend/deploy/Dockerfile
   sec:
     taskfile: '{{printf .TASKLIB "security"}}'
     dir: .
