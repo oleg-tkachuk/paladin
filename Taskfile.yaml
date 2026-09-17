@@ -30,7 +30,11 @@ vars:
   # OrbStack cluster; both components redeclare the same default so a
   # standalone `cd backend && task …` behaves identically.
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
-  TASKLIB: '../taskfiles/%s'
+  # Shared task library — github.com/oleg-tkachuk/taskfiles, pinned.
+  # Working on the library itself: point this at a checkout beside the
+  # repository instead, keeping the %s:
+  #   TASKLIB: '../taskfiles/%s'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.2.0'
 includes:
   # Repo-wide scans from the shared library. Not wired into this repo's own
   # aggregates on purpose: the tasks are here to be run, not to change what

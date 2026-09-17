@@ -57,4 +57,11 @@ backend/cmd/seed-fixture/main.go.bak
 **/deploy/info.env
 
 # Task's fingerprint cache and remote-Taskfile cache.
-.task/
+**/.task/*
+# ...except the remote lock. Task refuses to run when the content behind a
+# ?ref= no longer matches it, which is the only thing standing between a
+# moved tag and this build. Kept at any depth, because a component run from
+# its own directory caches there rather than at the root.
+!**/.task/remote/
+**/.task/remote/*
+!**/.task/remote/*.checksum
