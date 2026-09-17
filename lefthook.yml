@@ -161,13 +161,27 @@ pre-push:
       root: backend/
       tags: [chart, lint]
       glob: "backend/deploy/chart/**/*"
-      run: task release:chart:verify
+      # Own TMPDIR: Task clones a remote include into
+      # $TMPDIR/task-git-repos/git/<hash of url+ref>, one directory per repo+ref
+      # shared by every module, every consumer and every process on the machine,
+      # with no lock. Two `task` runs at once lose the clone — reproduced as
+      # `could not create work tree dir ... File exists`, six out of six.
+      run: |
+        d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
+        TMPDIR="$d/" task release:chart:verify
 
     - name: frontend-chart-verify
       root: frontend/
       tags: [chart, lint]
       glob: "frontend/deploy/chart/**/*"
-      run: task release:chart:verify
+      # Own TMPDIR, same reason as the job above: Task clones a remote include into
+      # $TMPDIR/task-git-repos/git/<hash of url+ref>, one directory per repo+ref
+      # shared by every module, every consumer and every process on the machine,
+      # with no lock. Two `task` runs at once lose the clone — reproduced as
+      # `could not create work tree dir ... File exists`, six out of six.
+      run: |
+        d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
+        TMPDIR="$d/" task release:chart:verify
 
     - name: frontend-tsc
       root: frontend/
