@@ -162,6 +162,11 @@ tasks:
       # That shipped: the console image built with the repo root as its docker
       # context from anywhere but frontend/, and took verify-e2e down with it.
       - ./scripts/taskfile-vars.test.sh
+      # sqlc stamps its own version into every file it writes, so a generator
+      # taken from PATH instead of the go.mod pin rewrites the whole output
+      # with nothing but that banner changed — and the drift gate then blames
+      # the developer for what it had just done itself.
+      - ./scripts/sqlc-pin.test.sh
       - task: frontend:build
 
   verify-capability:

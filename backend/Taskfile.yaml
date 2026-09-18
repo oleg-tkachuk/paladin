@@ -64,6 +64,17 @@ includes:
       BUF_TEMPLATE: proto/buf.gen.yaml
       GENERATED_DIRS: internal/api/pb
       PROTO_FORBID: proto/internal
+      # Run sqlc through `go run`, so the version that regenerates is the one
+      # go.mod pins rather than whatever is on PATH. The bindings carry their
+      # generating version in a banner comment, so a PATH sqlc one minor ahead
+      # rewrites all 29 files with nothing but that line changed — and the
+      # drift gate below then reports the output as stale when it was fine and
+      # the gate itself had just dirtied it.
+      SQLC_MODULE: github.com/sqlc-dev/sqlc/cmd/sqlc
+      # Must match `out:` in sqlc.yaml. sqlc writes there and the gate diffs
+      # there; nothing reconciles the two spellings, and a gate pointed at the
+      # wrong directory passes by finding nothing.
+      SQLC_DIR: internal/store/postgres/sqlc
   auth:
     taskfile: '{{printf .TASKLIB "auth"}}'
     dir: .

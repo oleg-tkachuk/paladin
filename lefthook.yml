@@ -66,18 +66,19 @@ pre-commit:
       # `backend/` in front of it, which is why `*.go` above needs no prefix
       # and this needed one to match anything at all.
       glob: "backend/{sqlc.yaml,sqlc.yml,sqlc.json,internal/store/postgres/queries/*.sql}"
+      # Delegated to the library gate rather than hand-rolled here, so the
+      # version that regenerates is go.mod's either way. The local copy ran
+      # sqlc from PATH and skipped silently when it was absent — a guard that
+      # reports success without checking anything, and a false failure for
+      # anyone whose PATH sqlc was not the pinned one.
+      #
+      # Own TMPDIR and TASK_OFFLINE, for the reason spelled out on the
+      # chart-verify jobs below: this hook set runs `parallel: true`, and Task
+      # resolves its remote includes through a clone directory shared by every
+      # process on the machine, with no lock.
       run: |
-        set -euo pipefail
-        command -v sqlc >/dev/null 2>&1 || exit 0
-        sqlc generate
-        # Scoped to sqlc's own output (`out:` in sqlc.yaml). A bare
-        # `git diff --quiet` answers "is the worktree clean", which is a
-        # different question and a false alarm on any partially staged
-        # commit — harmless only while this job was unreachable.
-        if ! git diff --quiet -- internal/store/postgres/sqlc; then
-          echo "ERROR: sqlc generated files are out of date. Run 'task codegen:sqlc' and commit."
-          exit 1
-        fi
+        d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
+        TMPDIR="$d/" TASK_OFFLINE=1 task codegen:sqlc:check
 
     - name: backend-gofmt
       root: backend/
