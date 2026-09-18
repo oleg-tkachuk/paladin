@@ -79,10 +79,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           token: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Mirrors `task docker:build`. Backend context is the REPO ROOT (not
-      # backend/): the Dockerfile COPYs backend/ plus the nested capability/
-      # module, so a backend/-scoped context fails on `COPY backend/... not
-      # found`. The frontend build below keeps its frontend/ context.
+      # Mirrors `task backend:release:image:build`. Backend context is the
+      # REPO ROOT (not backend/): the Dockerfile COPYs backend/ plus the nested
+      # capability/ module, so a backend/-scoped context fails on `COPY
+      # backend/... not found`. The frontend build below keeps its frontend/
+      # context.
       - name: Build backend image
         run: |
           docker buildx build --load \

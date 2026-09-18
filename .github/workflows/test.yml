@@ -127,7 +127,7 @@ jobs:
       - name: Proto codegen drift
         # Regenerate with the go.mod-pinned plugins (so versions match the
         # committed output) and fail if anything changed — catches a hand-edited
-        # or --no-verify-committed generated file. Mirrors `task gen:proto`.
+        # or --no-verify-committed generated file. Mirrors `task backend:codegen:proto`.
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go
@@ -137,7 +137,7 @@ jobs:
           buf generate proto --template proto/buf.gen.yaml
           goimports -w internal/api/pb
           if ! git diff --exit-code -- internal/api/pb; then
-            echo "ERROR: generated proto code is out of date. Run 'task gen:proto' and commit."
+            echo "ERROR: generated proto code is out of date. Run 'task backend:codegen:proto' and commit."
             exit 1
           fi
 

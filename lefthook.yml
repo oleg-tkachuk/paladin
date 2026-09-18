@@ -75,7 +75,7 @@ pre-commit:
         # different question and a false alarm on any partially staged
         # commit — harmless only while this job was unreachable.
         if ! git diff --quiet -- internal/store/postgres/sqlc; then
-          echo "ERROR: sqlc generated files are out of date. Run 'task gen:all' and commit."
+          echo "ERROR: sqlc generated files are out of date. Run 'task codegen:sqlc' and commit."
           exit 1
         fi
 
