@@ -1,0 +1,15 @@
+# npm-check-updates config, read automatically by `task frontend:node:deps:update`.
+
+# pnpm is not an ordinary dependency here, it is a PIN — written in two places
+# that have to agree: "packageManager" in package.json, and ARG PNPM_VERSION in
+# deploy/Dockerfile, which runs before there is a package manager to read the
+# first one. `task pnpm:pin:update` owns that pair and moves both together.
+#
+# ncu knows only about the first. Bumping it here left the two disagreeing, so
+# `pnpm:pin:update` refused and took the rest of `task deps:update` down with
+# it — after the Go half had already been written. It also rewrote
+# "pnpm@12.3.4+sha512.961aa…" as a bare "pnpm@12.4.2", dropping the integrity
+# hash corepack verifies the download against: a supply-chain check silently
+# gone, and nothing in the failure mentioned it.
+reject:
+  - pnpm
