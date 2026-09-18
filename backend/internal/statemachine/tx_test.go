@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Covers the ADR-0003 orchestrators: the state change and the caller's outbox
@@ -117,6 +118,11 @@ func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
 func (r *fakeRows) Values() ([]any, error)                       { return nil, nil }
 func (r *fakeRows) RawValues() [][]byte                          { return nil }
 func (r *fakeRows) Conn() *pgx.Conn                              { return nil }
+
+// TypeMap joined pgx.Rows in pgx v5.11.0. nil is what the interface documents
+// for a Rows that carries no values, which is this one: Scan above writes the
+// id straight into dest and decodes nothing through pgtype.
+func (r *fakeRows) TypeMap() *pgtype.Map { return nil }
 
 // promotingPool returns a pool whose tx reports a successful promote.
 func promotingPool() (*fakePool, *fakeTx) {

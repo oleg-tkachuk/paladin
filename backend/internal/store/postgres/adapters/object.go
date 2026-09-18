@@ -174,12 +174,13 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	// or partially-pushed filter only over-fetches — it never drops a
 	// matching row. A pushdown parse error is non-fatal (the CompiledCEL
 	// path already validated the same expression).
-	var state sqlc.NullObjectState
+	var state *sqlc.ObjectState
 	var prefix, substr *string
 	if args.Filter != "" {
 		if pd, perr := cel.ExtractObjectPushdown(args.Filter); perr == nil {
 			if pd.StateEq != "" {
-				state = sqlc.NullObjectState{ObjectState: sqlc.ObjectState(pd.StateEq), Valid: true}
+				v := sqlc.ObjectState(pd.StateEq)
+				state = &v
 			}
 			// Only push a key literal when it has no LIKE metacharacters
 			// (%, _, \). Otherwise the SQL LIKE would interpret them as
@@ -244,7 +245,7 @@ const countScanCap = 10000
 // in-process, capped at countScanCap.
 func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsArgs) (int64, bool, error) {
 	if args.CompiledCEL == nil {
-		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, sqlc.NullObjectState{})
+		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, nil)
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects: %w", err)
 		}
@@ -261,7 +262,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 		rows, err := r.q.ListObjects(ctx,
 			pgUUID(args.TenantID),
 			args.Collection,
-			sqlc.NullObjectState{},
+			nil, // state (no filter: count every state)
 			nil, // prefix
 			nil, // substr (CountObjectsArgs carries no raw filter to push down)
 			pgUUID(afterID),

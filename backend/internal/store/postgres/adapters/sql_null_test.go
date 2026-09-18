@@ -73,12 +73,12 @@ func TestSinkKindToSQL(t *testing.T) {
 	webhook := "webhook"
 
 	for name, in := range map[string]*string{"nil": nil, "empty": &empty} {
-		if got := sinkKindToSQL(in); got.Valid {
+		if got := sinkKindToSQL(in); got != nil {
 			t.Errorf("sinkKindToSQL(%s) = %+v, want NULL", name, got)
 		}
 	}
 	got := sinkKindToSQL(&webhook)
-	if !got.Valid || got.EventSinkKind != sqlc.EventSinkKind("webhook") {
+	if got == nil || *got != sqlc.EventSinkKind("webhook") {
 		t.Errorf("sinkKindToSQL(\"webhook\") = %+v, want a valid webhook", got)
 	}
 }
@@ -86,22 +86,22 @@ func TestSinkKindToSQL(t *testing.T) {
 // "no default retention mode" is NULL in the enum column and "" in the domain,
 // so the pair has to round-trip through both representations.
 func TestLockModeSQLRoundTrip(t *testing.T) {
-	if got := lockModeToSQL(""); got.Valid {
+	if got := lockModeToSQL(""); got != nil {
 		t.Errorf("lockModeToSQL(\"\") = %+v, want NULL", got)
 	}
-	if got := lockModeFromSQL(sqlc.NullObjectLockMode{}); got != "" {
+	if got := lockModeFromSQL(nil); got != "" {
 		t.Errorf("lockModeFromSQL(NULL) = %q, want \"\"", got)
 	}
-	// A mode carried in an invalid wrapper is still NULL: the string is set
-	// but the column is not, and reading it back would invent a retention
-	// mode for a bucket that has none.
-	if got := lockModeFromSQL(sqlc.NullObjectLockMode{ObjectLockMode: "GOVERNANCE"}); got != "" {
-		t.Errorf("lockModeFromSQL(invalid-with-value) = %q, want \"\"", got)
-	}
+	// There used to be a third case here: a mode carried in a wrapper whose
+	// Valid was false, which had to read back as "" so a bucket with no
+	// retention mode could not be given one. sqlc v1.31 replaced the
+	// NullObjectLockMode wrapper with *ObjectLockMode, and a pointer cannot
+	// hold a value and be absent at the same time — the state the case
+	// guarded is now unrepresentable rather than merely handled.
 	for _, mode := range []string{"GOVERNANCE", "COMPLIANCE"} {
 		sql := lockModeToSQL(mode)
-		if !sql.Valid {
-			t.Errorf("lockModeToSQL(%q): Valid = false", mode)
+		if sql == nil {
+			t.Errorf("lockModeToSQL(%q) = nil, want a value", mode)
 			continue
 		}
 		if got := lockModeFromSQL(sql); got != mode {

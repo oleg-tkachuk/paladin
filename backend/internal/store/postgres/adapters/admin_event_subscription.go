@@ -136,9 +136,10 @@ func eventSubFromSQLC(row sqlc.EventSubscription) admindomain.EventSubscription 
 }
 
 // sink_kind is a Postgres enum now; a nil pointer means "leave unchanged".
-func sinkKindToSQL(k *string) sqlc.NullEventSinkKind {
+func sinkKindToSQL(k *string) *sqlc.EventSinkKind {
 	if k == nil || *k == "" {
-		return sqlc.NullEventSinkKind{}
+		return nil
 	}
-	return sqlc.NullEventSinkKind{EventSinkKind: sqlc.EventSinkKind(*k), Valid: true}
+	v := sqlc.EventSinkKind(*k)
+	return &v
 }

@@ -111,7 +111,7 @@ func (r *ObjectLockRepo) ApplyBucketDefault(ctx context.Context, tenantID, versi
 	return nil
 }
 
-func lockFrom(mode sqlc.NullObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) object.ObjectLock {
+func lockFrom(mode *sqlc.ObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) object.ObjectLock {
 	return object.ObjectLock{
 		Mode:        lockModeFromSQL(mode),
 		RetainUntil: timePtr(retainUntil),

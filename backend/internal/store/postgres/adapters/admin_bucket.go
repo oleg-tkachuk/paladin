@@ -587,16 +587,17 @@ var _ = fmt.Errorf
 
 // object_lock_mode is a Postgres enum now (ADR-0013), and "no default mode" is
 // NULL rather than the empty string the domain uses.
-func lockModeToSQL(m string) sqlc.NullObjectLockMode {
+func lockModeToSQL(m string) *sqlc.ObjectLockMode {
 	if m == "" {
-		return sqlc.NullObjectLockMode{}
+		return nil
 	}
-	return sqlc.NullObjectLockMode{ObjectLockMode: sqlc.ObjectLockMode(m), Valid: true}
+	v := sqlc.ObjectLockMode(m)
+	return &v
 }
 
-func lockModeFromSQL(m sqlc.NullObjectLockMode) string {
-	if !m.Valid {
+func lockModeFromSQL(m *sqlc.ObjectLockMode) string {
+	if m == nil {
 		return ""
 	}
-	return string(m.ObjectLockMode)
+	return string(*m)
 }

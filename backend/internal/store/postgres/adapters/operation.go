@@ -153,9 +153,10 @@ func (r *OperationRepo) List(
 	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool,
 ) ([]operation.Operation, string, error) {
 	pageSize = pageSizeOrDefault(pageSize)
-	var ns sqlc.NullOperationState
+	var ns *sqlc.OperationState
 	if state != nil {
-		ns = sqlc.NullOperationState{OperationState: sqlc.OperationState(string(*state)), Valid: true}
+		v := sqlc.OperationState(string(*state))
+		ns = &v
 	}
 	// Pushdown: see admin_bucket.go. `state` is deliberately not pushed from
 	// the filter — the column is an enum, and casting an arbitrary literal to
