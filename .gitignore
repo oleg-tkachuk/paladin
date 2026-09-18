@@ -65,3 +65,9 @@ backend/cmd/seed-fixture/main.go.bak
 !**/.task/remote/
 **/.task/remote/*
 !**/.task/remote/*.checksum
+# ...and the module bodies themselves. Committing them is what lets
+# TASK_OFFLINE=1 resolve every include from the repository: no clone, so no
+# race over the one shared clone directory, no download timeout, and a build
+# that does not depend on github.com being reachable. The .timestamp files stay
+# out - they are per-machine cache state, not content.
+!**/.task/remote/*.yaml

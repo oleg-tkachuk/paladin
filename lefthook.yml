@@ -167,11 +167,13 @@ pre-push:
       # with no lock. Two `task` runs at once lose the clone — reproduced as
       # `could not create work tree dir ... File exists`, six out of six.
       #
-      # --timeout because that private TMPDIR costs the shared clone: every
-      # module is fetched on its own, and the default ten seconds is not enough.
+      # TASK_OFFLINE, because every module resolved here is committed under
+      # .task/remote: nothing is fetched, so no timeout and no github.com. The
+      # private TMPDIR stays — offline alone is not enough, each job passes
+      # under it alone and two together still lose the shared clone directory.
       run: |
         d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" task --timeout 300s release:chart:verify
+        TMPDIR="$d/" TASK_OFFLINE=1 task release:chart:verify
 
     - name: frontend-chart-verify
       root: frontend/
@@ -184,7 +186,7 @@ pre-push:
       # `could not create work tree dir ... File exists`, six out of six.
       run: |
         d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" task --timeout 300s release:chart:verify
+        TMPDIR="$d/" TASK_OFFLINE=1 task release:chart:verify
 
     - name: frontend-tsc
       root: frontend/

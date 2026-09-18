@@ -1,0 +1,131 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# monorepo — run one target across every component of a monorepo.
+#
+#   includes:
+#     monorepo:
+#       taskfile: '{{printf .TASKLIB "monorepo"}}'
+#       dir: .
+#       vars: { COMPONENTS: "backend frontend workers/api" }
+#
+# COMPONENTS is a whitespace-separated list of directories, each holding its
+# own Taskfile. The fan-out is sequential and stops at the first failure: a
+# half-shipped registry is worse than a failed command with a name attached to
+# it.
+#
+# The set is decided at the include and nowhere else: a COMPONENTS on the
+# command line does NOT narrow the run, because a declared var wins over a CLI
+# value. Run one component's own `task deploy`, or include this module a second
+# time for a second set.
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+#   COMPONENTS       whitespace-separated component directories
+#   TARGET           required by `each`: the task to run in each of them
+#   REGISTRY         what `registry:check` probes    (default localhost:5000)
+#   GLOBAL_REGISTRY  a monorepo-wide override; wins over REGISTRY
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+vars:
+  _MONO_COMPONENTS: '{{.COMPONENTS | default ""}}'
+  _MONO_REG: '{{.GLOBAL_REGISTRY | default .REGISTRY | default "localhost:5000"}}'
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _MONO_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+
+tasks:
+
+  each:
+    desc: "Run TARGET in every component (TARGET=test, TARGET=deploy, ...)"
+    requires:
+      vars: [TARGET]
+    preconditions:
+      # An empty list is not "nothing to do", it is a fan-out that was never
+      # wired up — a misspelled COMPONENTS on the include, most likely. Without
+      # this the gate prints nothing and exits 0, which reads as every component
+      # passing.
+      # An empty TARGET passes `requires` and then runs `task` with no
+      # argument in every component — each one's default, which is usually a
+      # task list. A fan-out that lists instead of testing, and says nothing.
+      - sh: '[ -n "{{.TARGET}}" ]'
+        msg: "TARGET is empty — name the task to run in each component."
+      - sh: '[ -n "{{._MONO_COMPONENTS}}" ]'
+        msg: |-
+          COMPONENTS is empty — there is nothing to run TARGET in.
+          Set it on this module's include (it is read when the include loads,
+          so a value passed on the command line will not do).
+      # A component that is not a directory is a typo, and Task does not treat
+      # a missing `dir:` as an error — it runs the command in the PARENT
+      # directory instead. The child `task <TARGET>` then finds the ROOT
+      # Taskfile, whose TARGET is usually this very fan-out, and the run
+      # recurses until it is killed. Silently: no error, no exit, no end.
+      - sh: '[ -z {{._MONO_BAD | q}} ]'
+        # The names go in the message, not to stderr: Task does not show a
+        # precondition's own output, so anything printed there is lost and the
+        # operator is told that something is wrong without being told what.
+        msg: |-
+          COMPONENTS names something that is not a component:{{._MONO_BAD}}
+          Each entry must be a directory holding its own Taskfile, relative to
+          the directory this module's include carries.
+    vars:
+      _MONO_BAD:
+        sh: |-
+          for c in {{._MONO_COMPONENTS}}; do
+            if [ ! -d "$c" ]; then printf ' %s(no such directory)' "$c"
+            elif ! ls "$c"/[Tt]askfile.y*ml >/dev/null 2>&1; then printf ' %s(no Taskfile)' "$c"
+            fi
+          done
+    cmds:
+      - for: { var: _MONO_COMPONENTS }
+        task: _run
+        vars: { COMPONENT: "{{.ITEM}}", TARGET: "{{.TARGET}}" }
+
+  _run:
+    internal: true
+    dir: "{{.COMPONENT}}"
+    cmds:
+      - printf '%s\n' "── {{.COMPONENT}} · {{.TARGET}}"
+      # A child `task` process rather than a namespaced reference: the
+      # component owns its own Taskfile, its own vars and its own includes, and
+      # this file must not need to know any of them.
+      - task {{.TARGET}} {{.CLI_ARGS}}
+
+  test:
+    desc: "Run `task test` in every component"
+    cmds: [{ task: each, vars: { TARGET: test } }]
+
+  lint:
+    desc: "Run `task lint` in every component"
+    cmds: [{ task: each, vars: { TARGET: lint } }]
+
+  build:
+    desc: "Run `task build` in every component"
+    cmds: [{ task: each, vars: { TARGET: build } }]
+
+  deploy:
+    desc: "Run `task deploy` in every component, after checking the registry answers"
+    deps: [registry:check]
+    cmds: [{ task: each, vars: { TARGET: deploy } }]
+
+  registry:check:
+    desc: "Fail fast when {{._MONO_REG}} is not reachable"
+    # A misconfigured registry should cost seconds, not a half-finished push
+    # chain. 200/401/403 all mean the registry answered — the same three codes
+    # release:doctor accepts, so the two do not disagree about what "reachable"
+    # means for the same kind of endpoint. --max-time bounds it for the same
+    # reason: this runs before a fan-out across every component, and an
+    # unreachable host must cost seconds, not a hang.
+    preconditions:
+      - sh: >-
+          case "$(curl -sk --max-time 10 -o /dev/null -w '%{http_code}'
+          https://{{._MONO_REG}}/v2/ 2>/dev/null || printf '%s' 000)" in
+            200|401|403) true ;; *) false ;;
+          esac
+        msg: |-
+          {{._MONO_REG}} is not answering on :443.
+          Bring the OCI registry up, or point the run somewhere else with
+          GLOBAL_REGISTRY=<host> task ...
+    cmds:
+      - printf '%s\n' "{{._MONO_OK}} registry {{._MONO_REG}} reachable"

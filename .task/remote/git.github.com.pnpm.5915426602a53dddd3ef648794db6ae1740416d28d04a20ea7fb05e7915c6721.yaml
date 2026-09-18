@@ -1,0 +1,217 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# pnpm — keep the pnpm version pin honest across a repository's apps.
+#
+#   includes:
+#     pnpm:
+#       taskfile: '{{printf .TASKLIB "pnpm"}}'
+#       dir: .
+#       vars: { PNPM_APPS: "frontend/admin-app frontend/clinic-app" }
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+#   PNPM_APPS    whitespace-separated app directories, each with a package.json
+#                carrying a "packageManager": "pnpm@..." pin
+#   PNPM_PIN_FILES
+#                whitespace-separated files that write the same version a second
+#                time, in any spelling this recognises: `pnpm@X.Y.Z` (corepack
+#                prepare, an install line) or `PNPM_VERSION=X.Y.Z` (an ARG or an
+#                ENV). Optional. Never list a package.json here - corepack owns
+#                that pin, hash and all.
+#   SPEC         which release `_pin:to` resolves — a major ("12"), an exact
+#                version, "latest", or "current-major" (the default path)
+#
+# Repo-scoped, not component-scoped: every app moves together. A repository
+# where one app is on one pnpm and another on a different one writes two
+# lockfile dialects, and nothing notices until an image build breaks.
+#
+# pnpm is delivered by corepack, so the pin in package.json IS the version
+# every developer, CI job and image build runs. `pnpm self-update` cannot work
+# here — corepack owns the shim and refuses it. `corepack use` is the supported
+# path and does both things a pin bump needs: it rewrites "packageManager" with
+# the release's integrity hash, and re-runs install so the lockfile is written
+# by the new pnpm rather than the previous major's.
+#
+# One thing that is not obvious and cost a real debugging session: corepack
+# resolves the pin from the CURRENT directory, so `pnpm -C <app> ...` runs
+# corepack's own default rather than the app's pin and then refuses to switch.
+# Every command here cd's into the app instead.
+#
+# An image build cannot read package.json before it has a package manager, so a
+# repository that installs pnpm in its Dockerfile pins the version there too.
+# That second pin is invisible to corepack and to npm tooling alike: it drifts
+# silently, and the image then builds a lockfile a different pnpm wrote.
+#
+# The spelling of that pin is not one thing. Two repositories in the same
+# workspace wrote it two ways - `ARG PNPM_VERSION=12.3.4` in one, `corepack
+# prepare pnpm@11.8.0` in the other - so this matches the version rather than
+# the line around it, and takes every occurrence in a file rather than the
+# first. The second of those had drifted a whole major behind its package.json
+# and nothing had noticed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+vars:
+  _PNPM_APPS: '{{.PNPM_APPS | default "."}}'
+  _PNPM_PIN_FILES: '{{.PNPM_PIN_FILES | default ""}}'
+  # Both spellings of a literal pin, applied to every occurrence in a line.
+  # `pnpm@${PNPM_VERSION}` is deliberately not matched: it is derived from the
+  # ARG this already rewrites, so touching it would be touching the same pin
+  # twice.
+  _PNPM_READ_PINS: |-
+    {
+      for (i = 1; i <= 2; i++) {
+        pat = (i == 1) ? "pnpm@" : "PNPM_VERSION="
+        rest = $0
+        while (match(rest, pat "[0-9]+\\.[0-9]+\\.[0-9]+")) {
+          print substr(rest, RSTART + length(pat), RLENGTH - length(pat))
+          rest = substr(rest, RSTART + RLENGTH)
+        }
+      }
+    }
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _PNPM_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _PNPM_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _PNPM_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
+  _PNPM_ERR: '{{if .NO_COLOR}}✖{{else}}{{"\x1b[31m✖\x1b[0m"}}{{end}}'
+
+tasks:
+
+  pin:update:
+    desc: "Bump pnpm to the newest release of the major the repo sits on"
+    cmds:
+      - task: _pin:to
+        vars: { SPEC: current-major }
+
+  pin:update:major:
+    desc: "Cross a pnpm major deliberately — task pnpm:pin:update:major -- 12"
+    cmds:
+      - task: _pin:to
+        vars: { SPEC: '{{.CLI_ARGS | default "latest"}}' }
+
+  pin:check:
+    desc: "Fail when the apps' pnpm pins diverge, or corepack is being bypassed"
+    preconditions:
+      - sh: command -v corepack >/dev/null
+        msg: "corepack is not on PATH (it ships with Node) — run `corepack enable`"
+    cmds:
+      - cmd: |-
+          set -u
+          rc=0; pins=""
+          for a in {{._PNPM_APPS}}; do
+            pm=$(cd "$a" && node -p "require('./package.json').packageManager || ''" 2>/dev/null)
+            case "$pm" in
+              pnpm@*) ;;
+              *) printf '%s\n' "{{._PNPM_ERR}} pnpm · $a has no pnpm pin" >&2; rc=1; continue ;;
+            esac
+            v=${pm#pnpm@}; v=${v%%+*}; pins="$pins $v"
+            # corepack resolves the shim per directory, so this is the version
+            # an install in that app would really use.
+            got=$(cd "$a" && pnpm --version 2>/dev/null)
+            if [ "$got" != "$v" ]; then
+              printf '%s\n' "{{._PNPM_ERR}} pnpm · $a pins $v but reports ${got:-<none>} — a global pnpm is shadowing the corepack shim" >&2
+              rc=1
+            fi
+          done
+          for f in {{._PNPM_PIN_FILES}}; do
+            if [ ! -f "$f" ]; then
+              printf '%s\n' "{{._PNPM_ERR}} pnpm · $f does not exist" >&2; rc=1; continue
+            fi
+            found=$(awk {{._PNPM_READ_PINS | q}} "$f" | sort -u)
+            if [ -z "$found" ]; then
+              printf '%s\n' "{{._PNPM_ERR}} pnpm · $f writes no pnpm version this recognises (pnpm@X.Y.Z or PNPM_VERSION=X.Y.Z)" >&2
+              rc=1; continue
+            fi
+            pins="$pins $found"
+          done
+          if [ "$(printf '%s\n' $pins | sort -u | grep -c .)" -gt 1 ]; then
+            printf '%s\n' "{{._PNPM_ERR}} pnpm · the pins disagree:$pins" >&2
+            rc=1
+          fi
+          [ "$rc" = 0 ] && printf '%s\n' "{{._PNPM_OK}} pnpm · every pin at$(printf '%s\n' $pins | sort -u | head -1 | sed 's/^/ /')"
+          exit "$rc"
+
+  _pin:to:
+    internal: true
+    preconditions:
+      - sh: command -v corepack >/dev/null
+        msg: "corepack is not on PATH (it ships with Node) — run `corepack enable`"
+    cmds:
+      - cmd: |-
+          set -u
+          pins=""
+          for a in {{._PNPM_APPS}}; do
+            pm=$(cd "$a" && node -p "require('./package.json').packageManager || ''" 2>/dev/null)
+            case "$pm" in
+              pnpm@*) ;;
+              *) printf '%s\n' "{{._PNPM_ERR}} pnpm · $a carries no pnpm \"packageManager\" pin" >&2; exit 1 ;;
+            esac
+            v=${pm#pnpm@}; pins="$pins ${v%%+*}"
+          done
+          for f in {{._PNPM_PIN_FILES}}; do
+            found=$(awk {{._PNPM_READ_PINS | q}} "$f" 2>/dev/null | sort -u)
+            case "$found" in
+              "") printf '%s\n' "{{._PNPM_ERR}} pnpm · $f writes no pnpm version this recognises" >&2; exit 1 ;;
+              *) pins="$pins $found" ;;
+            esac
+          done
+          current=$(printf '%s\n' $pins | sort -u)
+          if [ "$(printf '%s\n' "$current" | grep -c .)" != "1" ]; then
+            printf '%s\n' "{{._PNPM_ERR}} pnpm · the pins disagree:$pins — reconcile with pnpm:pin:check" >&2
+            exit 1
+          fi
+
+          spec='{{.SPEC}}'
+          [ "$spec" = "current-major" ] && spec=${current%%.*}
+          target=$(npm view "pnpm@$spec" version --json 2>/dev/null | node -p 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));Array.isArray(v)?v[v.length-1]:v' 2>/dev/null)
+          case "$target" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) printf '%s\n' "{{._PNPM_ERR}} pnpm · the registry gave no stable version for '$spec'" >&2; exit 1 ;;
+          esac
+
+          if [ "$target" = "$current" ]; then
+            printf '%s\n' "{{._PNPM_OK}} pnpm · already pinned at $current everywhere"
+          else
+            printf '%s\n' "{{._PNPM_RUN}} pnpm · $current → $target"
+            for a in {{._PNPM_APPS}}; do
+              ( cd "$a" && corepack use "pnpm@$target" ) || {
+                printf '%s\n' "{{._PNPM_ERR}} pnpm · $a: corepack use pnpm@$target failed — the other apps may already be bumped" >&2
+                exit 1
+              }
+            done
+            # After the apps, so a corepack failure leaves both pins on the old
+            # version rather than the image build ahead of the lockfile.
+            for f in {{._PNPM_PIN_FILES}}; do
+              tmp="$f.pnpm-pin.$$"
+              awk -v t="$target" '
+                {
+                  gsub(/pnpm@[0-9]+\.[0-9]+\.[0-9]+/, "pnpm@" t)
+                  gsub(/PNPM_VERSION=[0-9]+\.[0-9]+\.[0-9]+/, "PNPM_VERSION=" t)
+                }
+                1
+              ' "$f" > "$tmp" && mv "$tmp" "$f" || {
+                rm -f "$tmp"
+                printf '%s\n' "{{._PNPM_ERR}} pnpm · $f: could not rewrite the pin" >&2
+                exit 1
+              }
+              # Read it back rather than trusting the rewrite. A pattern that
+              # matches nothing rewrites nothing and exits 0, and the line below
+              # then reports a version the file does not carry - which is
+              # exactly what a wrong escape in the gsub above once did.
+              left=$(awk {{._PNPM_READ_PINS | q}} "$f" | sort -u | grep -vx "$target" || true)
+              if [ -n "$left" ]; then
+                printf '%s\n' "{{._PNPM_ERR}} pnpm · $f still pins $(printf '%s' $left) after the rewrite" >&2
+                exit 1
+              fi
+            done
+            printf '%s\n' "{{._PNPM_OK}} pnpm · pinned at $target everywhere — review the package.json, pin-file and lockfile diff"
+          fi
+
+          # A held-back major is reported, never taken silently.
+          newest=$(npm view pnpm@latest version 2>/dev/null)
+          if [ -n "$newest" ] && [ "${newest%%.*}" != "${target%%.*}" ]; then
+            printf '%s\n' "{{._PNPM_WARN}} pnpm · $newest is out and this task stays inside major ${target%%.*}" >&2
+            printf '%s\n' "         cross it deliberately: task pnpm:pin:update:major -- ${newest%%.*}" >&2
+          fi

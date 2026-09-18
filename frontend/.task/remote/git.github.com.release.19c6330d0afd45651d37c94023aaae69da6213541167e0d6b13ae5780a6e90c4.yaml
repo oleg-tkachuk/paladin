@@ -1,0 +1,551 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# release — everything between a commit and an artifact in a registry: the
+# version this tree publishes as, the container image, the Helm chart, and the
+# one task that does all three in the right order.
+#
+# Nothing here talks to a cluster. A repository that only publishes — CI with
+# no kubeconfig anywhere near it — needs this module and not the k8s one.
+#
+# The cluster-side half is a separate module, `k8s`, included separately by the
+# consumer. It has to be the consumer that includes it: a module that includes
+# its own parts hands them the LIBRARY's working directory rather than the
+# consumer's, and every relative path in them resolves in the wrong tree.
+#
+#   includes:
+#     release:
+#       taskfile: '{{printf .TASKLIB "release"}}'
+#       dir: .
+#
+# `dir: .` is required — it pins every command to the INCLUDING component's
+# directory, so CHART_DIR / DOCKERFILE / INFO_ENV_FILE stay relative to it.
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+# Set these in the including Taskfile's `vars:`. Only PROJECT_NAME is required.
+#
+#   PROJECT_NAME         image + chart name, and the label in every log line
+#   CHART_NAME           chart name when it differs from PROJECT_NAME
+#   IMAGE_NAME           image name when it differs from PROJECT_NAME
+#   REGISTRY             OCI host                     (default localhost:5000)
+#   GLOBAL_REGISTRY      monorepo-wide override, wins over REGISTRY
+#   IMAGE_NAMESPACE      path between host and name     (default none)
+#   DOCKERFILE           default ./Dockerfile
+#   DOCKER_CONTEXT       default .
+#   DOCKER_BUILD_FLAGS   verbatim extra buildx flags    (default none)
+#
+# `image:build` writes to whatever Docker daemon the host talks to. Getting
+# that image into a local cluster is the `runtime/*` modules' job — they differ
+# per runtime, and only some of them have anything to do.
+#   CHART_DIR            default ./deploy/chart
+#   CHART_APP_VERSION    appVersion when the image is upstream's, not ours
+#   CHART_MIN_RESOURCES  render-gate floor              (default 1)
+#   K8S_VERSION          schema version chart:validate checks against
+#   KUBECONFORM_FLAGS    extra kubeconform flags
+#   HELM_FLAGS           extra flags for every helm registry call
+#   HELM_LINT_FLAGS      extra flags for `helm lint`
+#   HELM_TEMPLATE_FLAGS  extra flags for `helm template`
+#   HELM_PACKAGE_FLAGS   extra flags for `helm package`
+#   K8S_NAMESPACE        namespace the chart renders against (default "default")
+#   INFO_ENV_FILE        default ./deploy/info.env
+#   VERSION_BASE         base for untagged builds       (default 0.1.0)
+#   IMAGE_LATEST     set to 1 to also push a floating :latest beside the
+#                    version tag. Off by default — see the note below.
+#   VERSION_TAG_EXCLUDE  tag glob to keep out of the version (e.g. "api/*")
+#   APP_VERSION          pin the version outright, skipping git derivation
+#
+# Nothing here is defined as a bare knob name: a var declared in an included
+# file SHADOWS the including file's value of the same name, so every input is
+# read through `{{.NAME | default ...}}` and every derived value is prefixed `_`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+vars:
+  _REL_SVC: '{{.PROJECT_NAME | default "service"}}'
+  _REL_CHART: '{{.CHART_NAME | default .PROJECT_NAME | default "service"}}'
+
+  # One knob re-points everything. GLOBAL_REGISTRY (set by a monorepo root)
+  # wins over a component's own REGISTRY.
+  _REL_REG: '{{.GLOBAL_REGISTRY | default .REGISTRY | default "localhost:5000"}}'
+  _REL_NS: '{{if .IMAGE_NAMESPACE}}/{{.IMAGE_NAMESPACE}}{{end}}'
+  _REL_IMAGE: '{{._REL_REG}}{{._REL_NS}}/{{.IMAGE_NAME | default .PROJECT_NAME | default "service"}}'
+  _REL_CHART_REPO: 'oci://{{._REL_REG}}{{._REL_NS}}/charts'
+  # A registry serving a certificate strict oras clients reject — a wildcard
+  # that does not cover the apex, say — needs --insecure-skip-tls-verify here.
+  _REL_HELM_FLAGS: '{{.HELM_FLAGS | default ""}}'
+
+  _REL_DOCKERFILE: '{{.DOCKERFILE | default "./Dockerfile"}}'
+  _REL_CONTEXT: '{{.DOCKER_CONTEXT | default "."}}'
+  _REL_BUILD_FLAGS: '{{.DOCKER_BUILD_FLAGS | default ""}}'
+  # A named builder keeps a cache `docker builder prune` does not touch. Unset
+  # means the active builder, which is right for anyone who has not named one.
+  _REL_BUILDER: '{{.BUILDX_BUILDER | default ""}}'
+  _REL_KEEP: '{{.BUILDX_KEEP_STORAGE | default "8GB"}}'
+
+  _REL_CHART_DIR: '{{.CHART_DIR | default "./deploy/chart"}}'
+  _REL_MIN_RES: '{{.CHART_MIN_RESOURCES | default "1"}}'
+  _REL_RENDER: '{{.RENDER_OUT | default ".task/render.yaml"}}'
+
+  _REL_K8S_NS: '{{.K8S_NAMESPACE | default "default"}}'
+
+  _REL_INFO_ENV: '{{.INFO_ENV_FILE | default "./deploy/info.env"}}'
+
+  # ─── version derivation ────────────────────────────────────────────────────
+  # One scheme for every repo, always SemVer-2 (Helm OCI rejects anything else):
+  #
+  #   exact tag, clean tree  →  X.Y.Z
+  #   otherwise, clean tree  →  <base>-dev.<committer-ts>.g<sha>
+  #   dirty tree             →  <base>-dev.<committer-ts>.g<sha>.dirty.<now>
+  #
+  # The committer timestamp, not `date +%s`: a clean tree then produces the
+  # SAME version on every run, which is what lets image:build and chart:push
+  # skip work that is already published. A dirty tree is not reproducible by
+  # definition, so it takes a wall-clock suffix and always rebuilds.
+  #
+  # Timestamp first, sha second: SemVer compares pre-release identifiers left
+  # to right, so a leading numeric timestamp orders builds chronologically and
+  # ArgoCD's `>=0.0.0-0` resolver always lands on the newest push. A sha-first
+  # form lets an alphabetically larger sha from an OLDER commit shadow a newer
+  # build — that bug has been shipped twice; do not reintroduce it.
+  #
+  # The `g` prefix on the sha follows git-describe. Without it an all-digit
+  # short sha with a leading zero is an invalid SemVer numeric identifier
+  # ("MUST NOT include leading zeroes") and Helm rejects the chart version.
+  #
+  _REL_SHA:
+    sh: git rev-parse --short=8 HEAD 2>/dev/null || printf '%s' 00000000
+  _REL_CTS:
+    sh: git show -s --format=%ct HEAD 2>/dev/null || printf '%s' 0
+  # VERSION_TAG_EXCLUDE keeps a tag namespace out of the version: a repo that
+  # tags its proto contract `api/vN` must not let those restamp an image, and
+  # the `/` in them is invalid in a Docker tag anyway.
+  # The `v` comes off in the template, not through `sed`: one process instead
+  # of two, and the rule is legible as data rather than buried in a regex
+  # inside a folded scalar.
+  _REL_TAG_RAW:
+    sh: >-
+      git describe --tags --exact-match
+      {{if .VERSION_TAG_EXCLUDE}}--exclude '{{.VERSION_TAG_EXCLUDE}}'{{end}}
+      HEAD 2>/dev/null || true
+  _REL_TAG: '{{._REL_TAG_RAW | trimPrefix "v"}}'
+  _REL_HELM_LINT_FLAGS: '{{.HELM_LINT_FLAGS | default ""}}'
+  _REL_HELM_TPL_FLAGS: '{{.HELM_TEMPLATE_FLAGS | default ""}}'
+  _REL_HELM_PKG_FLAGS: '{{.HELM_PACKAGE_FLAGS | default ""}}'
+  _REL_K8S_VERSION: '{{.K8S_VERSION | default ""}}'
+  _REL_KUBECONFORM_FLAGS: '{{.KUBECONFORM_FLAGS | default ""}}'
+  _REL_LATEST: '{{.IMAGE_LATEST | default "0"}}'
+  _REL_DIRTY:
+    sh: git status --porcelain 2>/dev/null | head -c1
+  _REL_NOW:
+    sh: date +%s
+  _REL_VERSION: >-
+    {{- if .APP_VERSION -}}{{.APP_VERSION}}
+    {{- else if and ._REL_TAG (not ._REL_DIRTY) -}}{{._REL_TAG}}
+    {{- else -}}
+    {{- ._REL_TAG | default .VERSION_BASE | default "0.1.0"}}-dev.{{._REL_CTS}}.g{{._REL_SHA}}
+    {{- if ._REL_DIRTY}}.dirty.{{._REL_NOW}}{{end}}
+    {{- end -}}
+  _REL_BUILD_TIME:
+    sh: TZ='{{.TIMEZONE | default "UTC"}}' date +%Y-%m-%dT%H:%M:%S%z
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _REL_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _REL_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _REL_SKIP: '{{if .NO_COLOR}}○{{else}}{{"\x1b[90m○\x1b[0m"}}{{end}}'
+  _REL_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
+  _REL_ERR: '{{if .NO_COLOR}}✖{{else}}{{"\x1b[31m✖\x1b[0m"}}{{end}}'
+
+tasks:
+
+  version:
+    desc: "Print the version this working tree publishes as"
+    cmds:
+      - printf '%s\n' "{{._REL_VERSION}}"
+
+  metadata:
+    desc: "Write APP_VERSION / GIT_COMMIT_HASH / BUILD_TIME into the deploy info file"
+    aliases: [info]
+    cmds:
+      - mkdir -p {{dir ._REL_INFO_ENV}}
+      - >-
+        printf 'APP_VERSION=%s\nGIT_COMMIT_HASH=%s\nBUILD_TIME=%s\n'
+        '{{._REL_VERSION}}' '{{._REL_SHA}}' '{{._REL_BUILD_TIME}}' > {{._REL_INFO_ENV}}
+      - printf '%s\n' "{{._REL_RUN}} {{._REL_SVC}} · version · {{._REL_VERSION}} → {{._REL_INFO_ENV}}"
+
+  doctor:
+    desc: "Check that everything this component declares actually resolves"
+    # A report rather than a gate chain: `preconditions` stop at the first
+    # failure, and the point here is to see every problem at once, before a
+    # deploy spends minutes proving them one at a time.
+    #
+    # The checks are the mistakes that have actually happened: a Dockerfile
+    # named relative to the build context instead of the component, a chart
+    # whose Chart.yaml#name does not match what the push looks for, a version
+    # that cannot be derived because there is no git history.
+    cmds:
+      - cmd: |-
+          set -u
+          fail=0
+
+          say() { printf '%s %s · doctor · %s\n' "$1" '{{._REL_SVC}}' "$2"; }
+          bad() { say '{{._REL_ERR}}' "$1" >&2; fail=1; }
+
+          # ─── tools ────────────────────────────────────────────────────────
+          for t in git helm; do
+            command -v "$t" >/dev/null 2>&1 || bad "$t is not installed"
+          done
+
+          # ─── version ──────────────────────────────────────────────────────
+          if [ -z '{{._REL_VERSION}}' ]; then
+            bad "no version could be derived — is this a git repository?"
+          elif [ '{{._REL_SHA}}' = "00000000" ]; then
+            bad "no git history — every build would publish the same version"
+          else
+            say '{{._REL_OK}}' "version {{._REL_VERSION}}"
+            # `cond && say ...` would end the script here under Task's errexit
+            # shell whenever cond is false, silently truncating the report.
+            if [ -n '{{._REL_DIRTY}}' ]; then
+              say '{{._REL_WARN}}' "tree is dirty — this version is not reproducible"
+            fi
+          fi
+
+          # ─── chart ────────────────────────────────────────────────────────
+          if [ ! -f '{{._REL_CHART_DIR}}/Chart.yaml' ]; then
+            bad "CHART_DIR {{._REL_CHART_DIR}} has no Chart.yaml"
+          else
+            # `helm package` names the .tgz after Chart.yaml#name, and the push
+            # looks for <CHART_NAME>-<version>.tgz. A mismatch is a push that
+            # 404s on a file that was never written.
+            declared=$(sed -n 's/^name:[[:space:]]*//p' '{{._REL_CHART_DIR}}/Chart.yaml' | head -1 | tr -d '"'"'"'"')
+            if [ "$declared" != '{{._REL_CHART}}' ]; then
+              bad "chart name mismatch: Chart.yaml says '$declared', this publishes as '{{._REL_CHART}}' — set CHART_NAME"
+            else
+              # The full OCI path, not just the name: two components can carry
+              # the same chart name safely, and only the path says whether they
+              # actually land on top of each other.
+              say '{{._REL_OK}}' "chart {{._REL_CHART_DIR}} → {{._REL_CHART_REPO}}/{{._REL_CHART}}"
+            fi
+          fi
+
+          # ─── image ────────────────────────────────────────────────────────
+          # A declared DOCKERFILE that is missing is an error; an absent default
+          # one only means this component publishes a chart around an upstream
+          # image, which is a supported shape.
+          if [ -f '{{._REL_DOCKERFILE}}' ]; then
+            command -v docker >/dev/null 2>&1 || bad "docker is not installed — https://docs.docker.com/get-started/get-docker/"
+            [ -d '{{._REL_CONTEXT}}' ] || bad "DOCKER_CONTEXT {{._REL_CONTEXT}} is not a directory"
+            say '{{._REL_OK}}' "image {{._REL_IMAGE}} from {{._REL_DOCKERFILE}} (context {{._REL_CONTEXT}})"
+
+            # `COPY --from=NAME` resolves to a build stage, an earlier stage
+            # index, or an external tree passed as `--build-context NAME=path`.
+            # When it is none of the three BuildKit reads NAME as an image and
+            # pulls docker.io/library/NAME:latest — the failure reads as a
+            # registry permission error, which points nowhere near the cause.
+            external=$(awk '
+              { sub(/^[[:space:]]*#.*/, "") }
+              toupper($1) == "FROM" {
+                for (i = 2; i < NF; i++)
+                  if (toupper($i) == "AS") stage[tolower($(i + 1))] = 1
+              }
+              match($0, /--from=[A-Za-z0-9_.-]+/) {
+                used[tolower(substr($0, RSTART + 7, RLENGTH - 7))] = 1
+              }
+              END {
+                for (n in used)
+                  if (!(n in stage) && n !~ /^[0-9]+$/) print n
+              }
+            ' '{{._REL_DOCKERFILE}}')
+            for name in $external; do
+              case " {{._REL_BUILD_FLAGS}} " in
+                *" --build-context $name="*|*" --build-context=$name="*)
+                  say '{{._REL_OK}}' "build context $name is passed" ;;
+                *)
+                  bad "COPY --from=$name names no build stage and no build context — BuildKit would pull docker.io/library/$name:latest; add --build-context $name=<path> to DOCKER_BUILD_FLAGS" ;;
+              esac
+            done
+          elif [ -n '{{.DOCKERFILE | default ""}}' ]; then
+            bad "DOCKERFILE {{._REL_DOCKERFILE}} not found — it is resolved from this directory, not from DOCKER_CONTEXT"
+          else
+            say '{{._REL_SKIP}}' "no {{._REL_DOCKERFILE}} — chart-only, publish with deploy:chart-only"
+          fi
+
+          # ─── registry ─────────────────────────────────────────────────────
+          # --max-time bounds the check: doctor is a report someone runs while
+          # waiting, and an unreachable registry must cost seconds, not a hang.
+          code=$(curl -sk --max-time 10 -o /dev/null -w '%{http_code}' 'https://{{._REL_REG}}/v2/' 2>/dev/null || printf '%s' 000)
+          case "$code" in
+            200|401|403) say '{{._REL_OK}}' "registry {{._REL_REG}} answers" ;;
+            *) say '{{._REL_WARN}}' "registry {{._REL_REG}} did not answer (got $code) — a push would fail" ;;
+          esac
+
+          if [ "$fail" = 0 ]; then
+            say '{{._REL_OK}}' "ready to publish"
+          fi
+          exit "$fail"
+
+  # ═══ container image ════════════════════════════════════════════════════════
+
+  image:build:
+    desc: "Build the component image (skipped when the tree is clean and it is already built)"
+    # Resolved once here rather than on each half of the pair: as a dep of both
+    # it would run twice and print the version banner twice.
+    deps: [metadata]
+    # Two complementary status guards: exactly one of the pair runs, so a skip
+    # says so out loud instead of leaving a silent gap in the deploy log.
+    # The skip notice runs FIRST, on the pristine state: `_do` changes the very
+    # condition the pair tests, so asking afterwards reports the work `_do` just
+    # did as a reason to skip it.
+    cmds:
+      - task: image:build:_skipped
+      - task: image:build:_do
+
+  image:build:_skipped:
+    internal: true
+    # One guard, not two: Task ANDs the entries in a `status:` list, and the
+    # condition for staying quiet is a disjunction — there is nothing to skip
+    # when the tree is dirty OR the image is missing.
+    status:
+      - test -n '{{._REL_DIRTY}}' || ! docker image inspect {{._REL_IMAGE}}:{{._REL_VERSION}} >/dev/null 2>&1
+    cmds:
+      - printf '%s\n' "{{._REL_SKIP}} {{._REL_SVC}} · image · {{._REL_VERSION}} already built — skipping"
+
+  image:build:_do:
+    internal: true
+    # Idempotency: a clean tree yields a deterministic version, so an image
+    # already in the local store IS the image this commit builds. A dirty tree
+    # never matches — its version carries a fresh timestamp — so local
+    # iteration always rebuilds.
+    status:
+      - test -z '{{._REL_DIRTY}}'
+      - docker image inspect {{._REL_IMAGE}}:{{._REL_VERSION}} >/dev/null 2>&1
+    preconditions:
+      - sh: command -v docker >/dev/null
+        msg: "docker is not installed — https://docs.docker.com/get-started/get-docker/"
+      - sh: test -f {{._REL_DOCKERFILE}}
+        msg: |-
+          {{._REL_DOCKERFILE}} not found.
+          DOCKERFILE is resolved from the component directory, not from
+          DOCKER_CONTEXT — `docker build --file` reads it relative to the
+          working directory. A component that builds from the repo root still
+          names its own Dockerfile: DOCKER_CONTEXT ../.., DOCKERFILE ./Dockerfile.
+    cmds:
+      - printf '%s\n' "{{._REL_RUN}} {{._REL_SVC}} · image · build {{._REL_IMAGE}}:{{._REL_VERSION}}"
+      # --load is required under the docker-container buildx driver: without it
+      # the result stays in the build cache and the next push fails with "tag
+      # does not exist". Harmless no-op under the plain docker driver.
+      - >-
+        docker buildx build --load
+        --file {{._REL_DOCKERFILE}}
+        --tag {{._REL_IMAGE}}:{{._REL_VERSION}}
+        --build-arg APP_VERSION={{._REL_VERSION}}
+        --build-arg GIT_COMMIT_HASH={{._REL_SHA}}
+        --build-arg BUILD_TIME={{._REL_BUILD_TIME}}
+        {{._REL_BUILD_FLAGS}} {{._REL_CONTEXT}}
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · image · built {{._REL_VERSION}}"
+
+  image:push:
+    desc: "Push the component image to the registry"
+    deps: [image:build]
+    preconditions:
+      - sh: docker image inspect {{._REL_IMAGE}}:{{._REL_VERSION}} >/dev/null 2>&1
+        msg: "{{._REL_IMAGE}}:{{._REL_VERSION}} is not in the local image store — run `task svc:image:build`"
+    cmds:
+      - printf '%s\n' "{{._REL_RUN}} {{._REL_SVC}} · image · push {{._REL_IMAGE}}:{{._REL_VERSION}}"
+      - docker push {{._REL_IMAGE}}:{{._REL_VERSION}}
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · image · pushed {{._REL_VERSION}}"
+      # A floating tag, only when a repository asks for one. It is off by
+      # default because :latest makes a deployment unreproducible — what it
+      # resolved to yesterday is gone — and because the charts here read their
+      # tag from appVersion, so nothing in this library needs it. Repositories
+      # whose consumers pull by name still do.
+      - if: '{{ne ._REL_LATEST "0"}}'
+        cmd: |-
+          set -eu
+          docker tag {{._REL_IMAGE}}:{{._REL_VERSION}} {{._REL_IMAGE}}:latest
+          docker push {{._REL_IMAGE}}:latest
+          printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · image · pushed latest → {{._REL_VERSION}}"
+
+  image:gc:
+    desc: "Trim the BuildKit cache to the keep floor and drop dangling images"
+    cmds:
+      # --keep-storage only reclaims ABOVE the floor, so the working set
+      # survives; this just stops per-session growth from filling the disk.
+      # Falls back to the active builder when the named one is not there.
+      - >-
+        docker buildx prune {{if ._REL_BUILDER}}--builder {{._REL_BUILDER}} {{end}}--keep-storage={{._REL_KEEP}} -f >/dev/null 2>&1 ||
+        docker buildx prune --keep-storage={{._REL_KEEP}} -f >/dev/null 2>&1 || true
+      - docker image prune -f >/dev/null 2>&1 || true
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · image · build cache trimmed to {{._REL_KEEP}}"
+
+  # ═══ helm chart ═════════════════════════════════════════════════════════════
+
+  chart:verify:
+    desc: "Lint the chart and render it through the multi-doc separator gate"
+    cmds:
+      - task: chart:lint
+      - task: chart:render
+
+  chart:lint:
+    desc: "helm lint the chart"
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed — https://helm.sh/docs/intro/install/"
+      - sh: test -f {{._REL_CHART_DIR}}/Chart.yaml
+        msg: "{{._REL_CHART_DIR}}/Chart.yaml not found — set CHART_DIR"
+    cmds:
+      - helm lint {{._REL_HELM_LINT_FLAGS}} {{._REL_CHART_DIR}}
+
+  chart:render:
+    desc: "Render the chart and fail on glued separators, unparseable YAML, or a resource drop"
+    # Why this gate exists: a range block that strips the newline before a
+    # `---` glues the separator onto the previous line
+    # (`automountServiceAccountToken: true---`). Every YAML parser then reads
+    # the stream as one garbage document and silently drops every resource
+    # after the first — a chart shipped 1 of N Deployments and the cluster ran
+    # wedged for hours before anyone found it. Seconds to check, hours to find.
+    deps: [chart:render:_write]
+    preconditions:
+      - sh: '! grep -qE "[^[:space:]]---" {{._REL_RENDER}}'
+        msg: |-
+          broken multi-doc YAML separator in the rendered chart.
+          A `---` is glued to the end of the previous line, so kubectl and ArgoCD
+          drop every resource after the first one.
+          Fix: leave a literal blank line before `---` in the offending template
+          and drop the trailing whitespace-strip on the line above it.
+          Offenders: grep -nE '[^[:space:]]---' {{._REL_RENDER}}
+      - sh: test "$(grep -c '^kind:' {{._REL_RENDER}})" -ge {{._REL_MIN_RES}}
+        msg: |-
+          the chart rendered fewer than {{._REL_MIN_RES}} resources.
+          That is the signature of documents being dropped by a separator bug
+          the pattern check did not catch. Inspect {{._REL_RENDER}}.
+    cmds:
+      # yq is optional: the separator gate above already catches the bug this
+      # file was written for, and a missing tool should not turn a checkout red.
+      # `&&/||` would let a yq PARSE FAILURE fall through to the `||` branch
+      # exactly like a missing binary does — the shell's exit status is the
+      # echo's, not yq's — so presence and success are checked separately.
+      - cmd: |-
+          if command -v yq >/dev/null 2>&1; then
+            yq ea '.' {{._REL_RENDER}} >/dev/null
+          else
+            printf '%s\n' "{{._REL_WARN}} {{._REL_SVC}} · chart · yq absent, YAML parse gate skipped"
+          fi
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · chart · renders $(grep -c '^kind:' {{._REL_RENDER}}) resources cleanly"
+      - rm -f {{._REL_RENDER}}
+
+  chart:render:_write:
+    internal: true
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed — https://helm.sh/docs/intro/install/"
+    cmds:
+      - mkdir -p {{dir ._REL_RENDER}}
+      - helm template {{._REL_HELM_TPL_FLAGS}} {{._REL_SVC}} {{._REL_CHART_DIR}} --namespace {{._REL_K8S_NS}} > {{._REL_RENDER}}
+
+  chart:validate:
+    desc: "Check the rendered manifests against the Kubernetes schemas"
+    # helm lint reads the chart, chart:render reads the YAML — neither knows
+    # whether the apiVersions exist. A resource on an apiVersion the target
+    # cluster dropped renders, parses, lints clean and fails at apply.
+    #
+    # Missing schemas are NOT ignored by default. `-ignore-missing-schemas`
+    # turns an apiVersion the cluster no longer serves into a *skip*, which is
+    # the exact case this gate exists for — a chart on apps/v1beta1 renders,
+    # lints, and passes while validating nothing. A chart that ships custom
+    # resources adds `-ignore-missing-schemas` or `-skip <Kind>` through
+    # KUBECONFORM_FLAGS, deliberately and where a reader can see it.
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed — https://helm.sh/docs/intro/install/"
+      - sh: command -v kubeconform >/dev/null
+        msg: "kubeconform is not installed — https://github.com/yannh/kubeconform#installation"
+    cmds:
+      # Renders into its own file rather than reusing chart:render's: that one
+      # deletes its output when it finishes, and two tasks sharing a path race
+      # whenever both are asked for in the same run.
+      - cmd: |-
+          set -eu
+          # A directory, not `mktemp -t ...​.yaml`: BSD mktemp appends its
+          # randomness AFTER the template, so the file ends up without a .yaml
+          # extension and kubeconform skips it — reporting 0 resources checked
+          # and exiting 0. A gate that passes by validating nothing.
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          out="$d/render.yaml"
+          helm template {{._REL_HELM_TPL_FLAGS}} {{._REL_SVC}} {{._REL_CHART_DIR}} \
+            --namespace {{._REL_K8S_NS}} > "$out"
+          printf '%s\n' "{{._REL_RUN}} {{._REL_SVC}} · chart · kubeconform{{if ._REL_K8S_VERSION}} against k8s {{._REL_K8S_VERSION}}{{end}}"
+          kubeconform -summary \
+            {{if ._REL_K8S_VERSION}}-kubernetes-version {{._REL_K8S_VERSION}} {{end}}{{._REL_KUBECONFORM_FLAGS}} \
+            "$out"
+          printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · chart · manifests match the Kubernetes schemas"
+
+  chart:package:
+    desc: "helm package the chart at the derived version"
+    preconditions:
+      - sh: test -f {{._REL_CHART_DIR}}/Chart.yaml
+        msg: "{{._REL_CHART_DIR}}/Chart.yaml not found — set CHART_DIR"
+    generates:
+      - "{{._REL_CHART}}-{{._REL_VERSION}}.tgz"
+    cmds:
+      - >-
+        helm package {{._REL_HELM_PKG_FLAGS}} {{._REL_CHART_DIR}} --version {{._REL_VERSION}}
+        --app-version {{.CHART_APP_VERSION | default ._REL_VERSION}} >/dev/null
+      - printf '%s\n' "{{._REL_RUN}} {{._REL_SVC}} · chart · packaged {{._REL_CHART}}-{{._REL_VERSION}}.tgz"
+
+  chart:push:
+    desc: "Package and push the chart (skipped when that version is already published)"
+    # The skip notice runs FIRST, on the pristine state: `_do` changes the very
+    # condition the pair tests, so asking afterwards reports the work `_do` just
+    # did as a reason to skip it.
+    cmds:
+      - task: chart:push:_skipped
+      - task: chart:push:_do
+
+  chart:push:_skipped:
+    internal: true
+    status:
+      - "! helm show chart {{._REL_CHART_REPO}}/{{._REL_CHART}} --version {{._REL_VERSION}} {{._REL_HELM_FLAGS}} >/dev/null 2>&1"
+    cmds:
+      - printf '%s\n' "{{._REL_SKIP}} {{._REL_SVC}} · chart · {{._REL_VERSION}} already in the registry — skipping"
+
+  chart:push:_do:
+    internal: true
+    # Idempotency: the registry is the source of truth. A version already there
+    # is the desired end state, so repeating `task deploy` on an unchanged
+    # commit costs one lookup and changes nothing.
+    status:
+      - helm show chart {{._REL_CHART_REPO}}/{{._REL_CHART}} --version {{._REL_VERSION}} {{._REL_HELM_FLAGS}} >/dev/null 2>&1
+    cmds:
+      - task: chart:package
+      # Runs whether the push succeeds or fails — a stray .tgz in the component
+      # directory is how the next `helm package` picks up the wrong file.
+      - defer: rm -f {{._REL_CHART}}-{{._REL_VERSION}}.tgz
+      - printf '%s\n' "{{._REL_RUN}} {{._REL_SVC}} · chart · push {{._REL_CHART}}:{{._REL_VERSION}} → {{._REL_CHART_REPO}}"
+      - helm push {{._REL_CHART}}-{{._REL_VERSION}}.tgz {{._REL_CHART_REPO}} {{._REL_HELM_FLAGS}} >/dev/null
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · chart · pushed {{._REL_VERSION}}"
+
+  chart:clean:
+    desc: "Remove packaged chart tarballs from the component directory"
+    cmds:
+      - rm -f {{._REL_CHART}}-*.tgz
+
+  # ═══ release ════════════════════════════════════════════════════════════════
+
+  deploy:
+    desc: "Verify the chart, then publish image + chart to the registry"
+    # Gate first: a chart regression must never reach the registry, and the
+    # verify costs seconds against a push that costs minutes.
+    cmds:
+      - task: chart:verify
+      - task: image:push
+      - task: chart:push
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · deploy · {{._REL_VERSION}} → {{._REL_REG}}"
+
+  deploy:chart-only:
+    desc: "Publish the chart alone — for components running an upstream image"
+    cmds:
+      - task: chart:verify
+      - task: chart:push
+      - printf '%s\n' "{{._REL_OK}} {{._REL_SVC}} · deploy · chart {{._REL_VERSION}} → {{._REL_CHART_REPO}}"

@@ -1,0 +1,203 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# argocd — force the Argo applications that track freshly pushed charts to
+# re-read the registry.
+#
+#   includes:
+#     argocd:
+#       taskfile: '{{printf .TASKLIB "argocd"}}'
+#       dir: .
+#       vars: { APP_PREFIX: "svc-" }
+#
+# A push to the OCI registry does not reach the cluster until Argo's repo-server
+# drops its cached chart. Without a hard refresh the cluster can sit on the
+# previous version until the next poll fires — the deploy looks done and is not.
+#
+# Every task here no-ops (exit 0) when kubectl cannot reach the cluster, so it
+# is safe to chain after a deploy on a laptop.
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+#   APP_PREFIX     required by refresh; which applications to touch
+#   ARGOCD_NS      default "argocd"
+#   ARGOCD_SERVER  the server deployment    (default "argocd-server"; a Helm
+#                  release named other than `argocd` prefixes it, so a release
+#                  called `argo-cd` makes this `argo-cd-argocd-server`)
+#   ARGOCD_SERVER_LABEL
+#                  app.kubernetes.io/name on the server pods (default
+#                  "argocd-server"). Not the same knob as ARGOCD_SERVER: the
+#                  chart's app label does not carry the release name, so a
+#                  release called `argo-cd` has deployment
+#                  argo-cd-argocd-server wearing the label argocd-server.
+#   ARGOCD_PORT    local port for server:port-forward     (default 8443)
+#   K8S_CONTEXT    pin a cluster                          (default: current)
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+vars:
+  _ARGO_NS: '{{.ARGOCD_NS | default "argocd"}}'
+  # APP_PREFIX is deliberately NOT resolved here. A var in this block is
+  # evaluated in the included file's own scope, which does not yet carry the
+  # vars a caller passes on the task call (`task: argocd:refresh` with
+  # `vars: {APP_PREFIX: ...}`) — it resolved to "" there while the task itself
+  # saw the real value, and `grep -E '^'` then matched every application in
+  # the namespace. The tasks below read .APP_PREFIX directly, which works for
+  # a value passed at include time and at call time alike.
+  _ARGO_KUBECTL: 'kubectl{{if .K8S_CONTEXT}} --context {{.K8S_CONTEXT}}{{end}}'
+  _ARGO_SERVER: '{{.ARGOCD_SERVER | default "argocd-server"}}'
+  _ARGO_LABEL: '{{.ARGOCD_SERVER_LABEL | default "argocd-server"}}'
+  _ARGO_PORT: '{{.ARGOCD_PORT | default "8443"}}'
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _ARGO_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _ARGO_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _ARGO_SKIP: '{{if .NO_COLOR}}○{{else}}{{"\x1b[90m○\x1b[0m"}}{{end}}'
+
+tasks:
+
+  refresh:
+    desc: "Hard-refresh every Argo application matching APP_PREFIX"
+    requires:
+      vars: [APP_PREFIX]
+    preconditions:
+      # `requires` only asserts the var was set; an empty value passes it and
+      # then matches everything. This is the one place where "no filter" and
+      # "filter that matches all" have to be told apart.
+      - sh: '[ -n "{{.APP_PREFIX}}" ]'
+        msg: |-
+          APP_PREFIX is empty — refusing to hard-refresh.
+          An empty prefix matches EVERY application in the namespace,
+          including infra ones (Postgres, registries) that must not be
+          touched. Pass a prefix, e.g. APP_PREFIX=acme-.
+    # Skipped, not failed, when there is no cluster to talk to.
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    vars:
+      # The leading version check is deliberate, not redundant with the task's
+      # own status guard: task-level vars are evaluated before status is even
+      # consulted, so on a laptop with no cluster this would otherwise run the
+      # real get below and hard-fail before status ever got a chance to skip
+      # the task quietly. Past that check a cluster answers, so a genuine
+      # failure — the applications.argoproj.io CRD not existing because Argo
+      # itself was never installed here — is a real problem worth failing
+      # loudly on, not something to fold into "no application matched".
+      _ARGO_APPS:
+        sh: |-
+          {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1 || exit 0
+          set -eu -o pipefail
+          {{._ARGO_KUBECTL}} -n {{._ARGO_NS}} get applications.argoproj.io \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+            | { grep -E '^{{.APP_PREFIX}}' || true; }
+    cmds:
+      - for: { var: _ARGO_APPS }
+        cmd: >-
+          {{._ARGO_KUBECTL}} -n {{._ARGO_NS}} patch application.argoproj.io {{.ITEM}} --type merge
+          -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' >/dev/null
+          && printf '%s\n' "{{._ARGO_OK}} argocd · hard-refreshed {{.ITEM}}"
+      - '{{if not ._ARGO_APPS}}printf "%s\n" "{{._ARGO_SKIP}} argocd · no application matches {{.APP_PREFIX}}* in {{._ARGO_NS}}"{{end}}'
+
+  list:
+    desc: "Show the sync + health state of every application matching APP_PREFIX"
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    cmds:
+      - >-
+        {{._ARGO_KUBECTL}} -n {{._ARGO_NS}} get applications.argoproj.io
+        -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
+        {{if .APP_PREFIX}}| grep -E '^(NAME|{{.APP_PREFIX}})'{{end}}
+
+  # ═══ the server itself ══════════════════════════════════════════════════════
+  #
+  # Everything above acts on Argo's applications; everything below acts on the
+  # Argo that runs them. Read-only tasks keep the module's promise of no-opping
+  # without a cluster — `set-password` does not, because a mutation that
+  # silently does nothing is worse than one that says it cannot.
+
+  server:port-forward:
+    desc: "Port-forward the Argo server to localhost (Ctrl-C to stop)"
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    cmds:
+      - printf '%s\n' "{{._ARGO_RUN}} argocd · server · https://localhost:{{._ARGO_PORT}}"
+      - >-
+        {{._ARGO_KUBECTL}} -n {{._ARGO_NS}}
+        port-forward svc/{{._ARGO_SERVER}} {{._ARGO_PORT}}:443
+
+  server:password:
+    desc: "Print the initial admin password"
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    # The secret is deleted once the password has been changed, so its absence
+    # is an answer rather than a failure.
+    cmds:
+      - cmd: |-
+          pw=$({{._ARGO_KUBECTL}} -n {{._ARGO_NS}} get secret argocd-initial-admin-secret \
+                 -o jsonpath='{.data.password}' 2>/dev/null | base64 -d) || true
+          if [ -n "$pw" ]; then
+            printf '%s\n' "$pw"
+          else
+            printf '%s\n' "{{._ARGO_SKIP}} argocd · server · no initial password secret — it is removed once the password is changed"
+          fi
+
+  server:set-password:
+    desc: "Set the admin password and roll the server so it takes effect"
+    requires:
+      vars: [ARGOCD_ADMIN_PASSWORD]
+    preconditions:
+      # Same reason as refresh above: `requires` only asserts the var was set,
+      # and an empty value passes it. Here that reached `argocd account bcrypt
+      # --password ''`, which asks for the password on a terminal, dies on EOF
+      # in a task, and leaves the hash empty — after which the patch below
+      # succeeded and wrote an empty admin.password, locking admin out of a
+      # server this then restarted.
+      - sh: '[ -n "{{.ARGOCD_ADMIN_PASSWORD}}" ]'
+        msg: |-
+          ARGOCD_ADMIN_PASSWORD is empty — refusing to set it.
+          An empty value does not clear the password, it writes one no login
+          can satisfy, on a server this task then rolls.
+      - sh: command -v argocd >/dev/null
+        msg: "the argocd CLI is not installed — https://argo-cd.readthedocs.io/en/stable/cli_installation/"
+      - sh: "{{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+        msg: "no reachable cluster — this one changes a credential, so it refuses rather than skipping"
+    cmds:
+      # bcrypt via the argocd CLI rather than a hash written by hand: the
+      # server reads admin.password as bcrypt and rejects anything else at
+      # login, long after the patch reported success.
+      #
+      # set -eu so a bcrypt that fails for any other reason stops here too: the
+      # block's exit status is the patch's, so without it a failed hash is
+      # still written.
+      - cmd: |-
+          set -eu
+          hash=$(argocd account bcrypt --password {{.ARGOCD_ADMIN_PASSWORD | q}})
+          [ -n "$hash" ]
+          {{._ARGO_KUBECTL}} -n {{._ARGO_NS}} patch secret argocd-secret \
+            -p "{\"stringData\":{\"admin.password\":\"${hash}\",\"admin.passwordMtime\":\"$(date -u +%FT%TZ)\"}}" >/dev/null
+      - task: server:restart
+      - printf '%s\n' "{{._ARGO_OK}} argocd · server · admin password set"
+
+  server:restart:
+    desc: "Roll the Argo server deployment"
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    cmds:
+      - "{{._ARGO_KUBECTL}} -n {{._ARGO_NS}} rollout restart deploy/{{._ARGO_SERVER}} >/dev/null"
+      - "{{._ARGO_KUBECTL}} -n {{._ARGO_NS}} rollout status deploy/{{._ARGO_SERVER}} --timeout={{.ROLLOUT_TIMEOUT | default \"2m\"}}"
+      - printf '%s\n' "{{._ARGO_OK}} argocd · server · rolled"
+
+  server:status:
+    desc: "Show the Argo pods"
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    cmds:
+      - "{{._ARGO_KUBECTL}} -n {{._ARGO_NS}} get pods -o wide"
+
+  server:logs:
+    desc: "Tail the Argo server logs (Ctrl-C to stop)"
+    status:
+      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+    cmds:
+      - >-
+        {{._ARGO_KUBECTL}} -n {{._ARGO_NS}} logs -l app.kubernetes.io/name={{._ARGO_LABEL}}
+        -f --tail={{.LOG_TAIL | default "100"}}
