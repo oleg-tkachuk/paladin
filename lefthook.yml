@@ -166,9 +166,12 @@ pre-push:
       # shared by every module, every consumer and every process on the machine,
       # with no lock. Two `task` runs at once lose the clone — reproduced as
       # `could not create work tree dir ... File exists`, six out of six.
+      #
+      # --timeout because that private TMPDIR costs the shared clone: every
+      # module is fetched on its own, and the default ten seconds is not enough.
       run: |
         d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" task release:chart:verify
+        TMPDIR="$d/" task --timeout 300s release:chart:verify
 
     - name: frontend-chart-verify
       root: frontend/
@@ -181,7 +184,7 @@ pre-push:
       # `could not create work tree dir ... File exists`, six out of six.
       run: |
         d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" task release:chart:verify
+        TMPDIR="$d/" task --timeout 300s release:chart:verify
 
     - name: frontend-tsc
       root: frontend/
