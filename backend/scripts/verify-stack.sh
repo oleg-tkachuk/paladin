@@ -14,7 +14,7 @@
 # t.Skip-ing, the conformance suite had no endpoint to conform to, the
 # readiness smoke test was filtered out of the only run that had a stack, and
 # this bootstrap script was calling a proto package that had not existed for
-# months. `task backend:test:tagged:compile` catches the first of those in
+# months. `task backend:go:test:tagged:compile` catches the first of those in
 # seconds; it cannot catch any of the rest, because a suite that builds and
 # then skips passes a compiler cleanly.
 #

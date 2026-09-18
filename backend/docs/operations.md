@@ -35,10 +35,11 @@ Use `configs/local.yaml` for local development:
 Migrations use Goose. From the project root:
 
 ```bash
-task db:migrate
-# or manually:
 go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "DSN_HERE" up
 ```
+
+In a cluster this is the chart's `migrate` job, which runs before the
+deployments are patched — there is no Task target for it.
 
 ### Build and Run
 
@@ -47,7 +48,7 @@ go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "DS
 task deploy
 
 # Or build into the local Docker store + helm install to OrbStack (no registry)
-task deploy-orbstack
+task deploy-local
 
 # Run the binary directly
 ./server --config configs/local.yaml
@@ -89,13 +90,11 @@ task --list
 Common tasks include:
 
 - `task deploy` — build + push image and Helm chart
-- `task deploy-orbstack` — build into the local Docker store + helm install (no registry)
+- `task deploy-local` — build into the local Docker store + helm install (no registry)
 - `task test` — run unit tests
 - `task lint` — run golangci-lint
-- `task proto` — regenerate proto Go files
-- `task sqlc` — regenerate sqlc query files
-- `task wire` — regenerate Wire injection code
-- `task db:migrate` — run Goose migrations
+- `task codegen:proto` — regenerate proto Go files
+- `task codegen:sqlc` — regenerate sqlc query files
 
 ## Kubernetes Deployment
 

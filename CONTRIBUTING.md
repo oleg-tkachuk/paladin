@@ -44,8 +44,8 @@ a cluster, that is a bug — please report it.
 Per-half loops:
 
 ```bash
-task backend:build   task backend:test
-task frontend:tsc    task frontend:build
+task backend:build            task backend:test
+task frontend:node:typecheck  task frontend:build
 ```
 
 ## Tests

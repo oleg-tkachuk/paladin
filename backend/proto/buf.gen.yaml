@@ -10,7 +10,7 @@ version: v2
 # — 60 files that compile, that nothing can import (the `internal/` in that path
 # scopes them to backend/proto/, which holds no Go code), and that then rot in
 # place. That copy existed, committed, until 2026-08-27; it had drifted three
-# field removals behind the real one. `task gen:proto` has the correct
+# field removals behind the real one. `task codegen:proto` has the correct
 # invocation baked in — prefer it over calling buf by hand.
 plugins:
   # Local binaries — no BSR remote plugin calls, no rate limits.

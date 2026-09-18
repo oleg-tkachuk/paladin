@@ -55,8 +55,8 @@ the window) so the rewrite copies less.
    `RAISE`).
 3. **Stop writers** (scale the API/worker deployments to 0, or put the plane
    in maintenance). Audit/idempotency writes must be quiesced.
-4. **Apply** via the normal migrate path (`task db:migrate` / the migrate
-   job). Goose runs 041 then 042.
+4. **Apply** via the normal migrate path (the chart's `migrate` job).
+   Goose runs 041 then 042.
 5. **Post-checks** (see below).
 6. **Restart writers.**
 7. The `PartitionMaintainer` worker takes over partition lifecycle on its
