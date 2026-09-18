@@ -9,11 +9,12 @@ version: "3"
 #   task deploy          publish both components to the registry
 #   task backend:test    forwards into backend's Taskfile
 #
-# Aggregates that only forwarded to one namespaced task are gone: the library
-# already names them. `task test` / `task lint` are `all:test` / `all:lint`
-# (the monorepo module's fan-out), `deploy:backend` is `backend:deploy`,
-# `images:gc` is `backend:release:image:gc`, and the pnpm pin is
-# `pnpm:pin:check` / `pnpm:pin:update`. One name per thing.
+# One name per thing, and no aliases kept for compatibility. `task test`,
+# `task lint`, `task build` and `task deploy` are the monorepo module's
+# fan-out, flattened to the top level rather than reached through an `all:`
+# prefix. `deploy:backend` is `backend:deploy`, `images:gc` is
+# `backend:release:image:gc`, and the pnpm pin is `pnpm:pin:check` /
+# `pnpm:pin:update`.
 #
 # The release chain, the language gates, the compose stack and the ArgoCD
 # refresh come from the shared task library
@@ -84,9 +85,14 @@ includes:
     taskfile: '{{printf .TASKLIB "argocd"}}'
     dir: .
     vars: { K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-  all:
+  # Flattened: the fan-out is this repo's top-level verb set, so it is
+  # `task deploy` and `task test`, not `task all:deploy`. One name per thing —
+  # a second spelling of the same task is a thing to keep in sync, not a
+  # convenience.
+  monorepo:
     taskfile: '{{printf .TASKLIB "monorepo"}}'
     dir: .
+    flatten: true
     vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
   # The third Go tree. It is a library with no image and no chart, so it is not
   # a monorepo component and carries no Taskfile of its own — the library's go
@@ -205,14 +211,6 @@ tasks:
       - task: frontend:generate
 
   # ═══ release ════════════════════════════════════════════════════════════════
-
-  deploy:
-    desc: "Publish both components (image + chart) to the registry"
-    # Sequential, and preceded by a registry reachability check, so a misconfig
-    # costs seconds instead of a half-finished push chain. Idempotent: a
-    # component already published at this commit is skipped.
-    cmds:
-      - task: all:deploy
 
   deploy:sync:
     desc: "Hard-refresh the paladin-core / paladin-console ArgoCD apps after a deploy"

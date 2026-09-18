@@ -90,7 +90,6 @@ tasks:
 
   deploy-local:
     desc: "Build and helm-install into the local cluster — no registry"
-    aliases: [deploy-orbstack]
     cmds:
       - task: release:image:build
       - task: local:install
