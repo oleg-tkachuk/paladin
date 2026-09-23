@@ -1,0 +1,273 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# node — pnpm/npm front-ends.
+#
+#   includes:
+#     node: { taskfile: '{{printf .TASKLIB "node"}}', dir: . }
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+# Pass these at the include's own `vars:`, not the consumer's top-level
+# `vars:`. In a repository with more than one component the top level is
+# shared with every other component — see README.md#variable-scoping.
+#
+#   PROJECT_NAME   label in log lines
+#   PM             package manager        (default pnpm; pass npm for npm ci)
+#   PM_EXEC        how a one-off tool is run  (default `pnpm dlx`, `npx` for npm)
+#   PM_INSTALL     override the install command outright
+#
+# Every task runs a package.json script, and which script is an input: a
+# repository whose build is `build:prod` or whose end-to-end suite is `e2e`
+# sets the name rather than doing without the task. The defaults are the
+# conventional ones.
+#
+#   SCRIPT_DEV        default dev
+#   SCRIPT_BUILD      default build
+#   SCRIPT_LINT       default lint
+#   SCRIPT_TEST       default test
+#   SCRIPT_E2E        default test:e2e
+#   E2E_SETUP         run before the suite; "none" to skip it
+#                     (default "exec playwright install --with-deps chromium").
+#                     "none" and not "": Task's `default` filter fires on an
+#                     empty value as well as an unset one, so an empty string
+#                     cannot turn anything off here.
+#   SCRIPT_TYPECHECK  default typecheck
+#   SCRIPT_GENERATE   default generate
+#   LINT_FIX_FLAGS    what `lint:fix` appends       (default --fix)
+#
+# Every task is a thin wrapper over a package.json script, which keeps the
+# whole developer surface visible in `task --list-all` instead of split across
+# two tools.
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+vars:
+  _NODE_NAME: '{{.PROJECT_NAME | default "node"}}'
+  _NODE_PM: '{{.PM | default "pnpm"}}'
+  _NODE_EXEC: '{{.PM_EXEC | default (eq (.PM | default "pnpm") "npm" | ternary "npx" (printf "%s dlx" (.PM | default "pnpm")))}}'
+  _NODE_DEV: '{{.SCRIPT_DEV | default "dev"}}'
+  _NODE_BUILD: '{{.SCRIPT_BUILD | default "build"}}'
+  _NODE_LINT: '{{.SCRIPT_LINT | default "lint"}}'
+  _NODE_TEST: '{{.SCRIPT_TEST | default "test"}}'
+  _NODE_TYPECHECK: '{{.SCRIPT_TYPECHECK | default "typecheck"}}'
+  _NODE_E2E: '{{.SCRIPT_E2E | default "test:e2e"}}'
+  _NODE_E2E_SETUP: '{{.E2E_SETUP | default "exec playwright install --with-deps chromium"}}'
+  _NODE_GEN: '{{.SCRIPT_GENERATE | default "generate"}}'
+  _NODE_FIX: '{{.LINT_FIX_FLAGS | default "--fix"}}'
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _NODE_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _NODE_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _NODE_SKIP: '{{if .NO_COLOR}}○{{else}}{{"\x1b[90m○\x1b[0m"}}{{end}}'
+  _NODE_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
+  _NODE_ERR: '{{if .NO_COLOR}}✖{{else}}{{"\x1b[31m✖\x1b[0m"}}{{end}}'
+
+env:
+  # Let corepack fetch the pinned package manager without the interactive
+  # download prompt, so installs run unattended in CI and in deps:update.
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+tasks:
+
+  install:
+    desc: "Install dependencies from the lockfile (skipped when the manifests are unchanged)"
+    # The reproducible form: a lockfile that disagrees with package.json should
+    # fail the install, not be quietly rewritten.
+    sources:
+      - package.json
+      - pnpm-lock.yaml
+      - package-lock.json
+    generates:
+      - node_modules/.modules.yaml
+      - node_modules/.package-lock.json
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_PM}} install"
+      - >-
+        {{if .PM_INSTALL}}{{.PM_INSTALL}}{{else if eq ._NODE_PM "npm"}}npm ci{{else}}{{._NODE_PM}} install --frozen-lockfile{{end}}
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · dependencies installed"
+
+  dev:
+    desc: "Start the dev server"
+    interactive: true
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_PM}} run {{._NODE_DEV}}"
+      - "{{._NODE_PM}} run {{._NODE_DEV}}"
+
+  build:
+    desc: "Build the production bundle"
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_PM}} run {{._NODE_BUILD}}"
+      - "{{._NODE_PM}} run {{._NODE_BUILD}}"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · bundle built"
+
+  lint:
+    desc: "Run the lint script (read-only)"
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_LINT}}"
+      - "{{._NODE_PM}} run {{._NODE_LINT}}"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · lint clean"
+
+  lint:fix:
+    desc: "Run the lint script with --fix"
+    cmds:
+      - "{{._NODE_PM}} run {{._NODE_LINT}} {{._NODE_FIX}}"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · lint fixed"
+
+  typecheck:
+    desc: "Run the typecheck script, skipped where the project declares none"
+    cmds:
+      # A project without the script is not failing a gate it never opted into;
+      # `pnpm run` on a missing script is an error, so ask package.json first.
+      - cmd: |-
+          set -eu
+          if ! node -e 'process.exit(require("./package.json").scripts?.["{{._NODE_TYPECHECK}}"] ? 0 : 1)' 2>/dev/null; then
+            printf '%s\n' "{{._NODE_SKIP}} {{._NODE_NAME}} · node · no {{._NODE_TYPECHECK}} script — skipped"
+            exit 0
+          fi
+          printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_TYPECHECK}}"
+          {{._NODE_PM}} run {{._NODE_TYPECHECK}}
+          printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · types check"
+
+  test:
+    desc: "Run the test script"
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_TEST}}"
+      - "{{._NODE_PM}} run {{._NODE_TEST}}"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · tests pass"
+
+  test:e2e:
+    desc: "Run the end-to-end suite, preparing its browser first"
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_E2E}}"
+      # Playwright needs its browser downloaded before the first run and says so
+      # only by failing. Another runner prepares differently, or not at all, so
+      # the step is an input — set E2E_SETUP to "none" when there is nothing to
+      # do. Not "": `default` fires on an empty value too, so an empty string
+      # would silently give back the default rather than switching it off.
+      - '{{if ne ._NODE_E2E_SETUP "none"}}{{._NODE_PM}} {{._NODE_E2E_SETUP}} >/dev/null{{end}}'
+      - "{{._NODE_PM}} run {{._NODE_E2E}}"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · e2e pass"
+
+  verify:
+    desc: "Lint then build — the pre-push gate"
+    # Lint first: fail on style in seconds rather than after paying for a build.
+    cmds:
+      - task: lint
+      - task: build
+
+  doctor:
+    desc: "Check that the package manager, lockfile and scripts this component declares agree"
+    # A report rather than a gate chain, the shape release:doctor uses: the
+    # point is to see every problem at once.
+    #
+    # The lockfile check is the one that earned this task. PM is an input, so
+    # the manager that runs is the consumer's answer — and in a monorepo a
+    # sibling component's top-level `vars:` can supply it (see
+    # README.md#variable-scoping). An `npm install` over a pnpm tree does not
+    # say so: npm walks the symlink farm and dies inside its own tree builder
+    # with "Cannot read properties of null (reading 'matches')", naming
+    # neither the manager nor where it came from. One line here would have.
+    cmds:
+      - cmd: |-
+          set -u
+          fail=0
+
+          say() { printf '%s %s · doctor · %s\n' "$1" '{{._NODE_NAME}}' "$2"; }
+          bad() { say '{{._NODE_ERR}}' "$1" >&2; fail=1; }
+
+          # ─── the manager ──────────────────────────────────────────────────
+          pm={{._NODE_PM}}
+          if command -v "$pm" >/dev/null 2>&1; then
+            say '{{._NODE_OK}}' "package manager $pm ({{._NODE_EXEC}} for one-off tools)"
+          else
+            bad "package manager $pm is not on PATH"
+          fi
+
+          # ─── the manifest ─────────────────────────────────────────────────
+          if [ ! -f package.json ]; then
+            bad "no package.json here — is the include missing dir: . ?"
+          else
+            # ─── lockfile vs manager ────────────────────────────────────────
+            # Which file each manager owns, and what the other one being
+            # present means: a stray lockfile shadows nothing on its own, but
+            # it is how a repository ends up with two answers to one question.
+            case "$pm" in
+              npm) own=package-lock.json; other=pnpm-lock.yaml ;;
+              *)   own=pnpm-lock.yaml;    other=package-lock.json ;;
+            esac
+            if [ -f "$own" ]; then
+              say '{{._NODE_OK}}' "lockfile $own matches $pm"
+            elif [ -f "$other" ]; then
+              bad "$pm would install here, but the lockfile is $other — one of the two is wrong"
+            else
+              say '{{._NODE_WARN}}' "no lockfile yet — the first install writes $own"
+            fi
+            if [ -f "$own" ] && [ -f "$other" ]; then
+              say '{{._NODE_WARN}}' "$other is here too, and nothing reads it"
+            fi
+
+            # ─── the scripts the tasks run ──────────────────────────────────
+            # Read with node rather than jq: a node module has node, and jq is
+            # not something this library may assume.
+            #
+            # A missing script is a warning, not a fault. Every task here is a
+            # wrapper over one, and a consumer is free to use some and not
+            # others — flint-chart ships `test` and `typecheck` and calls only
+            # `install`. What is worth saying is which task would fail if it
+            # were called, which is not obvious from the script name alone.
+            if ! command -v node >/dev/null 2>&1; then
+              say '{{._NODE_WARN}}' "node is not on PATH — package.json scripts not checked"
+            else
+              missing=$(node -e '
+                const s = (require("./package.json").scripts) || {};
+                const want = [];
+                for (let i = 1; i < process.argv.length; i += 2)
+                  if (!(process.argv[i] in s)) want.push(
+                    process.argv[i] === process.argv[i + 1]
+                      ? process.argv[i]
+                      : process.argv[i] + " (task " + process.argv[i + 1] + ")");
+                if (want.length) console.log(want.join(", "));
+              ' '{{._NODE_BUILD}}' build '{{._NODE_LINT}}' lint '{{._NODE_TEST}}' test 2>/dev/null) || {
+                bad "package.json does not parse"; missing=""; }
+              if [ -n "$missing" ]; then
+                say '{{._NODE_WARN}}' "no script for: $missing — those tasks would fail"
+              else
+                say '{{._NODE_OK}}' "scripts {{._NODE_BUILD}}, {{._NODE_LINT}}, {{._NODE_TEST}} are declared"
+              fi
+            fi
+          fi
+
+          [ "$fail" = 0 ] && say '{{._NODE_OK}}' "ready"
+          exit "$fail"
+
+  generate:
+    desc: "Run the codegen script"
+    cmds:
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_GEN}}"
+      - "{{._NODE_PM}} run {{._NODE_GEN}}"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · generated"
+
+  deps:update:
+    desc: "Bump dependencies to the latest minor/patch (no majors), then reinstall"
+    cmds:
+      # Both lines name the RESOLVED tool rather than spelling one in prose.
+      # PM is an input, so which manager runs here is the consumer's answer,
+      # not this file's — and when a stray `npm` reached a pnpm tree, npm died
+      # inside its own tree builder with a message naming neither the manager
+      # nor the component that chose it. The log said `npm-check-updates` and
+      # nothing else. Now it says who ran it.
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_EXEC}} npm-check-updates --target minor"
+      # `dlx` is pnpm's; npm spells the same thing `npx`. Hardcoding one of
+      # them made this task fail with "Unknown command: dlx" on every npm repo.
+      - "{{._NODE_EXEC}} npm-check-updates --target minor --upgrade"
+      - printf '%s\n' "{{._NODE_RUN}} {{._NODE_NAME}} · node · {{._NODE_PM}} install"
+      - "{{._NODE_PM}} install"
+      - printf '%s\n' "{{._NODE_OK}} {{._NODE_NAME}} · node · deps bumped — review the lockfile diff, then verify"
+
+  deps:outdated:
+    desc: "Show dependencies with a newer version available (read-only)"
+    cmds:
+      # `pnpm outdated` exits non-zero when anything is outdated; for a report
+      # that is the normal case, not a failure.
+      - "{{._NODE_PM}} outdated || true"

@@ -35,7 +35,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.3.1'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.4.0'
 includes:
   # Repo-wide scans from the shared library. Not wired into this repo's own
   # aggregates on purpose: the tasks are here to be run, not to change what

@@ -1,0 +1,81 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# runtime/orbstack — making a locally built image runnable by an OrbStack cluster,
+# with no registry in the loop.
+#
+#   includes:
+#     local: { taskfile: '{{printf .TASKLIB "runtime/orbstack"}}', dir: . }
+#
+# Every runtime under runtime/ exposes the same three tasks — `check`,
+# `image:load`, `install` — so switching from one to another is a one-line
+# change in the consumer's includes and nothing else.
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+# Pass these at the include's own `vars:`, not the consumer's top-level
+# `vars:`. In a repository with more than one component the top level is
+# shared with every other component — see README.md#variable-scoping.
+#
+# The same vars the `release` module reads: PROJECT_NAME, REGISTRY,
+# IMAGE_NAMESPACE, CHART_DIR, K8S_NAMESPACE, K8S_CONTEXT. Include this
+# alongside `release`, not instead of it: `image:load` moves what
+# `release:image:build` produced.
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+# `_REL_VERSION` and `_REL_IMAGE` below come from the `release` module: every included
+# file shares one var namespace, so its derived values are readable here. Do
+# NOT shell out to `task release:version` for them — that re-loads the consumer
+# Taskfile, which re-includes this module, which asks again: an infinite fork.
+
+vars:
+  _RT_SVC: '{{.PROJECT_NAME | default "service"}}'
+  _RT_CHART_DIR: '{{.CHART_DIR | default "./deploy/chart"}}'
+  _RT_K8S_NS: '{{.K8S_NAMESPACE | default "default"}}'
+  _RT_CTX: '{{.K8S_CONTEXT | default "orbstack"}}'
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _RT_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _RT_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+
+tasks:
+
+  check:
+    desc: "Fail early when OrbStack or its kube context is not there"
+    preconditions:
+      - sh: docker info >/dev/null 2>&1
+        msg: "the Docker daemon is not running — start OrbStack"
+      - sh: kubectl config get-contexts -o name | grep -qx '{{._RT_CTX}}'
+        msg: "there is no '{{._RT_CTX}}' kube context — enable Kubernetes in OrbStack, or set K8S_CONTEXT"
+    cmds:
+      - printf '%s\n' "{{._RT_OK}} {{._RT_SVC}} · local · OrbStack ready ({{._RT_CTX}})"
+
+  image:load:
+    desc: "No-op — OrbStack runs containers from the same image store the build wrote to"
+    # Nothing to move: the cluster and `docker build` share one daemon, so the
+    # image is already visible. The task exists so a consumer can call
+    # `local:image:load` without caring which runtime is underneath.
+    cmds:
+      - printf '%s\n' "{{._RT_OK}} {{._RT_SVC}} · local · {{._REL_VERSION}} already visible to OrbStack"
+
+  install:
+    desc: "helm upgrade --install from the chart directory, running the local image"
+    # No registry in the path: the chart is installed from disk and the image
+    # is pinned to the tag just built, with IfNotPresent so nothing is pulled.
+    deps: [check]
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed — https://helm.sh/docs/intro/install/"
+    cmds:
+      - task: image:load
+      - printf '%s\n' "{{._RT_RUN}} {{._RT_SVC}} · local · helm upgrade --install into {{._RT_CTX}}/{{._RT_K8S_NS}}"
+      - >-
+        helm upgrade --install {{._RT_SVC}} {{._RT_CHART_DIR}}
+        --kube-context {{._RT_CTX}}
+        --namespace {{._RT_K8S_NS}} --create-namespace
+        --set image.tag={{._REL_VERSION}}
+        --set image.pullPolicy=IfNotPresent
+        {{.HELM_UPGRADE_FLAGS | default ""}}
+        {{if .VALUES}}--values {{.VALUES}}{{end}}
+      - printf '%s\n' "{{._RT_OK}} {{._RT_SVC}} · local · {{._REL_VERSION}} installed into {{._RT_CTX}}"
