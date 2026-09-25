@@ -34,6 +34,9 @@ tasks/
 .pre-commit-config.yaml
 lefthook.yml
 release.config.cjs
+package.json
+package-lock.json
+node_modules/
 renovate.json
 
 # ── Repo-root docs ──────────────────────────────────────────────────────
