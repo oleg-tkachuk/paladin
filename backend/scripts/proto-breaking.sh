@@ -8,24 +8,24 @@
 # rename, most of them field renames that keep the field number. gRPC clients
 # survive those. JSON clients do not. Nothing said so.
 #
-# Why it lives here and not only in CI: the check has existed in
-# .github/workflows/test.yml since it was written and has NEVER EXECUTED —
-# Actions refuses to start jobs on this account. A guard that only exists in a
+# Why it lives here and not only in CI: it ran for months in a workflow that
+# Actions never started on this account. A guard that only exists in a
 # pipeline nobody can run is not a guard, which is the lesson the rest of this
 # repository's gates were rebuilt around. Seconds, no Docker, so it belongs in
-# the fast gate.
+# the fast gate — which CI now runs as `task verify-all`.
 #
-# The baseline tag is READ FROM THE WORKFLOW rather than repeated here. Two
-# places that must agree about one string is how the port defaults and the
-# plane URLs drifted; the workflow is the one an operator bumps when cutting a
-# new baseline, so it is the source and this follows it.
+# The baseline tag lives HERE and nowhere else. It used to be read out of the
+# old test workflow; that workflow is gone, and this script is the only thing
+# that compares against it. Bump it when cutting a new baseline — see
+# docs/upgrading.md, "Changing the API contract".
 
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-workflow=.github/workflows/test.yml
+# The published API contract this tree must stay wire-compatible with.
+API_BASELINE_TAG=api/v0.9.0
 
 if ! command -v buf >/dev/null 2>&1; then
     {
@@ -38,21 +38,9 @@ if ! command -v buf >/dev/null 2>&1; then
     exit 1
 fi
 
-baseline=$(sed -n 's/.*breaking_against:.*tag=\([^,]*\),.*/\1/p' "$workflow" | head -1)
-if [[ -z "$baseline" ]]; then
+if ! git rev-parse --verify --quiet "refs/tags/$API_BASELINE_TAG" >/dev/null; then
     {
-        echo "!!! could not read the API baseline tag from $workflow"
-        echo "    Expected a line of the form:"
-        echo "      breaking_against: \".git#tag=api/vX.Y.Z,subdir=backend/proto\""
-        echo "    If that step was renamed or removed, this gate has nothing to"
-        echo "    compare against and must not pretend otherwise."
-    } >&2
-    exit 1
-fi
-
-if ! git rev-parse --verify --quiet "refs/tags/$baseline" >/dev/null; then
-    {
-        echo "!!! the API baseline tag $baseline is not in this clone."
+        echo "!!! the API baseline tag $API_BASELINE_TAG is not in this clone."
         echo "    A shallow or tagless fetch cannot run this check. Fetch it:"
         echo
         echo "      git fetch --tags origin"
@@ -60,6 +48,6 @@ if ! git rev-parse --verify --quiet "refs/tags/$baseline" >/dev/null; then
     exit 1
 fi
 
-echo ">>> [proto] buf breaking against $baseline"
-buf breaking backend/proto --against ".git#tag=$baseline,subdir=backend/proto"
-echo ">>> [proto] wire contract unchanged since $baseline"
+echo ">>> [proto] buf breaking against $API_BASELINE_TAG"
+buf breaking backend/proto --against ".git#tag=$API_BASELINE_TAG,subdir=backend/proto"
+echo ">>> [proto] wire contract unchanged since $API_BASELINE_TAG"

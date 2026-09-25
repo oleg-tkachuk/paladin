@@ -22,7 +22,7 @@ To land a deliberate breaking change:
    git push origin api/v0.5.1 && git push --force origin api/latest
    ```
 
-   Then bump `breaking_against` in `.github/workflows/test.yml` to it.
+   Then bump `API_BASELINE_TAG` in `backend/scripts/proto-breaking.sh` to it.
 
    A new number rather than `-f` on the current one: the tags are the record
    of what the contract WAS at each point, and force-moving a published tag
@@ -31,9 +31,9 @@ To land a deliberate breaking change:
    v0.5.0 — is what this procedure has actually been doing; the instruction to
    force-move said otherwise and was wrong.
 
-The baseline is a tag rather than the default branch on purpose: `main` and
-`develop` advance together in this repo, so comparing against `main` compares
-the tree with itself and passes without checking anything.
+The baseline is a tag rather than the default branch on purpose: a branch
+moves with every merge, so comparing against `main` from `main` compares the
+tree with itself and passes without checking anything.
 
 
 ## Unreleased — clients read the contract; the three prefix lists are gone
