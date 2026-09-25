@@ -1,164 +1,156 @@
-# Paladin
+# paladin
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/go-1.26-00ADD8.svg)](backend/go.mod)
+[![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
+[![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin?sort=semver&label=release&cacheSeconds=3600)](https://github.com/oleg-tkachuk/paladin/releases/latest)
+[![go](https://img.shields.io/github/go-mod/go-version/oleg-tkachuk/paladin?filename=backend/go.mod&logo=go&logoColor=white&label=go&cacheSeconds=3600)](backend/go.mod)
+[![license: Apache-2.0](https://img.shields.io/github/license/oleg-tkachuk/paladin?label=license&cacheSeconds=3600)](LICENSE)
 
-A multi-tenant control plane in front of object storage, built for
-workloads where the thing calling you is an agent rather than a person.
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Connect RPC](https://img.shields.io/badge/Connect%20RPC-1D4ED8)](https://connectrpc.com)
+[![Cedar](https://img.shields.io/badge/Cedar-FF9900)](https://www.cedarpolicy.com)
+[![MCP](https://img.shields.io/badge/MCP-000000?logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 
-Applications do not hold S3 credentials or a bucket name. They hold an
-Paladin credential scoped to a tenant, and Paladin decides what it may do, routes
-the bytes to whichever backend that tenant is on, meters what was spent,
-and emits an auditable event trail.
+A multi-tenant control plane in front of object storage, built for workloads
+where the caller is an agent rather than a person. Applications hold no S3
+credentials and no bucket name: they hold a Paladin credential scoped to a
+tenant, and Paladin decides what it may do, routes the bytes to whichever
+backend that tenant is on, meters what was spent, and emits an auditable
+event trail.
 
-## Why
+An orchestrator spawns sub-agents, and every call they make needs four
+answers: may it, can it afford it, whose spend was it, and can it be stopped
+now. A long-lived API key answers none of them. The primitive that does —
+budgeted, delegable, individually revocable authority — is
+[`capability/`](capability/), a separate Go module with no database driver
+and no storage SDK among its dependencies, usable without the rest of Paladin.
 
-An orchestrator spawns sub-agents. Each calls tools that cost money.
-Every call needs four answers:
-
-- **May it?** Is this operation, on this resource, permitted?
-- **Can it afford it?** Has this agent's budget run out?
-- **Whose was it?** Which run, spawned by which parent, spent this?
-- **Can I stop it now?** An agent is misbehaving — revoke it mid-flight.
-
-A long-lived API key answers none of these. Role-based access answers
-only the first, and coarsely.
-
-## The reusable part
-
-If you only want the authorisation primitive, take
-[**`capability/`**](capability/) and leave the rest. It is a separate Go
-module — budgeted, delegable, individually revocable authority — with no
-database driver and no storage SDK anywhere in its dependency graph, a
-property CI enforces against the resolved graph rather than against
-`go.mod`.
-
-```go
-import "github.com/oleg-tkachuk/paladin/capability"
+```
+backend/      one Go binary (paladin serve <role>), one Deployment per role
+  ├─ api          data plane + IAM
+  ├─ admin        tenants, quotas, policies, capabilities, backends
+  ├─ mcp          api + admin, exposed to agents over the Model Context Protocol
+  ├─ worker       lifecycle, reapers, quota reconciliation, storage migration
+  ├─ dispatcher   transactional outbox → webhook and broker sinks
+  ├─ ingest       storage-side events → objects
+  ├─ Postgres     state, with row-level security per tenant
+  └─ S3           SeaweedFS, MinIO, Garage or AWS S3, switchable at runtime
+capability/   standalone module: capability tokens ◄── imported by backend/
+frontend/     Next.js console + BFF ──Connect RPC──► api, admin
 ```
 
-You supply storage; a bundled in-memory implementation is enough to get
-started. It is in-tree rather than published, though — there is no version
-stream to `go get`; see
-[`capability/README.md`](capability/README.md#versioning).
+## Contents
 
-## What's in the box
-
-- **Multi-tenant object management** — objects, versions, tags, buckets
-  and quotas as first-class rows, with Postgres row-level security as a
-  primary isolation control rather than a defence-in-depth extra.
-- **Layered authorisation** — Cedar policies stored per tenant and
-  simulatable before you save them, CEL scope expressions that narrow a
-  credential, and capability tokens that can only ever be delegated
-  narrower.
-- **Pluggable S3 backends** — SeaweedFS, MinIO, Garage, AWS S3. Added,
-  disabled and rotated at runtime; objects migrate between them,
-  including across backend types.
-- **Durable events** — a transactional outbox drained to HTTP, NATS,
-  Kafka, RabbitMQ and SQS sinks, plus a crash-durable audit log built the
-  same way.
-- **An MCP server** — the RPC surface exposed to agents over the Model
-  Context Protocol, as an OAuth 2.1 resource server.
-- **An admin console** — Next.js, with a BFF so the browser never holds a
-  plane URL or an upstream credential.
+- [Quick start](#quick-start) — the whole stack, locally
+- [Prerequisites](#prerequisites) — what has to be installed
+- [Commands](#commands) — the handful worth knowing
+- [How changes land](#how-changes-land) — trunk, CI and releases
+- [Documentation](#documentation) — the rest, by document
+- [Layout](#layout) — where things live in the tree
+- [License](#license)
 
 ## Quick start
 
-Needs Docker and [Task](https://taskfile.dev). Nothing else — no cluster,
-no credentials to arrange.
-
-Running the gates is a different matter: `task verify-all` shells out to Go,
-helm, buf, yq and more. [`brew bundle`](Brewfile) installs that set, and the
-Brewfile says which tools are pinned elsewhere instead (`sqlc` by `go.mod`,
-`pnpm` by corepack) and why.
+Running the stack needs Docker and [Task](https://taskfile.dev) — no cluster
+and no credentials to arrange.
 
 ```bash
-task stack:up          # every plane + Postgres + storage + the console
+git clone https://github.com/oleg-tkachuk/paladin.git && cd paladin
+task stack:up        # every plane + Postgres + SeaweedFS + the console, in compose
 ```
 
-The console comes up on <http://localhost:3002> (host 3002 → container 3000),
-the data plane on `:8080`, admin on `:8090`.
+The console is on <http://localhost:3002>, the data plane on `:8080`, admin
+on `:8090`. The compose file,
+[`backend/deploy/docker-compose.yaml`](backend/deploy/docker-compose.yaml),
+lists the rest.
 
 ```bash
-task stack:down        # stop, keep volumes
-task stack:reset       # stop and drop volumes
+task stack:down      # stop, keep volumes
+task stack:reset     # stop and delete volumes
+task verify-all      # the commit gate: tests, lint and build of every tree
 ```
 
-Verifying a change:
+## Prerequisites
 
-```bash
-task verify-all      # build, test and lint both halves
-task --list-all      # every target, across both namespaces
-```
+`task stack:up` needs only the first two rows. Working on the code needs the
+rest.
 
-Per-half loops:
+| Tool | Why |
+|------|-----|
+| [Docker](https://docs.docker.com/get-started/get-docker/) | the compose stack, testcontainers, `verify-deep` and `verify-e2e` |
+| [Task](https://taskfile.dev/installation/) 3.53+ | every entry point; CI pins 3.53.1, and the shared [task library](https://github.com/oleg-tkachuk/taskfiles) is a remote include |
+| [Go](https://go.dev/dl/) 1.27+ | `backend/` and `capability/`, per their `go.mod` |
+| [Node](https://nodejs.org) 24 | the console; the version CI verifies with |
+| [pnpm](https://pnpm.io) 12.7 | pinned by `packageManager` in `frontend/package.json`; `corepack enable` picks it up |
 
-```bash
-task backend:test               task backend:test:integration
-task frontend:node:test         task frontend:node:build
-```
+`task verify-all` also shells out to golangci-lint, buf, helm, yq and
+python3. On macOS `brew bundle` installs that set; the [Brewfile](Brewfile)
+says which tools are pinned elsewhere instead, and why.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the optional git hooks.
 
-Building from source additionally needs Go 1.26+, Node 24 and pnpm 11 —
-see [CONTRIBUTING.md](CONTRIBUTING.md) for the full list and the
-optional hook tooling.
+## Commands
 
-### On a cluster, without building anything
+`task` on its own lists every target across both halves.
 
-Charts and multi-arch images (`linux/amd64`, `linux/arm64`) are published to
-GHCR on every release, so no clone and no build are involved:
+| Task | Does |
+|------|------|
+| `task verify-all` | the commit gate: every tree's tests and lint, the proto compatibility check, the chart and Taskfile contract checks, the console build; no Docker |
+| `task verify-deep` | the Postgres-backed integration suites and the gates needing a live stack; Docker, ~15 min |
+| `task verify-e2e` | Playwright against images built from the current branch; Docker, ~10 min |
+| `task stack:up` | the whole stack in compose, waiting until every service is healthy |
+| `task deploy` | build and publish both images and charts to the OCI registry (`registry.local` by default) |
 
-```bash
-helm install paladin-core   oci://ghcr.io/oleg-tkachuk/charts/paladin-core   --version X.Y.Z
-helm install paladin-console oci://ghcr.io/oleg-tkachuk/charts/paladin-console --version X.Y.Z
-```
+Per half: `task backend:test`, `task backend:test:integration`,
+`task frontend:test`, `task frontend:build`.
 
-The charts default to the matching images, `ghcr.io/oleg-tkachuk/paladin-core`
-and `…/paladin-console`. Chart version, app version and image tag are the same
-release number, so pinning one pins all three.
+## How changes land
 
-Images also carry `latest`, but pin the version in anything you care about.
-Artifacts exist only for released versions — there is no image for an
-unreleased `main`, so build from source for that. The dev loop overrides the
-charts back to a local registry via `values-local.yaml`.
+`main` is the only long-lived branch. Changes reach it through pull requests,
+with [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
-## Where to read next
+[`ci.yaml`](.github/workflows/ci.yaml) runs `task verify-all` and audits the
+workflows with actionlint and zizmor. A green push to `main` dispatches
+[`release.yaml`](.github/workflows/release.yaml): semantic-release computes
+the next tag from the commits since the last one, and a GitHub release with
+generated notes is created for it.
 
-| | |
-| --- | --- |
+CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
+`verify-e2e` need Docker and run locally, before a merge.
+
+## Documentation
+
+| Document | Covers |
+|----------|--------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | what the pieces are and why the boundaries fall where they do |
 | [backend/README.md](backend/README.md) | roles, ports, packages, wire contracts, database |
 | [frontend/README.md](frontend/README.md) | the console and its BFF |
-| [capability/README.md](capability/README.md) | the standalone authorisation primitive |
-| [docs/](docs/) | configuration reference, ADRs, runbooks |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | conventions, test tiers, how a PR is expected to look |
-| [SECURITY.md](SECURITY.md) | the security model, and how to report a vulnerability |
+| [capability/README.md](capability/README.md) | the standalone authorisation primitive, and why it has no version stream |
+| [docs/configuration.md](docs/configuration.md) | every configuration surface, and the validation run at load |
+| [docs/upgrading.md](docs/upgrading.md) | breaking changes between releases |
+| [docs/](docs/README.md) | subsystems, [ADRs](docs/adr/) and [runbooks](docs/runbooks/) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | conventions, test tiers, how a pull request is expected to look |
+| [SECURITY.md](SECURITY.md) | the security model, and reporting a vulnerability |
+| [BACKLOG.md](BACKLOG.md) | deferred work, each item with its reason — read before calling a gap an oversight |
 
 ## Layout
 
-```
-backend/        Go control plane — one binary, one Deployment per role
-frontend/       Next.js BFF + admin console
-capability/     standalone Go module: budgeted, delegable authority
-docs/           configuration reference, ADRs, runbooks
-specs/          spec-driven-development artifacts, per feature
-tasks/          cross-project Taskfiles
-BACKLOG.md      deferred work, with reasons
-```
+| Path | Holds |
+|------|-------|
+| [backend/](backend) | the Go control plane: binary, proto, migrations, policies, chart, compose stack |
+| [frontend/](frontend) | the Next.js console and BFF, its chart and Playwright suite |
+| [capability/](capability) | the standalone authorisation module |
+| [deploy/](deploy) | Grafana dashboards and alerts |
+| [scripts/](scripts) | the repository's own contract checks, run by `verify-all` |
+| [specs/](specs) | spec-driven-development artifacts, per feature |
+| [docs/](docs) | the documents above |
 
-Both halves live in one repository because a change to the wire contract
-is a change to both: the proto in `backend/proto/` is the source of
-truth, and the console regenerates its Connect-ES stubs from it.
+Both halves share a repository because a wire-contract change is a change to
+both: the proto in `backend/proto/` is the source of truth, and the console
+regenerates its Connect-ES stubs from it.
 
-## Project status
-
-Pre-1.0 and moving. Backward compatibility is not maintained across
-releases yet, and only `main` is supported.
-
-[BACKLOG.md](BACKLOG.md) is the register of everything deliberately
-deferred — each entry carries its reason, its definition of done, and
-what is blocking it. It is long on purpose. Read it before concluding
-that a gap is an oversight; quite often it is a decision.
+Compatibility is not kept across releases yet, and only `main` is supported —
+[docs/upgrading.md](docs/upgrading.md) lists what each release breaks.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
