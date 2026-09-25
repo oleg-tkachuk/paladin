@@ -1,0 +1,308 @@
+name: CI
+
+# The whole pipeline: the repository's own fast gate, an audit of these
+# workflows, and — on a green push to main — a dispatch to release.yaml.
+#
+# Deliberately minimal. CI builds no image, pushes no chart and deploys
+# nothing; those are local tasks (`task deploy`). The slower gates that need
+# Docker — `task verify-deep` (Postgres-backed suites) and `task verify-e2e`
+# (Playwright against a built stack) — are run locally before a merge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing at the top level — each job asks for what it needs.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Pinned tools, one place each. A floating tool changes what the gate checks
+# with no commit of ours in between.
+env:
+  # renovate: datasource=github-releases depName=go-task/task
+  TASK_VERSION: "3.53.1"
+  # Must be BUILT with a Go no older than the `go` directive in backend/go.mod
+  # and capability/go.mod, or it refuses to load the config. Bumping go.mod
+  # means checking this.
+  # renovate: datasource=github-releases depName=golangci/golangci-lint
+  GOLANGCI_LINT_VERSION: "v2.14.0"
+  # renovate: datasource=github-releases depName=bufbuild/buf
+  BUF_VERSION: "1.73.0"
+  # renovate: datasource=github-releases depName=helm/helm
+  HELM_VERSION: "v4.3.0"
+  # renovate: datasource=github-releases depName=mikefarah/yq
+  YQ_VERSION: "v4.53.6"
+  # Matches NODE_VERSION in frontend/deploy/Dockerfile.
+  NODE_VERSION: "24"
+  # renovate: datasource=go depName=github.com/rhysd/actionlint
+  ACTIONLINT_VERSION: "v1.7.12"
+  # renovate: datasource=pypi depName=zizmor
+  ZIZMOR_VERSION: "1.30.1"
+
+jobs:
+  # Whether anything the checks below read has changed.
+  #
+  # An EXCLUSION list, and the direction matters more than its contents: an
+  # inclusion list has to be extended for each new kind of input, and
+  # forgetting is silent and green. Excluding documentation cannot fail that
+  # way — a file type nobody has thought about yet is relevant by default.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The diff below needs both ends of it.
+          fetch-depth: 0
+
+      - name: Classify the diff
+        id: filter
+        env:
+          # A pull request has both ends of its own diff; a push reports the
+          # branch's previous head.
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          inert='(^|/)[^/]*\.md$|^docs/|^LICENSE$|^NOTICE$|^\.gitignore$|\.(png|jpe?g|svg|gif)$'
+
+          if [ -n "${BASE:-}" ]; then
+            from="$BASE"
+            to="$HEAD"
+          else
+            from="${BEFORE:-}"
+            to="$AFTER"
+          fi
+
+          # A push that created the branch reports all zeros, and a force-push
+          # can name a commit this clone does not have. Neither is a diff, so
+          # both mean everything.
+          zero=0000000000000000000000000000000000000000
+
+          if [ -z "$from" ] || [ "$from" = "$zero" ] || ! git cat-file -e "${from}^{commit}" 2>/dev/null; then
+            printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
+            printf '%s\n' "no usable base (${from:-none}) — running everything"
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "$from" "$to")"
+          printf '%s\n' "$changed"
+
+          # grep exits 1 when every line is inert, which is an answer here.
+          relevant="$(printf '%s\n' "$changed" | grep -vE "$inert" || true)"
+
+          if [ -n "$relevant" ]; then
+            printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
+            printf '%s\n' "outside documentation:"
+            printf '%s\n' "$relevant" | sed 's/^/  /'
+          else
+            printf '%s\n' "relevant=false" >>"$GITHUB_OUTPUT"
+            printf '%s\n' "documentation only — the checks below will report as skipped"
+          fi
+
+  # `task verify-all` — the repository's own commit gate, run as-is rather than
+  # re-implemented here, so CI and a developer's machine check the same thing:
+  # backend and capability tests and lint, the tagged suites compiling, the
+  # frontend's tests, lint and build, the proto wire-compatibility check and
+  # the chart and Taskfile contract scripts. No Docker.
+  test:
+    name: Verify
+    needs: [changes]
+    if: needs.changes.outputs.relevant != 'false'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # scripts/proto-breaking.sh compares against an api/vX.Y.Z tag, and a
+          # shallow checkout fetches none.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: |
+            backend/go.sum
+            capability/go.sum
+
+      - name: Set up golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          install-only: true
+
+      - name: Set up buf
+        uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
+        with:
+          setup_only: true
+          version: ${{ env.BUF_VERSION }}
+          github_token: ${{ github.token }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # The runner image ships a yq, but not a version this repository chose.
+      # The chart and Taskfile checks read YAML through it.
+      - name: Set up yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Set up Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Version comes from frontend/package.json "packageManager".
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: frontend/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # --yes accepts the first-fetch trust prompt for the shared task library
+      # include; unattended, that prompt is a hang rather than a question.
+      - name: task verify-all
+        run: task --yes verify-all
+
+  # Two jobs over the same files, and the halves do not overlap. actionlint
+  # covers whether a workflow is correct at all — schema, expression syntax,
+  # `needs:` naming a job that exists, and shellcheck over every `run:` block.
+  # zizmor covers security: unpinned actions, leaked credentials, injectable
+  # expressions.
+  #
+  # Separate jobs rather than two steps in one: a job name is a required check,
+  # so burying an audit inside another job's name leaves nothing on the pull
+  # request saying it ran.
+  syntax:
+    name: Workflow syntax
+    needs: [changes]
+    if: needs.changes.outputs.relevant != 'false'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          actionlint
+
+  audit:
+    name: Workflow audit
+    needs: [changes]
+    if: needs.changes.outputs.relevant != 'false'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # These workflows are the part of the repository that runs with a token,
+      # so they are audited as code rather than trusted as config. Exceptions
+      # live in .github/zizmor.yml, each with the reason it stands.
+      #
+      # pipx run rather than install, so the version in the command is the
+      # version that executes.
+      - name: zizmor
+        env:
+          # Without a token zizmor runs offline and skips the audits that need
+          # the API — resolving an action's ref among them.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pipx run "zizmor==${ZIZMOR_VERSION}" \
+            --config .github/zizmor.yml --persona=regular --format=plain .github/workflows/
+
+  dispatch-release:
+    name: Dispatch release
+    needs: [changes, test, syntax, audit]
+    # always(), because a documentation-only push skips the jobs above and a
+    # plain `needs` would skip this with them — and then no release is ever
+    # dispatched for a push that only edits prose. semantic-release decides
+    # whether anything is due; this only has to let it look.
+    #
+    # Releasing from a push whose checks were skipped is not a hole: the code
+    # is byte-identical to the commit before it, which was checked. What would
+    # be a hole is dispatching after a failure, so both failure and cancelled
+    # stop it.
+    if: >-
+      always() &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # POST /repos/{owner}/{repo}/dispatches needs write
+    steps:
+      - name: Dispatch the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --input rather than -f: client_payload is nested and the form
+          # syntax cannot express that. Both values come from Actions itself
+          # and arrive through env, so nothing here is substituted into the
+          # script before the shell runs.
+          gh api "repos/${GITHUB_REPOSITORY}/dispatches" --input - <<JSON
+          {
+            "event_type": "release",
+            "client_payload": {
+              "sha": "${GITHUB_SHA}",
+              "ci_run_id": "${GITHUB_RUN_ID}"
+            }
+          }
+          JSON
+          printf '%s\n' "dispatched release for ${GITHUB_SHA}"
