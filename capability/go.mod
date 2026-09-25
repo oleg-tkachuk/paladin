@@ -4,7 +4,7 @@
 // This module deliberately depends on NOTHING that ties it to object storage
 // or to a database. The dependency list below is the enforcement point for
 // FR-002 / FR-003: if a storage SDK or a database driver ever appears here,
-// the extraction has regressed and the standalone CI job fails.
+// the extraction has regressed and isolation_test.go fails `task verify-capability`.
 //
 // Persistence is the consumer's concern — the module publishes Store,
 // UsageStore[TX] and KeyResolver contracts and nothing more. See

@@ -61,10 +61,10 @@ Four tiers, and they run in different places for a reason:
 
 The capability module must resolve **no** database driver and **no**
 object-storage SDK in its dependency graph, so that a third party can use it
-without either. Nothing checks this automatically at the moment — check
-`cd capability && go list -deps ./...` yourself if your change adds an import
-there. If it pulls either in, the right fix is almost always to move the code
-into `backend/` instead.
+without either. `isolation_test.go` in the module asserts this against the
+resolved graph, so `task verify-capability` — and with it `verify-all` and CI
+— fails if your change pulls either in. The right fix is almost always to
+move the code into `backend/` instead.
 
 New behaviour needs a test. The project constitution is explicit that the
 middleware and store layers must be covered — that is where three-valued
