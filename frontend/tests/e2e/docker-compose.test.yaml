@@ -272,7 +272,7 @@ services:
     restart: on-failure
     command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
     ports:
-      - "${PALADIN_E2E_PORT_DATA:-8080}:8080"  # data
+      - "${PALADIN_E2E_PORT_DATA:-8083}:8080"  # data
       - "${PALADIN_E2E_PORT_IAM:-8085}:8085"  # iam
     depends_on:
       bootstrap:

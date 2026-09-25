@@ -15,7 +15,7 @@
 #                                              → paladin-console (waits for api+admin)
 #
 # Verify the planes + UI:
-#   curl http://localhost:8080/readyz   # data
+#   curl http://localhost:8083/readyz   # data
 #   curl http://localhost:8085/readyz   # iam
 #   curl http://localhost:8090/readyz   # admin
 #   curl http://localhost:8095/healthz  # mcp
@@ -110,7 +110,7 @@ services:
     restart: on-failure
     command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
     ports:
-      - "8080:8080"   # data
+      - "8083:8080"   # data — host 8083, not 8080: another-service core-api owns 8080
       - "8085:8085"   # iam
     depends_on:
       paladin-bootstrap:

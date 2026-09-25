@@ -17,7 +17,7 @@
 
 # Defaults mirror frontend/tests/e2e/docker-compose.test.yaml. Exported so the
 # compose file interpolates the same values the caller resolved.
-: "${PALADIN_E2E_PORT_DATA:=8080}"
+: "${PALADIN_E2E_PORT_DATA:=8083}"
 : "${PALADIN_E2E_PORT_IAM:=8085}"
 : "${PALADIN_E2E_PORT_ADMIN:=8090}"
 : "${PALADIN_E2E_PORT_S3:=9000}"

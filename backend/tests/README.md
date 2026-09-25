@@ -74,7 +74,7 @@ Every flow:
 ## Quick start
 
 ```bash
-# Smoke against a locally-running Paladin (default http://127.0.0.1:8080):
+# Smoke against a locally-running Paladin (default http://127.0.0.1:8083):
 tests/api/run-all.sh
 
 # Single stage:

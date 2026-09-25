@@ -4,7 +4,7 @@ set -euo pipefail
 # This script runs Nuclei DAST scan against the running API.
 # Requirements: nuclei installed (go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest)
 
-TARGET_URL=${TARGET_URL:-"http://localhost:8080"}
+TARGET_URL=${TARGET_URL:-"http://localhost:8083"}
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUTPUT_DIR="$PROJECT_ROOT/reports/security"
 mkdir -p "$OUTPUT_DIR"

@@ -4,8 +4,8 @@ set -euo pipefail
 # This script runs OWASP ZAP API scan using Docker.
 # Requirements: Docker installed
 
-TARGET_URL=${TARGET_URL:-"http://host.docker.internal:8080"}
-OPENAPI_URL=${OPENAPI_URL:-"http://host.docker.internal:8080/v1/openapi.yaml"}
+TARGET_URL=${TARGET_URL:-"http://host.docker.internal:8083"}
+OPENAPI_URL=${OPENAPI_URL:-"http://host.docker.internal:8083/v1/openapi.yaml"}
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUTPUT_DIR="$PROJECT_ROOT/reports/security"
 mkdir -p "$OUTPUT_DIR"

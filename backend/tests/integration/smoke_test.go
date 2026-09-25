@@ -40,13 +40,13 @@ type probe struct {
 // The addresses are overridable, and by the same PALADIN_E2E_*_URL variables
 // the Playwright fixtures already read (tests/e2e/fixtures/seed.ts). The
 // compose file publishes every host port through an override so two stacks
-// can coexist; a probe hardcoded to :8080 would then be testing the other
+// can coexist; a probe hardcoded to one port would then be testing the other
 // one, or nothing.
 func planeProbes() []probe {
 	return []probe{
-		{"data", readyzURL("PALADIN_E2E_DATA_URL", "http://127.0.0.1:8080")},
-		{"iam", readyzURL("PALADIN_E2E_IAM_URL", "http://127.0.0.1:8085")},
-		{"admin", readyzURL("PALADIN_E2E_ADMIN_URL", "http://127.0.0.1:8090")},
+		{"data", readyzURL("PALADIN_E2E_DATA_URL", defaultDataURL)},
+		{"iam", readyzURL("PALADIN_E2E_IAM_URL", defaultIAMURL)},
+		{"admin", readyzURL("PALADIN_E2E_ADMIN_URL", defaultAdminURL)},
 	}
 }
 

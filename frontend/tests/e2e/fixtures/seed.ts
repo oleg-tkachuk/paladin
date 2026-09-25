@@ -54,7 +54,7 @@ import { uniqueSlug, uniqueDisplayName, FIXTURE_SLUG_RE } from "./unique";
 // ─── plane base URLs (test stack) ──────────────────────────
 const IAM_URL = process.env.PALADIN_E2E_IAM_URL ?? "http://localhost:8085";
 const ADMIN_URL = process.env.PALADIN_E2E_ADMIN_URL ?? "http://localhost:8090";
-const DATA_URL = process.env.PALADIN_E2E_DATA_URL ?? "http://localhost:8080";
+const DATA_URL = process.env.PALADIN_E2E_DATA_URL ?? "http://localhost:8083";
 
 // ─── token cache: audience → access JWT + its expiry ───────
 //

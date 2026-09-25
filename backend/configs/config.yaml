@@ -56,7 +56,9 @@ runtime:
 api:
   server:
     data: &http_defaults
-      addr: "0.0.0.0:8080"
+      # 8083 on the host: another-service core-api owns 8080. In-cluster the chart
+      # pins 8080 (deploy/chart/values.yaml), and compose.yaml does in-container.
+      addr: "0.0.0.0:8083"
       read_header_timeout: 5s
       read_timeout: 30s
       write_timeout: 30s
@@ -391,7 +393,7 @@ cedar:
 mcp:
   upstreams:
     admin_url: "http://localhost:8090"
-    data_url: "http://localhost:8080"
+    data_url: "http://localhost:8083"
     iam_url: "http://localhost:8085"
     # Trust material for whichever URLs above are https://. There is no
     # "enabled" flag: the scheme decides whether a dial is encrypted, so the

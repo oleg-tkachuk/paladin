@@ -173,3 +173,31 @@ func TestLoadRealConfigYAML(t *testing.T) {
 		t.Error("workers.replication interval/lookback_window defaulted to zero")
 	}
 }
+
+// TestShippedConfigDataPortMatchesSchema pins configs/config.yaml's data
+// listener and MCP data upstream to the schema defaults. The file's header
+// promises "defaults match schema.cue"; for the data port that promise is
+// load-bearing, because a host-run stack on 8080 collides with another-service's
+// core-api.
+func TestShippedConfigDataPortMatchesSchema(t *testing.T) {
+	shipped, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("Load configs/config.yaml: %v", err)
+	}
+	minimal := filepath.Join(t.TempDir(), "min.yaml")
+	if err := os.WriteFile(minimal, []byte(minimalConfigYAML), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	defaults, err := Load([]string{minimal}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("Load minimal yaml: %v", err)
+	}
+	if shipped.API.Server.Data.Addr != defaults.API.Server.Data.Addr {
+		t.Errorf("api.server.data.addr: config.yaml %q, schema default %q",
+			shipped.API.Server.Data.Addr, defaults.API.Server.Data.Addr)
+	}
+	if shipped.MCP.Upstreams.DataURL != defaults.MCP.Upstreams.DataURL {
+		t.Errorf("mcp.upstreams.data_url: config.yaml %q, schema default %q",
+			shipped.MCP.Upstreams.DataURL, defaults.MCP.Upstreams.DataURL)
+	}
+}

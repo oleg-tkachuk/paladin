@@ -44,6 +44,16 @@ import (
 	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 )
 
+// Default plane addresses for a stack on this host, shared with smoke_test.go.
+// They mirror the e2e compose file's published host ports
+// (scripts/stack-ports.sh). Data is 8083, not 8080: another-service's core-api owns
+// 8080 on the same machine.
+const (
+	defaultDataURL  = "http://127.0.0.1:8083"
+	defaultIAMURL   = "http://127.0.0.1:8085"
+	defaultAdminURL = "http://127.0.0.1:8090"
+)
+
 // plane maps a protobuf package to the listener that serves it and the
 // audience its tokens must carry.
 type plane struct {
@@ -76,9 +86,9 @@ func planes() []plane {
 		return def
 	}
 	return []plane{
-		{"paladin.admin.v1.", base("PALADIN_E2E_ADMIN_URL", "PALADIN_RPC_ADMIN_URL", "http://127.0.0.1:8090"), "paladin-admin"},
-		{"paladin.data.v1.", base("PALADIN_E2E_DATA_URL", "PALADIN_RPC_DATA_URL", "http://127.0.0.1:8080"), "paladin-data"},
-		{"paladin.iam.v1.", base("PALADIN_E2E_IAM_URL", "PALADIN_RPC_IAM_URL", "http://127.0.0.1:8085"), "paladin-iam"},
+		{"paladin.admin.v1.", base("PALADIN_E2E_ADMIN_URL", "PALADIN_RPC_ADMIN_URL", defaultAdminURL), "paladin-admin"},
+		{"paladin.data.v1.", base("PALADIN_E2E_DATA_URL", "PALADIN_RPC_DATA_URL", defaultDataURL), "paladin-data"},
+		{"paladin.iam.v1.", base("PALADIN_E2E_IAM_URL", "PALADIN_RPC_IAM_URL", defaultIAMURL), "paladin-iam"},
 	}
 }
 

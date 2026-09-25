@@ -69,4 +69,17 @@ func TestCueSchema(t *testing.T) {
 	if !cfg.MCP.Stdio.Enabled {
 		t.Error("MCP.Stdio.Enabled: default should be true")
 	}
+
+	// The host-run data plane listens on 8083 because another-service's core-api
+	// owns 8080; the MCP bridge's default upstream must follow it.
+	const (
+		wantDataAddr = "0.0.0.0:8083"
+		wantDataURL  = "http://localhost:8083"
+	)
+	if cfg.API.Server.Data.Addr != wantDataAddr {
+		t.Errorf("API.Server.Data.Addr: got %q want %q", cfg.API.Server.Data.Addr, wantDataAddr)
+	}
+	if cfg.MCP.Upstreams.DataURL != wantDataURL {
+		t.Errorf("MCP.Upstreams.DataURL: got %q want %q", cfg.MCP.Upstreams.DataURL, wantDataURL)
+	}
 }

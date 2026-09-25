@@ -62,11 +62,18 @@ runtime: {
   health_snapshot_token: string | *""
 }
 
+// #LocalDataPort is the data plane's port when the binary runs on the host
+// with these defaults. 8083, not 8080: another-service's core-api owns 8080 on the
+// same machine. The data listener and mcp.upstreams.data_url both derive
+// from it so the two cannot drift. Containers are unaffected — the chart
+// (deploy/chart/values.yaml) and configs/compose.yaml pin 8080 explicitly.
+#LocalDataPort: 8083
+
 // API role — the binary started by `serve api`. Hosts the data and
 // iam Connect listeners.
 api: {
   server: {
-    data: #HTTPServer & {addr: string | *"0.0.0.0:8080"}
+    data: #HTTPServer & {addr: string | *"0.0.0.0:\(#LocalDataPort)"}
     iam:  #HTTPServer & {addr: string | *"0.0.0.0:8085"}
   }
 }
@@ -533,7 +540,7 @@ ingest: {
 mcp: {
   upstreams: {
     admin_url: string | *"http://localhost:8090"
-    data_url:  string | *"http://localhost:8080"
+    data_url:  string | *"http://localhost:\(#LocalDataPort)"
     iam_url:   string | *"http://localhost:8085"
     // Trust material for whichever URLs above are https://. There is no
     // "enabled" switch on purpose — the URL scheme decides whether a dial is
