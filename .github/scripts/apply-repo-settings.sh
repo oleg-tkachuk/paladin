@@ -14,8 +14,9 @@
 #   1. Leaves repository VISIBILITY untouched — flipping a repo public is a
 #      one-way door and belongs to a human, not a script. The current value
 #      is printed so you know which profile the rest of the run assumes.
-#   2. Turns OFF "automatically delete head branches" on merge, so a merged
-#      pull request's branch stays until its author removes it.
+#   2. Turns ON "automatically delete head branches" on merge. With main the
+#      only long-lived branch, a merged pull request's branch has nothing left
+#      to do; leaving it behind only piles up stale branches.
 #   3. Enables private vulnerability reporting and Dependabot alerts. Both
 #      are free on public repositories, and SECURITY.md points contributors
 #      at the private-reporting form — a form that 404s if this is not on.
@@ -80,8 +81,8 @@ visibility=$(gh api "repos/$REPO" --jq .visibility)
 echo "Repository: $REPO"
 echo "Visibility (left unchanged): $visibility"
 
-echo "==> Disabling auto-delete of head branches on merge"
-gh api -X PATCH "repos/$REPO" -F delete_branch_on_merge=false \
+echo "==> Enabling auto-delete of head branches on merge"
+gh api -X PATCH "repos/$REPO" -F delete_branch_on_merge=true \
   --jq '"    delete_branch_on_merge = " + (.delete_branch_on_merge | tostring)'
 
 echo "==> Enabling private vulnerability reporting"
