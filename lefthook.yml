@@ -80,11 +80,18 @@ pre-commit:
         d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
         TMPDIR="$d/" TASK_OFFLINE=1 task codegen:sqlc:check
 
+    # Formatters re-stage through `stage_fixed`, never a `git add` of their own.
+    # In a linked worktree git runs hooks with GIT_DIR exported and no
+    # GIT_WORK_TREE, so git takes the CWD as the top of the tree: under
+    # `root:` a `git add vitest.config.ts` from frontend/ recorded a copy at
+    # the repository root, and the file actually formatted went unstaged.
+    # lefthook's own `git add` runs from the root with repo-relative paths.
     - name: backend-gofmt
       root: backend/
       tags: [go, fmt]
       glob: "*.go"
-      run: gofmt -w {staged_files} && git add {staged_files}
+      run: gofmt -w {staged_files}
+      stage_fixed: true
 
     - name: backend-goimports
       root: backend/
@@ -92,8 +99,9 @@ pre-commit:
       glob: "*.go"
       run: |
         if command -v goimports >/dev/null 2>&1; then
-          goimports -w {staged_files} && git add {staged_files}
+          goimports -w {staged_files}
         fi
+      stage_fixed: true
 
     - name: backend-govet
       root: backend/
@@ -122,7 +130,9 @@ pre-commit:
       root: frontend/
       tags: [ui, fmt]
       glob: "*.{js,jsx,ts,tsx,css,scss,json,md}"
-      run: npx prettier --write {staged_files} && git add {staged_files}
+      # stage_fixed, not `git add`: see the note above backend-gofmt.
+      run: npx prettier --write {staged_files}
+      stage_fixed: true
 
 pre-push:
   parallel: true
