@@ -127,6 +127,12 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      # One package at a time: packages that start Postgres, Memgraph or other
+      # testcontainers run side by side otherwise, and a two-core runner runs
+      # out of memory. GOFLAGS reaches every go command a task runs, including
+      # the ones that do not go through the shared library's GO_TEST_FLAGS.
+      GOFLAGS: -p=1
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
