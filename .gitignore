@@ -71,3 +71,6 @@ backend/cmd/seed-fixture/main.go.bak
 # that does not depend on github.com being reachable. The .timestamp files stay
 # out - they are per-machine cache state, not content.
 !**/.task/remote/*.yaml
+
+# ── Release tooling (root package.json: semantic-release only) ──────
+/node_modules/

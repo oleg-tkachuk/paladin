@@ -1,0 +1,10 @@
+{
+  "name": "paladin-release",
+  "private": true,
+  "description": "Release tooling only: semantic-release, run by .github/workflows/release.yaml. The console's own dependencies live in frontend/.",
+  "devDependencies": {
+    "semantic-release": "25.0.9",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "conventional-changelog-conventionalcommits": "10.4.0"
+  }
+}
