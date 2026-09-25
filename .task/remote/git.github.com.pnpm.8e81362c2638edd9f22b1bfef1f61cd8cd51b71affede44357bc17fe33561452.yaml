@@ -36,6 +36,17 @@ version: "3"
 # the release's integrity hash, and re-runs install so the lockfile is written
 # by the new pnpm rather than the previous major's.
 #
+# That install runs with lifecycle scripts off, and a second, ordinary install
+# runs them afterwards. A postinstall that calls `pnpm` resolves it from PATH,
+# and on a machine where a standalone pnpm sits ahead of the corepack shim that
+# is the standalone one: it inherits corepack's environment, sees it is running
+# under corepack, refuses to switch to the new pin, and fails the whole bump
+# with ERR_PNPM_BAD_PM_VERSION - after corepack has already rewritten
+# "packageManager". Outside corepack the same standalone pnpm switches to the
+# pin by itself, so the second install is where the scripts can run. It needs
+# --force: a plain install finds the lockfile current and skips the root
+# project's scripts, which would leave them silently never run.
+#
 # One thing that is not obvious and cost a real debugging session: corepack
 # resolves the pin from the CURRENT directory, so `pnpm -C <app> ...` runs
 # corepack's own default rather than the app's pin and then refuses to switch.
@@ -104,6 +115,20 @@ tasks:
       - cmd: |-
           set -u
           rc=0; pins=""
+          # Which binary answers to `pnpm`, not which version it reports. A
+          # standalone pnpm 10 or later ahead of the shim switches itself to
+          # the pin, so the version check below passes - and it still breaks
+          # anything run under corepack, where it refuses to switch. corepack
+          # installs its shims as links into its own dist/, beside corepack
+          # itself, so a pnpm that resolves anywhere else is not the shim.
+          found=$(command -v pnpm || true)
+          if [ -z "$found" ]; then
+            printf '%s\n' "{{._PNPM_ERR}} pnpm · no pnpm on PATH — run \`corepack enable\`" >&2
+            rc=1
+          elif [ "$(dirname "$(realpath "$found")")" != "$(dirname "$(realpath "$(command -v corepack)")")" ]; then
+            printf '%s\n' "{{._PNPM_ERR}} pnpm · $found is first on PATH and is not corepack's shim — remove it, or put the shim ahead of it" >&2
+            rc=1
+          fi
           for a in {{._PNPM_APPS}}; do
             pm=$(cd "$a" && node -p "require('./package.json').packageManager || ''" 2>/dev/null)
             case "$pm" in
@@ -180,7 +205,8 @@ tasks:
           else
             printf '%s\n' "{{._PNPM_RUN}} pnpm · $current → $target"
             for a in {{._PNPM_APPS}}; do
-              ( cd "$a" && corepack use "pnpm@$target" ) || {
+              # pnpm_, not npm_: pnpm 11 and later ignore npm_config_*.
+              ( cd "$a" && pnpm_config_ignore_scripts=true corepack use "pnpm@$target" ) || {
                 printf '%s\n' "{{._PNPM_ERR}} pnpm · $a: corepack use pnpm@$target failed — the other apps may already be bumped" >&2
                 exit 1
               }
@@ -209,6 +235,14 @@ tasks:
                 printf '%s\n' "{{._PNPM_ERR}} pnpm · $f still pins $(printf '%s' $left) after the rewrite" >&2
                 exit 1
               fi
+            done
+            # Last, once every pin agrees: a script that fails here leaves a
+            # consistent bump behind and only the scripts still to run.
+            for a in {{._PNPM_APPS}}; do
+              ( cd "$a" && pnpm install --force ) || {
+                printf '%s\n' "{{._PNPM_ERR}} pnpm · $a: every pin is at $target, but its install scripts failed — fix them, then \`pnpm install --force\` there" >&2
+                exit 1
+              }
             done
             printf '%s\n' "{{._PNPM_OK}} pnpm · pinned at $target everywhere — review the package.json, pin-file and lockfile diff"
           fi
