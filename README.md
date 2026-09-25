@@ -77,8 +77,8 @@ rest.
 | [Docker](https://docs.docker.com/get-started/get-docker/) | the compose stack, testcontainers, `verify-deep` and `verify-e2e` |
 | [Task](https://taskfile.dev/installation/) 3.53+ | every entry point; CI pins 3.53.1, and the shared [task library](https://github.com/oleg-tkachuk/taskfiles) is a remote include |
 | [Go](https://go.dev/dl/) 1.27+ | `backend/` and `capability/`, per their `go.mod` |
-| [Node](https://nodejs.org) 24 | the console; the version CI verifies with |
-| [pnpm](https://pnpm.io) 12.7 | pinned by `packageManager` in `frontend/package.json`; `corepack enable` picks it up |
+| [Node](https://nodejs.org) 26 | the console; the version its image ships and CI verifies with |
+| [pnpm](https://pnpm.io) 12.7 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.7.0` |
 
 `task verify-all` also shells out to golangci-lint, buf, helm, yq and
 python3. On macOS `brew bundle` installs that set; the [Brewfile](Brewfile)

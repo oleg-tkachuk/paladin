@@ -36,8 +36,10 @@ env:
   HELM_VERSION: "v4.3.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.53.6"
-  # Matches NODE_VERSION in frontend/deploy/Dockerfile.
-  NODE_VERSION: "24"
+  # Matches NODE_VERSION in frontend/deploy/Dockerfile, so the suite runs on
+  # the Node the console image ships. That Node has no corepack; pnpm comes
+  # from pnpm/action-setup below instead.
+  NODE_VERSION: "26"
   # renovate: datasource=go depName=github.com/rhysd/actionlint
   ACTIONLINT_VERSION: "v1.7.12"
   # renovate: datasource=pypi depName=zizmor
