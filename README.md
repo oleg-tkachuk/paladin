@@ -56,8 +56,8 @@ git clone https://github.com/oleg-tkachuk/paladin.git && cd paladin
 task stack:up        # every plane + Postgres + SeaweedFS + the console, in compose
 ```
 
-The console is on <http://localhost:3002>, the data plane on `:8080`, admin
-on `:8090`. The compose file,
+The console is on <http://localhost:3002>, the data plane on `:8083` (not
+`:8080`, which another-service's core-api uses), admin on `:8090`. The compose file,
 [`backend/deploy/docker-compose.yaml`](backend/deploy/docker-compose.yaml),
 lists the rest.
 

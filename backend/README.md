@@ -9,7 +9,7 @@ the process boundaries below are also the pod boundaries.
 
 | Command | Listens on | What it does |
 | --- | --- | --- |
-| `paladin serve api` | `:8080` data, `:8085` iam | Tenant-facing Connect-RPC. Objects, buckets, tags, presign, multipart, batch, auth. |
+| `paladin serve api` | `:8080` data (`:8083` on the host), `:8085` iam | Tenant-facing Connect-RPC. Objects, buckets, tags, presign, multipart, batch, auth. |
 | `paladin serve admin` | `:8090` | Platform-facing Connect-RPC. Tenants, quotas, policies, capabilities, API tokens, audit, billing, backends. |
 | `paladin serve worker` | `:8099` ops | Background jobs, lease-coordinated: object lifecycle transitions, reapers, quota reconciliation, storage migration. |
 | `paladin serve dispatcher` | `:8099` ops | Durable event fan-out. Drains the transactional outbox to webhook and broker sinks. |
