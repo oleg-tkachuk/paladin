@@ -146,9 +146,10 @@ Full reference: [`docs/configuration.md`](../docs/configuration.md).
 
 [`capability/`](../capability/) is a separate Go module, consumed here
 through a `replace` directive. It has no database driver and no storage
-SDK in its dependency graph, and CI enforces that against the resolved
-graph rather than against `go.mod` — a transitive pull disqualifies it
-just as much as a direct one.
+SDK in its dependency graph — the resolved graph, not `go.mod`: a
+transitive pull disqualifies it just as much as a direct one. Nothing
+asserts this automatically at the moment; `go list -deps ./...` in
+`capability/` shows the graph.
 
 If you are adding code that needs Postgres or S3, it belongs in
 `internal/`, not in the module.

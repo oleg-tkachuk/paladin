@@ -13,8 +13,9 @@ SDD audit trail live at
 #   - Paladin backend + UI images present locally as
 #     registry.local/paladin/paladin-core:latest
 #     registry.local/paladin/paladin-console:latest
-#     (build via `task -d backend build:image` if missing)
-#   - pnpm 11.3.0+: `corepack enable && corepack prepare pnpm@11.3.0 --activate`
+#     (`task verify-e2e` from the repo root rebuilds both; or
+#     `task -d backend release:image:build` / `task -d frontend release:image:build`)
+#   - pnpm 12.7.0 (the `packageManager` pin): `npm install -g pnpm@12.7.0`
 #   - Chromium binary: `pnpm exec playwright install chromium`
 
 cd frontend

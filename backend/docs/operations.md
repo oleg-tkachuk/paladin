@@ -4,7 +4,7 @@
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.27+ (the `go` directive in `backend/go.mod`)
 - Task (`brew install go-task/tap/go-task`)
 - Docker + Docker Compose
 - A running PostgreSQL instance (or use the provided compose file)

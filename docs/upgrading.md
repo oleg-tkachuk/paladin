@@ -2,9 +2,11 @@
 
 ## Changing the API contract
 
-`buf breaking` runs in CI against the `api/v0.5.0` tag and **blocks**. Pre-1.0
-the project still breaks compatibility deliberately — see *Project status* in
-the README — so the gate does not forbid it. It forbids doing it by accident.
+`buf breaking` runs in `task verify-all`, and so in CI, against the tag
+pinned as `API_BASELINE_TAG` in `backend/scripts/proto-breaking.sh`, and
+**blocks**. Pre-1.0 the project still breaks compatibility deliberately — see
+*Project status* in the README — so the gate does not forbid it. It forbids
+doing it by accident.
 
 To land a deliberate breaking change:
 

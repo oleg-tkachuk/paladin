@@ -189,8 +189,9 @@ the default posture.
   wire-format drift, because tokens outlive deployments.
 - **Charges are atomic.** A failed side effect, or a rejection by either
   ceiling, leaves both counters *and* the ledger untouched.
-- **No hidden dependencies.** CI asserts the resolved dependency graph
-  contains no database driver and no storage SDK.
+- **No hidden dependencies.** The resolved dependency graph contains no
+  database driver and no storage SDK. This is kept by review, not by CI:
+  the check that asserted it went away with the old per-module workflow.
 - **Tests need nothing.** The suite runs with no database, no network and no
   container.
 

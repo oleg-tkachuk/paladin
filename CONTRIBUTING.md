@@ -11,11 +11,11 @@ If you are reporting a security problem, stop and read
 
 | Tool | Version | Why |
 | --- | --- | --- |
-| Go | 1.26+ | pinned in `backend/go.mod`; the toolchain auto-downloads |
-| Node | 24 | matches `frontend/deploy/Dockerfile` |
-| pnpm | 11.21+ | `corepack enable && corepack prepare pnpm@11.21.0 --activate` |
+| Go | 1.27+ | the `go` directive in `backend/go.mod` and `capability/go.mod`; the toolchain auto-downloads |
+| Node | 26 | matches `frontend/deploy/Dockerfile`; CI runs the same |
+| pnpm | 12.7.0 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.7.0` |
 | Docker | recent | compose stacks, testcontainers-backed integration tests |
-| [Task](https://taskfile.dev) | 3+ | every entry point is a task target |
+| [Task](https://taskfile.dev) | 3.53+ | every entry point is a task target; CI pins 3.53.1 |
 
 Optional but recommended — the git hooks call these and **silently skip
 when they are missing**, so a fresh clone can commit, but you lose the
@@ -57,13 +57,14 @@ Four tiers, and they run in different places for a reason:
 | Unit | `task backend:test` / `cd frontend && pnpm test` | nothing |
 | Integration | `task backend:test:integration` | Docker (testcontainers spins a real Postgres) |
 | E2E | `task verify-e2e` | Docker (rebuilds both images, then Playwright boots the compose stack) |
-| Capability module | `cd capability && go test ./...` | nothing, deliberately |
+| Capability module | `task verify-capability` (part of `task verify-all`) | nothing, deliberately |
 
-The capability module's isolation is a property CI enforces, not a
-convention: it must resolve **no** database driver and **no** object-storage
-SDK in its dependency graph. If your change adds either, the
-`Capability module` workflow fails and the right fix is almost always to
-move the code into `backend/` instead.
+The capability module must resolve **no** database driver and **no**
+object-storage SDK in its dependency graph, so that a third party can use it
+without either. Nothing checks this automatically at the moment — check
+`cd capability && go list -deps ./...` yourself if your change adds an import
+there. If it pulls either in, the right fix is almost always to move the code
+into `backend/` instead.
 
 New behaviour needs a test. The project constitution is explicit that the
 middleware and store layers must be covered — that is where three-valued
@@ -82,9 +83,10 @@ feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security
 
 Two things follow from this that are easy to miss:
 
-- **The type drives releases.** `semantic-release` reads the history on
-  `main` and computes the next version from it. A `feat:` that should have
-  been a `fix:` publishes a minor release.
+- **The type drives releases.** Once CI passes on a push to `main`, it
+  dispatches `.github/workflows/release.yaml`, where `semantic-release` reads
+  the history and computes the next version from it. A `feat:` that should
+  have been a `fix:` publishes a minor release.
 - **One scope per commit.** A commit that touches auth and the console and
   the chart is three commits. This is a constitution principle, not a
   preference — it is what makes `git log` a usable audit trail for a
@@ -141,10 +143,12 @@ tooling. They are committed on purpose, and you can ignore all of them.
 
 ## Pull requests
 
-- Branch from `main`.
-- Make sure `task verify-all` passes before you push. CI runs the same
-  checks, so a red pipeline usually means a step was skipped locally
-  because the tool was not installed.
+- Branch from `main` and open the pull request against `main`. There is no
+  other long-lived branch.
+- Make sure `task verify-all` passes before you push. CI
+  (`.github/workflows/ci.yaml`) runs exactly that task, plus actionlint and
+  zizmor over the workflows, so a red pipeline usually means a step was
+  skipped locally because the tool was not installed.
 - Run `task verify-deep` before you ask for a merge. It needs Docker and
   takes about fifteen minutes, which is why it is not the pre-commit gate —
   but it is the only thing that runs the integration suites, the whole-contract
