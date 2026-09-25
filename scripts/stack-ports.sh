@@ -118,9 +118,8 @@ require_free_ports() {
 # which reads as "this image does not exist" and sends the next reader looking
 # for a bad tag or a corrupted store. Both were fine; `docker pull` succeeded by
 # hand on the first try. What actually failed was a concurrent pull, and nothing
-# in the message said so — .github/workflows/e2e.yml already carries a note
-# about Docker Hub rate limits, so this is a known hazard wearing the wrong
-# name.
+# in the message said so — Docker Hub rate limits and concurrent pulls are a
+# known hazard, here wearing the wrong name.
 #
 # Pulling first means a fetch failure is reported as a fetch failure, once,
 # before three phases of stack boot are stacked on top of it.

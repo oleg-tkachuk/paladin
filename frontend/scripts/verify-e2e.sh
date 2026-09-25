@@ -104,8 +104,8 @@ echo "      HEAD                                     rev=$(git describe --always
 #
 # Nothing is hidden by this. A test that only passes on the retry is reported
 # as `flaky`, not `passed`, and the check below refuses to let that scroll by.
-# Setting CI here also aligns the local gate with .github/workflows/e2e.yml
-# exactly — same workers, same retries, same no-reuse of a running stack.
+# Setting CI here also selects the Playwright config's CI profile — same
+# workers, same retries, same no-reuse of a running stack on every machine.
 export CI=true
 
 echo ">>> [e2e] Playwright"
