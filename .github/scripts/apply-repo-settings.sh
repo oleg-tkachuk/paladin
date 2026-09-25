@@ -14,12 +14,13 @@
 #   1. Leaves repository VISIBILITY untouched — flipping a repo public is a
 #      one-way door and belongs to a human, not a script. The current value
 #      is printed so you know which profile the rest of the run assumes.
-#   2. Turns OFF "automatically delete head branches" on merge, so a
-#      develop -> main PR merge never auto-removes develop.
+#   2. Turns OFF "automatically delete head branches" on merge, so a merged
+#      pull request's branch stays until its author removes it.
 #   3. Enables private vulnerability reporting and Dependabot alerts. Both
 #      are free on public repositories, and SECURITY.md points contributors
 #      at the private-reporting form — a form that 404s if this is not on.
-#   4. Creates/updates a branch RULESET protecting main and develop.
+#   4. Creates/updates a branch RULESET protecting main, the only long-lived
+#      branch (trunk-based: every change reaches it through a pull request).
 #
 # Rulesets rather than classic branch protection: they are additive (they
 # never clobber protection already configured elsewhere) and they work on
@@ -36,40 +37,39 @@
 #
 #     REQUIRE_CHECKS=1 .github/scripts/apply-repo-settings.sh
 #
-# They land on `main` ALONE, in a ruleset of their own. A required check on a
-# branch blocks the direct pushes to it as well as the merges: the commit being
-# pushed has no check runs yet, so there is nothing for the rule to pass, and
-# the only route left is a pull request. That is the right trade for a release
-# branch and the wrong one for `develop`, which is pushed to many times a day
-# here. Override with CHECKS_REFS if that stops being true.
+# They land on `main`, in a ruleset of their own. A required check on a branch
+# blocks the direct pushes to it as well as the merges: the commit being pushed
+# has no check runs yet, so there is nothing for the rule to pass, and the only
+# route left is a pull request — which is how trunk-based work reaches main.
+# Override with CHECKS_REFS if that stops being true.
 #
 # Verify a run has actually gone green on each context first — the names
-# below are the check-run names GitHub reports, which are the JOB ids in
-# the workflow files, not the workflow names.
+# below are the check-run names GitHub reports, which are the jobs' `name:`
+# in .github/workflows/ci.yaml, not the workflow name.
 
 set -euo pipefail
 
 REPO="${REPO:-oleg-tkachuk/paladin}"
-RULESET_NAME="protect-main-develop"
+RULESET_NAME="protect-main"
+# What the ruleset was called while it also covered `develop`. Looked up so a
+# re-run renames and narrows that ruleset in place instead of creating a second
+# one beside it that would keep protecting a branch nobody uses.
+LEGACY_RULESET_NAME="protect-main-develop"
 CHECKS_RULESET_NAME="require-checks-main"
 REQUIRE_CHECKS="${REQUIRE_CHECKS:-0}"
-# Space-separated refs the required checks apply to. Deliberately narrower than
-# the deletion rule above, which covers both branches.
+# Space-separated refs the required checks apply to.
 CHECKS_REFS="${CHECKS_REFS:-refs/heads/main}"
 
-# Job ids from .github/workflows/*. None of these jobs sets `name:`, so the
-# check-run context equals the job id. Keep in sync when a job is renamed:
-# a required context that no job reports blocks merges permanently.
+# Job names from .github/workflows/ci.yaml. Each job sets `name:`, so the
+# check-run context is that name, not the job id. Keep in sync when a job is
+# renamed: a required context that no job reports blocks merges permanently.
 #
-# The slower jobs — `postgres-backed` (integration.yml), `e2e` (e2e.yml),
-# `standalone` (capability-module.yml) — are deliberately not required yet.
-# Add them once their runtimes on public runners are known; a required
-# check that routinely times out is worse than one that is merely advisory.
+# A documentation-only change skips these jobs, and GitHub counts a skipped
+# required check as passing, so such a pull request is not blocked.
 REQUIRED_CONTEXTS=(
-  "backend"    # test.yml
-  "frontend"   # test.yml
-  "gitleaks"   # security.yml
-  "trivy-fs"   # security.yml
+  "Verify"           # ci.yaml job `test`
+  "Workflow syntax"  # ci.yaml job `syntax`
+  "Workflow audit"   # ci.yaml job `audit`
 )
 
 command -v gh >/dev/null || { echo "error: gh CLI not found" >&2; exit 1; }
@@ -100,7 +100,7 @@ else
   echo "    could not enable (already on, or insufficient permissions)"
 fi
 
-echo "==> Ensuring branch ruleset for main + develop"
+echo "==> Ensuring branch ruleset for main"
 
 # Rules that always apply. To also block force-pushes (history rewrites),
 # add { "type": "non_fast_forward" }.
@@ -115,16 +115,22 @@ payload=$(jq -n \
      enforcement: "active",
      conditions: {
        ref_name: {
-         include: ["refs/heads/main", "refs/heads/develop"],
+         include: ["refs/heads/main"],
          exclude: []
        }
      },
      rules: $rules
    }')
 
+# Any further arguments are former names of the same ruleset, tried when no
+# ruleset carries the current one.
 upsert_ruleset() {
-  local name="$1" body="$2" id
-  id=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name==\"$name\") | .id" 2>/dev/null | head -n1 || true)
+  local name="$1" body="$2" id candidate
+  shift 2
+  for candidate in "$name" "$@"; do
+    id=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name==\"$candidate\") | .id" 2>/dev/null | head -n1 || true)
+    [ -n "$id" ] && break
+  done
   if [ -n "$id" ]; then
     echo "    updating existing ruleset #$id"
     printf '%s' "$body" | gh api -X PUT "repos/$REPO/rulesets/$id" --input - \
@@ -136,7 +142,7 @@ upsert_ruleset() {
   fi
 }
 
-upsert_ruleset "$RULESET_NAME" "$payload"
+upsert_ruleset "$RULESET_NAME" "$payload" "$LEGACY_RULESET_NAME"
 
 # Required status checks live in their own ruleset because a ruleset carries a
 # single ref condition for every rule it holds, and these apply to a narrower

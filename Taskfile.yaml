@@ -55,7 +55,6 @@ includes:
     taskfile: '{{printf .TASKLIB "security"}}'
     dir: .
     vars:
-      BASE: develop
       # trivy 0.74 does not pick .trivyignore.yaml up on its own.
       TRIVY_FLAGS: --ignorefile .trivyignore.yaml
       # sqlc, protobuf and mock output is not written by hand and not reviewed
