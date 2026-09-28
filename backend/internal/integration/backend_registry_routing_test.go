@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,41 +17,79 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 )
 
-// minioImage pins the same MinIO release the e2e workflow uses, for a
+// seaweedImage pins the SeaweedFS release the e2e compose stack uses, for a
 // reproducible pull.
 //
-// quay.io, not Docker Hub: MinIO withdrew both minio/minio and minio/mc from
-// Docker Hub, and the repositories now 404 there. The pull fails as "pull
-// access denied ... may require 'docker login'", which reads like a
-// credentials problem and is not one — no login recovers a repository that is
-// gone. quay.io carries the identical tag.
-const minioImage = "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z"
+// SeaweedFS and not MinIO, since 2026-09-28: MinIO has closed every free
+// registry its images were on. Docker Hub 404s both minio/minio and minio/mc,
+// quay.io answers 401 even with a freshly issued anonymous pull token (its
+// tags list too), and ghcr.io/minio/* answers 403. Docker reports the first as
+// "pull access denied ... may require 'docker login'" and the second as
+// "unauthorized", both of which read like a credentials problem and are not
+// one — there is no account to add, so do not re-point this at another MinIO
+// mirror. SeaweedFS already backs the compose stack, so the substitution keeps
+// one S3 implementation in the repository rather than adding a second.
+const seaweedImage = "chrislusf/seaweedfs:4.47"
 
-// startMinio brings up a single-node MinIO and returns its S3 endpoint plus
-// the root credentials.
-func startMinio(t *testing.T) (endpoint, accessKey, secretKey string) {
+// s3TestIdentities is the -s3.config SeaweedFS reads its credentials from.
+// MinIO took them as MINIO_ROOT_USER / MINIO_ROOT_PASSWORD; SeaweedFS takes
+// only a file, so the helper writes this one into the container.
+//
+// A named identity and deliberately NOT SeaweedFS' "anonymous" one: anonymous
+// grants the actions to unsigned requests, and the adapter under test signs
+// every request. A suite that passed because the server never checked a
+// signature would prove nothing about the signing.
+const s3TestIdentities = `{
+  "identities": [
+    {
+      "name": "paladin-test",
+      "credentials": [{"accessKey": "paladin-test-access", "secretKey": "paladin-test-secret-key"}],
+      "actions": ["Read", "Write", "List", "Admin"]
+    }
+  ]
+}`
+
+// s3Port is SeaweedFS' S3 gateway port. MinIO served S3 on 9000; keeping the
+// number in one place is what stops the wait strategy and the mapped-port
+// lookup from disagreeing.
+const s3Port = "8333/tcp"
+
+// startS3 brings up a single-node SeaweedFS S3 gateway and returns its
+// endpoint plus the credentials its identity file declares.
+func startS3(t *testing.T) (endpoint, accessKey, secretKey string) {
 	t.Helper()
 	ctx := context.Background()
-	const user, pass = "minioadmin", "minioadmin"
+	const user, pass = "paladin-test-access", "paladin-test-secret-key"
+	const configPath = "/etc/seaweedfs/s3.json"
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        minioImage,
-			Cmd:          []string{"server", "/data"},
-			Env:          map[string]string{"MINIO_ROOT_USER": user, "MINIO_ROOT_PASSWORD": pass},
-			ExposedPorts: []string{"9000/tcp"},
-			WaitingFor:   wait.ForHTTP("/minio/health/ready").WithPort("9000/tcp").WithStartupTimeout(90 * time.Second),
+			Image: seaweedImage,
+			Cmd: []string{
+				"server", "-dir=/data", "-ip.bind=0.0.0.0",
+				"-s3", "-s3.port=8333", "-s3.config=" + configPath,
+			},
+			Files: []testcontainers.ContainerFile{{
+				Reader:            strings.NewReader(s3TestIdentities),
+				ContainerFilePath: configPath,
+				FileMode:          0o644,
+			}},
+			ExposedPorts: []string{s3Port},
+			// /status is the S3 gateway's own readiness endpoint. It answers
+			// only once the gateway has a filer and a master behind it, which
+			// is the thing a bare port check would miss.
+			WaitingFor: wait.ForHTTP("/status").WithPort(s3Port).WithStartupTimeout(90 * time.Second),
 		},
 		Started: true,
 	})
 	if err != nil {
-		t.Fatalf("start minio: %v", err)
+		t.Fatalf("start seaweedfs: %v", err)
 	}
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(ctr) })
 	host, err := ctr.Host(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	port, err := ctr.MappedPort(ctx, "9000/tcp")
+	port, err := ctr.MappedPort(ctx, s3Port)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +109,8 @@ func TestBackendRegistryRouting(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	epA, ak, sk := startMinio(t)
-	epB, _, _ := startMinio(t) // same root creds
+	epA, ak, sk := startS3(t)
+	epB, _, _ := startS3(t) // same credentials
 
 	mkBackend := func(ep, bucket string) config.StorageBackend {
 		return config.StorageBackend{

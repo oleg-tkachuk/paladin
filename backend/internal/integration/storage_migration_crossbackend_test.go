@@ -31,8 +31,8 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	epA, ak, sk := startMinio(t) // shared backend
-	epB, _, _ := startMinio(t)   // dedicated target backend
+	epA, ak, sk := startS3(t) // shared backend
+	epB, _, _ := startS3(t)   // dedicated target backend
 
 	mkBackend := func(ep, bucket string) config.StorageBackend {
 		return config.StorageBackend{
