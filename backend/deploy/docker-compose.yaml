@@ -60,7 +60,9 @@ services:
       - ./postgres-custom.conf:/etc/postgresql/postgresql.conf:ro
 
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    # Pinned, not `:latest`: a floating tag changes what the stack runs with
+    # no commit of ours in between, and the e2e suite pins the same release.
+    image: chrislusf/seaweedfs:4.47
     container_name: paladin-seaweedfs
     # `-filer.notification` enables the webhook publisher that posts
     # filer events to paladin-ingest. The notification.toml mounted at
