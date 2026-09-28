@@ -481,7 +481,8 @@ open deliberately — each notes why._
     otherwise).
   - Watermark advance + retry-with-exponential-backoff on transient
     errors.
-  - Integration test using two MinIO instances.
+  - Integration test across two backends — the suites bring up two
+    SeaweedFS instances for exactly this.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
 ### `ResetPassword` — self-service email delivery
