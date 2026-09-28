@@ -124,14 +124,39 @@ require_free_ports() {
 # Pulling first means a fetch failure is reported as a fetch failure, once,
 # before three phases of stack boot are stacked on top of it.
 #
-# The service list is here rather than in the two callers for the reason the
-# ports are: two copies of it would drift, and the compose file is the only
-# thing that decides which services carry a remote image. api/admin/ui are
-# deliberately absent — they run registry.local images this repo builds, and
-# `pull` on those fails.
+# The list is DERIVED from the compose file, not written out here. It used to
+# be written out, under a comment saying the compose file is the only thing
+# that decides which services carry a remote image — and then the storage
+# service was renamed and this still said `minio`, so the pull failed with
+# "no such service" and the gate died ten minutes in, after both image builds.
+# The message it printed offered a rate limit and a bad tag; the cause was
+# neither.
+#
+# The criterion is the image prefix: services running an image this repository
+# BUILDS cannot be pulled, and everything else must be. api/admin/ui/migrate/
+# bootstrap are the former and drop out on their own.
+readonly STACK_BUILT_IMAGE_PREFIX="registry.local/paladin/"
+
 stack_pull_thirdparty() {
     local compose_file="${1:?compose file}"
-    local services=(minio minio-setup postgres promote-app-role)
+    local services=()
+    # yq warns on stderr about merge-anchor semantics; the anchor-using
+    # services are all locally built, so it cannot change this answer.
+    while IFS= read -r svc; do
+        [ -n "$svc" ] && services+=("$svc")
+    done < <(yq -r ".services | to_entries | .[]
+                   | select((.value.image // \"\")
+                       | test(\"^${STACK_BUILT_IMAGE_PREFIX}\") | not)
+                   | .key" "$compose_file" 2>/dev/null)
+
+    # An empty list would make this a no-op that reports success, which is
+    # exactly the failure it exists to prevent.
+    if [ ${#services[@]} -eq 0 ]; then
+        echo "!!! no third-party services found in $compose_file — nothing was pulled" >&2
+        echo "    Either the file moved, or every service now runs a built image." >&2
+        return 1
+    fi
+
     echo ">>> [stack] pulling third-party images: ${services[*]}"
     if docker compose -f "$compose_file" pull --quiet "${services[@]}"; then
         return 0
