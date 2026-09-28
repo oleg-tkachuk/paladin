@@ -5,7 +5,7 @@ name: CI
 #
 # Deliberately minimal. CI builds no image, pushes no chart and deploys
 # nothing; those are local tasks (`task deploy`). The slower gates that need
-# Docker — `task verify-deep` (Postgres-backed suites) and `task verify-e2e`
+# Docker — `verify-deep` (Postgres-backed suites) and `verify-e2e`
 # (Playwright against a built stack) — are run locally before a merge.
 
 on:
@@ -116,11 +116,12 @@ jobs:
             printf '%s\n' "documentation only — the checks below will report as skipped"
           fi
 
-  # `task verify-all` — the repository's own commit gate, run as-is rather than
-  # re-implemented here, so CI and a developer's machine check the same thing:
-  # backend and capability tests and lint, the tagged suites compiling, the
-  # frontend's tests, lint and build, the proto wire-compatibility check and
-  # the chart and Taskfile contract scripts. No Docker.
+  # `task -t Taskfile.dev.yaml verify-all` — the repository's own commit gate,
+  # run as-is rather than re-implemented here, so CI and a developer's machine
+  # check the same thing: backend and capability tests and lint, the tagged
+  # suites compiling, the frontend's tests, lint and build, the proto
+  # wire-compatibility check and the chart and Taskfile contract scripts.
+  # No Docker.
   test:
     name: Verify
     needs: [changes]
@@ -206,7 +207,7 @@ jobs:
       # --yes accepts the first-fetch trust prompt for the shared task library
       # include; unattended, that prompt is a hang rather than a question.
       - name: task verify-all
-        run: task --yes verify-all
+        run: task --yes -t Taskfile.dev.yaml verify-all
 
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,

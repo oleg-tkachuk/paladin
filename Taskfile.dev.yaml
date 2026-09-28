@@ -1,0 +1,308 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+# Working ON Paladin: the gates, the codegen and the dependency bumps.
+# Nothing here operates a cluster.
+#
+#   task -t Taskfile.dev.yaml --list
+#   task -t Taskfile.dev.yaml verify-all     # before pushing
+#
+# Why a second entry point at all — see the header of Taskfile.yaml. The short
+# version: `task` is the list an operator reads, and these are not their
+# commands.
+#
+# Named dev rather than ci because CI is a caller, not the definition:
+# .github/workflows/ci.yaml runs `verify-all` as-is so the pipeline and a
+# developer's machine check the same thing. What the tasks below have in
+# common is the repository, not the pipeline.
+
+silent: true
+
+vars:
+  # Single source of truth for the OCI registry. Both components derive their
+  # image path and chart repo from it, so re-pointing the stack is one override.
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  # Kube context every kubectl/helm task targets. Defaults to the local
+  # OrbStack cluster; both components redeclare the same default so a
+  # standalone `cd backend && task …` behaves identically.
+  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
+  # Shared task library — github.com/oleg-tkachuk/taskfiles, pinned.
+  #
+  # The second copy of this pin, and it has to be: `includes:` below resolves
+  # before anything this entry point could read it from, and an included file
+  # cannot hand a var upward. Held to the same version as Taskfile.yaml by
+  # hand; a half-applied bump fails one entry point with a message about trust
+  # rather than about the version.
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.4.2'
+  # Status marker, the same vocabulary as Taskfile.yaml and as the shared
+  # library. Redefined rather than inherited, and forgetting is silent: Task
+  # renders an undefined variable as the empty string, so a missing glyph
+  # prints a line with nothing in front of it rather than raising anything.
+  _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+
+includes:
+  # ─── components ────────────────────────────────────────────────────────────
+  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these two
+  # blocks byte-identical; `verify:taskfile-drift` below is what notices.
+  backend:
+    taskfile: backend/Taskfile.yaml
+    dir: backend
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+  frontend:
+    taskfile: frontend/Taskfile.yaml
+    dir: frontend
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+
+  # ─── fan-out ───────────────────────────────────────────────────────────────
+  # The other half of the split described in Taskfile.yaml: test, lint and
+  # build are a developer's verbs, deploy is not. Flattened for the same
+  # reason there — `task test`, not `task all:test`.
+  monorepo:
+    taskfile: '{{printf .TASKLIB "monorepo"}}'
+    dir: .
+    flatten: true
+    excludes: ["deploy", "registry:check"]
+    vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+
+  # ─── repo-wide tooling ─────────────────────────────────────────────────────
+  # Not wired into this repo's own aggregates on purpose: the tasks are here to
+  # be run, not to change what an existing gate already does.
+  pnpm:
+    taskfile: '{{printf .TASKLIB "pnpm"}}'
+    dir: .
+    # The version is pinned twice and the two must agree: packageManager in
+    # frontend/package.json, which is also what CI reads, and ARG PNPM_VERSION
+    # in the image build, which runs before there is a package manager to read
+    # the first one. Both sat a release behind for months because nothing
+    # updated either.
+    vars:
+      PNPM_APPS: frontend
+      PNPM_PIN_FILES: frontend/deploy/Dockerfile
+  sec:
+    taskfile: '{{printf .TASKLIB "security"}}'
+    dir: .
+    vars:
+      # trivy 0.74 does not pick .trivyignore.yaml up on its own.
+      TRIVY_FLAGS: --ignorefile .trivyignore.yaml
+      # sqlc, protobuf and mock output is not written by hand and not reviewed
+      # as source; gosec reads its SQL string constants as hardcoded
+      # credentials. Excluding it drops 141 of 188 findings, all of them noise,
+      # and leaves the ones in code somebody wrote.
+      GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
+      GO_MODULES: >-
+        capability backend
+  # The third Go tree. It is a library with no image and no chart, so it is not
+  # a monorepo component and carries no Taskfile of its own — the library's go
+  # module aimed at its directory is the whole surface it needs.
+  capability:
+    taskfile: '{{printf .TASKLIB "go"}}'
+    dir: capability
+    vars: { PROJECT_NAME: capability }
+
+tasks:
+  default:
+    desc: "The gates, codegen and dependency bumps"
+    # Written out for the same reason as Taskfile.yaml's: the flattened
+    # components put 100-odd tasks in `--list`, and the dozen below are the
+    # ones this entry point exists for.
+    cmds:
+      - cmd: |
+          printf '%s\n' \
+            "Paladin — working on the repository" \
+            "" \
+            "  task -t Taskfile.dev.yaml verify-all         the commit gate: seconds, no Docker" \
+            "  task -t Taskfile.dev.yaml verify-deep        Postgres-backed suites; Docker, ~15 min" \
+            "  task -t Taskfile.dev.yaml verify-e2e         Playwright on this branch; Docker, ~10 min" \
+            "  task -t Taskfile.dev.yaml verify-capability  the third Go tree on its own" \
+            "  task -t Taskfile.dev.yaml test               unit tests, both halves" \
+            "  task -t Taskfile.dev.yaml lint               linters, both halves" \
+            "  task -t Taskfile.dev.yaml gen                proto + sqlc + mocks + the console's codegen" \
+            "  task -t Taskfile.dev.yaml deps:update        bump dependencies, no majors" \
+            "  task -t Taskfile.dev.yaml sec:scan           the security scanners" \
+            "" \
+            "  task -t Taskfile.dev.yaml --list             the rest, component by component" \
+            "  task                                         operating the stack"
+
+  # ═══ gates ══════════════════════════════════════════════════════════════════
+
+  verify-all:
+    desc: "Test + lint + build both halves. The commit gate: seconds, no Docker."
+    # The local green bar, and what .github/workflows/ci.yaml runs as-is so the
+    # pipeline and a developer's machine check the same thing.
+    cmds:
+      - task: backend:test
+      # The tagged suites are excluded from `go test ./...` by their build tag,
+      # so this is the only thing in the local gate that notices when one has
+      # stopped compiling. Both of them had.
+      - task: backend:go:test:tagged:compile
+      - task: backend:lint
+      # The third Go tree. Every lefthook Go job is `root: backend/` and this
+      # aggregate reached backend + frontend only, so `capability/` was checked
+      # by nothing a developer runs — its CI job caught an unformatted file that
+      # had been committed and pushed. Same checks that workflow runs, minus the
+      # ones needing a toolchain install.
+      - task: verify-capability
+      # The frontend's unit tests. Their absence here is how a breaking API
+      # change reached a green gate: three vitest specs had been failing for
+      # days and nothing local ran them. Lint and build assert nothing.
+      - task: frontend:test
+      - task: frontend:lint
+      - task: verify:proto-breaking
+      - task: verify:stack-ports
+      - task: verify:chart-values
+      - task: verify:chart-reads
+      - task: verify:chart-netpol
+      - task: verify:taskfile-vars
+      - task: verify:taskfile-drift
+      - task: verify:sqlc-pin
+      # Last on purpose: toolchain drift is the least urgent thing in this
+      # list, and running it earlier would mask a real test failure behind it.
+      - task: verify:brewfile
+      - task: frontend:build
+      - echo "{{._OK}} paladin · the commit gate passed"
+
+  verify-capability:
+    desc: "gofmt + lint + test the capability module (the third Go tree)"
+    # golangci-lint rather than the bare `go vet` this replaces: govet is one of
+    # its default linters, so the check only widens, and the module is clean
+    # under it today.
+    cmds:
+      - task: capability:fmt:check
+      - task: capability:lint
+      - task: capability:test
+
+  verify-deep:
+    desc: "The gates verify-all cannot run: Postgres-backed suites and everything needing a live stack"
+    # verify-all is the pre-commit gate and has to stay in the tens of seconds,
+    # so it runs no Docker and boots no stack. That trade is also how three
+    # suites rotted unnoticed — they were left to CI workflows that stopped
+    # executing. This is the other half: ~15 minutes and a Docker daemon, run
+    # before a merge rather than before a commit.
+    cmds:
+      # Disk first, before anything consumes any. This check used to run after
+      # the image build and after the integration suite, so it measured the
+      # worst moment in the gate rather than a representative one — and refused
+      # on a transient reading that had cleared minutes later.
+      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-deep"
+      # Testcontainers, not the compose stack: these bring their own Postgres.
+      - task: backend:test:integration
+      - task: backend:test:stack
+
+  verify-e2e:
+    desc: "Playwright against a stack built from this branch (needs Docker, ~10 min)"
+    # Separate from verify-deep on purpose: this one needs the console image and
+    # a browser; verify-deep boots the API and admin planes and never opens one.
+    # Both images, because the stack runs :latest and compose rebuilds nothing —
+    # a Playwright run against yesterday's console is a failure this repo has
+    # already had twice.
+    cmds:
+      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-e2e"
+      - task: backend:release:image:build
+      - task: frontend:release:image:build
+      - frontend/scripts/verify-e2e.sh
+
+  # ─── the individual checks verify-all fans out over ────────────────────────
+  # Named rather than inlined as bare script lines: a check that only exists
+  # inside an aggregate cannot be re-run on its own after it fails, which is
+  # exactly the moment somebody wants to.
+
+  verify:proto-breaking:
+    desc: "Refuse a wire-incompatible proto change against the last contract tag"
+    # Seconds, no Docker, and the only thing standing between a field rename
+    # and every JSON client of this API. It sat in a CI workflow that has
+    # never executed, which is how forty-five breaking changes accumulated in
+    # four days once already.
+    cmds:
+      - ./backend/scripts/proto-breaking.sh
+
+  verify:stack-ports:
+    desc: "Fail when the port script and the compose file disagree"
+    # Two files have to agree about six port numbers — the port script and
+    # the compose file — and nothing else would notice them drifting apart
+    # until a gate booted on top of whatever was already listening.
+    cmds:
+      - ./scripts/stack-ports.test.sh
+
+  verify:chart-values:
+    desc: "Render every values file and fail on a key the schema does not admit"
+    # A mistyped chart value renders the default and exits 0, so the
+    # operator reads their own YAML back as applied while the cluster
+    # runs something else. The schemas close that; this checks the
+    # schemas still refuse anything — and renders every values file, not
+    # only the defaults the chart's own gate looks at.
+    cmds:
+      - ./scripts/chart-values.test.sh
+
+  verify:chart-reads:
+    desc: "Fail when a key the templates read is refused by the schema"
+    # The other direction from verify:chart-values: the schemas were generated
+    # from the values files we ship, so they encode what we set rather than
+    # what the chart supports. Three keys the templates read were already
+    # refused by them.
+    cmds:
+      - python3 ./scripts/chart-reads.py
+
+  verify:chart-netpol:
+    desc: "Fail when a role has no NetworkPolicy and the baseline does not cover it"
+    # The NetworkPolicies are off in every values file we ship, so nothing
+    # above renders them. The baseline denies both directions for every pod,
+    # which makes a role with no policy of its own cut off rather than
+    # merely exposed — worth more than a syntax check.
+    cmds:
+      - python3 ./scripts/chart-netpol.py
+
+  verify:taskfile-vars:
+    desc: "Fail when one component's Taskfile var leaks into the other"
+    # Task does not isolate an included file's vars from its siblings, so a
+    # name declared on one component only is silently inherited by the other.
+    # That shipped: the console image built with the repo root as its docker
+    # context from anywhere but frontend/, and took verify-e2e down with it.
+    cmds:
+      - ./scripts/taskfile-vars.test.sh
+
+  verify:taskfile-drift:
+    desc: "Fail when the two entry points list different components"
+    # The component includes are duplicated across Taskfile.yaml and this file
+    # because a single shared copy is not on offer: included with
+    # `flatten: true` — the only form that keeps the namespaces callable as
+    # `backend:deploy` rather than `components:backend:deploy` — Task 3.53.1
+    # resolves an included file's variables out of one pool shared with its
+    # siblings, which is the same leak `verify:taskfile-vars` above exists for
+    # and would be doubled by nesting the components a level deeper.
+    #
+    # So the list is in two places, and this fails when they stop agreeing.
+    cmds:
+      - ./scripts/taskfile-drift.test.sh
+
+  verify:sqlc-pin:
+    desc: "Fail when the sqlc drift gate would regenerate with an unpinned sqlc"
+    # sqlc stamps its own version into every file it writes, so a generator
+    # taken from PATH instead of the go.mod pin rewrites the whole output
+    # with nothing but that banner changed — and the drift gate then blames
+    # the developer for what it had just done itself.
+    cmds:
+      - ./scripts/sqlc-pin.test.sh
+
+  verify:brewfile:
+    desc: "Fail when the Brewfile and the tools the gates reach for have drifted"
+    cmds:
+      - ./scripts/brewfile.test.sh
+
+  # ═══ codegen ════════════════════════════════════════════════════════════════
+
+  gen:
+    desc: "Run codegen for both halves"
+    cmds:
+      - task: backend:generate
+      - task: frontend:generate
+
+  # ═══ dependency bumps ═══════════════════════════════════════════════════════
+
+  deps:update:
+    desc: "Bump both halves to the latest minor/patch (no majors)"
+    cmds:
+      - task: backend:go:deps:update
+      - task: frontend:node:deps:update
+      # deps:update bumps what the package manager installs; pnpm:pin:update
+      # bumps the package manager, in both places it is pinned.
+      - task: pnpm:pin:update

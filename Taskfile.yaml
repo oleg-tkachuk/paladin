@@ -1,25 +1,33 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
 version: "3"
 
-# Paladin — top-level orchestrator over the two components: backend/ (API, admin
-# and IAM planes) and frontend/ (the console).
+# Paladin — operating the stack.
 #
-#   task                 every task across both halves
-#   task verify-all      the commit gate — seconds, no Docker
-#   task verify-deep     the merge gate — Postgres-backed suites, ~15 min
+#   task                 the commands below
+#   task stack:up        every plane + Postgres + SeaweedFS + console, in compose
 #   task deploy          publish both components to the registry
-#   task backend:test    forwards into backend's Taskfile
+#   task backend:deploy  publish one of them
 #
-# One name per thing, and no aliases kept for compatibility. `task test`,
-# `task lint`, `task build` and `task deploy` are the monorepo module's
-# fan-out, flattened to the top level rather than reached through an `all:`
-# prefix. `deploy:backend` is `backend:deploy`, `images:gc` is
-# `backend:release:image:gc`, and the pnpm pin is `pnpm:pin:check` /
-# `pnpm:pin:update`.
+# Working ON the repository — the gates, codegen and dependency bumps — is the
+# other entry point:
 #
-# The release chain, the language gates, the compose stack and the ArgoCD
-# refresh come from the shared task library
-# (github.com/oleg-tkachuk/taskfiles). What is left here is this repo's own
-# gates and the fan-out over its two components.
+#   task -t Taskfile.dev.yaml --list
+#
+# WHY TWO. `task` with no arguments is the list somebody reads to find a
+# command, and this one used to run `--list-all`: 165 lines, nearly all of them
+# a library verb on one of the two components. Nobody scrolls that to find
+# `deploy`. Hiding them is not an option either — Task's `internal: true`
+# removes a task from the list AND from the command line, so a hidden task
+# cannot be called at all. Two entry points is the mechanism Task offers.
+#
+# The split is by who runs the command, not by what it touches: a gate and a
+# deploy both reach the whole tree, but only one of them is something an
+# operator runs.
+#
+# The component includes are duplicated into Taskfile.dev.yaml rather than
+# shared, and `task -t Taskfile.dev.yaml verify:taskfile-drift` fails when the
+# two copies stop agreeing. See that task for why a shared copy is not on
+# offer.
 
 silent: true
 
@@ -36,34 +44,16 @@ vars:
   # repository instead, keeping the %s:
   #   TASKLIB: '../taskfiles/%s'
   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.4.2'
+  # Status markers. The shape carries the meaning, so a line still reads in a
+  # monochrome log; the colour drops out under NO_COLOR. The shared library
+  # prints the same vocabulary — two of them in one terminal session is what
+  # this avoids.
+  _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+
 includes:
-  # Repo-wide scans from the shared library. Not wired into this repo's own
-  # aggregates on purpose: the tasks are here to be run, not to change what
-  # an existing gate already does.
-  pnpm:
-    taskfile: '{{printf .TASKLIB "pnpm"}}'
-    dir: .
-    # The version is pinned twice and the two must agree: packageManager in
-    # frontend/package.json, which is also what CI reads, and ARG PNPM_VERSION
-    # in the image build, which runs before there is a package manager to read
-    # the first one. Both sat a release behind for months because nothing
-    # updated either.
-    vars:
-      PNPM_APPS: frontend
-      PNPM_PIN_FILES: frontend/deploy/Dockerfile
-  sec:
-    taskfile: '{{printf .TASKLIB "security"}}'
-    dir: .
-    vars:
-      # trivy 0.74 does not pick .trivyignore.yaml up on its own.
-      TRIVY_FLAGS: --ignorefile .trivyignore.yaml
-      # sqlc, protobuf and mock output is not written by hand and not reviewed
-      # as source; gosec reads its SQL string constants as hardcoded
-      # credentials. Excluding it drops 141 of 188 findings, all of them noise,
-      # and leaves the ones in code somebody wrote.
-      GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
-      GO_MODULES: >-
-        capability backend
+  # ─── components ────────────────────────────────────────────────────────────
+  # DUPLICATED into Taskfile.dev.yaml, deliberately, and guarded. Keep these
+  # two blocks byte-identical; `verify:taskfile-drift` there is what notices.
   backend:
     taskfile: backend/Taskfile.yaml
     dir: backend
@@ -73,9 +63,31 @@ includes:
     dir: frontend
     vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
 
+  # ─── fan-out ───────────────────────────────────────────────────────────────
+  # Flattened, so it is `task deploy` and not `task all:deploy`. One name per
+  # thing — a second spelling of the same task is a thing to keep in sync, not
+  # a convenience.
+  #
+  # `excludes` is what splits the fan-out across the two entry points: the
+  # module defines test, lint, build AND deploy, and only the last of those is
+  # an operator's. The dev file takes the other three and excludes this one.
+  # `each` stays in both: deploy is defined in terms of it, and excluding it
+  # takes deploy down with it.
+  monorepo:
+    taskfile: '{{printf .TASKLIB "monorepo"}}'
+    dir: .
+    flatten: true
+    excludes: ["test", "lint", "build"]
+    vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+
+  # ─── cluster and local stack ───────────────────────────────────────────────
   # The integrated compose stack. backend's compose file is the single source
   # of truth — it builds the backend services and mounts the frontend as the
   # console container, with a build context resolving to ../../frontend.
+  #
+  # Here rather than in the dev file because `task stack:up` is the README's
+  # first command: clone the repository and run the thing. That is the one
+  # audience neither half of the split is about, and it reaches for `task`.
   stack:
     taskfile: '{{printf .TASKLIB "compose"}}'
     dir: .
@@ -84,135 +96,30 @@ includes:
     taskfile: '{{printf .TASKLIB "argocd"}}'
     dir: .
     vars: { K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-  # Flattened: the fan-out is this repo's top-level verb set, so it is
-  # `task deploy` and `task test`, not `task all:deploy`. One name per thing —
-  # a second spelling of the same task is a thing to keep in sync, not a
-  # convenience.
-  monorepo:
-    taskfile: '{{printf .TASKLIB "monorepo"}}'
-    dir: .
-    flatten: true
-    vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
-  # The third Go tree. It is a library with no image and no chart, so it is not
-  # a monorepo component and carries no Taskfile of its own — the library's go
-  # module aimed at its directory is the whole surface it needs.
-  capability:
-    taskfile: '{{printf .TASKLIB "go"}}'
-    dir: capability
-    vars: { PROJECT_NAME: capability }
 
 tasks:
   default:
-    desc: "List every task across both components"
+    desc: "The commands for operating the stack"
+    # Written out rather than `task --list`, which prints 100-odd lines here:
+    # each component contributes thirty-odd library verbs, all of them carrying
+    # a desc. That list is a reference, not a front door. Both are reachable
+    # below.
     cmds:
-      - task --list-all
-
-  # ═══ gates ══════════════════════════════════════════════════════════════════
-
-  verify-all:
-    desc: "Test + lint + build both halves. The commit gate: seconds, no Docker."
-    cmds:
-      - task: backend:test
-      # The tagged suites are excluded from `go test ./...` by their build tag,
-      # so this is the only thing in the local gate that notices when one has
-      # stopped compiling. Both of them had.
-      - task: backend:go:test:tagged:compile
-      - task: backend:lint
-      # The third Go tree. Every lefthook Go job is `root: backend/` and this
-      # aggregate reached backend + frontend only, so `capability/` was checked
-      # by nothing a developer runs — its CI job caught an unformatted file that
-      # had been committed and pushed. Same checks that workflow runs, minus the
-      # ones needing a toolchain install.
-      - task: verify-capability
-      # The frontend's unit tests. Their absence here is how a breaking API
-      # change reached a green gate: three vitest specs had been failing for
-      # days and nothing local ran them. Lint and build assert nothing.
-      - task: frontend:test
-      - task: frontend:lint
-      # Seconds, no Docker, and the only thing standing between a field rename
-      # and every JSON client of this API. It sat in a CI workflow that has
-      # never executed, which is how forty-five breaking changes accumulated in
-      # four days once already.
-      - ./backend/scripts/proto-breaking.sh
-      # Two files have to agree about six port numbers — the port script and
-      # the compose file — and nothing else would notice them drifting apart
-      # until a gate booted on top of whatever was already listening.
-      - ./scripts/stack-ports.test.sh
-      # A mistyped chart value renders the default and exits 0, so the
-      # operator reads their own YAML back as applied while the cluster
-      # runs something else. The schemas close that; this checks the
-      # schemas still refuse anything — and renders every values file, not
-      # only the defaults the chart's own gate looks at.
-      - ./scripts/chart-values.test.sh
-      # The other direction: the schemas were generated from the values files
-      # we ship, so they encode what we set rather than what the chart
-      # supports. Three keys the templates read were already refused by them.
-      - python3 ./scripts/chart-reads.py
-      # The NetworkPolicies are off in every values file we ship, so nothing
-      # above renders them. The baseline denies both directions for every pod,
-      # which makes a role with no policy of its own cut off rather than
-      # merely exposed — worth more than a syntax check.
-      - python3 ./scripts/chart-netpol.py
-      # Last on purpose: toolchain drift is the least urgent thing in this
-      # list, and running it earlier would mask a real test failure behind it.
-      - ./scripts/brewfile.test.sh
-      # Task does not isolate an included file's vars from its siblings, so a
-      # name declared on one component only is silently inherited by the other.
-      # That shipped: the console image built with the repo root as its docker
-      # context from anywhere but frontend/, and took verify-e2e down with it.
-      - ./scripts/taskfile-vars.test.sh
-      # sqlc stamps its own version into every file it writes, so a generator
-      # taken from PATH instead of the go.mod pin rewrites the whole output
-      # with nothing but that banner changed — and the drift gate then blames
-      # the developer for what it had just done itself.
-      - ./scripts/sqlc-pin.test.sh
-      - task: frontend:build
-
-  verify-capability:
-    desc: "gofmt + lint + test the capability module (the third Go tree)"
-    # golangci-lint rather than the bare `go vet` this replaces: govet is one of
-    # its default linters, so the check only widens, and the module is clean
-    # under it today.
-    cmds:
-      - task: capability:fmt:check
-      - task: capability:lint
-      - task: capability:test
-
-  verify-deep:
-    desc: "The gates verify-all cannot run: Postgres-backed suites and everything needing a live stack"
-    # verify-all is the pre-commit gate and has to stay in the tens of seconds,
-    # so it runs no Docker and boots no stack. That trade is also how three
-    # suites rotted unnoticed — they were left to CI workflows that stopped
-    # executing. This is the other half: ~15 minutes and a Docker daemon, run
-    # before a merge rather than before a commit.
-    cmds:
-      # Disk first, before anything consumes any. This check used to run after
-      # the image build and after the integration suite, so it measured the
-      # worst moment in the gate rather than a representative one — and refused
-      # on a transient reading that had cleared minutes later.
-      - ./scripts/require-disk.sh "task verify-deep"
-      # Testcontainers, not the compose stack: these bring their own Postgres.
-      - task: backend:test:integration
-      - task: backend:test:stack
-
-  verify-e2e:
-    desc: "Playwright against a stack built from this branch (needs Docker, ~10 min)"
-    # Separate from verify-deep on purpose: this one needs the console image and
-    # a browser; verify-deep boots the API and admin planes and never opens one.
-    # Both images, because the stack runs :latest and compose rebuilds nothing —
-    # a Playwright run against yesterday's console is a failure this repo has
-    # already had twice.
-    cmds:
-      - ./scripts/require-disk.sh "task verify-e2e"
-      - task: backend:release:image:build
-      - task: frontend:release:image:build
-      - frontend/scripts/verify-e2e.sh
-
-  gen:
-    desc: "Run codegen for both halves"
-    cmds:
-      - task: backend:generate
-      - task: frontend:generate
+      - cmd: |
+          printf '%s\n' \
+            "Paladin — operating the stack" \
+            "" \
+            "  task stack:up                      the whole stack in compose, locally" \
+            "  task stack:down                    stop it, keep the volumes" \
+            "  task deploy                        publish both images + charts" \
+            "  task backend:deploy                publish one of them" \
+            "  task deploy:sync                   hard-refresh the ArgoCD apps after a deploy" \
+            "  task backend:k8s:status            what is running" \
+            "  task backend:k8s:logs              follow its logs" \
+            "  task argocd:list                   sync + health of every Argo app" \
+            "" \
+            "  task --list                        every operator task, component by component" \
+            "  task -t Taskfile.dev.yaml          gates, codegen and dependency bumps"
 
   # ═══ release ════════════════════════════════════════════════════════════════
 
@@ -225,13 +132,4 @@ tasks:
         vars: { APP_PREFIX: "paladin-core" }
       - task: argocd:refresh
         vars: { APP_PREFIX: "paladin-console" }
-
-  # ═══ dependency bumps ═══════════════════════════════════════════════════════
-  deps:update:
-    desc: "Bump both halves to the latest minor/patch (no majors)"
-    cmds:
-      - task: backend:go:deps:update
-      - task: frontend:node:deps:update
-      # deps:update bumps what the package manager installs; pnpm:pin:update
-      # bumps the package manager, in both places it is pinned.
-      - task: pnpm:pin:update
+      - echo "{{._OK}} paladin · both applications refreshed"
