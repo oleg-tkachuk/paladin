@@ -12,7 +12,8 @@
 # and each one there carries the reason. An exclusion is a decision, not a way
 # to silence this check.
 #
-# Runs from `task verify-all` — no network, no brew invocation.
+# Runs from `task -t Taskfile.dev.yaml verify-all` — no network, no brew
+# invocation.
 
 set -euo pipefail
 

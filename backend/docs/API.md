@@ -149,7 +149,7 @@ offending field named.
 ## Compatibility
 
 The wire contract is pinned to a published baseline tag (`api/v0.5.0` at time
-of writing) and `buf breaking` runs against it in `task verify-all`. Pre-1.0
+of writing) and `buf breaking` runs against it in `verify-all`. Pre-1.0
 the project still breaks compatibility deliberately — see
 [docs/upgrading.md](../../docs/upgrading.md), which records every such change
 and the procedure for making one. What is not possible is breaking it by

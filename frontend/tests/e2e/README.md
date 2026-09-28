@@ -13,7 +13,7 @@ SDD audit trail live at
 #   - Paladin backend + UI images present locally as
 #     registry.local/paladin/paladin-core:latest
 #     registry.local/paladin/paladin-console:latest
-#     (`task verify-e2e` from the repo root rebuilds both; or
+#     (`task -t Taskfile.dev.yaml verify-e2e` from the repo root rebuilds both; or
 #     `task -d backend release:image:build` / `task -d frontend release:image:build`)
 #   - pnpm 12.7.0 (the `packageManager` pin): `npm install -g pnpm@12.7.0`
 #   - Chromium binary: `pnpm exec playwright install chromium`
@@ -60,7 +60,7 @@ PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 \
 ```
 
 Point the suite at it with the `PALADIN_E2E_*_URL` variables the
-fixtures already read. This is what lets `task verify-deep` run while
+fixtures already read. This is what lets `verify-deep` run while
 a Playwright stack is up; before the `container_name` pins came out,
 a second project collided on the first name Docker already held no
 matter which ports it was given.

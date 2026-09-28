@@ -31,11 +31,19 @@ lefthook install                          # wire the hooks into .git/hooks
 ## Getting a stack up
 
 ```bash
-task stack:up          # backend + console + Postgres + SeaweedFS, in compose
-task verify-all      # build + test both halves — the fast, pre-commit gate
-task verify-deep     # the slow one: integration suites + live-stack gates
-task verify-e2e      # Playwright, against images built from your branch
-task --list-all      # everything, across both namespaces
+task stack:up   # backend + console + Postgres + SeaweedFS, in compose
+task            # the rest of the commands for operating it
+```
+
+The gates live behind the second entry point — `task` is what an operator
+runs, and these are not their commands:
+
+```bash
+task -t Taskfile.dev.yaml               # its own list of commands
+task -t Taskfile.dev.yaml verify-all    # the pre-commit gate: build + test
+task -t Taskfile.dev.yaml verify-deep   # integration suites + live-stack gates
+task -t Taskfile.dev.yaml verify-e2e    # Playwright, on images from your branch
+task -t Taskfile.dev.yaml --list        # everything it reaches
 ```
 
 `task stack:up` needs nothing but Docker. If it asks you for a credential or
@@ -56,13 +64,13 @@ Four tiers, and they run in different places for a reason:
 | --- | --- | --- |
 | Unit | `task backend:test` / `cd frontend && pnpm test` | nothing |
 | Integration | `task backend:test:integration` | Docker (testcontainers spins a real Postgres) |
-| E2E | `task verify-e2e` | Docker (rebuilds both images, then Playwright boots the compose stack) |
-| Capability module | `task verify-capability` (part of `task verify-all`) | nothing, deliberately |
+| E2E | `task -t Taskfile.dev.yaml verify-e2e` | Docker (rebuilds both images, then Playwright boots the compose stack) |
+| Capability module | `task -t Taskfile.dev.yaml verify-capability` (part of `verify-all`) | nothing, deliberately |
 
 The capability module must resolve **no** database driver and **no**
 object-storage SDK in its dependency graph, so that a third party can use it
 without either. `isolation_test.go` in the module asserts this against the
-resolved graph, so `task verify-capability` — and with it `verify-all` and CI
+resolved graph, so `verify-capability` — and with it `verify-all` and CI
 — fails if your change pulls either in. The right fix is almost always to
 move the code into `backend/` instead.
 
@@ -145,22 +153,22 @@ tooling. They are committed on purpose, and you can ignore all of them.
 
 - Branch from `main` and open the pull request against `main`. There is no
   other long-lived branch.
-- Make sure `task verify-all` passes before you push. CI
+- Make sure `task -t Taskfile.dev.yaml verify-all` passes before you push. CI
   (`.github/workflows/ci.yaml`) runs exactly that task, plus actionlint and
   zizmor over the workflows, so a red pipeline usually means a step was
   skipped locally because the tool was not installed.
-- Run `task verify-deep` before you ask for a merge. It needs Docker and
-  takes about fifteen minutes, which is why it is not the pre-commit gate —
-  but it is the only thing that runs the integration suites, the whole-contract
-  RPC gate, the Go admin e2e suite, the S3 conformance suite and
-  `dev-bootstrap.sh` against a stack built from your branch. Every one of those
+- Run `task -t Taskfile.dev.yaml verify-deep` before you ask for a merge. It
+  needs Docker and takes about fifteen minutes, which is why it is not the
+  pre-commit gate — but it is the only thing that runs the integration suites,
+  the whole-contract RPC gate, the Go admin e2e suite, the S3 conformance suite
+  and `dev-bootstrap.sh` against a stack built from your branch. Every one of those
   has silently rotted at least once while `verify-all` stayed green; a compile
   check cannot catch a suite that builds and then fails.
-- Run `task verify-e2e` too if you touched the console or a plane's wire
-  format. Prefer it over a bare `pnpm run test:e2e`: that rebuilds nothing, and
-  the stack runs `:latest`, so the result describes whichever images happen to
-  be on the machine. This repository has twice read a green run as verifying a
-  commit the images did not contain.
+- Run `task -t Taskfile.dev.yaml verify-e2e` too if you touched the console or
+  a plane's wire format. Prefer it over a bare `pnpm run test:e2e`: that
+  rebuilds nothing, and the stack runs `:latest`, so the result describes
+  whichever images happen to be on the machine. This repository has twice read
+  a green run as verifying a commit the images did not contain.
 - Keep the diff to one concern. If review surfaces a second one, a
   follow-up PR is better than growing this one.
 - Explain *why* in the description. The what is in the diff.

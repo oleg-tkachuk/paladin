@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # verify-e2e.sh — run the Playwright suite against a stack built from this
-# branch. Invoked as `task verify-e2e`, which builds both images first.
+# branch. Invoked as `task -t Taskfile.dev.yaml verify-e2e`, which builds both
+# images first.
 #
 # The suite has always been runnable (`pnpm run test:e2e`), and that is exactly
 # the problem this closes. Playwright's webServer brings the compose stack up
@@ -13,7 +14,7 @@
 # wrong image is worse than no run, because it is believed.
 #
 # So the task builds both images and this script refuses to start if the ports
-# are taken — the same discipline `task verify-deep` got, sharing the same
+# are taken — the same discipline `verify-deep` got, sharing the same
 # preflight so the two cannot drift apart.
 #
 # Requires: docker, pnpm, a Chromium Playwright has installed. ~2 minutes after
@@ -57,7 +58,8 @@ cleanup
 # The UI port matters here and does not for the backend gate: this is the only
 # gate that opens a browser, so :3000 (or its override) has to be ours. It is
 # passed as an extra rather than added to the shared list for that reason.
-require_free_ports "task verify-e2e" "$PALADIN_E2E_PORT_UI" || exit 1
+require_free_ports "task -t Taskfile.dev.yaml verify-e2e" \
+    "$PALADIN_E2E_PORT_UI" || exit 1
 
 # This script deliberately does not set PALADIN_E2E_BASE_URL. That variable is
 # the "an external stack is already running" switch: playwright.config.ts turns

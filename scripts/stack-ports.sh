@@ -4,7 +4,7 @@
 # are free. SOURCE this; it is not executable on its own.
 #
 #   source "$(git rev-parse --show-toplevel)/scripts/stack-ports.sh"
-#   require_free_ports "task verify-deep"
+#   require_free_ports "task -t Taskfile.dev.yaml verify-deep"
 #
 # Why it is shared rather than copied: two gates now boot the same
 # frontend/tests/e2e/docker-compose.test.yaml — backend/scripts/verify-stack.sh

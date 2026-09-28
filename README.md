@@ -64,7 +64,13 @@ lists the rest.
 ```bash
 task stack:down      # stop, keep volumes
 task stack:reset     # stop and delete volumes
-task verify-all      # the commit gate: tests, lint and build of every tree
+```
+
+Working on the code rather than running it is the other entry point:
+
+```bash
+task -t Taskfile.dev.yaml             # the gates, codegen and dependency bumps
+task -t Taskfile.dev.yaml verify-all  # the commit gate: tests, lint and build
 ```
 
 ## Prerequisites
@@ -80,24 +86,28 @@ rest.
 | [Node](https://nodejs.org) 26 | the console; the version its image ships and CI verifies with |
 | [pnpm](https://pnpm.io) 12.7 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.7.0` |
 
-`task verify-all` also shells out to golangci-lint, buf, helm, yq and
+`verify-all` also shells out to golangci-lint, buf, helm, yq and
 python3. On macOS `brew bundle` installs that set; the [Brewfile](Brewfile)
 says which tools are pinned elsewhere instead, and why.
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the optional git hooks.
 
 ## Commands
 
-`task` on its own lists every target across both halves.
+Two entry points, split by who runs the command. `task` operates the stack;
+`task -t Taskfile.dev.yaml` works on the repository. Each on its own prints
+its handful of commands, and `--list` after either prints everything it
+reaches.
 
 | Task | Does |
 |------|------|
-| `task verify-all` | the commit gate: every tree's tests and lint, the proto compatibility check, the chart and Taskfile contract checks, the console build; no Docker |
-| `task verify-deep` | the Postgres-backed integration suites and the gates needing a live stack; Docker, ~15 min |
-| `task verify-e2e` | Playwright against images built from the current branch; Docker, ~10 min |
 | `task stack:up` | the whole stack in compose, waiting until every service is healthy |
 | `task deploy` | build and publish both images and charts to the OCI registry (`registry.local` by default) |
+| `task deploy:sync` | hard-refresh the ArgoCD applications after a deploy |
+| `task -t Taskfile.dev.yaml verify-all` | the commit gate: every tree's tests and lint, the proto compatibility check, the chart and Taskfile contract checks, the console build; no Docker |
+| `task -t Taskfile.dev.yaml verify-deep` | the Postgres-backed integration suites and the gates needing a live stack; Docker, ~15 min |
+| `task -t Taskfile.dev.yaml verify-e2e` | Playwright against images built from the current branch; Docker, ~10 min |
 
-Per half: `task backend:test`, `task backend:test:integration`,
+Per half, from either: `task backend:test`, `task backend:test:integration`,
 `task frontend:test`, `task frontend:build`.
 
 ## How changes land
@@ -105,7 +115,7 @@ Per half: `task backend:test`, `task backend:test:integration`,
 `main` is the only long-lived branch. Changes reach it through pull requests,
 with [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
-[`ci.yaml`](.github/workflows/ci.yaml) runs `task verify-all` and audits the
+[`ci.yaml`](.github/workflows/ci.yaml) runs `verify-all` and audits the
 workflows with actionlint and zizmor. A green push to `main` dispatches
 [`release.yaml`](.github/workflows/release.yaml): semantic-release computes
 the next tag from the commits since the last one, and a GitHub release with

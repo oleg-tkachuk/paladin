@@ -19,7 +19,7 @@
 # IngressRoute, PrometheusRule, ServersTransport, ServiceMonitor — were
 # reachable by no gate at all.
 #
-# Runs from `task verify-all` — seconds, no cluster.
+# Runs from `task -t Taskfile.dev.yaml verify-all` — seconds, no cluster.
 
 set -euo pipefail
 

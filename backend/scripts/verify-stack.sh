@@ -5,7 +5,7 @@
 # are ready, and drives four suites against it: the RPC-surface gate, the Go
 # admin e2e tests, the S3 conformance suite (against the stack's MinIO) and
 # dev-bootstrap.sh. Invoked as `task backend:test:stack` (which builds the
-# backend image first) or `task verify-deep` (which adds the Postgres-backed
+# backend image first) or `verify-deep` (which adds the Postgres-backed
 # integration suites in front).
 #
 # What they have in common is that none of them ran. Each was reachable only by

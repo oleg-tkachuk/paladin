@@ -33,7 +33,7 @@ tasks:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
     vars:
       # Named rather than left to Go's 10m default: internal/integration takes
-      # ~622s on a developer machine, so the default failed `task verify-deep`
+      # ~622s on a developer machine, so the default failed `verify-deep`
       # on a suite that passes. This used to be read out of the integration
       # workflow; that workflow is gone and this task is the only place the
       # suites run, so the number lives here.

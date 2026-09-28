@@ -12,7 +12,7 @@
 # Actions never started on this account. A guard that only exists in a
 # pipeline nobody can run is not a guard, which is the lesson the rest of this
 # repository's gates were rebuilt around. Seconds, no Docker, so it belongs in
-# the fast gate — which CI now runs as `task verify-all`.
+# the fast gate — which CI now runs as `task -t Taskfile.dev.yaml verify-all`.
 #
 # The baseline tag lives HERE and nowhere else. It used to be read out of the
 # old test workflow; that workflow is gone, and this script is the only thing

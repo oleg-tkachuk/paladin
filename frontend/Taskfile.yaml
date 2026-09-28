@@ -54,7 +54,7 @@ includes:
     excludes: [uninstall, upgrade]
   # test:e2e is excluded, not merely unused: it runs Playwright against
   # whatever images are lying around, and the suite's whole point is that a
-  # green run against a stale console is worse than no run. `task verify-e2e`
+  # green run against a stale console is worse than no run. `verify-e2e`
   # at the root builds both images first and is the only supported entry.
   node:
     taskfile: '{{printf .TASKLIB "node"}}'

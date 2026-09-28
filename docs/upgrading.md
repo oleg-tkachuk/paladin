@@ -2,7 +2,7 @@
 
 ## Changing the API contract
 
-`buf breaking` runs in `task verify-all`, and so in CI, against the tag
+`buf breaking` runs in `verify-all`, and so in CI, against the tag
 pinned as `API_BASELINE_TAG` in `backend/scripts/proto-breaking.sh`, and
 **blocks**. Pre-1.0 the project still breaks compatibility deliberately — see
 *Project status* in the README — so the gate does not forbid it. It forbids
@@ -189,7 +189,7 @@ reaches a write, directly or one hop through a helper. Verified by mutation in
 both shapes.
 
 **Cutting the baseline.** This needs `api/v0.6.0`; see the procedure above.
-Until it is tagged and `breaking_against` bumped, `task verify-all` fails on
+Until it is tagged and `breaking_against` bumped, `verify-all` fails on
 this change by design.
 
 ## Unreleased — API tokens are addressed by resource name

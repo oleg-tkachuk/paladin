@@ -149,7 +149,7 @@ through a `replace` directive. It has no database driver and no storage
 SDK in its dependency graph — the resolved graph, not `go.mod`: a
 transitive pull disqualifies it just as much as a direct one. The
 module's `isolation_test.go` asserts this, and runs in
-`task verify-capability`, part of `verify-all`.
+`task -t Taskfile.dev.yaml verify-capability`, part of `verify-all`.
 
 If you are adding code that needs Postgres or S3, it belongs in
 `internal/`, not in the module.

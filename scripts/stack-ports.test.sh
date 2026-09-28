@@ -7,7 +7,7 @@
 # quiet and nasty: the preflight checks one set of ports, compose publishes
 # another, and a gate boots on top of whatever was already listening.
 #
-# Runs from `task verify-all` — seconds, no Docker.
+# Runs from `task -t Taskfile.dev.yaml verify-all` — seconds, no Docker.
 
 set -euo pipefail
 

@@ -9,13 +9,13 @@
 # the console with the REPO ROOT as its docker context and died on a COPY of
 # frontend/pnpm-workspace.yaml — while the identical task run from frontend/
 # succeeded, because there was no sibling to inherit from. That took a while to
-# find, and `task verify-e2e` was broken by it the whole time.
+# find, and `verify-e2e` was broken by it the whole time.
 #
 # Identical NAMES, not identical values: each component still sets its own
 # PROJECT_NAME and its own context. What this refuses is a name declared on one
 # side only, because that is exactly the gap the fall-through fills.
 #
-# Runs from `task verify-all` — no Docker, no cluster.
+# Runs from `task -t Taskfile.dev.yaml verify-all` — no Docker, no cluster.
 
 set -euo pipefail
 

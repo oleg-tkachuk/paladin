@@ -14,7 +14,8 @@
 # sqlc through `go run`. This test proves it by putting a sqlc on PATH that
 # fails loudly if anything calls it: the gate must still pass.
 #
-# Runs from `task verify-all` — needs the Go toolchain, no Docker.
+# Runs from `task -t Taskfile.dev.yaml verify-all` — needs the Go toolchain,
+# no Docker.
 
 set -euo pipefail
 

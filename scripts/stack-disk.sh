@@ -33,7 +33,8 @@ stack_free_gib() {
 
 # Make room if there is not enough, and say so either way.
 #
-#   stack_ensure_disk "task verify-e2e" <min_gib> <target_gib>
+#   stack_ensure_disk "task -t Taskfile.dev.yaml verify-e2e" \
+#       <min_gib> <target_gib>
 #
 # Reclaims before refusing, because a gate that stops with "free some space"
 # when it could have freed the space itself is a gate people learn to work

@@ -6,7 +6,7 @@
 # first one. `task pnpm:pin:update` owns that pair and moves both together.
 #
 # ncu knows only about the first. Bumping it here left the two disagreeing, so
-# `pnpm:pin:update` refused and took the rest of `task deps:update` down with
+# `pnpm:pin:update` refused and took the rest of `deps:update` down with
 # it — after the Go half had already been written. It also rewrote
 # "pnpm@12.3.4+sha512.961aa…" as a bare "pnpm@12.4.2", dropping the integrity
 # hash corepack verifies the download against: a supply-chain check silently

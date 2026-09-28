@@ -191,7 +191,7 @@ the default posture.
   ceiling, leaves both counters *and* the ledger untouched.
 - **No hidden dependencies.** The resolved dependency graph contains no
   database driver and no storage SDK; `isolation_test.go` asserts it, so
-  `task verify-capability` and CI fail if one appears.
+  `task -t Taskfile.dev.yaml verify-capability` and CI fail if one appears.
 - **Tests need nothing.** The suite runs with no database, no network and no
   container.
 
