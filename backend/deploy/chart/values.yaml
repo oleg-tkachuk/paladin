@@ -554,16 +554,40 @@ metrics:
 #
 # Either can be disabled (e.g. external migrator owns DDL).
 jobs:
+  # Both Jobs ran with no requests and no limits, which the templates already
+  # had a slot for. That makes their pods BestEffort: first evicted under node
+  # pressure, and refused outright by a namespace carrying a LimitRange that
+  # requires requests. These are pre-install/pre-upgrade hooks, so losing one
+  # does not degrade the release — it fails it, before a single Deployment is
+  # applied.
+  #
+  # Sized as a serving role rather than measured: same image, same binary, and
+  # both do strictly less than an api pod — Goose streams its SQL to Postgres
+  # and bootstrap inserts a handful of rows, so the client-side footprint is
+  # the smaller half of that pair. An upper bound is the honest number here;
+  # tune per environment if a migration ever proves otherwise.
   migrate:
     enabled: true
     backoffLimit: 1
     activeDeadlineSeconds: 600
-    resources: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
   bootstrap:
     enabled: true
     backoffLimit: 1
     activeDeadlineSeconds: 120
-    resources: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
 
 # ─── Application config ────────────────────────────────────────────────────
 #
