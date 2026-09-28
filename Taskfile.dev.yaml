@@ -91,6 +91,30 @@ includes:
       GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
       GO_MODULES: >-
         capability backend
+  # Policy scanning over the YAML a cluster applies — the charts, the
+  # Dockerfiles and these workflows. Separate from `sec:` because it asks a
+  # different question of a different tree: `sec:` scans the Go modules and
+  # what is built from them.
+  checkov:
+    taskfile: '{{printf .TASKLIB "checkov"}}'
+    dir: .
+    vars:
+      # ONE directory. The module interpolates this as `-d <target>`, so a
+      # list of three reaches checkov as a single path, which it reports as
+      # "does not exist; skipping it" on stderr — and then exits 0, having
+      # scanned nothing. Whole-repo with exclusions instead; the excluded
+      # trees are vendored or generated and no cluster ever sees them.
+      CHECKOV_TARGET: .
+      CHECKOV_FLAGS: >-
+        --skip-path node_modules --skip-path .task
+        --skip-path frontend/.next --skip-path backend/internal/api/pb
+        --skip-path frontend/src/gen
+      CHECKOV_FRAMEWORKS: helm kubernetes dockerfile github_actions
+      # Pinned, and run through `pipx run` rather than installed: the rules a
+      # scan asserts against change between releases, so an unpinned checkov
+      # makes a local run and the pipeline's disagree — a red nobody else can
+      # reproduce, or a green that means nothing.
+      CHECKOV_VERSION: "3.3.20"
   # The third Go tree. It is a library with no image and no chart, so it is not
   # a monorepo component and carries no Taskfile of its own — the library's go
   # module aimed at its directory is the whole surface it needs.
@@ -155,6 +179,7 @@ tasks:
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:sqlc-pin
+      - task: verify:checkov
       # Last on purpose: toolchain drift is the least urgent thing in this
       # list, and running it earlier would mask a real test failure behind it.
       - task: verify:brewfile
@@ -282,6 +307,20 @@ tasks:
     # the developer for what it had just done itself.
     cmds:
       - ./scripts/sqlc-pin.test.sh
+
+  verify:checkov:
+    desc: "Policy-scan the charts, Dockerfiles and workflows"
+    # Wired into the gate rather than left as a command somebody remembers to
+    # run. This repository has the receipts for the alternative: the proto
+    # compatibility check and three suites each sat in a workflow that never
+    # executed. It found both hook Jobs running with no resource requests —
+    # BestEffort pods on a pre-install hook, so a namespace with a LimitRange
+    # would have failed the whole release rather than degraded it.
+    #
+    # Whatever it finds is either fixed or written down with a reason in
+    # .checkov.yaml. Nothing is skipped for being noisy.
+    cmds:
+      - task: checkov:scan
 
   verify:brewfile:
     desc: "Fail when the Brewfile and the tools the gates reach for have drifted"

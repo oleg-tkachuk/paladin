@@ -32,6 +32,29 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## Deploy cutover: rename to `paladin`
 
+### NetworkPolicies ship disabled in every environment
+
+- **Status:** Open — the policies exist and are correct; nothing turns them on.
+- **Reason:** `templates/networkpolicy.yaml` carries a full per-role default-deny
+set with a documented flow matrix (api / admin / worker / dispatcher / ingest /
+mcp), gated on `networkPolicies.enabled`. That flag is `false` in
+`values.yaml` and is overridden by no overlay — not dev, not staging, not
+prod. Confirmed by rendering: `values-prod.yaml` produces **zero**
+NetworkPolicy resources. `git log -S networkPolicies` shows one commit,
+the one that introduced them, so this was never enabled and then rolled
+back — it was never enabled. checkov reports it as CKV2_K8S_6 against all
+eight pods; the skip in `.checkov.yaml` points here.
+- **Definition of Done:** `networkPolicies.enabled: true` in at least the prod
+overlay, with `helm template -f values-prod.yaml` rendering a policy for every
+role, and the CKV2_K8S_6 skip deleted from `.checkov.yaml`.
+- **Blockers:** needs an operator, not a chart edit. Two unknowns: whether the
+target cluster's CNI enforces NetworkPolicy at all (against one that does not,
+enabling this changes nothing and proves nothing), and whether the flow matrix
+is complete for the live topology — against a CNI that does enforce, a flow the
+matrix missed drops production traffic with no error anywhere but the client.
+Rolling it out per-namespace with the dispatcher's open egress verified first is
+the cheap order.
+
 ### Push renamed charts/images before syncing the renamed ApplicationSet
 
 - **Status:** Blocked (operator action — cannot deploy from a coding session).
