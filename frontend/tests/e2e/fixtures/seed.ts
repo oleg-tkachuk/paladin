@@ -408,12 +408,12 @@ export async function seedBucket(opts?: {
 }
 
 /**
- * The bucket that physically exists in the test stack's MinIO, registered in
+ * The bucket that physically exists in the test stack's SeaweedFS, registered in
  * Paladin so objects can actually be written to it.
  *
  * seedBucket({provision: true}) is not an option here: provisioning is
  * asynchronous and completed by the worker plane, which this stack leaves
- * out on purpose (see docker-compose.test.yaml). The bucket the minio-setup
+ * out on purpose (see docker-compose.test.yaml). The bucket the seaweedfs-setup
  * container creates is the one real place bytes can land.
  *
  * Idempotent — every object test shares it.

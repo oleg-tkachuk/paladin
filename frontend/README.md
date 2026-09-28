@@ -95,5 +95,5 @@ npx tsc --noEmit
 ```
 
 `pnpm run test:e2e` brings its own stack up and tears it down — Postgres,
-MinIO and the Paladin planes. It needs nothing but Docker and the two locally
+SeaweedFS and the Paladin planes. It needs nothing but Docker and the two locally
 built images; see [`tests/e2e/README.md`](tests/e2e/README.md).

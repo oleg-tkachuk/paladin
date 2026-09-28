@@ -46,7 +46,7 @@ export default defineConfig({
 
   // An external stack is slower than the local compose one by construction:
   // every seeding call crosses an ingress, and objects land in a real object
-  // store rather than a MinIO container on the same bridge. Against a
+  // store rather than a container on the same bridge. Against a
   // cluster the heaviest tests measure 28-48s — a multipart upload of 12 MiB
   // through presigned URLs is most of that — so the 30s default fails them
   // for being slow rather than wrong, which is the least useful kind of red.

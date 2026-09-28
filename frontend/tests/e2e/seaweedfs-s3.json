@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "paladin-e2e",
+      "credentials": [
+        {
+          "accessKey": "paladin-e2e-access",
+          "secretKey": "paladin-e2e-secret-key"
+        }
+      ],
+      "actions": ["Read", "Write", "List", "Admin"]
+    }
+  ]
+}

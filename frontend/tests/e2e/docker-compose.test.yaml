@@ -6,7 +6,7 @@
 # deliberately ABSENT — the Playwright tests never exercise
 # background jobs (R-006).
 #
-# Storage backend: MinIO, brought up IN THIS FILE. The stack has
+# Storage backend: SeaweedFS, brought up IN THIS FILE. The stack has
 # no external prerequisite beyond Docker and the two locally
 # built images — `git clone && pnpm run test:e2e` works, which is
 # the whole point of a suite other people are meant to run.
@@ -18,12 +18,13 @@
 # anyone without that cluster, and made CI a THIRD configuration
 # (the workflow started its own MinIO on the runner host and
 # pointed the stack at the docker0 gateway) — so local, CI and
-# the documented path all differed. One MinIO, declared here,
-# collapses the three into one.
+# the documented path all differed. One storage service, declared
+# here, collapses the three into one. It was MinIO until
+# 2026-09-28; see the service below for why it is not any more.
 #
 # An external S3 endpoint is still supported: set every
-# PALADIN_E2E_S3_* var below and the in-compose MinIO is bypassed
-# (it still starts; ignore it, or `--scale minio=0`).
+# PALADIN_E2E_S3_* var below and the in-compose SeaweedFS is
+# bypassed (it still starts; ignore it, or `--scale seaweedfs=0`).
 #
 # Bring up:
 #   docker compose -p paladin-e2e \
@@ -92,14 +93,14 @@ x-paladin-base: &paladin-base
     # from auth.signing_key (build_api_token.go), which is exactly the
     # single-tenant dev posture this stack already has everywhere else.
     PALADIN_API_TOKEN_ENABLED: "true"
-    # ── storage: in-compose MinIO ────────────────────────────
+    # ── storage: in-compose SeaweedFS ────────────────────────
     # Two endpoints, and they are NOT interchangeable. The backend
     # signs presigned URLs against public_endpoint, and SigV4 covers
-    # the Host header — sign for `minio:9000` and the browser's PUT
+    # the Host header — sign for `seaweedfs:8333` and the browser's PUT
     # to localhost fails the signature check, not the connection.
     #   endpoint        — container DNS, used by the backend itself
     #   public_endpoint — host-reachable, used by the Playwright browser
-    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: ${PALADIN_E2E_S3_ENDPOINT:-http://minio:9000}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: ${PALADIN_E2E_S3_ENDPOINT:-http://seaweedfs:8333}
     PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:${PALADIN_E2E_PORT_S3:-9000}}
     PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
     PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
@@ -117,22 +118,32 @@ x-paladin-base: &paladin-base
     PALADIN_DATASTORES_POSTGRES_DSN: postgres://paladin_app:paladin_app@postgres:5432/paladin?sslmode=disable
 
 services:
-  # S3-compatible storage. Pinned to the same MinIO release the CI
-  # workflow used when it started MinIO itself, so moving it in here
-  # changed the topology and nothing else.
+  # S3-compatible storage.
   #
-  # quay.io, not Docker Hub: MinIO withdrew both images from Docker Hub and
-  # the repositories 404 there now. Docker reports it as "pull access denied
-  # ... may require 'docker login'", which reads like a credentials problem
-  # and is not one. quay.io carries the identical tags.
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: ["server", "/data"]
-    environment:
-      # dev-only credentials — e2e compose only, NEVER reused outside it.
-      MINIO_ROOT_USER: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
-      MINIO_ROOT_PASSWORD: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
-    # Objects live for one run, same as the Postgres above: a suite that
+  # SeaweedFS and not MinIO, since 2026-09-28: MinIO has closed every free
+  # registry its images were on. Docker Hub 404s both minio/minio and
+  # minio/mc, quay.io answers 401 even with a freshly issued anonymous pull
+  # token, and ghcr.io/minio/* answers 403. Two of those report as
+  # "unauthorized", which reads like a credentials problem and is not one —
+  # there is no account to add, so do not re-point this at another MinIO
+  # mirror. SeaweedFS already backs backend/deploy/docker-compose.yaml, so the
+  # substitution leaves one S3 implementation in the repository, not two.
+  #
+  # Published on the host as 9000 even though SeaweedFS serves S3 on 8333:
+  # PALADIN_E2E_PORT_S3 is what scripts/stack-ports.sh declares and what the
+  # presigned PUT is signed for, so the host side of the mapping stays put.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.47
+    # Credentials come from -s3.config; SeaweedFS has no env-var equivalent of
+    # MINIO_ROOT_USER. A NAMED identity, not SeaweedFS' "anonymous" one, which
+    # would grant these actions to unsigned requests — an unsigned GET must
+    # stay a 403, or the suite would stop proving that the backend signs.
+    command: >-
+      server -dir=/data -ip.bind=0.0.0.0
+      -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    volumes:
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    # Objects live for one run, same as the Postgres below: a suite that
     # inherits state from the previous run passes for the wrong reason.
     tmpfs:
       - /data
@@ -140,45 +151,42 @@ services:
       # Published because the browser uploads straight to it via a
       # presigned PUT — this is not a debugging convenience, the suite
       # fails without it.
-      - "${PALADIN_E2E_PORT_S3:-9000}:9000"
+      - "${PALADIN_E2E_PORT_S3:-9000}:8333"
 
-  # One-shot: waits for MinIO and creates the bucket, then exits 0.
+  # One-shot: waits for SeaweedFS and creates the bucket, then exits 0.
   #
-  # A healthcheck on the minio service would be the obvious alternative,
-  # but the MinIO image carries neither curl nor wget, so there is
-  # nothing to probe /minio/health/live WITH from inside it. mc is a
-  # separate image that has both the client and a shell.
-  minio-setup:
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+  # The same image as the service above rather than a second one. MinIO needed
+  # a separate mc image here because its own image carries no shell; the
+  # SeaweedFS image has both a shell and the weed binary, so the bucket is
+  # created with the tool that already ships.
+  seaweedfs-setup:
+    image: chrislusf/seaweedfs:4.47
     restart: "no"
     environment:
-      S3_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:-paladin-e2e-access}
-      S3_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:-paladin-e2e-secret-key}
       S3_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
     entrypoint: ["/bin/sh", "-c"]
     command:
-      # `mc alias set` round-trips to the server, so it doubles as the
-      # readiness probe. Bounded and loud: an unbounded wait turns "MinIO
-      # never came up" into a job that hangs until the 30-minute timeout.
+      # `weed shell` round-trips to the master, so it doubles as the readiness
+      # probe. Bounded and loud: an unbounded wait turns "SeaweedFS never came
+      # up" into a job that hangs until the 30-minute timeout.
       - |
         set -eu
         ready=""
         for i in $$(seq 1 60); do
-          if mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" >/dev/null 2>&1; then
+          if echo "s3.bucket.create -name $$S3_BUCKET" \
+              | weed shell -master seaweedfs:9333 >/dev/null 2>&1; then
             ready=1
-            echo "MinIO ready after $${i}s"
+            echo "bucket $$S3_BUCKET ready after $${i}s"
             break
           fi
           sleep 1
         done
         if [ -z "$$ready" ]; then
-          echo "MinIO did not accept connections within 60s" >&2
+          echo "SeaweedFS did not create the bucket within 60s" >&2
           exit 1
         fi
-        mc mb --ignore-existing "local/$$S3_BUCKET"
-        echo "bucket $$S3_BUCKET ready"
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_started
 
   postgres:
@@ -277,9 +285,9 @@ services:
     depends_on:
       bootstrap:
         condition: service_completed_successfully
-      # Gate on the bucket, not on MinIO being up: the backend's first
+      # Gate on the bucket, not on SeaweedFS being up: the backend's first
       # write fails just as hard against a live server with no bucket.
-      minio-setup:
+      seaweedfs-setup:
         condition: service_completed_successfully
     # NOTE: the Paladin backend image is distroless (no shell / wget), so a
     # CMD-SHELL HTTP probe can't run in-container. The plane is ready

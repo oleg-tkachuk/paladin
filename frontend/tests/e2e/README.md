@@ -21,7 +21,7 @@ SDD audit trail live at
 cd frontend
 
 # Run the suite. Playwright's webServer config brings up the
-# docker-compose test stack — Postgres, MinIO and the Paladin planes —
+# docker-compose test stack — Postgres, SeaweedFS and the Paladin planes —
 # and tears it down on exit.
 pnpm run test:e2e
 ```
@@ -31,14 +31,16 @@ credential export.
 
 ## Storage
 
-MinIO runs as a service inside `docker-compose.test.yaml`, with a
-one-shot `minio-setup` container that creates the bucket before the
-API plane starts. Credentials are the committed dev pair
+SeaweedFS runs as a service inside `docker-compose.test.yaml`, with a
+one-shot `seaweedfs-setup` container — the same image — that creates the
+bucket before the API plane starts. It was MinIO until 2026-09-28, when
+MinIO closed the last free registry carrying its images; the compose file
+says which ones and why re-pointing is not an option. Credentials are the committed dev pair
 (`paladin-e2e-access` / `paladin-e2e-secret-key`) — dev-only, and listed in the
 backend's weak-secret deny-list so no real deployment can inherit them.
 
 Two endpoints are configured and they are not interchangeable:
-`endpoint` (`http://minio:9000`) is what the backend talks to over
+`endpoint` (`http://seaweedfs:8333`) is what the backend talks to over
 container DNS, and `public_endpoint` (`http://localhost:9000`) is what
 presigned URLs are signed for, because the browser uploads from the
 host. SigV4 covers the Host header, so swapping them produces a
