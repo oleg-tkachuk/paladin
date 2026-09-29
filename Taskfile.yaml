@@ -43,7 +43,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.1'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
   # Status markers. The shape carries the meaning, so a line still reads in a
   # monochrome log; the colour drops out under NO_COLOR. The shared library
   # prints the same vocabulary — two of them in one terminal session is what

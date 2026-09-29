@@ -168,7 +168,12 @@ tasks:
       # A repository with accepted historical findings passes a baseline; without
       # one every old finding is reported again on every run, and a gate that
       # always fails is a gate nobody reads.
-      - gitleaks git . --no-banner --redact{{if ._SEC_GL_BASE}} --baseline-path {{._SEC_GL_BASE}}{{end}} {{._SEC_GL_FLAGS}}
+      # -v prints the rule, file, line and commit of each finding. Without it
+      # gitleaks reports a count and nothing else — "leaks found: 2" with no
+      # way to act on it, which cost a manual re-run to locate two findings in
+      # a consumer. --redact keeps the values out of the log either way: with
+      # both flags the Secret and Finding fields print as REDACTED.
+      - gitleaks git . --no-banner --redact -v{{if ._SEC_GL_BASE}} --baseline-path {{._SEC_GL_BASE}}{{end}} {{._SEC_GL_FLAGS}}
       - printf '%s\n' "{{._SEC_OK}} sec · no secrets in history"
 
   trivy:

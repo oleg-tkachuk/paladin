@@ -33,7 +33,7 @@ vars:
   # cannot hand a var upward. Held to the same version as Taskfile.yaml by
   # hand; a half-applied bump fails one entry point with a message about trust
   # rather than about the version.
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.1'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
   # Status marker, the same vocabulary as Taskfile.yaml and as the shared
   # library. Redefined rather than inherited, and forgetting is silent: Task
   # renders an undefined variable as the empty string, so a missing glyph
