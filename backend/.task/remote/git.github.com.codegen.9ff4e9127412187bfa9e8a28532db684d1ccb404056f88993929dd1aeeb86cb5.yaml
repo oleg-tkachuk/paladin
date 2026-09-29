@@ -15,7 +15,7 @@ version: "3"
 #   PROJECT_NAME      label in log lines
 #   MOCKERY_CONFIG    default .mockery.yaml
 #   MOCKERY_MODULE    default github.com/vektra/mockery/v3
-#   BUF_TEMPLATE      one or more buf templates — a YAML list, or a
+#   BUF_TEMPLATE      list of buf templates — a YAML list, or a
 #                     space-separated string (default buf.gen.yaml)
 #   BUF_INPUT         buf's input, when it is not the working directory
 #   PROTO_FORBID      paths that must not exist when the stubs are generated
@@ -74,15 +74,18 @@ vars:
   # latter because `for:` splits a string on whitespace either way. A list is
   # what a reader expects for several templates; the string form is what a
   # single one looks like, and what CLI and env overrides can carry.
-  _CG_BUF_TPL: >-
-    {{if kindIs "slice" .BUF_TEMPLATE}}{{join " " .BUF_TEMPLATE}}
-    {{- else}}{{.BUF_TEMPLATE | default "buf.gen.yaml"}}{{end}}
+  # `ref:` keeps the list a list. It used to accept a string too and join a
+  # slice down to one — which meant every consumer below had to split it back
+  # apart, and a template path with a space in it could not be expressed.
+  _CG_BUF_TPL:
+    ref: 'default (list "buf.gen.yaml") .BUF_TEMPLATE'
   _CG_BUF_PATH: '{{.PROTO_PATH | default ""}}'
   _CG_BUF_IN: '{{.BUF_INPUT | default ""}}'
   _CG_FORBID: '{{.PROTO_FORBID | default ""}}'
   _CG_PLUGINS: '{{.PROTO_PLUGINS | default ""}}'
   _CG_BIN: '{{.CODEGEN_BIN_DIR | default "./bin"}}'
-  _CG_DIRS: '{{.GENERATED_DIRS | default ""}}'
+  _CG_DIRS:
+    ref: 'default (list) .GENERATED_DIRS'
   _CG_SQLC_MOD: '{{.SQLC_MODULE | default ""}}'
   _CG_MOCK_SPEC: '{{.MOCKS_PATHSPEC | default "internal"}}'
   _CG_SQLC_DIR: '{{.SQLC_DIR | default ""}}'
@@ -142,8 +145,8 @@ tasks:
     preconditions:
       - sh: command -v buf >/dev/null
         msg: "buf is not installed — https://buf.build/docs/installation/"
-      - sh: 'for f in {{._CG_BUF_TPL}}; do test -f "$f" || exit 1; done'
-        msg: "one of {{._CG_BUF_TPL}} is missing — check BUF_TEMPLATE"
+      - sh: '{{range $f := ._CG_BUF_TPL}}test -f {{$f | q}} && {{end}}true'
+        msg: 'one of {{._CG_BUF_TPL | join ", "}} is missing — check BUF_TEMPLATE'
       # A generator whose output path is relative to the working directory
       # writes a second, complete copy of the stubs when it is invoked from the
       # wrong one. That copy compiles, nothing imports it, and it rots in place.
@@ -160,7 +163,7 @@ tasks:
       # One buf run per template. A repository that generates a second slice
       # from a different template — a vendored contract, a TypeScript client —
       # lists both here rather than keeping its own copy of this task.
-      - for: { var: _CG_BUF_TPL, split: " " }
+      - for: { var: _CG_BUF_TPL }
         cmd: |-
           set -eu
           {{if ._CG_PLUGINS}}
@@ -233,9 +236,9 @@ tasks:
     # optional — a checkout without it still generates, it just does not
     # normalise, which the drift gate will then report honestly.
     status:
-      - test -z '{{._CG_DIRS}}'
+      - '{{if ._CG_DIRS}}false{{else}}true{{end}}'
     cmds:
       - cmd: |-
           if command -v goimports >/dev/null 2>&1; then
-            goimports {{._CG_GOIMPORTS_FLAGS}} -w {{._CG_DIRS}}
+            goimports {{._CG_GOIMPORTS_FLAGS}} -w {{range $d := ._CG_DIRS}}{{$d | q}} {{end}}
           fi

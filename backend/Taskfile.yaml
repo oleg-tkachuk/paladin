@@ -14,7 +14,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.4.2'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v10.0.0'
   PROJECT_NAME: paladin-core
   IMAGE_NAMESPACE: paladin
   K8S_NAMESPACE: paladin
@@ -61,8 +61,8 @@ includes:
     dir: .
     vars:
       BUF_INPUT: proto
-      BUF_TEMPLATE: proto/buf.gen.yaml
-      GENERATED_DIRS: internal/api/pb
+      BUF_TEMPLATE: ["proto/buf.gen.yaml"]
+      GENERATED_DIRS: ["internal/api/pb"]
       PROTO_FORBID: proto/internal
       # Run sqlc through `go run`, so the version that regenerates is the one
       # go.mod pins rather than whatever is on PATH. The bindings carry their

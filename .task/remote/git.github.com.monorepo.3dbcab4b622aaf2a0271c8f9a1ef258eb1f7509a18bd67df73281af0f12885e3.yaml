@@ -7,9 +7,9 @@ version: "3"
 #     monorepo:
 #       taskfile: '{{printf .TASKLIB "monorepo"}}'
 #       dir: .
-#       vars: { COMPONENTS: "backend frontend workers/api" }
+#       vars: { COMPONENTS: ["backend", "frontend", "workers/api"] }
 #
-# COMPONENTS is a whitespace-separated list of directories, each holding its
+# COMPONENTS is a list of directories, each holding its
 # own Taskfile. The fan-out is sequential and stops at the first failure: a
 # half-shipped registry is worse than a failed command with a name attached to
 # it.
@@ -24,7 +24,7 @@ version: "3"
 # `vars:`. In a repository with more than one component the top level is
 # shared with every other component — see README.md#variable-scoping.
 #
-#   COMPONENTS       whitespace-separated component directories
+#   COMPONENTS       list of component directories
 #   TARGET           required by `each`: the task to run in each of them
 #   REGISTRY         what `registry:check` probes    (default localhost:5000)
 #   GLOBAL_REGISTRY  a monorepo-wide override; wins over REGISTRY
@@ -33,7 +33,10 @@ version: "3"
 silent: true
 
 vars:
-  _MONO_COMPONENTS: '{{.COMPONENTS | default ""}}'
+  # A list, kept one by `ref:` — interpolating it into a template flattens
+  # it to "[a b]", and the entries downstream become "[a" and "b]".
+  _MONO_COMPONENTS:
+    ref: 'default (list) .COMPONENTS'
   _MONO_REG: '{{.GLOBAL_REGISTRY | default .REGISTRY | default "localhost:5000"}}'
   # Status markers. The shape carries the meaning, so a line still reads in
   # a monochrome log; the colour sits on top and drops out under NO_COLOR.
@@ -55,7 +58,7 @@ tasks:
       # task list. A fan-out that lists instead of testing, and says nothing.
       - sh: '[ -n "{{.TARGET}}" ]'
         msg: "TARGET is empty — name the task to run in each component."
-      - sh: '[ -n "{{._MONO_COMPONENTS}}" ]'
+      - sh: '{{if ._MONO_COMPONENTS}}true{{else}}false{{end}}'
         msg: |-
           COMPONENTS is empty — there is nothing to run TARGET in.
           Set it on this module's include (it is read when the include loads,
@@ -76,11 +79,11 @@ tasks:
     vars:
       _MONO_BAD:
         sh: |-
-          for c in {{._MONO_COMPONENTS}}; do
-            if [ ! -d "$c" ]; then printf ' %s(no such directory)' "$c"
-            elif ! ls "$c"/[Tt]askfile.y*ml >/dev/null 2>&1; then printf ' %s(no Taskfile)' "$c"
-            fi
-          done
+          {{range $c := ._MONO_COMPONENTS}}
+          if [ ! -d {{$c | q}} ]; then printf ' %s(no such directory)' {{$c | q}}
+          elif ! ls {{$c | q}}/[Tt]askfile.y*ml >/dev/null 2>&1; then printf ' %s(no Taskfile)' {{$c | q}}
+          fi
+          {{end}}
     cmds:
       - for: { var: _MONO_COMPONENTS }
         task: _run

@@ -7,14 +7,14 @@ version: "3"
 #     pnpm:
 #       taskfile: '{{printf .TASKLIB "pnpm"}}'
 #       dir: .
-#       vars: { PNPM_APPS: "frontend/admin-app frontend/clinic-app" }
+#       vars: { PNPM_APPS: ["frontend/admin-app", "frontend/clinic-app"] }
 #
 # ── Inputs ───────────────────────────────────────────────────────────────────
 # Pass these at the include's own `vars:`, not the consumer's top-level
 # `vars:`. In a repository with more than one component the top level is
 # shared with every other component — see README.md#variable-scoping.
 #
-#   PNPM_APPS    whitespace-separated app directories, each with a package.json
+#   PNPM_APPS    list of app directories, each with a package.json
 #                carrying a "packageManager": "pnpm@..." pin
 #   PNPM_PIN_FILES
 #                whitespace-separated files that write the same version a second
@@ -68,8 +68,18 @@ version: "3"
 silent: true
 
 vars:
-  _PNPM_APPS: '{{.PNPM_APPS | default "."}}'
-  _PNPM_PIN_FILES: '{{.PNPM_PIN_FILES | default ""}}'
+  # Lists, kept lists by `ref:`. Interpolated into a template they flatten to
+  # "[a b]", which every loop below then splits into "[a" and "b]".
+  #
+  # The loops stay shell: their bodies accumulate state and `continue` past a
+  # bad entry, and unrolling that into a template would turn control flow into
+  # generated straight-line code. What moves into the template is the word
+  # list they iterate — quoted per element, so a path with a space in it
+  # survives, which the old whitespace-separated string could never express.
+  _PNPM_APPS:
+    ref: 'default (list ".") .PNPM_APPS'
+  _PNPM_PIN_FILES:
+    ref: 'default (list) .PNPM_PIN_FILES'
   # Both spellings of a literal pin, applied to every occurrence in a line.
   # `pnpm@${PNPM_VERSION}` is deliberately not matched: it is derived from the
   # ARG this already rewrites, so touching it would be touching the same pin
@@ -129,7 +139,7 @@ tasks:
             printf '%s\n' "{{._PNPM_ERR}} pnpm · $found is first on PATH and is not corepack's shim — remove it, or put the shim ahead of it" >&2
             rc=1
           fi
-          for a in {{._PNPM_APPS}}; do
+          for a in {{range $x := ._PNPM_APPS}}{{$x | q}} {{end}}; do
             pm=$(cd "$a" && node -p "require('./package.json').packageManager || ''" 2>/dev/null)
             case "$pm" in
               pnpm@*) ;;
@@ -144,7 +154,7 @@ tasks:
               rc=1
             fi
           done
-          for f in {{._PNPM_PIN_FILES}}; do
+          for f in {{range $x := ._PNPM_PIN_FILES}}{{$x | q}} {{end}}; do
             if [ ! -f "$f" ]; then
               printf '%s\n' "{{._PNPM_ERR}} pnpm · $f does not exist" >&2; rc=1; continue
             fi
@@ -171,7 +181,7 @@ tasks:
       - cmd: |-
           set -u
           pins=""
-          for a in {{._PNPM_APPS}}; do
+          for a in {{range $x := ._PNPM_APPS}}{{$x | q}} {{end}}; do
             pm=$(cd "$a" && node -p "require('./package.json').packageManager || ''" 2>/dev/null)
             case "$pm" in
               pnpm@*) ;;
@@ -179,7 +189,7 @@ tasks:
             esac
             v=${pm#pnpm@}; pins="$pins ${v%%+*}"
           done
-          for f in {{._PNPM_PIN_FILES}}; do
+          for f in {{range $x := ._PNPM_PIN_FILES}}{{$x | q}} {{end}}; do
             found=$(awk {{._PNPM_READ_PINS | q}} "$f" 2>/dev/null | sort -u)
             case "$found" in
               "") printf '%s\n' "{{._PNPM_ERR}} pnpm · $f writes no pnpm version this recognises" >&2; exit 1 ;;
@@ -204,7 +214,7 @@ tasks:
             printf '%s\n' "{{._PNPM_OK}} pnpm · already pinned at $current everywhere"
           else
             printf '%s\n' "{{._PNPM_RUN}} pnpm · $current → $target"
-            for a in {{._PNPM_APPS}}; do
+            for a in {{range $x := ._PNPM_APPS}}{{$x | q}} {{end}}; do
               # pnpm_, not npm_: pnpm 11 and later ignore npm_config_*.
               ( cd "$a" && pnpm_config_ignore_scripts=true corepack use "pnpm@$target" ) || {
                 printf '%s\n' "{{._PNPM_ERR}} pnpm · $a: corepack use pnpm@$target failed — the other apps may already be bumped" >&2
@@ -213,7 +223,7 @@ tasks:
             done
             # After the apps, so a corepack failure leaves both pins on the old
             # version rather than the image build ahead of the lockfile.
-            for f in {{._PNPM_PIN_FILES}}; do
+            for f in {{range $x := ._PNPM_PIN_FILES}}{{$x | q}} {{end}}; do
               tmp="$f.pnpm-pin.$$"
               awk -v t="$target" '
                 {
@@ -238,7 +248,7 @@ tasks:
             done
             # Last, once every pin agrees: a script that fails here leaves a
             # consistent bump behind and only the scripts still to run.
-            for a in {{._PNPM_APPS}}; do
+            for a in {{range $x := ._PNPM_APPS}}{{$x | q}} {{end}}; do
               ( cd "$a" && pnpm install --force ) || {
                 printf '%s\n' "{{._PNPM_ERR}} pnpm · $a: every pin is at $target, but its install scripts failed — fix them, then \`pnpm install --force\` there" >&2
                 exit 1

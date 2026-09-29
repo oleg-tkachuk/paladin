@@ -7,7 +7,7 @@ version: "3"
 #     security:
 #       taskfile: '{{printf .TASKLIB "security"}}'
 #       dir: .
-#       vars: { GO_MODULES: "backend/api backend/worker" }
+#       vars: { GO_MODULES: ["backend/api", "backend/worker"] }
 #
 # Each tool is optional in the sense that a missing binary produces an install
 # hint rather than a stack trace, but present-and-failing is always fatal: a
@@ -18,8 +18,8 @@ version: "3"
 # `vars:`. In a repository with more than one component the top level is
 # shared with every other component — see README.md#variable-scoping.
 #
-#   GO_MODULES   whitespace-separated module directories for the Go scans
-#   DOCKERFILES  Dockerfiles to lint                       (default: discovered)
+#   GO_MODULES   list of module directories for the Go scans (default ["."])
+#   DOCKERFILES  list of Dockerfiles to lint               (default: discovered)
 #   SCAN_EXCLUDE find(1) predicates discovery skips — vendored and throwaway trees
 #   BASE         branch the new-findings and breaking gates compare against
 #   GOSEC_FLAGS        extra gosec flags
@@ -46,7 +46,13 @@ silent: true
 vars:
   # Whitespace-separated module directories for the Go scans. Unset means the
   # repo root is the only module.
-  _SEC_MODULES: '{{.GO_MODULES | default "."}}'
+  # A list, and `ref:` is what keeps it one: interpolated into a template it
+  # flattens to "[a b]", and every consumer of it below then splits that on
+  # spaces into "[a" and "b]". Neither holds a go.mod, so the scans reported
+  # every module skipped and exited 0 — a vulnerability scan of nothing, in
+  # the green.
+  _SEC_MODULES:
+    ref: 'default (list ".") .GO_MODULES'
   # Branch the breaking-change and new-issue gates compare against.
   _SEC_BASE: '{{.BASE | default "main"}}'
   _SEC_GOSEC_FLAGS: '{{.GOSEC_FLAGS | default ""}}'
@@ -79,7 +85,8 @@ vars:
   # back empty.
   _SEC_PRUNE: >-
     {{.SCAN_EXCLUDE | default "-not -path \"*/node_modules/*\" -not -path \"*/.git/*\" -not -path \"*/.venv/*\" -not -path \"*/.claude/*\" -not -path \"*/vendor/*\" -not -path \"*/3rd-party-repos/*\" -not -path \"*/dist/*\" -not -path \"*/.terraform/*\""}}
-  _SEC_DOCKERFILES: '{{.DOCKERFILES | default ""}}'
+  _SEC_DOCKERFILES:
+    ref: 'default (list) .DOCKERFILES'
   # error-level only by default. Across this workspace hadolint's out-of-the-box
   # threshold flags 113 findings in 48 Dockerfiles — 3 errors and 110 warnings
   # and notes. A gate that is red everywhere on the day it lands is one people
@@ -128,7 +135,7 @@ tasks:
   vuln:
     desc: "govulncheck across every Go module — vulnerabilities the code actually reaches"
     preconditions:
-      - sh: 'has=0; for d in {{._SEC_MODULES}}; do if [ -f "$d/go.mod" ]; then has=1; fi; done; [ "$has" = 0 ] || command -v govulncheck >/dev/null'
+      - sh: 'has=0; {{range $d := ._SEC_MODULES}}[ -f {{$d | q}}/go.mod ] && has=1; {{end}}[ "$has" = 0 ] || command -v govulncheck >/dev/null'
         msg: "govulncheck is not installed — go install golang.org/x/vuln/cmd/govulncheck@latest"
     cmds:
       - for: { var: _SEC_MODULES }
@@ -141,7 +148,7 @@ tasks:
     # permanently red gate that everyone learns to ignore. New-since-base is a
     # gate that can actually stay green. Full audit: golangci-lint run ./...
     preconditions:
-      - sh: 'has=0; for d in {{._SEC_MODULES}}; do if [ -f "$d/go.mod" ]; then has=1; fi; done; [ "$has" = 0 ] || command -v golangci-lint >/dev/null'
+      - sh: 'has=0; {{range $d := ._SEC_MODULES}}[ -f {{$d | q}}/go.mod ] && has=1; {{end}}[ "$has" = 0 ] || command -v golangci-lint >/dev/null'
         msg: "golangci-lint is not installed — https://golangci-lint.run/docs/welcome/install/"
     cmds:
       - for: { var: _SEC_MODULES }
@@ -211,14 +218,18 @@ tasks:
   dockerfile:
     desc: "hadolint over the Dockerfiles this repository ships"
     vars:
+      # The branch is in the TEMPLATE, so the shell is left with the one job
+      # it is here for. It was a shell `[ -n "…" ]` on the input, which an
+      # empty LIST would have passed — `[]` is two characters, and the
+      # discovery below would never have run.
       _SEC_DF_LIST:
         sh: |-
-          if [ -n "{{._SEC_DOCKERFILES}}" ]; then
-            printf '%s' "{{._SEC_DOCKERFILES}}"
-          else
-            find . -name "Dockerfile*" -not -name "*.dockerignore" \
-              {{._SEC_PRUNE}} 2>/dev/null | sort | tr "\n" " "
-          fi
+          {{- if ._SEC_DOCKERFILES -}}
+          printf '%s' {{._SEC_DOCKERFILES | join " " | q}}
+          {{- else -}}
+          find . -name "Dockerfile*" -not -name "*.dockerignore" \
+            {{._SEC_PRUNE}} 2>/dev/null | sort | tr "\n" " "
+          {{- end -}}
     cmds:
       # A scan that found nothing and a scan that ran on nothing print the same
       # thing otherwise — which is the whole of its output, since every line
@@ -242,7 +253,7 @@ tasks:
   gosec:
     desc: "gosec — insecure patterns the compiler is happy with"
     preconditions:
-      - sh: 'has=0; for d in {{._SEC_MODULES}}; do if [ -f "$d/go.mod" ]; then has=1; fi; done; [ "$has" = 0 ] || command -v gosec >/dev/null'
+      - sh: 'has=0; {{range $d := ._SEC_MODULES}}[ -f {{$d | q}}/go.mod ] && has=1; {{end}}[ "$has" = 0 ] || command -v gosec >/dev/null'
         msg: "gosec is not installed — go install github.com/securego/gosec/v2/cmd/gosec@latest"
     cmds:
       - for: { var: _SEC_MODULES }

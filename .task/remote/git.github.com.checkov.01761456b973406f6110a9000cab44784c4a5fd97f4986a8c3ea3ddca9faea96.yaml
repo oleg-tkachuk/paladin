@@ -22,9 +22,11 @@ version: "3"
 #   CHECKOV_CONFIG      default .checkov.yaml
 #   CHECKOV_BASELINE    default .checkov.baseline; required to exist only
 #                       when CHECKOV_CONFIG names a baseline
-#   CHECKOV_FRAMEWORKS  frameworks the triage view walks
-#                       (default: github_actions dockerfile helm kubernetes)
-#   CHECKOV_TARGET      directory the triage view walks        (default .)
+#   CHECKOV_FRAMEWORKS  list of frameworks the triage view walks
+#                       (default: ["github_actions", "dockerfile", "helm",
+#                       "kubernetes"])
+#   CHECKOV_TARGET      list of directories the triage view walks
+#                       (default ["."])
 #   CHECKOV_FLAGS       extra checkov flags, appended to every invocation
 #   CHECKOV_VERSION     the version to run, whatever is installed
 #   CHECKOV_VERSION_CMD a command printing one, when it already lives
@@ -36,8 +38,13 @@ silent: true
 vars:
   _CKV_CFG: '{{.CHECKOV_CONFIG | default ".checkov.yaml"}}'
   _CKV_BASE: '{{.CHECKOV_BASELINE | default ".checkov.baseline"}}'
-  _CKV_FW: '{{.CHECKOV_FRAMEWORKS | default "github_actions dockerfile helm kubernetes"}}'
-  _CKV_TARGET: '{{.CHECKOV_TARGET | default "."}}'
+  _CKV_FW:
+    ref: 'default (list "github_actions" "dockerfile" "helm" "kubernetes") .CHECKOV_FRAMEWORKS'
+  # A real list, not a string this module splits. `ref:` is what keeps it one
+  # — interpolating it into a template flattens it to "[a b]", which is then
+  # a directory name with a bracket in it.
+  _CKV_TARGET:
+    ref: 'default (list ".") .CHECKOV_TARGET'
   _CKV_FLAGS: '{{.CHECKOV_FLAGS | default ""}}'
   # Status markers. The shape carries the meaning, so a line still reads in
   # a monochrome log; the colour sits on top and drops out under NO_COLOR.
@@ -133,10 +140,29 @@ tasks:
       # One block, so the resolution above and the run it defines are the same
       # shell. `set -e` because a merged block would otherwise print the OK
       # line after a failing scan.
+      #
+      # The output is captured rather than streamed, because a zero exit is not
+      # enough to believe here. checkov reports a directory it cannot open as
+      # "Directory X does not exist; skipping it" on stderr AND THEN EXITS 0 —
+      # so this task printed "no findings outside the baseline" over a scan of
+      # no files at all. The directory comes from the config's own `directory:`
+      # key, which nothing else validates, so the marker checkov prints is the
+      # honest detector; a precondition here would have to parse that YAML.
+      #
+      # A gate that cannot fail is worse than no gate: the first one is trusted.
       - cmd: |
           set -eu
           {{._CKV_RESOLVE}}
-          run_checkov --config-file {{._CKV_CFG | q}} {{._CKV_FLAGS}}
+          out="$(mktemp)"
+          trap 'rm -f "$out"' EXIT
+          status=0
+          run_checkov --config-file {{._CKV_CFG | q}} {{._CKV_FLAGS}} >"$out" 2>&1 || status=$?
+          cat "$out"
+          [ "$status" -eq 0 ] || exit "$status"
+          if grep -q 'does not exist; skipping it' "$out"; then
+            printf '%s\n' "{{._CKV_ERR}} checkov · a directory in {{._CKV_CFG}} does not exist, so part of the tree went unscanned — the line above names it" >&2
+            exit 1
+          fi
           printf '%s\n' "{{._CKV_OK}} checkov · no findings outside the baseline"
 
   # Named for what it is, and it used to be called `all`.
@@ -156,14 +182,29 @@ tasks:
       # Either is enough — see _CKV_RESOLVE.
       - sh: command -v checkov >/dev/null || command -v pipx >/dev/null
         msg: "neither checkov nor pipx is installed — https://www.checkov.io/2.Basics/Installing%20Checkov.html"
+      # checkov reports a directory it cannot open on stderr — "Directory X
+      # does not exist; skipping it" — and then exits 0. A wrong target is
+      # therefore a scan of NOTHING wearing a green exit code, which is the
+      # one result a triage view must never produce: an empty finding list
+      # reads as a clean tree.
+      #
+      # A string gets no message of its own here. One was tried: Task renders
+      # a task's cmds before it evaluates any precondition, so the `range` in
+      # the command below raises "range can't iterate over ." first and a
+      # guard above it can never speak. It said "must be a list" and could
+      # not fire — a dead precondition reads like a live one, so it is gone
+      # and Go's error stands.
+      - sh: '{{range $d := ._CKV_TARGET}}test -d {{$d | q}} && {{end}}true'
+        msg: 'CHECKOV_TARGET names a directory that does not exist ({{._CKV_TARGET | join ", "}}) — checkov would skip it and still exit 0'
     # Deliberately ignores the baseline and the config: this is the view for
     # deciding what to fix next, not a pass/fail check.
     cmds:
       - cmd: |
           set -eu
           {{._CKV_RESOLVE}}
-          run_checkov -d {{._CKV_TARGET | q}} --compact {{._CKV_FLAGS}} \
-            {{range $f := splitList " " ._CKV_FW}}--framework {{$f}} {{end}}
+          run_checkov --compact {{._CKV_FLAGS}} \
+            {{range $d := ._CKV_TARGET}}-d {{$d | q}} {{end}}\
+            {{range $f := ._CKV_FW}}--framework {{$f}} {{end}}
 
   baseline:
     desc: "Regenerate the checkov baseline — only after deliberately fixing findings"

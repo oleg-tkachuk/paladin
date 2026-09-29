@@ -43,7 +43,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.4.2'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v10.0.0'
   # Status markers. The shape carries the meaning, so a line still reads in a
   # monochrome log; the colour drops out under NO_COLOR. The shared library
   # prints the same vocabulary — two of them in one terminal session is what
@@ -78,7 +78,7 @@ includes:
     dir: .
     flatten: true
     excludes: ["test", "lint", "build"]
-    vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+    vars: { COMPONENTS: ["backend", "frontend"], GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
 
   # ─── cluster and local stack ───────────────────────────────────────────────
   # The integrated compose stack. backend's compose file is the single source

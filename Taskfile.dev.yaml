@@ -33,7 +33,7 @@ vars:
   # cannot hand a var upward. Held to the same version as Taskfile.yaml by
   # hand; a half-applied bump fails one entry point with a message about trust
   # rather than about the version.
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v7.4.2'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v10.0.0'
   # Status marker, the same vocabulary as Taskfile.yaml and as the shared
   # library. Redefined rather than inherited, and forgetting is silent: Task
   # renders an undefined variable as the empty string, so a missing glyph
@@ -62,7 +62,7 @@ includes:
     dir: .
     flatten: true
     excludes: ["deploy", "registry:check"]
-    vars: { COMPONENTS: "backend frontend", GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+    vars: { COMPONENTS: ["backend", "frontend"], GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
 
   # ─── repo-wide tooling ─────────────────────────────────────────────────────
   # Not wired into this repo's own aggregates on purpose: the tasks are here to
@@ -76,8 +76,8 @@ includes:
     # the first one. Both sat a release behind for months because nothing
     # updated either.
     vars:
-      PNPM_APPS: frontend
-      PNPM_PIN_FILES: frontend/deploy/Dockerfile
+      PNPM_APPS: ["frontend"]
+      PNPM_PIN_FILES: ["frontend/deploy/Dockerfile"]
   sec:
     taskfile: '{{printf .TASKLIB "security"}}'
     dir: .
@@ -89,8 +89,7 @@ includes:
       # credentials. Excluding it drops 141 of 188 findings, all of them noise,
       # and leaves the ones in code somebody wrote.
       GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
-      GO_MODULES: >-
-        capability backend
+      GO_MODULES: ["capability", "backend"]
   # Policy scanning over the YAML a cluster applies — the charts, the
   # Dockerfiles and these workflows. Separate from `sec:` because it asks a
   # different question of a different tree: `sec:` scans the Go modules and
@@ -104,12 +103,12 @@ includes:
       # "does not exist; skipping it" on stderr — and then exits 0, having
       # scanned nothing. Whole-repo with exclusions instead; the excluded
       # trees are vendored or generated and no cluster ever sees them.
-      CHECKOV_TARGET: .
+      CHECKOV_TARGET: ["."]
       CHECKOV_FLAGS: >-
         --skip-path node_modules --skip-path .task
         --skip-path frontend/.next --skip-path backend/internal/api/pb
         --skip-path frontend/src/gen
-      CHECKOV_FRAMEWORKS: helm kubernetes dockerfile github_actions
+      CHECKOV_FRAMEWORKS: ["helm", "kubernetes", "dockerfile", "github_actions"]
       # Pinned, and run through `pipx run` rather than installed: the rules a
       # scan asserts against change between releases, so an unpinned checkov
       # makes a local run and the pipeline's disagree — a red nobody else can
