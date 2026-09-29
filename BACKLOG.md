@@ -448,6 +448,44 @@ open deliberately — each notes why._
 
 ## Dependencies
 
+### Take grpc to the stable release carrying the GO-2026-6443 fix
+
+- **Status:** Open — waiting on upstream. There is nothing to bump to yet.
+- **Reason:** `govulncheck` reports GO-2026-6443 against
+`google.golang.org/grpc@v1.84.0`, which is the latest STABLE release
+(2026-09-17). The advisory names the fix as
+`v1.85.0-dev.0.20260825072537-93e31b48545e`, and the proxy lists only
+`v1.85.0-dev` and `v1.86.0-dev` above ours — both pre-releases, which this
+project does not adopt.
+`sec:vuln` is green today and honestly so: our code does not reach the
+vulnerable path, so the finding sits in "packages you import" rather than
+"your code is affected". That is the whole of the protection — it holds
+because of what we do not call, not because of what we do not depend on, and
+a future change that reaches that path turns the gate red with no dependency
+having moved.
+- **Definition of Done:** `google.golang.org/grpc` at the first stable release
+that carries the fix, `task -t Taskfile.dev.yaml sec:vuln` still green, and
+this entry deleted.
+- **Blockers:** upstream has not cut a stable v1.85.0. `task -t
+Taskfile.dev.yaml deps:update` will not pick a pre-release, so this does not
+resolve itself on the next dependency bump — it needs someone to notice the
+release.
+
+### `golang.org/x/crypto` GO-2026-5932 has no fix upstream
+
+- **Status:** Open, and not actionable — recorded so it is not re-discovered.
+- **Reason:** `govulncheck` reports GO-2026-5932 against
+`golang.org/x/crypto@v0.57.0` with **Fixed in: N/A**. Unlike the grpc one
+above, no release resolves this: bumping the dependency cannot help until
+upstream ships something.
+Unreachable from our code today, so `sec:vuln` stays green.
+- **Definition of Done:** upstream publishes a fixed version, we take it, and
+this entry goes. If the advisory is instead withdrawn or re-scored, delete it
+with a note in the commit saying which.
+- **Blockers:** upstream. Worth re-checking whenever `sec:vuln` output is read
+rather than on a schedule — the first sign of it mattering would be the
+finding moving from "packages you import" to "your code is affected".
+
 ## Performance / Scale
 
 ### Per-table autovacuum tuning
