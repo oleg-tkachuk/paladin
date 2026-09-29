@@ -56,11 +56,24 @@ def render(chart: Path) -> list[dict]:
 
 
 def component(doc: dict) -> str | None:
-    """The role a document is about. NetworkPolicy selects pods through
-    `podSelector`, a Deployment through `selector` — the label is the same."""
+    """The role a document is about.
+
+    A NetworkPolicy names it in `podSelector` and a Deployment in `selector`.
+    A Job names it in NEITHER: Kubernetes generates a Job's selector from a
+    controller UID, so reading `selector` alone returned None for both Jobs
+    this chart ships and dropped them out of every comparison below.
+
+    The pod template is the honest source in all three cases, because pod
+    labels are what a NetworkPolicy actually matches against."""
     spec = doc.get("spec") or {}
-    sel = (spec.get("podSelector") or spec.get("selector") or {}).get("matchLabels") or {}
-    return sel.get("app.kubernetes.io/component")
+    for labels in (
+        (spec.get("podSelector") or {}).get("matchLabels"),
+        (spec.get("selector") or {}).get("matchLabels"),
+        ((spec.get("template") or {}).get("metadata") or {}).get("labels"),
+    ):
+        if labels and "app.kubernetes.io/component" in labels:
+            return labels["app.kubernetes.io/component"]
+    return None
 
 
 def egress_has_dns(doc: dict) -> bool:
@@ -79,13 +92,20 @@ def main() -> int:
     docs = render(root / "backend/deploy/chart")
 
     policies = [d for d in docs if d.get("kind") == "NetworkPolicy"]
-    deployed = {component(d) for d in docs if d.get("kind") == "Deployment"} - {None}
+    # Jobs as well as Deployments, and the omission was not theoretical: the
+    # baseline selects on the chart's name+instance labels, which the migrate
+    # and bootstrap Job pods carry, while the per-role policies select on
+    # `component` — which for them is `migrate` / `bootstrap` and matched none.
+    # Both Jobs sat under default-deny with no allow of their own, and this
+    # check, written to catch exactly that, compared only half the workloads.
+    deployed = {component(d) for d in docs
+                if d.get("kind") in ("Deployment", "Job")} - {None}
     problems: list[str] = []
 
     if not policies:
         problems.append("no NetworkPolicy rendered at all, with networkPolicies.enabled=true")
     if not deployed:
-        problems.append("no Deployment rendered — the role comparison below checks nothing")
+        problems.append("no Deployment or Job rendered — the role comparison below checks nothing")
 
     baseline = [p for p in policies if p["metadata"]["name"].endswith("-default-deny")]
     if len(baseline) != 1:
@@ -101,7 +121,7 @@ def main() -> int:
     covered = {component(p) for p in policies} - {None}
     for role in sorted(deployed - covered):
         problems.append(
-            f"role {role!r} has a Deployment but no NetworkPolicy — the baseline denies "
+            f"role {role!r} has a workload but no NetworkPolicy — the baseline denies "
             f"both directions, so this pod would have no DNS, no database and no ingress"
         )
     for role in sorted(covered - deployed):
