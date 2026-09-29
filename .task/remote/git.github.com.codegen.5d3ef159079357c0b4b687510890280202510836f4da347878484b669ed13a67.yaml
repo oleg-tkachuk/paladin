@@ -32,6 +32,8 @@ version: "3"
 #   GENERATED_DIRS    directories to normalise with goimports after generating
 #   SQLC_MODULE       run sqlc through `go run <module>` instead of from PATH
 #   MOCKS_PATHSPEC    git pathspec the mock gate watches   (default internal)
+#   PROTO_PATHSPEC    git pathspec the proto gate watches, when the `out:`
+#                     paths in the templates are not the right answer
 #   SQLC_DIR          directory the sqlc gate watches
 #
 # Order is fixed, not configurable: mocks first, so they are written against
@@ -89,6 +91,7 @@ vars:
   _CG_SQLC_MOD: '{{.SQLC_MODULE | default ""}}'
   _CG_MOCK_SPEC: '{{.MOCKS_PATHSPEC | default "internal"}}'
   _CG_SQLC_DIR: '{{.SQLC_DIR | default ""}}'
+  _CG_PROTO_SPEC: '{{.PROTO_PATHSPEC | default ""}}'
   _CG_GEN_CMD: '{{.GENERATE_CMD | default "go generate ./..."}}'
   _CG_BUF_FLAGS: '{{.BUF_FLAGS | default ""}}'
   _CG_SQLC_FLAGS: '{{.SQLC_FLAGS | default ""}}'
@@ -98,6 +101,7 @@ vars:
   _CG_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
   _CG_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
   _CG_ERR: '{{if .NO_COLOR}}✖{{else}}{{"\x1b[31m✖\x1b[0m"}}{{end}}'
+  _CG_SKIP: '{{if .NO_COLOR}}○{{else}}{{"\x1b[90m○\x1b[0m"}}{{end}}'
 
 env:
   GOWORK: '{{.GOWORK | default "off"}}'
@@ -197,6 +201,7 @@ tasks:
     desc: "Fail when any committed generated output is stale"
     cmds:
       - task: mocks:check
+      - task: proto:check
       - task: sqlc:check
 
   mocks:check:
@@ -229,6 +234,75 @@ tasks:
           fi
           printf '%s\n' "{{._CG_OK}} {{._CG_NAME}} · gen · sqlc bindings match their queries"
 
+
+  proto:check:
+    desc: "Fail when the committed protobuf stubs are stale"
+    vars:
+      # Which directories to watch is not an input: it is what the templates
+      # already declare as `out:`. Derived, the gate moves with the generator —
+      # a template that gains a plugin or relocates its output cannot leave this
+      # watching the old path and calling the tree clean. PROTO_PATHSPEC
+      # overrides it for a layout the templates do not express.
+      _CG_PROTO_OUT:
+        sh: |-
+          if [ -n '{{._CG_PROTO_SPEC}}' ]; then printf '%s' '{{._CG_PROTO_SPEC}}'; exit 0; fi
+          awk 'BEGIN { q = "\047" }
+               /^[ \t]*out:[ \t]*/ {
+                 v = $0
+                 sub(/^[ \t]*out:[ \t]*/, "", v)
+                 sub(/[ \t]*#.*$/, "", v)
+                 sub(/[ \t]+$/, "", v)
+                 if (v == "") { next }
+                 if (index(v, "\"") == 1 || index(v, q) == 1) { v = substr(v, 2, length(v) - 2) }
+                 if (v != "") { print v }
+               }' {{range $f := ._CG_BUF_TPL}}{{$f | q}} {{end}} 2>/dev/null | sort -u | tr '\n' ' '
+    cmds:
+      - task: proto
+      - cmd: |-
+          set -eu
+          # Nothing parsed means the templates are a shape this does not
+          # understand. A gate that cannot name what it watches must refuse:
+          # passing here would report a clean tree it never looked at.
+          if [ -z "{{._CG_PROTO_OUT}}" ]; then
+            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · no out: path in {{._CG_BUF_TPL | join ", "}} — set PROTO_PATHSPEC" >&2
+            exit 1
+          fi
+          watched=''
+          for d in {{._CG_PROTO_OUT}}; do
+            # `out: .` is a real template shape, not a mistake: a plugin that
+            # carries the subdirectory in `module=` writes from the component
+            # root. Watching the root would call every unrelated change a stale
+            # stub, and a gate that cries wolf is one nobody reads — so it asks
+            # to be told which directory holds the output.
+            case "$d" in
+              . | ./)
+                printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · {{._CG_BUF_TPL | join ", "}} writes to the component root — set PROTO_PATHSPEC to the directory that holds the stubs" >&2
+                exit 1
+                ;;
+            esac
+            # A target with nothing committed under it cannot show drift —
+            # generated output that is gitignored, or a directory nobody has
+            # committed yet. Said out loud rather than counted as clean.
+            if [ -z "$(git ls-files -- "$d")" ]; then
+              printf '%s\n' "{{._CG_SKIP}} {{._CG_NAME}} · gen · $d holds no tracked file — not checked"
+            else
+              watched="$watched $d"
+            fi
+          done
+          if [ -z "$watched" ]; then
+            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · every stub directory is untracked — this gate checks nothing" >&2
+            exit 1
+          fi
+          # `git status`, not `git diff`: a new message or service produces a NEW
+          # file, and an uncommitted new stub is drift a diff-only check calls
+          # clean. Additions inside a gitignored target stay invisible either
+          # way, which is what the skip line above is for.
+          if [ -n "$(git status --porcelain -- $watched)" ]; then
+            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · protobuf stubs are stale — run the generator and commit:" >&2
+            git status --porcelain -- $watched >&2
+            exit 1
+          fi
+          printf '%s\n' "{{._CG_OK}} {{._CG_NAME}} · gen · protobuf stubs match their sources"
   _normalise:
     internal: true
     # Optional: a component that generates nothing needing import rewriting
