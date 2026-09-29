@@ -263,4 +263,55 @@ spec:
         - { protocol: TCP, port: 8085 }
         - { protocol: TCP, port: 8090 }
 {{- end }}
+{{/*
+  The migrate / bootstrap Jobs.
+
+  They are NOT optional here, and leaving them out is not a smaller policy set
+  — it is a broken upgrade. The default-deny above selects on the chart's own
+  name+instance labels, which the Job pods carry; the per-role policies select
+  on `app.kubernetes.io/component`, which for them is `migrate` / `bootstrap`
+  and matches none of the six above. So both Jobs land under default-deny with
+  no allow of their own.
+
+  The failure that produces is the worst-shaped kind. The Jobs are
+  pre-install/pre-upgrade hooks and these policies are not, so on a FIRST
+  install no policy exists yet and the Jobs run unrestricted. On every upgrade
+  after it the previous release's default-deny is already in the cluster, the
+  migrate hook runs under it, cannot reach Postgres, and the release fails —
+  having worked exactly once.
+
+  Hence the hook annotations: weight -10 puts these beside the ServiceAccounts
+  and ahead of migrate (0) and bootstrap (10), so the allow exists before the
+  pod that needs it. `before-hook-creation` matches what 0c511f8b set across
+  the SAs, the RBAC and both Jobs.
+
+  Egress only — nothing connects TO a Job — and `$common` is the whole of it:
+  DNS, the Kubernetes API the secret resolver reads at boot, Postgres, and the
+  OTLP collector.
+*/}}
+{{- range $jobName, $jobSpec := .Values.jobs }}
+{{- if $jobSpec.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" $ }}-{{ $jobName }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "argocd.argoproj.io/sync-wave": "-10"
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $jobName) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" $ "role" $jobName) | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    {{- range $r := $common }}
+    - {{ $r | toJson }}
+    {{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
