@@ -34,26 +34,37 @@ the same commit. Treat this file like a runtime invariant.
 
 ### NetworkPolicies ship disabled in every environment
 
-- **Status:** Open — the policies exist and are correct; nothing turns them on.
-- **Reason:** `templates/networkpolicy.yaml` carries a full per-role default-deny
-set with a documented flow matrix (api / admin / worker / dispatcher / ingest /
-mcp), gated on `networkPolicies.enabled`. That flag is `false` in
-`values.yaml` and is overridden by no overlay — not dev, not staging, not
-prod. Confirmed by rendering: `values-prod.yaml` produces **zero**
-NetworkPolicy resources. `git log -S networkPolicies` shows one commit,
-the one that introduced them, so this was never enabled and then rolled
-back — it was never enabled. checkov reports it as CKV2_K8S_6 against all
-eight pods; the skip in `.checkov.yaml` points here.
+- **Status:** Open — but the reason narrowed. The chart's own gap is fixed;
+what remains is the decision to turn them on.
+- **Reason:** `templates/networkpolicy.yaml` carries a per-role default-deny
+set with a documented flow matrix, gated on `networkPolicies.enabled`. That
+flag is `false` in `values.yaml` and no overlay turns it on — `values-prod.yaml`
+renders **zero** NetworkPolicy resources. `git log -S networkPolicies` shows
+one commit, the one that introduced them: never enabled and rolled back, just
+never enabled.
+- **What was found and fixed (2026-09-29):** enabling them as they shipped
+would have broken every upgrade. The baseline selects on the chart's
+name+instance labels, which the migrate and bootstrap Job pods carry; the
+per-role policies select on `component`, which for them is `migrate` /
+`bootstrap` and matched none. Both Jobs sat under default-deny with no allow.
+Because the policies land in the main sync phase and the Jobs are
+pre-install/pre-upgrade hooks, a FIRST install would have worked — no policy
+exists yet — and every upgrade after it would have failed at the migrate hook,
+unable to reach Postgres. The Jobs now get an egress policy in the hook phase
+at weight -10. `scripts/chart-netpol.py` compared only Deployments, which is
+why the gate written to catch exactly this did not; it reads pod-template
+labels now and covers Jobs.
 - **Definition of Done:** `networkPolicies.enabled: true` in at least the prod
-overlay, with `helm template -f values-prod.yaml` rendering a policy for every
-role, and the CKV2_K8S_6 skip deleted from `.checkov.yaml`.
-- **Blockers:** needs an operator, not a chart edit. Two unknowns: whether the
-target cluster's CNI enforces NetworkPolicy at all (against one that does not,
-enabling this changes nothing and proves nothing), and whether the flow matrix
-is complete for the live topology — against a CNI that does enforce, a flow the
-matrix missed drops production traffic with no error anywhere but the client.
-Rolling it out per-namespace with the dispatcher's open egress verified first is
-the cheap order.
+overlay, every workload rendering a policy, and the `CKV2_K8S_6` skip deleted
+from `.checkov.yaml`.
+- **Blockers:** an operator, and one fact this repository cannot supply. The
+local OrbStack cluster enforces **ingress only** — a `deny-all-egress` policy
+there changes nothing, verified directly — so the egress half of the matrix
+cannot be exercised here at all, and the Job fix above is proven by render and
+by the gate rather than by traffic. Whether the target cluster's CNI enforces
+egress, and whether the matrix is complete for the live topology, are answers
+only that cluster has. Enabling per-namespace with the dispatcher's open
+egress verified first is still the cheap order.
 
 ### Push renamed charts/images before syncing the renamed ApplicationSet
 
