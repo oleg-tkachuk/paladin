@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
 
 const h = vi.hoisted(() => ({ createUser: vi.fn() }));
 vi.mock("@/hooks/useUserAdmin", () => ({
@@ -10,16 +11,32 @@ import { OWN_TENANT_LABEL, UserCreateDialog } from "./UserCreateDialog";
 
 const TENANTS = [{ tenantId: "t-2", slug: "acme", displayName: "Acme" }];
 
+function show() {
+  render(
+    <UserCreateDialog
+      isOpen
+      onClose={vi.fn()}
+      onCreated={vi.fn()}
+      tenants={TENANTS}
+    />,
+  );
+}
+
 function fill() {
-  fireEvent.change(screen.getByLabelText("Subject"), {
+  fireEvent.change(screen.getByLabelText(/Subject/), {
     target: { value: "alice" },
   });
-  fireEvent.change(screen.getByLabelText("Initial password"), {
+  fireEvent.change(screen.getByLabelText(/Initial password/), {
     target: { value: "a-long-enough-password" },
   });
 }
 
-describe("UserCreateDialog tenant", () => {
+const submitForm = () =>
+  fireEvent.submit(
+    screen.getByRole("button", { name: "Create user" }).closest("form")!,
+  );
+
+describe("UserCreateDialog", () => {
   beforeEach(() => {
     h.createUser.mockReset();
     h.createUser.mockResolvedValue({ ok: true });
@@ -28,41 +45,56 @@ describe("UserCreateDialog tenant", () => {
   // The empty option sends no parent, which CreateUser reads as the caller's
   // tenant; labelling it "no tenant" promised something the API never does.
   it("offers the caller's own tenant, and sends no parent for it", async () => {
-    render(
-      <UserCreateDialog
-        isOpen
-        onClose={vi.fn()}
-        onCreated={vi.fn()}
-        tenants={TENANTS}
-      />,
-    );
-    const select = screen.getByLabelText("Tenant") as HTMLSelectElement;
-    expect(select.selectedOptions[0].textContent).toBe(OWN_TENANT_LABEL);
+    show();
+    expect(screen.getByLabelText("Tenant")).toHaveTextContent(OWN_TENANT_LABEL);
     expect(screen.queryByText(/no tenant/i)).toBeNull();
 
     fill();
-    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+    submitForm();
 
     await waitFor(() => expect(h.createUser).toHaveBeenCalledTimes(1));
     expect(h.createUser.mock.calls[0][0].parent).toBe("");
   });
 
   it("sends the picked tenant as the parent", async () => {
-    render(
-      <UserCreateDialog
-        isOpen
-        onClose={vi.fn()}
-        onCreated={vi.fn()}
-        tenants={TENANTS}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText("Tenant"), {
-      target: { value: "t-2" },
-    });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByLabelText("Tenant"));
+    await user.click(screen.getByRole("option", { name: "Acme" }));
     fill();
-    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+    submitForm();
 
     await waitFor(() => expect(h.createUser).toHaveBeenCalledTimes(1));
     expect(h.createUser.mock.calls[0][0].parent).toBe("tenants/t-2");
+  });
+
+  it("says what the held submit is waiting for", () => {
+    show();
+    expect(
+      screen.getByText("Enter a subject to continue."),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Subject/), {
+      target: { value: "alice" },
+    });
+    expect(
+      screen.getByText("The password needs at least 12 characters."),
+    ).toBeInTheDocument();
+  });
+
+  it("sends the roles that are ticked", async () => {
+    show();
+    fill();
+    fireEvent.click(screen.getByLabelText(/tenant\.admin/));
+    submitForm();
+    await waitFor(() => expect(h.createUser).toHaveBeenCalledTimes(1));
+    expect(h.createUser.mock.calls[0][0].roles).toEqual([
+      "tenant.user",
+      "tenant.admin",
+    ]);
+  });
+
+  it("says a role that grants nothing does so", () => {
+    show();
+    expect(screen.getByText(/Grants nothing yet/)).toBeInTheDocument();
   });
 });

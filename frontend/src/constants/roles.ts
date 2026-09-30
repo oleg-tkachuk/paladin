@@ -34,6 +34,18 @@ export const ASSIGNABLE_ROLES: readonly string[] = [
 ];
 
 /**
+ * What a role is for, where the backend documents it (apiutil/roles.go).
+ * Roles without an entry are decided entirely by Cedar policy.
+ */
+export const ROLE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  [ROLES.tenantProvisioner]:
+    "Creates tenants, their buckets and collections, for any tenant. Cannot delete, or read objects.",
+  [ROLES.capabilityIssuer]:
+    "Issues capabilities for any tenant, and nothing else.",
+  [ROLES.mcpOperator]: "Grants nothing yet: no handler or policy checks it.",
+};
+
+/**
  * The roles IAM issues the paladin-admin audience to — apiutil.
  * AdminAudienceRoles, and scripts/admin-audience-roles.test.sh keeps the two
  * lists equal. A pure tenant.user or mcp.operator never gets one.

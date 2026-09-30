@@ -2,18 +2,37 @@
 
 import { useState } from "react";
 
-import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  SelectContent,
+  SelectItem,
+  SelectRoot,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import {
+  FormDialog,
+  FormField,
+  FormRow,
+  FormSection,
+} from "@/components/ui/form-dialog";
 import { useUserAdmin } from "@/hooks/useUserAdmin";
-import { ASSIGNABLE_ROLES } from "@/constants/roles";
+import {
+  ADMIN_AUDIENCE_ROLES,
+  ASSIGNABLE_ROLES,
+  ROLE_DESCRIPTIONS,
+  ROLES,
+} from "@/constants/roles";
 
 /** Server floor on initial_password (buf.validate, min_len = 12). */
 const MIN_PASSWORD_LENGTH = 12;
 
 /** The empty-parent option: CreateUser puts the user in the caller's tenant. */
 export const OWN_TENANT_LABEL = "Your own tenant";
+
+// Radix Select cannot carry an empty value; this stands for "no parent".
+const OWN_TENANT_VALUE = "__own__";
 
 interface Props {
   isOpen: boolean;
@@ -33,14 +52,17 @@ export function UserCreateDialog({
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [tenantId, setTenantId] = useState("");
-  const [roles, setRoles] = useState<string[]>(["tenant.user"]);
+  const [roles, setRoles] = useState<string[]>([ROLES.tenantUser]);
   const [error, setError] = useState<string | null>(null);
 
   const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
-  const canSubmit =
-    !busy &&
-    subject.trim().length > 0 &&
-    password.length >= MIN_PASSWORD_LENGTH;
+  const blockedReason = !subject.trim()
+    ? "Enter a subject to continue."
+    : password.length < MIN_PASSWORD_LENGTH
+      ? `The password needs at least ${MIN_PASSWORD_LENGTH} characters.`
+      : roles.length === 0
+        ? "Pick at least one role."
+        : null;
 
   function toggleRole(role: string) {
     setRoles((prev) =>
@@ -53,8 +75,13 @@ export function UserCreateDialog({
     setDisplayName("");
     setPassword("");
     setTenantId("");
-    setRoles(["tenant.user"]);
+    setRoles([ROLES.tenantUser]);
     setError(null);
+  }
+
+  function close() {
+    reset();
+    onClose();
   }
 
   async function submit() {
@@ -78,113 +105,131 @@ export function UserCreateDialog({
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={() => {
-        reset();
-        onClose();
+    <FormDialog
+      open={isOpen}
+      onOpenChange={(o) => {
+        if (!o) close();
       }}
       title="New user"
-      description="Creates an account with an initial password the user is expected to change."
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={!canSubmit}>
-            {busy ? "Creating…" : "Create user"}
-          </Button>
-        </div>
-      }
+      description="An account with an initial password the user then changes."
+      width="lg"
+      onSubmit={() => void submit()}
+      submitLabel="Create user"
+      submittingLabel="Creating…"
+      submitting={busy}
+      blockedReason={blockedReason}
+      error={error}
     >
-      <div className="space-y-4">
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-
-        <div className="space-y-2">
-          <Label htmlFor="user-subject">Subject</Label>
-          <Input
-            id="user-subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="alice@example.com"
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">
-            The stable identifier the user signs in with. Immutable.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="user-display-name">Display name</Label>
-          <Input
-            id="user-display-name"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Alice Example"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="user-tenant">Tenant</Label>
-          <select
-            id="user-tenant"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={tenantId}
-            onChange={(e) => setTenantId(e.target.value)}
+      <FormSection title="Account">
+        <FormRow>
+          <FormField
+            label="Subject"
+            required
+            hint="What the user signs in with. Cannot be changed later."
           >
-            <option value="">{OWN_TENANT_LABEL}</option>
-            {tenants.map((t) => (
-              <option key={t.tenantId} value={t.tenantId}>
-                {t.displayName || t.slug}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="user-password">Initial password</Label>
-          <Input
-            id="user-password"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            aria-invalid={tooShort || undefined}
-            aria-describedby="user-password-hint"
-          />
-          <p
-            id="user-password-hint"
-            className={
-              tooShort
-                ? "text-xs text-destructive"
-                : "text-xs text-muted-foreground"
+            {(control) => (
+              <Input
+                {...control}
+                autoFocus
+                placeholder="alice@example.com"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+            )}
+          </FormField>
+          <FormField label="Display name">
+            {(control) => (
+              <Input
+                {...control}
+                placeholder="Alice Example"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
+            )}
+          </FormField>
+        </FormRow>
+        <FormRow>
+          <FormField label="Tenant">
+            {(control) => (
+              <SelectRoot
+                value={tenantId || OWN_TENANT_VALUE}
+                onValueChange={(v) =>
+                  setTenantId(v === OWN_TENANT_VALUE ? "" : v)
+                }
+              >
+                <SelectTrigger {...control}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OWN_TENANT_VALUE}>
+                    {OWN_TENANT_LABEL}
+                  </SelectItem>
+                  {tenants.map((t) => (
+                    <SelectItem key={t.tenantId} value={t.tenantId}>
+                      {t.displayName || t.slug}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </SelectRoot>
+            )}
+          </FormField>
+          <FormField
+            label="Initial password"
+            required
+            error={
+              tooShort ? `At least ${MIN_PASSWORD_LENGTH} characters.` : null
             }
+            hint="Pass it to the user; it cannot be read back."
           >
-            At least {MIN_PASSWORD_LENGTH} characters. Pass it to the user; it
-            cannot be read back.
-          </p>
-        </div>
+            {(control) => (
+              <Input
+                {...control}
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            )}
+          </FormField>
+        </FormRow>
+      </FormSection>
 
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Roles</legend>
-          <div className="grid grid-cols-2 gap-2">
-            {ASSIGNABLE_ROLES.map((role) => (
-              <label key={role} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+      <FormSection title="Roles">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ASSIGNABLE_ROLES.map((role) => {
+            const id = `user-role-${role}`;
+            return (
+              <label
+                key={role}
+                htmlFor={id}
+                className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 has-[[data-state=checked]]:border-primary/50"
+              >
+                <Checkbox
+                  id={id}
+                  className="mt-0.5"
                   checked={roles.includes(role)}
-                  onChange={() => toggleRole(role)}
+                  onCheckedChange={() => toggleRole(role)}
                 />
-                <span className="font-mono text-xs">{role}</span>
+                <span className="min-w-0 space-y-0.5">
+                  <span className="block font-mono text-xs">
+                    {role}
+                    {ADMIN_AUDIENCE_ROLES.includes(role) ? (
+                      <span className="ml-1.5 font-sans text-[10px] text-muted-foreground">
+                        console
+                      </span>
+                    ) : null}
+                  </span>
+                  {ROLE_DESCRIPTIONS[role] ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {ROLE_DESCRIPTIONS[role]}
+                    </span>
+                  ) : null}
+                </span>
               </label>
-            ))}
-          </div>
-        </fieldset>
-      </div>
-    </Modal>
+            );
+          })}
+        </div>
+      </FormSection>
+    </FormDialog>
   );
 }
