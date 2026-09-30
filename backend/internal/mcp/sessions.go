@@ -61,31 +61,44 @@ func NewSessionRegistry() *SessionRegistry {
 	return &SessionRegistry{now: time.Now, sessions: map[string]*sessionEntry{}}
 }
 
-// observe records one request against session id. isToolCall increments the
-// tool-call counter; subject (may be "") is stored on first sight and on any
-// later request that finally carries one. A zero id is ignored — the very
-// first `initialize` has no request id yet; the response-header capture in
-// TrackSessions records that session under the id the SDK mints.
-func (r *SessionRegistry) observe(id, subject string, isToolCall bool) {
+// open records a session the SDK has just minted, counting the initialize
+// that minted it.
+func (r *SessionRegistry) open(id, subject string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.now()
+	r.sessions[id] = &sessionEntry{agentSubject: subject, startedAt: now, lastSeen: now, requestCount: 1}
+}
+
+// touch records one request against a session already open. An id the
+// registry did not see minted is ignored: it comes from the client, and
+// recording it let any caller add entries to the operator's session list
+// by sending made-up ids.
+func (r *SessionRegistry) touch(id, subject string, isToolCall bool) {
 	if id == "" {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	now := r.now()
 	e := r.sessions[id]
 	if e == nil {
-		e = &sessionEntry{agentSubject: subject, startedAt: now}
-		r.sessions[id] = e
+		return
 	}
 	if e.agentSubject == "" && subject != "" {
 		e.agentSubject = subject
 	}
-	e.lastSeen = now
+	e.lastSeen = r.now()
 	e.requestCount++
 	if isToolCall {
 		e.toolCallCount++
 	}
+}
+
+// forget drops a session the client closed or the SDK no longer knows.
+func (r *SessionRegistry) forget(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.sessions, id)
 }
 
 // Snapshot returns all live sessions, oldest-first (stable order for a UI
@@ -190,17 +203,19 @@ func TrackSessions(next http.Handler, reg *SessionRegistry, subjectFn func(*http
 		reqID := r.Header.Get(mcpSessionIDHeader)
 		// Continuation request: id known up-front. (No-op for the first
 		// initialize, whose request carries no id yet.)
-		reg.observe(reqID, subject, isToolCall)
+		reg.touch(reqID, subject, isToolCall)
 
 		sw := &sessionCapturingWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
 
-		// initialize mints the id on the response. Record the new session
-		// when the response id differs from the request id; the tool-call was
-		// already counted above under reqID (empty on initialize, so no
-		// double count).
-		if respID := sw.captured; respID != "" && respID != reqID {
-			reg.observe(respID, subject, false)
+		switch {
+		// initialize mints the id on the response.
+		case sw.captured != "" && sw.captured != reqID:
+			reg.open(sw.captured, subject)
+		// The client closed the session, or the SDK has already expired it.
+		case reqID != "" && (r.Method == http.MethodDelete && sw.status < http.StatusMultipleChoices ||
+			sw.status == http.StatusNotFound):
+			reg.forget(reqID)
 		}
 	})
 }
@@ -235,6 +250,9 @@ type sessionCapturingWriter struct {
 	http.ResponseWriter
 	captured string
 	sniffed  bool
+	// status is what the handler answered; http.StatusOK when it wrote a
+	// body without an explicit WriteHeader, as net/http does.
+	status int
 }
 
 func (w *sessionCapturingWriter) snoop() {
@@ -242,9 +260,15 @@ func (w *sessionCapturingWriter) snoop() {
 		w.captured = w.Header().Get(mcpSessionIDHeader)
 		w.sniffed = true
 	}
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
 }
 
 func (w *sessionCapturingWriter) WriteHeader(code int) {
+	if w.status == 0 {
+		w.status = code
+	}
 	w.snoop()
 	w.ResponseWriter.WriteHeader(code)
 }

@@ -111,9 +111,9 @@ func TestTrackSessions_MintAndContinue(t *testing.T) {
 func TestSessionRegistry_Reap(t *testing.T) {
 	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	reg := newTestRegistry(clk)
-	reg.observe("old", "", false)
+	reg.open("old", "")
 	clk.t = clk.t.Add(10 * time.Minute)
-	reg.observe("fresh", "", false)
+	reg.open("fresh", "")
 
 	if n := reg.Reap(5 * time.Minute); n != 1 {
 		t.Fatalf("reaped %d, want 1", n)
@@ -130,7 +130,8 @@ func TestSessionRegistry_Reap(t *testing.T) {
 func TestSessionsHandler(t *testing.T) {
 	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	reg := newTestRegistry(clk)
-	reg.observe("s1", "agent-a", true)
+	reg.open("s1", "agent-a")
+	reg.touch("s1", "agent-a", true)
 
 	admin := fakeVerifier{principal: &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}}
 	nonAdmin := fakeVerifier{principal: &auth.Principal{Roles: []string{"tenant.admin"}}}
@@ -169,5 +170,63 @@ func TestSessionsHandler(t *testing.T) {
 	}
 	if c := call(nil, "Bearer ok").Code; c != http.StatusUnauthorized {
 		t.Errorf("nil verifier = %d, want 401", c)
+	}
+}
+
+// Made-up session ids used to create registry entries, so any caller could
+// fill the operator's session list, and a closed session stayed listed
+// until the reaper came round.
+func TestTrackSessions_OnlyMintedSessionsAreListed(t *testing.T) {
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	reg := newTestRegistry(clk)
+	sdk := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch id := r.Header.Get(mcpSessionIDHeader); {
+		case id == "":
+			w.Header().Set(mcpSessionIDHeader, "sess-1")
+			w.WriteHeader(http.StatusOK)
+		case id != "sess-1":
+			http.Error(w, "session not found", http.StatusNotFound)
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+	h := TrackSessions(sdk, reg, nil)
+	send := func(method, id string) {
+		req := httptest.NewRequestWithContext(t.Context(), method, "/mcp",
+			strings.NewReader(`{"jsonrpc":"2.0","method":"tools/list","id":1}`))
+		if id != "" {
+			req.Header.Set(mcpSessionIDHeader, id)
+		}
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	send(http.MethodPost, "")
+	for _, forged := range []string{"forged-1", "forged-2", "forged-3"} {
+		send(http.MethodPost, forged)
+	}
+	if snap := reg.Snapshot(); len(snap) != 1 || snap[0].ID != "sess-1" {
+		t.Fatalf("after forged ids: %+v, want only sess-1", snap)
+	}
+
+	send(http.MethodDelete, "sess-1")
+	if snap := reg.Snapshot(); len(snap) != 0 {
+		t.Errorf("after DELETE: %+v, want none", snap)
+	}
+}
+
+func TestTrackSessions_ForgetsASessionTheSDKNoLongerKnows(t *testing.T) {
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	reg := newTestRegistry(clk)
+	reg.open("expired", "")
+	h := TrackSessions(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "session not found", http.StatusNotFound)
+	}), reg, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(`{}`))
+	req.Header.Set(mcpSessionIDHeader, "expired")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if snap := reg.Snapshot(); len(snap) != 0 {
+		t.Errorf("snapshot = %+v, want the expired session gone", snap)
 	}
 }

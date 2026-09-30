@@ -23,7 +23,8 @@ func TestNewSessionRegistry(t *testing.T) {
 	}
 
 	before := time.Now()
-	reg.observe("sess-1", "agent-a", true)
+	reg.open("sess-1", "agent-a")
+	reg.touch("sess-1", "agent-a", true)
 	after := time.Now()
 
 	got := reg.Snapshot()
@@ -35,8 +36,9 @@ func TestNewSessionRegistry(t *testing.T) {
 		t.Errorf("LastSeen = %v, want a wall-clock reading between %v and %v",
 			s.LastSeen, before, after)
 	}
-	if s.ToolCallCount != 1 || s.RequestCount != 1 {
-		t.Errorf("counters = {tools:%d requests:%d}, want {1 1}", s.ToolCallCount, s.RequestCount)
+	// The initialize that opened it, and the tool call.
+	if s.ToolCallCount != 1 || s.RequestCount != 2 {
+		t.Errorf("counters = {tools:%d requests:%d}, want {1 2}", s.ToolCallCount, s.RequestCount)
 	}
 }
 
