@@ -221,5 +221,34 @@ if helm template paladin-console "$CONSOLE_CHART" --set backend.tls=true >/dev/n
     bad "console: backend.tls without a caSecret was not refused"
 fi
 
+# ─── ingress ─────────────────────────────────────────────────────────────────
+
+# kind_count <file> <kind> — how many objects of that kind a render holds.
+kind_count() { yq ea '[select(.kind == "'"$2"'")] | length' "$1"; }
+
+check "ingress: off by default" "$(kind_count "$scratch/defaults.yaml" Ingress)" "0"
+check "console ingress: off by default" "$(kind_count "$scratch/console-defaults.yaml" Ingress)" "0"
+
+render ingress --set ingress.enabled=true --set 'ingress.hosts={paladin.example.com}'
+ingress() { yq ea -r '[select(.kind == "Ingress")] | .[0] | '"$2" "$scratch/$1.yaml"; }
+check "ingress: Caddy class" "$(ingress ingress .spec.ingressClassName)" "caddy"
+check "ingress: iam path first" "$(ingress ingress '.spec.rules[0].http.paths[0].path')" "/paladin.iam.v1.*"
+check "ingress: iam to the iam port" "$(ingress ingress '.spec.rules[0].http.paths[0].backend.service.port.number')" "8085"
+check "ingress: the rest to the data port" "$(ingress ingress '.spec.rules[0].http.paths[1].backend.service.port.number')" "8080"
+check "ingress: plain backends need no protocol annotation" \
+    "$(ingress ingress '.metadata.annotations["caddy.ingress.kubernetes.io/backend-protocol"] // "none"')" "none"
+
+render ingress-tls --set ingress.enabled=true --set 'ingress.hosts={paladin.example.com}' \
+    --set internalTLS.enabled=true --set internalTLS.existingSecret=planes-tls
+check "ingress: Caddy dials TLS planes over https" \
+    "$(ingress ingress-tls '.metadata.annotations["caddy.ingress.kubernetes.io/backend-protocol"]')" "https"
+
+refuse ingress-no-host "ingress.hosts must name at least one host" \
+    -f "$CHART/$REQUIRED_VALUES" --set ingress.enabled=true
+
+console console-ingress --set ingress.enabled=true --set 'ingress.hosts={console.example.com}'
+check "console ingress: to the console Service" \
+    "$(yq ea -r '[select(.kind == "Ingress")] | .[0] | .spec.rules[0].http.paths[0].backend.service.port.number' "$scratch/console-console-ingress.yaml")" "3000"
+
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"

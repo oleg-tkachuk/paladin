@@ -1249,6 +1249,33 @@ traefik:
     data:
       port: 8080   # api role bare-Host fallthrough
 
+# ─── Ingress ─────────────────────────────────────────────────────────────────
+#
+# A standard networking.k8s.io/v1 Ingress for the api role: the IAM plane
+# under iam.path, the data plane for the rest. Off by default; leave it off to
+# route to the api Service with your own ingress or gateway.
+#
+# The defaults are for the Caddy ingress controller, which obtains
+# certificates itself when tls is empty. Another controller needs its own
+# className, the path syntax it matches iam.path with, and — when internalTLS
+# is on — its annotation for dialling the backend over https.
+ingress:
+  enabled: false
+  className: caddy
+  annotations: {}
+  hosts: []
+  # [{secretName, hosts}] to serve your own certificates.
+  tls: []
+  iam:
+    # Every IAM RPC is /paladin.iam.v1.<Service>/<Method>. A glob for Caddy's
+    # path matcher; Prefix would not match, since Kubernetes compares whole
+    # path segments.
+    path: /paladin.iam.v1.*
+    pathType: ImplementationSpecific
+    port: 8085
+  data:
+    port: 8080
+
 # ─── TLS via cert-manager ──────────────────────────────────────────────────
 tls:
   enabled: true

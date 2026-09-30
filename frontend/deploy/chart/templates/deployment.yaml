@@ -65,23 +65,23 @@ spec:
             # Per-plane backend URLs — read by the BFF (route handlers under
             # /api/rpc and /api/auth). The browser never sees these.
             - name: PALADIN_DATA_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "data") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "data") | quote }}
             - name: PALADIN_IAM_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "iam") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "iam") | quote }}
             - name: PALADIN_ADMIN_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "admin") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "admin") | quote }}
             # Worker + MCP have no Connect surface; they expose
             # /system/health.json on their ops ports for the BFF
             # /api/health/all aggregator. The browser never hits them
             # directly — Service DNS isn't browser-resolvable.
             - name: PALADIN_WORKER_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "worker") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "worker") | quote }}
             - name: PALADIN_MCP_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "mcp") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "mcp") | quote }}
             - name: PALADIN_DISPATCHER_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "dispatcher") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "dispatcher") | quote }}
             - name: PALADIN_INGEST_URL
-              value: {{ include "paladin-console.backendURL" (dict "ctx" $ "plane" "ingest") | quote }}
+              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "ingest") | quote }}
             {{- /*
               PALADIN_HEALTH_SNAPSHOT_TOKEN — shared secret the BFF /api/health/all
               aggregator forwards (as X-Health-Token) to each backend's
@@ -93,7 +93,7 @@ spec:
               value: {{ join "," .Values.backend.healthRoles | quote }}
             {{- if .Values.backend.tls }}
             - name: NODE_EXTRA_CA_CERTS
-              value: {{ printf "%s/%s" (include "paladin-console.backendCAPath" .) .Values.backend.caSecret.key | quote }}
+              value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}
             {{- end }}
             {{- with .Values.healthSnapshotTokenSecret }}
             - name: PALADIN_HEALTH_SNAPSHOT_TOKEN
@@ -129,7 +129,7 @@ spec:
           {{- $volumes := .Values.volumes | default list }}
           {{- if .Values.backend.tls }}
           {{- $ca := required "backend.caSecret.name is required when backend.tls: the Secret holding the backend's CA" .Values.backend.caSecret.name }}
-          {{- $mounts = append $mounts (dict "name" "backend-ca" "mountPath" (include "paladin-console.backendCAPath" .) "readOnly" true) }}
+          {{- $mounts = append $mounts (dict "name" "backend-ca" "mountPath" (include "chart.backendCAPath" .) "readOnly" true) }}
           {{- $volumes = append $volumes (dict "name" "backend-ca" "secret" (dict "secretName" $ca)) }}
           {{- end }}
           {{- with $mounts }}

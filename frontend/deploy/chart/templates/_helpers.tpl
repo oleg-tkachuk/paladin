@@ -63,14 +63,14 @@ Create the name of the service account to use
 
 
 {{/*
-paladin-console.backendURL — one backend plane's URL: backend.urls.<plane>
+chart.backendURL — one backend plane's URL: backend.urls.<plane>
 when set, otherwise built from the backend release. Called with
 (dict "ctx" $ "plane" "<plane>").
 
 The ports are the backend chart's Service ports; its worker and dispatcher
 Services map :8099 onto container ports of their own.
 */}}
-{{- define "paladin-console.backendURL" -}}
+{{- define "chart.backendURL" -}}
 {{- $b := .ctx.Values.backend -}}
 {{- $explicit := index $b.urls .plane -}}
 {{- if $explicit -}}
@@ -97,9 +97,9 @@ Services map :8099 onto container ports of their own.
 {{- end -}}
 
 {{/*
-paladin-console.backendCA — the mount path of the backend CA, when backend.tls
+chart.backendCAPath — the mount path of the backend CA, when backend.tls
 is on. Fails without a caSecret: Node rejects the internal CA otherwise.
 */}}
-{{- define "paladin-console.backendCAPath" -}}
+{{- define "chart.backendCAPath" -}}
 /etc/paladin-backend-ca
 {{- end -}}

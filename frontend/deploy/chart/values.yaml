@@ -140,6 +140,20 @@ traefik:
   annotations: {}
   middlewares: []
 
+# ─── Ingress ─────────────────────────────────────────────────────────────────
+#
+# A standard networking.k8s.io/v1 Ingress for the console. Off by default;
+# leave it off to route to the Service with your own ingress. The console
+# speaks plain HTTP, so any controller works; Caddy obtains certificates itself
+# when tls is empty.
+ingress:
+  enabled: false
+  className: caddy
+  annotations: {}
+  hosts: []
+  # [{secretName, hosts}] to serve your own certificates.
+  tls: []
+
 # ─── TLS via cert-manager ──────────────────────────────────────────────────
 tls:
   enabled: true

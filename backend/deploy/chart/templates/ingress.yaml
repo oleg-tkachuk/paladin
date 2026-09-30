@@ -1,0 +1,58 @@
+{{- /*
+A standard Ingress for the api role: the IAM plane under ingress.iam.path, the
+data plane for everything else. The admin plane gets no public route, as with
+the Traefik IngressRoute; expose it separately behind whatever guards it.
+
+The defaults target the Caddy ingress controller: its path matcher takes
+ingress.iam.path as a glob under ImplementationSpecific, and when the planes
+terminate TLS themselves (internalTLS) it is told to dial them over https.
+Another controller needs its own path syntax and annotations.
+*/ -}}
+{{- if .Values.ingress.enabled -}}
+{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $ing := .Values.ingress -}}
+{{- $hosts := required "ingress.hosts must name at least one host when ingress.enabled" (first $ing.hosts) -}}
+{{- $annotations := deepCopy ($ing.annotations | default dict) -}}
+{{- if and .Values.internalTLS.enabled (eq $ing.className "caddy") -}}
+{{- $_ := set $annotations "caddy.ingress.kubernetes.io/backend-protocol" "https" -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $apiFullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "api") | nindent 4 }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $ing.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $ing.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $host := $ing.hosts }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: {{ $ing.iam.path }}
+            pathType: {{ $ing.iam.pathType }}
+            backend:
+              service:
+                name: {{ $apiFullname }}
+                port:
+                  number: {{ $ing.iam.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $apiFullname }}
+                port:
+                  number: {{ $ing.data.port }}
+    {{- end }}
+{{- end }}
