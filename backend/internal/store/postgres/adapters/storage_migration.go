@@ -15,7 +15,7 @@ import (
 )
 
 // StorageMigrationRepo adapts the sqlc queries to worker.MigrationRepo — the
-// persistence seam for the ADR-0011 Phase 3 copy job. The raw pool is needed
+// persistence seam for the ADR-0015 Phase 3 copy job. The raw pool is needed
 // for the transactional rebind (all collections + storage_layout flipped
 // atomically under the DEFERRABLE FK).
 type StorageMigrationRepo struct {

@@ -874,7 +874,7 @@ type Cedar struct {
 	PolicyCacheTTL time.Duration `yaml:"policy_cache_ttl" json:"policy_cache_ttl"`
 	// CanonicalCollectionEUID switches the Cedar Collection entity UID from the
 	// legacy `{tenant_uuid}/{collection}` form to the canonical A-shape name
-	// (ADR-0010, Phase 1). Default false. Only applies where (backend, bucket)
+	// (ADR-0014, Phase 1). Default false. Only applies where (backend, bucket)
 	// are in scope on the authz request; attribute/parent-based policies are
 	// unaffected by the UID string. Flip per-environment only after confirming
 	// no policy hardcodes a `resource == Collection::"…"` literal.

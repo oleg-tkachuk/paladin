@@ -145,7 +145,7 @@ type Querier interface {
 	// Keyed on name, not id: the caller knows the config key ("primary"), and the
 	// uuid is generated here.
 	CreateStorageBackendV2(ctx context.Context, name string, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string, displayName string, publicEndpoint string, forcePathStyle bool, credentialsSecretRef string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
-	// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
+	// ADR-0015 Phase 3: shared->dedicated storage migration copy job.
 	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, name_4 string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
 	CreateTenant(ctx context.Context, iD pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout TenantStorageLayout) error
@@ -234,7 +234,7 @@ type Querier interface {
 	// "locked" error instead of a bare version-mismatch when the SQL guard
 	// on HardDeleteObject zeroes the rowcount.
 	//
-	// The lock belongs to the VERSION now (ADR-0013), so this reads through the
+	// The lock belongs to the VERSION now (ADR-0017), so this reads through the
 	// object's current version. LEFT JOIN plus COALESCE: an object with no lock
 	// row is the common case and must answer "not locked", not "no row".
 	GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectLockStateRow, error)
@@ -291,7 +291,7 @@ type Querier interface {
 	// promotion path when the parent bucket has versioning_enabled = true.
 	InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte) error
 	// Purge debt: the retry handle for bytes whose DB row is already gone.
-	// See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
+	// See ADR-0017 and migrations/001_initial_schema.sql: storage_path is
 	// denormalised here because the object row is gone before the purge runs.
 	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error
 	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error

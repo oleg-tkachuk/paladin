@@ -29,7 +29,7 @@ export type ResolvedTenant = {
   tenantId: string;
   slug: string;
   displayName: string;
-  // "shared" (default) | "dedicated" — ADR-0011 physical bucket layout.
+  // "shared" (default) | "dedicated" — ADR-0015 physical bucket layout.
   storageLayout: string;
 };
 

@@ -1251,7 +1251,7 @@ func TestObjectRouterSameBackendCopyStaysServerSide(t *testing.T) {
 	}
 }
 
-// Cross-backend copy is the ADR-0011 Phase 3 stream-through: GET on the source
+// Cross-backend copy is the ADR-0015 Phase 3 stream-through: GET on the source
 // piped into the destination's multipart writer.
 func TestObjectRouterCrossBackendStreamsThrough(t *testing.T) {
 	fSrc, fDst := newFakeS3(t), newFakeS3(t)

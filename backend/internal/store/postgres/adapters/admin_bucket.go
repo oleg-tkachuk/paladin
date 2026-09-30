@@ -585,7 +585,7 @@ func pgUUIDOptional(u uuid.UUID) pgtype.UUID {
 // silence unused imports across go versions
 var _ = fmt.Errorf
 
-// object_lock_mode is a Postgres enum now (ADR-0013), and "no default mode" is
+// object_lock_mode is a Postgres enum now (ADR-0017), and "no default mode" is
 // NULL rather than the empty string the domain uses.
 func lockModeToSQL(m string) *sqlc.ObjectLockMode {
 	if m == "" {

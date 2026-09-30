@@ -1,6 +1,6 @@
 "use client";
 
-// Default Route — ADR-0010 Phase 3. Manages the tenant's default
+// Default Route — ADR-0014 Phase 3. Manages the tenant's default
 // (backend, bucket) binding: where a bare collection name (created without
 // naming a bucket) lands. Backed by TenantService.{Get,Set,Clear}
 // TenantDefaultBinding.

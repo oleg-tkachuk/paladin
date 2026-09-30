@@ -11,7 +11,7 @@ import (
 // fakeStore returns a fixed tenant policy text (concatenated with the
 // built-in policy by the engine), a fixed authoritative slug, and a no-op
 // Watch. slug defaults to "" (membership-irrelevant tests); isolation tests
-// set it to the tenant's real slug (ADR-0012).
+// set it to the tenant's real slug (ADR-0016).
 type fakeStore struct{ text, slug string }
 
 func (f fakeStore) Fetch(context.Context, uuid.UUID, string) (Layers, []byte, string, error) {

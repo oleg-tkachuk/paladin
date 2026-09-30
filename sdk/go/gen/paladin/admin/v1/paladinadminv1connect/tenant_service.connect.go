@@ -84,7 +84,7 @@ const (
 type TenantServiceClient interface {
 	// CreateTenant provisions a tenant and, unless the request opts out, its
 	// default storage binding. storage_layout="dedicated" also provisions a
-	// physical bucket owned by the tenant (ADR-0011). AlreadyExists when the
+	// physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
 	// slug is taken.
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
 	// GetTenant accepts either the UUID or the slug in the resource name.
@@ -128,7 +128,7 @@ type TenantServiceClient interface {
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-	// (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
+	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
 	// the collections and flips the layout. Returns the initial migration status;
 	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
@@ -147,7 +147,7 @@ type TenantServiceClient interface {
 	// enumerate slug→tenant mappings.
 	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-	// route used to complete the bare collection name shape (ADR-0010 Phase 3).
+	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
 	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
 	// SetTenantDefaultBinding upserts the tenant's default route. The
@@ -372,7 +372,7 @@ func (c *tenantServiceClient) ClearTenantDefaultBinding(ctx context.Context, req
 type TenantServiceHandler interface {
 	// CreateTenant provisions a tenant and, unless the request opts out, its
 	// default storage binding. storage_layout="dedicated" also provisions a
-	// physical bucket owned by the tenant (ADR-0011). AlreadyExists when the
+	// physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
 	// slug is taken.
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
 	// GetTenant accepts either the UUID or the slug in the resource name.
@@ -416,7 +416,7 @@ type TenantServiceHandler interface {
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-	// (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
+	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
 	// the collections and flips the layout. Returns the initial migration status;
 	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
@@ -435,7 +435,7 @@ type TenantServiceHandler interface {
 	// enumerate slug→tenant mappings.
 	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-	// route used to complete the bare collection name shape (ADR-0010 Phase 3).
+	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
 	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
 	// SetTenantDefaultBinding upserts the tenant's default route. The

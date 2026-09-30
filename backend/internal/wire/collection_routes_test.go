@@ -130,7 +130,7 @@ func TestListCollectionRoutes_PaginatesAcrossPages(t *testing.T) {
 
 // TestListCollectionRoutes_ResumesFromPageToken: a caller-supplied page token is
 // forwarded verbatim to the first ListCollections round-trip, so a client pages
-// through the whole table (ADR-0010 Phase 4 DoD option a).
+// through the whole table (ADR-0014 Phase 4 DoD option a).
 func TestListCollectionRoutes_ResumesFromPageToken(t *testing.T) {
 	tid := uuid.New()
 	f := &fakeOKLister{
@@ -217,7 +217,7 @@ func TestListCollectionRoutes_ExactCapNotTruncated(t *testing.T) {
 
 // TestListCollectionRoutes_PagesThroughEntireTable: a client that keeps feeding
 // next_page_token back eventually sees every Collection with no duplicates and no
-// gaps (ADR-0010 Phase 4 DoD option a — full pagination, not a hard cap).
+// gaps (ADR-0014 Phase 4 DoD option a — full pagination, not a hard cap).
 func TestListCollectionRoutes_PagesThroughEntireTable(t *testing.T) {
 	tid := uuid.New()
 	const total = whoAmIMaxRoutes*2 + whoAmIRoutePageSize // spans 3 WhoAmI calls

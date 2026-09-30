@@ -388,7 +388,7 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 	return out
 }
 
-// ─── Tenant default binding (ADR-0010 Phase 3) ──────────────────────────────
+// ─── Tenant default binding (ADR-0014 Phase 3) ──────────────────────────────
 
 // resolveTenantID maps a "tenants/{id_or_slug}" name to a tenant UUID, using
 // GetTenantBySlug for the slug form (its authz layer gates visibility).

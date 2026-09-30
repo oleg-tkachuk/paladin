@@ -440,7 +440,7 @@ storage: {
 
 cedar: {
   policy_cache_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-  // ADR-0010 Phase 1: canonical A-shape ObjectKey entity UID. Default false so
+  // ADR-0014 Phase 1: canonical A-shape ObjectKey entity UID. Default false so
   // an env that omits it keeps the legacy UID; the shipped configs set true
   // (behaviourally inert — no policy matches the UID literal).
   canonical_collection_euid: bool | *false

@@ -15,7 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// TestBucketProvisioningGate proves the ADR-0011 Phase 1 write gate: while a
+// TestBucketProvisioningGate proves the ADR-0015 Phase 1 write gate: while a
 // dedicated tenant's bucket is provision_state != 'ready', a mutation
 // (write=true) resolution returns ErrBucketProvisioning; reads still resolve;
 // and once the reconciler marks it 'ready' writes resolve too.

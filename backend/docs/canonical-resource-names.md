@@ -1,10 +1,10 @@
 # Canonical Resource Names — A+B+C Plan
 
-Status: accepted — ratified by [ADR-0010](adr/0010-canonical-resource-names.md) (2026-07-01)
-Owner: see ADR-0010
+Status: accepted — ratified by [ADR-0014](../../docs/adr/0014-canonical-resource-names.md) (2026-07-01)
+Owner: see ADR-0014
 Last updated: 2026-07-01
 
-> This doc is the detailed phase-by-phase reference; ADR-0010 is the
+> This doc is the detailed phase-by-phase reference; ADR-0014 is the
 > authoritative decision + records two constraints found during ratification
 > (canonical Cedar EUID needs backend+bucket threading; Phase 5 soft-deprecation
 > is data-gated on ≥1 week of shape-distribution metric, not a deploy window).

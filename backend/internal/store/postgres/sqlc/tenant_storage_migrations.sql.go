@@ -68,7 +68,7 @@ WHERE ssb.name = $2 AND sb.name = $3
 RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at
 `
 
-// ADR-0011 Phase 3: shared->dedicated storage migration copy job.
+// ADR-0015 Phase 3: shared->dedicated storage migration copy job.
 func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, name_4 string, cleanupRetentionSeconds int64) (TenantStorageMigration, error) {
 	row := q.db.QueryRow(ctx, createStorageMigration,
 		tenantID,

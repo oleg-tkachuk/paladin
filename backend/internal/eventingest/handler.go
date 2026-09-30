@@ -37,7 +37,7 @@ type ObjectLookup interface {
 	) (string, error)
 	// GetCollection resolves a collection row (for its backend_id +
 	// bucket_name binding) so the emitted event carries the canonical
-	// resource name (ADR-0010 Phase 1).
+	// resource name (ADR-0014 Phase 1).
 	GetCollection(
 		ctx context.Context,
 		tenantID pgtype.UUID,
@@ -231,7 +231,7 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 
 // objectResourceName builds the canonical (A-shape) object resource name
 // `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}/objects-by-key/{key}`
-// for the emitted event (ADR-0010 Phase 1), matching what the data-plane
+// for the emitted event (ADR-0014 Phase 1), matching what the data-plane
 // object handler emits so a subscriber can't tell which producer promoted the
 // object. Resolving the collection's (backend, bucket) binding needs a lookup;
 // on any miss it falls back to the C-shape name so a resolve blip never blocks

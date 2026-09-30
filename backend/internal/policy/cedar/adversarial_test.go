@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Adversarial tenant-isolation matrix (ADR-0012). Membership keys on the
+// Adversarial tenant-isolation matrix (ADR-0016). Membership keys on the
 // DB-authoritative slug (the fake's `slug`) and trusted-UUID equality, so Cedar
 // is an INDEPENDENT second isolation layer — a spoofed JWT slug changes
 // nothing, and a cross-tenant caller cannot satisfy a member permit even
@@ -51,7 +51,7 @@ func TestAdversarial_LegitMemberAllowed(t *testing.T) {
 	}
 }
 
-// THE core invariant (ADR-0012): a caller in tenant B cannot satisfy tenant A's
+// THE core invariant (ADR-0016): a caller in tenant B cannot satisfy tenant A's
 // member permit — EVEN when it claims A's slug in its JWT. Cedar denies
 // independently of the shim, because membership anchors on the principal's
 // trusted UUID, which differs from the resource tenant.

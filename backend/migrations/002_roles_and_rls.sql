@@ -7,7 +7,7 @@
 -- plane runs as paladin_app, which has no BYPASSRLS, so a missing policy means
 -- a missing wall. Every policy is single-table and reads tenant_id directly —
 -- that is why tenant_id is denormalised onto every tenant-scoped table
--- (ADR-0013 §4).
+-- (ADR-0017 §4).
 
 -- ─── Roles ──────────────────────────────────────────────────────────────────
 --

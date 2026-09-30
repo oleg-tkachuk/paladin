@@ -18,7 +18,7 @@ const (
 	// while assembling a WhoAmI route-table page.
 	whoAmIRoutePageSize = 200
 	// whoAmIMaxRoutes caps the routes returned in ONE WhoAmI call. Beyond it the
-	// caller pages via the returned next_page_token (ADR-0010 Phase 4). A
+	// caller pages via the returned next_page_token (ADR-0014 Phase 4). A
 	// multiple of whoAmIRoutePageSize so the cap always lands on a ListCollections
 	// page boundary — the boundary cursor is what we hand back for resumption.
 	whoAmIMaxRoutes = 1000
@@ -38,7 +38,7 @@ type defaultBindingReader interface {
 	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error)
 }
 
-// collectionRouteLister assembles the WhoAmI Collection route table (ADR-0010
+// collectionRouteLister assembles the WhoAmI Collection route table (ADR-0014
 // Phase 4). Narrow interfaces (not the full handler / repository) keep it
 // unit-testable with small fakes.
 type collectionRouteLister struct {

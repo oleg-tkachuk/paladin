@@ -61,7 +61,7 @@ expect_ok() {
 
 echo "== setup: platform admin creates victim + attacker tenants =="
 # Victim uses the SHARED layout so this probe runs on any object-store backend.
-# Dedicated-bucket provisioning + the upload gate (ADR-0011) are covered
+# Dedicated-bucket provisioning + the upload gate (ADR-0015) are covered
 # separately by the integration test TestAdversarial_ProvisionGateOnUploadPath;
 # on a backend whose S3 CreateBucket doesn't yield a writable bucket (e.g.
 # Garage), a dedicated victim never becomes writable and the cross-tenant

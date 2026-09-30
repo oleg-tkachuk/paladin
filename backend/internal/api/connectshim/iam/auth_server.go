@@ -112,7 +112,7 @@ func (s *AuthServer) WhoAmI(ctx context.Context, req *connect.Request[pb.WhoAmIR
 	}), nil
 }
 
-// collectionRoutesToProto maps the handler's route table (ADR-0010 Phase 4)
+// collectionRoutesToProto maps the handler's route table (ADR-0014 Phase 4)
 // onto the wire message. nil/empty in → nil out (omitted field).
 func collectionRoutesToProto(routes []authh.CollectionRoute) []*pb.CollectionRoute {
 	if len(routes) == 0 {

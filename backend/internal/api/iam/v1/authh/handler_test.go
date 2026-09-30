@@ -560,7 +560,7 @@ func TestRefreshToken_SpentTokenStillRevokesTheFamily(t *testing.T) {
 	}
 }
 
-// ─── WhoAmI route table (ADR-0010 Phase 4) ──────────────────────────────────
+// ─── WhoAmI route table (ADR-0014 Phase 4) ──────────────────────────────────
 
 type stubRouteLister struct {
 	routes   []CollectionRoute
@@ -649,7 +649,7 @@ func TestWhoAmI_PropagatesRoutesTruncated(t *testing.T) {
 
 // TestWhoAmI_ForwardsRoutePageToken proves the caller's page token reaches the
 // lister and a second page (empty next) marks the table exhausted — the full
-// page-through path (ADR-0010 Phase 4 DoD option a).
+// page-through path (ADR-0014 Phase 4 DoD option a).
 func TestWhoAmI_ForwardsRoutePageToken(t *testing.T) {
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
 	lister := &stubRouteLister{

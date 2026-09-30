@@ -1,7 +1,7 @@
-# ADR-0012: Cedar tenant membership keys on the DB-authoritative slug (independent cross-tenant isolation)
+# ADR-0016: Cedar tenant membership keys on the DB-authoritative slug (independent cross-tenant isolation)
 
 - **Status:** Accepted 2026-07-03 — surfaced by the adversarial security suite
-  (PR #134) during the ADR-0011 dedicated-tenant live verification.
+  (PR #134) during the ADR-0015 dedicated-tenant live verification.
   Implementation lands with this ADR.
 
 - **Context.** The rendered default policy keys member permits on the tenant's

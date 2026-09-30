@@ -44,7 +44,7 @@ type BucketProvisioner interface {
 	CreateBucket(ctx context.Context, backendID, bucketName, region string) error
 	DeleteBucket(ctx context.Context, backendID, bucketName string) error
 	// TagBucketOwner tags a dedicated bucket with its owner tenant_id for cost
-	// attribution (ADR-0011). Best-effort at the call site.
+	// attribution (ADR-0015). Best-effort at the call site.
 	TagBucketOwner(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error
 }
 
@@ -186,7 +186,7 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 
 	err := r.prov.CreateBucket(ctx, row.BackendID, row.BucketName, row.Region)
 	if err == nil {
-		// Cost attribution (ADR-0011): tag a dedicated (owned) bucket with its
+		// Cost attribution (ADR-0015): tag a dedicated (owned) bucket with its
 		// tenant_id so cloud cost reports group bucket→tenant. Best-effort —
 		// a backend that doesn't support PutBucketTagging must not block
 		// provisioning; the bucket is already usable.

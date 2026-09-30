@@ -331,7 +331,7 @@ func (*RevokeResponse) Descriptor() ([]byte, []int) {
 
 type WhoAmIRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// route_page_token pages the Collection route table (ADR-0010 Phase 4). Empty
+	// route_page_token pages the Collection route table (ADR-0014 Phase 4). Empty
 	// = first page; pass back the previous response's `next_page_token` to fetch
 	// the next page. Only the route table is paged — identity fields are always
 	// returned in full.
@@ -388,7 +388,7 @@ type WhoAmIResponse struct {
 	// slug-form URLs (`/tenants/<slug>/...`) without a follow-up
 	// GetTenant lookup.
 	TenantSlug string `protobuf:"bytes,3,opt,name=tenant_slug,json=tenantSlug,proto3" json:"tenant_slug,omitempty"`
-	// routes is ONE PAGE of the caller's Collection route table (ADR-0010 Phase
+	// routes is ONE PAGE of the caller's Collection route table (ADR-0014 Phase
 	// 4): the Collections the caller can read, in all three name shapes, so
 	// clients and SDKs normalize to canonical (A) before sending rather than
 	// constructing it themselves. Empty when the server has no route source wired
@@ -481,7 +481,7 @@ func (x *WhoAmIResponse) GetNextPageToken() string {
 }
 
 // CollectionRoute is one addressable Collection expressed in all three
-// ADR-0010 name shapes plus its (backend, bucket) binding. A client that
+// ADR-0014 name shapes plus its (backend, bucket) binding. A client that
 // holds this table can accept any shape from the end user and normalize to
 // canonical (A) on the wire.
 type CollectionRoute struct {

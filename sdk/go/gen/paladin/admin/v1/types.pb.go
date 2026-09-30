@@ -1326,7 +1326,7 @@ type Tenant struct {
 	// empty when the tenant has no default binding (legacy / never set).
 	// Read-only here — set the binding via CreateTenant.default_bucket.
 	DefaultBucket string `protobuf:"bytes,11,opt,name=default_bucket,json=defaultBucket,proto3" json:"default_bucket,omitempty"`
-	// storage_layout — "shared" (default) or "dedicated" (ADR-0011). A dedicated
+	// storage_layout — "shared" (default) or "dedicated" (ADR-0015). A dedicated
 	// tenant gets its own physical bucket (owner_tenant_id = the tenant),
 	// provisioned at CreateTenant time. Settable only at create; read-only after.
 	StorageLayout string `protobuf:"bytes,12,opt,name=storage_layout,json=storageLayout,proto3" json:"storage_layout,omitempty"`

@@ -97,7 +97,7 @@ func startS3(t *testing.T) (endpoint, accessKey, secretKey string) {
 }
 
 // TestBackendRegistryRouting proves the multi-backend routing end-to-end
-// (docs/backend-registry.md, ADR-0011 Phase 2): with two physically distinct
+// (docs/backend-registry.md, ADR-0015 Phase 2): with two physically distinct
 // MinIO backends configured, an object written to backend "a" is resolvable
 // through the router when addressed to "a" and NOT when addressed to "b".
 // Because "a" and "b" are separate MinIO instances, a positive Head on "a" and

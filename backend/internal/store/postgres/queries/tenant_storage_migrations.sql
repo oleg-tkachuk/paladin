@@ -1,4 +1,4 @@
--- ADR-0011 Phase 3: shared->dedicated storage migration copy job.
+-- ADR-0015 Phase 3: shared->dedicated storage migration copy job.
 
 -- name: CreateStorageMigration :one
 INSERT INTO tenant_storage_migrations

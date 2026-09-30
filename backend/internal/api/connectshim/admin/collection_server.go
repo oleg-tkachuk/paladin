@@ -21,7 +21,7 @@ import (
 
 // defaultBindingSource resolves a tenant's default (backend, bucket) route so
 // CreateCollection can route a NEW collection when the caller omits the bucket
-// (ADR-0010 Phase 3). Satisfied by tenant.Repository.
+// (ADR-0014 Phase 3). Satisfied by tenant.Repository.
 type defaultBindingSource interface {
 	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error)
 }
@@ -47,7 +47,7 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 	}
 	src := m.GetCollectionResource()
 	backend, bucket, _ := bucketRef(src.GetBucket())
-	// Bare-name ergonomics (ADR-0010 Phase 3): if the caller creates an
+	// Bare-name ergonomics (ADR-0014 Phase 3): if the caller creates an
 	// collection without naming a bucket, route it to the tenant's default
 	// binding. This is the CREATION case only — an existing collection keeps its
 	// own (backend, bucket), which the Get/Update/Delete paths resolve from the

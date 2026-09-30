@@ -14,7 +14,7 @@ import (
 )
 
 // TestTenantStorageLayout proves the schema baseline (001_initial_schema.sql) + the storage_layout plumbing
-// (ADR-0011 Phase 1): a tenant created with storage_layout="dedicated"
+// (ADR-0015 Phase 1): a tenant created with storage_layout="dedicated"
 // persists and reads back as such, while the default is "shared".
 func TestTenantStorageLayout(t *testing.T) {
 	ctx := context.Background()

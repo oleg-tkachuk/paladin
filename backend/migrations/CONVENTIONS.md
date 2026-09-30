@@ -1,6 +1,6 @@
 # Migration conventions (forward-only, lock-aware)
 
-> **Baseline consolidation, 2026-08-20 (ADR-0013).** The 65 migrations that
+> **Baseline consolidation, 2026-08-20 (ADR-0017).** The 65 migrations that
 > built the schema up to this point were replaced by `001`–`003`. That is a
 > deliberate, one-time exception to the immutability rule below, and it is only
 > defensible because every deployment reprovisions rather than upgrades

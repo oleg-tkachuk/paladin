@@ -1,6 +1,6 @@
 //go:build integration
 
-// ADR-0010 Phase 3 wiring: CreateCollection without a bucket routes the NEW
+// ADR-0014 Phase 3 wiring: CreateCollection without a bucket routes the NEW
 // collection to the tenant's default binding; with no binding it is a clear
 // FAILED_PRECONDITION rather than a raw NOT-NULL / FK error. (Get/Update/Delete
 // of an EXISTING collection use the row's own binding — not covered here because

@@ -20,7 +20,7 @@ const STATE_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
 };
 
 // StorageMigrationCard surfaces a tenant's shared->dedicated storage migration
-// (ADR-0011 Phase 3):
+// (ADR-0015 Phase 3):
 //   - a migration in flight / completed → live status + progress;
 //   - a `shared` tenant with no migration → a trigger to start one;
 //   - a `dedicated` tenant with no migration → nothing (the identity card's

@@ -29,7 +29,7 @@ Migrations run under [Goose](https://github.com/pressly/goose) as
 
 ## Identity and naming
 
-Every table follows [ADR-0013](adr/0013-single-identity-model-and-naming.md):
+Every table follows [ADR-0017](../../docs/adr/0017-single-identity-model-and-naming.md):
 
 - The primary key is always `id uuid`, never a natural key.
 - `<entity>_id` names a foreign key and nothing else.

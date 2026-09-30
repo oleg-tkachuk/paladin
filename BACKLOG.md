@@ -1326,7 +1326,7 @@ finding moving from "packages you import" to "your code is affected".
 
 ### Phase 3: deprecate redundant resource-name shapes
 
-- **Ratified under [ADR-0010](backend/docs/adr/0010-canonical-resource-names.md)
+- **Ratified under [ADR-0014](docs/adr/0014-canonical-resource-names.md)
   (2026-07-01).** In the plan's authoritative numbering this is **Phase 5**
   (soft-deprecate C on the wire) — gated on ≥1 week of real
   `paladin_resource_name_shape_total` data, which a deploy window does NOT supply.
@@ -1505,7 +1505,7 @@ finding moving from "packages you import" to "your code is affected".
 ### Per-tenant S3 bucket layout — Phase 3 (shared→dedicated copy job)
 
 - **Status:** Phases 1 + 2 SHIPPED 2026-07-02/03 per
-  [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md); **Phase 3
+  [ADR-0015](docs/adr/0015-per-tenant-bucket-layout.md); **Phase 3
   slices 1 + 2 + 3 SHIPPED** (same-backend copy job + retention-gated cleanup
   live-verified end-to-end against Garage; cross-backend stream-through
   unit-tested — a live cross-backend run needs a second working backend, the
@@ -1594,7 +1594,7 @@ finding moving from "packages you import" to "your code is affected".
   Paladin defect. Garage has no per-bucket volume reservation; verified
   end-to-end (shared security-probe 6/6 + dedicated provision→upload→read).
   **Garage prerequisite:** the S3 access key needs the global create-bucket
-  grant (`garage key allow --create-bucket <key>`) or the ADR-0011
+  grant (`garage key allow --create-bucket <key>`) or the ADR-0015
   reconciler's `CreateBucket` is rejected. **Follow-ups:** (1) to move the
   change into the registry-pulled chart, `task deploy:backend`, then re-enable
   the Paladin ArgoCD app's `automated` sync (paused during the live cutover);

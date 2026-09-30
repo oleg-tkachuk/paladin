@@ -80,7 +80,7 @@ export function useTenants() {
   //     (backend, bucket) in tenant_default_bindings. Optional; legacy
   //     bootstrap callers omit it. For a dedicated tenant, send a
   //     backend-only ref "storageBackends/{b}/buckets/" (bucket derived).
-  //   - storageLayout — "shared" (default) or "dedicated" (ADR-0011): a
+  //   - storageLayout — "shared" (default) or "dedicated" (ADR-0015): a
   //     dedicated tenant gets its own provisioned bucket on the named backend;
   //     the backend is required, the bucket is derived (paladin-<tenant_uuid>).
   const createTenant = useCallback(
@@ -227,7 +227,7 @@ export function useTenants() {
   );
 
   // getTenantStorageMigration returns the tenant's shared->dedicated migration
-  // status, or null when none was ever started (NOT_FOUND). See ADR-0011 Phase 3.
+  // status, or null when none was ever started (NOT_FOUND). See ADR-0015 Phase 3.
   const getTenantStorageMigration = useCallback(
     async (tenantId: string): Promise<StorageMigrationStatus | null> => {
       try {
@@ -244,7 +244,7 @@ export function useTenants() {
     [],
   );
 
-  // migrateTenantStorageLayout starts a shared->dedicated migration (ADR-0011
+  // migrateTenantStorageLayout starts a shared->dedicated migration (ADR-0015
   // Phase 3). The tenant MUST currently be shared. targetBackendId empty reuses
   // the current backend; cleanupRetentionSeconds 0 uses the server default (24h).
   // Returns the freshly-created migration status.

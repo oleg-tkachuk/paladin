@@ -150,7 +150,7 @@ var ErrBackendReadOnly = errors.New("storage backend is read-only (draining)")
 // ErrBucketProvisioning is returned by the resolution path for a MUTATION when
 // the target bucket exists in the catalog but is not provisioned yet
 // (provision_state != 'ready') — the dedicated-bucket window between
-// CreateTenant and the reconciler creating the physical bucket (ADR-0011
+// CreateTenant and the reconciler creating the physical bucket (ADR-0015
 // Phase 1). Mapped to FailedPrecondition so a client retries once the bucket
 // is ready rather than presigning a PUT against a bucket S3 doesn't have.
 var ErrBucketProvisioning = errors.New("storage bucket is still provisioning")
@@ -478,7 +478,7 @@ func objectResourceName(tenantID uuid.UUID, collection, key string) string {
 
 // canonicalObjectPrefix resolves the canonical (A-shape) collection prefix
 // `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}` used to build
-// object-level event resource names (ADR-0010 Phase 1). The (backend, bucket)
+// object-level event resource names (ADR-0014 Phase 1). The (backend, bucket)
 // binding depends only on the collection, so callers resolve it ONCE before the
 // mutation tx and pass it into the dispatch — never a pool read inside an open
 // tx. On a lookup miss it returns "" and the caller falls back to the C-shape

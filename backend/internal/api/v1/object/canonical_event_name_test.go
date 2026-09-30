@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ADR-0010 Phase 1: object-level event resource_name goes canonical (A). The
+// ADR-0014 Phase 1: object-level event resource_name goes canonical (A). The
 // dispatch sites resolve the collection's (backend, bucket) prefix once before
 // the tx and append the user key; a resolve miss degrades to the C-shape name
 // so a transient blip never blocks the event.

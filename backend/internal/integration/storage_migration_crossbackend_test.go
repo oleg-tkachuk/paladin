@@ -17,7 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
-// TestStorageMigration_CrossBackendStreamThrough is the ADR-0011 Phase 3 slice-3
+// TestStorageMigration_CrossBackendStreamThrough is the ADR-0015 Phase 3 slice-3
 // live proof: the shared→dedicated migration's cross-backend copy path
 // (ObjectRouter.CopyObject → GetStream(source) piped into the destination's
 // multipart writer) actually moves an object between two physically distinct S3

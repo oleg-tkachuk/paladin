@@ -215,7 +215,7 @@ message TenantStats {
   // (deleted_at IS NOT NULL) and still hold their slug.
   int64 active = 2;
   int64 trashed = 3;
-  // storage_layout split (ADR-0011). Counted over ACTIVE tenants only.
+  // storage_layout split (ADR-0015). Counted over ACTIVE tenants only.
   int64 shared_layout = 4;
   int64 dedicated_layout = 5;
   // Active tenants with no row in tenant_default_bindings — they can't

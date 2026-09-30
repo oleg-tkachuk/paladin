@@ -1,11 +1,11 @@
-# BackendRegistry — multi-backend S3 client routing (ADR-0011 Phase 2)
+# BackendRegistry — multi-backend S3 client routing (ADR-0015 Phase 2)
 
 Status: proposed — detailed design for Phase 2 of
-[ADR-0011](adr/0011-per-tenant-bucket-layout.md)
-Owner: see ADR-0011
+[ADR-0015](../../docs/adr/0015-per-tenant-bucket-layout.md)
+Owner: see ADR-0015
 Last updated: 2026-07-02
 
-> This is the component-level design for the "real unblock" in ADR-0011: the
+> This is the component-level design for the "real unblock" in ADR-0015: the
 > single per-process S3 client becomes one client **per backend**, keyed by
 > `backend_id`. It carries no product decision — it is a prerequisite refactor
 > that is safe and behavior-preserving on a single-backend deployment. Phase 1
@@ -16,7 +16,7 @@ Last updated: 2026-07-02
 
 Let objects belonging to different tenants live on **different storage
 backends** (region / account / endpoint), so per-tenant region pinning and
-per-tenant IAM (ADR-0011 `dedicated` layout) become possible. Today
+per-tenant IAM (ADR-0015 `dedicated` layout) become possible. Today
 `internal/app/build_deps.go` builds a single `s3adapter.New(ctx, backend)` from
 `config.Storage.DefaultBackend`; `resolveBucket(perCall)` swaps only the bucket
 **name**, reusing one endpoint/credentials/region. Multi-backend routing is

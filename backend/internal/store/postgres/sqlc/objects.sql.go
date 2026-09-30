@@ -142,7 +142,7 @@ type GetObjectLockStateRow struct {
 // "locked" error instead of a bare version-mismatch when the SQL guard
 // on HardDeleteObject zeroes the rowcount.
 //
-// The lock belongs to the VERSION now (ADR-0013), so this reads through the
+// The lock belongs to the VERSION now (ADR-0017), so this reads through the
 // object's current version. LEFT JOIN plus COALESCE: an object with no lock
 // row is the common case and must answer "not locked", not "no row".
 func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectLockStateRow, error) {
@@ -215,7 +215,7 @@ DELETE FROM objects
 WHERE objects.tenant_id = $1 AND objects.id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
-  -- The lock lives on the object's current version now (ADR-0013). NOT EXISTS
+  -- The lock lives on the object's current version now (ADR-0017). NOT EXISTS
   -- rather than a join: an object with no lock row is the common case and must
   -- remain deletable.
   AND NOT EXISTS (

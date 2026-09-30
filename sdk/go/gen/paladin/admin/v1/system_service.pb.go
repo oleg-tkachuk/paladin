@@ -956,7 +956,7 @@ type TenantStats struct {
 	// (deleted_at IS NOT NULL) and still hold their slug.
 	Active  int64 `protobuf:"varint,2,opt,name=active,proto3" json:"active,omitempty"`
 	Trashed int64 `protobuf:"varint,3,opt,name=trashed,proto3" json:"trashed,omitempty"`
-	// storage_layout split (ADR-0011). Counted over ACTIVE tenants only.
+	// storage_layout split (ADR-0015). Counted over ACTIVE tenants only.
 	SharedLayout    int64 `protobuf:"varint,4,opt,name=shared_layout,json=sharedLayout,proto3" json:"shared_layout,omitempty"`
 	DedicatedLayout int64 `protobuf:"varint,5,opt,name=dedicated_layout,json=dedicatedLayout,proto3" json:"dedicated_layout,omitempty"`
 	// Active tenants with no row in tenant_default_bindings — they can't

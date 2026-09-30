@@ -68,7 +68,7 @@ type Tenant struct {
 	// — sourced from tenant_default_bindings on read. Empty when unbound.
 	// Populated only by the read paths (Get / GetBySlug / List).
 	DefaultBucket string
-	// StorageLayout — "shared" or "dedicated" (ADR-0011). Populated on read.
+	// StorageLayout — "shared" or "dedicated" (ADR-0015). Populated on read.
 	StorageLayout string
 }
 
@@ -87,7 +87,7 @@ type CreateTenantArgs struct {
 	// Empty strings = no binding (legacy / scripted-bootstrap path).
 	DefaultBackendID  string
 	DefaultBucketName string
-	// StorageLayout — "shared" (default) or "dedicated" (ADR-0011). Settable
+	// StorageLayout — "shared" (default) or "dedicated" (ADR-0015). Settable
 	// only at create; empty defaults to "shared".
 	StorageLayout string
 	// DedicatedBackend is set by the handler (not the client) for a dedicated
@@ -106,7 +106,7 @@ type UpdateTenantArgs struct {
 }
 
 // DefaultBinding is a tenant's default (backend, bucket) route for the bare
-// collection name shape (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
+// collection name shape (ADR-0014 Phase 3 / the schema baseline (001_initial_schema.sql)).
 type DefaultBinding struct {
 	TenantID uuid.UUID
 	// BucketID is the stored reference; BackendName and BucketName are carried
@@ -171,7 +171,7 @@ type Repository interface {
 	// StartStorageMigration provisions the tenant's dedicated bucket
 	// (provision_state='pending', owned by the tenant) and inserts the
 	// tenant_storage_migrations row (state='provisioning') in one transaction
-	// (ADR-0011 Phase 3). ErrStorageMigrationExists when a migration row is
+	// (ADR-0015 Phase 3). ErrStorageMigrationExists when a migration row is
 	// already present for the tenant. Returns the created migration.
 	StartStorageMigration(ctx context.Context, args StartStorageMigrationArgs) (StorageMigration, error)
 	// GetStorageMigration returns the tenant's migration status. ErrNotFound
@@ -458,7 +458,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("default_binding requires both backend and bucket"))
 	}
-	// storage_layout defaults to "shared"; "dedicated" (ADR-0011) is accepted
+	// storage_layout defaults to "shared"; "dedicated" (ADR-0015) is accepted
 	// and persisted here. The dedicated-bucket provisioning is wired in a
 	// follow-up; until then a dedicated tenant behaves like a shared one.
 	switch args.StorageLayout {
@@ -622,7 +622,7 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 	return &t, nil
 }
 
-// MigrateTenantStorageLayout starts a shared->dedicated migration (ADR-0011
+// MigrateTenantStorageLayout starts a shared->dedicated migration (ADR-0015
 // Phase 3): it validates the tenant is currently shared, provisions the
 // tenant's dedicated bucket, and records the copy job. The async
 // StorageMigrationWorker does the actual object copy + rebind. Returns the

@@ -145,4 +145,4 @@ storage:
 
 cedar:
   policy_cache_ttl: 30s
-  canonical_collection_euid: true       # ADR-0010 Phase 1 — see configs/config.yaml
+  canonical_collection_euid: true       # ADR-0014 Phase 1 — see configs/config.yaml

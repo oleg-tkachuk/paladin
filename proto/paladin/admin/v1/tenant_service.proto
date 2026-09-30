@@ -15,7 +15,7 @@ import "google/api/field_behavior.proto";
 service TenantService {
   // CreateTenant provisions a tenant and, unless the request opts out, its
   // default storage binding. storage_layout="dedicated" also provisions a
-  // physical bucket owned by the tenant (ADR-0011). AlreadyExists when the
+  // physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
   // slug is taken.
   rpc CreateTenant(CreateTenantRequest) returns (Tenant);
   // GetTenant accepts either the UUID or the slug in the resource name.
@@ -78,7 +78,7 @@ service TenantService {
   }
 
   // MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-  // (ADR-0011 Phase 3). It provisions the tenant's own bucket and starts an
+  // (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
   // async copy job that server-side-copies every object into it, then rebinds
   // the collections and flips the layout. Returns the initial migration status;
   // poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
@@ -104,7 +104,7 @@ service TenantService {
   }
 
   // GetTenantDefaultBinding returns the tenant's default (backend, bucket)
-  // route used to complete the bare collection name shape (ADR-0010 Phase 3).
+  // route used to complete the bare collection name shape (ADR-0014 Phase 3).
   // NOT_FOUND when the tenant has no binding set.
   rpc GetTenantDefaultBinding(GetTenantDefaultBindingRequest) returns (TenantDefaultBinding) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -268,7 +268,7 @@ message GetTenantStorageMigrationRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0011
+// StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0015
 // Phase 3): the copy job's state machine + progress.
 message StorageMigrationStatus {
   // tenant — "tenants/{tenant_id}".
@@ -287,7 +287,7 @@ message StorageMigrationStatus {
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the
-// bare collection name shape (ADR-0010 Phase 3 / migration 034).
+// bare collection name shape (ADR-0014 Phase 3 / migration 034).
 message TenantDefaultBinding {
   // name — "tenants/{tenant_id}/defaultBinding".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];

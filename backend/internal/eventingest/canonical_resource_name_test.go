@@ -11,7 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// ADR-0010 Phase 1: ingest-side object events must carry the SAME canonical
+// ADR-0014 Phase 1: ingest-side object events must carry the SAME canonical
 // (A-shape) resource_name the data-plane object handler emits, so an
 // implicit-mode (storage-event) upload and an explicit CompleteObject upload
 // are indistinguishable to a subscriber filtering on resource_name.

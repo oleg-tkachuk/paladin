@@ -48,7 +48,7 @@ type Layers struct {
 type Store interface {
 	// Fetch returns the effective policy text, a content hash, and the
 	// tenant's DB-authoritative slug. The slug is the trusted key for tenant
-	// membership in Cedar (ADR-0012) — never the JWT-supplied one. Empty when
+	// membership in Cedar (ADR-0016) — never the JWT-supplied one. Empty when
 	// the tenant is unknown or has no slug (legacy); callers fall back to the
 	// tenant UUID for the entity UID.
 	Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (layers Layers, hash []byte, slug string, err error)

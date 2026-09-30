@@ -1,4 +1,4 @@
-# ADR-0013: One identity model, one naming convention
+# ADR-0017: One identity model, one naming convention
 
 - **Status:** Accepted 2026-08-20. Supersedes the implicit split that grew up
   between natural-composite and surrogate keys. Implementation lands with this

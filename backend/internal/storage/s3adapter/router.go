@@ -79,7 +79,7 @@ func (r *ObjectRouter) CopyObject(ctx context.Context, src, dst object.Location)
 		}
 		return c.CopyObject(ctx, src, dst)
 	}
-	// Cross-backend (ADR-0011 Phase 3 slice 3): the two objects live on
+	// Cross-backend (ADR-0015 Phase 3 slice 3): the two objects live on
 	// different S3 endpoints, so stream through — GET from the source client
 	// into the destination's multipart writer, which parts the body so
 	// arbitrarily large objects copy without buffering the whole thing.

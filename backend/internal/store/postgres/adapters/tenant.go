@@ -109,7 +109,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 	}
 
 	// Dedicated layout: provision the tenant's own bucket in the same tx
-	// (ADR-0011). The row lands provision_state='pending' with the tenant as
+	// (ADR-0015). The row lands provision_state='pending' with the tenant as
 	// owner; the bucket reconciler (backend-routed) creates it physically.
 	// The default binding points at it so the tenant's collections land there.
 	// Bucket name is derived from the tenant id (globally unique per
@@ -229,7 +229,7 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 // TenantDefaultBinding returns the tenant's default (backend, bucket) route,
 // with found=false (nil error) when none is set. Implements
 // resolve.DefaultBindingLookup — completes the bare (B) collection shape to
-// canonical (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
+// canonical (ADR-0014 Phase 3 / the schema baseline (001_initial_schema.sql)).
 func (r *TenantRepo) TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (string, string, bool, error) {
 	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
 	if err != nil {

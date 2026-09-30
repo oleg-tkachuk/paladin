@@ -54,7 +54,7 @@ type tokenMinter interface {
 	MintRefresh(c issuer.RefreshClaims) (string, time.Time, error)
 }
 
-// CollectionRoute is one addressable Collection in all three ADR-0010 name
+// CollectionRoute is one addressable Collection in all three ADR-0014 name
 // shapes (A canonical, C tenant-path, B bare alias) plus its (backend,
 // bucket) binding. WhoAmI returns these so clients normalize to canonical
 // before sending rather than constructing it themselves (Phase 4).
@@ -75,7 +75,7 @@ type CollectionRoute struct {
 type CollectionRouteLister interface {
 	// Returns one page of the route table (starting after pageToken; empty =
 	// first page) plus nextPageToken — non-empty when more readable Collections
-	// remain, so the caller pages until it comes back empty (ADR-0010 Phase 4).
+	// remain, so the caller pages until it comes back empty (ADR-0014 Phase 4).
 	ListCollectionRoutes(ctx context.Context, tenantID uuid.UUID, pageToken string) (routes []CollectionRoute, nextPageToken string, err error)
 }
 
@@ -88,7 +88,7 @@ type Handler struct {
 	tenantSlug     TenantSlugLookup
 	now            func() time.Time
 
-	// Optional: WhoAmI Collection route table (ADR-0010 Phase 4). nil → no
+	// Optional: WhoAmI Collection route table (ADR-0014 Phase 4). nil → no
 	// routes in the response.
 	routes CollectionRouteLister
 
@@ -98,7 +98,7 @@ type Handler struct {
 }
 
 // WithCollectionRoutes installs the source of the WhoAmI Collection route table
-// (ADR-0010 Phase 4). Builder-style + optional so existing wire-up and tests
+// (ADR-0014 Phase 4). Builder-style + optional so existing wire-up and tests
 // keep working; unset means WhoAmI returns identity with no routes.
 func (h *Handler) WithCollectionRoutes(l CollectionRouteLister) *Handler {
 	h.routes = l
@@ -460,7 +460,7 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 type WhoAmIOutput struct {
 	User     authstore.User
 	Audience string
-	// Routes is one page of the caller's Collection route table (ADR-0010 Phase
+	// Routes is one page of the caller's Collection route table (ADR-0014 Phase
 	// 4). Empty when no route source is wired or the caller has no readable
 	// Collections.
 	Routes []CollectionRoute

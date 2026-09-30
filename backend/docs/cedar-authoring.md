@@ -158,7 +158,7 @@ Resource side (the user being managed):
 
 Each resource is a Cedar entity with a UID. Today the Collection UID is
 `Collection::"{tenant_uuid}/{collection}"` and the Tenant UID is
-`Tenant::"{slug}"`. Under [ADR-0010](adr/0010-canonical-resource-names.md)
+`Tenant::"{slug}"`. Under [ADR-0014](../../docs/adr/0014-canonical-resource-names.md)
 the Collection UID is migrating to the **canonical A-shape** name:
 
 ```
@@ -306,7 +306,7 @@ the regression").
 
 - **Hardcoding a resource EUID literal.** `resource == Collection::"…"` ties
   the policy to one identifier form and breaks across the canonical-name
-  migration (ADR-0010). Gate on attributes/parents instead — see §4.
+  migration (ADR-0014). Gate on attributes/parents instead — see §4.
 
 ---
 

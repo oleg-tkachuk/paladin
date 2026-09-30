@@ -11,7 +11,7 @@ import (
 )
 
 // TestLookupBucketReturnsBackendID proves the resolver plumbing for
-// multi-backend routing (docs/backend-registry.md, ADR-0011 Phase 2):
+// multi-backend routing (docs/backend-registry.md, ADR-0015 Phase 2):
 // LookupBucket now returns (backend_id, bucket) from the same
 // collections × storage_backends JOIN, so the storage boundary can key on
 // the physical (backend, bucket) pair. Guards against a column-order swap in

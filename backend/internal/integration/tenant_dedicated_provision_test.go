@@ -13,7 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// TestCreateDedicatedTenantProvisionsBucket proves ADR-0011 Phase 1
+// TestCreateDedicatedTenantProvisionsBucket proves ADR-0015 Phase 1
 // provisioning: CreateTenant with storage_layout="dedicated" inserts, in the
 // same tx, a pending bucket owned by the tenant plus a default binding to it.
 // The (backend-routed) bucket reconciler then creates it physically.

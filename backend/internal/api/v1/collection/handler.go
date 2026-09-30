@@ -592,7 +592,7 @@ func splitBucketResourceName(name string) (backend, bucket string, err error) {
 // the collection row on purpose: reading first would let an unauthorized
 // caller distinguish "exists" (→ PermissionDenied) from "not found" (→
 // NotFound), leaking existence. So the (backend, bucket) binding is not
-// available here, and under ADR-0010 the Cedar Collection EUID intentionally
+// available here, and under ADR-0014 the Cedar Collection EUID intentionally
 // falls back to the legacy `{tid}/{ok}` form for these calls — canonicalizing
 // them would require the pre-authz row read we deliberately avoid. Create /
 // BindCollectionToBucket carry the binding in the request and use authorizeFull,

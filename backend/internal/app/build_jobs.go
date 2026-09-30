@@ -110,7 +110,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// pending row names its backend, and a dedicated bucket may live on a
 		// non-default backend, so the reconciler must provision on the row's
 		// own backend rather than the default client (prerequisite for the
-		// per-tenant dedicated-bucket layout, ADR-0011 Phase 1).
+		// per-tenant dedicated-bucket layout, ADR-0015 Phase 1).
 		bucketRec := worker.NewBucketReconciler(
 			adapters.NewBucketRepoV2(reaperQ, reaperPool),
 			s3adapter.NewProvisionerRouter(deps.Registry),
@@ -385,7 +385,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
-	// ADR-0011 Phase 3: shared->dedicated storage migration copy job. Always
+	// ADR-0015 Phase 3: shared->dedicated storage migration copy job. Always
 	// registered — it is idle unless a tenant_storage_migrations row is active
 	// (the admin MigrateTenantStorageLayout RPC creates one), so it needs no
 	// config toggle. Slice 1 is same-backend server-side copy.

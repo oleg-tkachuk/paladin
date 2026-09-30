@@ -200,7 +200,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	}
 }
 
-// TestAdversarial_CedarAuthoritativeSlugIsolation proves ADR-0012 end-to-end
+// TestAdversarial_CedarAuthoritativeSlugIsolation proves ADR-0016 end-to-end
 // against the REAL PostgresStore: tenant membership keys on the DB slug, so a
 // caller in tenant B cannot satisfy tenant A's member permit — not even by
 // claiming A's slug in its principal. Verifies the slug genuinely flows from

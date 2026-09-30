@@ -46,6 +46,11 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0010](adr/0010-capability-as-establishing-credential.md) | A capability may establish identity on the data plane |
 | [0011](adr/0011-narrow-role-for-tenant-provisioning.md) | A narrow role for tenant provisioning |
 | [0012](adr/0012-machine-principals-may-delete-their-own-objects.md) | Cedar knows the credential kind, and machines may delete their own objects |
+| [0013](adr/0013-object-lock-retention-and-legal-hold.md) | Object Lock — retention a mode of Paladin cannot lift |
+| [0014](adr/0014-canonical-resource-names.md) | Canonical resource names |
+| [0015](adr/0015-per-tenant-bucket-layout.md) | Per-tenant bucket layout |
+| [0016](adr/0016-cedar-tenant-membership-isolation.md) | Cedar tenant-membership isolation |
+| [0017](adr/0017-single-identity-model-and-naming.md) | One identity model, one naming convention |
 
 ## Runbooks
 

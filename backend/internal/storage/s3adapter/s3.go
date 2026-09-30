@@ -323,7 +323,7 @@ func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region
 	// Verify the bucket is actually reachable before reporting success: a
 	// backend that accepts CreateBucket without exposing a usable bucket would
 	// otherwise let the reconciler flip provision_state to 'ready' on a bucket
-	// that can't be served, lifting the presign/upload gate (ADR-0011) into a
+	// that can't be served, lifting the presign/upload gate (ADR-0015) into a
 	// broken bucket. A failing HeadBucket keeps the row in 'failed'/'pending'
 	// with the error surfaced, so the gate stays closed. NOTE: this catches a
 	// missing bucket, not a store that has the bucket but can't accept writes
@@ -347,7 +347,7 @@ func (c *Client) DeleteBucket(ctx context.Context, backendID, bucketName string)
 }
 
 // TagBucketOwner tags a bucket with tenant_id=<uuid> for cost attribution
-// (ADR-0011). Callers treat failure as non-fatal — not every S3-compatible
+// (ADR-0015). Callers treat failure as non-fatal — not every S3-compatible
 // backend implements PutBucketTagging.
 func (c *Client) TagBucketOwner(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error {
 	_, err := c.s3.PutBucketTagging(ctx, &s3.PutBucketTaggingInput{

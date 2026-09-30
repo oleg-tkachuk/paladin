@@ -248,7 +248,7 @@ type Engine struct {
 
 	// canonicalCollectionEUID switches the Collection entity UID from the legacy
 	// `{tenant_uuid}/{collection}` form to the canonical A-shape name
-	// (ADR-0010). Only takes effect where (backend, bucket) are in scope on the
+	// (ADR-0014). Only takes effect where (backend, bucket) are in scope on the
 	// request; attribute/parent-based policies are unaffected by the UID string
 	// either way. Default off; flip per-environment after confirming no policy
 	// hardcodes a `resource == Collection::"…"` literal.
@@ -266,7 +266,7 @@ type Engine struct {
 type EngineOption func(*Engine)
 
 // WithCanonicalCollectionEUID enables the canonical A-shape Collection entity
-// UID (ADR-0010, Phase 1). Off by default.
+// UID (ADR-0014, Phase 1). Off by default.
 func WithCanonicalCollectionEUID(on bool) EngineOption {
 	return func(e *Engine) { e.canonicalCollectionEUID = on }
 }
@@ -295,7 +295,7 @@ type compiledPolicy struct {
 	// answer.
 	degraded []string
 	// tenantSlug is the DB-authoritative slug for this policy's tenant
-	// (ADR-0012). Cached with the policy so keying tenant membership on the
+	// (ADR-0016). Cached with the policy so keying tenant membership on the
 	// trusted slug costs no extra query on the authz hot path.
 	tenantSlug string
 	// perObjectEval is true when at least one policy in the set reads a
@@ -377,7 +377,7 @@ type Authorizer interface {
 func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
 	// compiledFor loads the resource-tenant's policy by the TRUSTED UUID and
 	// returns that tenant's DB-authoritative slug. The slug — never the
-	// JWT-supplied one — keys tenant membership in the entity graph (ADR-0012),
+	// JWT-supplied one — keys tenant membership in the entity graph (ADR-0016),
 	// so a spoofed tenant_slug claim cannot satisfy a member permit.
 	set, authSlug, err := e.compiledFor(ctx, r.TenantID, r.Collection)
 	if err != nil {
@@ -893,7 +893,7 @@ func collectionUID(tenantID uuid.UUID, collection string) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeCollection, cedartypes.String(tenantID.String()+"/"+collection))
 }
 
-// Canonical A-shape Collection name segments (ADR-0010). Inlined here rather
+// Canonical A-shape Collection name segments (ADR-0014). Inlined here rather
 // than importing internal/api/v1/collection (that package imports cedar —
 // importing it back would cycle).
 const (
@@ -956,7 +956,7 @@ func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID 
 		return targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
 	}
 	// Tenant-as-resource: key on the DB-authoritative slug so this UID matches
-	// the Tenant entity buildEntities emits (ADR-0012).
+	// the Tenant entity buildEntities emits (ADR-0016).
 	return tenantUID(r.TenantID, authSlug)
 }
 
@@ -1032,7 +1032,7 @@ func scopeKeysValue(r *Resource) cedartypes.Value {
 // authSlug is the DB-authoritative slug of the resource's tenant (from the
 // policy fetch). It — not r.TenantSlug — keys the resource Tenant entity, and
 // the User's membership anchors on the resource tenant only when the principal
-// provably belongs to it (trusted-UUID equality). See ADR-0012.
+// provably belongs to it (trusted-UUID equality). See ADR-0016.
 func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedartypes.EntityMap {
 	uUID := userUID(p)
 	rolesSet := make([]cedartypes.Value, 0, len(p.Roles))
@@ -1071,7 +1071,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	}
 
 	// User membership — anchored on the PRINCIPAL's tenant, gated by
-	// trusted-UUID equality (ADR-0012). The principal is placed under the
+	// trusted-UUID equality (ADR-0016). The principal is placed under the
 	// resource's Tenant entity ONLY when p.TenantID == r.TenantID (both trusted
 	// UUIDs), so `principal in Tenant::"<slug>"` means "this caller really
 	// belongs to this tenant" — making Cedar an independent second isolation

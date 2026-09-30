@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ADR-0011 Phase 3 (slice 1): the shared->dedicated storage migration copy job.
+// ADR-0015 Phase 3 (slice 1): the shared->dedicated storage migration copy job.
 // A tenant switched to the `dedicated` layout keeps serving from its shared
 // bucket until this worker copies every object into the tenant's own bucket
 // (same key, server-side CopyObject), rebinds the collections in one

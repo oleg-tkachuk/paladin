@@ -6,9 +6,9 @@
 -- This is a CONSOLIDATED baseline: it replaces the 65 incremental migrations
 -- that built the schema between 2026-05 and 2026-08. Those migrations are in
 -- git history; they are not carried forward because every deployment
--- reprovisions (ADR-0013), so no database will ever replay them.
+-- reprovisions (ADR-0017), so no database will ever replay them.
 --
--- Conventions, all of them from ADR-0013 — read it before adding a table:
+-- Conventions, all of them from ADR-0017 — read it before adding a table:
 --
 --   * `id` is the primary key, always, and it is a uuid. A column named
 --     `<entity>_id` is a FOREIGN key to `<entity>.id` and nothing else.
@@ -32,7 +32,7 @@ CREATE TYPE object_state AS ENUM ('PENDING', 'AVAILABLE', 'FAILED', 'DELETED');
 CREATE TYPE operation_state AS ENUM (
     'PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED');
 
--- Was text + CHECK on two tables (ADR-0013 §5).
+-- Was text + CHECK on two tables (ADR-0017 §5).
 CREATE TYPE object_lock_mode AS ENUM ('GOVERNANCE', 'COMPLIANCE');
 
 CREATE TYPE backend_health_status AS ENUM ('unknown', 'ok', 'error');
@@ -73,7 +73,7 @@ CREATE UNIQUE INDEX tenants_slug_live_key
 CREATE UNIQUE INDEX tenants_display_name_live_key
     ON tenants (display_name) WHERE deleted_at IS NULL;
 
--- Append-only: bigint identity, not uuid (ADR-0013).
+-- Append-only: bigint identity, not uuid (ADR-0017).
 CREATE TABLE tenant_slug_history (
     id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     tenant_id  uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -173,7 +173,7 @@ CREATE TABLE api_token_rate_buckets (
 
 -- ─── OAuth 2.1 authorization server ─────────────────────────────────────────
 
--- `client_id` is the ONE naming exception in the schema (ADR-0013 §2): a
+-- `client_id` is the ONE naming exception in the schema (ADR-0017 §2): a
 -- public OAuth protocol identifier that appears in issued tokens and in client
 -- configuration, so it is an external contract rather than our identity.
 CREATE TABLE oauth_clients (
@@ -290,7 +290,7 @@ CREATE TABLE replication_state (
 -- ─── Collections (was: collections) ─────────────────────────────────────────
 
 -- A collection is a policy-bearing container of objects inside a tenant. It is
--- NOT a key — that naming is what ADR-0013 §3 exists to fix.
+-- NOT a key — that naming is what ADR-0017 §3 exists to fix.
 CREATE TABLE collections (
     id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -306,7 +306,7 @@ CREATE TABLE collections (
     updated_at        timestamptz NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, name),
     -- Target of the composite FK from objects: pins an object's collection to
-    -- the object's own tenant (ADR-0013 §4).
+    -- the object's own tenant (ADR-0017 §4).
     UNIQUE (tenant_id, id),
     CONSTRAINT collections_name_format CHECK (
         char_length(name) <= 255 AND
@@ -372,7 +372,7 @@ CREATE TABLE objects (
     terminated_at      timestamptz,
     presign_expires_at timestamptz,
     -- Composite FK, not two separate ones: an object cannot reference a
-    -- collection that belongs to a different tenant (ADR-0013 §4).
+    -- collection that belongs to a different tenant (ADR-0017 §4).
     FOREIGN KEY (tenant_id, collection_id)
         REFERENCES collections (tenant_id, id) ON DELETE RESTRICT,
     UNIQUE (collection_id, path),
@@ -422,7 +422,7 @@ ALTER TABLE objects
 
 -- Object Lock, lifted out of objects/object_versions where it lived as three
 -- duplicated columns on each. S3 attaches retention to a version, so the
--- version owns it (ADR-0013 consequences).
+-- version owns it (ADR-0017 consequences).
 CREATE TABLE object_locks (
     id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

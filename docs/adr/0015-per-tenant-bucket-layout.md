@@ -1,4 +1,4 @@
-# ADR-0011: Per-tenant physical S3 bucket layout (hybrid with the shared layout)
+# ADR-0015: Per-tenant physical S3 bucket layout (hybrid with the shared layout)
 
 - **Status:** Proposed 2026-07-02 — design ratified on explicit request (the
   BACKLOG entry *"Per-tenant S3 bucket layout"* was held **do-not-design until
@@ -26,20 +26,20 @@
 
   | Mechanism | Where | Effect |
   |---|---|---|
-  | Key prefix `<tenant_id>/…` | [`s3adapter/s3.go`](../../internal/storage/s3adapter/s3.go) `composeKey` | every object's S3 key is tenant-rooted |
-  | `buckets.owner_tenant_id` + trigger | [`migrations/003_triggers.sql`](../../migrations/003_triggers.sql) `collections_enforce_bucket_tenancy` | NULL ⇒ any tenant may bind; set ⇒ only the owner may |
+  | Key prefix `<tenant_id>/…` | [`s3adapter/s3.go`](../../backend/internal/storage/s3adapter/s3.go) `composeKey` | every object's S3 key is tenant-rooted |
+  | `buckets.owner_tenant_id` + trigger | [`migrations/003_triggers.sql`](../../backend/migrations/003_triggers.sql) `collections_enforce_bucket_tenancy` | NULL ⇒ any tenant may bind; set ⇒ only the owner may |
   | Per-object_key bucket binding | `object_keys.(backend_id, bucket_name)` FK | each namespace names its own physical bucket |
 
   Concrete state discovered while designing this (do not re-derive):
 
   - **Physical bucket provisioning already exists.** `CreateBucket` accepts a
     `ProvisionOnBackend` flag → writes `provision_state='pending'`; the
-    [`BucketReconciler`](../../internal/worker/bucket_reconciler.go) worker
+    [`BucketReconciler`](../../backend/internal/worker/bucket_reconciler.go) worker
     calls `provisioner.CreateBucket` / `DeleteBucket` idempotently via the
     outbox. `owner_tenant_id`, `region`, and `tenant_default_bindings`
     (tenant → default `(backend_id, bucket_name)`) are all present.
   - **Provisioning is NOT wired into CreateTenant.** A tenant is created
-    logical-only ([`internal/api/v1/tenant/handler.go`](../../internal/api/v1/tenant/handler.go));
+    logical-only ([`internal/api/v1/tenant/handler.go`](../../backend/internal/api/v1/tenant/handler.go));
     nothing provisions or binds a bucket at tenant-create time.
   - **One S3 client per process.** `build_deps.go` builds a single
     `s3adapter.New(ctx, backend)` from `config.Storage.DefaultBackend`;
@@ -113,7 +113,7 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
   `backend_id`, so resolution becomes `registry.For(backend_id).Presign(…)`.
   This unblocks per-tenant **region pinning** and per-tenant **IAM** (a distinct
   AssumeRole / credential per backend). Detailed component design:
-  [docs/backend-registry.md](../backend-registry.md).
+  [docs/backend-registry.md](../../backend/docs/backend-registry.md).
 - **Phase 3 — shared→dedicated migration job (reuse StorageReplicator).**
   Because keys are uniform: provision the dedicated bucket → server-side
   `CopyObject` every object under the `<tenant_id>/` prefix with the **same**
@@ -178,7 +178,7 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
   tagging, frontend field surfacing) are listed there too.
 
 Component-level design for the Phase 2 machinery:
-[docs/backend-registry.md](../backend-registry.md).
+[docs/backend-registry.md](../../backend/docs/backend-registry.md).
 
 ## Consequences
 

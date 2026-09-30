@@ -33,7 +33,7 @@ func TestObjectRouter_UnknownBackendPropagates(t *testing.T) {
 	}
 }
 
-// Cross-backend CopyObject used to be rejected up front; ADR-0011 Phase 3
+// Cross-backend CopyObject used to be rejected up front; ADR-0015 Phase 3
 // slice 3 turned it into a GET→PUT stream-through (see ObjectRouter.streamThrough).
 // The byte transfer needs a real/mock S3 on both ends, so it is covered by the
 // migration integration test rather than a unit test here.

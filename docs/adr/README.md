@@ -23,21 +23,10 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0011](0011-narrow-role-for-tenant-provisioning.md) | A narrow role for tenant provisioning | Accepted |
 | [0012](0012-machine-principals-may-delete-their-own-objects.md) | Cedar knows the credential kind; machines may delete their own objects | Accepted |
 | [0013](0013-object-lock-retention-and-legal-hold.md) | Object Lock — retention a mode of Paladin cannot lift | Accepted |
-
-## Backend-scoped ADRs
-
-A second set lives in [`../../backend/docs/adr/`](../../backend/docs/adr/),
-covering decisions internal to the backend's schema and API surface rather
-than the platform as a whole. The two sets number independently, so **0010
-through 0012 exist in both** — cite them as "ADR-NNNN" for this directory
-and "backend ADR-NNNN" for the other.
-
-| ADR | Title | Status |
-|-----|-------|--------|
-| [backend 0010](../../backend/docs/adr/0010-canonical-resource-names.md) | Canonical resource names (A + B + C) | Accepted |
-| [backend 0011](../../backend/docs/adr/0011-per-tenant-bucket-layout.md) | Per-tenant bucket layout | Accepted |
-| [backend 0012](../../backend/docs/adr/0012-cedar-tenant-membership-isolation.md) | Cedar tenant-membership isolation | Accepted |
-| [backend 0013](../../backend/docs/adr/0013-single-identity-model-and-naming.md) | One identity model, one naming convention | Accepted |
+| [0014](0014-canonical-resource-names.md) | Canonical resource names (A + B + C) | Accepted |
+| [0015](0015-per-tenant-bucket-layout.md) | Per-tenant bucket layout | Accepted |
+| [0016](0016-cedar-tenant-membership-isolation.md) | Cedar tenant-membership isolation | Accepted |
+| [0017](0017-single-identity-model-and-naming.md) | One identity model, one naming convention | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

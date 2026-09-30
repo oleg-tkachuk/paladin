@@ -42,7 +42,7 @@ type CanonicalRef struct {
 
 // DefaultBindingLookup resolves a tenant's default (backend, bucket) route,
 // used to complete the bare (B) collection shape to canonical. Implemented by
-// the tenant store adapter (ADR-0010 Phase 3 / the schema baseline (001_initial_schema.sql)).
+// the tenant store adapter (ADR-0014 Phase 3 / the schema baseline (001_initial_schema.sql)).
 type DefaultBindingLookup interface {
 	TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (backendID, bucketName string, found bool, err error)
 }
@@ -113,7 +113,7 @@ func ParseCollectionName(ctx context.Context, name string) (CanonicalRef, error)
 
 // ResolveCollectionNameWithBinding is ResolveCollectionName plus bare-shape (B)
 // enrichment: a bare name carries no (backend, bucket), so it is completed to
-// canonical using the caller-tenant's default binding (ADR-0010 Phase 3). The
+// canonical using the caller-tenant's default binding (ADR-0014 Phase 3). The
 // A and C shapes are returned unchanged — the lookup is consulted only for B,
 // and only when the binding isn't already populated. A tenant with no default
 // binding gets ErrNoDefaultBinding.

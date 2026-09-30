@@ -342,7 +342,7 @@ export default function TenantOverviewPage() {
         ))}
       </div>
 
-      {/* ─── Storage migration (ADR-0011 Phase 3) ──────────────── */}
+      {/* ─── Storage migration (ADR-0015 Phase 3) ──────────────── */}
       <StorageMigrationCard
         tenantId={tenant.tenantId}
         storageLayout={tenant.storageLayout || "shared"}

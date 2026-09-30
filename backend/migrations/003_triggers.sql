@@ -72,7 +72,7 @@ CREATE TRIGGER tenants_block_immutable_columns
 
 -- ─── Object Lock retention ──────────────────────────────────────────────────
 --
--- Object Lock now lives in its own table (ADR-0013), so the guard moves with
+-- Object Lock now lives in its own table (ADR-0017), so the guard moves with
 -- it: deleting a version means deleting its lock row, and the lock is what
 -- forbids the delete. COMPLIANCE cannot be overridden by anyone, including the
 -- platform; GOVERNANCE yields to an explicit bypass GUC.

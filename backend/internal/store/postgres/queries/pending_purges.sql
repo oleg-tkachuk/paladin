@@ -1,5 +1,5 @@
 -- Purge debt: the retry handle for bytes whose DB row is already gone.
--- See ADR-0013 and migrations/001_initial_schema.sql: storage_path is
+-- See ADR-0017 and migrations/001_initial_schema.sql: storage_path is
 -- denormalised here because the object row is gone before the purge runs.
 
 -- name: InsertPendingPurge :exec

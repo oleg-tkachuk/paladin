@@ -907,7 +907,7 @@ func (x *GetTenantStorageMigrationRequest) GetName() string {
 	return ""
 }
 
-// StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0011
+// StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0015
 // Phase 3): the copy job's state machine + progress.
 type StorageMigrationStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1007,7 +1007,7 @@ func (x *StorageMigrationStatus) GetError() string {
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the
-// bare collection name shape (ADR-0010 Phase 3 / migration 034).
+// bare collection name shape (ADR-0014 Phase 3 / migration 034).
 type TenantDefaultBinding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name — "tenants/{tenant_id}/defaultBinding".

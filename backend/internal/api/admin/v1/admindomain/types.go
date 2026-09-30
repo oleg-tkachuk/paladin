@@ -115,7 +115,7 @@ type BucketProvisionRow struct {
 	ProvisionAttempts int32
 	LastProvisionAt   time.Time
 	// OwnerTenantID is the dedicated-bucket owner (uuid.Nil for shared buckets).
-	// The reconciler tags the bucket with it for cost attribution (ADR-0011).
+	// The reconciler tags the bucket with it for cost attribution (ADR-0015).
 	OwnerTenantID uuid.UUID
 }
 

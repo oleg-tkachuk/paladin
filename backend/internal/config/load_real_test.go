@@ -126,10 +126,10 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if !cfg.Middleware.RateLimit.Enabled {
 		t.Error("Middleware.RateLimit.Enabled: expected true from yaml")
 	}
-	// ADR-0010 Phase 1: the canonical Collection EUID is enabled in the shipped
+	// ADR-0014 Phase 1: the canonical Collection EUID is enabled in the shipped
 	// config. Guards against the flag silently reverting to the Go zero-value.
 	if !cfg.Cedar.CanonicalCollectionEUID {
-		t.Error("Cedar.CanonicalCollectionEUID: expected true from configs/config.yaml (ADR-0010 Phase 1)")
+		t.Error("Cedar.CanonicalCollectionEUID: expected true from configs/config.yaml (ADR-0014 Phase 1)")
 	}
 	if cfg.MCP.HTTP.Addr == "" {
 		t.Error("MCP.HTTP.Addr is empty")
