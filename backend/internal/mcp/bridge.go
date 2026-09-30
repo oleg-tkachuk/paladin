@@ -109,9 +109,18 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 				// is normal behaviour, not an exception. A fresh UUID per
 				// attempt only collapses a transport-level retry; a caller
 				// wanting more can set the header itself, which this respects.
+				//
+				// A key the agent put in the message's idempotency_key field wins:
+				// the plane refuses a request whose header and field disagree, so
+				// stamping a fresh UUID beside it failed every such call, and a
+				// retry with the same key was never recognised as one.
 				if wantsIdempotencyKey(req.Spec().Procedure) &&
 					req.Header().Get(paladin.HeaderIdempotencyKey) == "" {
-					req.Header().Set(paladin.HeaderIdempotencyKey, uuid.NewString())
+					key := uuid.NewString()
+					if c, ok := req.Any().(interface{ GetIdempotencyKey() string }); ok && c.GetIdempotencyKey() != "" {
+						key = c.GetIdempotencyKey()
+					}
+					req.Header().Set(paladin.HeaderIdempotencyKey, key)
 				}
 				return next(ctx, req)
 			}
