@@ -103,8 +103,10 @@ describe("TenantsPage", () => {
     const form = screen.getByRole("dialog").querySelector("form")!;
     fireEvent.submit(form);
     expect(h.createTenant).not.toHaveBeenCalled();
-    expect(h.showNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "error", title: "Invalid slug" }),
+    // Said at the field, where it can be fixed, not in a toast.
+    expect(screen.getByLabelText(/Slug/i)).toHaveAttribute(
+      "aria-invalid",
+      "true",
     );
   });
 
