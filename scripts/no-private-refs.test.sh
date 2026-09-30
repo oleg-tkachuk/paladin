@@ -40,8 +40,9 @@ readonly OWNER="oleg-tkachuk"
 #   paladin                    this repository — Go module path, docs links
 #   paladin-core               its backend container image, ghcr.io/OWNER/…
 #   paladin-console            its frontend container image
+#   charts                     its Helm charts, oci://ghcr.io/OWNER/charts/…
 #   taskfiles                 the shared Task library, a remote include
-readonly ALLOWED_REPOS=(paladin paladin-core paladin-console taskfiles)
+readonly ALLOWED_REPOS=(paladin paladin-core paladin-console charts taskfiles)
 
 # Lockfiles carry base64 integrity hashes and vendored dependency graphs; the
 # owner names in them are npm's and Go's business, not a reference this tree
