@@ -99,7 +99,7 @@ vars:
   #
   #   exact tag, clean tree  →  X.Y.Z
   #   otherwise, clean tree  →  <base>-dev.<committer-ts>.g<sha>
-  #   dirty tree             →  <base>-dev.<committer-ts>.g<sha>.dirty.<now>
+  #   dirty tree             →  <base>-dev.<committer-ts>.dirty.<now>.g<sha>
   #
   # The committer timestamp, not `date +%s`: a clean tree then produces the
   # SAME version on every run, which is what lets image:build and chart:push
@@ -111,6 +111,22 @@ vars:
   # ArgoCD's `>=0.0.0-0` resolver always lands on the newest push. A sha-first
   # form lets an alphabetically larger sha from an OLDER commit shadow a newer
   # build — that bug has been shipped twice; do not reintroduce it.
+  #
+  # The dirty marker goes BEFORE the sha, and that position is the whole of it.
+  # SemVer says a larger set of pre-release fields outranks a smaller one when
+  # the shared prefix is equal (§11.4.4) — so appending `.dirty.<now>` made a
+  # dirty build outrank the clean build of the SAME commit, permanently: the
+  # clean version is pinned by the committer timestamp and can never grow the
+  # extra fields to catch up. Once a dirty image was pushed, committing and
+  # rebuilding could not displace it and ArgoCD kept serving the dirty one
+  # until the next commit.
+  #
+  # With the marker in front, field 3 compares `dirty` against `g<sha>` — both
+  # alphanumeric, ASCII order, 'd' < 'g' — so the clean build of a commit always
+  # wins, while a dirty build still outranks every build of an OLDER commit
+  # (field 2, the timestamp, decides first) and two dirty builds still order by
+  # their wall clock. Iteration is unchanged; only "I committed and rebuilt" is
+  # fixed.
   #
   # The `g` prefix on the sha follows git-describe. Without it an all-digit
   # short sha with a leading zero is an invalid SemVer numeric identifier
@@ -146,8 +162,8 @@ vars:
     {{- if .APP_VERSION -}}{{.APP_VERSION}}
     {{- else if and ._REL_TAG (not ._REL_DIRTY) -}}{{._REL_TAG}}
     {{- else -}}
-    {{- ._REL_TAG | default .VERSION_BASE | default "0.1.0"}}-dev.{{._REL_CTS}}.g{{._REL_SHA}}
-    {{- if ._REL_DIRTY}}.dirty.{{._REL_NOW}}{{end}}
+    {{- ._REL_TAG | default .VERSION_BASE | default "0.1.0"}}-dev.{{._REL_CTS}}
+    {{- if ._REL_DIRTY}}.dirty.{{._REL_NOW}}{{end}}.g{{._REL_SHA}}
     {{- end -}}
   _REL_BUILD_TIME:
     sh: TZ='{{.TIMEZONE | default "UTC"}}' date +%Y-%m-%dT%H:%M:%S%z

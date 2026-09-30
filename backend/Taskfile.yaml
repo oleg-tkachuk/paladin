@@ -14,7 +14,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.0'
   PROJECT_NAME: paladin-core
   K8S_NAMESPACE: paladin
   # The local OrbStack cluster by default; override to target another.
