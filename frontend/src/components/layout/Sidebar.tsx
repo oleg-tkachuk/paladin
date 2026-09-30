@@ -152,7 +152,7 @@ const navigationGroups: Array<{
       // the System group for; Health answers "is it up".
       { name: "Platform Stats", path: "/stats", icon: ChartBarSquareIcon },
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
-      { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
+      { name: "MCP server", path: "/mcp", icon: CommandLineIcon },
       {
         name: "Health Status",
         path: "/health",

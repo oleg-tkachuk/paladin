@@ -32,6 +32,13 @@ describe("visibleNavigationGroups", () => {
     expect(all).toEqual(names([ROLES.tenantAdmin]));
   });
 
+  it("names the MCP entry after the page it opens", () => {
+    const entry = visibleNavigationGroups([ROLES.platformAdmin])
+      .flatMap((g) => g.items)
+      .find((i) => i.path === "/mcp");
+    expect(entry?.name).toBe("MCP server");
+  });
+
   it("takes nothing away before the user is known", () => {
     expect(names(null)).toEqual(names([ROLES.platformAdmin]));
   });
