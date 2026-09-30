@@ -1,6 +1,8 @@
-# checkov config, read by `task -t Taskfile.dev.yaml checkov:scan` and
-# `checkov:triage`. The frameworks and the directory are passed as flags by the
-# include in Taskfile.dev.yaml; what lives here is what we accept and why.
+# checkov config, read by `task -t Taskfile.dev.yaml checkov:scan`. The scan
+# passes checkov this file and CHECKOV_FLAGS, nothing else: without `directory`
+# and `framework` here it prints its banner, scans nothing and exits 0.
+# `checkov:triage` takes them from CHECKOV_TARGET and CHECKOV_FRAMEWORKS in
+# Taskfile.dev.yaml instead; scripts/checkov-config.test.sh keeps the two equal.
 #
 # Two mechanisms, and the difference matters:
 #
@@ -13,6 +15,15 @@
 #
 # Anything moved from the second list to the first needs a reason that survives
 # review. "It was noisy" is not one.
+
+directory:
+  - .
+
+framework:
+  - dockerfile
+  - github_actions
+  - helm
+  - kubernetes
 
 skip-check:
   # The chart writes `.Release.Namespace` everywhere. `helm template` without

@@ -102,11 +102,11 @@ includes:
     taskfile: '{{printf .TASKLIB "checkov"}}'
     dir: .
     vars:
-      # ONE directory. The module interpolates this as `-d <target>`, so a
-      # list of three reaches checkov as a single path, which it reports as
-      # "does not exist; skipping it" on stderr — and then exits 0, having
-      # scanned nothing. Whole-repo with exclusions instead; the excluded
-      # trees are vendored or generated and no cluster ever sees them.
+      # CHECKOV_TARGET and CHECKOV_FRAMEWORKS reach `checkov:triage` only;
+      # `checkov:scan` reads `directory` and `framework` from .checkov.yaml,
+      # and scripts/checkov-config.test.sh fails when the two disagree.
+      # Whole-repo with exclusions; the excluded trees are vendored or
+      # generated and no cluster ever sees them.
       CHECKOV_TARGET: ["."]
       CHECKOV_FLAGS: >-
         --skip-path node_modules --skip-path .task
@@ -412,6 +412,7 @@ tasks:
     # Whatever it finds is either fixed or written down with a reason in
     # .checkov.yaml. Nothing is skipped for being noisy.
     cmds:
+      - ./scripts/checkov-config.test.sh
       - task: checkov:scan
 
   verify:brewfile:
