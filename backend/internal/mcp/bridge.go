@@ -173,8 +173,8 @@ func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Ser
 	})
 	registerReadTools(srv, c, filter)
 	registerWriteTools(srv, c, filter)
-	registerResources(srv, c)
-	registerPrompts(srv)
+	registerResources(srv, c, filter)
+	registerPrompts(srv, filter)
 	return srv
 }
 
@@ -1243,8 +1243,11 @@ type auditEntryArgs struct {
 
 // ─── Resources ──────────────────────────────────────────────────────────────
 
-func registerResources(s *mcpsdk.Server, c *Clients) {
-	addJSONResource(s, c, "paladin://backends", "Storage backends", "All registered storage backends as JSON.",
+// registerResources exposes each resource only when the profile allows the
+// tool that reads the same data: a resource is another door to it, and a
+// profile that withholds paladin_list_tenants must not list tenants here.
+func registerResources(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
+	addJSONResource(s, filter, "paladin_list_backends", "paladin://backends", "Storage backends", "All registered storage backends as JSON.",
 		func(ctx context.Context) (any, error) {
 			r, err := c.Backend.ListBackends(ctx, connect.NewRequest(&adminv1.ListBackendsRequest{
 				Page: &commonv1.PageRequest{PageSize: 200},
@@ -1254,7 +1257,7 @@ func registerResources(s *mcpsdk.Server, c *Clients) {
 			}
 			return r.Msg, nil
 		})
-	addJSONResource(s, c, "paladin://buckets", "Buckets", "All buckets across all backends.",
+	addJSONResource(s, filter, "paladin_list_buckets", "paladin://buckets", "Buckets", "All buckets across all backends.",
 		func(ctx context.Context) (any, error) {
 			r, err := c.Bucket.ListBuckets(ctx, connect.NewRequest(&adminv1.ListBucketsRequest{
 				Page: &commonv1.PageRequest{PageSize: 200},
@@ -1264,7 +1267,7 @@ func registerResources(s *mcpsdk.Server, c *Clients) {
 			}
 			return r.Msg, nil
 		})
-	addJSONResource(s, c, "paladin://tenants", "Tenants", "All tenants.",
+	addJSONResource(s, filter, "paladin_list_tenants", "paladin://tenants", "Tenants", "All tenants.",
 		func(ctx context.Context) (any, error) {
 			r, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{
 				Page: &commonv1.PageRequest{PageSize: 200},
@@ -1276,7 +1279,10 @@ func registerResources(s *mcpsdk.Server, c *Clients) {
 		})
 }
 
-func addJSONResource(s *mcpsdk.Server, _ *Clients, uri, name, desc string, fetch func(ctx context.Context) (any, error)) {
+func addJSONResource(s *mcpsdk.Server, filter *ToolFilter, tool, uri, name, desc string, fetch func(ctx context.Context) (any, error)) {
+	if filter != nil && !filter.Allow(tool) {
+		return
+	}
 	s.AddResource(&mcpsdk.Resource{
 		URI:         uri,
 		Name:        name,
@@ -1303,59 +1309,76 @@ func addJSONResource(s *mcpsdk.Server, _ *Clients, uri, name, desc string, fetch
 
 // ─── Prompts ────────────────────────────────────────────────────────────────
 
-func registerPrompts(s *mcpsdk.Server) {
-	s.AddPrompt(&mcpsdk.Prompt{
-		Name:        "audit_access_for_tenant",
-		Description: "Audit who has access to what within a tenant.",
-		Arguments: []*mcpsdk.PromptArgument{
-			{Name: "tenant_id", Description: "tenant UUID or slug", Required: true},
-		},
-	}, func(_ context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
-		t := req.Params.Arguments["tenant_id"]
-		if t == "" {
-			return nil, fmt.Errorf("tenant_id required")
+// registerPrompts adds a prompt only when the profile allows every tool it
+// tells the model to call; a prompt naming a tool the session cannot see
+// sends the model after something that does not exist.
+func registerPrompts(s *mcpsdk.Server, filter *ToolFilter) {
+	allowed := func(tools ...string) bool {
+		for _, t := range tools {
+			if filter != nil && !filter.Allow(t) {
+				return false
+			}
 		}
-		return &mcpsdk.GetPromptResult{
-			Messages: []*mcpsdk.PromptMessage{{
-				Role: "user",
-				Content: &mcpsdk.TextContent{Text: fmt.Sprintf(
-					"Audit access for tenant %s.\n"+
-						"1) Use paladin_list_collections to enumerate the namespaces.\n"+
-						"2) For each, fetch its Cedar policy via the Paladin admin API.\n"+
-						"3) Identify which user_ids hold scopes that match.\n"+
-						"4) Summarise findings with concrete principal→action→resource bindings.\n",
-					t,
-				)},
-			}},
-		}, nil
-	})
+		return true
+	}
+	if allowed("paladin_list_collections", "paladin_get_effective_policy") {
+		s.AddPrompt(&mcpsdk.Prompt{
+			Name:        "audit_access_for_tenant",
+			Description: "Audit who has access to what within a tenant.",
+			Arguments: []*mcpsdk.PromptArgument{
+				{Name: "tenant_id", Description: "tenant UUID or slug", Required: true},
+			},
+		}, func(_ context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
+			t := req.Params.Arguments["tenant_id"]
+			if t == "" {
+				return nil, fmt.Errorf("tenant_id required")
+			}
+			return &mcpsdk.GetPromptResult{
+				Messages: []*mcpsdk.PromptMessage{{
+					Role: "user",
+					Content: &mcpsdk.TextContent{Text: fmt.Sprintf(
+						"Audit access for tenant %s.\n"+
+							"1) Use paladin_list_collections to enumerate the namespaces.\n"+
+							"2) For each, read its merged Cedar policy with paladin_get_effective_policy.\n"+
+							"3) Identify which user_ids hold scopes that match.\n"+
+							"4) Summarise findings with concrete principal→action→resource bindings.\n",
+						t,
+					)},
+				}},
+			}, nil
+		})
+	}
 
-	s.AddPrompt(&mcpsdk.Prompt{
-		Name:        "rotate_backend_credentials",
-		Description: "Plan a credential rotation for a storage backend.",
-		Arguments: []*mcpsdk.PromptArgument{
-			{Name: "backend_id", Description: "backend id to rotate", Required: true},
-		},
-	}, func(_ context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
-		b := req.Params.Arguments["backend_id"]
-		if b == "" {
-			return nil, fmt.Errorf("backend_id required")
-		}
-		return &mcpsdk.GetPromptResult{
-			Messages: []*mcpsdk.PromptMessage{{
-				Role: "user",
-				Content: &mcpsdk.TextContent{Text: fmt.Sprintf(
-					"Plan a safe credential rotation for backend %s.\n"+
-						"Steps to consider:\n"+
-						"  • Confirm the new secret_ref is provisioned in the secret manager.\n"+
-						"  • Call paladin_test_backend to verify reachability before swap.\n"+
-						"  • Decide a grace_period that exceeds the max presign TTL in use.\n"+
-						"  • Flag any presigned URLs minted before rotation that may break.\n",
-					b,
-				)},
-			}},
-		}, nil
-	})
+	if allowed("paladin_list_backends") {
+		s.AddPrompt(&mcpsdk.Prompt{
+			Name:        "rotate_backend_credentials",
+			Description: "Plan a credential rotation for a storage backend.",
+			Arguments: []*mcpsdk.PromptArgument{
+				{Name: "backend_id", Description: "backend id to rotate", Required: true},
+			},
+		}, func(_ context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
+			b := req.Params.Arguments["backend_id"]
+			if b == "" {
+				return nil, fmt.Errorf("backend_id required")
+			}
+			return &mcpsdk.GetPromptResult{
+				Messages: []*mcpsdk.PromptMessage{{
+					Role: "user",
+					Content: &mcpsdk.TextContent{Text: fmt.Sprintf(
+						"Plan a safe credential rotation for backend %s.\n"+
+							"Steps to consider:\n"+
+							"  • Read the backend's current settings with paladin_list_backends.\n"+
+							"  • Confirm the new secret_ref is provisioned in the secret manager.\n"+
+							"  • The rotation itself and the reachability test are operator actions:\n"+
+							"    the console's backend page, or the admin API's RotateCredentials and TestBackend.\n"+
+							"  • Decide a grace_period that exceeds the max presign TTL in use.\n"+
+							"  • Flag any presigned URLs minted before rotation that may break.\n",
+						b,
+					)},
+				}},
+			}, nil
+		})
+	}
 }
 
 func ptrTrue() *bool { v := true; return &v }
