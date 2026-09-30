@@ -42,6 +42,8 @@ env:
   GOIMPORTS_VERSION: "v0.50.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v4.3.0"
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: "v0.74.0"
   # renovate: datasource=github-releases depName=hadolint/hadolint
   HADOLINT_VERSION: "v2.15.1"
   # renovate: datasource=github-releases depName=mikefarah/yq
@@ -246,6 +248,18 @@ jobs:
             "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-linux-x86_64"
           sudo chmod +x /usr/local/bin/hadolint
           hadolint --version
+      - name: Set up trivy
+        if: matrix.group == 'repo'
+        run: |
+          set -euo pipefail
+          v="${TRIVY_VERSION#v}"
+          base="https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}"
+          archive="trivy_${v}_Linux-64bit.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSL "${base}/trivy_${v}_checksums.txt" | grep " ${archive}\$" | sha256sum -c -
+          sudo tar -xzf "$archive" -C /usr/local/bin trivy
+          trivy --version
       - name: task verify-${{ matrix.group }}
         env:
           GROUP: ${{ matrix.group }}
