@@ -162,13 +162,30 @@ if [ "$REQUIRE_CHECKS" = "1" ]; then
           required_status_checks: .
         }
       }')
+  # The repository admin bypasses this ruleset. Without it the rule is
+  # unconditional, and a required check that cannot run — which is the state
+  # this repository has been in — locks `main` against its own maintainer with
+  # no way out but disabling enforcement by hand for every merge.
+  #
+  # actor_id 5 is the built-in `admin` RepositoryRole; there is no per-user
+  # actor type for a repository outside an organisation, so this is how the
+  # owner is addressed.
+  #
+  # bypass_mode "always", not "pull_request": the narrower mode covers a merge
+  # through a pull request and nothing else, so a direct push to `main` is
+  # still refused. That was measured, not assumed — with "pull_request" the
+  # rule-suite audit recorded `bypass` for the merges and `fail` for the
+  # pushes.
+  checks_bypass=$(jq -n '[{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }]')
   checks_payload=$(jq -n \
     --arg name "$CHECKS_RULESET_NAME" \
     --argjson rule "$checks_rule" \
+    --argjson bypass "$checks_bypass" \
     --args '{
        name: $name,
        target: "branch",
        enforcement: "active",
+       bypass_actors: $bypass,
        conditions: { ref_name: { include: $ARGS.positional, exclude: [] } },
        rules: [$rule]
      }' $CHECKS_REFS)
