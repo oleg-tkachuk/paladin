@@ -99,6 +99,11 @@ syncs the local ArgoCD applications; `task -t Taskfile.dev.yaml` works on the
 repository. Each on its own prints its handful of commands, and `--list` after
 any of them prints everything it reaches.
 
+Releases are published by CI: for every release tag,
+[release.yaml](.github/workflows/release.yaml) pushes both images
+(linux/amd64 and linux/arm64) and both Helm charts to GHCR, under the
+repository owner.
+
 | Task | Does |
 |------|------|
 | `task stack:up` | the whole stack in compose, waiting until every service is healthy |

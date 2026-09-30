@@ -180,6 +180,7 @@ tasks:
       - task: verify:chart-netpol
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
+      - task: verify:publish-target
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
@@ -302,6 +303,13 @@ tasks:
     # So the list is in three places, and this fails when they stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
+
+  verify:publish-target:
+    desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"
+    # A chart default naming a path nothing publishes to installs cleanly and
+    # then never pulls.
+    cmds:
+      - ./scripts/publish-target.test.sh
 
   verify:private-refs:
     desc: "Fail when the tree points at a private repository or a home directory"

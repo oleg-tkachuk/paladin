@@ -2,9 +2,9 @@ name: Release
 
 # Dispatched by ci.yaml once the checks on a push to main have passed.
 #
-# A release is a tag and its notes — nothing else. No image is built, no chart
-# is packaged, nothing is pushed to a registry: those are local tasks
-# (`task deploy`), run against the tag this creates.
+# A release is a tag, its notes, and both components published to GHCR at that
+# tag: a multi-arch image and a Helm chart each. Nothing is published when no
+# tag was due.
 #
 # workflow_run is the obvious trigger and is refused by zizmor's
 # dangerous-triggers audit. A plain `push` trigger would not help: GitHub
@@ -21,6 +21,21 @@ on:
 
 permissions: {}
 
+# Pinned tools, the same versions ci.yaml pins.
+env:
+  # renovate: datasource=github-releases depName=go-task/task
+  TASK_VERSION: "3.53.1"
+  # renovate: datasource=github-releases depName=helm/helm
+  HELM_VERSION: "v4.3.0"
+  # renovate: datasource=github-releases depName=mikefarah/yq
+  YQ_VERSION: "v4.53.6"
+  # Where both components publish. Must match image.repository in the charts'
+  # values.yaml and the defaults in Taskfile.yaml; verify:publish-target
+  # checks all three.
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+  PLATFORMS: linux/amd64,linux/arm64
+
 concurrency:
   # Two dispatches close together would both compute "next version" from the
   # same last tag and could push conflicting ones. Never cancel-in-progress: a
@@ -35,6 +50,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write # semantic-release pushes the tag; gh creates the release
+    outputs:
+      # Empty when no release was due; publish below keys off it.
+      tag: ${{ steps.notes.outputs.tag }}
     steps:
       # No persist-credentials: false — semantic-release pushes the tag it
       # creates, so this is the one checkout here that needs its credentials.
@@ -82,6 +100,7 @@ jobs:
       # due and there is nothing to publish. Only v* tags: the api/vX.Y.Z
       # proto baselines can point at the same commit and are not releases.
       - name: Publish the release for the tag it just pushed
+        id: notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -97,3 +116,136 @@ jobs:
           # Notes for people, built from merged pull requests and shaped by
           # .github/release.yml.
           gh release create "$tag" --generate-notes --verify-tag
+          printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
+
+  # One job per component. The chart is gated and pushed through the same task
+  # library `task -t Taskfile.local.yaml deploy` uses; the image is built here
+  # instead, because the library builds for the host's architecture only and
+  # the published image is multi-arch.
+  publish:
+    name: Publish ${{ matrix.component }}
+    needs: [release]
+    if: needs.release.outputs.tag != ''
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write # push the image and the chart to GHCR
+    strategy:
+      # A failure in one component must not cancel the other halfway through a
+      # push; each is re-runnable on its own, and both pushes are idempotent.
+      fail-fast: false
+      matrix:
+        # The component directories, as in the monorepo fan-out.
+        component: [backend, frontend]
+    env:
+      COMPONENT: ${{ matrix.component }}
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      # The tag, not the branch head: main may have moved on since the release
+      # job ran. fetch-depth: 0 because the library derives the version with
+      # `git describe`, which needs the tags.
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Set up Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Everything the image build needs, read from the component's Taskfile
+      # and the task library rather than restated here.
+      - name: Resolve the version and the image
+        id: resolve
+        run: |
+          set -euo pipefail
+
+          # --yes accepts the first-fetch trust prompt for the task library.
+          version="$(task --yes "${COMPONENT}:release:version")"
+          if [ "$version" != "${TAG#v}" ]; then
+            printf 'the library derives %s, the tag is %s — refusing to publish\n' "$version" "$TAG" >&2
+            exit 1
+          fi
+
+          taskfile="${COMPONENT}/Taskfile.yaml"
+          name="$(yq -r '.vars.PROJECT_NAME' "$taskfile")"
+          dockerfile="$(yq -r '.vars.DOCKERFILE' "$taskfile")"
+          context="$(yq -r '.vars.DOCKER_CONTEXT' "$taskfile")"
+
+          {
+            printf 'version=%s\n' "$version"
+            printf 'image=%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$name"
+            printf 'file=%s/%s\n' "$COMPONENT" "$dockerfile"
+            printf 'context=%s/%s\n' "$COMPONENT" "$context"
+            # The same three values the library's image:build passes.
+            printf 'sha=%s\n' "$(git rev-parse --short=8 HEAD)"
+            printf 'build_time=%s\n' "$(TZ=UTC date +%Y-%m-%dT%H:%M:%S%z)"
+          } >>"$GITHUB_OUTPUT"
+
+      # Before anything is pushed: a chart regression must not ship an image
+      # it cannot deploy.
+      - name: Verify the chart
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: task --yes "${COMPONENT}:release:chart:verify" APP_VERSION="$VERSION"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No build cache: this job holds a write token, and a cache another run
+      # wrote is not something to build a published image from.
+      - name: Build and push the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ steps.resolve.outputs.context }}
+          file: ${{ steps.resolve.outputs.file }}
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: ${{ steps.resolve.outputs.image }}:${{ steps.resolve.outputs.version }}
+          build-args: |
+            APP_VERSION=${{ steps.resolve.outputs.version }}
+            GIT_COMMIT_HASH=${{ steps.resolve.outputs.sha }}
+            BUILD_TIME=${{ steps.resolve.outputs.build_time }}
+
+      # After the image: the chart's appVersion names it, so a chart pushed
+      # first would point at a tag that does not exist yet.
+      - name: Push the chart
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pinned rather than re-derived: the image is already tagged with it,
+          # and a tree dirtied by an earlier step would derive a -dev version.
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TOKEN" | helm registry login "$REGISTRY" --username "$ACTOR" --password-stdin
+          task --yes "${COMPONENT}:release:chart:push" \
+            GLOBAL_REGISTRY="$REGISTRY" IMAGE_NAMESPACE="$IMAGE_NAMESPACE" APP_VERSION="$VERSION"

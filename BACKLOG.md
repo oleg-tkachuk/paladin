@@ -1942,6 +1942,24 @@ finding moving from "packages you import" to "your code is affected".
   Security) all report `conclusion: failure` with **zero steps executed** on
   every job — the same signature, not a new failure. Nothing in the repository
   can move this.
+- **Also unrun:** the `publish` job in `release.yaml` (multi-arch images and
+  charts to GHCR on each release tag). It is linted by actionlint, zizmor and
+  checkov; it has never executed. The first run is also the first time the
+  version check (library version == tag) and the GHCR logins meet a runner.
+
+## GHCR packages are created private
+
+- **Status:** Deferred (owner action on the first release).
+- **Reason:** the first push to GHCR creates each package with the
+  repository's visibility, and the repository is private. Both charts'
+  `values.yaml` default `image.repository` to GHCR so that `helm install` works
+  without building anything; against a private package it fails with an
+  image pull error unless the cluster has a pull secret.
+- **Definition of Done:** `paladin-core`, `paladin-console` and both
+  `charts/*` packages are public, or the charts document the pull secret
+  they need.
+- **Blockers:** the first release tag, and the same publish decision as the
+  name-collision item.
 
 ## Include-level `vars:` do not reach a var the component declares
 
