@@ -1961,6 +1961,18 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** the first release tag, and the same publish decision as the
   name-collision item.
 
+## PyPI does not know the Python SDK yet
+
+- **Status:** Deferred (owner action before the first contract tag).
+- **Reason:** `.github/workflows/sdk.yaml` publishes `paladin-sdk` through
+  PyPI trusted publishing, which needs the project registered on PyPI with this
+  repository, the `sdk.yaml` workflow and the `pypi` environment as its
+  publisher, and the `pypi` environment created in the repository settings.
+  Until then the Python job fails at the publish step; the Go SDK is unaffected.
+  The package name is provisional, gated on the name-collision item.
+- **Definition of Done:** an `api/v*` tag publishes `paladin-sdk` to PyPI.
+- **Blockers:** the name decision; the Actions billing item.
+
 ## Include-level `vars:` do not reach a var the component declares
 
 - **Status:** Deferred.

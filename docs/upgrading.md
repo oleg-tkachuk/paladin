@@ -15,7 +15,8 @@ To land a deliberate breaking change:
 2. Decide it is worth it. The common case is a field rename that keeps the
    number — gRPC clients survive that, JSON clients do not, and nothing at
    runtime will tell you which you broke.
-3. Note it here, under a heading for the release.
+3. Note it here, under a heading for the release, and set the next contract
+   version in `sdk/python/pyproject.toml` in the same change.
 4. Cut the next baseline once the change is merged:
 
    ```
@@ -25,6 +26,11 @@ To land a deliberate breaking change:
    ```
 
    Then bump `API_BASELINE_TAG` in `backend/scripts/proto-breaking.sh` to it.
+
+   The pushed tag publishes both SDKs at that version
+   (`.github/workflows/sdk.yaml`): it tags `sdk/go/vX.Y.Z` on the same commit
+   and publishes `paladin-sdk X.Y.Z` to PyPI, refusing when
+   `pyproject.toml` names a different version.
 
    A new number rather than `-f` on the current one: the tags are the record
    of what the contract WAS at each point, and force-moving a published tag

@@ -24,10 +24,10 @@ vars:
   # so a declaration here — even one wrapped in `default` — always wins over
   # what the entry point forwards. Undeclared, they arrive from the entry
   # point, the command line or the environment; deploy requires both.
-  # `api/*` tags version the proto contract, not this image: they carry a `/`
-  # that is invalid in a Docker tag, and a contract bump must not restamp a
-  # release.
-  VERSION_TAG_EXCLUDE: 'api/*'
+  # Only v* tags version this image. The others — api/*, sdk/go/*,
+  # capability/* — carry a `/` that is invalid in a Docker tag, and one of them
+  # landing on a release commit must not restamp the release.
+  VERSION_TAG_EXCLUDE: '*/*'
   # The shared buildx builder this repo builds through; its cache is separate
   # from the default builder's and needs pruning by name.
   BUILDX_BUILDER: lean
