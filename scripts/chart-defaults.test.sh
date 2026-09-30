@@ -117,7 +117,7 @@ check "postgres: namespace override lands on the ref" \
     "$(config other-ns .datastores.postgres.password_secret.namespace)" "database"
 
 # refuse <name> <expected message> [helm args...] — the render must fail and
-# say why. Rendered without the required values, so each case sets its own.
+# say why. Each case passes the required values and unsets what it tests.
 refuse() {
     local name=$1 want=$2
     shift 2
@@ -128,13 +128,23 @@ refuse() {
         bad "$name: refused without mentioning '$want': $(head -1 "$scratch/$name.err")"
     fi
 }
-refuse no-database "no database configured"
+refuse no-database "no database configured" -f "$CHART/$REQUIRED_VALUES" --set postgres.host=
 refuse no-app-secret "postgres.app.existingSecret is required" \
-    --set postgres.host=db --set postgres.migrate.existingSecret=m
+    -f "$CHART/$REQUIRED_VALUES" --set postgres.app.existingSecret=
+
+# ─── object store ────────────────────────────────────────────────────────────
+
+refuse no-endpoint "config.storage.backends.primary.endpoint is required" \
+    -f "$CHART/$REQUIRED_VALUES" --set config.storage.backends.primary.endpoint=
+refuse no-s3-keys "storage.s3CredentialsSecret.accessKey is required" \
+    -f "$CHART/$REQUIRED_VALUES" --set storage.s3CredentialsSecret.accessKey=
+render s3-existing --set storage.s3CredentialsSecret.accessKey= --set storage.s3CredentialsSecret.secretKey= \
+    --set storage.s3CredentialsSecret.existingSecret=my-s3
+check "s3: existingSecret needs no keys" "$(config s3-existing .storage.backends.primary.auth.access_key_secret.name)" "my-s3"
 
 cases=$((cases + 1))
-helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
-    --set config.datastores.postgres.dsn=postgres://u@h/d >"$scratch/raw-dsn.yaml" ||
+helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" -f "$CHART/$REQUIRED_VALUES" \
+    --set postgres.host= --set config.datastores.postgres.dsn=postgres://u@h/d >"$scratch/raw-dsn.yaml" ||
     bad "postgres: a DSN written under config.datastores.postgres was refused"
 check "postgres: a written DSN is used as is" "$(config raw-dsn .datastores.postgres.dsn)" "postgres://u@h/d"
 

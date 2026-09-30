@@ -1,5 +1,5 @@
-# The inputs the chart cannot default: where the database is and which Secrets
-# hold its passwords. Every gate that renders the chart's own defaults adds
+# The inputs the chart cannot default: where the database and the object store
+# are, and the credentials for both. Every gate that renders the chart's own defaults adds
 # this file, so a render fails only for the reason being tested. See
 # docs/install.md for what an install needs in their place.
 postgres:
@@ -8,3 +8,12 @@ postgres:
     existingSecret: paladin-postgres-app
   migrate:
     existingSecret: paladin-postgres-migrate
+config:
+  storage:
+    backends:
+      primary:
+        endpoint: http://s3.example.internal:8333
+storage:
+  s3CredentialsSecret:
+    accessKey: required-values-access
+    secretKey: required-values-secret

@@ -42,6 +42,11 @@ data:
     {{- $_ := set $b.auth "secret_key_secret" (dict "name" $sec.name "key" "secret_key") }}
     {{- end }}
     {{- end }}
+    {{- range $name, $backend := $cfg.storage.backends }}
+    {{- if and (eq $backend.kind "s3-compatible") (not $backend.endpoint) }}
+    {{- fail (printf "config.storage.backends.%s.endpoint is required for an s3-compatible backend" $name) }}
+    {{- end }}
+    {{- end }}
     {{- $pg := fromJson (include "chart.postgres" .) }}
     {{- $pgCfg := $cfg.datastores.postgres }}
     {{- if $pg.active }}
