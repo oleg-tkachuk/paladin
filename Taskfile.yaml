@@ -90,7 +90,9 @@ tasks:
             "  task stack:up                      the whole stack in compose, locally" \
             "  task stack:down                    stop it, keep the volumes" \
             "  task backend:k8s:status            what is running" \
+            "  task frontend:k8s:status" \
             "  task backend:k8s:logs              follow its logs" \
+            "  task frontend:k8s:logs" \
             "" \
             "  task --list                        every operator task, component by component" \
             "  task -t Taskfile.local.yaml        publish to registry.local, sync the ArgoCD apps" \

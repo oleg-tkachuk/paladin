@@ -5,6 +5,7 @@ version: "3"
 #
 #   task -t Taskfile.local.yaml deploy           publish both images + charts to registry.local
 #   task -t Taskfile.local.yaml backend:deploy   publish one of them
+#   task -t Taskfile.local.yaml frontend:deploy
 #   task -t Taskfile.local.yaml deploy:sync      hard-refresh the ArgoCD apps after a deploy
 #
 # The released artifacts go to GHCR from .github/workflows/release.yaml; this
@@ -70,9 +71,11 @@ tasks:
             "" \
             "  task -t Taskfile.local.yaml deploy            publish both images + charts to {{.GLOBAL_REGISTRY}}" \
             "  task -t Taskfile.local.yaml backend:deploy    publish one of them" \
+            "  task -t Taskfile.local.yaml frontend:deploy" \
             "  task -t Taskfile.local.yaml deploy:sync       hard-refresh the ArgoCD apps after a deploy" \
             "  task -t Taskfile.local.yaml argocd:list       sync + health of every Argo app" \
-            "  task -t Taskfile.local.yaml backend:deploy-local  build + helm-install, no registry"
+            "  task -t Taskfile.local.yaml backend:deploy-local   build + helm-install, no registry" \
+            "  task -t Taskfile.local.yaml frontend:deploy-local"
 
   deploy:
     desc: "Publish both images + charts to {{.GLOBAL_REGISTRY}}, after checking it answers"
