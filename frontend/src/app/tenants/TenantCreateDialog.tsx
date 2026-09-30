@@ -277,7 +277,10 @@ export function TenantCreateDialog({
                 value={layout}
                 onValueChange={(v) => setLayout(v as StorageLayout)}
               >
-                <SelectTrigger id="tenant-layout">
+                <SelectTrigger
+                  id="tenant-layout"
+                  className="w-full min-w-0 *:data-[slot=select-value]:truncate"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -291,7 +294,7 @@ export function TenantCreateDialog({
               </SelectRoot>
             </div>
             <div className={dedicated ? "" : "grid grid-cols-2 gap-3"}>
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="tenant-backend">
                   Storage backend <span className="text-destructive">*</span>
                 </Label>
@@ -299,7 +302,10 @@ export function TenantCreateDialog({
                   value={newBackend}
                   onValueChange={(v) => setNewBackend(v)}
                 >
-                  <SelectTrigger id="tenant-backend">
+                  <SelectTrigger
+                    id="tenant-backend"
+                    className="w-full min-w-0 *:data-[slot=select-value]:truncate"
+                  >
                     <SelectValue
                       placeholder={
                         backends.length === 0
@@ -320,7 +326,7 @@ export function TenantCreateDialog({
                 </SelectRoot>
               </div>
               {!dedicated && (
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label htmlFor="tenant-bucket">
                     Bucket <span className="text-destructive">*</span>
                   </Label>
@@ -329,7 +335,10 @@ export function TenantCreateDialog({
                     onValueChange={(v) => setNewBucket(v)}
                     disabled={!newBackend || bucketsForBackend.length === 0}
                   >
-                    <SelectTrigger id="tenant-bucket">
+                    <SelectTrigger
+                      id="tenant-bucket"
+                      className="w-full min-w-0 *:data-[slot=select-value]:truncate"
+                    >
                       <SelectValue
                         placeholder={
                           !newBackend
