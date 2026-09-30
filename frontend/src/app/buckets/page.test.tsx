@@ -29,6 +29,7 @@ vi.mock("@/hooks/useBuckets", () => ({ useBuckets: () => h.buckets }));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
 
 import BucketsPage from "./page";
+import { PROVISION_POLL_MS, PROVISION_STATE } from "@/lib/bucketProvision";
 
 beforeEach(() => {
   h.buckets.buckets = [];
@@ -207,5 +208,31 @@ describe("BucketsPage create dialog", () => {
 
     fireEvent.change(name, { target: { value: "good-name" } });
     expect(screen.queryByText(/letters, digits, dots and hyphens/)).toBeNull();
+  });
+});
+
+describe("BucketsPage provisioning", () => {
+  it("keeps asking while a bucket is still provisioning", () => {
+    vi.useFakeTimers();
+    try {
+      h.backends.backends = [];
+      h.buckets.buckets = [
+        {
+          backendId: "primary",
+          bucketId: "fresh",
+          displayName: "",
+          region: "",
+          provisionState: PROVISION_STATE.pending,
+        },
+      ];
+      render(<BucketsPage />);
+      h.buckets.fetchBuckets.mockClear();
+      act(() => {
+        vi.advanceTimersByTime(PROVISION_POLL_MS);
+      });
+      expect(h.buckets.fetchBuckets).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

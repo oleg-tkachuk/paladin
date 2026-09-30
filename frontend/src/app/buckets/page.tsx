@@ -76,6 +76,8 @@ import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import { bucketNameError } from "@/lib/bucketName";
+import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
+import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 
 type SortColumn = "backend" | "name" | "region";
 
@@ -183,6 +185,14 @@ export default function BucketsPage() {
   useEffect(() => {
     void refetch();
   }, [refetch]);
+
+  // A created or deleted bucket settles in the reconciler, not in the RPC
+  // that started it; without this it read "provisioning…" until a reload.
+  useRefetchWhile(
+    buckets.some((b) => isProvisionInFlight(b.provisionState)),
+    () => void refetch(),
+    PROVISION_POLL_MS,
+  );
 
   // Default the create form to the first available backend once the dialog
   // opens and backends have loaded. Render-phase adjust-on-condition — the

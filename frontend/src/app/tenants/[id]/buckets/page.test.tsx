@@ -35,6 +35,7 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 
 import TenantBucketsPage from "./page";
+import { PROVISION_POLL_MS } from "@/lib/bucketProvision";
 
 const makeBucket = (name: string) => ({
   backendId: "be-1",
@@ -67,6 +68,41 @@ describe("TenantBucketsPage", () => {
   it("fetches this tenant's buckets on mount", () => {
     render(<TenantBucketsPage />);
     expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
+  });
+
+  // Refresh called fetchBuckets() bare, which lists every tenant's buckets.
+  it("refreshes this tenant's buckets, not everyone's", () => {
+    render(<TenantBucketsPage />);
+    h.fetchBuckets.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
+  });
+
+  // A bucket settles in the reconciler; the list asks again until it has.
+  it("keeps asking while a bucket is still provisioning", () => {
+    vi.useFakeTimers();
+    try {
+      h.buckets = [{ ...makeBucket("fresh"), provisionState: "pending" }];
+      render(<TenantBucketsPage />);
+      h.fetchBuckets.mockClear();
+      vi.advanceTimersByTime(PROVISION_POLL_MS);
+      expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not poll a settled list", () => {
+    vi.useFakeTimers();
+    try {
+      h.buckets = [{ ...makeBucket("done"), provisionState: "ready" }];
+      render(<TenantBucketsPage />);
+      h.fetchBuckets.mockClear();
+      vi.advanceTimersByTime(PROVISION_POLL_MS * 2);
+      expect(h.fetchBuckets).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens the create dialog from the header action", async () => {

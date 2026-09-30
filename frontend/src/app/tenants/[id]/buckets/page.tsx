@@ -13,7 +13,7 @@
 // current tenant — operators can still un-set it via the cross-tenant
 // page if they want a shared bucket.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import Link from "next/link";
 
@@ -88,6 +88,8 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
 import { bucketNameError } from "@/lib/bucketName";
+import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
+import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 
 type SortColumn = "backend" | "name" | "region";
 
@@ -158,13 +160,26 @@ export default function TenantBucketsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
   const [deleteRemote, setDeleteRemote] = useState(false);
 
+  // Push the tenant filter to the server. Hook signature is
+  // (backendId?, filter?, pageToken?, ownerTenantId?) — leave
+  // backend/filter/cursor empty to list all buckets owned by
+  // this tenant across backends. One place, so Refresh asks for the same.
+  const refetch = useCallback(
+    () => fetchBuckets(undefined, "", "", tenant.tenantId),
+    [fetchBuckets, tenant.tenantId],
+  );
+
   useEffect(() => {
-    // Push the tenant filter to the server. Hook signature is
-    // (backendId?, filter?, pageToken?, ownerTenantId?) — leave
-    // backend/filter/cursor empty to list all buckets owned by
-    // this tenant across backends.
-    fetchBuckets(undefined, "", "", tenant.tenantId);
-  }, [fetchBuckets, tenant.tenantId]);
+    void refetch();
+  }, [refetch]);
+
+  // A created or deleted bucket settles in the reconciler, not in the RPC
+  // that started it; without this it read "provisioning…" until a reload.
+  useRefetchWhile(
+    buckets.some((b) => isProvisionInFlight(b.provisionState)),
+    () => void refetch(),
+    PROVISION_POLL_MS,
+  );
 
   // Default the create form to the first backend once the dialog opens and
   // backends have loaded. Render-phase adjust-on-condition (the !newBackend
@@ -323,7 +338,7 @@ export default function TenantBucketsPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => fetchBuckets()}
+          onClick={() => void refetch()}
           aria-label="Refresh"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
