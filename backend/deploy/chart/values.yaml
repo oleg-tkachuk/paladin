@@ -163,12 +163,9 @@ deployments:
       httpGet:
         path: /livez
         port: data
-        # data plane is on TLS now (#25a cutover). Probes need scheme:
-        # HTTPS to match — kubelet doesn't auto-detect. The probe
-        # client uses Go's TLS InsecureSkipVerify=true (kubelet-side)
-        # so the self-signed cluster cert is OK; we still get the
-        # signal "TLS handshake completed + /livez 200".
-        scheme: HTTPS
+        # scheme: HTTPS is added by the chart when internalTLS is on —
+        # kubelet does not detect it. Its TLS client skips verification,
+        # so the internal CA needs no trust setup here.
       initialDelaySeconds: 15
       periodSeconds: 20
       timeoutSeconds: 1
@@ -177,7 +174,6 @@ deployments:
       httpGet:
         path: /readyz
         port: data
-        scheme: HTTPS
       initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 3
@@ -187,7 +183,6 @@ deployments:
       httpGet:
         path: /startupz
         port: data
-        scheme: HTTPS
       initialDelaySeconds: 5
       periodSeconds: 5
       timeoutSeconds: 3
@@ -203,25 +198,14 @@ deployments:
         - name: iam
           port: 8085
           targetPort: iam
-    # Mount the cert-manager-provisioned paladin-api-mtls Secret (provisioned
-    # by gitops's rag-internal-mtls App into the `paladin` namespace) so
-    # the data plane can present its leaf cert + verify inbound client
-    # certs signed by the rag-internal-mtls-ca ClusterIssuer. The
-    # config.api.server.data.tls block below points its paths at this
-    # mount. The paladin-api-mtls Secret stores PEM at the standard
-    # kubernetes.io/tls keys: tls.crt, tls.key, ca.crt.
+    # The internal TLS certificate is mounted by the chart when
+    # internalTLS.enabled; see internalTLS below.
     volumes:
       - name: tmp
         emptyDir: {}
-      - name: paladin-api-mtls
-        secret:
-          secretName: paladin-api-mtls
     volumeMounts:
       - name: tmp
         mountPath: /tmp
-      - name: paladin-api-mtls
-        mountPath: /etc/paladin-mtls
-        readOnly: true
   admin:
     enabled: true
     # Admin pod sits behind a stricter ingress; single replica is fine.
@@ -236,10 +220,7 @@ deployments:
       httpGet:
         path: /livez
         port: admin
-        # Admin plane terminates TLS (client_auth strict); kubelet's
-        # default scheme is HTTP, so probes get rejected with
-        # "client sent an HTTP request to an HTTPS server".
-        scheme: HTTPS
+        # scheme follows internalTLS, as on the api role.
       initialDelaySeconds: 15
       periodSeconds: 20
       timeoutSeconds: 1
@@ -248,7 +229,6 @@ deployments:
       httpGet:
         path: /readyz
         port: admin
-        scheme: HTTPS
       initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 3
@@ -258,7 +238,6 @@ deployments:
       httpGet:
         path: /startupz
         port: admin
-        scheme: HTTPS
       initialDelaySeconds: 5
       periodSeconds: 5
       timeoutSeconds: 3
@@ -269,23 +248,12 @@ deployments:
         - name: admin
           port: 8090
           targetPort: admin
-    # Admin plane also runs TLS (client_auth: permissive) — mount the same
-    # paladin-api-mtls Secret as the api role. Without this mount the pod
-    # crashloops with "open /etc/paladin-mtls/tls.crt: no such file or
-    # directory" because config.admin.server.tls.cert_path points at
-    # /etc/paladin-mtls but the chart's defaults.volumes don't include it.
     volumes:
       - name: tmp
         emptyDir: {}
-      - name: paladin-api-mtls
-        secret:
-          secretName: paladin-api-mtls
     volumeMounts:
       - name: tmp
         mountPath: /tmp
-      - name: paladin-api-mtls
-        mountPath: /etc/paladin-mtls
-        readOnly: true
   worker:
     enabled: true
     # Two replicas with anti-affinity so leases distribute; the lease
@@ -380,25 +348,12 @@ deployments:
         - name: mcp
           port: 8095
           targetPort: mcp
-    # The bridge dials the admin / data / iam planes, and all three serve TLS
-    # from the internal CA. Mount the same paladin-api-mtls Secret those planes
-    # use so config.mcp.upstreams.tls.ca_path resolves — without it every
-    # tools/call fails, because the planes' Go TLS listeners answer the
-    # plaintext dial with "400 Bad Request" rather than a usable error.
-    # tls.crt/tls.key ride along so the bridge can present a client cert if
-    # the planes ever move past client_auth: permissive.
     volumes:
       - name: tmp
         emptyDir: {}
-      - name: paladin-api-mtls
-        secret:
-          secretName: paladin-api-mtls
     volumeMounts:
       - name: tmp
         mountPath: /tmp
-      - name: paladin-api-mtls
-        mountPath: /etc/paladin-mtls
-        readOnly: true
 
   # Dispatcher plane — durable webhook fan-out. Consumes the
   # event_deliveries outbox (migration 028). Producer (admin pod)
@@ -665,27 +620,24 @@ config:
         real_ip_header: "X-Forwarded-For"
         trusted_proxies: []
         cors_allowed_origins: []
-        # mTLS termination (#25a). Permissive client_auth during the
-        # initial cutover so plaintext-disabled callers degrade
-        # gracefully while operators flip rag-api / rag-documents
-        # tls.enabled=true one at a time; switch to "strict" once
-        # every caller is verified mTLS-only.
+        # Turned on, with the certificate paths, by internalTLS.enabled.
+        # permissive verifies a client certificate when one is presented;
+        # "strict" requires one from every caller.
         tls:
-          enabled: true
-          cert_path: /etc/paladin-mtls/tls.crt
-          key_path: /etc/paladin-mtls/tls.key
-          ca_path: /etc/paladin-mtls/ca.crt
+          enabled: false
+          cert_path: ""
+          key_path: ""
+          ca_path: ""
           client_auth: permissive
       iam:
         <<: *http_defaults
         addr: "0.0.0.0:8085"
-        # iam plane shares the same mTLS posture as data — callers
-        # are also internal-cluster + same SPIFFE CA.
+        # Same posture as the data listener.
         tls:
-          enabled: true
-          cert_path: /etc/paladin-mtls/tls.crt
-          key_path: /etc/paladin-mtls/tls.key
-          ca_path: /etc/paladin-mtls/ca.crt
+          enabled: false
+          cert_path: ""
+          key_path: ""
+          ca_path: ""
           client_auth: permissive
 
   admin:
@@ -951,18 +903,17 @@ config:
       # Service names track chart.fullname automatically — override only
       # for cross-release setups (sidecar MCP pointing at a different
       # Paladin install) or when terminating TLS in front of those Services.
-      admin_url: 'https://{{ include "chart.fullname" . }}-admin:8090'
-      data_url: 'https://{{ include "chart.fullname" . }}-api:8080'
-      iam_url: 'https://{{ include "chart.fullname" . }}-api:8085'
-      # https:// above is not optional: admin.server.tls, api.server.data.tls
-      # and api.server.iam.tls are all enabled, so these Services speak TLS.
-      # ca_path is the CA those certificates chain to; the system roots do not
-      # contain it. No server_name override is needed: the certificate's SANs
-      # already cover the bare Service names used above.
+      admin_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-admin:8090'
+      data_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8080'
+      iam_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8085'
+      # The scheme follows internalTLS, and so do the paths below: with it on,
+      # the chart points them at the mounted certificate, whose CA the system
+      # roots do not contain. The certificate's SANs must cover the bare
+      # Service names above.
       tls:
-        ca_path: /etc/paladin-mtls/ca.crt
-        cert_path: /etc/paladin-mtls/tls.crt
-        key_path: /etc/paladin-mtls/tls.key
+        ca_path: ""
+        cert_path: ""
+        key_path: ""
     stdio:
       enabled: false
       profile: read_only
@@ -1093,6 +1044,24 @@ bootstrap:
     passwordSecret:
       name: "paladin-bootstrap-admin"
       key: "password"
+
+# ─── Internal TLS ────────────────────────────────────────────────────────────
+#
+# TLS between the chart's own pods: the data, iam and admin listeners terminate
+# it, and the MCP bridge dials them over it. Off by default — the planes then
+# speak plain HTTP inside the cluster, and an ingress or mesh in front provides
+# transport security. On, it needs a Secret with tls.crt, tls.key and ca.crt
+# whose certificate names the release's Services (cert-manager can issue one).
+internalTLS:
+  enabled: false
+  existingSecret: ""
+  mountPath: /etc/paladin-mtls
+  # Roles that mount the certificate: the three listeners' hosts and the
+  # bridge that dials them.
+  roles: [api, admin, mcp]
+  # Roles whose probes switch to HTTPS: the ones whose probe port is a TLS
+  # listener.
+  serverRoles: [api, admin]
 
 # ─── PostgreSQL ──────────────────────────────────────────────────────────────
 #

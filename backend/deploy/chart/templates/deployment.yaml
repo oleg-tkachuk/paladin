@@ -100,15 +100,15 @@ spec:
             {{- toYaml $spec.ports | nindent 12 }}
           {{- with $spec.livenessProbe }}
           livenessProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml (include "chart.probe" (dict "ctx" $ "role" $role "probe" .) | fromJson) | nindent 12 }}
           {{- end }}
           {{- with $spec.readinessProbe }}
           readinessProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml (include "chart.probe" (dict "ctx" $ "role" $role "probe" .) | fromJson) | nindent 12 }}
           {{- end }}
           {{- with $spec.startupProbe }}
           startupProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml (include "chart.probe" (dict "ctx" $ "role" $role "probe" .) | fromJson) | nindent 12 }}
           {{- end }}
           {{- with default $defaults.resources $spec.resources }}
           resources:
@@ -136,6 +136,11 @@ spec:
             {{- with default $defaults.volumeMounts $spec.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+            {{- if and $.Values.internalTLS.enabled (has $role $.Values.internalTLS.roles) }}
+            - name: internal-tls
+              mountPath: {{ $.Values.internalTLS.mountPath }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: config
           configMap:
@@ -155,6 +160,11 @@ spec:
         {{- end }}
         {{- with default $defaults.volumes $spec.volumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if and $.Values.internalTLS.enabled (has $role $.Values.internalTLS.roles) }}
+        - name: internal-tls
+          secret:
+            secretName: {{ include "chart.internalTLSSecret" $ }}
         {{- end }}
       {{- with default $defaults.nodeSelector $spec.nodeSelector }}
       nodeSelector:

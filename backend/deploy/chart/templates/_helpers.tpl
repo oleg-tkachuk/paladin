@@ -253,3 +253,34 @@ config.datastores.postgres is then used as written.
 {{- dict "active" false | toJson -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+chart.internalScheme — the scheme the planes speak inside the cluster: https
+when internalTLS is on, http otherwise. Used by the MCP bridge's upstream URLs
+(through tpl in values.yaml) and wherever else a plane is dialled.
+*/}}
+{{- define "chart.internalScheme" -}}
+{{- if .Values.internalTLS.enabled -}}https{{- else -}}http{{- end -}}
+{{- end -}}
+
+{{/*
+chart.internalTLSSecret — the Secret holding the planes' certificate, key and
+CA. Required whenever internalTLS is on.
+*/}}
+{{- define "chart.internalTLSSecret" -}}
+{{- required "internalTLS.existingSecret is required when internalTLS.enabled: a Secret with tls.crt, tls.key and ca.crt" .Values.internalTLS.existingSecret -}}
+{{- end -}}
+
+{{/*
+chart.probe — a role's probe with its httpGet scheme set by internalTLS: HTTPS
+for the roles whose listeners terminate TLS (internalTLS.serverRoles), as
+written otherwise. Returns JSON.
+*/}}
+{{- define "chart.probe" -}}
+{{- $probe := deepCopy .probe -}}
+{{- $tls := .ctx.Values.internalTLS -}}
+{{- if and $tls.enabled (has .role $tls.serverRoles) $probe.httpGet -}}
+{{- $_ := set $probe.httpGet "scheme" "HTTPS" -}}
+{{- end -}}
+{{- $probe | toJson -}}
+{{- end -}}

@@ -109,3 +109,9 @@ rbac:
       - paladin-bootstrap-admin
       - paladin-auth-signing-key
       - paladin-ingest-hmac
+
+# TLS between the planes, from the certificate cert-manager issues into the
+# release namespace.
+internalTLS:
+  enabled: true
+  existingSecret: paladin-api-mtls

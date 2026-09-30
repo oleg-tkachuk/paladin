@@ -52,6 +52,15 @@ data:
     {{- else if not $pgCfg.dsn }}
     {{- fail "no database configured: set postgres.host and postgres.{app,migrate}.existingSecret, or config.datastores.postgres.dsn" }}
     {{- end }}
+    {{- if .Values.internalTLS.enabled }}
+    {{- $_ := include "chart.internalTLSSecret" . }}
+    {{- $mount := .Values.internalTLS.mountPath }}
+    {{- $files := dict "cert_path" (printf "%s/tls.crt" $mount) "key_path" (printf "%s/tls.key" $mount) "ca_path" (printf "%s/ca.crt" $mount) }}
+    {{- range $listener := list $cfg.api.server.data $cfg.api.server.iam $cfg.admin.server }}
+    {{- $_ := set $listener "tls" (merge (dict "enabled" true) $files (deepCopy $listener.tls)) }}
+    {{- end }}
+    {{- $_ := set $cfg.mcp.upstreams "tls" (merge (deepCopy $files) (deepCopy $cfg.mcp.upstreams.tls)) }}
+    {{- end }}
     {{- $sk := fromJson (include "chart.authSigningKey" .) }}
     {{- if $sk.active }}
     {{- $_ := set $cfg.auth "signing_key_secret" (dict "name" $sk.name "key" $sk.key) }}

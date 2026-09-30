@@ -138,5 +138,36 @@ helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
     bad "postgres: a DSN written under config.datastores.postgres was refused"
 check "postgres: a written DSN is used as is" "$(config raw-dsn .datastores.postgres.dsn)" "postgres://u@h/d"
 
+# ─── internal TLS ────────────────────────────────────────────────────────────
+
+# deployment <render> <role> <yq path> — a value from one role's Deployment.
+deployment() {
+    yq ea -r '[select(.kind == "Deployment" and .metadata.name == "'"$RELEASE-$2"'")] | .[0] | '"$3" "$scratch/$1.yaml"
+}
+
+check "tls off: data listener plain" "$(config defaults .api.server.data.tls.enabled)" "false"
+check "tls off: bridge dials http" "$(config defaults .mcp.upstreams.admin_url)" "http://$RELEASE-admin:8090"
+check "tls off: api probe plain" "$(deployment defaults api '.spec.template.spec.containers[0].livenessProbe.httpGet.scheme // "HTTP"')" "HTTP"
+check "tls off: no certificate mounted" \
+    "$(deployment defaults api '[.spec.template.spec.volumes[] | select(.name == "internal-tls")] | length')" "0"
+
+render tls --set internalTLS.enabled=true --set internalTLS.existingSecret=planes-tls
+for listener in .api.server.data .api.server.iam .admin.server; do
+    check "tls on: $listener enabled" "$(config tls "$listener.tls.enabled")" "true"
+    check "tls on: $listener certificate" "$(config tls "$listener.tls.cert_path")" "/etc/paladin-mtls/tls.crt"
+done
+check "tls on: bridge dials https" "$(config tls .mcp.upstreams.admin_url)" "https://$RELEASE-admin:8090"
+check "tls on: bridge trusts the CA" "$(config tls .mcp.upstreams.tls.ca_path)" "/etc/paladin-mtls/ca.crt"
+for role in api admin mcp; do
+    check "tls on: $role mounts the certificate" \
+        "$(deployment tls "$role" '.spec.template.spec.volumes[] | select(.name == "internal-tls") | .secret.secretName')" "planes-tls"
+done
+check "tls on: worker does not mount it" \
+    "$(deployment tls worker '[.spec.template.spec.volumes[] | select(.name == "internal-tls")] | length')" "0"
+check "tls on: api probe over HTTPS" "$(deployment tls api '.spec.template.spec.containers[0].readinessProbe.httpGet.scheme')" "HTTPS"
+check "tls on: mcp probe stays plain" "$(deployment tls mcp '.spec.template.spec.containers[0].livenessProbe.httpGet.scheme // "HTTP"')" "HTTP"
+
+refuse tls-no-secret "internalTLS.existingSecret is required" -f "$CHART/$REQUIRED_VALUES" --set internalTLS.enabled=true
+
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"
