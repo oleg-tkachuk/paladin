@@ -513,6 +513,18 @@ func TestSettingsToProtoKeepsEachStringInItsOwnField(t *testing.T) {
 	}
 }
 
+func TestSettingsToProtoLeavesUnsavedTimestampsUnset(t *testing.T) {
+	// GetMine serves defaults, with zero times, for a user who has never
+	// saved. Encoded, a zero time is 0001-01-01, shown as "last synced".
+	got, err := settingsToProto(&usersettingsh.Settings{UserID: uuid.New(), TenantID: uuid.New()})
+	if err != nil {
+		t.Fatalf("settingsToProto: %v", err)
+	}
+	if got.GetCreatedAt() != nil || got.GetUpdatedAt() != nil {
+		t.Errorf("timestamps = %v / %v, want unset", got.GetCreatedAt(), got.GetUpdatedAt())
+	}
+}
+
 func TestSettingsToProtoRefusesUnparseablePreferences(t *testing.T) {
 	// Preferences are stored as raw JSON. Malformed bytes must surface as an
 	// error rather than an empty struct: silently returning no preferences

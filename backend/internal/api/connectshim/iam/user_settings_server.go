@@ -9,6 +9,7 @@ package iam
 import (
 	"context"
 	"errors"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -157,9 +158,19 @@ func settingsToProto(s *usersettingsh.Settings) (*pb.UserSettings, error) {
 		Theme:           s.Theme,
 		Preferences:     prefs,
 		ResourceVersion: itoa64(s.ResourceVersion),
-		CreatedAt:       timestamppb.New(s.CreatedAt),
-		UpdatedAt:       timestamppb.New(s.UpdatedAt),
+		CreatedAt:       timestampOrNil(s.CreatedAt),
+		UpdatedAt:       timestampOrNil(s.UpdatedAt),
 	}, nil
+}
+
+// timestampOrNil leaves a zero time unset. GetMine serves defaults for a user
+// with no row, and a zero time encodes as 0001-01-01, which the console
+// displayed as the moment the settings were last saved.
+func timestampOrNil(t time.Time) *timestamppb.Timestamp {
+	if t.IsZero() {
+		return nil
+	}
+	return timestamppb.New(t)
 }
 
 // bytesToStruct turns the domain layer's raw JSON preferences into a

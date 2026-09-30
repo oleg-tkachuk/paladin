@@ -397,7 +397,9 @@ export default function ProfilePage() {
               {/* Footer */}
               <div className="flex items-center justify-between border-t pt-4">
                 <div className={T.hint}>
-                  {settings ? (
+                  {/* GetMine serves defaults to a user who never saved;
+                      those carry no updatedAt. */}
+                  {settings?.updatedAt ? (
                     <>
                       <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-emerald-500" />
                       Last synced {formatTimestamp(settings.updatedAt)}
@@ -407,7 +409,7 @@ export default function ProfilePage() {
                       </span>
                     </>
                   ) : (
-                    "No row yet — save to create your settings."
+                    "Defaults — not saved yet."
                   )}
                 </div>
                 <div className="flex gap-2">
