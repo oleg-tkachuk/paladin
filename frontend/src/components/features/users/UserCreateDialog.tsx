@@ -12,6 +12,9 @@ import { ASSIGNABLE_ROLES } from "@/constants/roles";
 /** Server floor on initial_password (buf.validate, min_len = 12). */
 const MIN_PASSWORD_LENGTH = 12;
 
+/** The empty-parent option: CreateUser puts the user in the caller's tenant. */
+export const OWN_TENANT_LABEL = "Your own tenant";
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -57,8 +60,8 @@ export function UserCreateDialog({
   async function submit() {
     setError(null);
     const res = await createUser({
-      // Empty parent means a platform-level user, which is what the proto
-      // documents — not a missing value.
+      // Empty parent is the caller's own tenant, as the proto documents:
+      // every user belongs to exactly one tenant.
       parent: tenantId ? `tenants/${tenantId}` : "",
       subject: subject.trim(),
       displayName: displayName.trim(),
@@ -133,7 +136,7 @@ export function UserCreateDialog({
             value={tenantId}
             onChange={(e) => setTenantId(e.target.value)}
           >
-            <option value="">Platform-level (no tenant)</option>
+            <option value="">{OWN_TENANT_LABEL}</option>
             {tenants.map((t) => (
               <option key={t.tenantId} value={t.tenantId}>
                 {t.displayName || t.slug}
@@ -161,8 +164,8 @@ export function UserCreateDialog({
                 : "text-xs text-muted-foreground"
             }
           >
-            At least {MIN_PASSWORD_LENGTH} characters. Shown to you once — the
-            server does not send it again.
+            At least {MIN_PASSWORD_LENGTH} characters. Pass it to the user; it
+            cannot be read back.
           </p>
         </div>
 
