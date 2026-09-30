@@ -223,14 +223,18 @@ func addTool[Args any](
 		return
 	}
 	mcpsdk.AddTool(srv, tool, func(ctx context.Context, req *mcpsdk.CallToolRequest, args Args) (*mcpsdk.CallToolResult, any, error) {
-		return handler(withRequestCredentials(ctx, req.Extra), req, args)
+		res, out, err := handler(withRequestCredentials(ctx, req.Extra), req, args)
+		if err != nil {
+			return res, out, toolError(tool.Name, err)
+		}
+		return res, out, nil
 	})
 }
 
 // jsonResult is the universal "Connect response → MCP tool result" adapter.
-// Errors from the Connect call surface as protocol errors (bubble up as JSON-RPC
-// error responses); successful payloads land as a single text-content block of
-// indented JSON so the LLM can read fields by name.
+// An error from the Connect call becomes a tool result with isError set, its
+// text from toolError; a successful payload lands as a single text-content
+// block of indented JSON so the LLM can read fields by name.
 func jsonResult[T any](resp *connect.Response[T], err error) (*mcpsdk.CallToolResult, any, error) {
 	if err != nil {
 		return nil, nil, err
