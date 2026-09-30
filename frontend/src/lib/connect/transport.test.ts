@@ -129,3 +129,44 @@ describe("auth interceptor with no mintable token", () => {
     );
   });
 });
+
+// IAM refusing the audience is a fact about the principal, not a lost token.
+// Sending the RPC anyway and re-minting on its 401 cost every admin call two
+// refused exchanges and a request the backend could only reject.
+describe("auth interceptor when the audience is refused", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("fails with PermissionDenied without sending the RPC", async () => {
+    let exchangeCalls = 0;
+    let rpcCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/auth/exchange")) {
+          exchangeCalls += 1;
+          return json(
+            { error: "insufficient role for paladin-admin audience" },
+            403,
+          );
+        }
+        rpcCalls += 1;
+        return json({});
+      }),
+    );
+
+    const { Code, ConnectError } = await import("@connectrpc/connect");
+    const { tenantClient } = await import("@/lib/connect/client");
+    const err = await tenantClient.listTenants({}).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConnectError);
+    expect((err as InstanceType<typeof ConnectError>).code).toBe(
+      Code.PermissionDenied,
+    );
+    expect(rpcCalls).toBe(0);
+    expect(exchangeCalls).toBe(1);
+  });
+});

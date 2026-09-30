@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { AUDIENCES, type Audience } from "@/constants";
 import {
@@ -92,9 +93,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json(payload);
   } catch (err) {
     console.error(`[BFF /exchange] audience=${audience}`, err);
+    // A refusal is not a lost session: IAM withholds the admin audience from
+    // a principal with no admin-tier role, and a 401 here had the console
+    // re-mint and retry as if the token had merely expired.
+    const refused =
+      err instanceof ConnectError && err.code === Code.PermissionDenied;
     return NextResponse.json(
-      { error: (err as Error).message || "exchange failed" },
-      { status: 401 },
+      {
+        error:
+          (err instanceof ConnectError
+            ? err.rawMessage
+            : (err as Error).message) || "exchange failed",
+      },
+      { status: refused ? 403 : 401 },
     );
   }
 }

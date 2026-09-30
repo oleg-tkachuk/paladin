@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 const h = vi.hoisted(() => ({
   exchangeAudience: vi.fn(),
@@ -119,5 +120,20 @@ describe("POST /api/auth/exchange", () => {
     });
     const res = await POST(exchangeReq({ audience: "paladin-admin" }));
     expect(res.status).toBe(401);
+  });
+
+  it("403s when IAM refuses the audience to this principal", async () => {
+    h.readSessionCookie.mockResolvedValue("rt");
+    h.exchangeAudience.mockRejectedValue(
+      new ConnectError(
+        "insufficient role for paladin-admin audience",
+        Code.PermissionDenied,
+      ),
+    );
+    const res = await POST(exchangeReq({ audience: "paladin-admin" }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(
+      "insufficient role for paladin-admin audience",
+    );
   });
 });

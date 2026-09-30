@@ -20,6 +20,8 @@ import {
   markAudienceStale,
 } from "@/lib/auth/tokenStore";
 
+const HTTP_FORBIDDEN = 403;
+
 /**
  * Multi-plane transport layer.
  *
@@ -164,6 +166,16 @@ configureTokenStore(async (audience: Audience) => {
     body: JSON.stringify({ audience }),
     credentials: "same-origin",
   });
+  // 403: IAM will not issue this audience to this principal — a pure
+  // tenant.user asking for paladin-admin. Typed, so the auth interceptor can
+  // fail the call rather than send it and re-mint on the 401.
+  if (res.status === HTTP_FORBIDDEN) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new ConnectError(
+      body.error || `audience ${audience} refused`,
+      Code.PermissionDenied,
+    );
+  }
   if (!res.ok) {
     throw new Error(`exchange failed (${res.status}) for audience=${audience}`);
   }
@@ -190,6 +202,10 @@ function authInterceptorFor(audience: Audience): Interceptor {
       const token = await getAccessToken(audience);
       req.header.set("Authorization", `Bearer ${token}`);
     } catch (err) {
+      // Refused, not missing: no retry can change the answer.
+      if (err instanceof ConnectError && err.code === Code.PermissionDenied) {
+        throw err;
+      }
       // No token available — let the request go out unauthenticated.
       // Backend will return 401, the catch below self-heals.
       mintErr = err;
