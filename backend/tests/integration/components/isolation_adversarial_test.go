@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -47,7 +47,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	victimA := uuid.New()
 	hexA := uuid.NewString()[:8]
-	if _, err := tenantRepo.Create(ctx, tenant.CreateTenantArgs{
+	if _, err := tenantRepo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID: victimA, Slug: "victim-" + hexA, DisplayName: "victim-" + hexA,
 		StorageLayout: "dedicated", DedicatedBackend: backendID,
 	}); err != nil {
@@ -169,7 +169,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
 	hex := uuid.NewString()[:8]
-	if _, err := tenantRepo.Create(ctx, tenant.CreateTenantArgs{
+	if _, err := tenantRepo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID: tid, Slug: "gate2-" + hex, DisplayName: "gate2-" + hex,
 		StorageLayout: "dedicated", DedicatedBackend: backendID,
 	}); err != nil {

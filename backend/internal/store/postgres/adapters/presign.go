@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/presign"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -25,7 +25,7 @@ func NewPresignRepo(q *sqlc.Queries, pool *pgxpool.Pool) *PresignRepo {
 	return &PresignRepo{q: q, pool: pool}
 }
 
-var _ presign.Repository = (*PresignRepo)(nil)
+var _ presignh.Repository = (*PresignRepo)(nil)
 
 func (r *PresignRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (resolvedCollection, key, state string, err error) {
 	row, err := r.q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))

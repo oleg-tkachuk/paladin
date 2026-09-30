@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 )
 
 // Guards the ADR-0002 wiring: admin handlers route their error fallthroughs

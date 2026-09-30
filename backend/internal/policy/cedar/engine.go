@@ -894,7 +894,7 @@ func collectionUID(tenantID uuid.UUID, collection string) cedartypes.EntityUID {
 }
 
 // Canonical A-shape Collection name segments (ADR-0014). Inlined here rather
-// than importing internal/api/v1/collection (that package imports cedar —
+// than importing internal/api/admin/v1/collectionh (that package imports cedar —
 // importing it back would cycle).
 const (
 	cedarCanonBackendPrefix = "storageBackends/"

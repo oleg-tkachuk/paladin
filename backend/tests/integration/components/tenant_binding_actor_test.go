@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -57,7 +57,7 @@ func TestTenantCreate_RecordsBindingActor(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tid := uuid.New()
 			slug := "actor-" + uuid.NewString()[:8]
-			if _, err := repo.Create(tc.ctx, tenant.CreateTenantArgs{
+			if _, err := repo.Create(tc.ctx, tenanth.CreateTenantArgs{
 				TenantID:          tid,
 				Slug:              slug,
 				DisplayName:       slug,

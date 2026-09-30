@@ -19,7 +19,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -129,10 +129,10 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 
 	// Both resolver paths now refuse with the sentinel — the gate every
 	// object op funnels through.
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, objecth.ErrBackendDisabled) {
 		t.Errorf("disabled LookupBucket: err=%v, want ErrBackendDisabled", err)
 	}
-	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); !errors.Is(err, objecth.ErrBackendDisabled) {
 		t.Errorf("disabled LookupBucketMeta: err=%v, want ErrBackendDisabled", err)
 	}
 
@@ -253,10 +253,10 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	}
 
 	// Mutations are refused with the read-only sentinel …
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBackendReadOnly) {
 		t.Errorf("drained LookupBucket(write): err=%v, want ErrBackendReadOnly", err)
 	}
-	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBackendReadOnly) {
 		t.Errorf("drained LookupBucketMeta(write): err=%v, want ErrBackendReadOnly", err)
 	}
 	// … but reads still resolve — the whole point of a drain.
@@ -344,7 +344,7 @@ func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
 	if err := be.SetEnabled(ctx, "rev-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, object.ErrBackendDisabled) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, objecth.ErrBackendDisabled) {
 		t.Fatalf("expected disabled refusal, got %v", err)
 	}
 
@@ -473,7 +473,7 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		for _, r := range resolvers {
 			for _, write := range []bool{false, true} {
 				_, _, err := r.lookup(ctx, tenantID, "docs", write)
-				if !errors.Is(err, object.ErrBackendDisabled) {
+				if !errors.Is(err, objecth.ErrBackendDisabled) {
 					t.Errorf("%s disabled (write=%v): err=%v, want ErrBackendDisabled", r.name, write, err)
 				}
 			}
@@ -485,7 +485,7 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		defer setFlag(t, func(rv int64) error { return be.SetReadOnly(ctx, "three-be", false, rv) })
 
 		for _, r := range resolvers {
-			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBackendReadOnly) {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBackendReadOnly) {
 				t.Errorf("%s drained (write): err=%v, want ErrBackendReadOnly", r.name, err)
 			}
 			// Reads keep resolving — a drain that stopped serving reads
@@ -501,7 +501,7 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		defer setProvisionState(t, "ready")
 
 		for _, r := range resolvers {
-			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, object.ErrBucketProvisioning) {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBucketProvisioning) {
 				t.Errorf("%s pending (write): err=%v, want ErrBucketProvisioning", r.name, err)
 			}
 			if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {

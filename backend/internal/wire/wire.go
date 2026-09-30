@@ -28,20 +28,19 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/audith"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecttagh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/bucket"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object_tag"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
-	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/presign"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -64,13 +63,13 @@ import (
 // Repos bundles all repository interfaces. The caller constructs this from
 // its Postgres adapters (see cmd/server).
 type Repos struct {
-	Object     object.Repository
+	Object     objecth.Repository
 	Collection objectkey.Repository
-	Tenant     tenant.Repository
+	Tenant     tenanth.Repository
 	ObjectTag  objecttag.Repository
-	Presign    presign.Repository
-	Multipart  multipart.Repository
-	Operation  operation.Repository
+	Presign    presignh.Repository
+	Multipart  multiparth.Repository
+	Operation  operationh.Repository
 
 	// v2 admin/iam stores.
 	BackendV2     admindomain.BackendRepository
@@ -80,11 +79,11 @@ type Repos struct {
 	EventSub      admindomain.EventSubscriptionRepository
 	IAMUser       authstore.UserRepository
 	IAMRefresh    authstore.RefreshTokenRepository
-	ObjectVersion object.VersionRepository
+	ObjectVersion objecth.VersionRepository
 	// ObjectLock persists object_locks rows (ADR-0013). Optional: nil leaves
 	// the lock RPCs Unimplemented and skips applying bucket default retention
 	// at promote time.
-	ObjectLock object.LockRepository
+	ObjectLock objecth.LockRepository
 
 	// Idempotency is the per-(tenant, method, key) response cache used
 	// by the Create* enforcement gate (see internal/middleware/idempotency.go).
@@ -97,11 +96,11 @@ type Repos struct {
 // its own narrow Storage interface; a single backend adapter typically
 // implements all five.
 type Storage struct {
-	Object      object.Storage
-	Multipart   multipart.Storage
-	Presign     presign.Storage
-	Stream      object.StreamSink
-	Provisioner bucket.Provisioner
+	Object      objecth.Storage
+	Multipart   multiparth.Storage
+	Presign     presignh.Storage
+	Stream      objecth.StreamSink
+	Provisioner bucketh.Provisioner
 }
 
 func ProvideObjectHandler(
@@ -111,8 +110,8 @@ func ProvideObjectHandler(
 	fe *cel.Evaluator,
 	sm *statemachine.Transitioner,
 	cfg config.Config,
-) *object.Handler {
-	return object.NewHandler(repos.Object, storage.Object, pe, fe, sm, object.PresignConfig{
+) *objecth.Handler {
+	return objecth.NewHandler(repos.Object, storage.Object, pe, fe, sm, objecth.PresignConfig{
 		DefaultTTL:     cfg.Limits.Presign.DefaultTTL,
 		MaxTTL:         cfg.Limits.Presign.MaxTTL,
 		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
@@ -123,31 +122,31 @@ func ProvideCollectionHandler(repos Repos, pe *policy.Engine, _ config.Config) *
 	return objectkey.NewHandler(repos.Collection, pe)
 }
 
-func ProvideTenantHandler(repos Repos, pe *policy.Engine, _ config.Config) *tenant.Handler {
-	return tenant.NewHandler(repos.Tenant, pe)
+func ProvideTenantHandler(repos Repos, pe *policy.Engine, _ config.Config) *tenanth.Handler {
+	return tenanth.NewHandler(repos.Tenant, pe)
 }
 
-func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operation.Handler {
-	return operation.NewHandler(repos.Operation, pe)
+func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operationh.Handler {
+	return operationh.NewHandler(repos.Operation, pe)
 }
 
-func ProvideBatchHandler(repos Repos, opH *operation.Handler, pe *policy.Engine) *batch.Handler {
+func ProvideBatchHandler(repos Repos, opH *operationh.Handler, pe *policy.Engine) *batchh.Handler {
 	// repos.Object satisfies batch.BucketResolver — the submit-time Cedar check
 	// resolves each target collection's bucket so bucket:/collection: PAT
 	// scopes enforce (the batch worker does not re-check Cedar per object).
-	return batch.NewHandler(opH, pe, repos.Object)
+	return batchh.NewHandler(opH, pe, repos.Object)
 }
 
-func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presign.Handler {
-	return presign.NewHandler(repos.Presign, storage.Presign, pe, presign.Config{
+func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presignh.Handler {
+	return presignh.NewHandler(repos.Presign, storage.Presign, pe, presignh.Config{
 		DefaultTTL:     cfg.Limits.Presign.DefaultTTL,
 		MaxTTL:         cfg.Limits.Presign.MaxTTL,
 		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
 	})
 }
 
-func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm *statemachine.Transitioner) *multipart.Handler {
-	return multipart.NewHandler(repos.Multipart, storage.Multipart, pe, sm)
+func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm *statemachine.Transitioner) *multiparth.Handler {
+	return multiparth.NewHandler(repos.Multipart, storage.Multipart, pe, sm)
 }
 
 // ─── v2 IAM/admin handlers ──────────────────────────────────────────────────
@@ -195,7 +194,7 @@ func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
 // effectively immutable (rename is a deferred admin RPC — see BACKLOG),
 // so a single Get round-trip per token mint is the worst case for now.
 // If the mint volume warrants it, drop in a sync.Map cache here.
-func tenantSlugLookup(tr tenant.Repository) func(ctx context.Context, tenantID uuid.UUID) (string, error) {
+func tenantSlugLookup(tr tenanth.Repository) func(ctx context.Context, tenantID uuid.UUID) (string, error) {
 	if tr == nil {
 		return nil
 	}
@@ -216,14 +215,9 @@ func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, _ config.Config) *b
 }
 
 func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {
-	// storage.Provisioner passes straight through. bucketh.Provisioner and
-	// bucket.Provisioner declare the same two methods, and Go satisfies an
-	// interface structurally, so the wrapper this used to build was ceremony
-	// the language does not need — with one effect that was not ceremony: its
-	// methods returned nil when the wrapped value was nil, so a deployment
-	// with no provisioner was told its bucket had been provisioned. bucketh
-	// answers that case with Unavailable ("backend provisioning not wired"),
-	// on all three of its paths, and wrapping made every one unreachable.
+	// storage.Provisioner passes straight through, nil included: bucketh
+	// answers a missing provisioner with Unavailable ("backend provisioning
+	// not wired") on all three of its paths.
 	// The concrete BucketRepoV2 satisfies bucketh.Repository (domain
 	// interface + ADR-0003 tx seam); Repos.BucketV2 is the pgx-free domain
 	// type, so assert to the wider local interface here.
@@ -247,11 +241,11 @@ func ProvidePolicyHandler(engine *policy.Engine, store policy.Store) *policyh.Ha
 	return policyh.NewHandler(engine, store)
 }
 
-func ProvideVersionHandler(repos Repos) *object.VersionHandler {
+func ProvideVersionHandler(repos Repos) *objecth.VersionHandler {
 	if repos.ObjectVersion == nil {
 		return nil
 	}
-	h := object.NewVersionHandler(repos.Object, repos.ObjectVersion)
+	h := objecth.NewVersionHandler(repos.Object, repos.ObjectVersion)
 	// The lock port rides on the version handler because bucket default
 	// retention is applied at promote time, which is where versions are
 	// written. Nil is fine — a deployment without object lock promotes
@@ -263,9 +257,9 @@ func ProvideVersionHandler(repos Repos) *object.VersionHandler {
 // ProvideLockHandler builds the object-lock RPC handler. Requires both
 // version and lock repositories: a lock has to attach to a version, so
 // object lock without versioning is not a configuration this can serve.
-func ProvideLockHandler(repos Repos, pe policy.Authorizer) *object.LockHandler {
+func ProvideLockHandler(repos Repos, pe policy.Authorizer) *objecth.LockHandler {
 	if repos.ObjectVersion == nil || repos.ObjectLock == nil {
 		return nil
 	}
-	return object.NewLockHandler(repos.Object, repos.ObjectVersion, repos.ObjectLock, pe)
+	return objecth.NewLockHandler(repos.Object, repos.ObjectVersion, repos.ObjectLock, pe)
 }

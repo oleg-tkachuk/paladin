@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 )
 
 // ListBackends, UpdateBackend and DeleteBackend were three of the thirteen

@@ -1,6 +1,6 @@
 /**
  * Roles a Cedar policy can key on, as the backend defines them
- * (internal/api/v1/apiutil). Kept in one place so a dialog and a badge
+ * (internal/api/apiutil). Kept in one place so a dialog and a badge
  * cannot disagree about what a role is called.
  *
  * These are the names, not the authority: what each one may do is decided

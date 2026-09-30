@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
@@ -22,7 +22,7 @@ type ObjectTagServer struct {
 	H objectTagHandler
 }
 
-func NewObjectTagServer(h *object.Handler) *ObjectTagServer { return &ObjectTagServer{H: h} }
+func NewObjectTagServer(h *objecth.Handler) *ObjectTagServer { return &ObjectTagServer{H: h} }
 
 func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Request[pb.GetObjectTagsRequest]) (*connect.Response[pb.GetObjectTagsResponse], error) {
 	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
@@ -47,7 +47,7 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
+	out, err := s.H.UpdateObject(ctx, objecth.UpdateObjectInput{
 		Collection:      collection,
 		ObjectID:        objectID,
 		ResourceVersion: rv,
@@ -90,7 +90,7 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 			}
 		}
 	}
-	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
+	out, err := s.H.UpdateObject(ctx, objecth.UpdateObjectInput{
 		Collection:      collection,
 		ObjectID:        objectID,
 		ResourceVersion: rv,

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
 // memRepo is a tiny in-memory operation.Repository sufficient to drive
@@ -18,39 +18,39 @@ import (
 // (ClaimNext, UpdateState) need real behaviour; the rest are stubs.
 type memRepo struct {
 	mu      sync.Mutex
-	pending []operation.Operation
-	final   map[uuid.UUID]operation.Operation
+	pending []operationh.Operation
+	final   map[uuid.UUID]operationh.Operation
 }
 
 func newMemRepo() *memRepo {
-	return &memRepo{final: map[uuid.UUID]operation.Operation{}}
+	return &memRepo{final: map[uuid.UUID]operationh.Operation{}}
 }
 
-func (m *memRepo) enqueue(op operation.Operation) {
+func (m *memRepo) enqueue(op operationh.Operation) {
 	m.mu.Lock()
-	op.State = operation.StatePending
+	op.State = operationh.StatePending
 	m.pending = append(m.pending, op)
 	m.mu.Unlock()
 }
 
-func (m *memRepo) Create(_ context.Context, op operation.Operation) error {
+func (m *memRepo) Create(_ context.Context, op operationh.Operation) error {
 	m.enqueue(op)
 	return nil
 }
-func (m *memRepo) Get(_ context.Context, id uuid.UUID, _ uuid.UUID) (operation.Operation, error) {
+func (m *memRepo) Get(_ context.Context, id uuid.UUID, _ uuid.UUID) (operationh.Operation, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if op, ok := m.final[id]; ok {
 		return op, nil
 	}
-	return operation.Operation{}, errors.New("not found")
+	return operationh.Operation{}, errors.New("not found")
 }
-func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operation.State, md, resp []byte, code, msg string) error {
+func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operationh.State, md, resp []byte, code, msg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	op, ok := m.final[id]
 	if !ok {
-		op = operation.Operation{OperationID: id, Metadata: md}
+		op = operationh.Operation{OperationID: id, Metadata: md}
 	}
 	op.State = ns
 	op.Response = resp
@@ -60,18 +60,18 @@ func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operation.Stat
 	return nil
 }
 func (m *memRepo) Cancel(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (m *memRepo) List(context.Context, uuid.UUID, *operation.State, uuid.UUID, int32, string, bool) ([]operation.Operation, string, error) {
+func (m *memRepo) List(context.Context, uuid.UUID, *operationh.State, uuid.UUID, int32, string, bool) ([]operationh.Operation, string, error) {
 	return nil, "", nil
 }
-func (m *memRepo) ClaimNext(_ context.Context) (operation.Operation, error) {
+func (m *memRepo) ClaimNext(_ context.Context) (operationh.Operation, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.pending) == 0 {
-		return operation.Operation{}, operation.ErrNoOperationToClaim
+		return operationh.Operation{}, operationh.ErrNoOperationToClaim
 	}
 	op := m.pending[0]
 	m.pending = m.pending[1:]
-	op.State = operation.StateRunning
+	op.State = operationh.StateRunning
 	return op, nil
 }
 
@@ -82,7 +82,7 @@ type stubExecutor struct {
 	calls    int
 }
 
-func (s *stubExecutor) Execute(context.Context, operation.Operation) ([]byte, error) {
+func (s *stubExecutor) Execute(context.Context, operationh.Operation) ([]byte, error) {
 	s.calls++
 	return s.response, s.err
 }
@@ -100,14 +100,14 @@ func TestRunner_DispatchSucceeded(t *testing.T) {
 	}
 
 	id := uuid.New()
-	repo.enqueue(operation.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
+	repo.enqueue(operationh.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
 	r.drain(context.Background())
 
 	if exec.calls != 1 {
 		t.Fatalf("expected 1 exec call, got %d", exec.calls)
 	}
 	got := repo.final[id]
-	if got.State != operation.StateSucceeded {
+	if got.State != operationh.StateSucceeded {
 		t.Errorf("state: got %v, want SUCCEEDED", got.State)
 	}
 	if string(got.Response) != `{"ok":true}` {
@@ -127,11 +127,11 @@ func TestRunner_DispatchFailure(t *testing.T) {
 		Interval:  time.Millisecond,
 	}
 	id := uuid.New()
-	repo.enqueue(operation.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
+	repo.enqueue(operationh.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
 	r.drain(context.Background())
 
 	got := repo.final[id]
-	if got.State != operation.StateFailed {
+	if got.State != operationh.StateFailed {
 		t.Errorf("state: got %v, want FAILED", got.State)
 	}
 	if got.ErrorCode != "EXEC_FAILED" {
@@ -155,11 +155,11 @@ func TestRunner_UnknownType(t *testing.T) {
 		Interval:  time.Millisecond,
 	}
 	id := uuid.New()
-	repo.enqueue(operation.Operation{OperationID: id, TenantID: uuid.New(), Type: "Mystery"})
+	repo.enqueue(operationh.Operation{OperationID: id, TenantID: uuid.New(), Type: "Mystery"})
 	r.drain(context.Background())
 
 	got := repo.final[id]
-	if got.State != operation.StateFailed {
+	if got.State != operationh.StateFailed {
 		t.Fatalf("state: got %v, want FAILED", got.State)
 	}
 	if got.ErrorCode != "UNKNOWN_TYPE" {
@@ -188,7 +188,7 @@ func TestRunner_DrainBatch(t *testing.T) {
 		Interval:  time.Millisecond,
 	}
 	for i := 0; i < 10; i++ {
-		repo.enqueue(operation.Operation{OperationID: uuid.New(), TenantID: uuid.New(), Type: "X"})
+		repo.enqueue(operationh.Operation{OperationID: uuid.New(), TenantID: uuid.New(), Type: "X"})
 	}
 	r.drain(context.Background())
 	if exec.calls != 10 {

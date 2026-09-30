@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -33,9 +33,9 @@ func NewObjectLockRepo(q *sqlc.Queries) *ObjectLockRepo {
 	return &ObjectLockRepo{q: q}
 }
 
-var _ object.LockRepository = (*ObjectLockRepo)(nil)
+var _ objecth.LockRepository = (*ObjectLockRepo)(nil)
 
-func (r *ObjectLockRepo) SetRetention(ctx context.Context, args object.SetRetentionArgs) (object.ObjectLock, error) {
+func (r *ObjectLockRepo) SetRetention(ctx context.Context, args objecth.SetRetentionArgs) (objecth.ObjectLock, error) {
 	row, err := r.q.SetObjectRetention(ctx,
 		pgUUID(args.TenantID),
 		pgUUID(args.VersionID),
@@ -51,17 +51,17 @@ func (r *ObjectLockRepo) SetRetention(ctx context.Context, args object.SetRetent
 		// the trigger for the guarantee — callers should not have to know
 		// which one caught them.
 		if errors.Is(err, pgx.ErrNoRows) || isLockWeakeningViolation(err) {
-			return object.ObjectLock{}, object.ErrRetentionWeakened
+			return objecth.ObjectLock{}, objecth.ErrRetentionWeakened
 		}
-		return object.ObjectLock{}, fmt.Errorf("set object retention: %w", err)
+		return objecth.ObjectLock{}, fmt.Errorf("set object retention: %w", err)
 	}
 	return lockFrom(row.Mode, row.RetainUntil, row.LegalHold), nil
 }
 
-func (r *ObjectLockRepo) SetLegalHold(ctx context.Context, tenantID, versionID uuid.UUID, hold bool) (object.ObjectLock, error) {
+func (r *ObjectLockRepo) SetLegalHold(ctx context.Context, tenantID, versionID uuid.UUID, hold bool) (objecth.ObjectLock, error) {
 	row, err := r.q.SetObjectLegalHold(ctx, pgUUID(tenantID), pgUUID(versionID), hold)
 	if err != nil {
-		return object.ObjectLock{}, fmt.Errorf("set legal hold: %w", err)
+		return objecth.ObjectLock{}, fmt.Errorf("set legal hold: %w", err)
 	}
 	return lockFrom(row.Mode, row.RetainUntil, row.LegalHold), nil
 }
@@ -85,15 +85,15 @@ func isLockWeakeningViolation(err error) bool {
 		strings.Contains(pgErr.Message, "cannot be downgraded")
 }
 
-func (r *ObjectLockRepo) GetByVersion(ctx context.Context, versionID uuid.UUID) (object.ObjectLock, error) {
+func (r *ObjectLockRepo) GetByVersion(ctx context.Context, versionID uuid.UUID) (objecth.ObjectLock, error) {
 	row, err := r.q.GetObjectLockByVersion(ctx, pgUUID(versionID))
 	if err != nil {
 		// A version with no lock is unlocked, not missing. Returning an error
 		// here would make every caller special-case the common case.
 		if isNoRows(err) {
-			return object.ObjectLock{}, nil
+			return objecth.ObjectLock{}, nil
 		}
-		return object.ObjectLock{}, fmt.Errorf("get object lock: %w", err)
+		return objecth.ObjectLock{}, fmt.Errorf("get object lock: %w", err)
 	}
 	return lockFrom(row.Mode, row.RetainUntil, row.LegalHold), nil
 }
@@ -111,8 +111,8 @@ func (r *ObjectLockRepo) ApplyBucketDefault(ctx context.Context, tenantID, versi
 	return nil
 }
 
-func lockFrom(mode *sqlc.ObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) object.ObjectLock {
-	return object.ObjectLock{
+func lockFrom(mode *sqlc.ObjectLockMode, retainUntil pgtype.Timestamptz, legalHold bool) objecth.ObjectLock {
+	return objecth.ObjectLock{
 		Mode:        lockModeFromSQL(mode),
 		RetainUntil: timePtr(retainUntil),
 		LegalHold:   legalHold,

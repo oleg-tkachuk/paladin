@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -56,7 +56,7 @@ func TestSplitBucketResourceName(t *testing.T) {
 	for name, in := range bad {
 		t.Run(name, func(t *testing.T) {
 			backend, bucket, err := splitBucketResourceName(in)
-			if !errors.Is(err, tenant.ErrDefaultBindingBucketMissing) {
+			if !errors.Is(err, tenanth.ErrDefaultBindingBucketMissing) {
 				t.Fatalf("splitBucketResourceName(%q) err = %v, want ErrDefaultBindingBucketMissing", in, err)
 			}
 			if backend != "" || bucket != "" {

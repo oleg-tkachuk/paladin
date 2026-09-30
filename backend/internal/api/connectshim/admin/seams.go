@@ -11,13 +11,13 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
-	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -98,11 +98,11 @@ var _ eventSubscriptionHandler = (*eventsubh.Handler)(nil)
 // operationHandler is what OperationServer needs from *operation.Handler.
 type operationHandler interface {
 	CancelOperation(ctx context.Context, opID uuid.UUID) error
-	GetOperation(ctx context.Context, opID uuid.UUID) (*operation.Operation, error)
-	ListOperations(ctx context.Context, state *operation.State, pageSize int32, pageToken, filter string, newestFirst bool) ([]operation.Operation, string, error)
+	GetOperation(ctx context.Context, opID uuid.UUID) (*operationh.Operation, error)
+	ListOperations(ctx context.Context, state *operationh.State, pageSize int32, pageToken, filter string, newestFirst bool) ([]operationh.Operation, string, error)
 }
 
-var _ operationHandler = (*operation.Handler)(nil)
+var _ operationHandler = (*operationh.Handler)(nil)
 
 // policyHandler is what PolicyServer needs from *policyh.Handler.
 type policyHandler interface {
@@ -135,20 +135,20 @@ var _ systemHandler = (*systemh.Handler)(nil)
 // tenantHandler is what TenantServer needs from *tenant.Handler.
 type tenantHandler interface {
 	ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) error
-	CreateTenant(ctx context.Context, args tenant.CreateTenantArgs) (*tenant.Tenant, error)
+	CreateTenant(ctx context.Context, args tenanth.CreateTenantArgs) (*tenanth.Tenant, error)
 	DeleteTenant(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
-	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (*tenant.DefaultBinding, error)
-	GetTenant(ctx context.Context, tenantID uuid.UUID) (*tenant.Tenant, error)
-	GetTenantBySlug(ctx context.Context, slug string) (*tenant.Tenant, error)
-	GetTenantStorageMigration(ctx context.Context, tenantID uuid.UUID) (*tenant.StorageMigration, error)
-	ListTenants(ctx context.Context, args tenant.ListTenantsArgs, pageToken string) ([]tenant.Tenant, string, error)
-	MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*tenant.StorageMigration, error)
+	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (*tenanth.DefaultBinding, error)
+	GetTenant(ctx context.Context, tenantID uuid.UUID) (*tenanth.Tenant, error)
+	GetTenantBySlug(ctx context.Context, slug string) (*tenanth.Tenant, error)
+	GetTenantStorageMigration(ctx context.Context, tenantID uuid.UUID) (*tenanth.StorageMigration, error)
+	ListTenants(ctx context.Context, args tenanth.ListTenantsArgs, pageToken string) ([]tenanth.Tenant, string, error)
+	MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*tenanth.StorageMigration, error)
 	PurgeTenant(ctx context.Context, tenantID uuid.UUID) error
-	RenameTenantSlug(ctx context.Context, args tenant.RenameTenantSlugArgs) (*tenant.Tenant, error)
+	RenameTenantSlug(ctx context.Context, args tenanth.RenameTenantSlugArgs) (*tenanth.Tenant, error)
 	ResolveRenamedSlug(ctx context.Context, oldSlug string) (string, time.Time, error)
-	RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*tenant.Tenant, error)
-	SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket string) (*tenant.DefaultBinding, error)
-	UpdateTenant(ctx context.Context, args tenant.UpdateTenantArgs) (*tenant.Tenant, error)
+	RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*tenanth.Tenant, error)
+	SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket string) (*tenanth.DefaultBinding, error)
+	UpdateTenant(ctx context.Context, args tenanth.UpdateTenantArgs) (*tenanth.Tenant, error)
 }
 
-var _ tenantHandler = (*tenant.Handler)(nil)
+var _ tenantHandler = (*tenanth.Handler)(nil)

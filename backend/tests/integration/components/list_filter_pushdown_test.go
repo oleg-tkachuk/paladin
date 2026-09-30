@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -100,7 +100,7 @@ func TestPushdown_Tenants(t *testing.T) {
 			uuid.New(), fmt.Sprintf("%s-%02d", prefix, i), fmt.Sprintf("tenant %d", i))
 	}
 
-	got, _, err := repo.List(ctx, tenant.ListTenantsArgs{
+	got, _, err := repo.List(ctx, tenanth.ListTenantsArgs{
 		PageSize: 2,
 		Filter:   fmt.Sprintf(`slug.startsWith(%q)`, prefix),
 	})
@@ -121,7 +121,7 @@ func TestPushdown_Tenants(t *testing.T) {
 
 	// storage_layout is an enum column: a literal that is not a valid value
 	// must return no rows, not fail the query.
-	got, _, err = repo.List(ctx, tenant.ListTenantsArgs{
+	got, _, err = repo.List(ctx, tenanth.ListTenantsArgs{
 		PageSize: 10,
 		Filter:   `storage_layout == "not-a-layout"`,
 	})

@@ -15,11 +15,11 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
-	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -175,10 +175,10 @@ type failingOperation struct{}
 func (failingOperation) CancelOperation(context.Context, uuid.UUID) error {
 	return errBoom
 }
-func (failingOperation) GetOperation(context.Context, uuid.UUID) (*operation.Operation, error) {
+func (failingOperation) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
 	return nil, errBoom
 }
-func (failingOperation) ListOperations(context.Context, *operation.State, int32, string, string, bool) ([]operation.Operation, string, error) {
+func (failingOperation) ListOperations(context.Context, *operationh.State, int32, string, string, bool) ([]operationh.Operation, string, error) {
 	return nil, "", errBoom
 }
 
@@ -226,46 +226,46 @@ type failingTenant struct{}
 func (failingTenant) ClearDefaultBinding(context.Context, uuid.UUID) error {
 	return errBoom
 }
-func (failingTenant) CreateTenant(context.Context, tenant.CreateTenantArgs) (*tenant.Tenant, error) {
+func (failingTenant) CreateTenant(context.Context, tenanth.CreateTenantArgs) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
 func (failingTenant) DeleteTenant(context.Context, uuid.UUID, int64) error {
 	return errBoom
 }
-func (failingTenant) GetDefaultBinding(context.Context, uuid.UUID) (*tenant.DefaultBinding, error) {
+func (failingTenant) GetDefaultBinding(context.Context, uuid.UUID) (*tenanth.DefaultBinding, error) {
 	return nil, errBoom
 }
-func (failingTenant) GetTenant(context.Context, uuid.UUID) (*tenant.Tenant, error) {
+func (failingTenant) GetTenant(context.Context, uuid.UUID) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
-func (failingTenant) GetTenantBySlug(context.Context, string) (*tenant.Tenant, error) {
+func (failingTenant) GetTenantBySlug(context.Context, string) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
-func (failingTenant) GetTenantStorageMigration(context.Context, uuid.UUID) (*tenant.StorageMigration, error) {
+func (failingTenant) GetTenantStorageMigration(context.Context, uuid.UUID) (*tenanth.StorageMigration, error) {
 	return nil, errBoom
 }
-func (failingTenant) ListTenants(context.Context, tenant.ListTenantsArgs, string) ([]tenant.Tenant, string, error) {
+func (failingTenant) ListTenants(context.Context, tenanth.ListTenantsArgs, string) ([]tenanth.Tenant, string, error) {
 	return nil, "", errBoom
 }
-func (failingTenant) MigrateTenantStorageLayout(context.Context, uuid.UUID, string, int64) (*tenant.StorageMigration, error) {
+func (failingTenant) MigrateTenantStorageLayout(context.Context, uuid.UUID, string, int64) (*tenanth.StorageMigration, error) {
 	return nil, errBoom
 }
 func (failingTenant) PurgeTenant(context.Context, uuid.UUID) error {
 	return errBoom
 }
-func (failingTenant) RenameTenantSlug(context.Context, tenant.RenameTenantSlugArgs) (*tenant.Tenant, error) {
+func (failingTenant) RenameTenantSlug(context.Context, tenanth.RenameTenantSlugArgs) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
 func (failingTenant) ResolveRenamedSlug(context.Context, string) (string, time.Time, error) {
 	return "", time.Time{}, errBoom
 }
-func (failingTenant) RestoreTenant(context.Context, uuid.UUID) (*tenant.Tenant, error) {
+func (failingTenant) RestoreTenant(context.Context, uuid.UUID) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
-func (failingTenant) SetDefaultBinding(context.Context, uuid.UUID, string) (*tenant.DefaultBinding, error) {
+func (failingTenant) SetDefaultBinding(context.Context, uuid.UUID, string) (*tenanth.DefaultBinding, error) {
 	return nil, errBoom
 }
-func (failingTenant) UpdateTenant(context.Context, tenant.UpdateTenantArgs) (*tenant.Tenant, error) {
+func (failingTenant) UpdateTenant(context.Context, tenanth.UpdateTenantArgs) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
 
@@ -291,8 +291,8 @@ var (
 // state — but the lookup can fail, and that branch is worth holding too.
 type failingBindings struct{}
 
-func (failingBindings) GetDefaultBinding(context.Context, uuid.UUID) (tenant.DefaultBinding, error) {
-	return tenant.DefaultBinding{}, errBoom
+func (failingBindings) GetDefaultBinding(context.Context, uuid.UUID) (tenanth.DefaultBinding, error) {
+	return tenanth.DefaultBinding{}, errBoom
 }
 
 var _ defaultBindingSource = failingBindings{}

@@ -64,15 +64,15 @@ own protobuf package, auth audience and Postgres role:
 Each plane's handlers live under `internal/api/connectshim/<plane>/`, one
 file per service — `object_server.go`, `collection_server.go`, and so on.
 Those are thin: they translate protobuf to and from the domain types and
-delegate to the handlers in `internal/api/v1/<resource>/`, which hold the
-logic and know nothing about Connect. That split is what lets the same
+delegate to the handlers in `internal/api/<plane>/v1/<resource>h/`, which
+hold the logic and know nothing about Connect. That split is what lets the same
 handler be driven by the MCP bridge as well as by RPC.
 
 ### Shared Components
 
 | Package | Purpose |
 |---------|---------|
-| `internal/api/v1/apiutil/` | Domain-error → Connect-code mapping (`errmap.go`), the caller/principal context helpers, slug validation, the audit stash |
+| `internal/api/apiutil/` | Domain-error → Connect-code mapping (`errmap.go`), the caller/principal context helpers, slug validation, the audit stash |
 | `internal/api/connectshim/*/conv.go` | Domain ↔ proto converters, per plane |
 | `internal/api/connectshim/resolve/` | Resource-name → binding resolution shared by handlers |
 
@@ -141,8 +141,10 @@ See [configuration.md](configuration.md) for the field reference.
 
 ## Source Index
 
-- `internal/api/v1/` — Domain handlers per resource (object, tenant,
-  collection, multipart, …): the business logic, transport-agnostic.
+- `internal/api/{admin,data,iam}/v1/<resource>h/` — Domain handlers per
+  resource (objecth, tenanth, collectionh, multiparth, …): the business
+  logic, transport-agnostic, grouped by the plane that serves them. The `h`
+  keeps a handler package apart from the domain package of the same name.
 - `internal/api/connectshim/` — Connect RPC servers that adapt the generated
   protobuf surface onto those handlers, grouped by plane (admin / data / iam).
 - `sdk/go/gen/` (repository root) — Generated protobuf and Connect code,

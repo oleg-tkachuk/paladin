@@ -515,7 +515,7 @@ finding moving from "packages you import" to "your code is affected".
   every handler class that today's customer surface needs:
     - **Lifecycle classes** (always-on): tenant / bucket /
       objectKey / quota / object. Pattern in
-      `internal/api/v1/tenant/handler.go::EventProducer`,
+      `internal/api/admin/v1/tenanth/handler.go::EventProducer`,
       reused across the four sibling handlers; admin pod
       wiring in `build_listeners_admin.go`, api pod wiring
       in `build_listeners_api.go::apiDispatcher`. Event

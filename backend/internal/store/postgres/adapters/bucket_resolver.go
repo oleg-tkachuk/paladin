@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
 // This file holds the collection→bucket resolution that every data-plane op
@@ -47,13 +47,13 @@ const resolveBucketQuery = `
 // copy of it.
 func bucketOpAllowed(write, enabled, readOnly bool, provisionState string) error {
 	if !enabled {
-		return object.ErrBackendDisabled
+		return objecth.ErrBackendDisabled
 	}
 	if write && readOnly {
-		return object.ErrBackendReadOnly
+		return objecth.ErrBackendReadOnly
 	}
 	if write && provisionState != "ready" {
-		return object.ErrBucketProvisioning
+		return objecth.ErrBucketProvisioning
 	}
 	return nil
 }

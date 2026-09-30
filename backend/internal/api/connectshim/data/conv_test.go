@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -210,7 +210,7 @@ func TestObjectToProtoNil(t *testing.T) {
 func TestObjectToProtoProjectsEveryField(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	committed := now.Add(time.Minute)
-	o := &object.Object{
+	o := &objecth.Object{
 		ObjectID: objUUID, TenantID: tenantA, Collection: "logs", Key: "a.txt",
 		State: statemachine.StateAvailable, ContentType: "text/plain", SizeBytes: 123,
 		ETag: "etag-1", ChecksumAlgo: "SHA256", Checksum: "chk", Sequencer: "seq",
@@ -254,7 +254,7 @@ func TestObjectToProtoProjectsEveryField(t *testing.T) {
 // The checksum message is omitted entirely when neither half is set, so
 // clients can distinguish "no checksum" from "empty checksum".
 func TestObjectToProtoOmitsEmptyChecksum(t *testing.T) {
-	got := objectToProto(&object.Object{ObjectID: objUUID, TenantID: tenantA})
+	got := objectToProto(&objecth.Object{ObjectID: objUUID, TenantID: tenantA})
 	if got.Checksum != nil {
 		t.Errorf("Checksum = %+v, want nil", got.Checksum)
 	}
@@ -262,13 +262,13 @@ func TestObjectToProtoOmitsEmptyChecksum(t *testing.T) {
 
 func TestObjectToProtoIncludesPartialChecksum(t *testing.T) {
 	t.Run("algo only", func(t *testing.T) {
-		got := objectToProto(&object.Object{ChecksumAlgo: "MD5"})
+		got := objectToProto(&objecth.Object{ChecksumAlgo: "MD5"})
 		if got.Checksum == nil || got.Checksum.Algorithm != "MD5" {
 			t.Errorf("Checksum = %+v", got.Checksum)
 		}
 	})
 	t.Run("value only", func(t *testing.T) {
-		got := objectToProto(&object.Object{Checksum: "abc"})
+		got := objectToProto(&objecth.Object{Checksum: "abc"})
 		if got.Checksum == nil || got.Checksum.Value != "abc" {
 			t.Errorf("Checksum = %+v", got.Checksum)
 		}
@@ -311,11 +311,11 @@ func TestChecksumAlgoStr(t *testing.T) {
 }
 
 func TestCompletionModeProto(t *testing.T) {
-	cases := map[object.CompletionMode]commonpb.CompletionMode{
-		object.CompletionModeImplicit:    commonpb.CompletionMode_COMPLETION_MODE_IMPLICIT,
-		object.CompletionModeExplicit:    commonpb.CompletionMode_COMPLETION_MODE_EXPLICIT,
-		object.CompletionModeUnspecified: commonpb.CompletionMode_COMPLETION_MODE_UNSPECIFIED,
-		object.CompletionMode(99):        commonpb.CompletionMode_COMPLETION_MODE_UNSPECIFIED,
+	cases := map[objecth.CompletionMode]commonpb.CompletionMode{
+		objecth.CompletionModeImplicit:    commonpb.CompletionMode_COMPLETION_MODE_IMPLICIT,
+		objecth.CompletionModeExplicit:    commonpb.CompletionMode_COMPLETION_MODE_EXPLICIT,
+		objecth.CompletionModeUnspecified: commonpb.CompletionMode_COMPLETION_MODE_UNSPECIFIED,
+		objecth.CompletionMode(99):        commonpb.CompletionMode_COMPLETION_MODE_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := completionModeProto(in); got != want {
@@ -431,7 +431,7 @@ func TestLockStateToProtoCarriesAllThreeFacts(t *testing.T) {
 	// be refused. Dropping any one of them shows an operator a lock that is
 	// weaker than the one actually enforced, which is worse than showing none.
 	until := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
-	got := lockStateToProto(object.ObjectLock{
+	got := lockStateToProto(objecth.ObjectLock{
 		Mode: "COMPLIANCE", RetainUntil: &until, LegalHold: true,
 	})
 	if got.GetMode() != "COMPLIANCE" {
@@ -449,7 +449,7 @@ func TestLockStateToProtoAnswersUnlockedRatherThanNil(t *testing.T) {
 	// The RPC's question is "what is the lock here", and "none" is an answer.
 	// A nil message would read to a client as "unknown", which is a different
 	// claim entirely.
-	got := lockStateToProto(object.ObjectLock{})
+	got := lockStateToProto(objecth.ObjectLock{})
 	if got == nil {
 		t.Fatal("unlocked rendered as nil; the caller cannot tell that from an error")
 	}
@@ -461,7 +461,7 @@ func TestLockStateToProtoAnswersUnlockedRatherThanNil(t *testing.T) {
 func TestVersionToProtoCarriesTheIdentityAndBody(t *testing.T) {
 	vid, oid := uuid.New(), uuid.New()
 	created := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	got := versionToProto("tenants/t/collections/docs/objects/o", &object.ObjectVersion{
+	got := versionToProto("tenants/t/collections/docs/objects/o", &objecth.ObjectVersion{
 		VersionID: vid, ObjectID: oid, StoragePath: "docs/a.txt", SizeBytes: 42,
 		ETag: "etag-1", ContentType: "text/plain",
 		Metadata: map[string]string{"k": "v"}, Tags: map[string]string{"env": "prod"},
@@ -495,7 +495,7 @@ func TestVersionToProtoOmitsEmptySubMessages(t *testing.T) {
 	// A version with no checksum and no lock must carry neither sub-message.
 	// An empty ChecksumDigest reads as "checksummed with the empty algorithm",
 	// and an empty ObjectLockState on a history entry invents a lock.
-	got := versionToProto("p", &object.ObjectVersion{VersionID: uuid.New(), ObjectID: uuid.New()})
+	got := versionToProto("p", &objecth.ObjectVersion{VersionID: uuid.New(), ObjectID: uuid.New()})
 	if got.GetChecksum() != nil {
 		t.Errorf("checksum = %+v, want absent", got.GetChecksum())
 	}
@@ -507,7 +507,7 @@ func TestVersionToProtoOmitsEmptySubMessages(t *testing.T) {
 func TestVersionToProtoIncludesALockHeldOnlyByLegalHold(t *testing.T) {
 	// A legal hold with no mode and no date is a real lock, and the cheapest
 	// one to lose: every field it travels with is zero.
-	got := versionToProto("p", &object.ObjectVersion{
+	got := versionToProto("p", &objecth.ObjectVersion{
 		VersionID: uuid.New(), ObjectID: uuid.New(), LegalHold: true,
 	})
 	if got.GetLock() == nil || !got.GetLock().GetLegalHold() {
@@ -520,17 +520,17 @@ func TestDataOperationToProtoMarksOnlyTerminalStatesDone(t *testing.T) {
 	// polls a finished operation forever; wrong in the other it reads a
 	// half-finished result as final.
 	for _, tc := range []struct {
-		state    operation.State
+		state    operationh.State
 		wantDone bool
 	}{
-		{operation.StatePending, false},
-		{operation.StateRunning, false},
-		{operation.StateSucceeded, true},
-		{operation.StateFailed, true},
-		{operation.StateCancelled, true},
+		{operationh.StatePending, false},
+		{operationh.StateRunning, false},
+		{operationh.StateSucceeded, true},
+		{operationh.StateFailed, true},
+		{operationh.StateCancelled, true},
 	} {
 		t.Run(string(tc.state), func(t *testing.T) {
-			got := dataOperationToProto(&operation.Operation{
+			got := dataOperationToProto(&operationh.Operation{
 				OperationID: uuid.New(), Type: "BatchDelete", State: tc.state,
 			})
 			if got.GetDone() != tc.wantDone {
@@ -543,8 +543,8 @@ func TestDataOperationToProtoMarksOnlyTerminalStatesDone(t *testing.T) {
 func TestDataOperationToProtoPutsFailuresInTheErrorArm(t *testing.T) {
 	// The result is a oneof. A failure delivered in the response arm is a
 	// client that reports success with an empty payload.
-	got := dataOperationToProto(&operation.Operation{
-		OperationID: uuid.New(), Type: "BatchDelete", State: operation.StateFailed,
+	got := dataOperationToProto(&operationh.Operation{
+		OperationID: uuid.New(), Type: "BatchDelete", State: operationh.StateFailed,
 		ErrorCode: "internal", ErrorMessage: "boom",
 	})
 	if got.GetError() == nil {

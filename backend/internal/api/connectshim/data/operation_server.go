@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
@@ -24,7 +24,7 @@ type OperationServer struct {
 	H operationHandler
 }
 
-func NewOperationServer(h *operation.Handler) *OperationServer { return &OperationServer{H: h} }
+func NewOperationServer(h *operationh.Handler) *OperationServer { return &OperationServer{H: h} }
 
 func (s *OperationServer) GetOperation(ctx context.Context, req *connect.Request[pb.GetOperationRequest]) (*connect.Response[pb.Operation], error) {
 	id, err := dataOperationID(req.Msg.GetName())
@@ -78,14 +78,14 @@ func dataOperationID(name string) (uuid.UUID, error) {
 	return uuid.Parse(name[len(prefix):])
 }
 
-func dataOperationToProto(o *operation.Operation) *pb.Operation {
+func dataOperationToProto(o *operationh.Operation) *pb.Operation {
 	if o == nil {
 		return nil
 	}
 	out := &pb.Operation{
 		Name:      fmt.Sprintf("operations/%s", o.OperationID),
 		Type:      o.Type,
-		Done:      o.State == operation.StateSucceeded || o.State == operation.StateFailed || o.State == operation.StateCancelled,
+		Done:      o.State == operationh.StateSucceeded || o.State == operationh.StateFailed || o.State == operationh.StateCancelled,
 		CreatedAt: convx.TsProto(o.CreatedAt),
 		UpdatedAt: convx.TsProto(o.UpdatedAt),
 	}
@@ -93,10 +93,10 @@ func dataOperationToProto(o *operation.Operation) *pb.Operation {
 		out.Metadata = md
 	}
 	switch o.State {
-	case operation.StateFailed, operation.StateCancelled:
+	case operationh.StateFailed, operationh.StateCancelled:
 		out.Result = &pb.Operation_Error{
 			Error: convx.OperationError(o.ErrorCode, o.ErrorMessage, o.Response,
-				o.State == operation.StateCancelled),
+				o.State == operationh.StateCancelled),
 		}
 	default:
 		if resp := convx.JSONToAny(o.Response); resp != nil {

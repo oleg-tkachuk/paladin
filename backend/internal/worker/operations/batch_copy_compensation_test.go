@@ -10,51 +10,51 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // ─── fakes (only the methods copyOne touches do real work) ───────────────
 
-type copyFakeRepo struct{ created object.Object }
+type copyFakeRepo struct{ created objecth.Object }
 
-func (f *copyFakeRepo) CreateObject(context.Context, object.CreateObjectArgs) (object.Object, error) {
+func (f *copyFakeRepo) CreateObject(context.Context, objecth.CreateObjectArgs) (objecth.Object, error) {
 	return f.created, nil
 }
 
 // unused-by-copyOne Repository methods:
-func (*copyFakeRepo) FindByName(context.Context, uuid.UUID, string, string) (object.Object, error) {
+func (*copyFakeRepo) FindByName(context.Context, uuid.UUID, string, string) (objecth.Object, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]object.Object, error) {
+func (*copyFakeRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]objecth.Object, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (object.ObjectLock, error) {
+func (*copyFakeRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (objecth.ObjectLock, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) FindByPath(context.Context, uuid.UUID, string, string) (object.Object, error) {
+func (*copyFakeRepo) FindByPath(context.Context, uuid.UUID, string, string) (objecth.Object, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) UpdateMetadata(context.Context, object.UpdateMetadataArgs) (object.Object, error) {
+func (*copyFakeRepo) UpdateMetadata(context.Context, objecth.UpdateMetadataArgs) (objecth.Object, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) ListObjects(context.Context, object.ListObjectsArgs) ([]object.Object, string, error) {
+func (*copyFakeRepo) ListObjects(context.Context, objecth.ListObjectsArgs) ([]objecth.Object, string, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) CountObjects(context.Context, object.CountObjectsArgs) (int64, bool, error) {
+func (*copyFakeRepo) CountObjects(context.Context, objecth.CountObjectsArgs) (int64, bool, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) ListDistinctTags(context.Context, uuid.UUID, string, string, int32, int32) (object.DistinctTagPage, error) {
+func (*copyFakeRepo) ListDistinctTags(context.Context, uuid.UUID, string, string, int32, int32) (objecth.DistinctTagPage, error) {
 	panic("unused")
 }
 func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (object.BucketMeta, error) {
+func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) UpdateMetadataTx(context.Context, pgx.Tx, object.UpdateMetadataArgs) (object.Object, error) {
+func (*copyFakeRepo) UpdateMetadataTx(context.Context, pgx.Tx, objecth.UpdateMetadataArgs) (objecth.Object, error) {
 	panic("unused")
 }
 func (*copyFakeRepo) HardDeleteTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
@@ -70,24 +70,24 @@ func (*copyFakeRepo) RunInTx(context.Context, func(context.Context, pgx.Tx) erro
 // Purge debt is a no-op in these fakes: the permanent-delete path is
 // covered end-to-end in tests/integration/components, where a real pending_purges
 // row is the assertion.
-func (*copyFakeRepo) EnqueuePurgeTx(context.Context, pgx.Tx, object.PurgeDebt) error { return nil }
-func (*copyFakeRepo) SettlePurgeTx(context.Context, pgx.Tx, uuid.UUID) error         { return nil }
+func (*copyFakeRepo) EnqueuePurgeTx(context.Context, pgx.Tx, objecth.PurgeDebt) error { return nil }
+func (*copyFakeRepo) SettlePurgeTx(context.Context, pgx.Tx, uuid.UUID) error          { return nil }
 func (*copyFakeRepo) LiveCollision(context.Context, uuid.UUID, string, string) (bool, error) {
 	panic("unused")
 }
 
 type copyFakeStorage struct{ copyErr error }
 
-func (f *copyFakeStorage) CopyObject(context.Context, object.Location, object.Location) error {
+func (f *copyFakeStorage) CopyObject(context.Context, objecth.Location, objecth.Location) error {
 	return f.copyErr
 }
-func (*copyFakeStorage) PresignPut(context.Context, object.PresignPutArgs) (string, map[string]string, time.Time, error) {
+func (*copyFakeStorage) PresignPut(context.Context, objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	panic("unused")
 }
-func (*copyFakeStorage) PresignPost(context.Context, object.PresignPostArgs) (string, map[string]string, time.Time, error) {
+func (*copyFakeStorage) PresignPost(context.Context, objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
 	panic("unused")
 }
-func (*copyFakeStorage) PresignGet(context.Context, object.PresignGetArgs) (string, map[string]string, time.Time, error) {
+func (*copyFakeStorage) PresignGet(context.Context, objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	panic("unused")
 }
 func (*copyFakeStorage) Head(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {
@@ -116,8 +116,8 @@ func (*copyFakeTransitioner) Restore(context.Context, uuid.UUID) error          
 
 // ─── tests ───────────────────────────────────────────────────────────────
 
-func availableSrc() object.Object {
-	return object.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "k"}
+func availableSrc() objecth.Object {
+	return objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "k"}
 }
 
 // Storage copy fails → compensate by MarkFailed; the returned error names
@@ -125,11 +125,11 @@ func availableSrc() object.Object {
 func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 	tr := &copyFakeTransitioner{}
 	e := &BatchCopyExecutor{
-		Objects:     &copyFakeRepo{created: object.Object{ObjectID: uuid.New()}},
+		Objects:     &copyFakeRepo{created: objecth.Object{ObjectID: uuid.New()}},
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), batch.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
+	err := e.copyOne(context.Background(), batchh.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
 	if err == nil || !strings.Contains(err.Error(), "storage copy") {
 		t.Fatalf("want storage copy error, got %v", err)
 	}
@@ -146,11 +146,11 @@ func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 func TestCopyOneDoubleFailureSurfacesBoth(t *testing.T) {
 	tr := &copyFakeTransitioner{markFailedErr: errors.New("mark failed too")}
 	e := &BatchCopyExecutor{
-		Objects:     &copyFakeRepo{created: object.Object{ObjectID: uuid.New()}},
+		Objects:     &copyFakeRepo{created: objecth.Object{ObjectID: uuid.New()}},
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), batch.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
+	err := e.copyOne(context.Background(), batchh.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
 	if err == nil {
 		t.Fatal("want error")
 	}

@@ -14,8 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"

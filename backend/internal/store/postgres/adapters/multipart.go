@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -26,16 +26,16 @@ func NewMultipartRepo(q *sqlc.Queries, pool *pgxpool.Pool) *MultipartRepo {
 	return &MultipartRepo{q: q, pool: pool}
 }
 
-var _ multipart.Repository = (*MultipartRepo)(nil)
+var _ multiparth.Repository = (*MultipartRepo)(nil)
 
 const multipartSessionTTL = 24 * time.Hour
 
-func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (multipart.Session, error) {
+func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (multiparth.Session, error) {
 	uploadID := uuid.Must(uuid.NewV7()).String()
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return multipart.Session{}, fmt.Errorf("begin multipart tx: %w", err)
+		return multiparth.Session{}, fmt.Errorf("begin multipart tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := r.q.WithTx(tx)
@@ -47,7 +47,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 	}
 	collectionID, err := qtx.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
 	if err != nil {
-		return multipart.Session{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
+		return multiparth.Session{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
 	}
 	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
@@ -64,7 +64,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		strPtrOrNil(args.ExternalRef),
 		pgTS(time.Now().Add(multipartSessionTTL)),
 	); err != nil {
-		return multipart.Session{}, fmt.Errorf("create multipart object row: %w", err)
+		return multiparth.Session{}, fmt.Errorf("create multipart object row: %w", err)
 	}
 
 	if err := qtx.CreateMultipartUpload(ctx,
@@ -84,14 +84,14 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		args.Collection,
 		args.Key,
 	); err != nil {
-		return multipart.Session{}, fmt.Errorf("create multipart upload row: %w", err)
+		return multiparth.Session{}, fmt.Errorf("create multipart upload row: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return multipart.Session{}, fmt.Errorf("commit multipart tx: %w", err)
+		return multiparth.Session{}, fmt.Errorf("commit multipart tx: %w", err)
 	}
 
-	return multipart.Session{
+	return multiparth.Session{
 		UploadID: uploadID,
 		ObjectID: objectID,
 		// Carried back so the caller can build the object's resource name.
@@ -109,7 +109,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 	}, nil
 }
 
-func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multipart.Session, error) {
+func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multiparth.Session, error) {
 	const q = `
 				SELECT mu.id, mu.object_id, mu.storage_upload_id,
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
@@ -123,7 +123,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		WHERE mu.id = $1
 	`
 	var (
-		s          multipart.Session
+		s          multiparth.Session
 		objectID   uuid.UUID
 		tenantID   uuid.UUID
 		createdAt  time.Time
@@ -147,9 +147,9 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	)
 	if err != nil {
 		if isNoRows(err) {
-			return multipart.Session{}, fmt.Errorf("upload %q not found", uploadID)
+			return multiparth.Session{}, fmt.Errorf("upload %q not found", uploadID)
 		}
-		return multipart.Session{}, fmt.Errorf("get multipart session: %w", err)
+		return multiparth.Session{}, fmt.Errorf("get multipart session: %w", err)
 	}
 	s.ObjectID = objectID
 	s.TenantID = tenantID

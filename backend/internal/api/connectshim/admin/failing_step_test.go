@@ -8,9 +8,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -30,8 +30,8 @@ import (
 
 type cancelFailsGetSucceeds struct{ failingOperation }
 
-func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operation.Operation, error) {
-	return &operation.Operation{}, nil
+func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
+	return &operationh.Operation{}, nil
 }
 
 func TestCancelOperation_ReportsTheCancelNotTheReread(t *testing.T) {
@@ -77,8 +77,8 @@ func TestPurgeTenant_ReportsTheSlugLookupNotThePurge(t *testing.T) {
 // case that holds it is a successful creation.
 type okBindings struct{}
 
-func (okBindings) GetDefaultBinding(context.Context, uuid.UUID) (tenant.DefaultBinding, error) {
-	return tenant.DefaultBinding{BackendName: "primary", BucketName: "b1"}, nil
+func (okBindings) GetDefaultBinding(context.Context, uuid.UUID) (tenanth.DefaultBinding, error) {
+	return tenanth.DefaultBinding{BackendName: "primary", BucketName: "b1"}, nil
 }
 
 type okCollection struct{ failingCollection }

@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
 // BatchRestoreExecutor implements the BatchRestoreObjects operation type.
@@ -36,7 +36,7 @@ import (
 // would force the caller to thread the version of a row they don't
 // otherwise see in their list-deleted UI.
 type BatchRestoreExecutor struct {
-	Objects     object.Repository
+	Objects     objecth.Repository
 	Transitions Transitioner
 }
 
@@ -54,12 +54,12 @@ type BatchRestoreFailure struct {
 }
 
 // Execute implements Executor.
-func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operation.Operation) ([]byte, error) {
+func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
 	if e.Objects == nil || e.Transitions == nil {
 		return nil, errors.New("BatchRestoreExecutor: dependencies missing (Objects / Transitions)")
 	}
 
-	var args batch.BatchRestoreObjectsArgs
+	var args batchh.BatchRestoreObjectsArgs
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}

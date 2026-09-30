@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
@@ -18,62 +18,62 @@ import (
 // repo, a storage client and a database.
 type failingHandler struct{ err error }
 
-func (f failingHandler) UploadObject(context.Context, object.UploadObjectInput) (*object.UploadObjectOutput, error) {
+func (f failingHandler) UploadObject(context.Context, objecth.UploadObjectInput) (*objecth.UploadObjectOutput, error) {
 	return nil, f.err
 }
-func (f failingHandler) CompleteObject(context.Context, object.CompleteObjectInput) (*object.Object, error) {
+func (f failingHandler) CompleteObject(context.Context, objecth.CompleteObjectInput) (*objecth.Object, error) {
 	return nil, f.err
 }
-func (f failingHandler) ListObjects(context.Context, object.ListObjectsInput) ([]object.Object, string, error) {
+func (f failingHandler) ListObjects(context.Context, objecth.ListObjectsInput) ([]objecth.Object, string, error) {
 	return nil, "", f.err
 }
-func (f failingHandler) CountObjects(context.Context, object.CountObjectsInput) (*object.CountObjectsOutput, error) {
+func (f failingHandler) CountObjects(context.Context, objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error) {
 	return nil, f.err
 }
-func (f failingHandler) GetObject(context.Context, string, string) (*object.Object, error) {
+func (f failingHandler) GetObject(context.Context, string, string) (*objecth.Object, error) {
 	return nil, f.err
 }
-func (f failingHandler) LookupObject(context.Context, string, string) (*object.Object, error) {
+func (f failingHandler) LookupObject(context.Context, string, string) (*objecth.Object, error) {
 	return nil, f.err
 }
-func (f failingHandler) DownloadObject(context.Context, string, string, time.Duration, string) (*object.DownloadObjectOutput, error) {
+func (f failingHandler) DownloadObject(context.Context, string, string, time.Duration, string) (*objecth.DownloadObjectOutput, error) {
 	return nil, f.err
 }
-func (f failingHandler) UpdateObject(context.Context, object.UpdateObjectInput) (*object.Object, error) {
+func (f failingHandler) UpdateObject(context.Context, objecth.UpdateObjectInput) (*objecth.Object, error) {
 	return nil, f.err
 }
 func (f failingHandler) DeleteObject(context.Context, string, string, string, bool, bool) error {
 	return f.err
 }
-func (f failingHandler) RestoreObject(context.Context, string, string, string) (*object.Object, error) {
+func (f failingHandler) RestoreObject(context.Context, string, string, string) (*objecth.Object, error) {
 	return nil, f.err
 }
-func (f failingHandler) CopyObject(context.Context, object.CopyObjectInput) (*object.Object, error) {
+func (f failingHandler) CopyObject(context.Context, objecth.CopyObjectInput) (*objecth.Object, error) {
 	return nil, f.err
 }
 
 type failingVersions struct{ err error }
 
-func (f failingVersions) ListVersions(context.Context, object.ListVersionsInput) ([]object.ObjectVersion, string, error) {
+func (f failingVersions) ListVersions(context.Context, objecth.ListVersionsInput) ([]objecth.ObjectVersion, string, error) {
 	return nil, "", f.err
 }
-func (f failingVersions) GetVersion(context.Context, string) (*object.ObjectVersion, error) {
+func (f failingVersions) GetVersion(context.Context, string) (*objecth.ObjectVersion, error) {
 	return nil, f.err
 }
-func (f failingVersions) RestoreVersion(context.Context, string, string) (*object.Object, error) {
+func (f failingVersions) RestoreVersion(context.Context, string, string) (*objecth.Object, error) {
 	return nil, f.err
 }
 
 type failingLocks struct{ err error }
 
-func (f failingLocks) SetRetention(context.Context, object.SetRetentionInput) (object.ObjectLock, error) {
-	return object.ObjectLock{}, f.err
+func (f failingLocks) SetRetention(context.Context, objecth.SetRetentionInput) (objecth.ObjectLock, error) {
+	return objecth.ObjectLock{}, f.err
 }
-func (f failingLocks) SetLegalHold(context.Context, string, string, bool) (object.ObjectLock, error) {
-	return object.ObjectLock{}, f.err
+func (f failingLocks) SetLegalHold(context.Context, string, string, bool) (objecth.ObjectLock, error) {
+	return objecth.ObjectLock{}, f.err
 }
-func (f failingLocks) GetLock(context.Context, string, string) (object.ObjectLock, error) {
-	return object.ObjectLock{}, f.err
+func (f failingLocks) GetLock(context.Context, string, string) (objecth.ObjectLock, error) {
+	return objecth.ObjectLock{}, f.err
 }
 
 // ONE test, not one per branch.
@@ -230,8 +230,8 @@ func TestHandlerErrorsReachTheCaller(t *testing.T) {
 // This is the hazard the seam itself introduced, so it is pinned here rather
 // than trusted to a comment.
 func TestDisabledFeaturesAnswerUnimplementedRatherThanPanicking(t *testing.T) {
-	var versions *object.VersionHandler // exactly what the provider returns
-	var locks *object.LockHandler
+	var versions *objecth.VersionHandler // exactly what the provider returns
+	var locks *objecth.LockHandler
 
 	s := NewObjectServer(nil, versions).WithLocks(locks)
 	ctx := ctxTenant(tenantA)
@@ -328,47 +328,47 @@ func TestMalformedNamesAreRefusedBeforeTheHandler(t *testing.T) {
 // what makes the count meaningful rather than incidental.
 type countingHandler struct{ n int }
 
-func (c *countingHandler) UploadObject(context.Context, object.UploadObjectInput) (*object.UploadObjectOutput, error) {
+func (c *countingHandler) UploadObject(context.Context, objecth.UploadObjectInput) (*objecth.UploadObjectOutput, error) {
 	c.n++
-	return &object.UploadObjectOutput{}, nil
+	return &objecth.UploadObjectOutput{}, nil
 }
-func (c *countingHandler) CompleteObject(context.Context, object.CompleteObjectInput) (*object.Object, error) {
+func (c *countingHandler) CompleteObject(context.Context, objecth.CompleteObjectInput) (*objecth.Object, error) {
 	c.n++
-	return &object.Object{}, nil
+	return &objecth.Object{}, nil
 }
-func (c *countingHandler) ListObjects(context.Context, object.ListObjectsInput) ([]object.Object, string, error) {
+func (c *countingHandler) ListObjects(context.Context, objecth.ListObjectsInput) ([]objecth.Object, string, error) {
 	c.n++
 	return nil, "", nil
 }
-func (c *countingHandler) CountObjects(context.Context, object.CountObjectsInput) (*object.CountObjectsOutput, error) {
+func (c *countingHandler) CountObjects(context.Context, objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error) {
 	c.n++
-	return &object.CountObjectsOutput{}, nil
+	return &objecth.CountObjectsOutput{}, nil
 }
-func (c *countingHandler) GetObject(context.Context, string, string) (*object.Object, error) {
+func (c *countingHandler) GetObject(context.Context, string, string) (*objecth.Object, error) {
 	c.n++
-	return &object.Object{}, nil
+	return &objecth.Object{}, nil
 }
-func (c *countingHandler) LookupObject(context.Context, string, string) (*object.Object, error) {
+func (c *countingHandler) LookupObject(context.Context, string, string) (*objecth.Object, error) {
 	c.n++
-	return &object.Object{}, nil
+	return &objecth.Object{}, nil
 }
-func (c *countingHandler) DownloadObject(context.Context, string, string, time.Duration, string) (*object.DownloadObjectOutput, error) {
+func (c *countingHandler) DownloadObject(context.Context, string, string, time.Duration, string) (*objecth.DownloadObjectOutput, error) {
 	c.n++
-	return &object.DownloadObjectOutput{}, nil
+	return &objecth.DownloadObjectOutput{}, nil
 }
-func (c *countingHandler) UpdateObject(context.Context, object.UpdateObjectInput) (*object.Object, error) {
+func (c *countingHandler) UpdateObject(context.Context, objecth.UpdateObjectInput) (*objecth.Object, error) {
 	c.n++
-	return &object.Object{}, nil
+	return &objecth.Object{}, nil
 }
 func (c *countingHandler) DeleteObject(context.Context, string, string, string, bool, bool) error {
 	c.n++
 	return nil
 }
-func (c *countingHandler) RestoreObject(context.Context, string, string, string) (*object.Object, error) {
+func (c *countingHandler) RestoreObject(context.Context, string, string, string) (*objecth.Object, error) {
 	c.n++
-	return &object.Object{}, nil
+	return &objecth.Object{}, nil
 }
-func (c *countingHandler) CopyObject(context.Context, object.CopyObjectInput) (*object.Object, error) {
+func (c *countingHandler) CopyObject(context.Context, objecth.CopyObjectInput) (*objecth.Object, error) {
 	c.n++
-	return &object.Object{}, nil
+	return &objecth.Object{}, nil
 }

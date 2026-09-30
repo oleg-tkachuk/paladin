@@ -39,7 +39,7 @@
     outbox. `owner_tenant_id`, `region`, and `tenant_default_bindings`
     (tenant → default `(backend_id, bucket_name)`) are all present.
   - **Provisioning is NOT wired into CreateTenant.** A tenant is created
-    logical-only ([`internal/api/v1/tenant/handler.go`](../../backend/internal/api/v1/tenant/handler.go));
+    logical-only ([`internal/api/admin/v1/tenanth/handler.go`](../../backend/internal/api/admin/v1/tenanth/handler.go));
     nothing provisions or binds a bucket at tenant-create time.
   - **One S3 client per process.** `build_deps.go` builds a single
     `s3adapter.New(ctx, backend)` from `config.Storage.DefaultBackend`;

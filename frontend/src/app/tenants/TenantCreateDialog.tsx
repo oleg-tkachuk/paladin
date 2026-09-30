@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 
-// SLUG_RE mirrors backend/internal/api/v1/apiutil/slug.go ValidateTenantSlug.
+// SLUG_RE mirrors backend/internal/api/apiutil/slug.go ValidateTenantSlug.
 const SLUG_RE = /^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$/;
 // Permissive across UUID versions — server mints v7, accepts any RFC 4122.
 const UUID_RE =

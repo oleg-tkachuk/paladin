@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	objpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	objpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )

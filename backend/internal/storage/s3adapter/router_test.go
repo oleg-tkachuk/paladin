@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
 // TestObjectRouter_UnknownBackendPropagates proves the router routes on the
@@ -25,7 +25,7 @@ func TestObjectRouter_UnknownBackendPropagates(t *testing.T) {
 	if err := rt.DeleteObject(ctx, "nope", "bkt", uuid.New(), "ok", "k"); err == nil {
 		t.Fatal("DeleteObject to unknown backend: want error")
 	}
-	if _, _, _, err := rt.PresignGet(ctx, object.PresignGetArgs{BackendID: "nope"}); err == nil {
+	if _, _, _, err := rt.PresignGet(ctx, objecth.PresignGetArgs{BackendID: "nope"}); err == nil {
 		t.Fatal("PresignGet to unknown backend: want error")
 	}
 	if n := atomic.LoadInt32(builds); n != 0 {

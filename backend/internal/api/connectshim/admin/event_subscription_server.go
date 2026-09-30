@@ -12,7 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -29,7 +29,7 @@ type EventSubscriptionServer struct {
 // TenantResolver is the slug → id lookup this server needs, kept as an
 // interface so it does not depend on the whole tenant handler.
 type TenantResolver interface {
-	GetTenantBySlug(ctx context.Context, slug string) (*tenant.Tenant, error)
+	GetTenantBySlug(ctx context.Context, slug string) (*tenanth.Tenant, error)
 }
 
 func NewEventSubscriptionServer(h *eventsubh.Handler, tenants TenantResolver) *EventSubscriptionServer {

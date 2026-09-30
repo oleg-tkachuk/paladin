@@ -51,7 +51,7 @@ Existing C-shaped API stays the public contract.
 
 Changes:
 
-- `backend/internal/api/v1/collection/`: domain layer learns to emit
+- `backend/internal/api/admin/v1/collectionh/`: domain layer learns to emit
   and parse canonical form. Add `Collection.CanonicalName()` helper.
 - `backend/internal/audit/`: switch `resource_name` column writes to
   canonical. Backfill migration over existing rows (deterministic
@@ -68,7 +68,7 @@ Changes:
 
 Acceptance:
 - `rtk go test ./...` green.
-- New unit tests in `internal/api/v1/collection/canonical_test.go`
+- New unit tests in `internal/api/admin/v1/collectionh/canonical_test.go`
   covering all three shapes round-trip.
 - Audit log for any resource event after deploy contains canonical.
 - `cedarc lint` (existing CI step) passes against regenerated
@@ -339,7 +339,7 @@ Proto changes (`tenant_service.proto`):
   `INVALID_ARGUMENT` with `reason: SLUG_IMMUTABLE`. Same for
   `tenant_id` (already not in any mask, formalize the rejection).
 
-API handler changes (`backend/internal/api/v1/tenant/`):
+API handler changes (`backend/internal/api/admin/v1/tenanth/`):
 
 ```go
 func (h *Handler) CreateTenant(ctx, args CreateTenantArgs) (*Tenant, error) {
@@ -443,17 +443,17 @@ and will be exempt from the immutability trigger via session-level
 Phase 0 (~8 files):
 - `backend/migrations/033_tenant_identity_hardening.sql` (new)
 - `proto/paladin/admin/v1/tenant_service.proto` (validate rules)
-- `backend/internal/api/v1/tenant/handler.go` (create + update guards,
+- `backend/internal/api/admin/v1/tenanth/handler.go` (create + update guards,
   default display_name = slug, pg 23505 mapping)
-- `backend/internal/api/v1/tenant/handler_test.go`
+- `backend/internal/api/admin/v1/tenanth/handler_test.go`
 - `frontend/src/app/tenants/new/page.tsx` (required slug, optional dn)
 - `frontend/src/app/tenants/[id]/page.tsx` (read-only slug, editable dn)
 - `frontend/src/lib/paladin/tenants.ts` (form schema, 409 mapping)
 - regenerated proto/sqlc
 
 Phase 1 (~15 files):
-- `backend/internal/api/v1/collection/canonical.go` (new)
-- `backend/internal/api/v1/collection/canonical_test.go` (new)
+- `backend/internal/api/admin/v1/collectionh/canonical.go` (new)
+- `backend/internal/api/admin/v1/collectionh/canonical_test.go` (new)
 - `backend/internal/audit/recorder.go`
 - `backend/internal/cedar/templates/*.cedar`
 - `backend/internal/eventbus/publisher.go`
@@ -469,7 +469,7 @@ Phase 2 (~10 files):
 
 Phase 3 (~12 files):
 - `proto/paladin/admin/v1/tenant_service.proto`
-- `backend/internal/api/v1/tenant/default_binding.go` (new)
+- `backend/internal/api/admin/v1/tenanth/default_binding.go` (new)
 - `backend/internal/db/queries/tenant_default_binding.sql` (new)
 - `backend/migrations/032_tenant_default_bindings.sql` (new)
 - `backend/internal/api/connectshim/admin/tenant_default_binding_server.go` (new)

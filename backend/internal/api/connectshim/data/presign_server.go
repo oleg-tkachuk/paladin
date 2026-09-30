@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/presign"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
@@ -15,7 +15,7 @@ type PresignServer struct {
 	H presignHandler
 }
 
-func NewPresignServer(h *presign.Handler) *PresignServer { return &PresignServer{H: h} }
+func NewPresignServer(h *presignh.Handler) *PresignServer { return &PresignServer{H: h} }
 
 func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Request[pb.RegenerateUploadUrlRequest]) (*connect.Response[pb.RegenerateUploadUrlResponse], error) {
 	m := req.Msg

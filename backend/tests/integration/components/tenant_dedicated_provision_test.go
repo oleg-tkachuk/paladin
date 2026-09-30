@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -27,7 +27,7 @@ func TestCreateDedicatedTenantProvisionsBucket(t *testing.T) {
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
 	hex := uuid.NewString()[:8]
-	tn, err := repo.Create(ctx, tenant.CreateTenantArgs{
+	tn, err := repo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID:         tid,
 		Slug:             "ded-" + hex,
 		DisplayName:      "dedicated-" + hex,

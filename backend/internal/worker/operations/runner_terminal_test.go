@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
 // recordingRepo captures terminal writes and refuses any write whose context
@@ -16,23 +16,23 @@ import (
 // invisible: the runner logged a warning and moved on.
 type recordingRepo struct {
 	mu     sync.Mutex
-	states []operation.State
-	claim  *operation.Operation
+	states []operationh.State
+	claim  *operationh.Operation
 	touch  int
 }
 
-func (r *recordingRepo) ClaimNext(context.Context) (operation.Operation, error) {
+func (r *recordingRepo) ClaimNext(context.Context) (operationh.Operation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.claim == nil {
-		return operation.Operation{}, operation.ErrNoOperationToClaim
+		return operationh.Operation{}, operationh.ErrNoOperationToClaim
 	}
 	op := *r.claim
 	r.claim = nil
 	return op, nil
 }
 
-func (r *recordingRepo) UpdateState(ctx context.Context, _ uuid.UUID, st operation.State, _, _ []byte, _, _ string) error {
+func (r *recordingRepo) UpdateState(ctx context.Context, _ uuid.UUID, st operationh.State, _, _ []byte, _, _ string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -52,27 +52,27 @@ func (r *recordingRepo) Touch(ctx context.Context, _ uuid.UUID) error {
 	return nil
 }
 
-func (r *recordingRepo) Create(context.Context, operation.Operation) error { return nil }
-func (r *recordingRepo) Get(context.Context, uuid.UUID, uuid.UUID) (operation.Operation, error) {
-	return operation.Operation{}, nil
+func (r *recordingRepo) Create(context.Context, operationh.Operation) error { return nil }
+func (r *recordingRepo) Get(context.Context, uuid.UUID, uuid.UUID) (operationh.Operation, error) {
+	return operationh.Operation{}, nil
 }
 func (r *recordingRepo) Cancel(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (r *recordingRepo) List(context.Context, uuid.UUID, *operation.State, uuid.UUID, int32, string, bool) ([]operation.Operation, string, error) {
+func (r *recordingRepo) List(context.Context, uuid.UUID, *operationh.State, uuid.UUID, int32, string, bool) ([]operationh.Operation, string, error) {
 	return nil, "", nil
 }
 
-func (r *recordingRepo) terminal() []operation.State {
+func (r *recordingRepo) terminal() []operationh.State {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]operation.State, len(r.states))
+	out := make([]operationh.State, len(r.states))
 	copy(out, r.states)
 	return out
 }
 
 // execFunc adapts a function to Executor.
-type execFunc func(ctx context.Context, op operation.Operation) ([]byte, error)
+type execFunc func(ctx context.Context, op operationh.Operation) ([]byte, error)
 
-func (f execFunc) Execute(ctx context.Context, op operation.Operation) ([]byte, error) {
+func (f execFunc) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
 	return f(ctx, op)
 }
 
@@ -86,7 +86,7 @@ func TestRunOne_MarksFailedEvenWhenTheRunnerContextIsCancelled(t *testing.T) {
 	r := &Runner{
 		Repo: repo,
 		Executors: map[string]Executor{
-			"BatchUpdateTags": execFunc(func(ctx context.Context, _ operation.Operation) ([]byte, error) {
+			"BatchUpdateTags": execFunc(func(ctx context.Context, _ operationh.Operation) ([]byte, error) {
 				<-ctx.Done() // the shutdown that cancels the executor
 				return nil, ctx.Err()
 			}),
@@ -94,7 +94,7 @@ func TestRunOne_MarksFailedEvenWhenTheRunnerContextIsCancelled(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	op := operation.Operation{OperationID: uuid.New(), TenantID: uuid.New(), Type: "BatchUpdateTags"}
+	op := operationh.Operation{OperationID: uuid.New(), TenantID: uuid.New(), Type: "BatchUpdateTags"}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -104,7 +104,7 @@ func TestRunOne_MarksFailedEvenWhenTheRunnerContextIsCancelled(t *testing.T) {
 	<-done
 
 	got := repo.terminal()
-	if len(got) != 1 || got[0] != operation.StateFailed {
+	if len(got) != 1 || got[0] != operationh.StateFailed {
 		t.Fatalf("terminal writes = %v, want exactly [FAILED] — a cancelled runner "+
 			"must still record the outcome, or the operation is stuck forever", got)
 	}
@@ -117,7 +117,7 @@ func TestRunOne_MarksSucceededEvenWhenTheRunnerContextIsCancelled(t *testing.T) 
 	r := &Runner{
 		Repo: repo,
 		Executors: map[string]Executor{
-			"BatchUpdateTags": execFunc(func(context.Context, operation.Operation) ([]byte, error) {
+			"BatchUpdateTags": execFunc(func(context.Context, operationh.Operation) ([]byte, error) {
 				return []byte(`{"total":1}`), nil
 			}),
 		},
@@ -125,12 +125,12 @@ func TestRunOne_MarksSucceededEvenWhenTheRunnerContextIsCancelled(t *testing.T) 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already shutting down when the executor returns
-	r.runOne(ctx, operation.Operation{
+	r.runOne(ctx, operationh.Operation{
 		OperationID: uuid.New(), TenantID: uuid.New(), Type: "BatchUpdateTags",
 	})
 
 	got := repo.terminal()
-	if len(got) != 1 || got[0] != operation.StateSucceeded {
+	if len(got) != 1 || got[0] != operationh.StateSucceeded {
 		t.Fatalf("terminal writes = %v, want exactly [SUCCEEDED]", got)
 	}
 }
@@ -143,11 +143,11 @@ func TestRunOne_UnknownTypeFailsOnACancelledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	r.runOne(ctx, operation.Operation{
+	r.runOne(ctx, operationh.Operation{
 		OperationID: uuid.New(), TenantID: uuid.New(), Type: "NoSuchType",
 	})
 
-	if got := repo.terminal(); len(got) != 1 || got[0] != operation.StateFailed {
+	if got := repo.terminal(); len(got) != 1 || got[0] != operationh.StateFailed {
 		t.Fatalf("terminal writes = %v, want exactly [FAILED]", got)
 	}
 }
@@ -163,7 +163,7 @@ func TestRunOne_HeartbeatsWhileTheExecutorWorks(t *testing.T) {
 		Toucher:   repo,
 		Heartbeat: time.Millisecond,
 		Executors: map[string]Executor{
-			"BatchUpdateTags": execFunc(func(context.Context, operation.Operation) ([]byte, error) {
+			"BatchUpdateTags": execFunc(func(context.Context, operationh.Operation) ([]byte, error) {
 				<-release
 				return nil, nil
 			}),
@@ -174,7 +174,7 @@ func TestRunOne_HeartbeatsWhileTheExecutorWorks(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		close(release)
 	}()
-	r.runOne(context.Background(), operation.Operation{
+	r.runOne(context.Background(), operationh.Operation{
 		OperationID: uuid.New(), TenantID: uuid.New(), Type: "BatchUpdateTags",
 	})
 

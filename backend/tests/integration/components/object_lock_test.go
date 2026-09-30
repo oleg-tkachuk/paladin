@@ -29,7 +29,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -83,9 +83,9 @@ func newLockFixture(t *testing.T) (context.Context, lockFixture) {
 	}
 }
 
-func (f lockFixture) retain(t *testing.T, ctx context.Context, mode string, until time.Time, bypass bool) (object.ObjectLock, error) {
+func (f lockFixture) retain(t *testing.T, ctx context.Context, mode string, until time.Time, bypass bool) (objecth.ObjectLock, error) {
 	t.Helper()
-	return f.locks.SetRetention(ctx, object.SetRetentionArgs{
+	return f.locks.SetRetention(ctx, objecth.SetRetentionArgs{
 		TenantID:         f.tenant,
 		VersionID:        f.versionID,
 		Mode:             mode,
@@ -133,7 +133,7 @@ func TestComplianceRetentionCannotBeWeakened(t *testing.T) {
 
 	t.Run("cannot be shortened", func(t *testing.T) {
 		_, err := f.retain(t, ctx, "COMPLIANCE", time.Now().Add(time.Hour), false)
-		if !errors.Is(err, object.ErrRetentionWeakened) {
+		if !errors.Is(err, objecth.ErrRetentionWeakened) {
 			t.Fatalf("shortening a COMPLIANCE window returned %v, want ErrRetentionWeakened", err)
 		}
 	})
@@ -142,14 +142,14 @@ func TestComplianceRetentionCannotBeWeakened(t *testing.T) {
 		// The bypass exists for GOVERNANCE. If it worked here, the two modes
 		// would be the same control with different names.
 		_, err := f.retain(t, ctx, "COMPLIANCE", time.Now().Add(time.Hour), true)
-		if !errors.Is(err, object.ErrRetentionWeakened) {
+		if !errors.Is(err, objecth.ErrRetentionWeakened) {
 			t.Fatalf("bypass shortened a COMPLIANCE window (err=%v)", err)
 		}
 	})
 
 	t.Run("cannot be downgraded to GOVERNANCE", func(t *testing.T) {
 		_, err := f.retain(t, ctx, "GOVERNANCE", far.Add(24*time.Hour), false)
-		if !errors.Is(err, object.ErrRetentionWeakened) {
+		if !errors.Is(err, objecth.ErrRetentionWeakened) {
 			t.Fatalf("COMPLIANCE was downgraded to GOVERNANCE (err=%v)", err)
 		}
 	})
@@ -209,7 +209,7 @@ func TestGovernanceRetentionYieldsToTheBypass(t *testing.T) {
 	}
 
 	t.Run("refuses shortening without the bypass", func(t *testing.T) {
-		if _, err := f.retain(t, ctx, "GOVERNANCE", time.Now().Add(time.Hour), false); !errors.Is(err, object.ErrRetentionWeakened) {
+		if _, err := f.retain(t, ctx, "GOVERNANCE", time.Now().Add(time.Hour), false); !errors.Is(err, objecth.ErrRetentionWeakened) {
 			t.Fatalf("shortened without bypass (err=%v)", err)
 		}
 	})

@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -34,7 +34,7 @@ func NewTenantRepo(q *sqlc.Queries, pool *pgxpool.Pool) *TenantRepo {
 	return &TenantRepo{q: q, pool: pool}
 }
 
-var _ tenant.Repository = (*TenantRepo)(nil)
+var _ tenanth.Repository = (*TenantRepo)(nil)
 
 // RunInTx runs fn in one transaction on the repo's pool — the seam an
 // event-producing handler uses to write a tenant mutation and its outbox
@@ -54,14 +54,14 @@ func (r *TenantRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, t
 	return nil
 }
 
-func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (tenant.Tenant, error) {
+func (r *TenantRepo) Create(ctx context.Context, args tenanth.CreateTenantArgs) (tenanth.Tenant, error) {
 	// The tenant insert + the optional default-binding insert already need
 	// one tx; RunInTx provides it. A binding FK violation rolls the tenant
 	// back too — better to surface the error than half-commit.
 	if err := r.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		return r.CreateTx(ctx, tx, args)
 	}); err != nil {
-		return tenant.Tenant{}, err
+		return tenanth.Tenant{}, err
 	}
 	return r.Get(ctx, args.TenantID)
 }
@@ -70,7 +70,7 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 // tx so an event-producing handler can write the paladin.tenant.created outbox
 // rows atomically with the row (ADR-0003). Typed UNIQUE/FK sentinels are
 // preserved.
-func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.CreateTenantArgs) error {
+func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.CreateTenantArgs) error {
 	// tenants.labels is JSONB NOT NULL DEFAULT '{}'. The INSERT binds it
 	// explicitly, so a nil []byte becomes SQL NULL and violates the
 	// constraint. Normalize to an empty JSON object.
@@ -98,11 +98,11 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		if pgerr.Is(err, pgerr.UniqueViolation) {
 			switch pgerr.Constraint(err) {
 			case schema.TenantsPK:
-				return tenant.ErrTenantIDConflict
+				return tenanth.ErrTenantIDConflict
 			case schema.TenantsSlugUnique:
-				return tenant.ErrSlugConflict
+				return tenanth.ErrSlugConflict
 			case schema.TenantsDisplayNameUnique:
-				return tenant.ErrDisplayNameConflict
+				return tenanth.ErrDisplayNameConflict
 			}
 		}
 		return fmt.Errorf("create tenant: %w", err)
@@ -157,7 +157,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		if n == 0 && err == nil {
 			// Resolved to no bucket: same meaning as the FK violation
 			// handled below, but it arrives as a zero count instead.
-			return tenant.ErrDefaultBindingBucketMissing
+			return tenanth.ErrDefaultBindingBucketMissing
 		}
 		if err != nil {
 			// FK violation = picked bucket doesn't exist on this backend.
@@ -165,7 +165,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 			// clean InvalidArgument instead of a Postgres error string.
 			if pgerr.Is(err, pgerr.ForeignKeyViolation) &&
 				pgerr.ConstraintIs(err, schema.TenantDefaultBindingsBucketFK) {
-				return tenant.ErrDefaultBindingBucketMissing
+				return tenanth.ErrDefaultBindingBucketMissing
 			}
 			return fmt.Errorf("create tenant: bind default: %w", err)
 		}
@@ -195,14 +195,14 @@ func actorFromContext(ctx context.Context) string {
 	return p.Subject
 }
 
-func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
+func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenanth.Tenant, error) {
 	return r.getWith(ctx, r.q, tenantID)
 }
 
-func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenant.Tenant, error) {
+func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenanth.Tenant, error) {
 	row, err := q.GetTenant(ctx, pgUUID(tenantID))
 	if err != nil {
-		return tenant.Tenant{}, err
+		return tenanth.Tenant{}, err
 	}
 	t := tenantFromSQLC(row.Tenant)
 	t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
@@ -213,13 +213,13 @@ func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid
 // `tenants/{tenant_id_or_slug}` resource-name form. pgx's no-row
 // error becomes the domain ErrNotFound so the handler can surface
 // CodeNotFound (kept consistent with the Get-by-UUID path).
-func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant, error) {
+func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenanth.Tenant, error) {
 	row, err := r.q.GetTenantBySlug(ctx, slug)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tenant.Tenant{}, tenant.ErrNotFound
+			return tenanth.Tenant{}, tenanth.ErrNotFound
 		}
-		return tenant.Tenant{}, err
+		return tenanth.Tenant{}, err
 	}
 	t := tenantFromSQLC(row.Tenant)
 	t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
@@ -242,43 +242,43 @@ func (r *TenantRepo) TenantDefaultBinding(ctx context.Context, tenantID uuid.UUI
 }
 
 // GetDefaultBinding — the richer domain read used by GetTenantDefaultBinding.
-func (r *TenantRepo) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error) {
+func (r *TenantRepo) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenanth.DefaultBinding, error) {
 	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tenant.DefaultBinding{}, tenant.ErrNotFound
+			return tenanth.DefaultBinding{}, tenanth.ErrNotFound
 		}
-		return tenant.DefaultBinding{}, err
+		return tenanth.DefaultBinding{}, err
 	}
 	return defaultBindingFromSQLC(row.TenantDefaultBinding, row.BackendName, row.BucketName), nil
 }
 
 // SetDefaultBinding upserts + reads back (the query is :exec). A bad bucket
 // trips the composite FK → ErrDefaultBindingBucketMissing (InvalidArgument).
-func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (tenant.DefaultBinding, error) {
+func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (tenanth.DefaultBinding, error) {
 	// bucket arrives as "storageBackends/{backend}/buckets/{bucket}" — one
 	// reference, per AIP-122. Split here rather than making every caller pass
 	// the halves separately.
 	backendName, bucketName, err := splitBucketResourceName(bucket)
 	if err != nil {
-		return tenant.DefaultBinding{}, err
+		return tenanth.DefaultBinding{}, err
 	}
 	n, err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy)
 	if err != nil {
 		if pgerr.ConstraintIs(err, schema.TenantDefaultBindingsBucketFK) {
-			return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
+			return tenanth.DefaultBinding{}, tenanth.ErrDefaultBindingBucketMissing
 		}
-		return tenant.DefaultBinding{}, err
+		return tenanth.DefaultBinding{}, err
 	}
 	// Zero rows means the (backend, bucket) pair resolved to nothing — see
 	// the note on the query. The FK cannot fire for a row that was never
 	// built, so this is the only place the missing bucket is detectable.
 	if n == 0 {
-		return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
+		return tenanth.DefaultBinding{}, tenanth.ErrDefaultBindingBucketMissing
 	}
 	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
 	if err != nil {
-		return tenant.DefaultBinding{}, err
+		return tenanth.DefaultBinding{}, err
 	}
 	return defaultBindingFromSQLC(row.TenantDefaultBinding, row.BackendName, row.BucketName), nil
 }
@@ -291,8 +291,8 @@ func (r *TenantRepo) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID
 
 func defaultBindingFromSQLC(row sqlc.TenantDefaultBinding,
 	backendName, bucketName string,
-) tenant.DefaultBinding {
-	return tenant.DefaultBinding{
+) tenanth.DefaultBinding {
+	return tenanth.DefaultBinding{
 		TenantID:    uuid.UUID(row.TenantID.Bytes),
 		BucketID:    uuid.UUID(row.BucketID.Bytes),
 		BackendName: backendName,
@@ -302,17 +302,17 @@ func defaultBindingFromSQLC(row sqlc.TenantDefaultBinding,
 	}
 }
 
-func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
+func (r *TenantRepo) Update(ctx context.Context, args tenanth.UpdateTenantArgs) (tenanth.Tenant, error) {
 	return r.updateWith(ctx, r.q, args)
 }
 
 // UpdateTx runs Update on the caller's tx (ADR-0003) so the handler can
 // enqueue paladin.tenant.updated atomically with the row update.
-func (r *TenantRepo) UpdateTx(ctx context.Context, tx pgx.Tx, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
+func (r *TenantRepo) UpdateTx(ctx context.Context, tx pgx.Tx, args tenanth.UpdateTenantArgs) (tenanth.Tenant, error) {
 	return r.updateWith(ctx, r.q.WithTx(tx), args)
 }
 
-func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
+func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenanth.UpdateTenantArgs) (tenanth.Tenant, error) {
 	var policyHash []byte
 	if args.InheritedCedarPolicy != nil {
 		sum := sha256.Sum256([]byte(*args.InheritedCedarPolicy))
@@ -332,12 +332,12 @@ func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenan
 		// offending field.
 		if pgerr.Is(err, pgerr.UniqueViolation) &&
 			pgerr.ConstraintIs(err, schema.TenantsDisplayNameUnique) {
-			return tenant.Tenant{}, tenant.ErrDisplayNameConflict
+			return tenanth.Tenant{}, tenanth.ErrDisplayNameConflict
 		}
-		return tenant.Tenant{}, fmt.Errorf("update tenant: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("update tenant: %w", err)
 	}
 	if rows == 0 {
-		return tenant.Tenant{}, tenant.ErrVersionMismatch
+		return tenanth.Tenant{}, tenanth.ErrVersionMismatch
 	}
 	return r.getWith(ctx, q, args.TenantID)
 }
@@ -365,15 +365,15 @@ func (r *TenantRepo) softDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 		// Re-read to disambiguate.
 		t, gerr := r.getWith(ctx, q, tenantID)
 		if errors.Is(gerr, pgx.ErrNoRows) {
-			return tenant.ErrNotFound
+			return tenanth.ErrNotFound
 		}
 		if gerr != nil {
 			return fmt.Errorf("soft-delete tenant: probe: %w", gerr)
 		}
 		if !t.DeletedAt.IsZero() {
-			return tenant.ErrAlreadyDeleted
+			return tenanth.ErrAlreadyDeleted
 		}
-		return tenant.ErrVersionMismatch
+		return tenanth.ErrVersionMismatch
 	}
 	return nil
 }
@@ -403,15 +403,15 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 			// `users`, which every tenant has. An operator following that
 			// message went looking in the wrong place; a purge blocked by
 			// users reported collections.
-			return fmt.Errorf("%w: %s", tenant.ErrTenantHasChildren, blockingRelation(err))
+			return fmt.Errorf("%w: %s", tenanth.ErrTenantHasChildren, blockingRelation(err))
 		}
 		return fmt.Errorf("hard-delete tenant: %w", err)
 	}
 	if rows == 0 {
 		if expectedVersion == 0 {
-			return tenant.ErrNotFound
+			return tenanth.ErrNotFound
 		}
-		return tenant.ErrVersionMismatch
+		return tenanth.ErrVersionMismatch
 	}
 	return nil
 }
@@ -420,16 +420,16 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 // when the row is currently active; ErrNotFound when missing; maps
 // slug/display_name UNIQUE collisions (a fresh tenant claimed the
 // handle while this one was trashed) to typed sentinels.
-func (r *TenantRepo) Restore(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
+func (r *TenantRepo) Restore(ctx context.Context, tenantID uuid.UUID) (tenanth.Tenant, error) {
 	return r.restoreWith(ctx, r.q, tenantID)
 }
 
 // RestoreTx runs Restore on the caller's tx (ADR-0003).
-func (r *TenantRepo) RestoreTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (tenant.Tenant, error) {
+func (r *TenantRepo) RestoreTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (tenanth.Tenant, error) {
 	return r.restoreWith(ctx, r.q.WithTx(tx), tenantID)
 }
 
-func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenant.Tenant, error) {
+func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenanth.Tenant, error) {
 	rows, err := q.RestoreTenant(ctx, pgUUID(tenantID))
 	if err != nil {
 		// UNIQUE violations can fire even on UPDATE-to-non-NULL paths
@@ -437,31 +437,31 @@ func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID 
 		if pgerr.Is(err, pgerr.UniqueViolation) {
 			switch pgerr.Constraint(err) {
 			case schema.TenantsSlugUnique:
-				return tenant.Tenant{}, tenant.ErrSlugConflict
+				return tenanth.Tenant{}, tenanth.ErrSlugConflict
 			case schema.TenantsDisplayNameUnique:
-				return tenant.Tenant{}, tenant.ErrDisplayNameConflict
+				return tenanth.Tenant{}, tenanth.ErrDisplayNameConflict
 			}
 		}
-		return tenant.Tenant{}, fmt.Errorf("restore tenant: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("restore tenant: %w", err)
 	}
 	if rows == 0 {
 		// Re-read to distinguish missing vs active.
 		t, gerr := r.getWith(ctx, q, tenantID)
 		if errors.Is(gerr, pgx.ErrNoRows) {
-			return tenant.Tenant{}, tenant.ErrNotFound
+			return tenanth.Tenant{}, tenanth.ErrNotFound
 		}
 		if gerr != nil {
-			return tenant.Tenant{}, fmt.Errorf("restore tenant: probe: %w", gerr)
+			return tenanth.Tenant{}, fmt.Errorf("restore tenant: probe: %w", gerr)
 		}
 		if t.DeletedAt.IsZero() {
-			return tenant.Tenant{}, tenant.ErrNotTrashed
+			return tenanth.Tenant{}, tenanth.ErrNotTrashed
 		}
-		return tenant.Tenant{}, tenant.ErrNotFound
+		return tenanth.Tenant{}, tenanth.ErrNotFound
 	}
 	return r.getWith(ctx, q, tenantID)
 }
 
-func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]tenant.Tenant, string, error) {
+func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]tenanth.Tenant, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
 	// stays authoritative, these only narrow the scan.
@@ -485,7 +485,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 	if err != nil {
 		return nil, "", fmt.Errorf("list tenants: %w", err)
 	}
-	out := make([]tenant.Tenant, 0, len(rows))
+	out := make([]tenanth.Tenant, 0, len(rows))
 	for _, row := range rows {
 		t := tenantFromSQLC(row.Tenant)
 		t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
@@ -514,10 +514,10 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 //
 // Implementation uses a single tx so a partial rewrite (tenant
 // updated, collections not) cannot leak.
-func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArgs) (tenant.Tenant, error) {
+func (r *TenantRepo) Rename(ctx context.Context, args tenanth.RenameTenantSlugArgs) (tenanth.Tenant, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: begin tx: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -527,7 +527,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	// passes the trigger; the LOCAL scope means it's gone the moment
 	// this tx commits or rolls back.
 	if _, err := tx.Exec(ctx, "SET LOCAL paladin.allow_slug_rename = on"); err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: enable slug rename: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: enable slug rename: %w", err)
 	}
 
 	// Read + lock the tenant row. SELECT FOR UPDATE so a concurrent
@@ -545,18 +545,18 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	).Scan(&oldSlug, &oldPolicy, &rv)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tenant.Tenant{}, tenant.ErrNotFound
+			return tenanth.Tenant{}, tenanth.ErrNotFound
 		}
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: select: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: select: %w", err)
 	}
 	if rv != args.ExpectedVersion {
-		return tenant.Tenant{}, tenant.ErrVersionMismatch
+		return tenanth.Tenant{}, tenanth.ErrVersionMismatch
 	}
 	if oldSlug == args.NewSlug {
 		// Idempotent no-op — nothing to rewrite, no version bump.
 		row, err := r.q.GetTenant(ctx, pgUUID(args.TenantID))
 		if err != nil {
-			return tenant.Tenant{}, err
+			return tenanth.Tenant{}, err
 		}
 		t := tenantFromSQLC(row.Tenant)
 		t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
@@ -587,12 +587,12 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		// PG error — translate to ErrSlugConflict so the handler can
 		// return AlreadyExists.
 		if pgerr.ConstraintIs(err, schema.TenantsSlugUnique) {
-			return tenant.Tenant{}, tenant.ErrSlugConflict
+			return tenanth.Tenant{}, tenanth.ErrSlugConflict
 		}
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: update tenant: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: update tenant: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return tenant.Tenant{}, tenant.ErrVersionMismatch
+		return tenanth.Tenant{}, tenanth.ErrVersionMismatch
 	}
 
 	// Rewrite per-collection policies. The cedar_policy column is
@@ -608,7 +608,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		pgUUID(args.TenantID),
 	)
 	if err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: list collections: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: list collections: %w", err)
 	}
 	type okRewrite struct {
 		key       string
@@ -620,7 +620,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		var key, pol string
 		if err := rows.Scan(&key, &pol); err != nil {
 			rows.Close()
-			return tenant.Tenant{}, fmt.Errorf("rename tenant: sca collection: %w", err)
+			return tenanth.Tenant{}, fmt.Errorf("rename tenant: sca collection: %w", err)
 		}
 		rewritten := rewriteTenantSlugRefs(pol, oldSlug, args.NewSlug)
 		if rewritten == pol {
@@ -631,7 +631,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: iterate collections: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: iterate collections: %w", err)
 	}
 	for _, w := range rewrites {
 		if _, err := tx.Exec(ctx,
@@ -644,7 +644,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 			    AND name      = $2`,
 			pgUUID(args.TenantID), w.key, w.newPolicy, w.newHash,
 		); err != nil {
-			return tenant.Tenant{}, fmt.Errorf("rename tenant: update collection %q: %w", w.key, err)
+			return tenanth.Tenant{}, fmt.Errorf("rename tenant: update collection %q: %w", w.key, err)
 		}
 	}
 
@@ -657,11 +657,11 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		 VALUES ($1, $2, $3)`,
 		pgUUID(args.TenantID), oldSlug, args.NewSlug,
 	); err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: record slug history: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: record slug history: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return tenant.Tenant{}, fmt.Errorf("rename tenant: commit: %w", err)
+		return tenanth.Tenant{}, fmt.Errorf("rename tenant: commit: %w", err)
 	}
 	return r.Get(ctx, args.TenantID)
 }
@@ -670,7 +670,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 // `window` (0 = unbounded), from the tenant_slug_history table Rename writes.
 // found=false (nil error) when no rotation matches — the resolver maps that to
 // NotFound. tenant_id is read as text to avoid pgx uuid-codec registration.
-func (r *TenantRepo) LookupRenamedSlug(ctx context.Context, oldSlug string, window time.Duration) (tenant.RenamedSlug, bool, error) {
+func (r *TenantRepo) LookupRenamedSlug(ctx context.Context, oldSlug string, window time.Duration) (tenanth.RenamedSlug, bool, error) {
 	q := `SELECT tenant_id::text, new_slug, renamed_at
 	        FROM tenant_slug_history
 	       WHERE old_slug = $1`
@@ -682,17 +682,17 @@ func (r *TenantRepo) LookupRenamedSlug(ctx context.Context, oldSlug string, wind
 	q += ` ORDER BY renamed_at DESC LIMIT 1`
 
 	var tidStr string
-	var res tenant.RenamedSlug
+	var res tenanth.RenamedSlug
 	err := r.pool.QueryRow(ctx, q, args...).Scan(&tidStr, &res.NewSlug, &res.RenamedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return tenant.RenamedSlug{}, false, nil
+		return tenanth.RenamedSlug{}, false, nil
 	}
 	if err != nil {
-		return tenant.RenamedSlug{}, false, fmt.Errorf("lookup renamed slug: %w", err)
+		return tenanth.RenamedSlug{}, false, fmt.Errorf("lookup renamed slug: %w", err)
 	}
 	tid, perr := uuid.Parse(tidStr)
 	if perr != nil {
-		return tenant.RenamedSlug{}, false, fmt.Errorf("lookup renamed slug: parse tenant_id: %w", perr)
+		return tenanth.RenamedSlug{}, false, fmt.Errorf("lookup renamed slug: parse tenant_id: %w", perr)
 	}
 	res.TenantID = tid
 	return res, true, nil
@@ -725,8 +725,8 @@ func defaultBucketName(backendName, bucketName string) string {
 	return fmt.Sprintf("storageBackends/%s/buckets/%s", backendName, bucketName)
 }
 
-func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
-	return tenant.Tenant{
+func tenantFromSQLC(t sqlc.Tenant) tenanth.Tenant {
+	return tenanth.Tenant{
 		TenantID:             uuidFrom(t.ID),
 		Slug:                 t.Slug,
 		DisplayName:          t.DisplayName,
@@ -748,7 +748,7 @@ func splitBucketResourceName(name string) (backend, bucket string, err error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 4 || parts[0] != "storageBackends" || parts[2] != "buckets" ||
 		parts[1] == "" || parts[3] == "" {
-		return "", "", tenant.ErrDefaultBindingBucketMissing
+		return "", "", tenanth.ErrDefaultBindingBucketMissing
 	}
 	return parts[1], parts[3], nil
 }

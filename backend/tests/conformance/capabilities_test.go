@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
@@ -66,7 +66,7 @@ func TestCapabilities(t *testing.T) {
 		// decides whether checksum enforcement can be turned on at all.
 		for _, algo := range []string{"SHA256", "CRC32C"} {
 			key := "conf/checksum-" + algo
-			url, headers, _, err := tg.client.PresignPut(ctx, object.PresignPutArgs{
+			url, headers, _, err := tg.client.PresignPut(ctx, objecth.PresignPutArgs{
 				Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
 				Key: key, ContentType: "text/plain", ChecksumAlgo: algo,
 				SizeHint: 4, TTL: ttl(), RequireChecksum: true,
@@ -98,7 +98,7 @@ func TestCapabilities(t *testing.T) {
 	t.Run("presigned POST", func(t *testing.T) {
 		// Browser form uploads. Not on Paladin's current path, but the adapter
 		// exposes it, so whether it works decides if it can be.
-		_, _, _, err := tg.client.PresignPost(ctx, object.PresignPostArgs{
+		_, _, _, err := tg.client.PresignPost(ctx, objecth.PresignPostArgs{
 			Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
 			Key: "conf/post.txt", ContentType: "text/plain", TTL: ttl(),
 		})
@@ -128,7 +128,7 @@ func TestCapabilities(t *testing.T) {
 }
 
 func putSmall(ctx context.Context, tg *target, key string, body []byte) error {
-	url, headers, _, err := tg.client.PresignPut(ctx, object.PresignPutArgs{
+	url, headers, _, err := tg.client.PresignPut(ctx, objecth.PresignPutArgs{
 		Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
 		Key: key, ContentType: "text/plain", SizeHint: int64(len(body)), TTL: ttl(),
 	})

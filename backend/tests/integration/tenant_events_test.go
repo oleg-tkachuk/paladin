@@ -24,7 +24,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	tenantpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	tenantpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"

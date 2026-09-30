@@ -22,8 +22,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -48,7 +48,7 @@ func TestBatchExecutor_Delete(t *testing.T) {
 		Transitions: statemachine.New(h.PoolMigrate),
 	}
 
-	args := batch.BatchDeleteArgs{
+	args := batchh.BatchDeleteArgs{
 		TenantID:   tenantID,
 		Collection: "docs",
 		ObjectIDs:  []uuid.UUID{id1, id2, id3, idGhost},
@@ -87,7 +87,7 @@ func TestBatchExecutor_UpdateTags(t *testing.T) {
 		Objects: adapters.NewObjectRepo(q, h.PoolMigrate),
 	}
 
-	args := batch.BatchUpdateTagsArgs{
+	args := batchh.BatchUpdateTagsArgs{
 		TenantID:   tenantID,
 		Collection: "docs",
 		ObjectIDs:  []uuid.UUID{id1, id2},
@@ -133,7 +133,7 @@ func TestBatchExecutor_Restore(t *testing.T) {
 		Transitions: tr,
 	}
 
-	args := batch.BatchRestoreObjectsArgs{
+	args := batchh.BatchRestoreObjectsArgs{
 		TenantID:   tenantID,
 		Collection: "docs",
 		ObjectIDs:  []uuid.UUID{id1, id2},
@@ -172,17 +172,17 @@ func TestBatchExecutor_TenantMismatch_FailsWholeOp(t *testing.T) {
 	}
 
 	// Args claim tenant A, but we wrap in a tenant-B operation.
-	args := batch.BatchDeleteArgs{
+	args := batchh.BatchDeleteArgs{
 		TenantID:   tenantA,
 		Collection: "docs",
 		ObjectIDs:  []uuid.UUID{id},
 	}
 	md, _ := json.Marshal(args)
-	op := operation.Operation{
+	op := operationh.Operation{
 		OperationID: uuid.New(),
 		TenantID:    tenantB,
 		Type:        "BatchDelete",
-		State:       operation.StateRunning,
+		State:       operationh.StateRunning,
 		Metadata:    md,
 	}
 	if _, err := exec.Execute(context.Background(), op); err == nil ||
@@ -236,11 +236,11 @@ func mustObjectTags(t *testing.T, pool *pgxpool.Pool, objectID uuid.UUID) map[st
 func runExecutor(t *testing.T, exec operations.Executor, tenantID uuid.UUID, args any) []byte {
 	t.Helper()
 	md, _ := json.Marshal(args)
-	op := operation.Operation{
+	op := operationh.Operation{
 		OperationID: uuid.New(),
 		TenantID:    tenantID,
 		Type:        "Batch",
-		State:       operation.StateRunning,
+		State:       operationh.StateRunning,
 		Metadata:    md,
 	}
 	resp, err := exec.Execute(context.Background(), op)

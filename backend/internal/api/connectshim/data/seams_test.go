@@ -9,11 +9,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/storagebootstraph"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
@@ -33,47 +33,47 @@ var errBoom = errors.New("backend unavailable")
 
 type failingBatch struct{}
 
-func (failingBatch) BatchDelete(context.Context, batch.BatchDeleteArgs) (uuid.UUID, error) {
+func (failingBatch) BatchDelete(context.Context, batchh.BatchDeleteArgs) (uuid.UUID, error) {
 	return uuid.Nil, errBoom
 }
-func (failingBatch) BatchCopy(context.Context, batch.BatchCopyArgs) (uuid.UUID, error) {
+func (failingBatch) BatchCopy(context.Context, batchh.BatchCopyArgs) (uuid.UUID, error) {
 	return uuid.Nil, errBoom
 }
-func (failingBatch) BatchRestoreObjects(context.Context, batch.BatchRestoreObjectsArgs) (uuid.UUID, error) {
+func (failingBatch) BatchRestoreObjects(context.Context, batchh.BatchRestoreObjectsArgs) (uuid.UUID, error) {
 	return uuid.Nil, errBoom
 }
-func (failingBatch) BatchUpdateTags(context.Context, batch.BatchUpdateTagsArgs) (uuid.UUID, error) {
+func (failingBatch) BatchUpdateTags(context.Context, batchh.BatchUpdateTagsArgs) (uuid.UUID, error) {
 	return uuid.Nil, errBoom
 }
 
 type failingMultipart struct{}
 
-func (failingMultipart) InitiateMultipartUpload(context.Context, multipart.InitiateArgs) (*multipart.Session, error) {
+func (failingMultipart) InitiateMultipartUpload(context.Context, multiparth.InitiateArgs) (*multiparth.Session, error) {
 	return nil, errBoom
 }
-func (failingMultipart) PresignPart(context.Context, string, int32, time.Duration, multipart.SessionRef) (string, map[string]string, time.Time, error) {
+func (failingMultipart) PresignPart(context.Context, string, int32, time.Duration, multiparth.SessionRef) (string, map[string]string, time.Time, error) {
 	return "", nil, time.Time{}, errBoom
 }
-func (failingMultipart) ListParts(context.Context, string, int32, string, multipart.SessionRef) ([]multipart.Part, string, error) {
+func (failingMultipart) ListParts(context.Context, string, int32, string, multiparth.SessionRef) ([]multiparth.Part, string, error) {
 	return nil, "", errBoom
 }
-func (failingMultipart) CompleteMultipartUpload(context.Context, multipart.CompleteArgs) error {
+func (failingMultipart) CompleteMultipartUpload(context.Context, multiparth.CompleteArgs) error {
 	return errBoom
 }
-func (failingMultipart) AbortMultipartUpload(context.Context, string, multipart.SessionRef) error {
+func (failingMultipart) AbortMultipartUpload(context.Context, string, multiparth.SessionRef) error {
 	return errBoom
 }
 
 type failingTags struct{}
 
-func (failingTags) GetObject(context.Context, string, string) (*object.Object, error) {
+func (failingTags) GetObject(context.Context, string, string) (*objecth.Object, error) {
 	return nil, errBoom
 }
-func (failingTags) UpdateObject(context.Context, object.UpdateObjectInput) (*object.Object, error) {
+func (failingTags) UpdateObject(context.Context, objecth.UpdateObjectInput) (*objecth.Object, error) {
 	return nil, errBoom
 }
-func (failingTags) ListDistinctTags(context.Context, string, string, int32) (object.DistinctTagPage, error) {
-	return object.DistinctTagPage{}, errBoom
+func (failingTags) ListDistinctTags(context.Context, string, string, int32) (objecth.DistinctTagPage, error) {
+	return objecth.DistinctTagPage{}, errBoom
 }
 
 type failingPresign struct{}
@@ -87,17 +87,17 @@ func (failingPresign) PresignPut(context.Context, string, string, string, string
 
 type failingOperations struct{}
 
-func (failingOperations) GetOperation(context.Context, uuid.UUID) (*operation.Operation, error) {
+func (failingOperations) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
 	return nil, errBoom
 }
-func (failingOperations) ListOperations(context.Context, *operation.State, int32, string, string, bool) ([]operation.Operation, string, error) {
+func (failingOperations) ListOperations(context.Context, *operationh.State, int32, string, string, bool) ([]operationh.Operation, string, error) {
 	return nil, "", errBoom
 }
 func (failingOperations) CancelOperation(context.Context, uuid.UUID) error { return errBoom }
 
 type failingBootstrap struct{}
 
-func (failingBootstrap) EnsureTenantStorage(context.Context, string, string, []string) (*storagebootstrap.Result, error) {
+func (failingBootstrap) EnsureTenantStorage(context.Context, string, string, []string) (*storagebootstraph.Result, error) {
 	return nil, errBoom
 }
 
@@ -251,14 +251,14 @@ func TestEveryShimPropagatesHandlerErrors(t *testing.T) {
 // test cannot see the difference. These doubles fail exactly one step.
 type cancelFailsGetSucceeds struct{ failingOperations }
 
-func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operation.Operation, error) {
-	return &operation.Operation{}, nil
+func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
+	return &operationh.Operation{}, nil
 }
 
 type readOKWriteFails struct{ failingTags }
 
-func (readOKWriteFails) GetObject(context.Context, string, string) (*object.Object, error) {
-	return &object.Object{Tags: map[string]string{"k": "v"}}, nil
+func (readOKWriteFails) GetObject(context.Context, string, string) (*objecth.Object, error) {
+	return &objecth.Object{Tags: map[string]string{"k": "v"}}, nil
 }
 
 func TestTheFAILINGStepIsTheOneReported(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -42,9 +42,9 @@ func NewOperationRepo(q *sqlc.Queries, pool *pgxpool.Pool) *OperationRepo {
 // UPDATE so concurrent workers grab disjoint rows. SKIP LOCKED is the
 // load-bearing piece; without it two workers would block each other
 // instead of getting separate rows.
-func (r *OperationRepo) ClaimNext(ctx context.Context) (operation.Operation, error) {
+func (r *OperationRepo) ClaimNext(ctx context.Context) (operationh.Operation, error) {
 	if r.pool == nil {
-		return operation.Operation{}, errors.New("operation: pool unavailable on this OperationRepo")
+		return operationh.Operation{}, errors.New("operation: pool unavailable on this OperationRepo")
 	}
 	const stmt = `
 UPDATE operations
@@ -75,15 +75,15 @@ RETURNING id, tenant_id, type, state, metadata, response,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return operation.Operation{}, operation.ErrNoOperationToClaim
+			return operationh.Operation{}, operationh.ErrNoOperationToClaim
 		}
-		return operation.Operation{}, fmt.Errorf("operation: claim: %w", err)
+		return operationh.Operation{}, fmt.Errorf("operation: claim: %w", err)
 	}
-	out := operation.Operation{
+	out := operationh.Operation{
 		OperationID: opID,
 		TenantID:    tenantID,
 		Type:        opType,
-		State:       operation.State(state),
+		State:       operationh.State(state),
 		Metadata:    metadata,
 		Response:    response,
 		CreatedAt:   createdAt,
@@ -99,9 +99,9 @@ RETURNING id, tenant_id, type, state, metadata, response,
 	return out, nil
 }
 
-var _ operation.Repository = (*OperationRepo)(nil)
+var _ operationh.Repository = (*OperationRepo)(nil)
 
-func (r *OperationRepo) Create(ctx context.Context, op operation.Operation) error {
+func (r *OperationRepo) Create(ctx context.Context, op operationh.Operation) error {
 	return r.q.CreateOperation(ctx,
 		pgUUID(op.OperationID),
 		pgUUID(op.TenantID),
@@ -111,15 +111,15 @@ func (r *OperationRepo) Create(ctx context.Context, op operation.Operation) erro
 	)
 }
 
-func (r *OperationRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (operation.Operation, error) {
+func (r *OperationRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (operationh.Operation, error) {
 	row, err := r.q.GetOperation(ctx, pgUUID(opID), pgUUID(tenantID))
 	if err != nil {
-		return operation.Operation{}, err
+		return operationh.Operation{}, err
 	}
 	return operationFromSQLC(row.Operation), nil
 }
 
-func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newState operation.State, metadata, response []byte, errCode, errMsg string) error {
+func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newState operationh.State, metadata, response []byte, errCode, errMsg string) error {
 	rows, err := r.q.UpdateOperationState(ctx,
 		pgUUID(opID),
 		sqlc.OperationState(string(newState)),
@@ -143,15 +143,15 @@ func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) er
 		return fmt.Errorf("cancel operation: %w", err)
 	}
 	if rows == 0 {
-		return operation.ErrNotCancellable
+		return operationh.ErrNotCancellable
 	}
 	return nil
 }
 
 func (r *OperationRepo) List(
-	ctx context.Context, tenantID uuid.UUID, state *operation.State,
+	ctx context.Context, tenantID uuid.UUID, state *operationh.State,
 	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool,
-) ([]operation.Operation, string, error) {
+) ([]operationh.Operation, string, error) {
 	pageSize = pageSizeOrDefault(pageSize)
 	var ns *sqlc.OperationState
 	if state != nil {
@@ -175,7 +175,7 @@ func (r *OperationRepo) List(
 
 	// Two queries rather than one with a flipped comparison: the cursor test
 	// has to move with the sort, and sqlc parameterises neither.
-	out := make([]operation.Operation, 0, pageSize)
+	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
 		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
 			typeEq, typeLike, errorCodeEq, errorMessageNeq,
@@ -232,12 +232,12 @@ func (r *OperationRepo) ReclaimStale(ctx context.Context, staleAfter time.Durati
 	return n, nil
 }
 
-func operationFromSQLC(o sqlc.Operation) operation.Operation {
-	return operation.Operation{
+func operationFromSQLC(o sqlc.Operation) operationh.Operation {
+	return operationh.Operation{
 		OperationID:  uuidFrom(o.ID),
 		TenantID:     uuidFrom(o.TenantID),
 		Type:         o.Type,
-		State:        operation.State(string(o.State)),
+		State:        operationh.State(string(o.State)),
 		Metadata:     o.Metadata,
 		Response:     o.Response,
 		ErrorCode:    derefStr(o.ErrorCode),

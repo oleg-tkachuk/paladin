@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -38,7 +38,7 @@ func TestMultipartSessionAnchorsBackend(t *testing.T) {
 	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
 		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, anchorBackend, anchorBucket)
 	objectID := uuid.Must(uuid.NewV7())
-	sess, err := repo.InitiateSession(ctx, multipart.InitiateArgs{
+	sess, err := repo.InitiateSession(ctx, multiparth.InitiateArgs{
 		TenantID:      f.tenantID,
 		Collection:    f.collection,
 		Key:           "mpu-" + uuid.NewString()[:8],

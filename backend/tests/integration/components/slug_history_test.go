@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	tenantapi "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	tenantapi "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )

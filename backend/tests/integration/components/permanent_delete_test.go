@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -43,7 +43,7 @@ import (
 // records the delete it was asked for. Everything else would panic, which is
 // the point — this path must not reach for presigning or copying.
 type recordingStorage struct {
-	object.Storage
+	objecth.Storage
 	deleted []string
 	err     error
 }
@@ -63,7 +63,7 @@ func purgeDebtCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, objec
 	return n
 }
 
-func availableObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture) object.Object {
+func availableObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture) objecth.Object {
 	t.Helper()
 	id := seedPendingObject(t, ctx, pool, f)
 	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
@@ -71,20 +71,20 @@ func availableObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fi
 	if err := pool.QueryRow(ctx, `SELECT path FROM objects WHERE id = $1`, id).Scan(&key); err != nil {
 		t.Fatalf("read key: %v", err)
 	}
-	return object.Object{
+	return objecth.Object{
 		ObjectID: id, TenantID: f.tenantID, Collection: f.collection, Key: key,
 	}
 }
 
-func permanentDeleteHandler(pool *pgxpool.Pool, st object.Storage) *object.Handler {
+func permanentDeleteHandler(pool *pgxpool.Pool, st objecth.Storage) *objecth.Handler {
 	q := sqlc.New(pool)
-	h := object.NewHandler(
+	h := objecth.NewHandler(
 		adapters.NewObjectRepo(q, pool),
 		st,
 		nil, // policy: PermanentDelete takes an already-authorized object
 		nil, // filter: nothing lists here
 		statemachine.New(pool),
-		object.PresignConfig{},
+		objecth.PresignConfig{},
 	)
 	h.SetEventProducer(&worker.Dispatcher{
 		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(q)),

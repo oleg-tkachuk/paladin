@@ -27,7 +27,7 @@ RPC returns `PermissionDenied`.
 
 **Default is deny.** A tenant with an empty `inherited_cedar_policy` cannot
 do anything. The default policy seeded at tenant creation
-([defaultpolicy.go](../internal/api/v1/tenant/defaultpolicy.go)) gives
+([defaultpolicy.go](../internal/api/admin/v1/tenanth/defaultpolicy.go)) gives
 tenant members read/write on their own objects and admins full reach.
 
 ---

@@ -15,10 +15,10 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/codec"
 	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/storagebootstraph"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
@@ -103,7 +103,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
 	collectionBootstrapH.SetEventProducer(apiDispatcher)
 	collectionBootstrapH.SetLogger(l.Named("collection-events"))
-	storageBootstrapH := storagebootstrap.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
+	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
 
 	// ─── IAM-plane handlers ──────────────────────────────────────────────
 	iss, err := wire.ProvideIssuer(cfg)
@@ -489,14 +489,14 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 // VersionHandler so the multipart handler can record promotion events
 // without a circular dependency on the object package.
 type multipartVersionAdapter struct {
-	v *object.VersionHandler
+	v *objecth.VersionHandler
 }
 
-func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multipart.VersionedObject) error {
+func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multiparth.VersionedObject) error {
 	if a.v == nil {
 		return nil
 	}
-	return a.v.OnPromote(ctx, object.Object{
+	return a.v.OnPromote(ctx, objecth.Object{
 		ObjectID:     vo.ObjectID,
 		TenantID:     vo.TenantID,
 		Collection:   vo.Collection,

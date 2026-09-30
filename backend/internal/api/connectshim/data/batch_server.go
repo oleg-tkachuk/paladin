@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
@@ -17,7 +17,7 @@ type BatchServer struct {
 	H batchHandler
 }
 
-func NewBatchServer(h *batch.Handler) *BatchServer { return &BatchServer{H: h} }
+func NewBatchServer(h *batchh.Handler) *BatchServer { return &BatchServer{H: h} }
 
 func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Request[pb.BatchDeleteObjectsRequest]) (*connect.Response[pb.Operation], error) {
 	m := req.Msg
@@ -29,7 +29,7 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, badName(err)
 	}
-	opID, err := s.H.BatchDelete(ctx, batch.BatchDeleteArgs{
+	opID, err := s.H.BatchDelete(ctx, batchh.BatchDeleteArgs{
 		Collection: collection,
 		ObjectIDs:  ids,
 		Permanent:  m.GetPermanent(),
@@ -57,7 +57,7 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, badName(err)
 	}
-	opID, err := s.H.BatchCopy(ctx, batch.BatchCopyArgs{
+	opID, err := s.H.BatchCopy(ctx, batchh.BatchCopyArgs{
 		SrcCollection: srcOK,
 		DstCollection: dstOK,
 		ObjectIDs:     ids,
@@ -82,7 +82,7 @@ func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, badName(err)
 	}
-	opID, err := s.H.BatchRestoreObjects(ctx, batch.BatchRestoreObjectsArgs{
+	opID, err := s.H.BatchRestoreObjects(ctx, batchh.BatchRestoreObjectsArgs{
 		Collection: collection,
 		ObjectIDs:  ids,
 	})
@@ -105,7 +105,7 @@ func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, badName(err)
 	}
-	opID, err := s.H.BatchUpdateTags(ctx, batch.BatchUpdateTagsArgs{
+	opID, err := s.H.BatchUpdateTags(ctx, batchh.BatchUpdateTagsArgs{
 		Collection: collection,
 		ObjectIDs:  ids,
 		Tags:       m.GetTags(),

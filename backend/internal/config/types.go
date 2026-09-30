@@ -571,7 +571,7 @@ type Dispatcher struct {
 
 // OperationsWorker drives the long-running operation queue
 // (BatchDelete / BatchCopy / BatchUpdateTags / BatchRestoreObjects).
-// Handlers in internal/api/v1/batch enqueue rows; this worker
+// Handlers in internal/api/data/v1/batchh enqueue rows; this worker
 // dequeues and runs them. Disable by setting interval to 0 — but
 // note that calling BatchXxx RPCs without a runner stages
 // PENDING operations that nothing will ever complete.

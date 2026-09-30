@@ -42,7 +42,7 @@ Three parts with single responsibilities:
 
 The resolver stays the **only** chokepoint for `enabled` / `read_only`
 (`ErrBackendDisabled` / `ErrBackendReadOnly`,
-`internal/api/v1/object/handler.go`). The registry does **not** re-check them —
+`internal/api/data/v1/objecth/handler.go`). The registry does **not** re-check them —
 it is purely "give me a client for backend X", and a disabled backend must
 still yield a client so a drain/migration can read from it.
 
@@ -53,7 +53,7 @@ still yield a client so a drain/migration can read from it.
   `internal/api/v1/bucket/handler.go`) — the impl just ignores it (uses the one
   client). Provisioner routing is a signature no-op.
 - `object.BucketMeta` **already** carries `BackendID` and `EventsEnabled`
-  (`internal/api/v1/object/handler.go`), so the resolver already knows the
+  (`internal/api/data/v1/objecth/handler.go`), so the resolver already knows the
   backend and the completion-mode input.
 - `object.Location{TenantID, Bucket, Collection, Key}` has **no** `BackendID`;
   presign args (`PresignPutArgs`, …) carry `Bucket` but no `BackendID`.

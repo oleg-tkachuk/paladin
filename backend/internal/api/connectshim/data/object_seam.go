@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
 // objectHandler is what ObjectServer needs from the domain handler, and the
@@ -22,23 +22,23 @@ import (
 // the shim stops calling something. *object.Handler satisfies it implicitly,
 // so no caller of NewObjectServer changed.
 type objectHandler interface {
-	UploadObject(ctx context.Context, in object.UploadObjectInput) (*object.UploadObjectOutput, error)
-	CompleteObject(ctx context.Context, in object.CompleteObjectInput) (*object.Object, error)
-	ListObjects(ctx context.Context, in object.ListObjectsInput) ([]object.Object, string, error)
-	CountObjects(ctx context.Context, in object.CountObjectsInput) (*object.CountObjectsOutput, error)
-	GetObject(ctx context.Context, collection, objectID string) (*object.Object, error)
-	LookupObject(ctx context.Context, collection, key string) (*object.Object, error)
-	DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (*object.DownloadObjectOutput, error)
-	UpdateObject(ctx context.Context, in object.UpdateObjectInput) (*object.Object, error)
+	UploadObject(ctx context.Context, in objecth.UploadObjectInput) (*objecth.UploadObjectOutput, error)
+	CompleteObject(ctx context.Context, in objecth.CompleteObjectInput) (*objecth.Object, error)
+	ListObjects(ctx context.Context, in objecth.ListObjectsInput) ([]objecth.Object, string, error)
+	CountObjects(ctx context.Context, in objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error)
+	GetObject(ctx context.Context, collection, objectID string) (*objecth.Object, error)
+	LookupObject(ctx context.Context, collection, key string) (*objecth.Object, error)
+	DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (*objecth.DownloadObjectOutput, error)
+	UpdateObject(ctx context.Context, in objecth.UpdateObjectInput) (*objecth.Object, error)
 	DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error
-	RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*object.Object, error)
-	CopyObject(ctx context.Context, in object.CopyObjectInput) (*object.Object, error)
+	RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*objecth.Object, error)
+	CopyObject(ctx context.Context, in objecth.CopyObjectInput) (*objecth.Object, error)
 }
 
 // Compile-time proof that the production type still fits. Without it the
 // interface could drift from the handler and the failure would land at every
 // call site instead of here.
-var _ objectHandler = (*object.Handler)(nil)
+var _ objectHandler = (*objecth.Handler)(nil)
 
 // versionHandler and lockHandler are the same seam for the two optional fields
 // on ObjectServer. Both stay nil in a deployment that has not enabled the
@@ -50,18 +50,18 @@ var _ objectHandler = (*object.Handler)(nil)
 // force a test double to implement methods it has no business knowing about,
 // and would make `Locks == nil` unrepresentable.
 type versionHandler interface {
-	ListVersions(ctx context.Context, in object.ListVersionsInput) ([]object.ObjectVersion, string, error)
-	GetVersion(ctx context.Context, name string) (*object.ObjectVersion, error)
-	RestoreVersion(ctx context.Context, name, resourceVersion string) (*object.Object, error)
+	ListVersions(ctx context.Context, in objecth.ListVersionsInput) ([]objecth.ObjectVersion, string, error)
+	GetVersion(ctx context.Context, name string) (*objecth.ObjectVersion, error)
+	RestoreVersion(ctx context.Context, name, resourceVersion string) (*objecth.Object, error)
 }
 
 type lockHandler interface {
-	SetRetention(ctx context.Context, in object.SetRetentionInput) (object.ObjectLock, error)
-	SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (object.ObjectLock, error)
-	GetLock(ctx context.Context, collection, objectID string) (object.ObjectLock, error)
+	SetRetention(ctx context.Context, in objecth.SetRetentionInput) (objecth.ObjectLock, error)
+	SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (objecth.ObjectLock, error)
+	GetLock(ctx context.Context, collection, objectID string) (objecth.ObjectLock, error)
 }
 
 var (
-	_ versionHandler = (*object.VersionHandler)(nil)
-	_ lockHandler    = (*object.LockHandler)(nil)
+	_ versionHandler = (*objecth.VersionHandler)(nil)
+	_ lockHandler    = (*objecth.LockHandler)(nil)
 )

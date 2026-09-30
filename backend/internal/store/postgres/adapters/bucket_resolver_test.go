@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
 // With the three gates in one function they are pure, so the whole policy
@@ -25,25 +25,25 @@ func TestBucketOpAllowed(t *testing.T) {
 
 		// Disabled refuses both classes: the backend is out of service, and
 		// a read would resolve to a bucket nobody is maintaining.
-		{"read on a disabled backend", false, false, false, "ready", object.ErrBackendDisabled},
-		{"write on a disabled backend", true, false, false, "ready", object.ErrBackendDisabled},
+		{"read on a disabled backend", false, false, false, "ready", objecth.ErrBackendDisabled},
+		{"write on a disabled backend", true, false, false, "ready", objecth.ErrBackendDisabled},
 
 		// Drain refuses mutations only — serving reads is the point of it.
 		{"read while draining", false, true, true, "ready", nil},
-		{"write while draining", true, true, true, "ready", object.ErrBackendReadOnly},
+		{"write while draining", true, true, true, "ready", objecth.ErrBackendReadOnly},
 
 		// Same split for a bucket that does not exist on the backend yet.
 		{"read while provisioning", false, true, false, "pending", nil},
-		{"write while provisioning", true, true, false, "pending", object.ErrBucketProvisioning},
-		{"write while deleting", true, true, false, "deleting", object.ErrBucketProvisioning},
-		{"write on a failed provision", true, true, false, "failed", object.ErrBucketProvisioning},
+		{"write while provisioning", true, true, false, "pending", objecth.ErrBucketProvisioning},
+		{"write while deleting", true, true, false, "deleting", objecth.ErrBucketProvisioning},
+		{"write on a failed provision", true, true, false, "failed", objecth.ErrBucketProvisioning},
 
 		// Precedence, where the states overlap. Disabled outranks the rest:
 		// telling an operator a bucket is still provisioning, when the
 		// backend it lives on is switched off, sends them to the wrong page.
-		{"disabled and draining", true, false, true, "ready", object.ErrBackendDisabled},
-		{"disabled and provisioning", true, false, false, "pending", object.ErrBackendDisabled},
-		{"draining and provisioning", true, true, true, "pending", object.ErrBackendReadOnly},
+		{"disabled and draining", true, false, true, "ready", objecth.ErrBackendDisabled},
+		{"disabled and provisioning", true, false, false, "pending", objecth.ErrBackendDisabled},
+		{"draining and provisioning", true, true, true, "pending", objecth.ErrBackendReadOnly},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

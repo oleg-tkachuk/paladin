@@ -34,7 +34,7 @@ const (
 )
 
 // CopyLocation is a physical object address for a server-side copy. Worker-local
-// (not internal/api/v1/object.Location) because that package imports worker —
+// (not internal/api/data/v1/objecth.Location) because that package imports worker —
 // importing it back would be a cycle. build_jobs adapts the router to this.
 type CopyLocation struct {
 	BackendID  string

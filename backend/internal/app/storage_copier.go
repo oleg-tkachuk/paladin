@@ -3,15 +3,15 @@ package app
 import (
 	"context"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // storageCopier adapts object.Storage (the s3 router) to worker.ObjectCopier,
 // translating the worker-local CopyLocation to object.Location. The worker
-// can't reference object.Location directly — internal/api/v1/object imports
+// can't reference object.Location directly — internal/api/data/v1/objecth imports
 // internal/worker, so the reverse would be an import cycle.
-type storageCopier struct{ s object.Storage }
+type storageCopier struct{ s objecth.Storage }
 
 func (c storageCopier) CopyObject(ctx context.Context, src, dst worker.CopyLocation) error {
 	return c.s.CopyObject(ctx, objLoc(src), objLoc(dst))
@@ -30,8 +30,8 @@ func (c storageCopier) HeadObject(ctx context.Context, loc worker.CopyLocation) 
 	return size, err
 }
 
-func objLoc(l worker.CopyLocation) object.Location {
-	return object.Location{
+func objLoc(l worker.CopyLocation) objecth.Location {
+	return objecth.Location{
 		BackendID:  l.BackendID,
 		TenantID:   l.TenantID,
 		Bucket:     l.Bucket,

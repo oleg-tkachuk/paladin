@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/storagebootstraph"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
@@ -18,7 +18,7 @@ type StorageBootstrapServer struct {
 	H storageBootstrapHandler
 }
 
-func NewStorageBootstrapServer(h *storagebootstrap.Handler) *StorageBootstrapServer {
+func NewStorageBootstrapServer(h *storagebootstraph.Handler) *StorageBootstrapServer {
 	return &StorageBootstrapServer{H: h}
 }
 

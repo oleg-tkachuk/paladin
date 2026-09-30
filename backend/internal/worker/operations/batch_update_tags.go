@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
 // BatchUpdateTagsExecutor implements the BatchUpdateTags operation type.
@@ -36,7 +36,7 @@ import (
 // unconditionally, so the default call quietly deleted tags nobody asked it
 // to touch — the opposite of what the request said it would do.
 type BatchUpdateTagsExecutor struct {
-	Objects object.Repository
+	Objects objecth.Repository
 }
 
 // BatchUpdateTagsResponse mirrors the BatchDelete shape.
@@ -53,12 +53,12 @@ type BatchUpdateTagsFailure struct {
 }
 
 // Execute implements Executor.
-func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Operation) ([]byte, error) {
+func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
 	if e.Objects == nil {
 		return nil, errors.New("BatchUpdateTagsExecutor: Objects dependency missing")
 	}
 
-	var args batch.BatchUpdateTagsArgs
+	var args batchh.BatchUpdateTagsArgs
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
@@ -94,7 +94,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 			})
 			continue
 		}
-		if _, err := e.Objects.UpdateMetadata(ctx, object.UpdateMetadataArgs{
+		if _, err := e.Objects.UpdateMetadata(ctx, objecth.UpdateMetadataArgs{
 			TenantID:        args.TenantID,
 			ObjectID:        obj.ObjectID,
 			ResourceVersion: obj.ResourceVersion,

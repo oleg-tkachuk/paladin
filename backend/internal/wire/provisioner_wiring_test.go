@@ -5,17 +5,13 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
-
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 )
 
 // The bucket handler's provisioner must reach it exactly as wired — nil
 // included.
 //
-// It used to arrive wrapped. `bucketProvisionerAdapter` bridged
-// bucket.Provisioner to bucketh.Provisioner, two interfaces that declare the
-// same two methods, which Go already treats as interchangeable — so the
-// wrapper was ceremony. Its nil handling was not: both methods returned nil
+// It used to arrive wrapped, bridging a second interface that declared the
+// same two methods. Its nil handling was the problem: both methods returned nil
 // when the wrapped value was nil, which is indistinguishable from "the bucket
 // was provisioned". bucketh has an answer for a missing provisioner —
 // CodeUnavailable, "backend provisioning not wired", guarded on all three of
@@ -27,23 +23,6 @@ import (
 // buckets were provisioned, and only the absence of the S3 bucket would ever
 // have said otherwise.
 //
-// Two checks, because the property has two halves.
-
-// TestBucketProvisionerNilSurvivesTheInterfaceConversion pins the language
-// rule the fix leans on: a nil interface value converted to another interface
-// type stays nil, so bucketh's `provisioner == nil` guard can still fire.
-// (A typed nil pointer stored in an interface would not — that is a different
-// bug, and not one this wiring can introduce, since it passes an interface
-// value straight through.)
-func TestBucketProvisionerNilSurvivesTheInterfaceConversion(t *testing.T) {
-	var storage Storage // Provisioner left unset
-	var p bucketh.Provisioner = storage.Provisioner
-	if p != nil {
-		t.Fatal("an unwired provisioner arrived non-nil; bucketh would report " +
-			"a bucket as provisioned instead of answering Unavailable")
-	}
-}
-
 // TestBucketProvisionerIsPassedUnwrapped is the half the type system cannot
 // state: that the value handed to bucketh.NewHandler is `storage.Provisioner`
 // itself and not something built around it. Any wrapper compiles and passes

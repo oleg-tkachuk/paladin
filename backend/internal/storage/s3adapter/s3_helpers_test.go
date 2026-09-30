@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -119,17 +119,17 @@ func TestResolveBucket(t *testing.T) {
 }
 
 func TestCompletionMode(t *testing.T) {
-	impl := &Client{mode: object.CompletionModeImplicit}
-	if got := impl.CompletionMode("any-key"); got != object.CompletionModeImplicit {
+	impl := &Client{mode: objecth.CompletionModeImplicit}
+	if got := impl.CompletionMode("any-key"); got != objecth.CompletionModeImplicit {
 		t.Errorf("implicit client: got %v, want Implicit", got)
 	}
 	// collection is ignored — same mode regardless of argument.
-	if got := impl.CompletionMode(""); got != object.CompletionModeImplicit {
+	if got := impl.CompletionMode(""); got != objecth.CompletionModeImplicit {
 		t.Errorf("collection must be ignored: got %v, want Implicit", got)
 	}
 
-	expl := &Client{mode: object.CompletionModeExplicit}
-	if got := expl.CompletionMode("any-key"); got != object.CompletionModeExplicit {
+	expl := &Client{mode: objecth.CompletionModeExplicit}
+	if got := expl.CompletionMode("any-key"); got != objecth.CompletionModeExplicit {
 		t.Errorf("explicit client: got %v, want Explicit", got)
 	}
 }

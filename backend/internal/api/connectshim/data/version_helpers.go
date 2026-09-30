@@ -6,7 +6,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
@@ -22,7 +22,7 @@ func stripVersionSuffix(name string) (string, error) {
 
 // versionToProto builds the pb.ObjectVersion envelope. parentName is the
 // AIP-122 parent so the proto `name` can include the full path.
-func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersion {
+func versionToProto(parentName string, v *objecth.ObjectVersion) *pb.ObjectVersion {
 	if v == nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func versionToProto(parentName string, v *object.ObjectVersion) *pb.ObjectVersio
 // lockStateToProto renders an object-lock state. An unlocked version is an
 // ObjectLockState with everything zero rather than a nil message: the RPC
 // answers "what is the lock here", and "none" is an answer.
-func lockStateToProto(l object.ObjectLock) *pb.ObjectLockState {
+func lockStateToProto(l objecth.ObjectLock) *pb.ObjectLockState {
 	return &pb.ObjectLockState{
 		Mode:        l.Mode,
 		RetainUntil: convx.TsPtrProto(l.RetainUntil),

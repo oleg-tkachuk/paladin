@@ -1,5 +1,5 @@
 // Package data wires the generated paladin.data.v1 Connect server stubs onto the
-// existing handler packages under internal/api/v1/. Each *.go file in this
+// handler packages under internal/api/data/v1/. Each *.go file in this
 // package maps one data-plane service.
 //
 // The data plane uses fully hierarchical AIP-122 names like
@@ -23,7 +23,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -152,7 +152,7 @@ func assertJWTTenant(ctx context.Context, urlTenantID string) error {
 
 // ─── Object ↔ proto ─────────────────────────────────────────────────────────
 
-func objectToProto(o *object.Object) *pb.Object {
+func objectToProto(o *objecth.Object) *pb.Object {
 	if o == nil {
 		return nil
 	}
@@ -250,11 +250,11 @@ func presignedUrlProto(url, method string, headers map[string]string, expires ti
 	return out
 }
 
-func completionModeProto(m object.CompletionMode) commonpb.CompletionMode {
+func completionModeProto(m objecth.CompletionMode) commonpb.CompletionMode {
 	switch m {
-	case object.CompletionModeImplicit:
+	case objecth.CompletionModeImplicit:
 		return commonpb.CompletionMode_COMPLETION_MODE_IMPLICIT
-	case object.CompletionModeExplicit:
+	case objecth.CompletionModeExplicit:
 		return commonpb.CompletionMode_COMPLETION_MODE_EXPLICIT
 	}
 	return commonpb.CompletionMode_COMPLETION_MODE_UNSPECIFIED

@@ -8,12 +8,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
 // Routers implement the handler-facing storage interfaces (object.Storage,
-// presign.Storage, multipart.Storage, object.StreamSink, bucket.Provisioner)
+// presign.Storage, multipart.Storage, object.StreamSink, bucketh.Provisioner)
 // by resolving the target *Client from a BackendRegistry per call and
 // delegating. The backend id travels in the method args — either a BackendID
 // field (presign args / Location) or a leading backendID parameter — so a
@@ -25,11 +25,11 @@ import (
 // signatures, so each interface gets its own router type (one struct cannot
 // carry two same-named methods).
 
-// Compile-time interface conformance (bucket.Provisioner is checked at the
+// Compile-time interface conformance (bucketh.Provisioner is checked at the
 // wire.Storage assignment to avoid importing the bucket package here).
 var (
-	_ object.Storage    = (*ObjectRouter)(nil)
-	_ object.StreamSink = (*StreamRouter)(nil)
+	_ objecth.Storage    = (*ObjectRouter)(nil)
+	_ objecth.StreamSink = (*StreamRouter)(nil)
 )
 
 // ObjectRouter routes object.Storage calls by backend id.
@@ -37,7 +37,7 @@ type ObjectRouter struct{ reg *BackendRegistry }
 
 func NewObjectRouter(reg *BackendRegistry) *ObjectRouter { return &ObjectRouter{reg: reg} }
 
-func (r *ObjectRouter) PresignPut(ctx context.Context, a object.PresignPutArgs) (string, map[string]string, time.Time, error) {
+func (r *ObjectRouter) PresignPut(ctx context.Context, a objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	c, err := r.reg.For(ctx, a.BackendID)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -45,7 +45,7 @@ func (r *ObjectRouter) PresignPut(ctx context.Context, a object.PresignPutArgs) 
 	return c.PresignPut(ctx, a)
 }
 
-func (r *ObjectRouter) PresignPost(ctx context.Context, a object.PresignPostArgs) (string, map[string]string, time.Time, error) {
+func (r *ObjectRouter) PresignPost(ctx context.Context, a objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
 	c, err := r.reg.For(ctx, a.BackendID)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -53,7 +53,7 @@ func (r *ObjectRouter) PresignPost(ctx context.Context, a object.PresignPostArgs
 	return c.PresignPost(ctx, a)
 }
 
-func (r *ObjectRouter) PresignGet(ctx context.Context, a object.PresignGetArgs) (string, map[string]string, time.Time, error) {
+func (r *ObjectRouter) PresignGet(ctx context.Context, a objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	c, err := r.reg.For(ctx, a.BackendID)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -69,7 +69,7 @@ func (r *ObjectRouter) Head(ctx context.Context, backendID, bucket string, tenan
 	return c.Head(ctx, bucket, tenantID, collection, key)
 }
 
-func (r *ObjectRouter) CopyObject(ctx context.Context, src, dst object.Location) error {
+func (r *ObjectRouter) CopyObject(ctx context.Context, src, dst objecth.Location) error {
 	// Same backend: a server-side S3 CopyObject runs on one client (no bytes
 	// flow through this process).
 	if src.BackendID == dst.BackendID {
@@ -86,7 +86,7 @@ func (r *ObjectRouter) CopyObject(ctx context.Context, src, dst object.Location)
 	return r.streamThrough(ctx, src, dst)
 }
 
-func (r *ObjectRouter) streamThrough(ctx context.Context, src, dst object.Location) error {
+func (r *ObjectRouter) streamThrough(ctx context.Context, src, dst objecth.Location) error {
 	srcC, err := r.reg.For(ctx, src.BackendID)
 	if err != nil {
 		return fmt.Errorf("stream copy: source backend: %w", err)
@@ -165,7 +165,7 @@ func (r *MultipartRouter) InitiateMultipart(ctx context.Context, backendID, buck
 	return c.InitiateMultipart(ctx, bucket, tenantID, collection, key, contentType)
 }
 
-func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []multipart.PartETag) (string, int64, error) {
+func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []multiparth.PartETag) (string, int64, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return "", 0, err
@@ -173,7 +173,7 @@ func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, buck
 	return c.CompleteMultipart(ctx, bucket, tenantID, storageUploadID, collection, key, parts)
 }
 
-func (r *MultipartRouter) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, afterPartNumber int32) ([]multipart.Part, int32, error) {
+func (r *MultipartRouter) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, afterPartNumber int32) ([]multiparth.Part, int32, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return nil, 0, err
@@ -202,7 +202,7 @@ type StreamRouter struct{ reg *BackendRegistry }
 
 func NewStreamRouter(reg *BackendRegistry) *StreamRouter { return &StreamRouter{reg: reg} }
 
-func (r *StreamRouter) Open(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (object.StreamWriter, error) {
+func (r *StreamRouter) Open(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (objecth.StreamWriter, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (r *StreamRouter) Open(ctx context.Context, backendID, bucket string, tenan
 	return c.Open(ctx, bucket, tenantID, collection, key, contentType, sizeHint)
 }
 
-// ProvisionerRouter routes bucket.Provisioner calls by backend id. The backend
+// ProvisionerRouter routes bucketh.Provisioner calls by backend id. The backend
 // id is already an explicit parameter on this interface, so routing is a
 // straight lookup; the resolved client's own CreateBucket/DeleteBucket ignore
 // their backendID argument (it targets the client it was built for).

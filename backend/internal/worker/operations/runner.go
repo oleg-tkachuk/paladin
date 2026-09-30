@@ -1,6 +1,6 @@
 // Package operations runs the long-running operation queue (BatchDelete /
 // BatchCopy / BatchUpdateTags / BatchRestoreObjects, …). Handlers in
-// internal/api/v1/batch enqueue rows into the `operations` table; this
+// internal/api/data/v1/batchh enqueue rows into the `operations` table; this
 // package is what actually picks them up and executes the work.
 //
 // Architecture: one Runner per pod that loops on a ticker, calls
@@ -30,7 +30,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
 // Executor is the per-operation-type seam. Implementations parse the
@@ -49,14 +49,14 @@ import (
 // when the worker pod shuts down. Long-running iteration loops MUST
 // honour ctx.Err() between items.
 type Executor interface {
-	Execute(ctx context.Context, op operation.Operation) (response []byte, err error)
+	Execute(ctx context.Context, op operationh.Operation) (response []byte, err error)
 }
 
 // Runner is the operation-queue consumer. One per worker pod; the
 // pod's ServiceAccount + lease infrastructure (internal/worker/lease)
 // gates "should I be running" — this struct just owns the loop.
 type Runner struct {
-	Repo      operation.Repository
+	Repo      operationh.Repository
 	Executors map[string]Executor
 	Interval  time.Duration
 	Logger    *zap.Logger
@@ -123,7 +123,7 @@ func (r *Runner) drain(ctx context.Context) {
 			return
 		}
 		op, err := r.Repo.ClaimNext(ctx)
-		if errors.Is(err, operation.ErrNoOperationToClaim) {
+		if errors.Is(err, operationh.ErrNoOperationToClaim) {
 			return
 		}
 		if err != nil {
@@ -138,7 +138,7 @@ func (r *Runner) drain(ctx context.Context) {
 // a terminal state (SUCCEEDED or FAILED) — leaving an op in RUNNING
 // after we've claimed it is the "stuck operation" failure mode that
 // users reported in the original BACKLOG entry.
-func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
+func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 	logger := r.log().With(
 		zap.String("operation_id", op.OperationID.String()),
 		zap.String("type", op.Type),
@@ -186,7 +186,7 @@ func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
 	writeCtx, cancel := terminalCtx(ctx)
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
-		operation.StateSucceeded, op.Metadata, response, "", ""); err != nil {
+		operationh.StateSucceeded, op.Metadata, response, "", ""); err != nil {
 		logger.Warn("failed to mark SUCCEEDED", zap.Error(err))
 	}
 }
@@ -210,7 +210,7 @@ func terminalCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 
 // heartbeat refreshes the operation's updated_at until stop is closed. See
 // Runner.Heartbeat for why liveness cannot be left to progress reporting.
-func (r *Runner) heartbeat(ctx context.Context, op operation.Operation, stop <-chan struct{}) {
+func (r *Runner) heartbeat(ctx context.Context, op operationh.Operation, stop <-chan struct{}) {
 	if r.Toucher == nil {
 		return
 	}
@@ -241,7 +241,7 @@ func (r *Runner) heartbeat(ctx context.Context, op operation.Operation, stop <-c
 // a live progress bar. Writes are throttled to ~1/s (the final tick always
 // lands) to keep the queue's DB pressure bounded on large batches. The
 // terminal success/fail write in runOne / markFailed is authoritative.
-func (r *Runner) withProgress(ctx context.Context, op operation.Operation) context.Context {
+func (r *Runner) withProgress(ctx context.Context, op operationh.Operation) context.Context {
 	var last time.Time
 	return WithProgress(ctx, func(processed, total int) {
 		now := time.Now()
@@ -254,7 +254,7 @@ func (r *Runner) withProgress(ctx context.Context, op operation.Operation) conte
 			Total     int `json:"total"`
 		}{processed, total})
 		if err := r.Repo.UpdateState(ctx, op.OperationID,
-			operation.StateRunning, meta, nil, "", ""); err != nil {
+			operationh.StateRunning, meta, nil, "", ""); err != nil {
 			r.log().Debug("progress write failed", zap.Error(err))
 		}
 	})
@@ -262,12 +262,12 @@ func (r *Runner) withProgress(ctx context.Context, op operation.Operation) conte
 
 // markFailed encodes the error to a JSON-friendly response field too
 // so polling clients can render the error without a separate fetch.
-func (r *Runner) markFailed(ctx context.Context, op operation.Operation, code, msg string) {
+func (r *Runner) markFailed(ctx context.Context, op operationh.Operation, code, msg string) {
 	resp, _ := json.Marshal(map[string]string{"error": msg, "code": code})
 	writeCtx, cancel := terminalCtx(ctx)
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
-		operation.StateFailed, op.Metadata, resp, code, msg); err != nil {
+		operationh.StateFailed, op.Metadata, resp, code, msg); err != nil {
 		r.log().Warn("failed to mark FAILED", zap.Error(err))
 	}
 }

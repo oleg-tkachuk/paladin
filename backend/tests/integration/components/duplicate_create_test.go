@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object_tag"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecttagh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )

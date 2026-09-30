@@ -24,9 +24,9 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	objectkeypkg "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	quotahpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
-	objectkeypkg "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	objectpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	objectpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"

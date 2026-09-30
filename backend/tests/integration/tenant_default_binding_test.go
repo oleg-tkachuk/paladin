@@ -11,7 +11,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -25,7 +25,7 @@ func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 	repo := adapters.NewTenantRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 
 	// No binding yet → Get is ErrNotFound; the resolve lookup reports found=false.
-	if _, err := repo.GetDefaultBinding(ctx, tid); !errors.Is(err, tenant.ErrNotFound) {
+	if _, err := repo.GetDefaultBinding(ctx, tid); !errors.Is(err, tenanth.ErrNotFound) {
 		t.Fatalf("Get before set: err = %v, want ErrNotFound", err)
 	}
 	if _, _, found, err := repo.TenantDefaultBinding(ctx, tid); err != nil || found {
@@ -61,7 +61,7 @@ func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 	}
 
 	// A bucket that does not exist trips the composite FK.
-	if _, err := repo.SetDefaultBinding(ctx, tid, "storageBackends/primary/buckets/nope", "admin@local"); !errors.Is(err, tenant.ErrDefaultBindingBucketMissing) {
+	if _, err := repo.SetDefaultBinding(ctx, tid, "storageBackends/primary/buckets/nope", "admin@local"); !errors.Is(err, tenanth.ErrDefaultBindingBucketMissing) {
 		t.Fatalf("bad bucket: err = %v, want ErrDefaultBindingBucketMissing", err)
 	}
 
@@ -72,7 +72,7 @@ func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 	if err := repo.ClearDefaultBinding(ctx, tid); err != nil {
 		t.Fatalf("clear again (idempotent): %v", err)
 	}
-	if _, err := repo.GetDefaultBinding(ctx, tid); !errors.Is(err, tenant.ErrNotFound) {
+	if _, err := repo.GetDefaultBinding(ctx, tid); !errors.Is(err, tenanth.ErrNotFound) {
 		t.Fatalf("Get after clear: err = %v, want ErrNotFound", err)
 	}
 }

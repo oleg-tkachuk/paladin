@@ -11,9 +11,9 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
@@ -315,12 +315,12 @@ func TestCreateBucket_ForwardsTheOwnerTenant(t *testing.T) {
 
 type recordingTenant struct {
 	failingTenant
-	args tenant.CreateTenantArgs
+	args tenanth.CreateTenantArgs
 }
 
-func (r *recordingTenant) CreateTenant(_ context.Context, args tenant.CreateTenantArgs) (*tenant.Tenant, error) {
+func (r *recordingTenant) CreateTenant(_ context.Context, args tenanth.CreateTenantArgs) (*tenanth.Tenant, error) {
 	r.args = args
-	return &tenant.Tenant{}, nil
+	return &tenanth.Tenant{}, nil
 }
 
 // Labels are marshalled only when there are some. Marshalling an empty map

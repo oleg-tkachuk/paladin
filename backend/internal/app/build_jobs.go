@@ -2,7 +2,7 @@ package app
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
@@ -415,14 +415,14 @@ func newPermanentDeleter(
 	reaperPool *pgxpool.Pool,
 	sm *statemachine.Transitioner,
 	l *zap.Logger,
-) *object.Handler {
-	h := object.NewHandler(
+) *objecth.Handler {
+	h := objecth.NewHandler(
 		deps.Repos.Object,
 		s3adapter.NewObjectRouter(deps.Registry),
 		nil, // policy: nothing to authorize without a caller
 		nil, // filter: PermanentDelete does not list
 		sm,
-		object.PresignConfig{},
+		objecth.PresignConfig{},
 	)
 	h.SetEventProducer(&worker.Dispatcher{
 		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),

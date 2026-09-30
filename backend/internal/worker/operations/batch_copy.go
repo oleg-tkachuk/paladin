@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -47,8 +47,8 @@ import (
 //   - Cross-tenant copy. Args carry one TenantID; we never look up
 //     a destination owned by a different tenant.
 type BatchCopyExecutor struct {
-	Objects     object.Repository
-	Storage     object.Storage
+	Objects     objecth.Repository
+	Storage     objecth.Storage
 	Transitions Transitioner
 
 	// PresignDefaultTTL pins the destination row's presign_expires_at.
@@ -71,12 +71,12 @@ type BatchCopyFailure struct {
 }
 
 // Execute implements Executor.
-func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation) ([]byte, error) {
+func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
 	if e.Objects == nil || e.Storage == nil || e.Transitions == nil {
 		return nil, errors.New("BatchCopyExecutor: dependencies missing (Objects / Storage / Transitions)")
 	}
 
-	var args batch.BatchCopyArgs
+	var args batchh.BatchCopyArgs
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
@@ -155,8 +155,8 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 // enough context for the caller's per-row failure entry.
 func (e *BatchCopyExecutor) copyOne(
 	ctx context.Context,
-	args batch.BatchCopyArgs,
-	src object.Object,
+	args batchh.BatchCopyArgs,
+	src objecth.Object,
 	srcBackendID, srcBucket, dstBackendID, dstBucket string,
 	presignTTL time.Duration,
 ) error {
@@ -165,7 +165,7 @@ func (e *BatchCopyExecutor) copyOne(
 	}
 
 	dstKey := args.KeyPrefix + src.Key
-	dst, err := e.Objects.CreateObject(ctx, object.CreateObjectArgs{
+	dst, err := e.Objects.CreateObject(ctx, objecth.CreateObjectArgs{
 		TenantID:         args.TenantID,
 		Collection:       args.DstCollection,
 		Key:              dstKey,
@@ -181,8 +181,8 @@ func (e *BatchCopyExecutor) copyOne(
 	}
 
 	if err := e.Storage.CopyObject(ctx,
-		object.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, Collection: args.SrcCollection, Key: src.Key},
-		object.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
+		objecth.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, Collection: args.SrcCollection, Key: src.Key},
+		objecth.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
 	); err != nil {
 		// Compensate: dst row is PENDING. Without this it lingers
 		// until the reconciler hard-deletes it (`min_object_age`).

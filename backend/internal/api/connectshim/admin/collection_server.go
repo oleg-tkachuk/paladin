@@ -12,9 +12,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -23,7 +23,7 @@ import (
 // CreateCollection can route a NEW collection when the caller omits the bucket
 // (ADR-0014 Phase 3). Satisfied by tenant.Repository.
 type defaultBindingSource interface {
-	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error)
+	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenanth.DefaultBinding, error)
 }
 
 type CollectionServer struct {
@@ -55,7 +55,7 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 	if bucket == "" {
 		db, err := s.bindings.GetDefaultBinding(ctx, tenantID)
 		if err != nil {
-			if errors.Is(err, tenant.ErrNotFound) {
+			if errors.Is(err, tenanth.ErrNotFound) {
 				return nil, connect.NewError(connect.CodeFailedPrecondition,
 					errors.New("no bucket specified and the tenant has no default binding; set one via SetTenantDefaultBinding or name a bucket"))
 			}

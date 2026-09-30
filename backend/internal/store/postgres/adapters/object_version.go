@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -23,9 +23,9 @@ func NewObjectVersionRepo(q *sqlc.Queries) *ObjectVersionRepo {
 	return &ObjectVersionRepo{q: q}
 }
 
-var _ object.VersionRepository = (*ObjectVersionRepo)(nil)
+var _ objecth.VersionRepository = (*ObjectVersionRepo)(nil)
 
-func (r *ObjectVersionRepo) Insert(ctx context.Context, v object.ObjectVersion) error {
+func (r *ObjectVersionRepo) Insert(ctx context.Context, v objecth.ObjectVersion) error {
 	if v.VersionID == uuid.Nil {
 		v.VersionID = uuid.Must(uuid.NewV7())
 	}
@@ -49,18 +49,18 @@ func (r *ObjectVersionRepo) Insert(ctx context.Context, v object.ObjectVersion) 
 	)
 }
 
-func (r *ObjectVersionRepo) Get(ctx context.Context, versionID uuid.UUID) (object.ObjectVersion, error) {
+func (r *ObjectVersionRepo) Get(ctx context.Context, versionID uuid.UUID) (objecth.ObjectVersion, error) {
 	row, err := r.q.GetObjectVersion(ctx, pgUUID(versionID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return object.ObjectVersion{}, object.ErrVersionNotFound
+			return objecth.ObjectVersion{}, objecth.ErrVersionNotFound
 		}
-		return object.ObjectVersion{}, err
+		return objecth.ObjectVersion{}, err
 	}
 	return versionFromSQLC(row.ObjectVersion, lockModeFromSQL(row.LockMode), row.LockRetainUntil, row.LegalHold), nil
 }
 
-func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSize int32, pageToken string) ([]object.ObjectVersion, string, error) {
+func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSize int32, pageToken string) ([]objecth.ObjectVersion, string, error) {
 	pageSize = pageSizeOrDefault(pageSize)
 	var (
 		afterAt pgtype.Timestamptz
@@ -81,7 +81,7 @@ func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSi
 		return nil, "", fmt.Errorf("list versions: %w", err)
 	}
 	currentID, _ := r.CurrentVersionID(ctx, objectID)
-	out := make([]object.ObjectVersion, 0, len(rows))
+	out := make([]objecth.ObjectVersion, 0, len(rows))
 	for _, row := range rows {
 		v := versionFromSQLC(row.ObjectVersion, lockModeFromSQL(row.LockMode), row.LockRetainUntil, row.LegalHold)
 		if v.VersionID == currentID {
@@ -114,12 +114,12 @@ func (r *ObjectVersionRepo) SetCurrentVersionID(ctx context.Context, objectID, v
 
 // lock* arrive from the LEFT JOIN to object_locks: most versions have no lock
 // row at all, so they are passed separately rather than assumed present.
-func versionFromSQLC(row sqlc.ObjectVersion, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) object.ObjectVersion {
+func versionFromSQLC(row sqlc.ObjectVersion, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) objecth.ObjectVersion {
 	var size int64
 	if row.SizeBytes != nil {
 		size = *row.SizeBytes
 	}
-	return object.ObjectVersion{
+	return objecth.ObjectVersion{
 		VersionID:       uuidFrom(row.ID),
 		ObjectID:        uuidFrom(row.ObjectID),
 		IsDeleteMarker:  row.IsDeleteMarker,

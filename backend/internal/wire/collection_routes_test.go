@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 )
 
 type fakeOKLister struct {
@@ -34,11 +34,11 @@ func (f *fakeOKLister) ListCollections(_ context.Context, args objectkey.ListCol
 }
 
 type fakeBindingReader struct {
-	db  tenant.DefaultBinding
+	db  tenanth.DefaultBinding
 	err error
 }
 
-func (f fakeBindingReader) GetDefaultBinding(context.Context, uuid.UUID) (tenant.DefaultBinding, error) {
+func (f fakeBindingReader) GetDefaultBinding(context.Context, uuid.UUID) (tenanth.DefaultBinding, error) {
 	return f.db, f.err
 }
 
@@ -54,7 +54,7 @@ func TestListCollectionRoutes_ShapesAndBareAlias(t *testing.T) {
 			tokens: []string{""},
 		},
 		// Default route is primary/paladin — only that OK gets a bare alias.
-		tenants: fakeBindingReader{db: tenant.DefaultBinding{BackendName: "primary", BucketName: "paladin"}},
+		tenants: fakeBindingReader{db: tenanth.DefaultBinding{BackendName: "primary", BucketName: "paladin"}},
 	}
 
 	routes, _, err := lister.ListCollectionRoutes(context.Background(), tid, "")
@@ -92,7 +92,7 @@ func TestListCollectionRoutes_NoBindingNoBareAliases(t *testing.T) {
 			pages:  [][]objectkey.Collection{{ok(tid, "primary", "paladin", "invoices")}},
 			tokens: []string{""},
 		},
-		tenants: fakeBindingReader{err: tenant.ErrNotFound},
+		tenants: fakeBindingReader{err: tenanth.ErrNotFound},
 	}
 
 	routes, _, err := lister.ListCollectionRoutes(context.Background(), tid, "")
@@ -110,7 +110,7 @@ func TestListCollectionRoutes_PaginatesAcrossPages(t *testing.T) {
 		pages:  [][]objectkey.Collection{{ok(tid, "primary", "paladin", "a")}, {ok(tid, "primary", "paladin", "b")}},
 		tokens: []string{"next-1", ""},
 	}
-	lister := collectionRouteLister{okH: f, tenants: fakeBindingReader{err: tenant.ErrNotFound}}
+	lister := collectionRouteLister{okH: f, tenants: fakeBindingReader{err: tenanth.ErrNotFound}}
 
 	routes, nextToken, err := lister.ListCollectionRoutes(context.Background(), tid, "")
 	if err != nil {
@@ -137,7 +137,7 @@ func TestListCollectionRoutes_ResumesFromPageToken(t *testing.T) {
 		pages:  [][]objectkey.Collection{{ok(tid, "primary", "paladin", "b")}},
 		tokens: []string{""},
 	}
-	lister := collectionRouteLister{okH: f, tenants: fakeBindingReader{err: tenant.ErrNotFound}}
+	lister := collectionRouteLister{okH: f, tenants: fakeBindingReader{err: tenanth.ErrNotFound}}
 
 	if _, _, err := lister.ListCollectionRoutes(context.Background(), tid, "resume-here"); err != nil {
 		t.Fatalf("ListCollectionRoutes: %v", err)
@@ -182,7 +182,7 @@ func TestListCollectionRoutes_TruncatesAtCap(t *testing.T) {
 	pages, tokens := pagedKeys(tid, whoAmIMaxRoutes+whoAmIRoutePageSize, "")
 	lister := collectionRouteLister{
 		okH:     &fakeOKLister{pages: pages, tokens: tokens},
-		tenants: fakeBindingReader{err: tenant.ErrNotFound},
+		tenants: fakeBindingReader{err: tenanth.ErrNotFound},
 	}
 
 	routes, nextToken, err := lister.ListCollectionRoutes(context.Background(), tid, "")
@@ -203,7 +203,7 @@ func TestListCollectionRoutes_ExactCapNotTruncated(t *testing.T) {
 	pages, tokens := pagedKeys(tid, whoAmIMaxRoutes, "")
 	lister := collectionRouteLister{
 		okH:     &fakeOKLister{pages: pages, tokens: tokens},
-		tenants: fakeBindingReader{err: tenant.ErrNotFound},
+		tenants: fakeBindingReader{err: tenanth.ErrNotFound},
 	}
 
 	routes, nextToken, err := lister.ListCollectionRoutes(context.Background(), tid, "")
@@ -224,7 +224,7 @@ func TestListCollectionRoutes_PagesThroughEntireTable(t *testing.T) {
 	pages, tokens := pagedKeys(tid, total, "")
 	lister := collectionRouteLister{
 		okH:     &fakeOKLister{pages: pages, tokens: tokens},
-		tenants: fakeBindingReader{err: tenant.ErrNotFound},
+		tenants: fakeBindingReader{err: tenanth.ErrNotFound},
 	}
 
 	seen := make(map[string]bool, total)

@@ -1,6 +1,6 @@
 // Default deny-by-default policy template applied to a freshly created tenant.
 //
-// Mirrors internal/api/v1/tenant/defaultpolicy.go — keep both in sync.
+// Mirrors internal/api/admin/v1/tenanth/defaultpolicy.go — keep both in sync.
 // Substitute "placeholder" with the concrete tenant UUID at load time.
 //
 // Roles use dot-form (canonical, matching the JWT-issuer mint shape):

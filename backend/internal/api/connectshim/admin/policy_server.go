@@ -6,7 +6,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"

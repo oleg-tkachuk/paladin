@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
@@ -32,7 +32,7 @@ func TestConformance(t *testing.T) {
 	body := []byte("paladin conformance probe")
 
 	t.Run("required/presigned PUT is usable by a plain HTTP client", func(t *testing.T) {
-		url, headers, _, err := tg.client.PresignPut(ctx, object.PresignPutArgs{
+		url, headers, _, err := tg.client.PresignPut(ctx, objecth.PresignPutArgs{
 			Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
 			Key: key, ContentType: "text/plain", SizeHint: int64(len(body)), TTL: ttl(),
 		})
@@ -102,7 +102,7 @@ func TestConformance(t *testing.T) {
 	})
 
 	t.Run("required/CopyObject duplicates within the backend", func(t *testing.T) {
-		src := object.Location{Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection, Key: key}
+		src := objecth.Location{Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection, Key: key}
 		dst := src
 		dst.Key = "conf/copied.txt"
 		if err := tg.client.CopyObject(ctx, src, dst); err != nil {
@@ -148,7 +148,7 @@ func TestConformance(t *testing.T) {
 			t.Fatal("part upload returned no ETag — CompleteMultipart needs it")
 		}
 		if _, _, err := tg.client.CompleteMultipart(ctx, tg.bucket, tg.tenant, uploadID, tg.collection, mkey,
-			[]multipart.PartETag{{PartNumber: 1, ETag: etag}}); err != nil {
+			[]multiparth.PartETag{{PartNumber: 1, ETag: etag}}); err != nil {
 			t.Fatalf("CompleteMultipart: %v", err)
 		}
 		if _, size, _, _, err := tg.client.Head(ctx, tg.bucket, tg.tenant, tg.collection, mkey); err != nil {

@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
@@ -31,7 +31,7 @@ type ObjectServer struct {
 //
 // Taking the concrete type here is what makes the nil detectable. Tests inject
 // through the fields, which is where the seam is needed.
-func NewObjectServer(h *object.Handler, versions *object.VersionHandler) *ObjectServer {
+func NewObjectServer(h *objecth.Handler, versions *objecth.VersionHandler) *ObjectServer {
 	s := &ObjectServer{H: h}
 	if versions != nil {
 		s.Versions = versions
@@ -42,7 +42,7 @@ func NewObjectServer(h *object.Handler, versions *object.VersionHandler) *Object
 // WithLocks wires the object-lock handler. Separate from the constructor
 // because object lock is opt-in per deployment and every existing caller of
 // NewObjectServer predates it.
-func (s *ObjectServer) WithLocks(locks *object.LockHandler) *ObjectServer {
+func (s *ObjectServer) WithLocks(locks *objecth.LockHandler) *ObjectServer {
 	// Concrete parameter, guarded assignment — see NewObjectServer. A typed
 	// nil here would make s.Locks non-nil and every object-lock RPC panic on a
 	// deployment that has the feature off.
@@ -58,7 +58,7 @@ func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, badName(err)
 	}
-	out, err := s.H.UploadObject(ctx, object.UploadObjectInput{
+	out, err := s.H.UploadObject(ctx, objecth.UploadObjectInput{
 		Collection:    collection,
 		Key:           m.GetKey(),
 		ContentType:   m.GetContentType(),
@@ -135,7 +135,7 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
+	out, err := s.H.UpdateObject(ctx, objecth.UpdateObjectInput{
 		Collection:      collection,
 		ObjectID:        objectID,
 		ResourceVersion: rv,
@@ -157,7 +157,7 @@ func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, badName(err)
 	}
-	out, err := s.H.CompleteObject(ctx, object.CompleteObjectInput{
+	out, err := s.H.CompleteObject(ctx, objecth.CompleteObjectInput{
 		Collection: collection,
 		ObjectID:   objectID,
 		ETag:       m.GetEtag(),
@@ -205,7 +205,7 @@ func (s *ObjectServer) CopyObject(ctx context.Context, req *connect.Request[pb.C
 	if err != nil {
 		return nil, badName(fmt.Errorf("destination: %w", err))
 	}
-	in := object.CopyObjectInput{
+	in := objecth.CopyObjectInput{
 		SourceCollection: srcCollection,
 		SourceObjectID:   srcObjectID,
 		DestCollection:   destCollection,
@@ -230,7 +230,7 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.
 	if err != nil {
 		return nil, badName(err)
 	}
-	objs, next, err := s.H.ListObjects(ctx, object.ListObjectsInput{
+	objs, next, err := s.H.ListObjects(ctx, objecth.ListObjectsInput{
 		Collection: collection,
 		PageSize:   m.GetPage().GetPageSize(),
 		PageToken:  m.GetPage().GetPageToken(),
@@ -254,7 +254,7 @@ func (s *ObjectServer) CountObjects(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, badName(err)
 	}
-	out, err := s.H.CountObjects(ctx, object.CountObjectsInput{
+	out, err := s.H.CountObjects(ctx, objecth.CountObjectsInput{
 		Collection: collection,
 		Filter:     m.GetFilter(),
 	})
@@ -283,7 +283,7 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, badName(err)
 	}
-	out, next, err := s.Versions.ListVersions(ctx, object.ListVersionsInput{
+	out, next, err := s.Versions.ListVersions(ctx, objecth.ListVersionsInput{
 		Collection: collection,
 		ObjectID:   objectID,
 		PageSize:   m.GetPage().GetPageSize(),
@@ -339,7 +339,7 @@ func (s *ObjectServer) SetObjectRetention(ctx context.Context, req *connect.Requ
 	if m.GetRetainUntil() == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("retain_until is required"))
 	}
-	out, err := s.Locks.SetRetention(ctx, object.SetRetentionInput{
+	out, err := s.Locks.SetRetention(ctx, objecth.SetRetentionInput{
 		Collection:       collection,
 		ObjectID:         objectID,
 		Mode:             m.GetMode(),

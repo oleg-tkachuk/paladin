@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -24,7 +24,7 @@ type TenantServer struct {
 	H tenantHandler
 }
 
-func NewTenantServer(h *tenant.Handler) *TenantServer { return &TenantServer{H: h} }
+func NewTenantServer(h *tenanth.Handler) *TenantServer { return &TenantServer{H: h} }
 
 func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb.CreateTenantRequest]) (*connect.Response[pb.Tenant], error) {
 	if err := requireCompilablePolicy(req.Msg.GetTenant().GetInheritedCedarPolicy()); err != nil {
@@ -46,9 +46,9 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb
 // spinning up auth/Cedar/DB. Any new field on CreateTenantRequest or
 // its nested Tenant message that needs to reach the handler MUST land
 // here — the field-mapping test fails until it does.
-func parseCreateTenantArgs(m *pb.CreateTenantRequest) (tenant.CreateTenantArgs, error) {
+func parseCreateTenantArgs(m *pb.CreateTenantRequest) (tenanth.CreateTenantArgs, error) {
 	src := m.GetTenant()
-	args := tenant.CreateTenantArgs{
+	args := tenanth.CreateTenantArgs{
 		Slug:                 src.GetSlug(),
 		DisplayName:          src.GetDisplayName(),
 		InheritedCedarPolicy: src.GetInheritedCedarPolicy(),
@@ -85,7 +85,7 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.Ge
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	var t *tenant.Tenant
+	var t *tenanth.Tenant
 	if ref.HasID() {
 		t, err = s.H.GetTenant(ctx, ref.ID)
 	} else {
@@ -97,7 +97,7 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.Ge
 	return connect.NewResponse(tenantDomainToProto(t)), nil
 }
 
-func storageMigrationToProto(m *tenant.StorageMigration) *pb.StorageMigrationStatus {
+func storageMigrationToProto(m *tenanth.StorageMigration) *pb.StorageMigrationStatus {
 	return &pb.StorageMigrationStatus{
 		Tenant:        "tenants/" + m.TenantID.String(),
 		State:         m.State,
@@ -151,7 +151,7 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	args := tenant.UpdateTenantArgs{TenantID: id, ExpectedVersion: rv}
+	args := tenanth.UpdateTenantArgs{TenantID: id, ExpectedVersion: rv}
 	mask := m.GetUpdateMask().GetPaths()
 	// Reject attempts to mutate immutable fields. Migration 033 also
 	// enforces this at the DB level via a trigger, but catching it
@@ -266,7 +266,7 @@ func (s *TenantServer) PurgeTenant(ctx context.Context, req *connect.Request[pb.
 
 func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.ListTenantsRequest]) (*connect.Response[pb.ListTenantsResponse], error) {
 	m := req.Msg
-	args := tenant.ListTenantsArgs{
+	args := tenanth.ListTenantsArgs{
 		PageSize:       m.GetPage().GetPageSize(),
 		IncludeTrashed: m.GetIncludeTrashed(),
 		OnlyTrashed:    m.GetOnlyTrashed(),
@@ -302,7 +302,7 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 	if err := requireCompilablePolicy(policy); err != nil {
 		return nil, err
 	}
-	t, err := s.H.UpdateTenant(ctx, tenant.UpdateTenantArgs{
+	t, err := s.H.UpdateTenant(ctx, tenanth.UpdateTenantArgs{
 		TenantID:             id,
 		ExpectedVersion:      rv,
 		InheritedCedarPolicy: &policy,
@@ -330,7 +330,7 @@ func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Reques
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	t, err := s.H.RenameTenantSlug(ctx, tenant.RenameTenantSlugArgs{
+	t, err := s.H.RenameTenantSlug(ctx, tenanth.RenameTenantSlugArgs{
 		TenantID:        id,
 		NewSlug:         req.Msg.GetNewSlug(),
 		ExpectedVersion: rv,
@@ -354,7 +354,7 @@ func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *connect.Requ
 
 var _ paladinadminv1connect.TenantServiceHandler = (*TenantServer)(nil)
 
-func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
+func tenantDomainToProto(t *tenanth.Tenant) *pb.Tenant {
 	if t == nil {
 		return nil
 	}
@@ -442,7 +442,7 @@ func (s *TenantServer) ClearTenantDefaultBinding(ctx context.Context, req *conne
 	return connect.NewResponse(&pb.ClearTenantDefaultBindingResponse{}), nil
 }
 
-func defaultBindingToProto(b *tenant.DefaultBinding) *pb.TenantDefaultBinding {
+func defaultBindingToProto(b *tenanth.DefaultBinding) *pb.TenantDefaultBinding {
 	return &pb.TenantDefaultBinding{
 		Name: "tenants/" + b.TenantID.String() + "/defaultBinding",
 		// One reference, one field: "storageBackends/{backend}/buckets/{bucket}".

@@ -22,8 +22,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -266,14 +266,14 @@ func subtestTenantSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 			uuid.New(), slug, display)
 	}
 
-	all, _, err := repo.List(ctx, tenant.ListTenantsArgs{PageSize: 1000})
+	all, _, err := repo.List(ctx, tenanth.ListTenantsArgs{PageSize: 1000})
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
 	for _, q := range searchQueries {
 		t.Run(q, func(t *testing.T) {
 			filter := celFilter(q)
-			narrowed, _, err := repo.List(ctx, tenant.ListTenantsArgs{PageSize: 1000, Filter: filter})
+			narrowed, _, err := repo.List(ctx, tenanth.ListTenantsArgs{PageSize: 1000, Filter: filter})
 			if err != nil {
 				t.Fatalf("list filtered: %v", err)
 			}
@@ -288,14 +288,14 @@ func subtestTenantSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	}
 }
 
-func celTenants(t *testing.T, filter string, in []tenant.Tenant) []tenant.Tenant {
+func celTenants(t *testing.T, filter string, in []tenanth.Tenant) []tenanth.Tenant {
 	t.Helper()
 	if filter == "" {
 		return in
 	}
-	in = append([]tenant.Tenant(nil), in...)
+	in = append([]tenanth.Tenant(nil), in...)
 	out, err := celpkg.FilterPage(celpkg.NewEvaluator(), celpkg.TenantSchema, filter, in,
-		func(x tenant.Tenant) map[string]any {
+		func(x tenanth.Tenant) map[string]any {
 			return map[string]any{
 				"slug":         x.Slug,
 				"display_name": x.DisplayName,

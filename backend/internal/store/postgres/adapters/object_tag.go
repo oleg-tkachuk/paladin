@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object_tag"
+	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecttagh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"

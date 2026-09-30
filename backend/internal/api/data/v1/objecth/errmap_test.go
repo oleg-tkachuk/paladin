@@ -1,0 +1,30 @@
+package objecth
+
+import (
+	"testing"
+
+	"connectrpc.com/connect"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+)
+
+// Guards the ADR-0002 wiring: the package init() must register its
+// sentinels so apiutil.MapError (and mapCreateErr, which delegates to it)
+// resolves them to the expected Connect code instead of CodeInternal.
+func TestErrorRegistration(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"ErrVersionMismatch", ErrVersionMismatch, connect.CodeAborted},
+		{"ErrBackendDisabled", ErrBackendDisabled, connect.CodeFailedPrecondition},
+		{"ErrBackendReadOnly", ErrBackendReadOnly, connect.CodeFailedPrecondition},
+		{"ErrVersionNotFound", ErrVersionNotFound, connect.CodeNotFound},
+	}
+	for _, tc := range cases {
+		if got := connect.CodeOf(apiutil.MapError(tc.err)); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

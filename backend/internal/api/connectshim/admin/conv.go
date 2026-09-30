@@ -1,6 +1,6 @@
 // Package admin wires generated paladin.admin.v1 Connect server stubs onto the
-// internal/api/admin/v1/<service>h handler packages and the existing
-// tenant/collection/policy/operation handlers from internal/api/v1/*.
+// internal/api/admin/v1/<service>h handler packages, and onto
+// internal/api/data/v1/operationh for platform operations.
 package admin
 
 import (
@@ -10,7 +10,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 

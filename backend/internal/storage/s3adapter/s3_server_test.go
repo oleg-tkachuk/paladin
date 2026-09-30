@@ -19,8 +19,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -545,8 +545,8 @@ func TestClientCopyObject(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	src := object.Location{Bucket: "src-b", TenantID: testTenant, Collection: "ok1", Key: "k1"}
-	dst := object.Location{Bucket: "dst-b", TenantID: testTenant, Collection: "ok2", Key: "k2"}
+	src := objecth.Location{Bucket: "src-b", TenantID: testTenant, Collection: "ok1", Key: "k1"}
+	dst := objecth.Location{Bucket: "dst-b", TenantID: testTenant, Collection: "ok2", Key: "k2"}
 	if err := c.CopyObject(testCtx, src, dst); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -587,8 +587,8 @@ func TestClientCopyObjectError(t *testing.T) {
 	c := newTestClient(t, f.srv.URL)
 
 	err := c.CopyObject(testCtx,
-		object.Location{Bucket: "a", TenantID: testTenant, Collection: "o", Key: "k"},
-		object.Location{Bucket: "b", TenantID: testTenant, Collection: "o", Key: "k"})
+		objecth.Location{Bucket: "a", TenantID: testTenant, Collection: "o", Key: "k"},
+		objecth.Location{Bucket: "b", TenantID: testTenant, Collection: "o", Key: "k"})
 	if err == nil {
 		t.Fatal("copy of a missing source: want error")
 	}
@@ -703,7 +703,7 @@ func TestClientCompleteMultipart(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	parts := []multipart.PartETag{{PartNumber: 1, ETag: "e1"}, {PartNumber: 2, ETag: "e2"}}
+	parts := []multiparth.PartETag{{PartNumber: 1, ETag: "e1"}, {PartNumber: 2, ETag: "e2"}}
 	etag, size, err := c.CompleteMultipart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", parts)
 	if err != nil {
 		t.Fatalf("CompleteMultipart: %v", err)
@@ -1044,7 +1044,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 	wantKey := composeKey(testTenant, "ok", "k")
 
 	t.Run("put", func(t *testing.T) {
-		url, hdrs, exp, err := c.PresignPut(testCtx, object.PresignPutArgs{
+		url, hdrs, exp, err := c.PresignPut(testCtx, objecth.PresignPutArgs{
 			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
 			ContentType: "text/plain", TTL: ttl,
 		})
@@ -1059,7 +1059,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 	})
 
 	t.Run("get", func(t *testing.T) {
-		url, _, exp, err := c.PresignGet(testCtx, object.PresignGetArgs{
+		url, _, exp, err := c.PresignGet(testCtx, objecth.PresignGetArgs{
 			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
 			TTL: ttl, ContentDisposition: `attachment; filename="r.pdf"`,
 		})
@@ -1075,7 +1075,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 	})
 
 	t.Run("post falls back to a signed put", func(t *testing.T) {
-		url, fields, _, err := c.PresignPost(testCtx, object.PresignPostArgs{
+		url, fields, _, err := c.PresignPost(testCtx, objecth.PresignPostArgs{
 			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
 			ContentType: "text/plain", MaxSizeBytes: 4096, TTL: ttl,
 		})
@@ -1139,7 +1139,7 @@ func TestPresignUsesPublicEndpoint(t *testing.T) {
 		b.PublicEndpoint = "https://s3.public.example.com"
 	})
 
-	url, _, _, err := c.PresignGet(testCtx, object.PresignGetArgs{
+	url, _, _, err := c.PresignGet(testCtx, objecth.PresignGetArgs{
 		TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute,
 	})
 	if err != nil {
@@ -1205,17 +1205,17 @@ func TestObjectRouterDelegatesToResolvedBackend(t *testing.T) {
 		call func() error
 	}{
 		{"PresignPut", func() error {
-			_, _, _, err := rt.PresignPut(testCtx, object.PresignPutArgs{
+			_, _, _, err := rt.PresignPut(testCtx, objecth.PresignPutArgs{
 				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
 			return err
 		}},
 		{"PresignPost", func() error {
-			_, _, _, err := rt.PresignPost(testCtx, object.PresignPostArgs{
+			_, _, _, err := rt.PresignPost(testCtx, objecth.PresignPostArgs{
 				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
 			return err
 		}},
 		{"PresignGet", func() error {
-			_, _, _, err := rt.PresignGet(testCtx, object.PresignGetArgs{
+			_, _, _, err := rt.PresignGet(testCtx, objecth.PresignGetArgs{
 				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
 			return err
 		}},
@@ -1231,8 +1231,8 @@ func TestObjectRouterSameBackendCopyStaysServerSide(t *testing.T) {
 	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
 	rt := NewObjectRouter(reg)
 
-	src := object.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, Collection: "o1", Key: "k1"}
-	dst := object.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, Collection: "o2", Key: "k2"}
+	src := objecth.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, Collection: "o1", Key: "k1"}
+	dst := objecth.Location{BackendID: "primary", Bucket: "b", TenantID: testTenant, Collection: "o2", Key: "k2"}
 	if err := rt.CopyObject(testCtx, src, dst); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -1261,8 +1261,8 @@ func TestObjectRouterCrossBackendStreamsThrough(t *testing.T) {
 	})
 	rt := NewObjectRouter(reg)
 
-	src := object.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, Collection: "o1", Key: "k1"}
-	dst := object.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, Collection: "o2", Key: "k2"}
+	src := objecth.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, Collection: "o1", Key: "k1"}
+	dst := objecth.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, Collection: "o2", Key: "k2"}
 	if err := rt.CopyObject(testCtx, src, dst); err != nil {
 		t.Fatalf("cross-backend CopyObject: %v", err)
 	}
@@ -1291,8 +1291,8 @@ func TestObjectRouterStreamThroughErrors(t *testing.T) {
 		"src": newTestClient(t, fSrc.srv.URL),
 		"dst": newTestClient(t, fDst.srv.URL),
 	}
-	src := object.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, Collection: "o", Key: "k"}
-	dst := object.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, Collection: "o", Key: "k"}
+	src := objecth.Location{BackendID: "src", Bucket: "sb", TenantID: testTenant, Collection: "o", Key: "k"}
+	dst := objecth.Location{BackendID: "dst", Bucket: "db", TenantID: testTenant, Collection: "o", Key: "k"}
 
 	t.Run("unknown source backend", func(t *testing.T) {
 		rt := NewObjectRouter(registryWith(map[string]*Client{"dst": good["dst"]}))
@@ -1400,7 +1400,7 @@ func TestMultipartRouterDelegates(t *testing.T) {
 	}
 
 	etag, size, err := rt.CompleteMultipart(testCtx, "primary", "b", testTenant, id, "ok", "k",
-		[]multipart.PartETag{{PartNumber: 1, ETag: "e1"}})
+		[]multiparth.PartETag{{PartNumber: 1, ETag: "e1"}})
 	if err != nil {
 		t.Fatalf("CompleteMultipart: %v", err)
 	}
@@ -1488,12 +1488,12 @@ func TestNewSetsCompletionModeFromEvents(t *testing.T) {
 	f := newFakeS3(t)
 
 	explicit := newTestClient(t, f.srv.URL)
-	if got := explicit.CompletionMode("any"); got != object.CompletionModeExplicit {
+	if got := explicit.CompletionMode("any"); got != objecth.CompletionModeExplicit {
 		t.Errorf("events disabled ⇒ Explicit, got %v", got)
 	}
 
 	implicit := newTestClient(t, f.srv.URL, func(b *config.StorageBackend) { b.Events.Enabled = true })
-	if got := implicit.CompletionMode("any"); got != object.CompletionModeImplicit {
+	if got := implicit.CompletionMode("any"); got != objecth.CompletionModeImplicit {
 		t.Errorf("events enabled ⇒ Implicit, got %v", got)
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -29,9 +29,9 @@ func NewObjectRepo(q *sqlc.Queries, pool *pgxpool.Pool) *ObjectRepo {
 	return &ObjectRepo{q: q, pool: pool}
 }
 
-var _ object.Repository = (*ObjectRepo)(nil)
+var _ objecth.Repository = (*ObjectRepo)(nil)
 
-func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectArgs) (object.Object, error) {
+func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObjectArgs) (objecth.Object, error) {
 	objectID := uuid.Must(uuid.NewV7())
 	var sizePtr *int64
 	if args.SizeHint > 0 {
@@ -43,7 +43,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 	// inside a subquery in VALUES.
 	collectionID, err := r.q.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
 	if err != nil {
-		return object.Object{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
+		return objecth.Object{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
 	}
 	if err := r.q.CreateObject(ctx,
 		pgUUID(objectID),
@@ -60,34 +60,34 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 		strPtr(args.ExternalRef),
 		pgTS(args.PresignExpiresAt),
 	); err != nil {
-		return object.Object{}, fmt.Errorf("create object: %w", err)
+		return objecth.Object{}, fmt.Errorf("create object: %w", err)
 	}
 	return r.getByID(ctx, args.TenantID, objectID)
 }
 
-func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, collection, objectID string) (object.Object, error) {
+func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, collection, objectID string) (objecth.Object, error) {
 	id, err := uuid.Parse(objectID)
 	if err != nil {
-		return object.Object{}, fmt.Errorf("parse object_id: %w", err)
+		return objecth.Object{}, fmt.Errorf("parse object_id: %w", err)
 	}
 	return r.getByID(ctx, tenantID, id)
 }
 
-func (r *ObjectRepo) ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (object.ObjectLock, error) {
+func (r *ObjectRepo) ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.ObjectLock, error) {
 	row, err := r.q.GetObjectLockState(ctx, pgUUID(tenantID), pgUUID(objectID))
 	if err != nil {
 		// No-rows is unexpected here — the delete path already resolved
 		// the object via FindByName — so surface it as a plain error.
-		return object.ObjectLock{}, fmt.Errorf("get object lock state: %w", err)
+		return objecth.ObjectLock{}, fmt.Errorf("get object lock state: %w", err)
 	}
-	return object.ObjectLock{
+	return objecth.ObjectLock{
 		Mode:        lockModeFromSQL(row.LockMode),
 		RetainUntil: timePtr(row.LockRetainUntil),
 		LegalHold:   row.LegalHold,
 	}, nil
 }
 
-func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]object.Object, error) {
+func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]objecth.Object, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -99,33 +99,33 @@ func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uu
 	if err != nil {
 		return nil, fmt.Errorf("get objects by ids: %w", err)
 	}
-	out := make([]object.Object, 0, len(rows))
+	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, objectFromSQLC(row.Object, row.CollectionName))
 	}
 	return out, nil
 }
 
-func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, collection, key string) (object.Object, error) {
+func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, collection, key string) (objecth.Object, error) {
 	row, err := r.q.LookupObjectByKey(ctx, pgUUID(tenantID), collection, key)
 	if err != nil {
-		return object.Object{}, err
+		return objecth.Object{}, err
 	}
 	return objectFromSQLC(row.Object, row.CollectionName), nil
 }
 
-func (r *ObjectRepo) UpdateMetadata(ctx context.Context, args object.UpdateMetadataArgs) (object.Object, error) {
+func (r *ObjectRepo) UpdateMetadata(ctx context.Context, args objecth.UpdateMetadataArgs) (objecth.Object, error) {
 	return r.updateMetadata(ctx, r.q, args)
 }
 
 // UpdateMetadataTx runs UpdateMetadata on the caller's transaction so the
 // handler can write the paladin.object.updated outbox rows atomically with the
 // row update — closing the dual-write crash window (ADR-0003).
-func (r *ObjectRepo) UpdateMetadataTx(ctx context.Context, tx pgx.Tx, args object.UpdateMetadataArgs) (object.Object, error) {
+func (r *ObjectRepo) UpdateMetadataTx(ctx context.Context, tx pgx.Tx, args objecth.UpdateMetadataArgs) (objecth.Object, error) {
 	return r.updateMetadata(ctx, r.q.WithTx(tx), args)
 }
 
-func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args object.UpdateMetadataArgs) (object.Object, error) {
+func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args objecth.UpdateMetadataArgs) (objecth.Object, error) {
 	var metadata, tags []byte
 	var extRef *string
 	for _, field := range args.UpdatedFields {
@@ -148,15 +148,15 @@ func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args o
 		args.ResourceVersion,
 	)
 	if err != nil {
-		return object.Object{}, fmt.Errorf("update metadata: %w", err)
+		return objecth.Object{}, fmt.Errorf("update metadata: %w", err)
 	}
 	if rows == 0 {
-		return object.Object{}, object.ErrVersionMismatch
+		return objecth.Object{}, objecth.ErrVersionMismatch
 	}
 	return r.getByIDWith(ctx, q, args.TenantID, args.ObjectID)
 }
 
-func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArgs) ([]object.Object, string, error) {
+func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsArgs) ([]objecth.Object, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 	var afterID uuid.UUID
 	if args.PageToken != "" {
@@ -208,7 +208,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	if err != nil {
 		return nil, "", fmt.Errorf("list objects: %w", err)
 	}
-	out := make([]object.Object, 0, len(rows))
+	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
 		o := objectFromSQLC(row.Object, row.CollectionName)
 		if args.CompiledCEL != nil {
@@ -243,7 +243,7 @@ const countScanCap = 10000
 // CountObjects returns the number of matching rows. No filter → single
 // COUNT(*) query (exact). With filter → paginated keyset scan applying CEL
 // in-process, capped at countScanCap.
-func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsArgs) (int64, bool, error) {
+func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjectsArgs) (int64, bool, error) {
 	if args.CompiledCEL == nil {
 		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, nil)
 		if err != nil {
@@ -311,7 +311,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 // predicates on the same table.
 func (r *ObjectRepo) ListDistinctTags(
 	ctx context.Context, tenantID uuid.UUID, collection, afterKey string, keyLimit, valueLimit int32,
-) (object.DistinctTagPage, error) {
+) (objecth.DistinctTagPage, error) {
 	if keyLimit <= 0 {
 		keyLimit = 50
 	}
@@ -343,11 +343,11 @@ func (r *ObjectRepo) ListDistinctTags(
 		pgUUID(tenantID), collection, afterKey, keyLimit+1, valueLimit,
 	)
 	if err != nil {
-		return object.DistinctTagPage{}, fmt.Errorf("list distinct tags: %w", err)
+		return objecth.DistinctTagPage{}, fmt.Errorf("list distinct tags: %w", err)
 	}
 	defer rows.Close()
 
-	page := object.DistinctTagPage{
+	page := objecth.DistinctTagPage{
 		Values:    map[string][]string{},
 		Truncated: map[string]bool{},
 	}
@@ -356,14 +356,14 @@ func (r *ObjectRepo) ListDistinctTags(
 		var values []string
 		var more bool
 		if err := rows.Scan(&key, &values, &more); err != nil {
-			return object.DistinctTagPage{}, fmt.Errorf("scan distinct tag: %w", err)
+			return objecth.DistinctTagPage{}, fmt.Errorf("scan distinct tag: %w", err)
 		}
 		page.Keys = append(page.Keys, key)
 		page.Values[key] = values
 		page.Truncated[key] = more
 	}
 	if err := rows.Err(); err != nil {
-		return object.DistinctTagPage{}, fmt.Errorf("iterate distinct tags: %w", err)
+		return objecth.DistinctTagPage{}, fmt.Errorf("iterate distinct tags: %w", err)
 	}
 
 	// The extra key proves there is another page; drop it and cursor on the
@@ -404,7 +404,7 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, colle
 //
 // This lets a tenant turn versioning on for one namespace within a
 // shared bucket without touching the bucket's global config.
-func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (object.BucketMeta, error) {
+func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
 	// JOIN storage_backends so a disabled backend is refused here too —
 	// the resolution chokepoint covers every promote/delete/version path.
 	// `write` splits the read_only (drain) gate by operation class (047).
@@ -422,7 +422,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		WHERE c.tenant_id = $1 AND c.name = $2
 	`
 	var (
-		meta             object.BucketMeta
+		meta             objecth.BucketMeta
 		constraintsJSON  []byte
 		enabled          bool
 		readOnly         bool
@@ -436,12 +436,12 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState,
 	); err != nil {
 		if isNoRows(err) {
-			return object.BucketMeta{}, fmt.Errorf("collection %q not found", collection)
+			return objecth.BucketMeta{}, fmt.Errorf("collection %q not found", collection)
 		}
-		return object.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
+		return objecth.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}
 	if err := bucketOpAllowed(write, enabled, readOnly, provisionState); err != nil {
-		return object.BucketMeta{}, err
+		return objecth.BucketMeta{}, err
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
 		meta.VersioningEnabled = v
@@ -522,7 +522,7 @@ func (r *ObjectRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, obje
 
 // EnqueuePurgeTx records the byte-reclaim debt on the caller's tx — the same
 // tx that removes the objects row, so the handle outlives the row it describes.
-func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p object.PurgeDebt) error {
+func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p objecth.PurgeDebt) error {
 	if err := r.q.WithTx(tx).InsertPendingPurge(ctx,
 		pgUUID(p.PurgeID), pgUUID(p.TenantID), pgUUID(p.ObjectID),
 		p.BackendID, p.BucketName, p.Collection, p.Key,
@@ -548,7 +548,7 @@ func hardDeleteObject(ctx context.Context, q *sqlc.Queries, tenantID, objectID u
 		return fmt.Errorf("hard delete: %w", err)
 	}
 	if rows == 0 {
-		return object.ErrVersionMismatch
+		return objecth.ErrVersionMismatch
 	}
 	return nil
 }
@@ -562,24 +562,24 @@ func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, coll
 	return exists, nil
 }
 
-func (r *ObjectRepo) getByID(ctx context.Context, tenantID, objectID uuid.UUID) (object.Object, error) {
+func (r *ObjectRepo) getByID(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.Object, error) {
 	return r.getByIDWith(ctx, r.q, tenantID, objectID)
 }
 
-func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID, objectID uuid.UUID) (object.Object, error) {
+func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID, objectID uuid.UUID) (objecth.Object, error) {
 	row, err := q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))
 	if err != nil {
-		return object.Object{}, err
+		return objecth.Object{}, err
 	}
 	return objectFromSQLC(row.Object, row.CollectionName), nil
 }
 
-func objectFromSQLC(o sqlc.Object, collectionName string) object.Object {
+func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 	var size int64
 	if o.SizeBytes != nil {
 		size = *o.SizeBytes
 	}
-	return object.Object{
+	return objecth.Object{
 		ObjectID:         uuidFrom(o.ID),
 		TenantID:         uuidFrom(o.TenantID),
 		Collection:       collectionName,
@@ -619,7 +619,7 @@ func likeLiteral(s string) (string, bool) {
 	return s, true
 }
 
-func celVars(o object.Object) map[string]any {
+func celVars(o objecth.Object) map[string]any {
 	return map[string]any{
 		"key":          o.Key,
 		"content_type": o.ContentType,

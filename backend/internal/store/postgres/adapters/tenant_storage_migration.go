@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -17,8 +17,8 @@ import (
 // arguments it just used to create the row.
 func storageMigrationToDomain(m sqlc.TenantStorageMigration,
 	srcBackend, srcBucket, tgtBackend, tgtBucket string,
-) tenant.StorageMigration {
-	return tenant.StorageMigration{
+) tenanth.StorageMigration {
+	return tenanth.StorageMigration{
 		TenantID:          uuidFrom(m.TenantID),
 		SourceBackendName: srcBackend,
 		SourceBucketName:  srcBucket,
@@ -35,10 +35,10 @@ func storageMigrationToDomain(m sqlc.TenantStorageMigration,
 // tenant-owned) and inserts the migration row in one transaction. The bucket
 // row may already exist from a prior attempt — that is tolerated; the migration
 // row's PK (tenant_id) is the guard against double-starting.
-func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.StartStorageMigrationArgs) (tenant.StorageMigration, error) {
+func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenanth.StartStorageMigrationArgs) (tenanth.StorageMigration, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return tenant.StorageMigration{}, err
+		return tenanth.StorageMigration{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := r.q.WithTx(tx)
@@ -50,7 +50,7 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 		"", []byte("{}"),      // cedar_policy, constraints
 		"pending",
 	); err != nil && !isUniqueViolation(err) {
-		return tenant.StorageMigration{}, fmt.Errorf("provision dedicated bucket: %w", err)
+		return tenanth.StorageMigration{}, fmt.Errorf("provision dedicated bucket: %w", err)
 	}
 
 	m, err := qtx.CreateStorageMigration(ctx, pgUUID(args.TenantID),
@@ -58,12 +58,12 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenant.Star
 		args.CleanupRetentionSeconds)
 	if err != nil {
 		if isUniqueViolation(err) {
-			return tenant.StorageMigration{}, tenant.ErrStorageMigrationExists
+			return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationExists
 		}
-		return tenant.StorageMigration{}, fmt.Errorf("create storage migration: %w", err)
+		return tenanth.StorageMigration{}, fmt.Errorf("create storage migration: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return tenant.StorageMigration{}, err
+		return tenanth.StorageMigration{}, err
 	}
 	return storageMigrationToDomain(m, args.SourceBackendName, args.SourceBucketName,
 		args.TargetBackendName, args.TargetBucketName), nil
@@ -80,21 +80,21 @@ func (r *TenantRepo) TenantSourceBucket(ctx context.Context, tenantID uuid.UUID)
 	}
 	switch len(rows) {
 	case 0:
-		return "", "", tenant.ErrNotFound
+		return "", "", tenanth.ErrNotFound
 	case 1:
 		return rows[0].BackendName, rows[0].BucketName, nil
 	default:
-		return "", "", tenant.ErrSourceBucketAmbiguous
+		return "", "", tenanth.ErrSourceBucketAmbiguous
 	}
 }
 
-func (r *TenantRepo) GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (tenant.StorageMigration, error) {
+func (r *TenantRepo) GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (tenanth.StorageMigration, error) {
 	m, err := r.q.GetStorageMigration(ctx, pgUUID(tenantID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tenant.StorageMigration{}, tenant.ErrNotFound
+			return tenanth.StorageMigration{}, tenanth.ErrNotFound
 		}
-		return tenant.StorageMigration{}, err
+		return tenanth.StorageMigration{}, err
 	}
 	return storageMigrationToDomain(m.TenantStorageMigration, m.SourceBackendName, m.SourceBucketName, m.TargetBackendName, m.TargetBucketName), nil
 }

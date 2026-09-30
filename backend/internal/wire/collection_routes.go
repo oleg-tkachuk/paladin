@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
-	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	policy "github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
@@ -35,7 +35,7 @@ type collectionLister interface {
 // defaultBindingReader is the slice of tenant.Repository this needs — reading
 // the tenant's default route to decide which Collections get a bare (B) alias.
 type defaultBindingReader interface {
-	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error)
+	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenanth.DefaultBinding, error)
 }
 
 // collectionRouteLister assembles the WhoAmI Collection route table (ADR-0014
@@ -63,7 +63,7 @@ func (l collectionRouteLister) ListCollectionRoutes(ctx context.Context, tenantI
 	var dbBackend, dbBucket string
 	if db, err := l.tenants.GetDefaultBinding(ctx, tenantID); err == nil {
 		dbBackend, dbBucket = db.BackendName, db.BucketName
-	} else if !errors.Is(err, tenant.ErrNotFound) {
+	} else if !errors.Is(err, tenanth.ErrNotFound) {
 		return nil, "", err
 	}
 

@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
@@ -22,7 +22,7 @@ type MultipartServer struct {
 	H multipartHandler
 }
 
-func NewMultipartServer(h *multipart.Handler) *MultipartServer { return &MultipartServer{H: h} }
+func NewMultipartServer(h *multiparth.Handler) *MultipartServer { return &MultipartServer{H: h} }
 
 func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *connect.Request[pb.InitiateMultipartUploadRequest]) (*connect.Response[pb.InitiateMultipartUploadResponse], error) {
 	m := req.Msg
@@ -30,7 +30,7 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 	if err != nil {
 		return nil, badName(err)
 	}
-	sess, err := s.H.InitiateMultipartUpload(ctx, multipart.InitiateArgs{
+	sess, err := s.H.InitiateMultipartUpload(ctx, multiparth.InitiateArgs{
 		Collection:   collection,
 		Key:          m.GetKey(),
 		ContentType:  m.GetContentType(),
@@ -79,14 +79,14 @@ func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[
 
 func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *connect.Request[pb.CompleteMultipartUploadRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	parts := make([]multipart.PartETag, 0, len(m.GetParts()))
+	parts := make([]multiparth.PartETag, 0, len(m.GetParts()))
 	for _, p := range m.GetParts() {
-		parts = append(parts, multipart.PartETag{
+		parts = append(parts, multiparth.PartETag{
 			PartNumber: p.GetPartNumber(),
 			ETag:       p.GetEtag(),
 		})
 	}
-	if err := s.H.CompleteMultipartUpload(ctx, multipart.CompleteArgs{
+	if err := s.H.CompleteMultipartUpload(ctx, multiparth.CompleteArgs{
 		UploadID: m.GetUploadId(),
 		Parts:    parts,
 	}); err != nil {
@@ -139,15 +139,15 @@ var _ = commonpb.PageResponse{}
 // The name is the caller's statement of which object the upload belongs to;
 // the handler checks it against the session. An unparseable name is rejected
 // here rather than silently treated as "no claim".
-func sessionRef(ctx context.Context, objectName string) (multipart.SessionRef, error) {
+func sessionRef(ctx context.Context, objectName string) (multiparth.SessionRef, error) {
 	collection, objectID, err := objectNameParts(ctx, objectName)
 	if err != nil {
-		return multipart.SessionRef{}, badName(err)
+		return multiparth.SessionRef{}, badName(err)
 	}
 	id, err := uuid.Parse(objectID)
 	if err != nil {
-		return multipart.SessionRef{}, connect.NewError(connect.CodeInvalidArgument,
+		return multiparth.SessionRef{}, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid object_id in object_name: %w", err))
 	}
-	return multipart.SessionRef{Collection: collection, ObjectID: id}, nil
+	return multiparth.SessionRef{Collection: collection, ObjectID: id}, nil
 }

@@ -34,8 +34,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -44,7 +44,7 @@ type Client struct {
 	s3      *s3.Client
 	presign *s3.PresignClient
 	cfg     config.StorageBackend
-	mode    object.CompletionMode
+	mode    objecth.CompletionMode
 	sseType string // "", "AES256", or "aws:kms"
 	sseKey  string
 	// backendID labels this client's storage-call metrics. A pointer because
@@ -119,9 +119,9 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 		}
 	})
 
-	mode := object.CompletionModeExplicit
+	mode := objecth.CompletionModeExplicit
 	if backend.Events.Enabled {
-		mode = object.CompletionModeImplicit
+		mode = objecth.CompletionModeImplicit
 	}
 
 	return &Client{
@@ -279,7 +279,7 @@ func (c *Client) resolveBucket(perCall string) string {
 	return c.cfg.Bucket
 }
 
-// ─── bucket.Provisioner ────────────────────────────────────────────────────
+// ─── bucketh.Provisioner ────────────────────────────────────────────────────
 // CreateBucket / DeleteBucket map directly to AWS S3 CreateBucket /
 // DeleteBucket. The adapter is bound to one backend at construction time;
 // the backendID parameter is accepted for interface symmetry but verified
@@ -369,7 +369,7 @@ func (c *Client) TagBucketOwner(ctx context.Context, backendID, bucketName strin
 // is reached only through the router (see router.go), so it no longer asserts
 // the interfaces directly.
 
-func (c *Client) PresignPut(ctx context.Context, args object.PresignPutArgs) (string, map[string]string, time.Time, error) {
+func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.PutObjectInput{
 		Bucket:      aws.String(c.resolveBucket(args.Bucket)),
 		Key:         aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
@@ -383,7 +383,7 @@ func (c *Client) PresignPut(ctx context.Context, args object.PresignPutArgs) (st
 	return req.URL, signedHeaders(req), time.Now().Add(args.TTL), nil
 }
 
-func (c *Client) PresignPost(ctx context.Context, args object.PresignPostArgs) (string, map[string]string, time.Time, error) {
+func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
 	// aws-sdk-go-v2 doesn't ship PresignPost; return a v4-signed PUT URL with
 	// POST-style fields so callers that requested POST have a working fallback.
 	in := &s3.PutObjectInput{
@@ -407,7 +407,7 @@ func (c *Client) PresignPost(ctx context.Context, args object.PresignPostArgs) (
 	return req.URL, fields, time.Now().Add(args.TTL), nil
 }
 
-func (c *Client) PresignGet(ctx context.Context, args object.PresignGetArgs) (string, map[string]string, time.Time, error) {
+func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.GetObjectInput{
 		Bucket: aws.String(c.resolveBucket(args.Bucket)),
 		Key:    aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
@@ -489,7 +489,7 @@ func (c *Client) confirmBucket(ctx context.Context, resolvedBucket string) error
 	return nil
 }
 
-func (c *Client) CopyObject(ctx context.Context, src, dst object.Location) error {
+func (c *Client) CopyObject(ctx context.Context, src, dst objecth.Location) error {
 	srcBucket := c.resolveBucket(src.Bucket)
 	dstBucket := c.resolveBucket(dst.Bucket)
 	_, err := c.s3.CopyObject(ctx, &s3.CopyObjectInput{
@@ -531,7 +531,7 @@ func (c *Client) DeleteObject(ctx context.Context, bucket string, tenantID uuid.
 
 // CompletionMode ignores the collection — the adapter fronts a single backend
 // whose Implicit/Explicit mode was chosen at construction time.
-func (c *Client) CompletionMode(collection string) object.CompletionMode {
+func (c *Client) CompletionMode(collection string) objecth.CompletionMode {
 	return c.mode
 }
 
@@ -551,7 +551,7 @@ func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID 
 	return aws.ToString(out.UploadId), nil
 }
 
-func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []multipart.PartETag) (string, int64, error) {
+func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []multiparth.PartETag) (string, int64, error) {
 	completed := make([]s3types.CompletedPart, 0, len(parts))
 	for _, p := range parts {
 		completed = append(completed, s3types.CompletedPart{
@@ -603,7 +603,7 @@ func (c *Client) ListMultipartParts(
 	storageUploadID, collection, key string,
 	maxParts int32,
 	afterPartNumber int32,
-) ([]multipart.Part, int32, error) {
+) ([]multiparth.Part, int32, error) {
 	in := &s3.ListPartsInput{
 		Bucket:   aws.String(c.resolveBucket(bucket)),
 		Key:      aws.String(composeKey(tenantID, collection, key)),
@@ -619,9 +619,9 @@ func (c *Client) ListMultipartParts(
 	if err != nil {
 		return nil, 0, fmt.Errorf("list multipart parts: %w", err)
 	}
-	parts := make([]multipart.Part, 0, len(out.Parts))
+	parts := make([]multiparth.Part, 0, len(out.Parts))
 	for _, p := range out.Parts {
-		part := multipart.Part{
+		part := multiparth.Part{
 			PartNumber: aws.ToInt32(p.PartNumber),
 			ETag:       strings.Trim(aws.ToString(p.ETag), `"`),
 		}
@@ -677,13 +677,13 @@ func (c *Client) Presign() *PresignView { return &PresignView{c: c} }
 // satisfies the presign.Storage interface and delegates here.
 
 func (p *PresignView) PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
-	return p.c.PresignGet(ctx, object.PresignGetArgs{
+	return p.c.PresignGet(ctx, objecth.PresignGetArgs{
 		TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key, TTL: ttl, ContentDisposition: disposition,
 	})
 }
 
 func (p *PresignView) PresignPut(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
-	return p.c.PresignPut(ctx, object.PresignPutArgs{
+	return p.c.PresignPut(ctx, objecth.PresignPutArgs{
 		TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key, ContentType: contentType,
 		ChecksumAlgo: checksumAlgo, SizeHint: sizeHint, TTL: ttl,
 	})
@@ -714,7 +714,7 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 
 // Open returns a StreamWriter that uploads a single object via S3 multipart.
 // 8 MiB parts are a reasonable default that balances memory vs S3 minimums.
-func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (object.StreamWriter, error) {
+func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (objecth.StreamWriter, error) {
 	resolvedBucket := c.resolveBucket(bucket)
 	fullKey := composeKey(tenantID, collection, key)
 	in := &s3.CreateMultipartUploadInput{

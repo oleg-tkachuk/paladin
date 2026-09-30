@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
 // BatchDeleteExecutor implements the BatchDelete operation type.
@@ -33,7 +33,7 @@ import (
 // surface as ErrVersionMismatch and that ID will land in the failure
 // list. Callers retry with a fresh BatchDelete if needed.
 type BatchDeleteExecutor struct {
-	Objects     object.Repository
+	Objects     objecth.Repository
 	Transitions Transitioner
 
 	// Permanent performs the hard delete. Optional: leave it nil and a
@@ -50,7 +50,7 @@ type BatchDeleteExecutor struct {
 // what stops anything in the executor from reaching a method that would need
 // one.
 type PermanentDeleter interface {
-	PermanentDelete(ctx context.Context, tenantID uuid.UUID, obj object.Object, rv int64, bypassGovernance bool) error
+	PermanentDelete(ctx context.Context, tenantID uuid.UUID, obj objecth.Object, rv int64, bypassGovernance bool) error
 }
 
 // BatchDeleteResponse is what we marshal into operation.Response on
@@ -72,12 +72,12 @@ type BatchDeleteFailure struct {
 }
 
 // Execute implements Executor.
-func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operation) ([]byte, error) {
+func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
 	if e.Objects == nil || e.Transitions == nil {
 		return nil, errors.New("BatchDeleteExecutor: dependencies missing (Objects / Transitions)")
 	}
 
-	var args batch.BatchDeleteArgs
+	var args batchh.BatchDeleteArgs
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}

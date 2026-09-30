@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -29,7 +29,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
 	hex := uuid.NewString()[:8]
-	if _, err := tenantRepo.Create(ctx, tenant.CreateTenantArgs{
+	if _, err := tenantRepo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID:         tid,
 		Slug:             "gate-" + hex,
 		DisplayName:      "gate-" + hex,
