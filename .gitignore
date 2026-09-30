@@ -103,3 +103,7 @@ lefthook-local.yml
 
 # ── Release tooling (root package.json: semantic-release only) ──────────────
 /node_modules/
+
+# Per-developer assistant instructions. Kept on the machine that uses them,
+# never in the repository or its history.
+CLAUDE.md
