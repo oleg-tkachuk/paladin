@@ -85,7 +85,9 @@ includes:
     dir: .
     vars:
       # trivy 0.74 does not pick .trivyignore.yaml up on its own.
-      TRIVY_FLAGS: --ignorefile .trivyignore.yaml
+      # frontend/.next is build output, rewritten by every `frontend:build`:
+      # a scan that overlaps one dies on a file deleted mid-walk.
+      TRIVY_FLAGS: --ignorefile .trivyignore.yaml --skip-dirs frontend/.next
       # sqlc, protobuf and mock output is not written by hand and not reviewed
       # as source; gosec reads its SQL string constants as hardcoded
       # credentials. Excluding it drops 141 of 188 findings, all of them noise,
