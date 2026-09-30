@@ -79,7 +79,7 @@ frontend/
 `src/gen/` is regenerated from the backend's protobuf definitions:
 
 ```bash
-pnpm run generate        # reads ../backend/proto, then prettier
+pnpm run generate        # reads ../proto, then prettier
 ```
 
 A proto change is a two-sided change. That is the main reason both halves

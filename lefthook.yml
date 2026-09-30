@@ -109,10 +109,9 @@ pre-commit:
       glob: "*.go"
       run: go vet ./...
 
-    - name: backend-buf-lint
-      root: backend/
+    - name: proto-buf-lint
       tags: [proto, lint]
-      glob: "backend/proto/**/*.proto"
+      glob: "proto/**/*.proto"
       run: |
         if command -v buf >/dev/null 2>&1; then
           buf lint proto

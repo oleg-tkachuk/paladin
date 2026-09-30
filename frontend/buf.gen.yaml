@@ -8,4 +8,4 @@ plugins:
     out: src/gen
     opt: target=ts
 inputs:
-  - directory: ../backend/proto
+  - directory: ../proto

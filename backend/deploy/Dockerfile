@@ -130,14 +130,13 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 COPY --link backend/cmd/ cmd/
 COPY --link backend/internal/ internal/
 COPY --link backend/migrations/ migrations/
-# proto/ is a self-contained buf module — buf.yaml/buf.gen.yaml/buf.lock now
-# live inside it (copied by the line above), so only sqlc.yaml is copied here.
-COPY --link backend/proto/ proto/
-COPY --link backend/sqlc.yaml ./
+# The contract lives at the repository root; the Go template is this module's.
+COPY --link proto/ /proto/
+COPY --link backend/buf.gen.yaml backend/sqlc.yaml ./
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    buf generate proto --template proto/buf.gen.yaml && \
+    buf generate /proto --template buf.gen.yaml && \
     go generate ./...
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \

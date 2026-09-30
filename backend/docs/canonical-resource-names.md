@@ -442,7 +442,7 @@ and will be exempt from the immutability trigger via session-level
 
 Phase 0 (~8 files):
 - `backend/migrations/033_tenant_identity_hardening.sql` (new)
-- `backend/proto/paladin/admin/v1/tenant_service.proto` (validate rules)
+- `proto/paladin/admin/v1/tenant_service.proto` (validate rules)
 - `backend/internal/api/v1/tenant/handler.go` (create + update guards,
   default display_name = slug, pg 23505 mapping)
 - `backend/internal/api/v1/tenant/handler_test.go`
@@ -468,7 +468,7 @@ Phase 2 (~10 files):
 - `frontend/src/lib/paladin/names.ts` (new) — TS mirror
 
 Phase 3 (~12 files):
-- `backend/proto/paladin/admin/v1/tenant_service.proto`
+- `proto/paladin/admin/v1/tenant_service.proto`
 - `backend/internal/api/v1/tenant/default_binding.go` (new)
 - `backend/internal/db/queries/tenant_default_binding.sql` (new)
 - `backend/migrations/032_tenant_default_bindings.sql` (new)
@@ -477,7 +477,7 @@ Phase 3 (~12 files):
 - regenerated proto/sqlc
 
 Phase 4 (~6 files):
-- `backend/proto/paladin/iam/v1/whoami.proto` (extend)
+- `proto/paladin/iam/v1/whoami.proto` (extend)
 - `backend/internal/api/v1/whoami/handler.go`
 - `frontend/src/lib/paladin/sdk.ts`
 - `frontend/src/lib/auth/whoami.ts`

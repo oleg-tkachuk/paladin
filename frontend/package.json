@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "generate": "buf generate ../backend/proto --include-imports && prettier --write src/gen",
+    "generate": "buf generate ../proto --include-imports && prettier --write src/gen",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",

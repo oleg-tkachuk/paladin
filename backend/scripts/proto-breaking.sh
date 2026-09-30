@@ -49,5 +49,6 @@ if ! git rev-parse --verify --quiet "refs/tags/$API_BASELINE_TAG" >/dev/null; th
 fi
 
 echo ">>> [proto] buf breaking against $API_BASELINE_TAG"
-buf breaking backend/proto --against ".git#tag=$API_BASELINE_TAG,subdir=backend/proto"
+# Baselines up to api/v0.10.0 were cut while the contract lived in backend/.
+buf breaking proto --against ".git#tag=$API_BASELINE_TAG,subdir=backend/proto"
 echo ">>> [proto] wire contract unchanged since $API_BASELINE_TAG"

@@ -63,14 +63,13 @@ includes:
     taskfile: '{{printf .TASKLIB "codegen"}}'
     dir: .
     vars:
-      BUF_INPUT: proto
-      BUF_TEMPLATE: ["proto/buf.gen.yaml"]
-      # proto/buf.gen.yaml writes with `out: .` — its plugins carry the
+      BUF_INPUT: ../proto
+      BUF_TEMPLATE: ["buf.gen.yaml"]
+      # buf.gen.yaml writes with `out: .` — its plugins carry the
       # subdirectory in `module=`, so the proto drift gate has to be told
       # where the stubs land rather than watching the whole component.
       PROTO_PATHSPEC: internal/api/pb
       GENERATED_DIRS: ["internal/api/pb"]
-      PROTO_FORBID: proto/internal
       # Run sqlc through `go run`, so the version that regenerates is the one
       # go.mod pins rather than whatever is on PATH. The bindings carry their
       # generating version in a banner comment, so a PATH sqlc one minor ahead

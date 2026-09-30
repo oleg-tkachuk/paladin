@@ -160,7 +160,7 @@ CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
 | [docs/](docs) | the documents above |
 
 Both halves share a repository because a wire-contract change is a change to
-both: the proto in `backend/proto/` is the source of truth, and the console
+both: the proto in `proto/` is the source of truth, and the console
 regenerates its Connect-ES stubs from it.
 
 Compatibility is not kept across releases yet, and only `main` is supported —

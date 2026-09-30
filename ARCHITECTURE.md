@@ -137,7 +137,7 @@ audit record.
 Next.js, with a BFF between the browser and the planes. The browser
 never holds a plane URL or an upstream credential; it talks to
 `/api/paladin`, and the BFF forwards over Connect. Both halves generate their
-clients from the same `backend/proto/` directory, which is the main
+clients from the same `proto/` directory, which is the main
 reason they share a repository — a wire change is a two-sided change and
 should be one commit.
 

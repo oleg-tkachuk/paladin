@@ -28,7 +28,7 @@ The audience is enforced, not advisory: each mux is wrapped with
 rejected before any handler runs. This is what stops a token handed to a
 browser from reaching tenant administration.
 
-- **Proto**: `backend/proto/paladin/{admin,data,iam,common}/v1/`
+- **Proto**: `proto/paladin/{admin,data,iam,common}/v1/`
 - **Protocol**: Connect, Connect-Web and gRPC over the same endpoints
 - **Handlers**: `backend/internal/api/connectshim/`
 - **Surface**: 142 RPCs across 27 services
