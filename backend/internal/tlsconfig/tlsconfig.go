@@ -1,4 +1,6 @@
-package utils
+// Package tlsconfig builds the tls.Config the listeners and outbound clients
+// share, and maps the configured client-auth mode onto Go's enum.
+package tlsconfig
 
 import (
 	"crypto/tls"
@@ -8,7 +10,7 @@ import (
 	"strings"
 )
 
-// NewTLSConfig creates a tls.Config based on the provided settings.
+// New creates a tls.Config based on the provided settings.
 //
 // Used for BOTH client outbound (sets RootCAs) and server inbound
 // (sets ClientCAs). For server-side mTLS termination, also set
@@ -17,7 +19,7 @@ import (
 // for the wire-up. The `ClientCAs` pool here mirrors RootCAs by
 // design: callers + callees within the cluster share the same
 // internal-mtls CA bundle.
-func NewTLSConfig(certPath, keyPath, caPath, serverName string, insecureSkipVerify bool) (*tls.Config, error) {
+func New(certPath, keyPath, caPath, serverName string, insecureSkipVerify bool) (*tls.Config, error) {
 	var cert tls.Certificate
 	var err error
 

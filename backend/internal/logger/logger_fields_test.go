@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
 )
 
 // The existing suite could only check that enrichment does not panic. An
@@ -239,8 +239,8 @@ func TestActorContext(t *testing.T) {
 
 func TestEnrichAddsRequestAndTenant(t *testing.T) {
 	l, logs := observed()
-	ctx := utils.WithTenantID(context.Background(), "tenant-7")
-	ctx = context.WithValue(ctx, utils.RequestIDKey, "req-9")
+	ctx := reqctx.WithTenantID(context.Background(), "tenant-7")
+	ctx = reqctx.WithRequestID(ctx, "req-9")
 
 	FromContext(WithContext(ctx, l)).Info("x")
 
@@ -336,7 +336,7 @@ func TestAuditFromContextAttachesActorAndEnrichment(t *testing.T) {
 	ReplaceGlobals(base)
 	t.Cleanup(func() { globalAppLogger, globalAuditLogger = nil, nil })
 
-	ctx := WithActor(utils.WithTenantID(context.Background(), "t-1"), "alice")
+	ctx := WithActor(reqctx.WithTenantID(context.Background(), "t-1"), "alice")
 	AuditFromContext(ctx).Info("did a thing")
 
 	f := fields(t, logs)

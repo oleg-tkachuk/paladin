@@ -106,7 +106,7 @@ admin: {
     server_name:          string | *""
     insecure_skip_verify: bool   | *false
     // Server-side mTLS termination knob (#25a). Only meaningful on
-    // inbound TLS listeners. See internal/utils/tls.go ParseClientAuth
+    // inbound TLS listeners. See internal/tlsconfig ParseClientAuth
     // for the mapping onto tls.ClientAuthType.
     client_auth:          *"" | "none" | "request" | "require" | "permissive" | "strict"
   }

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/bytesize"
 
 	_ "embed"
 
@@ -124,7 +124,7 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 		if b.PartSizeRaw == "" {
 			continue
 		}
-		n, err := utils.ParseSizeString(b.PartSizeRaw)
+		n, err := bytesize.Parse(b.PartSizeRaw)
 		if err != nil {
 			return Config{}, fmt.Errorf("storage.backends.%s.part_size (%s): %w", name, b.PartSizeRaw, err)
 		}
@@ -132,25 +132,25 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 		cfg.Storage.Backends[name] = b
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Limits.MaxObjectSizeRaw); err == nil {
+	if n, err := bytesize.Parse(cfg.Limits.MaxObjectSizeRaw); err == nil {
 		cfg.Limits.MaxObjectSizeBytes = n
 	} else {
 		return Config{}, fmt.Errorf("failed to parse limits.max_object_size (%s): %w", cfg.Limits.MaxObjectSizeRaw, err)
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Limits.MaxMultipartSizeRaw); err == nil {
+	if n, err := bytesize.Parse(cfg.Limits.MaxMultipartSizeRaw); err == nil {
 		cfg.Limits.MaxMultipartSizeBytes = n
 	} else {
 		return Config{}, fmt.Errorf("failed to parse limits.max_multipart_size (%s): %w", cfg.Limits.MaxMultipartSizeRaw, err)
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Limits.MinPartSizeRaw); err == nil {
+	if n, err := bytesize.Parse(cfg.Limits.MinPartSizeRaw); err == nil {
 		cfg.Limits.MinPartSizeBytes = n
 	} else {
 		return Config{}, fmt.Errorf("failed to parse limits.min_part_size (%s): %w", cfg.Limits.MinPartSizeRaw, err)
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Limits.MaxPartSizeRaw); err == nil {
+	if n, err := bytesize.Parse(cfg.Limits.MaxPartSizeRaw); err == nil {
 		cfg.Limits.MaxPartSizeBytes = n
 	} else {
 		return Config{}, fmt.Errorf("failed to parse limits.max_part_size (%s): %w", cfg.Limits.MaxPartSizeRaw, err)

@@ -1,4 +1,4 @@
-package utils
+package bytesize
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseSizeString(t *testing.T) {
+func TestParse(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected int64
@@ -22,7 +22,7 @@ func TestParseSizeString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got, err := ParseSizeString(tt.input)
+			got, err := Parse(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

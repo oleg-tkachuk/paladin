@@ -15,7 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/tlsconfig"
 )
 
 // HTTPListener bundles one *http.Server with its plane label, used for
@@ -127,8 +127,8 @@ func (a *App) Run() error {
 				// callers both work); "strict" requires a verified
 				// client cert (the destination posture once every
 				// in-cluster caller is migrated). See
-				// utils.ParseClientAuth + internal/utils/tls.go.
-				tlsCfg, terr := utils.NewTLSConfig(
+				// tlsconfig.ParseClientAuth.
+				tlsCfg, terr := tlsconfig.New(
 					l.TLS.CertPath, l.TLS.KeyPath, l.TLS.CaPath,
 					l.TLS.ServerName, l.TLS.InsecureSkipVerify,
 				)
@@ -136,7 +136,7 @@ func (a *App) Run() error {
 					errCh <- fmt.Errorf("plane %s: build tls config: %w", l.Plane, terr)
 					return
 				}
-				clientAuth, terr := utils.ParseClientAuth(l.TLS.ClientAuth)
+				clientAuth, terr := tlsconfig.ParseClientAuth(l.TLS.ClientAuth)
 				if terr != nil {
 					errCh <- fmt.Errorf("plane %s: parse client_auth: %w", l.Plane, terr)
 					return

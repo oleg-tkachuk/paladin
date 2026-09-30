@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -33,8 +33,8 @@ func TestNewBootstrapLogger(t *testing.T) {
 
 func TestFromContext(t *testing.T) {
 	ctx := context.Background()
-	ctx = utils.WithTenantID(ctx, "test-tenant")
-	ctx = context.WithValue(ctx, utils.RequestIDKey, "test-request-id")
+	ctx = reqctx.WithTenantID(ctx, "test-tenant")
+	ctx = reqctx.WithRequestID(ctx, "test-request-id")
 
 	l := FromContext(ctx)
 	if l == nil {

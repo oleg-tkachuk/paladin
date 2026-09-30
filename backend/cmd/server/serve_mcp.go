@@ -23,7 +23,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/tlsconfig"
 )
 
 // Flags scoped to `serve mcp`. Cobra binds them in init().
@@ -561,7 +561,7 @@ func upstreamHTTPClient(up config.MCPUpstreams) (*http.Client, error) {
 	if up.TLS.CaPath == "" && up.TLS.CertPath == "" && !up.TLS.InsecureSkipVerify {
 		return c, nil
 	}
-	tlsCfg, err := utils.NewTLSConfig(
+	tlsCfg, err := tlsconfig.New(
 		up.TLS.CertPath, up.TLS.KeyPath, up.TLS.CaPath,
 		up.TLS.ServerName, up.TLS.InsecureSkipVerify,
 	)

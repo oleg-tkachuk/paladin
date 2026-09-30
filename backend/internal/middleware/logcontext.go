@@ -9,7 +9,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
 )
 
 // LogContext puts a request-scoped logger on the context.
@@ -43,13 +43,13 @@ func LogContext(base *zap.Logger) connect.UnaryInterceptorFunc {
 // paths cannot drift.
 func withLogContext(ctx context.Context, base *zap.Logger, requestID, procedure string) context.Context {
 	if requestID != "" {
-		ctx = context.WithValue(ctx, utils.RequestIDKey, requestID)
+		ctx = reqctx.WithRequestID(ctx, requestID)
 	}
 	// The tenant comes from the verified principal rather than from a header:
 	// a header-supplied tenant id in a log line is an assertion by the caller,
 	// which is exactly what a log used for an audit trail must not contain.
 	if p, err := auth.PrincipalFromContext(ctx); err == nil && p != nil && p.TenantID.String() != "" {
-		ctx = utils.WithTenantID(ctx, p.TenantID.String())
+		ctx = reqctx.WithTenantID(ctx, p.TenantID.String())
 	}
 	if base != nil {
 		ctx = logger.WithContext(ctx, base.With(zap.String("rpc", procedure)))

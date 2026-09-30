@@ -28,7 +28,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
-	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
 )
 
 // New builds the application logger from config. Sampling, structured
@@ -228,10 +228,10 @@ func enrich(ctx context.Context, l *zap.Logger) *zap.Logger {
 			zap.String("span_id", sc.SpanID().String()),
 		)
 	}
-	if rid := utils.RequestIDFromContext(ctx, ""); rid != "" {
+	if rid := reqctx.RequestID(ctx, ""); rid != "" {
 		l = l.With(zap.String("request_id", rid))
 	}
-	if tid := utils.TenantIDFromContext(ctx, ""); tid != "" {
+	if tid := reqctx.TenantID(ctx, ""); tid != "" {
 		l = l.With(zap.String("tenant_id", tid))
 	}
 	return l

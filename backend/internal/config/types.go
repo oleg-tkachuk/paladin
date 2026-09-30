@@ -175,7 +175,7 @@ type TLS struct {
 	// useful during rollout cutover so plaintext + mTLS callers
 	// both work), "strict" (require-and-verify — full mTLS,
 	// the destination posture).
-	// See utils.ParseClientAuth for the mapping onto tls.ClientAuthType.
+	// See tlsconfig.ParseClientAuth for the mapping onto tls.ClientAuthType.
 	ClientAuth string `yaml:"client_auth" json:"client_auth"`
 }
 
