@@ -330,6 +330,34 @@ jobs:
           pipx run "zizmor==${ZIZMOR_VERSION}" \
             --config .github/zizmor.yml --persona=regular --format=plain .github/workflows/
 
+  # The one check a ruleset can require. The Verify jobs are a matrix whose
+  # members change with the paths a change touches, so no single job name is
+  # always present; this one always is. A skipped job was not reached by the
+  # change, which is a pass; a failure or a cancellation anywhere is not.
+  checks:
+    name: All checks passed
+    needs: [changes, test, syntax, audit]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require every job to have passed or been skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          printf 'results: %s\n' "$RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *)
+                printf '%s\n' "a required job ended as ${result}"
+                exit 1
+                ;;
+            esac
+          done
+
   dispatch-release:
     name: Dispatch release
     needs: [changes, test, syntax, audit]
