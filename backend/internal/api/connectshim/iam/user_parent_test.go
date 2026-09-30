@@ -15,8 +15,14 @@ import (
 // listingUser records the scope ListUsers reached the handler with.
 type listingUser struct {
 	failingUser
-	got   userh.ListUsersInput
-	calls int
+	got     userh.ListUsersInput
+	created userh.CreateUserInput
+	calls   int
+}
+
+func (l *listingUser) CreateUser(_ context.Context, in userh.CreateUserInput) (*authstore.User, error) {
+	l.created = in
+	return &authstore.User{TenantID: in.TenantID, Subject: in.Subject}, nil
 }
 
 func (l *listingUser) ListUsers(_ context.Context, in userh.ListUsersInput) ([]authstore.User, string, error) {
@@ -33,7 +39,7 @@ func TestListUsersRefusesAnUnparseableParent(t *testing.T) {
 
 	h := &listingUser{}
 	_, err := (&UserServer{H: h}).ListUsers(context.Background(), connect.NewRequest(&pb.ListUsersRequest{
-		Parent: "tenants/acme",
+		Parent: "tenants/Not A Slug!",
 	}))
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want %v (err: %v)", got, connect.CodeInvalidArgument, err)
