@@ -12,6 +12,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A run by hand has no diff to classify, so it runs every check. It never
+  # dispatches a release: that job requires a push event.
+  workflow_dispatch:
 
 # Nothing at the top level — each job asks for what it needs.
 permissions: {}
