@@ -51,7 +51,7 @@ const PUBLIC_PREFIXES = [
 // methods (GET/HEAD/OPTIONS) are exempt.
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // CSRF defense: a state-changing request to any API route must come
