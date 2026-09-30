@@ -341,7 +341,7 @@ type Querier interface {
 	// Lists every (tenant_id, collection name) bound to a given bucket. Used by
 	// lifecycle + replication workers to scope their object scans.
 	ListCollectionBindingsForBucket(ctx context.Context, name string, name_2 string) ([]ListCollectionBindingsForBucketRow, error)
-	// Every registered name name for the tenant. Backs the in-process
+	// Every registered collection name for the tenant. Backs the in-process
 	// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
 	// not a per-event query on the ingest hot path. collections is small per tenant
 	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.

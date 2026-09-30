@@ -158,7 +158,7 @@ FROM collections
 WHERE tenant_id = $1
 `
 
-// Every registered name name for the tenant. Backs the in-process
+// Every registered collection name for the tenant. Backs the in-process
 // longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
 // not a per-event query on the ingest hot path. collections is small per tenant
 // (bounded by the tenant's namespace layout), so the unbounded read is cheap.
