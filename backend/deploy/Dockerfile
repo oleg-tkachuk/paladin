@@ -89,9 +89,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
         -trimpath \
         -tags=go_json \
         -ldflags="-w -s \
-            ${APP_VERSION:+-X 'main.version=${APP_VERSION}'} \
-            ${GIT_COMMIT_HASH:+-X 'main.commit=${GIT_COMMIT_HASH}'} \
-            ${BUILD_TIME:+-X 'main.buildTime=${BUILD_TIME}'}" \
+            ${APP_VERSION:+-X main.version=${APP_VERSION}} \
+            ${GIT_COMMIT_HASH:+-X main.commit=${GIT_COMMIT_HASH}} \
+            ${BUILD_TIME:+-X main.buildTime=${BUILD_TIME}}" \
         -o /out/paladin-core ./cmd/server
 
 # -----------------------------------------------------------------------------

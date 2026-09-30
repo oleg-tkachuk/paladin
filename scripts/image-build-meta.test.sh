@@ -25,7 +25,7 @@ for pair in "${METADATA[@]}"; do
         fail=1
     fi
     # The -X flag must be conditional on the ARG being set.
-    if ! grep -F "\${${arg}:+-X 'main.${var}=\${${arg}}'}" "$DOCKERFILE" >/dev/null; then
+    if ! grep -F "\${${arg}:+-X main.${var}=\${${arg}}}" "$DOCKERFILE" >/dev/null; then
         echo "!!! -X main.$var is not conditional on $arg being set" >&2
         fail=1
     fi

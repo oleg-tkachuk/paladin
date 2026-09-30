@@ -230,6 +230,9 @@ tasks:
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
+      # hadolint over both images; the checkov Dockerfile scan does not lint
+      # the shell inside RUN.
+      - task: sec:dockerfile
       - task: verify:chart-scan
       # Last on purpose: toolchain drift is the least urgent thing in this
       # list, and running it earlier would mask a real test failure behind it.
