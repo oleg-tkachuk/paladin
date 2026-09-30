@@ -50,6 +50,7 @@ describe("transport interceptors", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.resetModules();
   });
@@ -86,6 +87,7 @@ describe("transport interceptors", () => {
         return new Response(null, { status: 404 });
       }),
     );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { bucketClient } = await import("@/lib/connect/client");
     await expect(
       bucketClient.createBucket({
@@ -94,6 +96,12 @@ describe("transport interceptors", () => {
       }),
     ).rejects.toThrow();
     expect(rpcCalls).toBe(2); // original + exactly one retry, then it stops
+    // A failure that reaches the caller is also logged, once, by method.
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(logged).toHaveBeenCalledWith(
+      "[RPC Error] CreateBucket:",
+      expect.anything(),
+    );
   });
 });
 
@@ -104,6 +112,7 @@ describe("transport interceptors", () => {
 // the session's refresh family had been revoked.
 describe("auth interceptor with no mintable token", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.resetModules();
   });
@@ -123,9 +132,14 @@ describe("auth interceptor with no mintable token", () => {
       }),
     );
 
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { tenantClient } = await import("@/lib/connect/client");
     await expect(tenantClient.listTenants({})).rejects.toThrow(
       /no paladin-admin access token/,
+    );
+    expect(logged).toHaveBeenCalledWith(
+      "[RPC Error] ListTenants:",
+      expect.anything(),
     );
   });
 });
@@ -135,6 +149,7 @@ describe("auth interceptor with no mintable token", () => {
 // refused exchanges and a request the backend could only reject.
 describe("auth interceptor when the audience is refused", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.resetModules();
   });
@@ -158,9 +173,14 @@ describe("auth interceptor when the audience is refused", () => {
       }),
     );
 
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { Code, ConnectError } = await import("@connectrpc/connect");
     const { tenantClient } = await import("@/lib/connect/client");
     const err = await tenantClient.listTenants({}).catch((e: unknown) => e);
+    expect(logged).toHaveBeenCalledWith(
+      "[RPC Error] ListTenants:",
+      expect.anything(),
+    );
 
     expect(err).toBeInstanceOf(ConnectError);
     expect((err as InstanceType<typeof ConnectError>).code).toBe(
