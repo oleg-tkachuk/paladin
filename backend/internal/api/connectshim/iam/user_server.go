@@ -2,6 +2,7 @@ package iam
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,7 +11,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -18,16 +22,68 @@ import (
 
 type UserServer struct {
 	paladiniamv1connect.UnimplementedUserServiceHandler
-	H userHandler
+	H       userHandler
+	tenants tenantSlugSource
 }
 
-func NewUserServer(h *userh.Handler) *UserServer { return &UserServer{H: h} }
+// tenantSlugSource resolves a tenant slug to its row. Satisfied by the
+// tenant repository.
+type tenantSlugSource interface {
+	GetBySlug(ctx context.Context, slug string) (tenanth.Tenant, error)
+}
+
+func NewUserServer(h *userh.Handler, tenants tenantSlugSource) *UserServer {
+	return &UserServer{H: h, tenants: tenants}
+}
+
+// errForeignTenantSlug refuses a slug that is not the caller's own tenant to a
+// caller who is not a platform admin. It is returned without a lookup, so the
+// answer is the same whether such a tenant exists or not.
+var errForeignTenantSlug = errors.New("tenant is not the caller's")
+
+// tenantParent resolves a `tenants/{tenant_id_or_slug}` parent to a tenant id;
+// an empty parent is the caller's whole scope. A UUID costs no lookup. A slug
+// is resolved without letting the answer reveal which slugs exist: the
+// caller's own slug comes from its token, a platform admin's is looked up, and
+// anyone else's is refused before any lookup. The handler still authorises
+// the resolved tenant.
+func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID, error) {
+	if parent == "" {
+		return uuid.Nil, nil
+	}
+	if !strings.HasPrefix(parent, apiutil.TenantNamePrefix) {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid parent %q (want %s{tenant_id_or_slug})", parent, apiutil.TenantNamePrefix))
+	}
+	ref, err := apiutil.ParseTenantNameRef(parent)
+	if err != nil {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if ref.HasID() {
+		return ref.ID, nil
+	}
+	p, _ := auth.PrincipalFromContext(ctx)
+	if p != nil && p.TenantSlug != "" && p.TenantSlug == ref.Slug {
+		return p.TenantID, nil
+	}
+	if p == nil || !p.HasRole(apiutil.RolePlatformAdmin) {
+		return uuid.Nil, connect.NewError(connect.CodePermissionDenied, errForeignTenantSlug)
+	}
+	t, err := s.tenants.GetBySlug(ctx, ref.Slug)
+	if errors.Is(err, tenanth.ErrNotFound) {
+		return uuid.Nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tenant %q not found", ref.Slug))
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return t.TenantID, nil
+}
 
 func (s *UserServer) CreateUser(ctx context.Context, req *connect.Request[pb.CreateUserRequest]) (*connect.Response[pb.User], error) {
 	m := req.Msg
-	tenantID, err := tenantFromParent(m.GetParent())
+	tenantID, err := s.tenantParent(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	out, err := s.H.CreateUser(ctx, userh.CreateUserInput{
 		TenantID:        tenantID,
@@ -101,9 +157,9 @@ func (s *UserServer) ListUsers(ctx context.Context, req *connect.Request[pb.List
 	// Empty parent is cross-tenant, and the handler enforces the role for it. A
 	// parent that does not parse is refused: it used to be dropped, which turned
 	// a request for one tenant's users into a listing of every tenant's.
-	tenantID, err := tenantFromParent(m.GetParent())
+	tenantID, err := s.tenantParent(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	users, next, err := s.H.ListUsers(ctx, userh.ListUsersInput{
 		TenantID:  tenantID,
@@ -169,17 +225,6 @@ var _ paladiniamv1connect.UserServiceHandler = (*UserServer)(nil)
 var _ = authstore.User{}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
-
-func tenantFromParent(parent string) (uuid.UUID, error) {
-	if parent == "" {
-		return uuid.Nil, nil
-	}
-	const prefix = "tenants/"
-	if !strings.HasPrefix(parent, prefix) {
-		return uuid.Nil, fmt.Errorf("invalid parent %q (want tenants/{id})", parent)
-	}
-	return uuid.Parse(parent[len(prefix):])
-}
 
 func userIDFromName(name string) (uuid.UUID, error) {
 	// Format: tenants/{tenant_id}/users/{user_id}

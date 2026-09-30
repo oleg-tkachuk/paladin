@@ -1,9 +1,11 @@
 package iam
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -174,27 +176,29 @@ func TestUserIDFromName(t *testing.T) {
 
 // An empty parent means "no tenant filter", which is distinct from an invalid
 // one — collapsing them would turn a typo into a silent list-everything.
-func TestTenantFromParent(t *testing.T) {
+func TestTenantParent(t *testing.T) {
+	srv := &UserServer{}
 	t.Run("empty means unfiltered", func(t *testing.T) {
-		got, err := tenantFromParent("")
+		got, err := srv.tenantParent(context.Background(), "")
 		if err != nil || got != uuid.Nil {
 			t.Errorf("got %v, %v", got, err)
 		}
 	})
-	t.Run("happy path", func(t *testing.T) {
-		got, err := tenantFromParent("tenants/" + tenantID.String())
+	t.Run("a uuid needs no lookup", func(t *testing.T) {
+		got, err := srv.tenantParent(context.Background(), "tenants/"+tenantID.String())
 		if err != nil || got != tenantID {
 			t.Errorf("got %v, %v", got, err)
 		}
 	})
 	for label, p := range map[string]string{
 		"wrong prefix": "orgs/" + tenantID.String(),
-		"bad uuid":     "tenants/not-a-uuid",
+		"not a slug":   "tenants/Not A Slug!",
 		"prefix only":  "tenants/",
 	} {
 		t.Run(label, func(t *testing.T) {
-			if _, err := tenantFromParent(p); err == nil {
-				t.Errorf("want an error for %q", p)
+			_, err := srv.tenantParent(context.Background(), p)
+			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+				t.Errorf("%q: code = %v, want %v (err: %v)", p, got, connect.CodeInvalidArgument, err)
 			}
 		})
 	}
