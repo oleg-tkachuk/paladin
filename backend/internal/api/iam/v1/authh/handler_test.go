@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -485,6 +486,30 @@ func TestAssertAudienceAllowed(t *testing.T) {
 	}
 	if err := h.assertAudienceAllowed(user, "paladin-bogus"); code(err) != connect.CodeInvalidArgument {
 		t.Errorf("unknown audience: code = %v, want InvalidArgument", code(err))
+	}
+}
+
+// Each role's answer for the admin audience. The two platform roles do all
+// their work on the admin plane; the suffix rule refused them, and granted any
+// role that happened to end in ".admin".
+func TestAssertAudienceAllowed_AdminAudiencePerRole(t *testing.T) {
+	h := &Handler{}
+	cases := map[string]bool{
+		apiutil.RolePlatformAdmin:     true,
+		apiutil.RoleTenantAdmin:       true,
+		apiutil.RoleBucketAdmin:       true,
+		apiutil.RoleIAMAdmin:          true,
+		apiutil.RoleTenantProvisioner: true,
+		apiutil.RoleCapabilityIssuer:  true,
+		apiutil.RoleTenantUser:        false,
+		apiutil.RoleMCPOperator:       false,
+		"invented.admin":              false,
+	}
+	for role, want := range cases {
+		err := h.assertAudienceAllowed(authstore.User{Roles: []string{role}}, auth.AudienceAdmin)
+		if got := err == nil; got != want {
+			t.Errorf("%s → admin audience allowed = %v, want %v (err %v)", role, got, want, err)
+		}
 	}
 }
 

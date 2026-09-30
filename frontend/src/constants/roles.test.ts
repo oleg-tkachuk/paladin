@@ -9,15 +9,19 @@ describe("canUseAdminPlane", () => {
     [[ROLES.bucketAdmin]],
     [[ROLES.iamAdmin]],
     [[ROLES.tenantUser, ROLES.tenantAdmin]],
+    [[ROLES.tenantProvisioner]],
+    [[ROLES.capabilityIssuer]],
   ])("admits %j", (roles) => {
     expect(canUseAdminPlane(roles)).toBe(true);
   });
 
   // The same principals IAM refuses the paladin-admin audience.
-  it.each([[[]], [[ROLES.tenantUser]], [[ROLES.mcpOperator]]])(
-    "refuses %j",
-    (roles) => {
-      expect(canUseAdminPlane(roles)).toBe(false);
-    },
-  );
+  it.each([
+    [[]],
+    [[ROLES.tenantUser]],
+    [[ROLES.mcpOperator]],
+    [["invented.admin"]],
+  ])("refuses %j", (roles) => {
+    expect(canUseAdminPlane(roles)).toBe(false);
+  });
 });

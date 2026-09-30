@@ -40,6 +40,21 @@ const (
 	RoleTenantProvisioner = "platform.tenant-provisioner"
 )
 
+// AdminAudienceRoles are the roles IAM issues the paladin-admin audience to:
+// each one's work is on the admin plane. tenant.user and mcp.operator have
+// none there. An explicit list rather than a name pattern, so a new role
+// reaches the admin plane only by being added here. The console mirrors it
+// (frontend/src/constants/roles.ts), and scripts/admin-audience-roles.test.sh
+// keeps the two equal.
+var AdminAudienceRoles = []string{
+	RolePlatformAdmin,
+	RoleTenantAdmin,
+	RoleBucketAdmin,
+	RoleIAMAdmin,
+	RoleTenantProvisioner,
+	RoleCapabilityIssuer,
+}
+
 // RequireRole returns Unauthenticated when no principal is present and
 // PermissionDenied when the principal lacks the role.
 func RequireRole(ctx context.Context, role string) error {

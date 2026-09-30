@@ -34,10 +34,18 @@ export const ASSIGNABLE_ROLES: readonly string[] = [
 ];
 
 /**
- * IAM issues the paladin-admin audience only to a principal holding a role
- * that ends in this (authh.isAdminRole); a pure tenant.user never gets one.
+ * The roles IAM issues the paladin-admin audience to — apiutil.
+ * AdminAudienceRoles, and scripts/admin-audience-roles.test.sh keeps the two
+ * lists equal. A pure tenant.user or mcp.operator never gets one.
  */
-export const ADMIN_TIER_ROLE_SUFFIX = ".admin";
+export const ADMIN_AUDIENCE_ROLES: readonly string[] = [
+  ROLES.platformAdmin,
+  ROLES.tenantAdmin,
+  ROLES.bucketAdmin,
+  ROLES.iamAdmin,
+  ROLES.tenantProvisioner,
+  ROLES.capabilityIssuer,
+];
 
 /**
  * Whether the admin plane is reachable at all for these roles. The console
@@ -45,5 +53,5 @@ export const ADMIN_TIER_ROLE_SUFFIX = ".admin";
  * call.
  */
 export function canUseAdminPlane(roles: readonly string[]): boolean {
-  return roles.some((r) => r.endsWith(ADMIN_TIER_ROLE_SUFFIX));
+  return roles.some((r) => ADMIN_AUDIENCE_ROLES.includes(r));
 }

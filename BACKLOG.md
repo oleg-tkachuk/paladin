@@ -2152,19 +2152,6 @@ finding moving from "packages you import" to "your code is affected".
   plane.
 - **Blockers:** none.
 
-## Which roles receive the admin audience is decided by a name suffix
-
-- **Status:** Open question.
-- **Reason:** `authh.isAdminRole` admits a role ending in `.admin`, so
-  `platform.tenant-provisioner`, `platform.capability-issuer` and
-  `mcp.operator` — roles whose work is on the admin plane — are refused the
-  paladin-admin audience unless they also hold an `*.admin` role. The console
-  mirrors the suffix (`ADMIN_TIER_ROLE_SUFFIX`).
-- **Definition of Done:** the audience grant is an explicit per-role list in
-  one place, the console reads it rather than a suffix, and a test pins each
-  role's answer.
-- **Blockers:** the intended powers of the three roles.
-
 ## A proto change cannot pass the gate before it is committed
 
 - **Status:** Deferred.

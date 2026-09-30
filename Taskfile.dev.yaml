@@ -226,6 +226,7 @@ tasks:
       - task: verify:frontend-gen
       - task: verify:image-uid
       - task: verify:image-build-meta
+      - task: verify:admin-audience-roles
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
@@ -379,6 +380,11 @@ tasks:
     desc: "Fail when the console's Connect-ES stubs are stale against proto/"
     cmds:
       - ./scripts/frontend-gen.test.sh
+
+  verify:admin-audience-roles:
+    desc: "Fail when the console and IAM disagree on which roles reach the admin plane"
+    cmds:
+      - ./scripts/admin-audience-roles.test.sh
 
   verify:image-build-meta:
     desc: "Fail when the backend image would bake a placeholder version into the binary"

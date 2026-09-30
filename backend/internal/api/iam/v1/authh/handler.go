@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -741,12 +743,9 @@ func (h *Handler) assertAudienceAllowed(u authstore.User, audience string) error
 	case auth.AudienceData, auth.AudienceIAM:
 		return nil
 	case auth.AudienceAdmin:
-		// Any role on the principal *might* permit some admin operation —
-		// Cedar makes the actual call. We allow audience escalation when the
-		// user holds at least one admin-tier role, and reject pure
-		// `tenant.user` callers from receiving admin-aud tokens entirely.
+		// The audience only opens the plane; Cedar still decides each call.
 		for _, role := range u.Roles {
-			if isAdminRole(role) {
+			if slices.Contains(apiutil.AdminAudienceRoles, role) {
 				return nil
 			}
 		}
@@ -846,14 +845,6 @@ func checkLoginRow(u authstore.User, password string) (authstore.User, error) {
 		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
 	}
 	return u, nil
-}
-
-func isAdminRole(r string) bool {
-	switch r {
-	case "platform.admin", "tenant.admin", "bucket.admin", "iam.admin":
-		return true
-	}
-	return strings.HasSuffix(r, ".admin")
 }
 
 // mintPair issues an access+refresh pair. familyID groups the refresh chain:
