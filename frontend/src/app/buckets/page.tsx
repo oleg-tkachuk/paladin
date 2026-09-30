@@ -300,7 +300,7 @@ export default function BucketsPage() {
           />
         </div>
         <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger aria-label="Filter by backend" className="w-[200px]">
             <SelectValue placeholder="All backends" />
           </SelectTrigger>
           <SelectContent>

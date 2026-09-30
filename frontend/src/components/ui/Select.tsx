@@ -159,6 +159,9 @@ interface LegacySelectProps {
   /** Tailwind width class — kept for backward compatibility. */
   width?: string;
   disabled?: boolean;
+  /** For a <Label htmlFor>; without it, pass aria-label. */
+  id?: string;
+  "aria-label"?: string;
 }
 
 function Select({
@@ -169,10 +172,16 @@ function Select({
   className,
   width,
   disabled,
+  id,
+  "aria-label": ariaLabel,
 }: LegacySelectProps) {
   return (
     <SelectRoot value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className={cn(width, className)}>
+      <SelectTrigger
+        id={id}
+        aria-label={ariaLabel}
+        className={cn(width, className)}
+      >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

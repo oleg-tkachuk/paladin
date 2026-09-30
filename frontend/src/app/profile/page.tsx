@@ -317,6 +317,7 @@ export default function ProfilePage() {
                 <div className="space-y-1.5">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Select
+                      aria-label="Common timezones"
                       options={COMMON_TIMEZONES.map((tz) => ({
                         value: tz,
                         label: tz,
@@ -362,6 +363,7 @@ export default function ProfilePage() {
                 <div className="space-y-1.5">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Select
+                      aria-label="Common locales"
                       options={COMMON_LOCALES.map((lo) => ({
                         value: lo,
                         label: lo,

@@ -700,7 +700,10 @@ function RuleEditor({
                   value={form.afterUnit}
                   onValueChange={(v) => update("afterUnit", v as DurationUnit)}
                 >
-                  <SelectTrigger className="w-[170px]">
+                  <SelectTrigger
+                    aria-label="Duration unit"
+                    className="w-[170px]"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

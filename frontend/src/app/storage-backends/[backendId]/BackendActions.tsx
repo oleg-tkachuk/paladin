@@ -404,6 +404,7 @@ function EditBackendForm({
             <div className="space-y-2">
               <Label htmlFor="edit-sse-type">Server-side encryption</Label>
               <Select
+                id="edit-sse-type"
                 options={SSE_OPTIONS}
                 value={String(sseType)}
                 onChange={(v) => setSseType(Number(v) as SseType)}
@@ -436,6 +437,7 @@ function EditBackendForm({
                 Ingest events from this backend
               </label>
               <Select
+                aria-label="Storage events target"
                 options={EVENT_TARGET_OPTIONS}
                 value={String(eventsTarget)}
                 onChange={(v) => setEventsTarget(Number(v) as EventTarget)}

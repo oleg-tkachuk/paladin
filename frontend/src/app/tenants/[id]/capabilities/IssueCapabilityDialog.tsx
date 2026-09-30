@@ -313,6 +313,7 @@ export function IssueCapabilityDialog({
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-[140px_1fr]">
                   <Field label="Kind">
                     <Select
+                      aria-label="Kind"
                       options={PRINCIPAL_KIND_OPTIONS}
                       value={issuePrincipalKind}
                       onChange={setIssuePrincipalKind}
@@ -415,6 +416,7 @@ export function IssueCapabilityDialog({
                     hint="USD/EUR/UAH/GBP or UNIT (non-currency metering)."
                   >
                     <Select
+                      aria-label="Currency / Unit"
                       options={ALLOWED_UNIT_CODES.map((u) => ({
                         value: u,
                         label: u,
@@ -426,6 +428,7 @@ export function IssueCapabilityDialog({
                   </Field>
                   <Field label="TTL">
                     <Select
+                      aria-label="TTL"
                       options={TTL_OPTIONS.map((o) => ({
                         value: o.value,
                         label: o.label,

@@ -126,6 +126,7 @@ export function ObjectsFilterBar({
         </div>
 
         <Select
+          aria-label="Filter by status"
           options={STATUS_OPTIONS}
           value={status || "all"}
           onChange={(val) => onStatusChange(val === "all" ? undefined : val)}
@@ -133,6 +134,7 @@ export function ObjectsFilterBar({
 
         {tagOptions.length > 0 && (
           <Select
+            aria-label="Filter by tag"
             options={[
               { value: "all", label: "All Tags" },
               ...tagOptions.map((t) => ({

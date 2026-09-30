@@ -442,6 +442,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2">
                 <span className={T.label}>Granularity</span>
                 <Select
+                  aria-label="Granularity"
                   value={granularity}
                   onChange={(v) => setGranularity(v as Granularity)}
                   options={[

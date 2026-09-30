@@ -259,7 +259,10 @@ export default function UploadPage() {
                 value={selectedCollection}
                 onValueChange={handleCollectionChange}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  aria-label="Destination Collection"
+                  className="w-full"
+                >
                   <SelectValue placeholder="Select Collection…" />
                 </SelectTrigger>
                 <SelectContent>

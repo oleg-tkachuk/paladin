@@ -326,6 +326,7 @@ export function CreateTokenDialog({
                 <div className="space-y-1.5">
                   <Label htmlFor="m2m-ttl">Expiration</Label>
                   <Select
+                    id="m2m-ttl"
                     options={TTL_OPTIONS.map((o) => ({
                       value: o.value,
                       label: o.label,

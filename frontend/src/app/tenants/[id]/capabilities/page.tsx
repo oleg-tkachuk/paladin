@@ -316,6 +316,7 @@ export default function CapabilitiesPage() {
           <div className="space-y-1.5">
             <Label className="text-xs">Principal kind</Label>
             <Select
+              aria-label="Principal kind"
               options={PRINCIPAL_KIND_OPTIONS}
               value={principalKind}
               onChange={setPrincipalKind}

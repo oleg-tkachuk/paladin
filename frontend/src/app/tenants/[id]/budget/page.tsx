@@ -386,6 +386,7 @@ export default function TenantBudgetPage() {
             <div className="space-y-1.5">
               <Label htmlFor="unit-code">Currency / Unit</Label>
               <Select
+                id="unit-code"
                 options={ALLOWED_UNIT_CODES.map((u) => ({
                   value: u,
                   label: u,

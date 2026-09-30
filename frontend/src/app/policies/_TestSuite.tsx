@@ -448,7 +448,7 @@ function CaseRow({
                   onUpdate({ expected: v as TestCase["expected"] })
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger aria-label="Expected outcome" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

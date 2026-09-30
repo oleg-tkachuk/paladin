@@ -454,7 +454,7 @@ export default function PoliciesPage() {
               value={scope}
               onValueChange={(v) => setScope(v as Scope)}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger aria-label="Scope" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -473,6 +473,7 @@ export default function PoliciesPage() {
           <div className="space-y-1.5">
             <Label>Target</Label>
             <Select
+              aria-label="Target"
               options={targetOptions}
               value={target}
               onChange={setTarget}
