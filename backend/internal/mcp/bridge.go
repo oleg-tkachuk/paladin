@@ -84,14 +84,16 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 	if httpc == nil {
 		httpc = http.DefaultClient
 	}
+	defaults := Credentials{Bearer: bearer, Capability: capabilityToken}
 	authInjector := connect.WithInterceptors(connect.UnaryInterceptorFunc(
 		func(next connect.UnaryFunc) connect.UnaryFunc {
 			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-				if bearer != "" {
-					req.Header().Set("Authorization", "Bearer "+bearer)
+				cred := credentialsFrom(ctx, defaults)
+				if cred.Bearer != "" {
+					req.Header().Set("Authorization", "Bearer "+cred.Bearer)
 				}
-				if capabilityToken != "" {
-					req.Header().Set(paladin.HeaderCapability, capabilityToken)
+				if cred.Capability != "" {
+					req.Header().Set(paladin.HeaderCapability, cred.Capability)
 				}
 				// Idempotency-Key on the calls whose replay means something.
 				//
@@ -167,9 +169,41 @@ func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Ser
 	return srv
 }
 
+// Credentials are what the bridge presents to the planes on a caller's
+// behalf: the bearer and the optional capability.
+type Credentials struct {
+	Bearer     string
+	Capability string
+}
+
+type credentialsKey struct{}
+
+// withRequestCredentials puts the credentials of the HTTP request carrying
+// this MCP message on ctx, so the planes are called with the token the
+// caller holds now — not the one that opened the session, which may have
+// expired or been refreshed since. A stdio request has no header and leaves
+// ctx alone; the Clients' defaults apply.
+func withRequestCredentials(ctx context.Context, extra *mcpsdk.RequestExtra) context.Context {
+	if extra == nil || extra.Header == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, credentialsKey{}, Credentials{
+		Bearer:     headerToken(extra.Header),
+		Capability: extra.Header.Get(paladin.HeaderCapability),
+	})
+}
+
+func credentialsFrom(ctx context.Context, defaults Credentials) Credentials {
+	if c, ok := ctx.Value(credentialsKey{}).(Credentials); ok {
+		return c
+	}
+	return defaults
+}
+
 // addTool wraps mcpsdk.AddTool with the active ToolFilter so the
 // registration call sites stay tight. When the filter denies a name
 // the call is a no-op — the tool simply doesn't appear in ListTools.
+// Every handler runs with the calling request's credentials.
 func addTool[Args any](
 	srv *mcpsdk.Server,
 	filter *ToolFilter,
@@ -179,7 +213,9 @@ func addTool[Args any](
 	if filter != nil && !filter.Allow(tool.Name) {
 		return
 	}
-	mcpsdk.AddTool(srv, tool, handler)
+	mcpsdk.AddTool(srv, tool, func(ctx context.Context, req *mcpsdk.CallToolRequest, args Args) (*mcpsdk.CallToolResult, any, error) {
+		return handler(withRequestCredentials(ctx, req.Extra), req, args)
+	})
 }
 
 // jsonResult is the universal "Connect response → MCP tool result" adapter.
@@ -1238,7 +1274,7 @@ func addJSONResource(s *mcpsdk.Server, _ *Clients, uri, name, desc string, fetch
 		Description: desc,
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
-		v, err := fetch(ctx)
+		v, err := fetch(withRequestCredentials(ctx, req.Extra))
 		if err != nil {
 			return nil, err
 		}

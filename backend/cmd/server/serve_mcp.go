@@ -113,9 +113,10 @@ type mcpRunner struct {
 	// stdioClients builds the single process-wide Clients for the stdio
 	// transport (one session per process).
 	stdioClients func() *mcp.Clients
-	// httpClients builds per-request Clients for the streamable-HTTP transport;
-	// it returns nil to refuse a session (missing bearer).
-	httpClients func(*http.Request) *mcp.Clients
+	// httpClients builds the Clients the streamable-HTTP transport shares
+	// across every session. They carry no credential of their own: each tool
+	// call presents the bearer and capability on the request that carries it.
+	httpClients func() *mcp.Clients
 	// onStop releases mode-owned resources after the transport drains. Bridge
 	// owns none and leaves it nil.
 	onStop func(context.Context)
@@ -151,15 +152,7 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 			// hand-editing JSON-RPC frames.
 			return makeClients(os.Getenv("PALADIN_MCP_TOKEN"), os.Getenv("PALADIN_MCP_CAPABILITY"))
 		},
-		httpClients: func(r *http.Request) *mcp.Clients {
-			token := mcp.BearerToken(r)
-			if token == "" {
-				return nil
-			}
-			// Capability optional — forwarded only when the MCP host
-			// supplies it. Absent capability → JWT-only auth flow.
-			return makeClients(token, r.Header.Get("X-Paladin-Capability"))
-		},
+		httpClients: func() *mcp.Clients { return makeClients("", "") },
 	}
 }
 
@@ -195,13 +188,7 @@ func provideMCPEmbeddedRunner(
 		stdioClients: func() *mcp.Clients {
 			return makeInlineClients(os.Getenv("PALADIN_MCP_TOKEN"), os.Getenv("PALADIN_MCP_CAPABILITY"))
 		},
-		httpClients: func(r *http.Request) *mcp.Clients {
-			token := mcp.BearerToken(r)
-			if token == "" {
-				return nil
-			}
-			return makeInlineClients(token, r.Header.Get("X-Paladin-Capability"))
-		},
+		httpClients: func() *mcp.Clients { return makeInlineClients("", "") },
 		onStop: func(context.Context) {
 			// Bounded (5s) fresh-context OTel flush — see the same note in the
 			// other roles: the fx OnStop context carries the 90s StopTimeout, so
@@ -236,7 +223,7 @@ func runMCPServer(lc fx.Lifecycle, sd fx.Shutdowner, r mcpRunner) {
 				case "stdio":
 					err = runStdio(workCtx, r.cfg, r.l, r.stdioClients())
 				case "http":
-					err = runHTTP(workCtx, r.cfg, r.l, r.modeLabel, r.httpClients)
+					err = runHTTP(workCtx, r.cfg, r.l, r.modeLabel, r.httpClients())
 				default:
 					r.l.Error("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
 					_ = sd.Shutdown(fx.ExitCode(1))
@@ -296,20 +283,19 @@ func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mc
 	return nil
 }
 
-// runHTTP runs the streamable-HTTP MCP transport. The clientsFor closure
-// is invoked per-session; it returns nil to refuse the session (which the SDK
-// surfaces as 400 Bad Request). Credential-less requests are turned away with
-// 401 before reaching it — see RequireToken / RequireBearer below.
-func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clientsFor func(*http.Request) *mcp.Clients) error {
+// runHTTP runs the streamable-HTTP MCP transport over one server and one set
+// of Clients. Credential-less requests are turned away with 401 before they
+// reach it — see RequireToken / RequireBearer below.
+func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clients *mcp.Clients) error {
 	profile := pickProfile(mcpProfile, cfg.MCP.HTTP.Profile)
 	filter := mcp.NewToolFilter(cfg.MCP, profile)
 
-	handler := mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
-		clients := clientsFor(r)
-		if clients == nil {
-			return nil
-		}
-		return mcp.NewServer("paladin-mcp", version, clients, filter)
+	// One server for every session. The SDK asks for it on each HTTP request
+	// (to negotiate the protocol version), and building it there reflected
+	// the whole tool catalog per request.
+	server := mcp.NewServer("paladin-mcp", version, clients, filter)
+	handler := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
+		return server
 	}, &mcpsdk.StreamableHTTPOptions{
 		SessionTimeout: cfg.MCP.HTTP.SessionTimeout,
 	})

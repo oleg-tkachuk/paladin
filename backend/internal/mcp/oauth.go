@@ -44,14 +44,16 @@ const WellKnownAuthorizationServer = "/.well-known/oauth-authorization-server"
 // the standard `Authorization: Bearer <token>` header (what OAuth-aware MCP
 // clients send) and falling back to the legacy `X-Paladin-Token` header so
 // existing bridge deployments keep working. Returns "" when neither is set.
-func BearerToken(r *http.Request) string {
-	if authz := r.Header.Get("Authorization"); authz != "" {
+func BearerToken(r *http.Request) string { return headerToken(r.Header) }
+
+func headerToken(h http.Header) string {
+	if authz := h.Get("Authorization"); authz != "" {
 		const prefix = "Bearer "
 		if len(authz) > len(prefix) && strings.EqualFold(authz[:len(prefix)], prefix) {
 			return strings.TrimSpace(authz[len(prefix):])
 		}
 	}
-	return r.Header.Get("X-Paladin-Token")
+	return h.Get("X-Paladin-Token")
 }
 
 // protectedResourceMetadata is the RFC 9728 document.
