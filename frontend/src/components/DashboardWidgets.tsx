@@ -61,9 +61,16 @@ export function DashboardWidgets() {
 
 function RecentActivityWidget() {
   // TanStack passes an AbortSignal to the queryFn and cancels the RPC on
-  // unmount / key-change without logging an AbortError. On failure `data`
-  // is undefined → rows defaults to [] and the widget degrades silently.
-  const { data: rows = [], isLoading: loading } = useQuery<AuditLogEntry[]>({
+  // unmount / key-change without logging an AbortError.
+  //
+  // isPending, not isLoading, in all three widgets: a query paused offline or
+  // on a retry held back while the window is unfocused is pending but not
+  // fetching, and `data ?? []` would then render as "nothing to report".
+  const {
+    data: rows = [],
+    isPending: loading,
+    error,
+  } = useQuery<AuditLogEntry[]>({
     queryKey: ["dashboard", "recentActivity"],
     queryFn: ({ signal }) =>
       auditClient
@@ -93,6 +100,10 @@ function RecentActivityWidget() {
               <Skeleton key={i} className="h-6 w-full" />
             ))}
           </div>
+        ) : error ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">
+            Activity unavailable.
+          </p>
         ) : rows.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
             No recent activity.
@@ -129,7 +140,11 @@ function RecentActivityWidget() {
 }
 
 function FailedOpsWidget() {
-  const { data: ops = [], isLoading: loading } = useQuery<Operation[]>({
+  const {
+    data: ops = [],
+    isPending: loading,
+    error,
+  } = useQuery<Operation[]>({
     queryKey: ["dashboard", "failedOps"],
     queryFn: ({ signal }) =>
       adminOperationClient
@@ -177,6 +192,10 @@ function FailedOpsWidget() {
       <CardContent className="pt-0">
         {loading ? (
           <Skeleton className="h-12 w-full" />
+        ) : error ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">
+            Operations unavailable.
+          </p>
         ) : ops.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
             No failures in the recent window.
@@ -207,7 +226,7 @@ const BUDGET_ALERT_LIMIT = 5;
 function BudgetAlertsWidget() {
   const {
     data: rows = [],
-    isLoading: loading,
+    isPending: loading,
     error,
   } = useQuery<TenantBudgetSummary[]>({
     queryKey: ["dashboard", "budgetAlerts"],
