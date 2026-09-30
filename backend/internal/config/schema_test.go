@@ -83,3 +83,47 @@ func TestCueSchema(t *testing.T) {
 		t.Errorf("MCP.Upstreams.DataURL: got %q want %q", cfg.MCP.Upstreams.DataURL, wantDataURL)
 	}
 }
+
+// TestCueSchemaAcceptsEveryEnvTheCodeKnows keeps app.env's enum in schema.cue
+// in step with the environment names the Go code gives meaning to. The schema
+// once listed three of them, so an overlay that set app.env: dev — a name the
+// weak-secret gate treats as disposable — was refused before the gate ran.
+func TestCueSchemaAcceptsEveryEnvTheCodeKnows(t *testing.T) {
+	ctx := cuecontext.New()
+	schemaVal := ctx.CompileString(cueSchema)
+	if schemaVal.Err() != nil {
+		t.Fatalf("CUE schema invalid: %v", schemaVal.Err())
+	}
+	validate := func(env string) error {
+		var doc map[string]any
+		if err := goyaml.Unmarshal([]byte(minimalConfigYAML), &doc); err != nil {
+			t.Fatal(err)
+		}
+		doc["app"].(map[string]any)["env"] = env
+		raw, err := goyaml.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		file, err := cueyaml.Extract("env.yaml", raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return schemaVal.Unify(ctx.BuildFile(file)).Validate()
+	}
+
+	known := []string{"staging", "prod"}
+	for env := range disposableEnvs {
+		if env != "" {
+			known = append(known, env)
+		}
+	}
+	for _, env := range known {
+		if err := validate(env); err != nil {
+			t.Errorf("app.env %q is handled by the code but refused by schema.cue: %v", env, err)
+		}
+	}
+	// An empty env is not a choice: it is an overlay that forgot to pick one.
+	if err := validate(""); err == nil {
+		t.Error(`app.env "" was accepted; it must name an environment`)
+	}
+}

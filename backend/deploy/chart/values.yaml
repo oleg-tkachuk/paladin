@@ -605,10 +605,10 @@ jobs:
 config:
   app:
     name: paladin-core
-    # Real environment is set per overlay (values-{local,dev,staging,prod}.yaml).
-    # Empty means "operator forgot to pick an overlay"; surface that loudly
-    # at startup if the binary cares about app.env (config validation).
-    env: ""
+    # prod unless an overlay says otherwise: the strict setting, under which
+    # weak secrets, ephemeral signing keys and an unauthenticated ingest
+    # webhook are all refused at boot. Overlays set local / dev / staging.
+    env: prod
 
   logger:
     # info-level + non-development zap config is the prod default. Local

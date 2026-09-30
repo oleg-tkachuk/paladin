@@ -8,7 +8,9 @@
 
 app: {
   name: string
-  env:  "local" | "staging" | "prod" | *"local"
+  // Every name the code gives meaning to: weak_secrets.go's disposableEnvs,
+  // build_capability.go's ephemeralKeyEnvs, and the two real environments.
+  env:  "local" | "dev" | "development" | "test" | "ci" | "e2e" | "staging" | "prod" | *"local"
 }
 
 logger: {
