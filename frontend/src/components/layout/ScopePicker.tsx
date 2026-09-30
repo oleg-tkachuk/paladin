@@ -13,6 +13,7 @@ import {
 
 import { useScope } from "@/context/ScopeContext";
 import { useAuth } from "@/context/AuthContext";
+import { canUseAdminPlane } from "@/constants/roles";
 import { useMemberships } from "@/hooks/useMemberships";
 import { useNotification } from "@/components/ui/Notification";
 import { useBuckets } from "@/hooks/useBuckets";
@@ -78,7 +79,10 @@ export const ScopePicker: React.FC = () => {
     setPickerOpen,
   } = useScope();
 
-  const { switchTenant } = useAuth();
+  const { user, switchTenant } = useAuth();
+  // Backends and buckets are admin-plane; without the audience, listing them
+  // only collects refusals.
+  const adminPlane = !user || canUseAdminPlane(user.roles);
   const {
     memberships,
     loading: membershipsLoading,
@@ -126,8 +130,8 @@ export const ScopePicker: React.FC = () => {
   // tenant memberships above.
   const { backends: backendRows, fetchBackends } = useBackends(false);
   useEffect(() => {
-    if (isPickerOpen) void fetchBackends();
-  }, [isPickerOpen, fetchBackends]);
+    if (isPickerOpen && adminPlane) void fetchBackends();
+  }, [isPickerOpen, adminPlane, fetchBackends]);
 
   // Backends come from BackendService.ListBackends — same source the
   // /buckets and /collections pickers use, so the picker stays
@@ -140,8 +144,8 @@ export const ScopePicker: React.FC = () => {
   // Refetch buckets whenever the backend scope changes, so the bucket
   // picker only shows valid options — but not before the picker is open.
   useEffect(() => {
-    if (isPickerOpen) void fetchBuckets(backendId || undefined);
-  }, [isPickerOpen, backendId, fetchBuckets]);
+    if (isPickerOpen && adminPlane) void fetchBuckets(backendId || undefined);
+  }, [isPickerOpen, adminPlane, backendId, fetchBuckets]);
 
   // Cascade — narrow the bucket list to the active backend (defence
   // in depth: the server-side filter above already does this, but we
@@ -169,8 +173,11 @@ export const ScopePicker: React.FC = () => {
   const tenantMismatch =
     !!scopedOwnerTenantId && !!tenantId && scopedOwnerTenantId !== tenantId;
 
+  // The token's slug stands in when the tenant record is not readable — a
+  // principal without the admin audience never loads it.
   const tenantLabel =
     tenant?.displayName?.trim() ||
+    user?.tenantSlug?.trim() ||
     (tenantId ? `${tenantId.slice(0, 8)}…` : "no tenant");
 
   // Tenant switcher rows. Once memberships load, one row per tenant the

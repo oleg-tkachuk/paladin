@@ -31,6 +31,9 @@ import {
 } from "@/lib/connect/client";
 import { ArchiveBoxIcon, TagIcon } from "@heroicons/react/24/outline";
 import { API_PAGE_SIZE_MAX } from "@/constants";
+import { canUseAdminPlane } from "@/constants/roles";
+import { useAuth } from "@/context/AuthContext";
+import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
 interface SearchResult {
   id: string;
   type: "action" | "object" | "nav";
@@ -38,6 +41,8 @@ interface SearchResult {
   subtitle?: string;
   icon: React.ElementType;
   shortcut?: string;
+  /** Where selecting it goes, so a route the principal cannot use is left out. */
+  href?: string;
   onSelect: () => void;
 }
 
@@ -53,6 +58,14 @@ export function CommandPalette() {
 
   const router = useRouter();
   const { actions } = useActions();
+  // A principal without the admin audience: its jumps would land on the
+  // no-admin-role card, and every resource search source is admin-plane.
+  const { user } = useAuth();
+  const adminPlane = !user || canUseAdminPlane(user.roles);
+  const reachable = useCallback(
+    (r: SearchResult) => adminPlane || !r.href || !routeNeedsAdminPlane(r.href),
+    [adminPlane],
+  );
   const { tenant: scopedTenant, collection: scopedCollection } = useScope();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +87,7 @@ export function CommandPalette() {
         subtitle: "Tenant overview, identity + quick links",
         icon: BuildingOfficeIcon,
         shortcut: "G T",
+        href: base,
         onSelect: () => router.push(base),
       },
       {
@@ -83,6 +97,7 @@ export function CommandPalette() {
         subtitle: "S3 buckets owned by this tenant",
         icon: ServerStackIcon,
         shortcut: "G B",
+        href: `${base}/buckets`,
         onSelect: () => router.push(`${base}/buckets`),
       },
       {
@@ -92,6 +107,7 @@ export function CommandPalette() {
         subtitle: "Tenant-scoped namespaces routed to a bucket",
         icon: ServerStackIcon,
         shortcut: "G K",
+        href: `${base}/collections`,
         onSelect: () => router.push(`${base}/collections`),
       },
       {
@@ -100,6 +116,7 @@ export function CommandPalette() {
         title: `Policies in ${label}`,
         subtitle: "Effective Cedar graph for this tenant",
         icon: CommandLineIcon,
+        href: `${base}/policies`,
         onSelect: () => router.push(`${base}/policies`),
       },
       {
@@ -108,6 +125,7 @@ export function CommandPalette() {
         title: `Audit log for ${label}`,
         subtitle: "Tenant-scoped mutation log",
         icon: ClockIcon,
+        href: `${base}/audit-log`,
         onSelect: () => router.push(`${base}/audit-log`),
       },
     ];
@@ -122,6 +140,7 @@ export function CommandPalette() {
         subtitle: "Tenant index — gateway to all resource subtrees",
         icon: BuildingOfficeIcon,
         shortcut: "G R",
+        href: "/tenants",
         onSelect: () => router.push("/tenants"),
       },
       {
@@ -131,6 +150,7 @@ export function CommandPalette() {
         subtitle: "System-wide Cedar editor",
         icon: CommandLineIcon,
         shortcut: "G P",
+        href: "/policies",
         onSelect: () => router.push("/policies"),
       },
       // Cross-tenant Object Explorer is gone — flat /objects page
@@ -144,6 +164,7 @@ export function CommandPalette() {
         title: "Buckets (cross-tenant)",
         subtitle: "Platform-admin index of every bucket",
         icon: ServerStackIcon,
+        href: "/buckets",
         onSelect: () => router.push("/buckets"),
       },
       {
@@ -152,6 +173,7 @@ export function CommandPalette() {
         title: "Collections (cross-tenant)",
         subtitle: "Platform-admin index of every Collection",
         icon: ServerStackIcon,
+        href: "/collections",
         onSelect: () => router.push("/collections"),
       },
       {
@@ -161,6 +183,7 @@ export function CommandPalette() {
         subtitle: "Upload new files",
         icon: DocumentIcon,
         shortcut: "G U",
+        href: "/upload",
         onSelect: () => router.push("/upload"),
       },
       // /trash and /object-tags removed in Phase 5. Trash is now
@@ -174,6 +197,7 @@ export function CommandPalette() {
         title: "Platform Stats",
         subtitle: "Tenant / storage / object census across the fleet",
         icon: ChartBarIcon,
+        href: "/stats",
         onSelect: () => router.push("/stats"),
       },
       {
@@ -183,6 +207,7 @@ export function CommandPalette() {
         subtitle: "Monitor infrastructure status",
         icon: HeartIcon,
         shortcut: "G H",
+        href: "/health",
         onSelect: () => router.push("/health"),
       },
       {
@@ -192,6 +217,7 @@ export function CommandPalette() {
         subtitle: "View environment and API settings",
         icon: Cog6ToothIcon,
         shortcut: "G C",
+        href: "/config",
         onSelect: () => router.push("/config"),
       },
     ],
@@ -202,8 +228,8 @@ export function CommandPalette() {
   // jumps first when a tenant is in scope, then the global static
   // navs. Searching merges both pools; see performSearch below.
   const defaultNavs = useMemo(
-    () => [...tenantScopedNavs, ...staticNavs],
-    [tenantScopedNavs, staticNavs],
+    () => [...tenantScopedNavs, ...staticNavs].filter(reachable),
+    [tenantScopedNavs, staticNavs, reachable],
   );
 
   const performSearch = useCallback(
@@ -244,12 +270,19 @@ export function CommandPalette() {
         ...staticNavs,
       ].filter(
         (n) =>
-          n.title.toLowerCase().includes(lowerQuery) ||
-          (n.subtitle && n.subtitle.toLowerCase().includes(lowerQuery)),
+          reachable(n) &&
+          (n.title.toLowerCase().includes(lowerQuery) ||
+            (n.subtitle && n.subtitle.toLowerCase().includes(lowerQuery))),
       );
 
       setSearchResults([...actionResults, ...navResults]);
       setSelectedIndex(0);
+
+      if (!adminPlane) {
+        setFailedSources([]);
+        setIsSearching(false);
+        return;
+      }
 
       try {
         // Parallel-fan-out global resource search. Each RPC is
@@ -417,7 +450,15 @@ export function CommandPalette() {
         setIsSearching(false);
       }
     },
-    [actions, staticNavs, tenantScopedNavs, router, scopedCollection],
+    [
+      actions,
+      staticNavs,
+      tenantScopedNavs,
+      router,
+      scopedCollection,
+      reachable,
+      adminPlane,
+    ],
   );
 
   // Debounced search

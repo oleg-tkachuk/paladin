@@ -2137,21 +2137,6 @@ finding moving from "packages you import" to "your code is affected".
   trace in the tree, so `ss -tnp` inside the pod during a burst is still the
   step that finishes this — and there is no burst to catch.
 
-## The console's admin views still open for a pure tenant.user by URL
-
-- **Status:** Deferred.
-- **Reason:** the sidebar and dashboard now leave out what reads the admin
-  plane when IAM will not issue that audience (`canUseAdminPlane`), but the
-  routes themselves, the command palette's entries and the scope picker's
-  tenant lookup still run for such a user and fail request by request with
-  PermissionDenied; the scope picker shows the tenant's UUID for the same
-  reason.
-- **Definition of Done:** an admin-plane route reached without the admin
-  audience renders one "needs an admin role" state, the palette lists only
-  what the sidebar does, and the scope picker names the tenant from the iam
-  plane.
-- **Blockers:** none.
-
 ## A proto change cannot pass the gate before it is committed
 
 - **Status:** Deferred.

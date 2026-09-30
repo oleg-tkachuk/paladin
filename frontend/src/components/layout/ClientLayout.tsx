@@ -8,6 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { AuthGate } from "@/components/AuthGate";
+import { AdminPlaneGate } from "@/components/AdminPlaneGate";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { ActionsProvider } from "@/context/ActionsContext";
 import { ScopeProvider } from "@/context/ScopeContext";
@@ -73,7 +74,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                     <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
                     <main className="flex-1">
                       <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                        {children}
+                        <AdminPlaneGate>{children}</AdminPlaneGate>
                       </div>
                     </main>
                   </div>

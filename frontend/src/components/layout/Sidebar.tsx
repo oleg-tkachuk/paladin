@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { canUseAdminPlane } from "@/constants/roles";
+import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -57,8 +58,6 @@ import {
 type NavItem = {
   name: string;
   icon: React.ElementType;
-  /** Works without an admin-plane token; see visibleNavigationGroups. */
-  withoutAdminPlane?: true;
 } & ({ path: string; tenantTab?: never } | { path?: never; tenantTab: string });
 
 const navigationGroups: Array<{
@@ -73,7 +72,7 @@ const navigationGroups: Array<{
     // pre-selected OK and is the most-used Core entry-point.
     title: "Core",
     items: [
-      { name: "Dashboard", path: "/", icon: HomeIcon, withoutAdminPlane: true },
+      { name: "Dashboard", path: "/", icon: HomeIcon },
       { name: "Upload", path: "/upload", icon: CloudArrowUpIcon },
     ],
   },
@@ -158,7 +157,6 @@ const navigationGroups: Array<{
         name: "Health Status",
         path: "/health",
         icon: CheckCircleIcon,
-        withoutAdminPlane: true,
       },
     ],
   },
@@ -169,7 +167,6 @@ const navigationGroups: Array<{
         name: "Profile",
         path: "/profile",
         icon: UserCircleIcon,
-        withoutAdminPlane: true,
       },
       { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
     ],
@@ -185,7 +182,11 @@ const navigationGroups: Array<{
 export function visibleNavigationGroups(roles: readonly string[] | null) {
   if (roles === null || canUseAdminPlane(roles)) return navigationGroups;
   return navigationGroups
-    .map((g) => ({ ...g, items: g.items.filter((i) => i.withoutAdminPlane) }))
+    .map((g) => ({
+      ...g,
+      // A tenantTab item always lands under /tenants, on the admin plane.
+      items: g.items.filter((i) => i.path && !routeNeedsAdminPlane(i.path)),
+    }))
     .filter((g) => g.items.length > 0);
 }
 

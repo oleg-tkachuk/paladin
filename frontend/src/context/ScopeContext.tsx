@@ -16,6 +16,7 @@ import { DEFAULT_OBJECT_KEY, STORAGE_KEYS } from "@/constants";
 import { tenantClient } from "@/lib/connect/client";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { useAuth } from "@/context/AuthContext";
+import { canUseAdminPlane } from "@/constants/roles";
 
 /**
  * ScopeContext — single source of truth for the operator's location
@@ -92,9 +93,12 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   // Tenant record fetched via GetTenant, cached by TanStack. `enabled` gates
   // on auth + tenantId; deriving `tenant` from auth status (below) clears it
   // on logout without a setState-in-effect.
+  // GetTenant is admin-plane: a principal without the admin audience is
+  // refused it, so the picker names their tenant from the token instead.
+  const adminPlane = canUseAdminPlane(user?.roles ?? []);
   const tenantQuery = useQuery({
     queryKey: ["scopeTenant", tenantId],
-    enabled: status === "authenticated" && !!tenantId,
+    enabled: status === "authenticated" && !!tenantId && adminPlane,
     queryFn: async ({ signal }) => {
       try {
         const fetched = await tenantClient.getTenant(

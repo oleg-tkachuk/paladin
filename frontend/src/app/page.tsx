@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { useStats } from "@/context/StatsContext";
 import { useAuth } from "@/context/AuthContext";
 import { canUseAdminPlane } from "@/constants/roles";
+import { NoAdminRole } from "@/components/NoAdminRole";
 import {
   type ComponentHealth,
   componentStatusLabel,
@@ -74,8 +75,6 @@ function backendBuild(
     buildTime: "",
   };
 }
-
-const NO_ADMIN_ROLE_TITLE = "This account holds no admin role.";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -150,15 +149,7 @@ export default function DashboardPage() {
           <DispatcherStatsCard />
         </>
       ) : (
-        <Card>
-          <CardContent className="space-y-1 px-5 py-4">
-            <p className="text-sm font-medium">{NO_ADMIN_ROLE_TITLE}</p>
-            <p className={T.hint}>
-              The console&apos;s management views need an admin role. Objects
-              are reached through the API and the SDKs.
-            </p>
-          </CardContent>
-        </Card>
+        <NoAdminRole />
       )}
 
       {/* ─── Footer strip: health rollup · identity · build pair ────── */}

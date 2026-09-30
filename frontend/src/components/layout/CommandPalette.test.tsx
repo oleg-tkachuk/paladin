@@ -35,6 +35,7 @@ const h = vi.hoisted(() => ({
       Promise.resolve({ backends: [] }),
   ),
   push: vi.fn(),
+  roles: ["platform.admin"] as string[],
 }));
 export type { Rows };
 
@@ -43,6 +44,9 @@ vi.mock("@/context/ActionsContext", () => ({
   useActions: () => ({ actions: [] }),
 }));
 vi.mock("@/context/ScopeContext", () => ({ useScope: () => ({}) }));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { roles: h.roles } }),
+}));
 vi.mock("@/lib/connect/client", () => ({
   tenantClient: { listTenants: h.listTenants },
   bucketClient: { listBuckets: h.listBuckets },
@@ -175,5 +179,46 @@ describe("CommandPalette partial failures", () => {
       vi.advanceTimersByTime(300);
     });
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+// Every search source is admin-plane and every jump but Health and Profile
+// lands on the no-admin-role card; a tenant.user is offered neither.
+describe("CommandPalette for a principal without the admin audience", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    h.roles = ["tenant.user"];
+    for (const fn of [
+      h.listTenants,
+      h.listBuckets,
+      h.listCollections,
+      h.listBackends,
+    ])
+      fn.mockClear();
+  });
+  afterEach(() => {
+    h.roles = ["platform.admin"];
+    vi.useRealTimers();
+  });
+
+  it("searches no admin-plane source", async () => {
+    render(<CommandPalette />);
+    openAndType("Acme");
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(h.listTenants).not.toHaveBeenCalled();
+    expect(h.listBackends).not.toHaveBeenCalled();
+  });
+
+  it("offers the health jump and not the admin ones", async () => {
+    render(<CommandPalette />);
+    openAndType("s");
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.queryByText(/health/i)).not.toBeNull();
+    expect(screen.queryByText("Resources")).toBeNull();
+    expect(screen.queryByText(/Platform stat/i)).toBeNull();
   });
 });
