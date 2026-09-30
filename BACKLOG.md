@@ -1974,19 +1974,16 @@ finding moving from "packages you import" to "your code is affected".
   `sdk/python/pyproject.toml` checked against the tag.
 - **Blockers:** the decision to publish.
 
-## checkov and trivy no longer scan the backend chart
+## health_snapshot_token is read from the ConfigMap
 
-- **Status:** Open — a gate coverage regression from 2026-09-30.
-- **Reason:** the backend chart now refuses to render without a database and
-  an object store (`ci/required-values.yaml` holds the inputs). checkov's and
-  trivy's helm scanners render charts with their own defaults, hit that
-  refusal, log a warning and skip the chart — so `verify:checkov` and
-  `sec:trivy` report clean without having read it. trivy's `--helm-values`
-  applies to every chart and the console's schema rejects the backend's keys.
-- **Definition of Done:** a gate renders the backend chart with
-  `ci/required-values.yaml` (and each overlay) and runs checkov's kubernetes
-  framework and `trivy config` over the rendered manifests; the helm-framework
-  scans skip the backend chart explicitly rather than by failure.
+- **Status:** Deferred.
+- **Reason:** `runtime.health_snapshot_token` has no Secret reference, unlike
+  `signing_key_secret` or `shared_secret_ref`, so a prod token lives in the
+  config ConfigMap; values-prod.yaml ships a placeholder there. trivy's
+  KSV-0109 is accepted in .trivyignore.yaml until this lands.
+- **Definition of Done:** a `health_snapshot_token_secret` reference resolved
+  at boot, the chart and values-prod.yaml using it — the console already reads
+  its copy from `healthSnapshotTokenSecret` — and the KSV-0109 entry removed.
 - **Blockers:** none.
 
 ## Include-level `vars:` do not reach a var the component declares

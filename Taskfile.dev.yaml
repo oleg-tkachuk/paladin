@@ -36,6 +36,11 @@ vars:
   # hand; a half-applied bump fails one entry point with a message about trust
   # rather than about the version.
   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
+  # Pinned, and run through `pipx run` rather than installed: the rules a scan
+  # asserts against change between releases, so an unpinned checkov makes a
+  # local run and the pipeline's disagree — a red nobody else can reproduce, or
+  # a green that means nothing. Read by `checkov:` and by verify:chart-scan.
+  CHECKOV_VERSION: "3.3.20"
   # Status marker, the same vocabulary as Taskfile.yaml and as the shared
   # library. Redefined rather than inherited, and forgetting is silent: Task
   # renders an undefined variable as the empty string, so a missing glyph
@@ -88,6 +93,12 @@ includes:
       # frontend/.next is build output, rewritten by every `frontend:build`:
       # a scan that overlaps one dies on a file deleted mid-walk.
       TRIVY_FLAGS: --ignorefile .trivyignore.yaml --skip-dirs frontend/.next
+      # The charts are scanned rendered, per values file, by verify:chart-scan;
+      # trivy's own helm renderer reads the defaults only and skips a chart
+      # that refuses them.
+      TRIVY_CONFIG_FLAGS: >-
+        --ignorefile .trivyignore.yaml --skip-dirs frontend/.next
+        --skip-dirs backend/deploy/chart --skip-dirs frontend/deploy/chart
       # sqlc, protobuf and mock output is not written by hand and not reviewed
       # as source; gosec reads its SQL string constants as hardcoded
       # credentials. Excluding it drops 141 of 188 findings, all of them noise,
@@ -112,12 +123,10 @@ includes:
         --skip-path node_modules --skip-path .task
         --skip-path frontend/.next --skip-path sdk/go/gen
         --skip-path frontend/src/gen
-      CHECKOV_FRAMEWORKS: ["helm", "kubernetes", "dockerfile", "github_actions"]
-      # Pinned, and run through `pipx run` rather than installed: the rules a
-      # scan asserts against change between releases, so an unpinned checkov
-      # makes a local run and the pipeline's disagree — a red nobody else can
-      # reproduce, or a green that means nothing.
-      CHECKOV_VERSION: "3.3.20"
+      # No `helm`: its renderer reads each chart's defaults only and skips a
+      # chart that refuses them. verify:chart-scan scans the rendered charts.
+      CHECKOV_FRAMEWORKS: ["kubernetes", "dockerfile", "github_actions"]
+      CHECKOV_VERSION: '{{.CHECKOV_VERSION}}'
   # The third Go tree. It is a library with no image and no chart, so it is not
   # a monorepo component and carries no Taskfile of its own — the library's go
   # module aimed at its directory is the whole surface it needs.
@@ -219,6 +228,7 @@ tasks:
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
+      - task: verify:chart-scan
       # Last on purpose: toolchain drift is the least urgent thing in this
       # list, and running it earlier would mask a real test failure behind it.
       - task: verify:brewfile
@@ -414,6 +424,11 @@ tasks:
     cmds:
       - ./scripts/checkov-config.test.sh
       - task: checkov:scan
+
+  verify:chart-scan:
+    desc: "Policy-scan the manifests both charts render, per values file, with checkov and trivy"
+    cmds:
+      - CHECKOV_VERSION={{.CHECKOV_VERSION}} ./scripts/chart-scan.test.sh
 
   verify:brewfile:
     desc: "Fail when the Brewfile and the tools the gates reach for have drifted"
