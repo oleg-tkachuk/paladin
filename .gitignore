@@ -1,67 +1,84 @@
-# Repo-root .gitignore for the Paladin monorepo. Path-specific ignores
-# live in backend/ and frontend/ where applicable; this file covers
-# the cross-cutting cases (compiled binaries, OS junk, dotenv files,
-# IDE detritus that may land in either half or in tasks/).
+# Repo-root .gitignore for the Paladin monorepo. Path-specific ignores live in
+# backend/ and frontend/ where applicable; this file covers the cross-cutting
+# cases.
+#
+# Every rule here is load-bearing — it matches something this tree actually
+# produces. What was removed when the repository was prepared for publication,
+# and why:
+#
+#   *.exe, *.exe~, *.dll, *.so, *.dylib   no Windows and no plugin builds; the
+#                                         backend image sets CGO_ENABLED=0 and
+#                                         nothing in the tree imports "C"
+#   *.test                                nothing runs `go test -c`
+#   coverage.*, *.coverprofile, profile.cov
+#                                         the task library writes
+#                                         coverage/cover.out, which none of the
+#                                         three matched — `coverage/` below does
+#   Thumbs.db                             Windows only
+#   backend/tests/{grpcurl,api/mutations,api/security}/reports/
+#                                         no such directory, and nothing writes
+#                                         one
+#   backend/cmd/seed-fixture/main.go.bak  one editor's scratch file from one
+#                                         afternoon
+#   docs/BACKLOG.md                       BACKLOG.md is at the root here
+#   commented-out .idea/ and .vscode/     a rule that does nothing
+#
+# A rule that matches nothing is worse than absent: it reads as protection, so
+# the next person does not look for the thing it was supposed to cover.
 
-# ── Compiled binaries (Go output anywhere in the tree) ──────────────
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
+# ── Compiled binaries ───────────────────────────────────────────────────────
+# `go build ./...` in backend/ names each binary after its main package and
+# leaves it in the working directory. Both of backend/cmd/'s packages land
+# here. `!server/` because the name also belongs to a directory in some trees
+# and a directory is not the artefact.
 server
 !server/
+backend/seed-fixture
 
-# ── Coverage / profile output ───────────────────────────────────────
+# ── Coverage ────────────────────────────────────────────────────────────────
+# The shared task library runs `go test -coverprofile=coverage/cover.out`, so
+# the directory is the artefact rather than any one file name.
+coverage/
 *.out
-coverage.*
-*.coverprofile
-profile.cov
 
-# ── Go workspace files ──────────────────────────────────────────────
+# ── Go workspace files ──────────────────────────────────────────────────────
+# Three modules live here — backend/, capability/ and the root's own tooling —
+# which is exactly the shape that invites a `go work init` to bridge them. A
+# committed go.work silently overrides every module's own dependency
+# resolution, so CI would stop building what a release builds.
 go.work
 go.work.sum
 
-# ── Dotenv ──────────────────────────────────────────────────────────
+# ── Dotenv ──────────────────────────────────────────────────────────────────
+# Secrets never belong in the tree. backend/deploy/.env is the one exception
+# and is negated explicitly rather than left to contradict the rule above it:
+# it carries DOCKER_BUILDKIT and COMPOSE_DOCKER_CLI_BUILD, which compose reads
+# and which every developer needs identically.
 .env
 .env.*
 !**/.env.example
+!backend/deploy/.env
 
-# ── OS / editor cruft ───────────────────────────────────────────────
+# ── OS cruft ────────────────────────────────────────────────────────────────
 .DS_Store
-Thumbs.db
-# .idea/    # uncomment if any contributor commits IntelliJ project files
-# .vscode/  # uncomment if any contributor commits VSCode workspace files
 
-# ── Generated reports (when locally produced; CI uploads as artifacts) ─
-backend/tests/grpcurl/reports/
-backend/tests/api/mutations/reports/
-backend/tests/api/security/reports/
-
-# Claude worktrees
-.claude/
-.claude/*
-
-# Hypothesis (Python property-based testing) runtime cache
-.hypothesis/
-
-# seed-fixture binary
-backend/seed-fixture
-backend/cmd/seed-fixture/main.go.bak
-
-
-# Auto-generated build metadata; written by Taskfile's metadata:write
-# task on every `task deploy`. Versions and timestamps go to git via
-# tags + commit history, not via a tracked file.
+# ── Generated build metadata ────────────────────────────────────────────────
+# Written by the Taskfile's metadata:write task on every `task deploy`.
+# Versions and timestamps reach git through tags and commit history, not
+# through a tracked file that changes on every build.
 **/deploy/info.env
 
+# ── Hypothesis ──────────────────────────────────────────────────────────────
+# Runtime cache for the Python property-based tests.
+.hypothesis/
+
+# ── Task ────────────────────────────────────────────────────────────────────
 # Task's fingerprint cache and remote-Taskfile cache.
 **/.task/*
 # ...except the remote lock. Task refuses to run when the content behind a
-# ?ref= no longer matches it, which is the only thing standing between a
-# moved tag and this build. Kept at any depth, because a component run from
-# its own directory caches there rather than at the root.
+# ?ref= no longer matches it, which is the only thing standing between a moved
+# tag and this build. Kept at any depth, because a component run from its own
+# directory caches there rather than at the root.
 !**/.task/remote/
 **/.task/remote/*
 !**/.task/remote/*.checksum
@@ -69,20 +86,20 @@ backend/cmd/seed-fixture/main.go.bak
 # TASK_OFFLINE=1 resolve every include from the repository: no clone, so no
 # race over the one shared clone directory, no download timeout, and a build
 # that does not depend on github.com being reachable. The .timestamp files stay
-# out - they are per-machine cache state, not content.
+# out — they are per-machine cache state, not content.
 !**/.task/remote/*.yaml
 
-# ── Release tooling (root package.json: semantic-release only) ──────
-/node_modules/
-
-docs/BACKLOG.md
-
-# Local-only lefthook overrides. Gates that belong to a working copy rather
-# than to the project; lefthook merges the file automatically when present.
+# ── Local-only lefthook overrides ──────────────────────────────────────────
+# Gates that belong to a working copy rather than to the project; lefthook
+# merges the file automatically when it is present.
 lefthook-local.yml
 
-# Claude Code's working state on this machine: agent worktrees, each a full
-# checkout of the repository on its own branch, and the tool's bookkeeping.
-# Nothing in it is project configuration, so the directory is ignored whole.
-.claude/
+# ── Agent tooling working state ─────────────────────────────────────────────
+# Agent worktrees, each a full checkout of the repository on its own branch,
+# plus the tool's bookkeeping. launch.json is the exception: it declares this
+# project's dev servers, which is project configuration and is tracked.
+.claude/*
+!.claude/launch.json
 
+# ── Release tooling (root package.json: semantic-release only) ──────────────
+/node_modules/
