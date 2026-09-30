@@ -43,18 +43,86 @@ sdk/python/   Python SDK: the same, on connect-python
 
 ## Contents
 
-- [Quick start](#quick-start) — the whole stack, locally
-- [Prerequisites](#prerequisites) — what has to be installed
+- [Deploy to Kubernetes](#deploy-to-kubernetes) — the Helm charts, on your cluster
+- [Run it with Task](#run-it-with-task) — the whole stack locally, or on a local cluster
+- [Prerequisites](#prerequisites) — what has to be installed to work on it
 - [Commands](#commands) — the handful worth knowing
 - [How changes land](#how-changes-land) — trunk, CI and releases
 - [Documentation](#documentation) — the rest, by document
 - [Layout](#layout) — where things live in the tree
 - [License](#license)
 
-## Quick start
+## Deploy to Kubernetes
 
-Running the stack needs Docker and [Task](https://taskfile.dev) — no cluster
-and no credentials to arrange.
+Two Helm charts, published to GHCR with every release (`vX.Y.Z`):
+
+| Chart | Runs |
+|-------|------|
+| `oci://ghcr.io/oleg-tkachuk/charts/paladin-core` | the backend planes, plus the migrate and bootstrap Jobs |
+| `oci://ghcr.io/oleg-tkachuk/charts/paladin-console` | the web console and its BFF |
+
+The charts run neither PostgreSQL nor the object store: bring PostgreSQL 16+
+and an S3-compatible store whose access key may create buckets. Kubernetes
+1.25+ and Helm 3.8+.
+
+1. Create the three database roles, once, as a superuser — the SQL is in
+   [docs/install.md](docs/install.md#1-database-roles).
+2. Put the credentials into Secrets:
+
+   ```bash
+   kubectl create namespace paladin
+   kubectl -n paladin create secret generic paladin-postgres-app --from-literal=password='<app-password>'
+   kubectl -n paladin create secret generic paladin-postgres-migrate --from-literal=password='<migrate-password>'
+   kubectl -n paladin create secret generic paladin-s3 \
+     --from-literal=access_key='<access-key>' --from-literal=secret_key='<secret-key>'
+   ```
+
+3. Give the backend chart what it cannot default:
+
+   ```yaml
+   # paladin-core.yaml
+   postgres:
+     host: postgres.databases.svc.cluster.local
+     sslmode: require
+     app:
+       existingSecret: paladin-postgres-app
+     migrate:
+       existingSecret: paladin-postgres-migrate
+   config:
+     storage:
+       backends:
+         primary:
+           endpoint: http://seaweedfs.storage.svc.cluster.local:8333
+           region: us-east-1
+   storage:
+     s3CredentialsSecret:
+       create: false
+       existingSecret: paladin-s3
+   ```
+
+4. Install both charts:
+
+   ```bash
+   helm install paladin-core oci://ghcr.io/oleg-tkachuk/charts/paladin-core \
+     --version <version> -n paladin -f paladin-core.yaml
+   helm install paladin-console oci://ghcr.io/oleg-tkachuk/charts/paladin-console \
+     --version <version> -n paladin
+   ```
+
+5. Sign in as `admin`, with the password generated on first install:
+
+   ```bash
+   kubectl -n paladin get secret paladin-bootstrap-admin -o jsonpath='{.data.password}' | base64 -d
+   kubectl -n paladin port-forward svc/paladin-console 3000:3000
+   ```
+
+[docs/install.md](docs/install.md) covers the rest: ingress, TLS between the
+planes, and what to set when ArgoCD renders the charts.
+
+## Run it with Task
+
+Running the stack on one machine needs Docker and [Task](https://taskfile.dev)
+— no cluster and no credentials to arrange.
 
 ```bash
 git clone https://github.com/oleg-tkachuk/paladin.git && cd paladin
@@ -71,7 +139,16 @@ task stack:down      # stop, keep volumes
 task stack:reset     # stop and delete volumes
 ```
 
-Working on the code rather than running it is the other entry point:
+On a local cluster with ArgoCD, `Taskfile.local.yaml` builds both images and
+charts from the working tree, publishes them to the host-only
+`registry.local`, and syncs the applications:
+
+```bash
+task -t Taskfile.local.yaml deploy        # build and publish images and charts
+task -t Taskfile.local.yaml deploy:sync   # hard-refresh the ArgoCD applications
+```
+
+Working on the code rather than running it is the third entry point:
 
 ```bash
 task -t Taskfile.dev.yaml             # the gates, codegen and dependency bumps
@@ -80,8 +157,8 @@ task -t Taskfile.dev.yaml verify-all  # the commit gate: tests, lint and build
 
 ## Prerequisites
 
-`task stack:up` needs only the first two rows. Working on the code needs the
-rest.
+Installing from the charts needs none of this. `task stack:up` needs only the
+first two rows; working on the code needs the rest.
 
 | Tool | Why |
 |------|-----|
@@ -129,10 +206,13 @@ with [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 [`ci.yaml`](.github/workflows/ci.yaml) runs `verify-all` and audits the
 workflows with actionlint and zizmor. A green push to `main` dispatches
 [`release.yaml`](.github/workflows/release.yaml): semantic-release computes
-the next tag from the commits since the last one, and a GitHub release with
-generated notes is created for it.
+the next tag from the commits since the last one, a GitHub release with
+generated notes is created for it, and both images and charts are pushed to
+GHCR at that version. The SDK and API-contract tags follow their own stream —
+see [docs/releasing.md](docs/releasing.md).
 
-CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
+`ci.yaml` builds no image and deploys nothing; images and charts are published
+only by `release.yaml`, for a release tag. `verify-deep` and
 `verify-e2e` need Docker and run locally, before a merge.
 
 ## Documentation
@@ -146,6 +226,7 @@ CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
 | [docs/install.md](docs/install.md) | installing on Kubernetes with the Helm charts |
 | [docs/configuration.md](docs/configuration.md) | every configuration surface, and the validation run at load |
 | [docs/upgrading.md](docs/upgrading.md) | breaking changes between releases |
+| [docs/releasing.md](docs/releasing.md) | what each tag family publishes and who cuts it |
 | [docs/](docs/README.md) | subsystems, [ADRs](docs/adr/) and [runbooks](docs/runbooks/) |
 | [CONTRIBUTING.md](.github/CONTRIBUTING.md) | pull requests are not accepted yet; security fixes are |
 | [docs/development.md](docs/development.md) | conventions, test tiers, how a pull request is expected to look |
