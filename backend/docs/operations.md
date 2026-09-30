@@ -95,7 +95,8 @@ Common tasks include:
   registry); same two variables
 - `task test` — run unit tests
 - `task lint` — run golangci-lint
-- `task codegen:proto` — regenerate proto Go files
+- `task generate` — regenerate mocks and sqlc bindings; the proto Go stubs
+  are generated in `sdk/go` (`task -t Taskfile.dev.yaml go-sdk-gen:proto`)
 - `task codegen:sqlc` — regenerate sqlc query files
 
 ## Kubernetes Deployment

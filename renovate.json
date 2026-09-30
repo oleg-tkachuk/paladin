@@ -7,7 +7,7 @@
     "Go and npm: enabled for minor/patch only, grouped into one PR per half per month. Majors stay manual, matching `task deps:update` (minor/patch, no majors, cross a major deliberately per CHANGELOG). Grouping rather than disabling: a public repository needs the security half of dependency automation to work, and a manager that is switched off raises no PR when an advisory lands.",
     "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window."
   ],
-  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm"],
+  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm", "pep621"],
   "pinDigests": true,
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 2,
@@ -40,7 +40,13 @@
       "schedule": ["before 6am on the first day of the month"]
     },
     {
-      "matchManagers": ["gomod", "npm"],
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "python sdk dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "matchManagers": ["gomod", "npm", "pep621"],
       "matchUpdateTypes": ["major"],
       "enabled": false,
       "description": "Majors are crossed by hand — a Go major can break the generated Connect stubs the frontend consumes, which no lockfile bump can tell you."

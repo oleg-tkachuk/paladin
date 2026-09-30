@@ -92,7 +92,7 @@ go build ./...                     # from backend/
 task backend:test                  # unit
 task backend:test:integration      # testcontainers Postgres, needs Docker
 task backend:lint                  # golangci-lint, curated set in .golangci.yaml
-task backend:generate              # proto + sqlc + mocks
+task backend:generate              # sqlc + mocks; proto stubs live in sdk/go
 ```
 
 The full compose stack — every plane, Postgres, SeaweedFS, and the

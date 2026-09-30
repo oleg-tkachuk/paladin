@@ -170,7 +170,7 @@ tasks:
             "  task -t Taskfile.dev.yaml verify-py-sdk      the Python SDK on its own" \
             "  task -t Taskfile.dev.yaml test               unit tests, both halves" \
             "  task -t Taskfile.dev.yaml lint               linters, both halves" \
-            "  task -t Taskfile.dev.yaml gen                proto + sqlc + mocks + the console's codegen" \
+            "  task -t Taskfile.dev.yaml gen                SDK stubs + sqlc + mocks + the console's codegen" \
             "  task -t Taskfile.dev.yaml deps:update        bump dependencies, no majors" \
             "  task -t Taskfile.dev.yaml sec:scan           the security scanners" \
             "" \
