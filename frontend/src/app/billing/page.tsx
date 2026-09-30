@@ -218,6 +218,10 @@ export default function BillingPage() {
   // fetch). Keep the setter — the in-flight flag may still be useful
   // for "Refresh" button affordance later.
   const [, setLoading] = useState(false);
+  // Why the last load failed. Without it a failed first load left the chart
+  // a skeleton forever and the breakdowns saying "no charges", which is a
+  // claim about data the page never received.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Debounce period changes — date pickers fire on each keystroke,
   // we don't want one RPC per character.
@@ -243,9 +247,11 @@ export default function BillingPage() {
       ]);
       setSummary(s);
       setTimeseries(ts);
+      setLoadError(null);
     } catch (err) {
       const msg =
         err instanceof ConnectError ? err.rawMessage : "Failed to load billing";
+      setLoadError(msg);
       showNotification({ type: "error", title: "Load failed", message: msg });
     } finally {
       setLoading(false);
@@ -363,148 +369,157 @@ export default function BillingPage() {
         </div>
       </Card>
 
-      {/* KPI tiles. Show skeleton whenever we don't have data yet —
+      {loadError !== null && !summary ? (
+        <Card className="space-y-2 p-8 text-center">
+          <h3 className={T.cardTitleProse}>Billing is unavailable</h3>
+          <p className={cn(T.helper, "mx-auto max-w-xl")}>{loadError}</p>
+        </Card>
+      ) : (
+        <>
+          {/* KPI tiles. Show skeleton whenever we don't have data yet —
           covers both "first fetch in flight" and "haven't started
           fetching" (tenantId still resolving). The previous
           condition `loading && !summary` left a brief flash of
           empty tiles between mount and the first fetch firing. */}
-      {!summary ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <KPITile
-            label="Total spend"
-            value={formatMoney(total, unit, undefined, 4)}
-            helper={
-              max > 0
-                ? `${pctOfBudget.toFixed(1)}% of budget`
-                : "no budget configured"
-            }
-          />
-          <KPITile
-            label="Charges"
-            value={formatCount(chargeCount)}
-            helper="this period"
-          />
-          <KPITile
-            label="Budget remaining"
-            value={
-              max > 0 ? (
-                formatMoney(remaining, unit)
-              ) : (
-                <span className={T.helper}>—</span>
-              )
-            }
-            helper={
-              max > 0 ? (
-                <div className="h-1.5 w-full rounded bg-muted">
-                  <div
-                    className={cn(
-                      "h-full rounded transition-all",
-                      pctOfBudget >= 90
-                        ? "bg-destructive"
-                        : pctOfBudget >= 70
-                          ? "bg-amber-500"
-                          : "bg-emerald-500",
-                    )}
-                    style={{ width: `${pctOfBudget}%` }}
-                  />
-                </div>
-              ) : (
-                "set a tenant budget to enable progress tracking"
-              )
-            }
-          />
-        </div>
-      )}
-
-      {/* Time-series */}
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className={T.cardTitleProse}>Spend over time</h3>
-          <div className="flex items-center gap-2">
-            <span className={T.label}>Granularity</span>
-            <Select
-              value={granularity}
-              onChange={(v) => setGranularity(v as Granularity)}
-              options={[
-                { value: "hour", label: "Hour" },
-                { value: "day", label: "Day" },
-                { value: "week", label: "Week" },
-              ]}
-            />
-          </div>
-        </div>
-        {!timeseries ? (
-          <Skeleton className="h-32" />
-        ) : buckets.length === 0 ? (
-          <div className={cn(T.helper, "py-8 text-center")}>
-            No data for the selected period.
-          </div>
-        ) : (
-          <>
-            <Sparkline data={tsValues} className="h-32" />
-            <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
-              {peak && (
-                <span>
-                  Peak: {formatMoney(peak.amount, tsUnit)} on{" "}
-                  {tsToDate(peak.start)?.toISOString().slice(0, 10) ?? "—"}
-                </span>
-              )}
-              <span>
-                Average: {formatMoney(avg, tsUnit)} per {granularity}
-              </span>
+          {!summary ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
             </div>
-          </>
-        )}
-      </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <KPITile
+                label="Total spend"
+                value={formatMoney(total, unit, undefined, 4)}
+                helper={
+                  max > 0
+                    ? `${pctOfBudget.toFixed(1)}% of budget`
+                    : "no budget configured"
+                }
+              />
+              <KPITile
+                label="Charges"
+                value={formatCount(chargeCount)}
+                helper="this period"
+              />
+              <KPITile
+                label="Budget remaining"
+                value={
+                  max > 0 ? (
+                    formatMoney(remaining, unit)
+                  ) : (
+                    <span className={T.helper}>—</span>
+                  )
+                }
+                helper={
+                  max > 0 ? (
+                    <div className="h-1.5 w-full rounded bg-muted">
+                      <div
+                        className={cn(
+                          "h-full rounded transition-all",
+                          pctOfBudget >= 90
+                            ? "bg-destructive"
+                            : pctOfBudget >= 70
+                              ? "bg-amber-500"
+                              : "bg-emerald-500",
+                        )}
+                        style={{ width: `${pctOfBudget}%` }}
+                      />
+                    </div>
+                  ) : (
+                    "set a tenant budget to enable progress tracking"
+                  )
+                }
+              />
+            </div>
+          )}
 
-      {/* Empty state — when the period genuinely has no charges, hide
+          {/* Time-series */}
+          <Card className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className={T.cardTitleProse}>Spend over time</h3>
+              <div className="flex items-center gap-2">
+                <span className={T.label}>Granularity</span>
+                <Select
+                  value={granularity}
+                  onChange={(v) => setGranularity(v as Granularity)}
+                  options={[
+                    { value: "hour", label: "Hour" },
+                    { value: "day", label: "Day" },
+                    { value: "week", label: "Week" },
+                  ]}
+                />
+              </div>
+            </div>
+            {!timeseries ? (
+              <Skeleton className="h-32" />
+            ) : buckets.length === 0 ? (
+              <div className={cn(T.helper, "py-8 text-center")}>
+                No data for the selected period.
+              </div>
+            ) : (
+              <>
+                <Sparkline data={tsValues} className="h-32" />
+                <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
+                  {peak && (
+                    <span>
+                      Peak: {formatMoney(peak.amount, tsUnit)} on{" "}
+                      {tsToDate(peak.start)?.toISOString().slice(0, 10) ?? "—"}
+                    </span>
+                  )}
+                  <span>
+                    Average: {formatMoney(avg, tsUnit)} per {granularity}
+                  </span>
+                </div>
+              </>
+            )}
+          </Card>
+
+          {/* Empty state — when the period genuinely has no charges, hide
           the breakdowns and show a single explanation card. */}
-      {summary && chargeCount === 0 ? (
-        <Card className="space-y-2 p-8 text-center">
-          <h3 className={T.cardTitleProse}>No charges in this period</h3>
-          <p className={cn(T.helper, "max-w-xl mx-auto")}>
-            No charges recorded for this tenant in the selected period. Charges
-            accumulate when capability tokens are used to call billable handlers
-            (presign / upload / etc.).
-          </p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <BreakdownCard
-            title="Top capabilities"
-            entries={summary?.topCapabilities ?? []}
-            unitCode={unit}
-            // Capabilities are tenant-scoped now — link goes to
-            // the active tenant's Capabilities tab. Falls back to a
-            // dead anchor when scope is empty (shouldn't happen on
-            // the billing page, which already requires a tenant).
-            linkBuilder={
-              tenantId
-                ? (id) =>
-                    `/tenants/${encodeURIComponent(tenantId)}/capabilities?id=${encodeURIComponent(id)}`
-                : undefined
-            }
-            emptyHint="No capability charges in this period."
-          />
-          <BreakdownCard
-            title="Top actors"
-            entries={summary?.topActors ?? []}
-            unitCode={unit}
-            emptyHint="No actor charges in this period."
-          />
-          <BreakdownCard
-            title="Top ops"
-            entries={summary?.topOps ?? []}
-            unitCode={unit}
-            emptyHint="No op charges in this period."
-          />
-        </div>
+          {summary && chargeCount === 0 ? (
+            <Card className="space-y-2 p-8 text-center">
+              <h3 className={T.cardTitleProse}>No charges in this period</h3>
+              <p className={cn(T.helper, "max-w-xl mx-auto")}>
+                No charges recorded for this tenant in the selected period.
+                Charges accumulate when capability tokens are used to call
+                billable handlers (presign / upload / etc.).
+              </p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <BreakdownCard
+                title="Top capabilities"
+                entries={summary?.topCapabilities ?? []}
+                unitCode={unit}
+                // Capabilities are tenant-scoped now — link goes to
+                // the active tenant's Capabilities tab. Falls back to a
+                // dead anchor when scope is empty (shouldn't happen on
+                // the billing page, which already requires a tenant).
+                linkBuilder={
+                  tenantId
+                    ? (id) =>
+                        `/tenants/${encodeURIComponent(tenantId)}/capabilities?id=${encodeURIComponent(id)}`
+                    : undefined
+                }
+                emptyHint="No capability charges in this period."
+              />
+              <BreakdownCard
+                title="Top actors"
+                entries={summary?.topActors ?? []}
+                unitCode={unit}
+                emptyHint="No actor charges in this period."
+              />
+              <BreakdownCard
+                title="Top ops"
+                entries={summary?.topOps ?? []}
+                unitCode={unit}
+                emptyHint="No op charges in this period."
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
