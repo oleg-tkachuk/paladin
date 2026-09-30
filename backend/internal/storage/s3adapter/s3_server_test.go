@@ -393,6 +393,43 @@ func TestClientDeleteBucketError(t *testing.T) {
 	}
 }
 
+// Deleting a bucket the backend never had is done, not failed: a bucket
+// deleted while still pending provisioning used to sit in 'deleting' while the
+// reconciler retried the 404 without end.
+func TestClientDeleteBucketAlreadyGone(t *testing.T) {
+	f := newFakeS3(t)
+	f.route = func(w http.ResponseWriter, r *http.Request, _, _ string) bool {
+		if r.Method == http.MethodDelete {
+			writeS3Error(w, http.StatusNotFound, codeNoSuchBucket, "gone")
+			return true
+		}
+		return false
+	}
+	c := newTestClient(t, f.srv.URL)
+
+	if err := c.DeleteBucket(testCtx, "primary", "never-made"); err != nil {
+		t.Fatalf("NoSuchBucket on delete: want success, got %v", err)
+	}
+}
+
+// A 404 that does not say NoSuchBucket proves nothing about the bucket — a
+// wrong endpoint answers the same way — so it stays an error.
+func TestClientDeleteBucketBare404Fails(t *testing.T) {
+	f := newFakeS3(t)
+	f.route = func(w http.ResponseWriter, r *http.Request, _, _ string) bool {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNotFound)
+			return true
+		}
+		return false
+	}
+	c := newTestClient(t, f.srv.URL)
+
+	if err := c.DeleteBucket(testCtx, "primary", "somewhere"); err == nil {
+		t.Fatal("bare 404 on delete: want error")
+	}
+}
+
 func TestClientTagBucketOwner(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)

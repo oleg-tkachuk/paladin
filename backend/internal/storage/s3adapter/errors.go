@@ -35,6 +35,22 @@ import (
 // undecidable case before this sentinel is returned.
 var ErrObjectNotFound = errors.New("s3adapter: object not found")
 
+// codeNoSuchBucket is the S3 error code for a bucket the backend does not have.
+const codeNoSuchBucket = "NoSuchBucket"
+
+// bucketGone reports whether err is the backend saying the bucket does not
+// exist. Only the typed error or its code count: a bare 404 can equally be a
+// wrong endpoint or path-style mismatch, and reading that as "already deleted"
+// would drop the row while the bucket lives on.
+func bucketGone(err error) bool {
+	var noSuchBucket *s3types.NoSuchBucket
+	if errors.As(err, &noSuchBucket) {
+		return true
+	}
+	var coder interface{ ErrorCode() string }
+	return errors.As(err, &coder) && coder.ErrorCode() == codeNoSuchBucket
+}
+
 // bucketLevelCodes are S3 error codes that mean "the container is wrong or
 // gone", never "this key is absent". They are checked first and always lose:
 // a missing bucket looks superficially like a missing object (both 404) but
@@ -42,7 +58,7 @@ var ErrObjectNotFound = errors.New("s3adapter: object not found")
 // not-found would mark an entire tenant's pending uploads FAILED on a
 // misconfigured binding.
 var bucketLevelCodes = map[string]struct{}{
-	"NoSuchBucket":      {},
+	codeNoSuchBucket:    {},
 	"InvalidBucketName": {},
 }
 

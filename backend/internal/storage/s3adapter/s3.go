@@ -336,11 +336,15 @@ func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region
 
 // DeleteBucket removes a real S3 bucket. Caller is responsible for ensuring
 // the bucket is empty (S3 rejects non-empty deletes).
+//
+// A bucket the backend does not have is already deleted, so NoSuchBucket is
+// success. Without that, a bucket deleted before it was ever provisioned kept
+// its row in 'deleting' and the reconciler retried the 404 forever.
 func (c *Client) DeleteBucket(ctx context.Context, backendID, bucketName string) error {
 	_, err := c.s3.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: aws.String(bucketName),
 	})
-	if err != nil {
+	if err != nil && !bucketGone(err) {
 		return fmt.Errorf("s3 delete bucket %q: %w", bucketName, err)
 	}
 	return nil
