@@ -139,8 +139,6 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 --ingroup nodejs nextjs && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-COPY --from=builder /app/public ./public
-
 # Prerender cache — created up-front with correct ownership so the runtime
 # needs no write permission on /app itself. `.next/cache` explicitly, not just
 # `.next`: Next creates it on the first ISR write, which succeeds only because

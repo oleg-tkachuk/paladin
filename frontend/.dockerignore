@@ -4,7 +4,7 @@
 # builds and smaller cached layers.
 #
 # Keep:
-#   - source dirs (src/, public/, configs/)
+#   - source dirs (src/, configs/)
 #   - lockfile + manifest (package.json, pnpm-lock.yaml,
 #     pnpm-workspace.yaml) for `pnpm install --frozen-lockfile`
 #   - build configs (next.config.ts, tsconfig.json, eslint.config.mjs,
