@@ -1,7 +1,9 @@
 # Paladin Python SDK
 
+Not published to PyPI. Install from the repository:
+
 ```bash
-pip install paladin-sdk
+pip install "git+https://github.com/oleg-tkachuk/paladin#subdirectory=sdk/python"
 ```
 
 Two parts, both imported as `paladin`:
@@ -150,7 +152,7 @@ they no longer match the contract.
 
 ## Versioning
 
-The package version is the API contract's: `paladin-sdk X.Y.Z` is generated
-from `api/vX.Y.Z`. The buf.validate module the contract's descriptors depend
+The package version is the API contract's: version X.Y.Z is generated from
+`api/vX.Y.Z`. The buf.validate module the contract's descriptors depend
 on ships inside the wheel as `buf.validate`, because no PyPI package provides
 it for the `protobuf` runtime.

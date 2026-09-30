@@ -68,8 +68,10 @@ egress verified first is still the cheap order.
 
 ### The `paladin` name collides — decide qualify-vs-rename before publishing
 
-- **Status:** Open, and now informed. Registries checked 2026-08-21; the
-  trademark question is still open and is the one that matters most.
+- **Status:** Open, not blocking. Registries checked 2026-08-21. Owner
+  decision 2026-09-30: nobody else uses Paladin yet, so if the name turns out
+  to be taken the service is renamed then; the repository goes public without
+  waiting on it.
 - **What the check found:**
   - **PyPI `paladin` is taken by NVIDIA** — `nv-paladin/paladin`, "The
     Foundation for All Paladin Libraries", Apache-2.0, 242 stars, version
@@ -103,8 +105,8 @@ egress verified first is still the cheap order.
      publicly.
   3. **Rename.** Only worth it if the trademark answer forces it.
   The cost of deciding late is in other people's bookmarks, not in this tree.
-- **Blockers:** none technically. This gates *publishing*, not development —
-  see the CI item, which wants the repository public.
+- **Blockers:** none. A rename is cheapest before anything is published
+  under the name — the SDK distributions above all.
 
 ---
 
@@ -1961,17 +1963,16 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** the first release tag, and the same publish decision as the
   name-collision item.
 
-## PyPI does not know the Python SDK yet
+## The Python SDK is not published
 
-- **Status:** Deferred (owner action before the first contract tag).
-- **Reason:** `.github/workflows/sdk.yaml` publishes `paladin-sdk` through
-  PyPI trusted publishing, which needs the project registered on PyPI with this
-  repository, the `sdk.yaml` workflow and the `pypi` environment as its
-  publisher, and the `pypi` environment created in the repository settings.
-  Until then the Python job fails at the publish step; the Go SDK is unaffected.
-  The package name is provisional, gated on the name-collision item.
-- **Definition of Done:** an `api/v*` tag publishes `paladin-sdk` to PyPI.
-- **Blockers:** the name decision; the Actions billing item.
+- **Status:** Deferred (owner decision, 2026-09-30).
+- **Reason:** there are no users outside the owner, so the SDK is installed
+  from the repository. The distribution name `paladin-sdk` is provisional and
+  follows the product name if that changes.
+- **Definition of Done:** a publish job in `.github/workflows/sdk.yaml` on
+  `api/v*` (PyPI trusted publishing, a `pypi` environment), and the version in
+  `sdk/python/pyproject.toml` checked against the tag.
+- **Blockers:** the decision to publish.
 
 ## Include-level `vars:` do not reach a var the component declares
 

@@ -27,10 +27,8 @@ To land a deliberate breaking change:
 
    Then bump `API_BASELINE_TAG` in `backend/scripts/proto-breaking.sh` to it.
 
-   The pushed tag publishes both SDKs at that version
-   (`.github/workflows/sdk.yaml`): it tags `sdk/go/vX.Y.Z` on the same commit
-   and publishes `paladin-sdk X.Y.Z` to PyPI, refusing when
-   `pyproject.toml` names a different version.
+   The pushed tag releases the Go SDK at that version
+   (`.github/workflows/sdk.yaml` tags `sdk/go/vX.Y.Z` on the same commit).
 
    A new number rather than `-f` on the current one: the tags are the record
    of what the contract WAS at each point, and force-moving a published tag

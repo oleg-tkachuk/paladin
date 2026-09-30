@@ -1,9 +1,9 @@
 name: SDK
 
-# Publishes both SDKs when an API contract baseline is cut: pushing
-# api/vX.Y.Z tags the Go SDK sdk/go/vX.Y.Z on the same commit and publishes
-# paladin-sdk X.Y.Z to PyPI. The SDKs are versioned with the contract they are
-# generated from; see docs/upgrading.md, "Changing the API contract".
+# Releases the Go SDK when an API contract baseline is cut: pushing
+# api/vX.Y.Z tags sdk/go/vX.Y.Z on the same commit. The SDKs are versioned with
+# the contract they are generated from; see docs/upgrading.md, "Changing the
+# API contract". The Python SDK is not published anywhere yet.
 #
 # api/latest is a moving pointer, not a release, and does not match.
 on:
@@ -15,10 +15,6 @@ permissions: {}
 concurrency:
   group: sdk-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  # renovate: datasource=github-releases depName=astral-sh/uv
-  UV_VERSION: "0.12.21"
 
 jobs:
   go:
@@ -55,51 +51,3 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
             -f ref="refs/tags/sdk/go/${version}" -f sha="${GITHUB_SHA}" >/dev/null
           printf 'tagged sdk/go/%s at %s\n' "$version" "$GITHUB_SHA"
-
-  python:
-    name: Publish the Python SDK
-    runs-on: ubuntu-26.04
-    timeout-minutes: 15
-    # PyPI trusted publishing: the project on PyPI names this repository,
-    # workflow and environment, so no token is stored anywhere.
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write # trusted publishing
-    defaults:
-      run:
-        working-directory: sdk/python
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: false
-
-      - name: Refuse a version that is not the tag's
-        env:
-          API_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          want="${API_TAG#api/v}"
-          got="$(uv version --short)"
-          if [ "$got" != "$want" ]; then
-            printf 'pyproject.toml says %s, the tag is %s — bump the version with the contract\n' "$got" "$API_TAG" >&2
-            exit 1
-          fi
-
-      - name: Test
-        run: uv run --group dev pytest -q
-
-      - name: Build
-        run: uv build
-
-      - name: Publish
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-        with:
-          packages-dir: sdk/python/dist
