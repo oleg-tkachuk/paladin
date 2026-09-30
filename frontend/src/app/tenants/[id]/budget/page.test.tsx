@@ -192,3 +192,35 @@ describe("TenantBudgetPage OCC", () => {
     expect(h.get.mock.calls.length).toBeGreaterThan(1);
   });
 });
+
+describe("TenantBudgetPage unavailable", () => {
+  beforeEach(() => {
+    h.get.mockReset();
+    h.set.mockReset();
+    h.notify.mockReset();
+  });
+
+  // The toast goes away; the snapshot card must keep saying why it is empty,
+  // and Apply must not look like it would work.
+  it("says the budget is unavailable and holds Apply", async () => {
+    h.get.mockRejectedValue(
+      new ConnectError(
+        "capability subsystem disabled; tenant budget unavailable",
+        Code.Unavailable,
+      ),
+    );
+    render(<BudgetPage />);
+
+    expect(await screen.findByText("Budget unavailable.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "capability subsystem disabled; tenant budget unavailable",
+      ),
+    ).toBeInTheDocument();
+    for (const button of screen.getAllByRole("button", {
+      name: /apply changes|create budget/i,
+    })) {
+      expect(button).toBeDisabled();
+    }
+  });
+});

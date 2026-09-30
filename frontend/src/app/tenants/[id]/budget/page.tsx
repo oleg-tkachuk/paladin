@@ -337,6 +337,18 @@ export default function TenantBudgetPage() {
               </div>
             )}
           </div>
+        ) : budgetQuery.isError ? (
+          <div className="flex items-start gap-3 text-sm">
+            <BanknotesIcon className="mt-0.5 size-5 text-muted-foreground" />
+            <div>
+              <p className="font-medium">Budget unavailable.</p>
+              <p className="text-muted-foreground">
+                {budgetQuery.error instanceof ConnectError
+                  ? budgetQuery.error.rawMessage
+                  : String(budgetQuery.error)}
+              </p>
+            </div>
+          </div>
         ) : null}
       </Card>
 
@@ -434,7 +446,12 @@ export default function TenantBudgetPage() {
           <div className="flex justify-end">
             <Button
               type="submit"
-              disabled={submitting || initialising || !maxBudget.trim()}
+              disabled={
+                submitting ||
+                initialising ||
+                budgetQuery.isError ||
+                !maxBudget.trim()
+              }
             >
               {submitting ? (
                 "Updating…"
