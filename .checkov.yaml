@@ -48,13 +48,6 @@ skip-check:
   # explicit resourceNames list — see templates/rbac.yaml.
   - CKV_K8S_38
 
-  # UID 1001 belongs to the frontend image, not to the chart: the Dockerfile
-  # creates nextjs:nodejs at 1001 and chowns the app tree to it, so raising it
-  # here alone would leave the process unable to write its own .next/cache.
-  # Moving it is a Dockerfile-and-chart change; tracked as a follow-up rather
-  # than done blind.
-  - CKV_K8S_40
-
   # Liveness and readiness live in the manifests, which is where Kubernetes
   # reads them. The only compose service anything waits on with
   # `service_healthy` is postgres, and it declares its own healthcheck — so
