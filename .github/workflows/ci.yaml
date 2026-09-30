@@ -35,6 +35,11 @@ env:
   GOLANGCI_LINT_VERSION: "v2.14.0"
   # renovate: datasource=github-releases depName=bufbuild/buf
   BUF_VERSION: "1.73.0"
+  # The codegen gates normalise generated imports with goimports when it is on
+  # PATH, and the committed stubs are normalised. Without it the check
+  # regenerates with the plugin's own grouping and reports every file stale.
+  # renovate: datasource=go depName=golang.org/x/tools
+  GOIMPORTS_VERSION: "v0.50.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v4.3.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
@@ -159,6 +164,11 @@ jobs:
             capability/go.sum
             sdk/go/go.sum
 
+      - name: Set up goimports
+        run: |
+          set -euo pipefail
+          go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"
+          printf '%s\n' "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
       - name: Set up golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
