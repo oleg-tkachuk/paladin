@@ -903,8 +903,9 @@ type MCP struct {
 	// "antithesis to capability model" set: tool names an agentic
 	// runtime must never see in its catalog (Issue/Revoke its own
 	// capability, mint API tokens, manage users, rewrite policies).
-	// Tool-name patterns support trailing-* wildcard. Default list
-	// (when empty) is the built-in DefaultAlwaysDeny.
+	// Tool-name patterns support trailing-* wildcard. Unset (nil) keeps
+	// the built-in DefaultAlwaysDeny; a list replaces it, and an explicit
+	// empty list denies nothing.
 	AlwaysDeny []string `yaml:"always_deny" json:"always_deny"`
 
 	// OAuth turns the streamable-HTTP MCP server into a spec-compliant

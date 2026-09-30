@@ -116,8 +116,8 @@ var DefaultCatalog = []ToolMeta{
 	// NB: most iam tools (login, manage-user) are in DefaultAlwaysDeny —
 	// they're never exposed to agents. The few kept here support
 	// read-only debugging via admin profile.
-	{Name: "paladin_create_user", Audience: "iam", Description: "Create a user (denied by default; admin-profile only).", Mutates: true},
-	{Name: "paladin_grant_user_scopes", Audience: "iam", Description: "Grant scopes (denied by default; admin-profile only).", Mutates: true},
+	{Name: "paladin_create_user", Audience: "iam", Description: "Create a user. In the default always-deny list, so no profile sees it unless mcp.always_deny is replaced.", Mutates: true},
+	{Name: "paladin_grant_user_scopes", Audience: "iam", Description: "Grant scopes. In the default always-deny list, so no profile sees it unless mcp.always_deny is replaced.", Mutates: true},
 }
 
 // DefaultProfiles is the baked-in profile set used when cfg.MCP.Profiles
