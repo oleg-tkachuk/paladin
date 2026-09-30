@@ -281,7 +281,7 @@ type Querier interface {
 	// no-op. Worker callers pass the version they read from
 	// ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
 	HardDeleteObjectIfStillDeleted(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
-	// Unconditional physical delete. Used by Delete(force=true) and Purge.
+	// Unconditional physical delete. Used by PurgeTenant.
 	// expected_version=0 → no OCC guard; non-zero → strict match.
 	HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.

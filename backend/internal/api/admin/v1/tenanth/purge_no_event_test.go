@@ -3,9 +3,11 @@ package tenanth
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -61,5 +63,28 @@ func TestPurgeTenantDoesNotFanOutItsOwnEvent(t *testing.T) {
 	}
 	if repo.lastHardDelete.tenantID != tid {
 		t.Errorf("hard delete forwarded %+v, want tenant %v", repo.lastHardDelete, tid)
+	}
+}
+
+// Purging an active tenant names the call that has to come first. The message
+// used to send callers to DeleteTenant(force=true), a flag that no longer
+// exists.
+func TestPurgeActiveTenantPointsAtDeleteTenant(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeRepo{getFn: func(_ context.Context, id uuid.UUID) (Tenant, error) {
+		return Tenant{TenantID: id}, nil
+	}}
+	err := NewHandler(repo, allow()).PurgeTenant(adminCtx(tid), tid)
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want %v (err: %v)", got, connect.CodeFailedPrecondition, err)
+	}
+	if !errors.Is(err, errPurgeActiveTenant) {
+		t.Errorf("err = %v, want errPurgeActiveTenant", err)
+	}
+	if strings.Contains(err.Error(), "force") {
+		t.Errorf("message still points at a flag that is gone: %v", err)
+	}
+	if repo.lastHardDelete.tenantID != uuid.Nil {
+		t.Errorf("an active tenant was hard-deleted: %+v", repo.lastHardDelete)
 	}
 }

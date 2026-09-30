@@ -115,7 +115,7 @@ WHERE id = $1
        OR resource_version = $2::bigint)
 `
 
-// Unconditional physical delete. Used by Delete(force=true) and Purge.
+// Unconditional physical delete. Used by PurgeTenant.
 // expected_version=0 → no OCC guard; non-zero → strict match.
 func (q *Queries) HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, hardDeleteTenant, iD, expectedVersion)

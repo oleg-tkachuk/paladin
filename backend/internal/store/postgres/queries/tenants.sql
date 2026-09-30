@@ -105,7 +105,7 @@ UPDATE tenants
         OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: HardDeleteTenant :execrows
--- Unconditional physical delete. Used by Delete(force=true) and Purge.
+-- Unconditional physical delete. Used by PurgeTenant.
 -- expected_version=0 → no OCC guard; non-zero → strict match.
 DELETE FROM tenants
 WHERE id = $1

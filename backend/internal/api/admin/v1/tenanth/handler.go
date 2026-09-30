@@ -796,14 +796,6 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	return &t, nil
 }
 
-// DeleteTenant supports two modes:
-//   - force=false (default): soft-delete. Sets deleted_at; tenant
-//     becomes recoverable via RestoreTenant within the retention TTL.
-//   - force=true: hard-delete. Skips the trash entirely.
-//
-// The force flag preserves the legacy "rip and run" path that E2E
-// cleanups + emergency procedures rely on, while the default protects
-// operators from undoable accidents.
 // DeleteTenant moves the tenant to the trash. It is the only thing this call
 // does now: the `force` flag that used to make it hard-delete instead is gone,
 // because landing the tenant in a different state is a different transition,
@@ -868,9 +860,13 @@ func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenan
 	return &t, nil
 }
 
+// errPurgeActiveTenant names the call that has to come first. It used to point
+// at DeleteTenant(force=true), a flag that no longer exists.
+var errPurgeActiveTenant = errors.New("tenant is active; move it to the trash with DeleteTenant first")
+
 // PurgeTenant hard-deletes a soft-deleted row. Requires the row to be
-// trashed first; on an active tenant returns FailedPrecondition. The
-// rare "skip the trash" path is DeleteTenant(force=true).
+// trashed first; on an active tenant returns FailedPrecondition. There is
+// no path past the trash: DeleteTenant first, then this.
 func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return err
@@ -886,7 +882,7 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	}
 	if t.DeletedAt.IsZero() {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("tenant is active; soft-delete it first or use DeleteTenant(force=true)"))
+			errPurgeActiveTenant)
 	}
 	// expectedVersion=0 — the row is already trashed and OCC was
 	// enforced at SoftDelete time. Purge is monotonically destructive.

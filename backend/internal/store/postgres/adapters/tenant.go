@@ -393,8 +393,7 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 		// pgerr folds the RESTRICT pair into one Kind: Postgres splits 23503
 		// foreign_key_violation from 23001 restrict_violation purely on how
 		// the constraint was declared, and checking only the first meant
-		// DeleteTenant(force=true) on a tenant with users — which every
-		// tenant has — leaked the raw SQL text as CodeInternal instead of
+		// purging a tenant with users — which every tenant has — leaked the raw SQL text as CodeInternal instead of
 		// saying what was wrong.
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
 			// Name the relation that is actually refusing. The static text
