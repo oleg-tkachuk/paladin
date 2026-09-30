@@ -222,6 +222,7 @@ func addTool[Args any](
 	if filter != nil && !filter.Allow(tool.Name) {
 		return
 	}
+	annotate(tool)
 	mcpsdk.AddTool(srv, tool, func(ctx context.Context, req *mcpsdk.CallToolRequest, args Args) (*mcpsdk.CallToolResult, any, error) {
 		res, out, err := handler(withRequestCredentials(ctx, req.Extra), req, args)
 		if err != nil {
