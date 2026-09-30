@@ -5,8 +5,13 @@ import { z } from "zod";
 // Resolve UI metadata with robust fallbacks
 const envFileVars: Record<string, string> = {};
 
+// What a build that was given no metadata reports: nothing. The readers show
+// "local" for an empty version and hide an empty commit, which is true; a
+// made-up number is not.
+export const UNSET_META = "";
+
 // Helper to prioritize non-placeholder strings
-const resolveMeta = (
+export const resolveMeta = (
   primary: string | undefined,
   secondary: string | undefined,
   tertiary: string | undefined,
@@ -24,13 +29,13 @@ const appVersion = resolveMeta(
   fs.existsSync("VERSION")
     ? fs.readFileSync("VERSION", "utf8").trim()
     : undefined,
-  "1.4.0",
+  UNSET_META,
 );
 const gitSha = resolveMeta(
   process.env.GIT_COMMIT_HASH,
   envFileVars.GIT_COMMIT_HASH,
   process.env.NEXT_PUBLIC_UI_METADATA_GIT_SHA,
-  "local",
+  UNSET_META,
 );
 const buildTime = resolveMeta(
   process.env.BUILD_TIME,

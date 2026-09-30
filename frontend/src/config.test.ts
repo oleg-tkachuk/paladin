@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { configSchema, loadConfig } from "./config";
+import { UNSET_META, configSchema, loadConfig, resolveMeta } from "./config";
 
 // This schema used to describe four subtrees; three of them were read by no
 // code. `paladin.upstreamUrl` fed an env var nothing consumed, `oidc.*` was for a
@@ -73,5 +73,29 @@ describe("loadConfig", () => {
     const cfg = loadConfig();
     expect(cfg.runtimeConfig.public.configPath).toBe("configs/config.yaml");
     expect(cfg.runtimeConfig.public.uiMetadata.service).toBe("paladin-console");
+  });
+});
+
+describe("uiMetadata without build args", () => {
+  // `docker build` without APP_VERSION used to report "1.4.0" — a version the
+  // console never had — beside the backend's real one on the dashboard.
+  it("reports no version rather than inventing one", () => {
+    const meta = configSchema.parse({}).runtimeConfig.public.uiMetadata;
+    expect(meta.version).toBe(UNSET_META);
+    expect(meta.gitSha).toBe(UNSET_META);
+  });
+
+  it.each([undefined, "", "undefined", "none", "unknown", "  "])(
+    "treats %j as unset",
+    (placeholder) => {
+      expect(resolveMeta(placeholder, undefined, undefined, UNSET_META)).toBe(
+        UNSET_META,
+      );
+    },
+  );
+
+  it("takes the first real value in order", () => {
+    expect(resolveMeta(undefined, "2.0.0", "3.0.0", UNSET_META)).toBe("2.0.0");
+    expect(resolveMeta("1.0.0", "2.0.0", undefined, UNSET_META)).toBe("1.0.0");
   });
 });
