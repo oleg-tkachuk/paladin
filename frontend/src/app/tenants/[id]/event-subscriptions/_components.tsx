@@ -7,60 +7,50 @@ import {
   XCircleIcon as XCircleSolid,
 } from "@heroicons/react/20/solid";
 
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/ui/form-dialog";
 import { cn } from "@/lib/utils";
-import { T } from "@/lib/ui/typography";
 import { truncate, type TestResult } from "./_form";
 
-export function FormSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h3>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
-
+/**
+ * A kit FormField around a control rendered by the caller, which already
+ * carries the id `htmlFor` names; the hint's id and the invalid state are
+ * added to it here.
+ */
 export function Field({
   label,
   htmlFor,
-  optional,
+  required,
   hint,
   error,
   children,
 }: {
   label: string;
   htmlFor?: string;
-  optional?: boolean;
+  required?: boolean;
   hint?: string;
   error?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor} className="text-xs">
-        {label}
-        {optional && (
-          <span className="ml-1.5 font-normal text-muted-foreground">
-            (optional)
-          </span>
-        )}
-      </Label>
-      {children}
-      {error ? (
-        <p className={cn(T.hint, "text-destructive")}>{error}</p>
-      ) : hint ? (
-        <p className={T.hint}>{hint}</p>
-      ) : null}
-    </div>
+    <FormField
+      label={label}
+      id={htmlFor}
+      required={required}
+      hint={hint}
+      error={error ?? null}
+    >
+      {(control) =>
+        htmlFor && React.isValidElement(children)
+          ? React.cloneElement(
+              children as React.ReactElement<Record<string, unknown>>,
+              {
+                "aria-describedby": control["aria-describedby"],
+                "aria-invalid": control["aria-invalid"],
+              },
+            )
+          : children
+      }
+    </FormField>
   );
 }
 

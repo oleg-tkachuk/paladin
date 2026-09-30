@@ -92,13 +92,15 @@ describe("EventsPage", () => {
     expect(
       screen.getByRole("heading", { name: "New event subscription" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("URL")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^URL/)).toBeInTheDocument();
   });
 
   it("does not create when the URL is invalid", async () => {
     render(<EventsPage />);
     await userEvent.click(newSubButtons()[0]);
-    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create subscription" }),
+    );
     expect(h.create).not.toHaveBeenCalled();
     expect(screen.getByText(/valid http\(s\):\/\/ URL/i)).toBeInTheDocument();
   });
@@ -108,14 +110,34 @@ describe("EventsPage", () => {
     render(<EventsPage />);
     await userEvent.click(newSubButtons()[0]);
     await userEvent.type(
-      screen.getByLabelText("URL"),
+      screen.getByLabelText(/^URL/),
       "https://example.com/hook",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create subscription" }),
+    );
     await waitFor(() =>
       expect(h.create).toHaveBeenCalledWith(
         expect.objectContaining({ parent: "tenants/t-1" }),
       ),
+    );
+  });
+
+  // It used to close into a toast; the editor now keeps the form and says why.
+  it("keeps a failed create in the editor, with the reason", async () => {
+    h.create.mockRejectedValue(new Error("boom"));
+    render(<EventsPage />);
+    await userEvent.click(newSubButtons()[0]);
+    await userEvent.type(
+      screen.getByLabelText(/^URL/),
+      "https://example.com/hook",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create subscription" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
+    expect(screen.getByLabelText(/^URL/)).toHaveValue(
+      "https://example.com/hook",
     );
   });
 
@@ -131,7 +153,7 @@ describe("EventsPage", () => {
     expect(
       screen.getByRole("heading", { name: "Edit subscription" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("URL")).toHaveValue(
+    expect(screen.getByLabelText(/^URL/)).toHaveValue(
       "https://hook.example.com/x",
     );
   });
