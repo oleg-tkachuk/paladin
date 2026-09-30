@@ -9,6 +9,7 @@ import {
   type AccessTokenDTO,
   type UserDTO,
 } from "@/lib/auth/bff";
+import { loginFailure } from "@/lib/auth/loginFailure";
 
 /**
  * POST /api/auth/login
@@ -95,9 +96,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return out;
   } catch (err) {
     console.error("[BFF /login]", err);
-    return NextResponse.json(
-      { error: (err as Error).message || "login failed" },
-      { status: 401 },
-    );
+    const { status, error } = loginFailure(err);
+    return NextResponse.json({ error }, { status });
   }
 }

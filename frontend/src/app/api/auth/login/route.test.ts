@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 const h = vi.hoisted(() => ({ login: vi.fn() }));
 
@@ -11,6 +12,10 @@ vi.mock("@/lib/auth/bff", async (orig) => {
 });
 
 import { POST } from "./route";
+import {
+  INVALID_CREDENTIALS_MESSAGE,
+  SIGN_IN_UNAVAILABLE_MESSAGE,
+} from "@/lib/auth/loginFailure";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/bff";
 
 function loginReq(body: unknown) {
@@ -72,11 +77,33 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(400);
   });
 
-  it("401s when IAM rejects the credentials", async () => {
-    h.login.mockRejectedValue(new Error("invalid credentials"));
+  it("401s when IAM rejects the credentials, in words for the form", async () => {
+    h.login.mockRejectedValue(
+      new ConnectError("invalid credentials", Code.Unauthenticated),
+    );
     const res = await POST(loginReq({ subject: "admin", password: "bad" }));
     expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe(INVALID_CREDENTIALS_MESSAGE);
     expect(res.cookies.get(SESSION_COOKIE_NAME)?.value).toBeFalsy();
+  });
+
+  it("403s with IAM's reason when the account may not sign in", async () => {
+    h.login.mockRejectedValue(
+      new ConnectError("user is disabled", Code.PermissionDenied),
+    );
+    const res = await POST(loginReq({ subject: "admin", password: "pw" }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("user is disabled");
+  });
+
+  // An unreachable IAM is not a wrong password.
+  it("502s when IAM cannot be reached", async () => {
+    h.login.mockRejectedValue(new TypeError("fetch failed"));
+    const res = await POST(loginReq({ subject: "admin", password: "pw" }));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe(
+      `${SIGN_IN_UNAVAILABLE_MESSAGE}: fetch failed`,
+    );
   });
 
   it("502s when IAM returns no token pair", async () => {
