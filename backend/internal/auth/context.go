@@ -7,6 +7,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -33,6 +34,12 @@ type Principal struct {
 	// Audience is the JWT `aud` claim — used by handlers to assert that a
 	// caller hitting the admin plane wasn't issued a data-plane token.
 	Audience string
+	// Audiences is every value of the token's `aud` claim, whatever the
+	// verifier expected. A caller that forwards the token — the MCP edge —
+	// reads it to know which planes the token can reach.
+	Audiences []string
+	// ExpiresAt is the token's `exp`; zero when the claim is absent.
+	ExpiresAt time.Time
 	// PrincipalKind distinguishes a User-bound JWT from an ApiKey-derived
 	// token. Cedar policies may key on this for blast-radius limits.
 	Kind PrincipalKind

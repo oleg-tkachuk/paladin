@@ -130,9 +130,13 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		Roles:      c.Roles,
 		Scopes:     scopes,
 		Audience:   v.ExpectedAudience,
+		Audiences:  audiences(c.Aud),
 		Kind:       parseKind(c.Kind),
 		Labels:     c.Labels,
 		TenantSlug: c.TenantSlug,
+	}
+	if c.Exp > 0 {
+		p.ExpiresAt = time.Unix(c.Exp, 0)
 	}
 	if t := c.tenantClaim(); t != "" {
 		id, err := uuid.Parse(t)
@@ -158,6 +162,23 @@ func parseKind(s string) PrincipalKind {
 
 func b64Decode(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
+}
+
+// audiences reads the `aud` claim, which RFC 7519 allows as one string or an
+// array of them.
+func audiences(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return []string{s}
+	}
+	var arr []string
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		return arr
+	}
+	return nil
 }
 
 func audienceMatches(raw json.RawMessage, want string) bool {

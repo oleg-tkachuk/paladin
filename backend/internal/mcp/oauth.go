@@ -17,11 +17,17 @@
 package mcp
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
 
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	apitoken "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -115,50 +121,106 @@ func jsonDocHandler(body []byte) http.Handler {
 	})
 }
 
-// RequireBearer wraps the MCP handler with an OAuth 2.1 Resource-Server
-// challenge: a request without a valid bearer token gets 401 +
-// WWW-Authenticate pointing at the protected-resource metadata, so a
-// compliant client can begin discovery. A token that is present but fails
-// signature/issuer/expiry checks is rejected the same way (error="invalid_token").
+// RequireBearer authenticates every request at the MCP edge and hands the
+// SDK the caller's identity, so a session is bound to the principal that
+// opened it. A request without a credential, or with one that fails
+// signature, issuer or expiry, gets 401 + WWW-Authenticate (error=
+// "invalid_token" for the second); resourceMetadataURL, when set, points an
+// OAuth client at the RFC 9728 document, and is empty when OAuth is off.
 //
-// resourceMetadataURL is the absolute (or root-relative) URL of the RFC 9728
-// document. verifier validates signature + issuer + expiry but NOT audience —
-// an agent token targets whichever plane it calls (admin/data/iam), so pinning
-// one audience here would wrongly reject valid tokens; the planes still do
-// their own per-audience checks downstream.
+// verifier checks signature + issuer + expiry but NOT audience — an agent
+// token targets whichever plane a tool calls, and the planes check their own
+// audience downstream. A Paladin API token (paladin_pat_…) is not a JWT and
+// is verified by the planes against their store, which this edge does not
+// hold; it passes here, identified by its hash.
 func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetadataURL string) http.Handler {
+	bound := bindSession(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok := BearerToken(r)
 		if tok == "" {
 			writeChallenge(w, resourceMetadataURL, "", "")
 			return
 		}
-		if _, err := verifier.Verify(r.Context(), tok); err != nil {
-			writeChallenge(w, resourceMetadataURL, "invalid_token", "the access token is missing, expired, or invalid")
-			return
+		info := &mcpauth.TokenInfo{UserID: credentialIdentity(tok)}
+		if !strings.HasPrefix(tok, apitoken.TokenPrefix) {
+			p, err := verifier.Verify(r.Context(), tok)
+			if err != nil {
+				writeChallenge(w, resourceMetadataURL, "invalid_token", "the access token is missing, expired, or invalid")
+				return
+			}
+			info = &mcpauth.TokenInfo{
+				UserID:     principalIdentity(p),
+				Expiration: p.ExpiresAt,
+				Extra:      map[string]any{TokenInfoAudiences: p.Audiences},
+			}
 		}
-		next.ServeHTTP(w, r)
+		bound.ServeHTTP(w, withTokenInfo(r, tok, info))
 	})
 }
 
-// RequireToken is the challenge for deployments that have not enabled the
-// OAuth Resource-Server posture. It only checks that *some* credential is
-// present — verification stays downstream, where the planes check audience and
-// scope — but it makes the refusal honest: without it, a request with no token
-// reaches the SDK's session factory, which returns nil and surfaces as
-// "400 Bad Request". A missing credential is 401, not a malformed request, and
-// clients (and humans reading logs) act on that difference.
+// RequireToken is the edge for a deployment with no way to verify a token —
+// no signing key and no JWKS. It can only check that a credential is present;
+// the planes verify it. It still binds each session to that credential, so a
+// session id cannot be driven with another token.
 //
 // No resource_metadata parameter is emitted: with OAuth disabled there is no
-// metadata document to point a client at. Use RequireBearer when there is.
+// metadata document to point a client at.
 func RequireToken(next http.Handler) http.Handler {
+	bound := bindSession(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if BearerToken(r) == "" {
+		tok := BearerToken(r)
+		if tok == "" {
 			writeChallenge(w, "", "", "")
 			return
 		}
-		next.ServeHTTP(w, r)
+		bound.ServeHTTP(w, withTokenInfo(r, tok, &mcpauth.TokenInfo{UserID: credentialIdentity(tok)}))
 	})
+}
+
+// TokenInfoAudiences is the TokenInfo.Extra key holding the token's `aud`
+// values, for handlers that explain which planes a session can reach.
+const TokenInfoAudiences = "audiences"
+
+// principalIdentity names a verified principal for session binding: the
+// tenant and the subject, since a subject is unique only within its tenant.
+func principalIdentity(p *auth.Principal) string {
+	return "jwt:" + p.TenantID.String() + "/" + p.Subject
+}
+
+// credentialIdentity names a credential the edge cannot open. Only a digest
+// is kept: the identity sits in the SDK's session table.
+func credentialIdentity(tok string) string {
+	sum := sha256.Sum256([]byte(tok))
+	return "token:" + hex.EncodeToString(sum[:])
+}
+
+type tokenInfoKey struct{}
+
+// withTokenInfo stashes the identity for bindSession and puts the credential
+// in the Authorization header, which is the only place the SDK reads it from
+// — a legacy X-Paladin-Token request would otherwise be refused there.
+func withTokenInfo(r *http.Request, tok string, info *mcpauth.TokenInfo) *http.Request {
+	r = r.Clone(context.WithValue(r.Context(), tokenInfoKey{}, info))
+	r.Header.Set("Authorization", "Bearer "+tok)
+	return r
+}
+
+// bindSession runs the SDK's bearer middleware with the identity this edge
+// already established. The SDK does the binding itself: a session remembers
+// the TokenInfo.UserID that created it and refuses requests carrying another.
+func bindSession(next http.Handler) http.Handler {
+	return mcpauth.RequireBearerToken(
+		func(ctx context.Context, _ string, _ *http.Request) (*mcpauth.TokenInfo, error) {
+			info, _ := ctx.Value(tokenInfoKey{}).(*mcpauth.TokenInfo)
+			if info == nil {
+				return nil, mcpauth.ErrInvalidToken
+			}
+			return info, nil
+		},
+		// Expiry was checked by the verifier with its leeway; an API token and
+		// an unverifiable credential carry none to check.
+		&mcpauth.RequireBearerTokenOptions{AllowMissingExpiration: true},
+	)(next)
 }
 
 // writeChallenge emits the 401 + WWW-Authenticate per RFC 9728 §5.1 (the

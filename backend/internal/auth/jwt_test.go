@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -195,5 +196,40 @@ func TestExpiryLeeway(t *testing.T) {
 	v.Leeway = time.Second
 	if _, err := v.Verify(context.Background(), tok); err == nil {
 		t.Error("a token 2s past expiry was accepted with only 1s of leeway")
+	}
+}
+
+// The MCP edge forwards the token to whichever plane a tool calls, so it
+// needs every audience the token carries — not only the one a plane expects —
+// and its expiry, to bind a session no longer than the token lives.
+func TestVerifyReportsEveryAudienceAndTheExpiry(t *testing.T) {
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	now := time.Unix(1_700_000_000, 0)
+	exp := now.Add(time.Hour)
+	for name, aud := range map[string]any{
+		"string": "paladin-admin",
+		"array":  []string{"paladin-admin", "paladin-data"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tok := hs256(t, secret, map[string]any{
+				"sub": "u1", "aud": aud, "exp": exp.Unix(),
+			})
+			// As the MCP edge builds it: no expected audience.
+			v := &JWTVerifier{Key: secret, Now: func() time.Time { return now }}
+			p, err := v.Verify(context.Background(), tok)
+			if err != nil {
+				t.Fatalf("verify: %v", err)
+			}
+			want := []string{"paladin-admin"}
+			if name == "array" {
+				want = []string{"paladin-admin", "paladin-data"}
+			}
+			if !slices.Equal(p.Audiences, want) {
+				t.Errorf("audiences = %v, want %v", p.Audiences, want)
+			}
+			if !p.ExpiresAt.Equal(exp) {
+				t.Errorf("expires = %v, want %v", p.ExpiresAt, exp)
+			}
+		})
 	}
 }

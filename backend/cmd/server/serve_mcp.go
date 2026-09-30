@@ -329,32 +329,30 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 
 	mux := http.NewServeMux()
 
-	// OAuth 2.1 Resource-Server posture (ADR-0008). When enabled, the MCP
-	// endpoint advertises where to authenticate (RFC 9728 / RFC 8414) and
-	// challenges unauthenticated requests with 401 + WWW-Authenticate so a
-	// standard MCP client can run discovery. Disabled → the legacy
-	// X-Paladin-Token path still answers a credential-less request with 401
-	// (RequireToken), just without a resource_metadata pointer.
-	mcpHandler := http.Handler(tracked)
+	// Every request is authenticated here and its session bound to the
+	// principal that opened it (RequireBearer). The OAuth 2.1 Resource-Server
+	// posture (ADR-0008) adds only the discovery documents and the
+	// resource_metadata pointer in the challenge.
+	//
+	// Verification used to happen only with OAuth on; otherwise any non-empty
+	// header opened a session, so an expired token got a working initialize
+	// and a failure on every call, and anyone could hold sessions open.
+	metadataURL := ""
 	if cfg.MCP.OAuth.Enabled {
 		mux.Handle(mcp.WellKnownProtectedResource, mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth))
 		if cfg.MCP.OAuth.AuthorizationServer.Issuer != "" {
 			mux.Handle(mcp.WellKnownAuthorizationServer, mcp.AuthorizationServerMetadataHandler(cfg.MCP.OAuth.AuthorizationServer))
 		}
-		// Edge verifier: signature + issuer + expiry, NOT audience (an agent
-		// token targets whichever plane it calls; the planes do per-audience
-		// checks downstream). Without a usable verifier we can't enforce, so
-		// log and fall back to serving metadata only.
-		if v := buildAgentVerifier(ctx, cfg.Auth, l); v != nil {
-			mcpHandler = mcp.RequireBearer(tracked, v, oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL))
-		} else {
-			l.Warn("mcp oauth: bearer challenge disabled — no usable JWT verifier (set auth.signing_key or auth.jwks_url)")
-			mcpHandler = mcp.RequireToken(mcpHandler)
-		}
+		metadataURL = oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL)
+	}
+	var mcpHandler http.Handler
+	if v := buildAgentVerifier(ctx, cfg.Auth, l); v != nil {
+		mcpHandler = mcp.RequireBearer(tracked, v, metadataURL)
 	} else {
-		// Legacy X-Paladin-Token path: no discovery metadata to advertise, but
-		// a request with no credential is still 401, not the SDK's 400.
-		mcpHandler = mcp.RequireToken(mcpHandler)
+		// A thin bridge with no signing key or JWKS cannot verify; the planes
+		// do. Sessions are still bound to the credential that opened them.
+		l.Warn("mcp: no JWT verifier (set auth.signing_key or auth.jwks_url) — tokens are checked only by the planes")
+		mcpHandler = mcp.RequireToken(tracked)
 	}
 	mux.Handle("/mcp", mcpHandler)
 
