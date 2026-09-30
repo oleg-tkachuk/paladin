@@ -73,5 +73,5 @@ For when something is already on fire.
 - [specs/](../specs/) — spec-driven-development artifacts per feature:
   specification, research, data model, plan, tasks. Useful when you want
   to know what alternatives a feature considered.
-- [SECURITY.md](../SECURITY.md) — the security model, and how to report
-  a vulnerability.
+- [security-model.md](security-model.md) — the security model; how to report is in [SECURITY.md](../.github/SECURITY.md)
+- [development.md](development.md) — conventions, test tiers and the gates

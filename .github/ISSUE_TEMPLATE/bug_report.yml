@@ -7,7 +7,7 @@ body:
       value: |
         **Not for security issues.** If this is a way for a principal to gain
         authority it should not have, close this and follow
-        [SECURITY.md](https://github.com/oleg-tkachuk/paladin/blob/main/SECURITY.md)
+        [SECURITY.md](https://github.com/oleg-tkachuk/paladin/blob/main/.github/SECURITY.md)
         instead.
 
         Worth checking first: [BACKLOG.md](https://github.com/oleg-tkachuk/paladin/blob/main/BACKLOG.md)

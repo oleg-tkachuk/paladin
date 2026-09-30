@@ -1,46 +1,8 @@
-# Security policy
+# Security model
 
-## Reporting a vulnerability
-
-**Do not open a public issue for a security problem.**
-
-Report privately through GitHub:
-
-1. Go to the [Security tab](https://github.com/oleg-tkachuk/paladin/security/advisories/new).
-2. Open a draft advisory ("Report a vulnerability").
-
-That channel is private until an advisory is published, and it gives us a
-place to work on a fix with you before anything is disclosed.
-
-If GitHub private reporting is unavailable to you for any reason, open a
-public issue containing **only** the words "security report, please make
-contact" and nothing else — no details, no reproduction — and a maintainer
-will arrange a private channel.
-
-### What to include
-
-A report is actionable when it says what an attacker gains, not only what
-looks wrong. Where you can:
-
-- the component (`backend/internal/auth`, the `capability` module, the
-  Next.js BFF, a Helm chart, …) and the version or commit;
-- the principal you started as, and the authority you ended with;
-- a reproduction — a request sequence, a config fragment, a failing test;
-- anything you already know about the blast radius (one tenant? all of
-  them? the platform plane?).
-
-### What to expect
-
-This is a pre-1.0 project maintained by a small number of people, so these
-are honest intentions rather than a contractual SLA:
-
-| Stage | Target |
-| --- | --- |
-| Acknowledgement of your report | 3 working days |
-| Initial assessment (valid / not, rough severity) | 10 working days |
-| Fix or documented mitigation for a confirmed high-severity issue | 30 days |
-
-We will credit you in the advisory unless you ask us not to.
+What is in scope for a security report, what is deliberately not a finding,
+and where the load-bearing pieces are. How to report is in
+[SECURITY.md](../.github/SECURITY.md).
 
 ## Scope
 
@@ -83,21 +45,16 @@ closed with a pointer here.
   convenience and is not hardened; report these against the Helm charts,
   which are the deployment path we intend people to use.
 
-## Security model
+## Where to start
 
 If you are looking for where to start, these are the load-bearing pieces:
 
-- [`docs/adr/0010-capability-as-establishing-credential.md`](docs/adr/0010-capability-as-establishing-credential.md)
+- [`docs/adr/0010-capability-as-establishing-credential.md`](adr/0010-capability-as-establishing-credential.md)
   — what a capability is allowed to establish on its own.
-- [`docs/adr/0012-machine-principals-may-delete-their-own-objects.md`](docs/adr/0012-machine-principals-may-delete-their-own-objects.md)
+- [`docs/adr/0012-machine-principals-may-delete-their-own-objects.md`](adr/0012-machine-principals-may-delete-their-own-objects.md)
   — the deliberate widening of machine-principal authority, and its limits.
-- [`docs/adr/0008-mcp-oauth-resource-server.md`](docs/adr/0008-mcp-oauth-resource-server.md)
-  and [`0009-oauth-authorization-server.md`](docs/adr/0009-oauth-authorization-server.md)
+- [`docs/adr/0008-mcp-oauth-resource-server.md`](adr/0008-mcp-oauth-resource-server.md)
+  and [`0009-oauth-authorization-server.md`](adr/0009-oauth-authorization-server.md)
   — the token-issuing surfaces.
-- [`capability/README.md`](capability/README.md) — the primitive itself,
+- [`capability/README.md`](../capability/README.md) — the primitive itself,
   including its threat model.
-
-## Supported versions
-
-Pre-1.0: only `main` is supported. Fixes land there and are released from
-there; there are no maintained release branches yet.

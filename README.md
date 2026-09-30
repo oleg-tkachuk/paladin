@@ -89,7 +89,7 @@ rest.
 `verify-all` also shells out to golangci-lint, buf, helm, yq and
 python3. On macOS `brew bundle` installs that set; the [Brewfile](Brewfile)
 says which tools are pinned elsewhere instead, and why.
-[CONTRIBUTING.md](CONTRIBUTING.md) covers the optional git hooks.
+[docs/development.md](docs/development.md) covers the optional git hooks.
 
 ## Commands
 
@@ -141,8 +141,10 @@ CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
 | [docs/configuration.md](docs/configuration.md) | every configuration surface, and the validation run at load |
 | [docs/upgrading.md](docs/upgrading.md) | breaking changes between releases |
 | [docs/](docs/README.md) | subsystems, [ADRs](docs/adr/) and [runbooks](docs/runbooks/) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | conventions, test tiers, how a pull request is expected to look |
-| [SECURITY.md](SECURITY.md) | the security model, and reporting a vulnerability |
+| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | pull requests are not accepted yet; security fixes are |
+| [docs/development.md](docs/development.md) | conventions, test tiers, how a pull request is expected to look |
+| [SECURITY.md](.github/SECURITY.md) | reporting a vulnerability |
+| [docs/security-model.md](docs/security-model.md) | scope, known non-findings, the security model |
 | [BACKLOG.md](BACKLOG.md) | deferred work, each item with its reason — read before calling a gap an oversight |
 
 ## Layout

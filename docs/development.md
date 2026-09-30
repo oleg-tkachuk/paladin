@@ -1,11 +1,11 @@
-# Contributing
+# Development guide
 
-Thanks for looking. This document is the short version of how the project
-actually works — the conventions here are enforced by hooks and CI, so
-knowing them up front saves a round trip.
+How the project works — the conventions here are enforced by hooks and CI,
+so knowing them up front saves a round trip.
 
-If you are reporting a security problem, stop and read
-[SECURITY.md](SECURITY.md) instead.
+The repository does not accept pull requests yet; see
+[CONTRIBUTING.md](../.github/CONTRIBUTING.md). If you are reporting a security
+problem, read [SECURITY.md](../.github/SECURITY.md) instead.
 
 ## Prerequisites
 
@@ -102,7 +102,7 @@ Two things follow from this that are easy to miss:
 
 ## BACKLOG.md
 
-[BACKLOG.md](BACKLOG.md) is the single source of truth for deferred work.
+[BACKLOG.md](../BACKLOG.md) is the single source of truth for deferred work.
 It is long, and that is the point: everything this project decided *not*
 to do is written down with the reason.
 
@@ -124,8 +124,8 @@ and the reviewer will treat it as a decision rather than an oversight.
 
 Anything that changes a boundary — a new dependency direction, a new
 trust relationship, a storage or transport choice — wants an ADR in
-[`docs/adr/`](docs/adr/). Follow the numbering and the existing format;
-[`docs/adr/README.md`](docs/adr/README.md) explains it.
+[`docs/adr/`](adr/). Follow the numbering and the existing format;
+[`docs/adr/README.md`](adr/README.md) explains it.
 
 Adding a dependency under a copyleft or source-available licence requires
 an ADR. Everything currently in the tree is Apache-2.0, MIT or BSD.
@@ -135,8 +135,8 @@ an ADR. Everything currently in the tree is Apache-2.0, MIT or BSD.
 Non-trivial features flow through the Spec Kit workflow
 (`/speckit-specify` → `/speckit-plan` → `/speckit-tasks` →
 `/speckit-implement`), and the resulting artifacts live in
-[`specs/`](specs/). Every plan passes the seven-principle Constitution
-Check in [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
+[`specs/`](../specs/). Every plan passes the seven-principle Constitution
+Check in [`.specify/memory/constitution.md`](../.specify/memory/constitution.md)
 before implementation.
 
 You do **not** need to use this workflow to contribute. A bug fix, a
@@ -146,7 +146,7 @@ with AI assistance and the specs are how that work stays reviewable — if
 you are proposing something large, reading the relevant `specs/` directory
 first will tell you what was already considered and rejected.
 
-The `.agents/`, `.claude/`, `.specify/` and `.rtk/` directories are that
+The `.agents/`, `.specify/` and `.rtk/` directories are that
 tooling. They are committed on purpose, and you can ignore all of them.
 
 ## Pull requests

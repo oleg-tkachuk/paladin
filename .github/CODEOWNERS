@@ -10,4 +10,4 @@
 /capability/              @oleg-tkachuk
 /backend/migrations/      @oleg-tkachuk
 /.github/                 @oleg-tkachuk
-/SECURITY.md              @oleg-tkachuk
+/docs/security-model.md   @oleg-tkachuk
