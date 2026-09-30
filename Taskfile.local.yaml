@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+# Paladin — publishing to the host-only registry and syncing the local cluster.
+#
+#   task -t Taskfile.local.yaml deploy           publish both images + charts to registry.local
+#   task -t Taskfile.local.yaml backend:deploy   publish one of them
+#   task -t Taskfile.local.yaml deploy:sync      hard-refresh the ArgoCD apps after a deploy
+#
+# The released artifacts go to GHCR from .github/workflows/release.yaml; this
+# file is the loop in between releases. Why a separate entry point at all — see
+# the header of Taskfile.yaml.
+
+silent: true
+
+vars:
+  # The OCI registry the local cluster pulls from. Both components derive
+  # their image path and chart repo from it.
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  IMAGE_NAMESPACE: '{{.IMAGE_NAMESPACE | default "paladin"}}'
+  # Kube context every kubectl/helm task targets. Defaults to the local
+  # OrbStack cluster; both components redeclare the same default so a
+  # standalone `cd backend && task …` behaves identically.
+  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
+  # Shared task library — github.com/oleg-tkachuk/taskfiles, pinned. Another
+  # copy of the pin in Taskfile.yaml, for the reason given in Taskfile.dev.yaml.
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
+  # Status marker, the same vocabulary as the shared library.
+  _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+
+includes:
+  # ─── components ────────────────────────────────────────────────────────────
+  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these
+  # blocks byte-identical; `verify:taskfile-drift` in Taskfile.dev.yaml is what
+  # notices.
+  backend:
+    taskfile: backend/Taskfile.yaml
+    dir: backend
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+  frontend:
+    taskfile: frontend/Taskfile.yaml
+    dir: frontend
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+
+  # ─── registry check ────────────────────────────────────────────────────────
+  # Only registry:check is taken. The module's own deploy fan-out runs a child
+  # `task deploy` in each component, which receives none of the vars above and
+  # would publish nowhere; `deploy` below calls the components through their
+  # includes instead.
+  monorepo:
+    taskfile: '{{printf .TASKLIB "monorepo"}}'
+    dir: .
+    flatten: true
+    excludes: ["test", "lint", "build", "deploy", "each"]
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+
+  # ─── cluster ───────────────────────────────────────────────────────────────
+  argocd:
+    taskfile: '{{printf .TASKLIB "argocd"}}'
+    dir: .
+    vars: { K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+
+tasks:
+  default:
+    desc: "The commands for the local registry and cluster"
+    cmds:
+      - cmd: |
+          printf '%s\n' \
+            "Paladin — the local registry and cluster" \
+            "" \
+            "  task -t Taskfile.local.yaml deploy            publish both images + charts to {{.GLOBAL_REGISTRY}}" \
+            "  task -t Taskfile.local.yaml backend:deploy    publish one of them" \
+            "  task -t Taskfile.local.yaml deploy:sync       hard-refresh the ArgoCD apps after a deploy" \
+            "  task -t Taskfile.local.yaml argocd:list       sync + health of every Argo app" \
+            "  task -t Taskfile.local.yaml backend:deploy-local  build + helm-install, no registry"
+
+  deploy:
+    desc: "Publish both images + charts to {{.GLOBAL_REGISTRY}}, after checking it answers"
+    # Sequential and stops at the first failure: a half-shipped registry is
+    # worse than a failed command with a name attached to it.
+    deps: [registry:check]
+    cmds:
+      - task: backend:deploy
+      - task: frontend:deploy
+
+  deploy:sync:
+    desc: "Hard-refresh the paladin-core / paladin-console ArgoCD apps after a deploy"
+    # The prefix is deliberately narrow: a bare `paladin` would also match the
+    # unrelated paladin-postgresql infra app, which must not be hard-refreshed.
+    cmds:
+      - task: argocd:refresh
+        vars: { APP_PREFIX: "paladin-core" }
+      - task: argocd:refresh
+        vars: { APP_PREFIX: "paladin-console" }
+      - echo "{{._OK}} paladin · both applications refreshed"

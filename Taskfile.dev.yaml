@@ -19,9 +19,11 @@ version: "3"
 silent: true
 
 vars:
-  # Single source of truth for the OCI registry. Both components derive their
-  # image path and chart repo from it, so re-pointing the stack is one override.
+  # The local image names, not a publish target: verify-e2e builds both images
+  # and the e2e compose file, verify-e2e.sh and stack-ports.sh run them as
+  # registry.local/paladin/<component>. Nothing here pushes.
   GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  IMAGE_NAMESPACE: '{{.IMAGE_NAMESPACE | default "paladin"}}'
   # Kube context every kubectl/helm task targets. Defaults to the local
   # OrbStack cluster; both components redeclare the same default so a
   # standalone `cd backend && task …` behaves identically.
@@ -42,20 +44,20 @@ vars:
 
 includes:
   # ─── components ────────────────────────────────────────────────────────────
-  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these two
+  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these
   # blocks byte-identical; `verify:taskfile-drift` below is what notices.
   backend:
     taskfile: backend/Taskfile.yaml
     dir: backend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
   frontend:
     taskfile: frontend/Taskfile.yaml
     dir: frontend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
 
   # ─── fan-out ───────────────────────────────────────────────────────────────
   # The other half of the split described in Taskfile.yaml: test, lint and
-  # build are a developer's verbs, deploy is not. Flattened for the same
+  # build are a developer's verbs, deploy is Taskfile.local.yaml's. Flattened for the same
   # reason there — `task test`, not `task all:test`.
   monorepo:
     taskfile: '{{printf .TASKLIB "monorepo"}}'
@@ -144,7 +146,8 @@ tasks:
             "  task -t Taskfile.dev.yaml sec:scan           the security scanners" \
             "" \
             "  task -t Taskfile.dev.yaml --list             the rest, component by component" \
-            "  task                                         operating the stack"
+            "  task                                         operating the stack" \
+            "  task -t Taskfile.local.yaml                  publish to registry.local"
 
   # ═══ gates ══════════════════════════════════════════════════════════════════
 
@@ -286,16 +289,17 @@ tasks:
       - ./scripts/taskfile-vars.test.sh
 
   verify:taskfile-drift:
-    desc: "Fail when the two entry points list different components"
-    # The component includes are duplicated across Taskfile.yaml and this file
-    # because a single shared copy is not on offer: included with
+    desc: "Fail when the entry points list different components"
+    # The component includes are duplicated across Taskfile.yaml,
+    # Taskfile.local.yaml and this file because a single shared copy is not on
+    # offer: included with
     # `flatten: true` — the only form that keeps the namespaces callable as
     # `backend:deploy` rather than `components:backend:deploy` — Task 3.53.1
     # resolves an included file's variables out of one pool shared with its
     # siblings, which is the same leak `verify:taskfile-vars` above exists for
     # and would be doubled by nesting the components a level deeper.
     #
-    # So the list is in two places, and this fails when they stop agreeing.
+    # So the list is in three places, and this fails when they stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
 

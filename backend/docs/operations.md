@@ -44,11 +44,11 @@ deployments are patched — there is no Task target for it.
 ### Build and Run
 
 ```bash
-# Build + push image and Helm chart to the OCI registry
-task deploy
+# From the repository root: build + push image and Helm chart to registry.local
+task -t Taskfile.local.yaml backend:deploy
 
 # Or build into the local Docker store + helm install to OrbStack (no registry)
-task deploy-local
+task -t Taskfile.local.yaml backend:deploy-local
 
 # Run the binary directly
 ./server --config configs/local.yaml
@@ -89,8 +89,10 @@ task --list
 
 Common tasks include:
 
-- `task deploy` — build + push image and Helm chart
-- `task deploy-local` — build into the local Docker store + helm install (no registry)
+- `task deploy` — build + push image and Helm chart; needs `GLOBAL_REGISTRY`
+  and `IMAGE_NAMESPACE`, which `Taskfile.local.yaml` at the root sets
+- `task deploy-local` — build into the local Docker store + helm install (no
+  registry); same two variables
 - `task test` — run unit tests
 - `task lint` — run golangci-lint
 - `task codegen:proto` — regenerate proto Go files

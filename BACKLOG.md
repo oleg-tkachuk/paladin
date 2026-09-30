@@ -1942,6 +1942,21 @@ finding moving from "packages you import" to "your code is affected".
   Security) all report `conclusion: failure` with **zero steps executed** on
   every job — the same signature, not a new failure. Nothing in the repository
   can move this.
+
+## Include-level `vars:` do not reach a var the component declares
+
+- **Status:** Deferred.
+- **Reason:** Task 3.53.1 evaluates an included Taskfile's own `vars:` before
+  the include's `vars:`, so a component declaration — even
+  `'{{.X | default "..."}}'` — always wins. `GLOBAL_REGISTRY` and
+  `IMAGE_NAMESPACE` were removed from the component Taskfiles for this reason;
+  `K8S_CONTEXT` is still declared in both, so the value every entry point
+  forwards is ignored. Invisible today only because every default is
+  `orbstack`.
+- **Definition of Done:** `K8S_CONTEXT` is undeclared in the components and
+  required by the tasks that talk to a cluster, or a test proves an entry
+  point's value reaches them.
+- **Blockers:** none.
 ---
 
 ## Terminal tenant events are observed by query, not by subscription

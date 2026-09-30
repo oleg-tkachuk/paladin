@@ -93,21 +93,22 @@ says which tools are pinned elsewhere instead, and why.
 
 ## Commands
 
-Two entry points, split by who runs the command. `task` operates the stack;
-`task -t Taskfile.dev.yaml` works on the repository. Each on its own prints
-its handful of commands, and `--list` after either prints everything it
-reaches.
+Three entry points, split by who runs the command. `task` operates the stack;
+`task -t Taskfile.local.yaml` publishes to the host-only `registry.local` and
+syncs the local ArgoCD applications; `task -t Taskfile.dev.yaml` works on the
+repository. Each on its own prints its handful of commands, and `--list` after
+any of them prints everything it reaches.
 
 | Task | Does |
 |------|------|
 | `task stack:up` | the whole stack in compose, waiting until every service is healthy |
-| `task deploy` | build and publish both images and charts to the OCI registry (`registry.local` by default) |
-| `task deploy:sync` | hard-refresh the ArgoCD applications after a deploy |
+| `task -t Taskfile.local.yaml deploy` | build and publish both images and charts to `registry.local` |
+| `task -t Taskfile.local.yaml deploy:sync` | hard-refresh the local ArgoCD applications after a deploy |
 | `task -t Taskfile.dev.yaml verify-all` | the commit gate: every tree's tests and lint, the proto compatibility check, the chart and Taskfile contract checks, the console build; no Docker |
 | `task -t Taskfile.dev.yaml verify-deep` | the Postgres-backed integration suites and the gates needing a live stack; Docker, ~15 min |
 | `task -t Taskfile.dev.yaml verify-e2e` | Playwright against images built from the current branch; Docker, ~10 min |
 
-Per half, from either: `task backend:test`, `task backend:test:integration`,
+Per half, from any of them: `task backend:test`, `task backend:test:integration`,
 `task frontend:test`, `task frontend:build`.
 
 ## How changes land

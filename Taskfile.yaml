@@ -5,36 +5,39 @@ version: "3"
 #
 #   task                 the commands below
 #   task stack:up        every plane + Postgres + SeaweedFS + console, in compose
-#   task deploy          publish both components to the registry
-#   task backend:deploy  publish one of them
 #
-# Working ON the repository — the gates, codegen and dependency bumps — is the
-# other entry point:
+# Three entry points, split by who runs the command:
 #
-#   task -t Taskfile.dev.yaml --list
+#   Taskfile.yaml        operating the stack; targets the published registry
+#   Taskfile.local.yaml  publishing to the host-only registry.local and syncing
+#                        the local ArgoCD apps
+#   Taskfile.dev.yaml    the gates, codegen and dependency bumps
 #
-# WHY TWO. `task` with no arguments is the list somebody reads to find a
-# command, and this one used to run `--list-all`: 165 lines, nearly all of them
-# a library verb on one of the two components. Nobody scrolls that to find
-# `deploy`. Hiding them is not an option either — Task's `internal: true`
-# removes a task from the list AND from the command line, so a hidden task
-# cannot be called at all. Two entry points is the mechanism Task offers.
+# Publishing to GHCR is not a command here: .github/workflows/release.yaml does
+# it for every release tag, multi-arch. The registry defaults below are the
+# same target, so a component task run from this file reads what CI published.
 #
-# The split is by who runs the command, not by what it touches: a gate and a
-# deploy both reach the whole tree, but only one of them is something an
-# operator runs.
+# WHY SEPARATE FILES. `task` with no arguments is the list somebody reads to
+# find a command, and this one used to run `--list-all`: 165 lines, nearly all
+# of them a library verb on one of the two components. Hiding them is not an
+# option — Task's `internal: true` removes a task from the list AND from the
+# command line, so a hidden task cannot be called at all. Separate entry points
+# are the mechanism Task offers.
 #
-# The component includes are duplicated into Taskfile.dev.yaml rather than
-# shared, and `task -t Taskfile.dev.yaml verify:taskfile-drift` fails when the
-# two copies stop agreeing. See that task for why a shared copy is not on
+# The component includes are duplicated into the other entry points rather
+# than shared, and `task -t Taskfile.dev.yaml verify:taskfile-drift` fails when
+# the copies stop agreeing. See that task for why a shared copy is not on
 # offer.
 
 silent: true
 
 vars:
-  # Single source of truth for the OCI registry. Both components derive their
-  # image path and chart repo from it, so re-pointing the stack is one override.
-  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  # Where release.yaml publishes: ghcr.io/<IMAGE_NAMESPACE>/<component> for the
+  # image, oci://ghcr.io/<IMAGE_NAMESPACE>/charts/<component> for the chart.
+  # Must match image.repository in both charts' values.yaml;
+  # `verify:publish-target` fails when they part.
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "ghcr.io"}}'
+  IMAGE_NAMESPACE: '{{.IMAGE_NAMESPACE | default "oleg-tkachuk"}}'
   # Kube context every kubectl/helm task targets. Defaults to the local
   # OrbStack cluster; both components redeclare the same default so a
   # standalone `cd backend && task …` behaves identically.
@@ -44,58 +47,33 @@ vars:
   # repository instead, keeping the %s:
   #   TASKLIB: '../taskfiles/%s'
   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
-  # Status markers. The shape carries the meaning, so a line still reads in a
-  # monochrome log; the colour drops out under NO_COLOR. The shared library
-  # prints the same vocabulary — two of them in one terminal session is what
-  # this avoids.
-  _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
 
 includes:
   # ─── components ────────────────────────────────────────────────────────────
-  # DUPLICATED into Taskfile.dev.yaml, deliberately, and guarded. Keep these
-  # two blocks byte-identical; `verify:taskfile-drift` there is what notices.
+  # DUPLICATED into Taskfile.local.yaml and Taskfile.dev.yaml, deliberately,
+  # and guarded. Keep these blocks byte-identical; `verify:taskfile-drift` is
+  # what notices.
   backend:
     taskfile: backend/Taskfile.yaml
     dir: backend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
   frontend:
     taskfile: frontend/Taskfile.yaml
     dir: frontend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
+    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
 
-  # ─── fan-out ───────────────────────────────────────────────────────────────
-  # Flattened, so it is `task deploy` and not `task all:deploy`. One name per
-  # thing — a second spelling of the same task is a thing to keep in sync, not
-  # a convenience.
-  #
-  # `excludes` is what splits the fan-out across the two entry points: the
-  # module defines test, lint, build AND deploy, and only the last of those is
-  # an operator's. The dev file takes the other three and excludes this one.
-  # `each` stays in both: deploy is defined in terms of it, and excluding it
-  # takes deploy down with it.
-  monorepo:
-    taskfile: '{{printf .TASKLIB "monorepo"}}'
-    dir: .
-    flatten: true
-    excludes: ["test", "lint", "build"]
-    vars: { COMPONENTS: ["backend", "frontend"], GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
-
-  # ─── cluster and local stack ───────────────────────────────────────────────
+  # ─── local stack ───────────────────────────────────────────────────────────
   # The integrated compose stack. backend's compose file is the single source
   # of truth — it builds the backend services and mounts the frontend as the
   # console container, with a build context resolving to ../../frontend.
   #
   # Here rather than in the dev file because `task stack:up` is the README's
   # first command: clone the repository and run the thing. That is the one
-  # audience neither half of the split is about, and it reaches for `task`.
+  # audience neither of the other files is about, and it reaches for `task`.
   stack:
     taskfile: '{{printf .TASKLIB "compose"}}'
     dir: .
     vars: { COMPOSE_FILE: ./backend/deploy/docker-compose.yaml, PROJECT_NAME: paladin }
-  argocd:
-    taskfile: '{{printf .TASKLIB "argocd"}}'
-    dir: .
-    vars: { K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
 
 tasks:
   default:
@@ -111,25 +89,9 @@ tasks:
             "" \
             "  task stack:up                      the whole stack in compose, locally" \
             "  task stack:down                    stop it, keep the volumes" \
-            "  task deploy                        publish both images + charts" \
-            "  task backend:deploy                publish one of them" \
-            "  task deploy:sync                   hard-refresh the ArgoCD apps after a deploy" \
             "  task backend:k8s:status            what is running" \
             "  task backend:k8s:logs              follow its logs" \
-            "  task argocd:list                   sync + health of every Argo app" \
             "" \
             "  task --list                        every operator task, component by component" \
+            "  task -t Taskfile.local.yaml        publish to registry.local, sync the ArgoCD apps" \
             "  task -t Taskfile.dev.yaml          gates, codegen and dependency bumps"
-
-  # ═══ release ════════════════════════════════════════════════════════════════
-
-  deploy:sync:
-    desc: "Hard-refresh the paladin-core / paladin-console ArgoCD apps after a deploy"
-    # The prefix is deliberately narrow: a bare `paladin` would also match the
-    # unrelated paladin-postgresql infra app, which must not be hard-refreshed.
-    cmds:
-      - task: argocd:refresh
-        vars: { APP_PREFIX: "paladin-core" }
-      - task: argocd:refresh
-        vars: { APP_PREFIX: "paladin-console" }
-      - echo "{{._OK}} paladin · both applications refreshed"

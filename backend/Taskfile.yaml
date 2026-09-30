@@ -16,11 +16,14 @@ vars:
   #   TASKLIB: '../../taskfiles/%s'
   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.0.2'
   PROJECT_NAME: paladin-core
-  IMAGE_NAMESPACE: paladin
   K8S_NAMESPACE: paladin
   # The local OrbStack cluster by default; override to target another.
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
-  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  # GLOBAL_REGISTRY and IMAGE_NAMESPACE are deliberately NOT declared: Task
+  # 3.53.1 evaluates an included file's own vars before the include's `vars:`,
+  # so a declaration here — even one wrapped in `default` — always wins over
+  # what the entry point forwards. Undeclared, they arrive from the entry
+  # point, the command line or the environment; deploy requires both.
   # `api/*` tags version the proto contract, not this image: they carry a `/`
   # that is invalid in a Docker tag, and a contract bump must not restamp a
   # release.
@@ -100,11 +103,13 @@ tasks:
 
   deploy:
     desc: "Verify the chart, then publish image + chart to the OCI registry"
+    requires: { vars: [GLOBAL_REGISTRY, IMAGE_NAMESPACE] }
     cmds:
       - task: release:deploy
 
   deploy-local:
     desc: "Build and helm-install into the local cluster — no registry"
+    requires: { vars: [GLOBAL_REGISTRY, IMAGE_NAMESPACE] }
     cmds:
       - task: release:image:build
       - task: local:install
