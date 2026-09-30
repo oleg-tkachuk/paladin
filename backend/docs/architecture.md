@@ -145,7 +145,8 @@ See [configuration.md](configuration.md) for the field reference.
   collection, multipart, …): the business logic, transport-agnostic.
 - `internal/api/connectshim/` — Connect RPC servers that adapt the generated
   protobuf surface onto those handlers, grouped by plane (admin / data / iam).
-- `internal/api/pb/`, `pkg/` — Generated protobuf and Connect code.
+- `sdk/go/gen/` (repository root) — Generated protobuf and Connect code,
+  shared with the Go SDK.
 - `internal/store/postgres/` — Repositories. `queries/` holds the sqlc source,
   `sqlc/` the generated code, `adapters/` the domain-facing wrappers.
 - `internal/storage/s3adapter/` — S3-compatible backend client.

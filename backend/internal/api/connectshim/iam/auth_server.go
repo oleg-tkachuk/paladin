@@ -8,10 +8,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // AuthServer bridges generated Connect handlers to authh.Handler.

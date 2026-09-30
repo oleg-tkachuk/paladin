@@ -12,11 +12,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // ─── helpers ───────────────────────────────────────────────────────────────

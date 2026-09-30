@@ -60,13 +60,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	commonv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	datav1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcmeta"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 const (

@@ -12,8 +12,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 // userIDFromName is the only thing standing between a caller-supplied string

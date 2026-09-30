@@ -12,7 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // Where a shim makes MORE THAN ONE call, "an error came back" is not the same

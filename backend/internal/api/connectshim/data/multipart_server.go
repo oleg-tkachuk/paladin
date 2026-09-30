@@ -11,10 +11,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
 type MultipartServer struct {

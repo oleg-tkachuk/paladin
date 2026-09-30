@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 type UserServer struct {

@@ -9,7 +9,7 @@
 # gets linted.
 exclude: |
   (?x)^(
-    backend/internal/api/pb/.*|
+    sdk/go/gen/.*|
     backend/internal/store/postgres/sqlc/.*|
     frontend/src/gen/.*|
     frontend/\.next/.*|

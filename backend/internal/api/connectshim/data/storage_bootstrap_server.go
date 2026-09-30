@@ -5,9 +5,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
 // StorageBootstrapServer adapts the generated Connect handler onto the

@@ -17,9 +17,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	// Register every descriptor the gate walks.
-	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 // TestDeclaredRequestFieldIsRead catches the failure mode this gate was built

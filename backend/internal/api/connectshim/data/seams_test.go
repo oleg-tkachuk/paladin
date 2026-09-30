@@ -9,12 +9,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
 // The same property object_server_test.go pins, for the other five servers: a

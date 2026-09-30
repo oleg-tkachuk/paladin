@@ -8,10 +8,10 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 // ─── Wire helpers ───────────────────────────────────────────────────────────

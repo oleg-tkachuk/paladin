@@ -9,8 +9,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
 // failingHandler fails every call. The seam exists so this can be written at

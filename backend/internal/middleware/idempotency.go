@@ -56,6 +56,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcmeta"
 
 	"connectrpc.com/connect"
@@ -66,7 +68,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
-const idempotencyHeader = "Idempotency-Key"
+const idempotencyHeader = paladin.HeaderIdempotencyKey
 
 // responseFactory builds a fresh AnyResponse from cached proto bytes.
 type responseFactory func(body []byte) (connect.AnyResponse, error)

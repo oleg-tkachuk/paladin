@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // CredentialMintingProcedures must never be memoized by the idempotency

@@ -9,11 +9,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // ─── Test doubles ────────────────────────────────────────────────────────────

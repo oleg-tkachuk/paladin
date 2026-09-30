@@ -1,0 +1,12 @@
+version: v2
+# Go stubs for the contract at the repository root. Run from sdk/go
+# (`task -t Taskfile.dev.yaml go-sdk-gen:proto` does): `out: .` is relative to
+# the working directory, and `module=` strips the module prefix from the path
+# buf appends, so the stubs land in gen/.
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: module=github.com/oleg-tkachuk/paladin/sdk/go
+  - local: protoc-gen-connect-go
+    out: .
+    opt: module=github.com/oleg-tkachuk/paladin/sdk/go

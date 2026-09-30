@@ -6,14 +6,14 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 type OperationServer struct {

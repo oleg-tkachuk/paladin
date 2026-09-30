@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
@@ -18,7 +20,7 @@ import (
 // HeaderAPIToken is the additional accepted header for API tokens.
 // Both `Authorization: Bearer paladin_pat_…` and `X-Paladin-API-Token: paladin_pat_…`
 // route to the same verifier; X-Paladin wins on duplicate (explicit > overloaded).
-const HeaderAPIToken = "X-Paladin-API-Token" // #nosec G101 -- an HTTP header name, not a credential
+const HeaderAPIToken = paladin.HeaderAPIToken
 
 // apiTokenKey is the context value the interceptor stashes the verified
 // *api_token.Token under. Read via APITokenFromContext from handler code.

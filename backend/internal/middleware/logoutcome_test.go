@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // The level is a decision about who gets woken up, so it is asserted per code

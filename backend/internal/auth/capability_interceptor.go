@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,7 +28,7 @@ import (
 // Either is accepted; if both are present, X-Paladin-Capability wins because
 // the explicit per-product header is the unambiguous signal.
 const (
-	HeaderCapability       = "X-Paladin-Capability"
+	HeaderCapability       = paladin.HeaderCapability
 	AuthorizationCapScheme = "capability"
 )
 

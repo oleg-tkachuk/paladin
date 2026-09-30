@@ -36,14 +36,14 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 // adminServiceNames enumerates the admin plane from the proto registry rather

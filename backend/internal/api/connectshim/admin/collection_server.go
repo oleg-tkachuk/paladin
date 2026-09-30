@@ -13,10 +13,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 // defaultBindingSource resolves a tenant's default (backend, bucket) route so

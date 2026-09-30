@@ -24,12 +24,12 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // tokenIssuer is the narrow slice of *api_token.Issuer the Create RPC needs.

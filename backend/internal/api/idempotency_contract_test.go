@@ -35,9 +35,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 // writeVerb matches a method name that persists something. Deliberately broad:

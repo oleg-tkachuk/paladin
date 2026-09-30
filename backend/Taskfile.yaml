@@ -63,13 +63,8 @@ includes:
     taskfile: '{{printf .TASKLIB "codegen"}}'
     dir: .
     vars:
-      BUF_INPUT: ../proto
-      BUF_TEMPLATE: ["buf.gen.yaml"]
-      # buf.gen.yaml writes with `out: .` — its plugins carry the
-      # subdirectory in `module=`, so the proto drift gate has to be told
-      # where the stubs land rather than watching the whole component.
-      PROTO_PATHSPEC: internal/api/pb
-      GENERATED_DIRS: ["internal/api/pb"]
+      # No proto here: the Go stubs are generated into sdk/go and imported
+      # from there.
       # Run sqlc through `go run`, so the version that regenerates is the one
       # go.mod pins rather than whatever is on PATH. The bindings carry their
       # generating version in a banner comment, so a PATH sqlc one minor ahead
@@ -134,9 +129,10 @@ tasks:
       - task: k8s:restart
 
   generate:
-    desc: "Regenerate mocks, proto stubs and sqlc bindings"
+    desc: "Regenerate mocks and sqlc bindings"
     cmds:
-      - task: codegen:all
+      - task: codegen:mocks
+      - task: codegen:sqlc
 
   # ─── seed fixture ───────────────────────────────────────────────────────────
   # Applies (or removes) the demo fixture against a running cluster. Both

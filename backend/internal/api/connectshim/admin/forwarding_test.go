@@ -15,9 +15,9 @@ import (
 	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 
-	commonv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // Optional request fields — a tenant filter, a page cursor, a bucket scope —

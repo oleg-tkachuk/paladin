@@ -11,8 +11,8 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 type BucketServer struct {

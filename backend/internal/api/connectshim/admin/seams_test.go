@@ -16,12 +16,12 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // The property, for every handler-backed server in this package: a handler

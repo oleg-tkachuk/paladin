@@ -14,7 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 // The property, for every handler-backed server on the IAM plane: a handler

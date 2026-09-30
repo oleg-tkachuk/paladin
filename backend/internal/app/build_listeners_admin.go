@@ -19,7 +19,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/codec"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
@@ -28,6 +27,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/wire"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 // AssembleAdminMux builds the admin Connect mux plus its *health.Handler.

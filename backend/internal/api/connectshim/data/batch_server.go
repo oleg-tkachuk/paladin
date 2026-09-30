@@ -7,9 +7,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
 type BatchServer struct {

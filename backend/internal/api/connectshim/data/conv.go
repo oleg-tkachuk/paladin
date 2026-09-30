@@ -23,11 +23,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────

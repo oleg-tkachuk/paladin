@@ -2,8 +2,8 @@
 #
 # Paladin container image — three stages:
 #
-#   1. tools   — installs codegen binaries (buf, sqlc, protoc-gen-*) on
-#                BUILDPLATFORM, resolved from go.mod + cache mounts.
+#   1. tools   — installs the codegen binary (sqlc) on BUILDPLATFORM,
+#                resolved from go.mod + cache mounts.
 #   2. builder — runs codegen + go build for TARGETPLATFORM.
 #   3. runtime — distroless static; ENTRYPOINTs the binary.
 #
@@ -51,10 +51,6 @@ RUN apk add --no-cache git && \
 # -----------------------------------------------------------------------------
 FROM gobase AS tools
 
-# buf is the only generator with a version of its own, because it is the only
-# one this module does not already depend on.
-ARG BUF_VERSION=v1.72.0
-
 WORKDIR /app
 
 # go.mod, go.sum and tools.go are all `go install` needs to resolve the
@@ -66,25 +62,11 @@ COPY --link backend/go.mod backend/go.sum backend/tools.go ./
 # module already selects — the code generated inside the image is then the code
 # a developer generates locally.
 #
-# These used to be four ARG pins maintained by hand beside go.mod's, with a
-# comment saying they MUST match. They did match, today. That is the whole
-# problem with the arrangement: nothing enforced it, the failure mode is
-# silent, and the builder stage REGENERATES the stubs rather than using the
-# committed ones — so a drifted plugin compiles the binary against protobuf
-# code that differs from what is in the repository, and the diff shows up
-# somewhere else entirely.
-#
 # GOOS/GOARCH stay unset: these run during the build, on the build platform.
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
     go install \
-      google.golang.org/protobuf/cmd/protoc-gen-go \
-      connectrpc.com/connect/cmd/protoc-gen-connect-go \
       github.com/sqlc-dev/sqlc/cmd/sqlc
-
-RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 
 # -----------------------------------------------------------------------------
 # Builder stage — runs codegen + cross-compiles the binary.
@@ -99,16 +81,6 @@ ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
 
-# No protoc. The line here used to install it, with a comment saying buf
-# shells out to it — buf has had a compiler of its own for years and does not.
-# Verified rather than assumed: building this stage with the package removed
-# produces a byte-identical binary (sha256 b378de11…, 60686496 bytes), so the
-# only thing it contributed was ~10MB and the CVE surface of a C++ toolchain
-# nothing invoked.
-#
-# This is also why "update protoc to 36.0" has no target in this image: Alpine
-# ships 31.1 and the image needs neither.
-
 COPY --from=tools /go_workspace/bin/ /go_workspace/bin/
 
 WORKDIR /app
@@ -119,9 +91,11 @@ WORKDIR /app
 # context cannot reach (`go mod download` fails resolving the relative
 # replace). Every path below is therefore repo-relative.
 COPY --link backend/go.mod backend/go.sum ./
-# The nested module must land BEFORE `go mod download`, because the replace
-# directive in backend/go.mod resolves against it.
+# The sibling modules must land BEFORE `go mod download`, because the replace
+# directives in backend/go.mod resolve against them. sdk/go carries the
+# committed protobuf and Connect stubs; they are not regenerated here.
 COPY --link capability/ /capability/
+COPY --link sdk/go/ /sdk/go/
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     go mod download -x
 
@@ -130,13 +104,10 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 COPY --link backend/cmd/ cmd/
 COPY --link backend/internal/ internal/
 COPY --link backend/migrations/ migrations/
-# The contract lives at the repository root; the Go template is this module's.
-COPY --link proto/ /proto/
-COPY --link backend/buf.gen.yaml backend/sqlc.yaml ./
+COPY --link backend/sqlc.yaml ./
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    buf generate /proto --template buf.gen.yaml && \
     go generate ./...
 
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \

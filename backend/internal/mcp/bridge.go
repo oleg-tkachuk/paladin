@@ -16,19 +16,21 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	adminv1connect "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
-	commonv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
-	datav1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
-	datav1connect "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
-	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
-	iamv1connect "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	adminv1connect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	datav1connect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	iamv1connect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // Clients is the bundle of Connect clients the MCP bridge dispatches to.
@@ -89,7 +91,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 					req.Header().Set("Authorization", "Bearer "+bearer)
 				}
 				if capabilityToken != "" {
-					req.Header().Set("X-Paladin-Capability", capabilityToken)
+					req.Header().Set(paladin.HeaderCapability, capabilityToken)
 				}
 				// Idempotency-Key on the calls whose replay means something.
 				//
@@ -106,8 +108,8 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 				// attempt only collapses a transport-level retry; a caller
 				// wanting more can set the header itself, which this respects.
 				if wantsIdempotencyKey(req.Spec().Procedure) &&
-					req.Header().Get("Idempotency-Key") == "" {
-					req.Header().Set("Idempotency-Key", uuid.NewString())
+					req.Header().Get(paladin.HeaderIdempotencyKey) == "" {
+					req.Header().Set(paladin.HeaderIdempotencyKey, uuid.NewString())
 				}
 				return next(ctx, req)
 			}

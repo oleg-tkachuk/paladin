@@ -10,8 +10,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // The validation interceptor is what stands between a malformed request and

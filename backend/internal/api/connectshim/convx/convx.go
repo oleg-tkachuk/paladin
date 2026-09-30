@@ -22,7 +22,7 @@ import (
 
 	"time"
 
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

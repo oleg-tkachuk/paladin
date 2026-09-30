@@ -91,7 +91,7 @@ includes:
       # credentials. Excluding it drops 141 of 188 findings, all of them noise,
       # and leaves the ones in code somebody wrote.
       GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
-      GO_MODULES: ["capability", "backend"]
+      GO_MODULES: ["capability", "backend", "sdk/go"]
   # Policy scanning over the YAML a cluster applies — the charts, the
   # Dockerfiles and these workflows. Separate from `sec:` because it asks a
   # different question of a different tree: `sec:` scans the Go modules and
@@ -108,7 +108,7 @@ includes:
       CHECKOV_TARGET: ["."]
       CHECKOV_FLAGS: >-
         --skip-path node_modules --skip-path .task
-        --skip-path frontend/.next --skip-path backend/internal/api/pb
+        --skip-path frontend/.next --skip-path sdk/go/gen
         --skip-path frontend/src/gen
       CHECKOV_FRAMEWORKS: ["helm", "kubernetes", "dockerfile", "github_actions"]
       # Pinned, and run through `pipx run` rather than installed: the rules a
@@ -123,6 +123,25 @@ includes:
     taskfile: '{{printf .TASKLIB "go"}}'
     dir: capability
     vars: { PROJECT_NAME: capability }
+  # The Go SDK: generated stubs plus a thin client, its own module so a
+  # consumer does not inherit the backend's dependency graph. Two includes
+  # because the library splits the Go verbs from codegen.
+  go-sdk:
+    taskfile: '{{printf .TASKLIB "go"}}'
+    dir: sdk/go
+    vars: { PROJECT_NAME: go-sdk }
+  go-sdk-gen:
+    taskfile: '{{printf .TASKLIB "codegen"}}'
+    dir: sdk/go
+    vars:
+      PROJECT_NAME: go-sdk
+      BUF_INPUT: ../../proto
+      BUF_TEMPLATE: ["buf.gen.yaml"]
+      # Installed from sdk/go's own go.mod, so the generator versions are the
+      # ones the generated code is compiled against.
+      PROTO_PLUGINS: google.golang.org/protobuf/cmd/protoc-gen-go connectrpc.com/connect/cmd/protoc-gen-connect-go
+      PROTO_PATHSPEC: gen
+      GENERATED_DIRS: ["gen"]
 
 tasks:
   default:
@@ -138,7 +157,8 @@ tasks:
             "  task -t Taskfile.dev.yaml verify-all         the commit gate: seconds, no Docker" \
             "  task -t Taskfile.dev.yaml verify-deep        Postgres-backed suites; Docker, ~15 min" \
             "  task -t Taskfile.dev.yaml verify-e2e         Playwright on this branch; Docker, ~10 min" \
-            "  task -t Taskfile.dev.yaml verify-capability  the third Go tree on its own" \
+            "  task -t Taskfile.dev.yaml verify-capability  the capability module on its own" \
+            "  task -t Taskfile.dev.yaml verify-go-sdk      the Go SDK on its own" \
             "  task -t Taskfile.dev.yaml test               unit tests, both halves" \
             "  task -t Taskfile.dev.yaml lint               linters, both halves" \
             "  task -t Taskfile.dev.yaml gen                proto + sqlc + mocks + the console's codegen" \
@@ -168,6 +188,7 @@ tasks:
       # had been committed and pushed. Same checks that workflow runs, minus the
       # ones needing a toolchain install.
       - task: verify-capability
+      - task: verify-go-sdk
       # The frontend's unit tests. Their absence here is how a breaking API
       # change reached a green gate: three vitest specs had been failing for
       # days and nothing local ran them. Lint and build assert nothing.
@@ -190,6 +211,14 @@ tasks:
       - task: verify:brewfile
       - task: frontend:build
       - echo "{{._OK}} paladin · the commit gate passed"
+
+  verify-go-sdk:
+    desc: "gofmt + lint + test the Go SDK, and fail when its stubs are stale"
+    cmds:
+      - task: go-sdk:fmt:check
+      - task: go-sdk:lint
+      - task: go-sdk:test
+      - task: go-sdk-gen:proto:check
 
   verify-capability:
     desc: "gofmt + lint + test the capability module (the third Go tree)"
@@ -358,8 +387,9 @@ tasks:
   # ═══ codegen ════════════════════════════════════════════════════════════════
 
   gen:
-    desc: "Run codegen for both halves"
+    desc: "Run codegen for the SDK stubs and both halves"
     cmds:
+      - task: go-sdk-gen:proto
       - task: backend:generate
       - task: frontend:generate
 

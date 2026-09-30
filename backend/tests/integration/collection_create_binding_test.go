@@ -15,10 +15,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 func TestCreateCollection_UsesDefaultBinding(t *testing.T) {

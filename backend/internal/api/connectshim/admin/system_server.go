@@ -8,9 +8,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 // SystemServer adapts *systemh.Handler to the generated Connect

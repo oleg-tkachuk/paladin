@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	connect "connectrpc.com/connect"
-	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"google.golang.org/protobuf/proto"
 )
 

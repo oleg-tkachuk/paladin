@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/capability"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // The proto↔domain converters sit in front of every Issue/Delegate call, so a

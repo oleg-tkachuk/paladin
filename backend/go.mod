@@ -3,7 +3,6 @@ module github.com/oleg-tkachuk/paladin/backend
 go 1.27.0
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	cel.dev/cel-go v0.32.0
 	connectrpc.com/connect v1.21.0
@@ -39,6 +38,7 @@ require (
 	// It is NOT published: no version stream is cut for it, and consumption is
 	// in-tree through the replace below. See capability/README.md §Versioning.
 	github.com/oleg-tkachuk/paladin/capability v0.1.0
+	github.com/oleg-tkachuk/paladin/sdk/go v0.0.0
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/rabbitmq/amqp091-go v1.15.0
@@ -65,7 +65,6 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sync v0.23.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
@@ -73,6 +72,7 @@ require (
 )
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
@@ -214,7 +214,10 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
 
 replace github.com/oleg-tkachuk/paladin/capability => ../capability
+
+replace github.com/oleg-tkachuk/paladin/sdk/go => ../sdk/go

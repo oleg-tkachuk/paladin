@@ -93,13 +93,10 @@ scripts/
 
 # ── Trees the Dockerfile doesn't COPY ───────────────────────────────
 # These are real source dirs, but the binary build doesn't reach
-# them: `pkg/` exposes the public Connect SDK to external consumers
-# (image carries internal/api/pb/... already), `policies/` ships
-# Cedar policy fixtures used by tests + docs, `tasks/` and
+# them: `policies/` ships Cedar policy fixtures used by tests + docs, `tasks/` and
 # Taskfile.yaml are the developer-side build orchestrator. Excluding
 # them keeps the context tight; if a future Dockerfile starts to
 # COPY one of these, drop the matching entry here.
-pkg/
 policies/
 tasks/
 Taskfile.yaml

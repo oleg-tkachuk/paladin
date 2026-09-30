@@ -15,8 +15,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
-	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────

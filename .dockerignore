@@ -18,6 +18,7 @@ frontend/
 deploy/
 docs/
 specs/
+sdk/python/
 tasks/
 .specify/
 .agents/
@@ -103,13 +104,11 @@ backend/Taskfile.yaml
 backend/tasks/
 
 # ── Trees the Dockerfile does not COPY ──────────────────────────────────
-# Real source, but the binary build never reaches them: pkg/ exposes the
-# public Connect SDK to external consumers, policies/ ships Cedar fixtures
-# used by tests and docs. If a future Dockerfile starts to COPY one, drop
+# Real source, but the binary build never reaches them: policies/ ships
+# Cedar fixtures used by tests and docs. If a future Dockerfile starts to COPY one, drop
 # the matching line.
 #
 # backend/tools.go used to be here. The tools stage now copies it, so that
 # `go install` resolves the generators from this module's own dependency
 # graph instead of from a second set of version pins maintained by hand.
-backend/pkg/
 backend/policies/

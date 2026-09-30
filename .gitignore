@@ -35,6 +35,11 @@ server
 !server/
 backend/seed-fixture
 
+# ── Code generators ─────────────────────────────────────────────────────────
+# The codegen task installs the protoc plugins a module pins into its ./bin
+# before running buf.
+sdk/go/bin/
+
 # ── Coverage ────────────────────────────────────────────────────────────────
 # The shared task library runs `go test -coverprofile=coverage/cover.out`, so
 # the directory is the artefact rather than any one file name.

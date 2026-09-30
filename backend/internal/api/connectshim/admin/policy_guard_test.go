@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // requireCompilablePolicy has its own test. What had none is whether the

@@ -16,8 +16,6 @@ import (
 	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
@@ -29,6 +27,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/wire"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // BuildMeta carries link-time identity surfaces SystemService needs.
