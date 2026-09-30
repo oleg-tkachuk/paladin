@@ -54,22 +54,21 @@ and no storage SDK among its dependencies. Besides the Connect API, the
 console and the Go and Python SDKs, the same operations are exposed over the
 Model Context Protocol, so AI agents can use them as tools.
 
-```
-backend/      one Go binary (paladin serve <role>), one Deployment per role
-  ├─ api          data plane + IAM
-  ├─ admin        tenants, quotas, policies, capabilities, backends
-  ├─ mcp          api + admin, exposed to agents over the Model Context Protocol
-  ├─ worker       lifecycle, reapers, quota reconciliation, storage migration
-  ├─ dispatcher   transactional outbox → webhook and broker sinks
-  ├─ ingest       storage-side events → objects
-  ├─ Postgres     state, with row-level security per tenant
-  └─ S3           SeaweedFS, MinIO, Garage or AWS S3, switchable at runtime
-capability/   standalone module: capability tokens ◄── imported by backend/
-frontend/     Next.js console + BFF ──Connect RPC──► api, admin
-proto/        the API contract, read by backend, console and both SDKs
-sdk/go/       Go SDK: generated Connect clients + a thin client
-sdk/python/   Python SDK: the same, on connect-python
-```
+Paladin is one Go binary. Each role below runs as its own Deployment
+(`paladin serve <role>`), next to a web console:
+
+| Role | What it does |
+|------|--------------|
+| `api` | the data plane (object metadata, presigned upload and download URLs) and IAM (sign-in, users, API tokens) |
+| `admin` | tenants, buckets, storage backends, quotas, policies, capabilities, audit |
+| `mcp` | the api and admin operations, as tools for AI agents |
+| `worker` | background jobs: bucket provisioning, trash purge, lifecycle, migration between backends |
+| `dispatcher` | delivers events to webhooks and message brokers |
+| `ingest` | turns storage-side notifications into object updates; off by default |
+| console | the web UI, with a BFF in front of `api` and `admin` |
+
+It needs PostgreSQL and an S3-compatible store — SeaweedFS, MinIO, Garage or
+AWS S3.
 
 ## Contents
 
