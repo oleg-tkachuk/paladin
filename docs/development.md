@@ -132,22 +132,11 @@ an ADR. Everything currently in the tree is Apache-2.0, MIT or BSD.
 
 ## Spec-driven development
 
-Non-trivial features flow through the Spec Kit workflow
-(`/speckit-specify` → `/speckit-plan` → `/speckit-tasks` →
-`/speckit-implement`), and the resulting artifacts live in
-[`specs/`](../specs/). Every plan passes the seven-principle Constitution
-Check in [`.specify/memory/constitution.md`](../.specify/memory/constitution.md)
-before implementation.
-
-You do **not** need to use this workflow to contribute. A bug fix, a
-dependency bump, a doc correction or a small feature is welcome as a plain
-pull request. The machinery exists because much of this codebase was built
-with AI assistance and the specs are how that work stays reviewable — if
-you are proposing something large, reading the relevant `specs/` directory
-first will tell you what was already considered and rejected.
-
-The `.agents/`, `.specify/` and `.rtk/` directories are that
-tooling. They are committed on purpose, and you can ignore all of them.
+Larger features are specified before they are built, and the resulting
+artifacts live in [`specs/`](../specs/). If you are proposing something
+large, read the relevant `specs/` directory first: it records what was
+already considered and rejected. A bug fix, a dependency bump, a doc
+correction or a small feature needs none of this.
 
 ## Pull requests
 

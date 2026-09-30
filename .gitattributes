@@ -63,7 +63,6 @@ Brewfile -linguist-detectable
 # four PowerShell files in the tree — a language this project does not
 # otherwise use and does not want on its bar. The directory is upstream's,
 # carried here so a feature plan resolves offline.
-.specify/** linguist-vendored=true
 
 # The shared Task library's module bodies, 159 KB, committed so TASK_OFFLINE=1
 # resolves every include from this repository instead of cloning. They are
