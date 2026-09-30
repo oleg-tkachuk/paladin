@@ -16,6 +16,10 @@ describe("idempotencyInterceptor", () => {
 
   beforeEach(() => {
     rpcHeaders = null;
+    // The fake backend answers every RPC with a 500: these tests read the
+    // request's headers, not the response. The transport logs that failure,
+    // which is correct and not what is under test here.
+    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: unknown, init?: RequestInit) => {
@@ -39,7 +43,10 @@ describe("idempotencyInterceptor", () => {
     );
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   // The whole chain, not the predicate: real client, real transport, real
   // interceptor, mocked fetch. Everything below asserts a DECISION; this is the
