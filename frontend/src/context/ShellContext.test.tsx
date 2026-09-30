@@ -4,10 +4,11 @@ import { render, screen, waitFor } from "@/test/utils";
 const h = vi.hoisted(() => ({
   token: vi.fn(),
   roles: ["platform.admin"] as string[],
+  signedIn: true,
 }));
 vi.mock("@/lib/auth/tokenStore", () => ({ getAccessToken: h.token }));
 vi.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({ user: { roles: h.roles } }),
+  useAuth: () => ({ user: h.signedIn ? { roles: h.roles } : null }),
 }));
 
 import { ShellProvider, useShell } from "./ShellContext";
@@ -43,7 +44,67 @@ describe("ShellContext", () => {
     h.token.mockReset();
     h.token.mockResolvedValue("tok");
     h.roles = ["platform.admin"];
+    h.signedIn = true;
     vi.unstubAllGlobals();
+  });
+
+  // The provider sits on the login page too. Asking there only collected a
+  // 401, and the chrome read "Unknown" after sign-in until the next poll.
+  it("asks nothing before anyone is signed in", async () => {
+    h.signedIn = false;
+    mockShellResponse({});
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(h.token).not.toHaveBeenCalled();
+  });
+
+  it("asks as soon as someone signs in, without waiting for a poll", async () => {
+    h.signedIn = false;
+    mockShellResponse({
+      version: { status: "ok", data: { version: "1.2.3" } },
+      health: { status: "ok", data: {} },
+      operations: { status: "ok", data: {} },
+    });
+    const view = render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+    h.signedIn = true;
+    view.rerender(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("health")).toHaveTextContent("ok"),
+    );
+  });
+
+  // Mount runs the first poll and the sign-in refresh in the same tick. Two
+  // fetches would mint tokens for different audiences from one cookie, which
+  // the backend reads as refresh-token reuse and answers by revoking the
+  // session.
+  it("folds refreshes that overlap into one fetch", async () => {
+    mockShellResponse({
+      version: { status: "ok", data: { version: "1.2.3" } },
+      health: { status: "ok", data: {} },
+      operations: { status: "ok", data: {} },
+    });
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("health")).toHaveTextContent("ok"),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   // IAM refuses a pure tenant.user the admin audience. Asking anyway failed

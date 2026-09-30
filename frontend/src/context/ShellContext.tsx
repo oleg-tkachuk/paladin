@@ -10,6 +10,8 @@
 // of taking the page with it.
 
 import React, {
+  useEffect,
+  useRef,
   createContext,
   useCallback,
   useContext,
@@ -98,8 +100,13 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   // poll only collects a refusal. The aggregate serves the iam sections alone.
   const { user } = useAuth();
   const adminAllowed = canUseAdminPlane(user?.roles ?? []);
+  // Who the shell is for; null until someone is signed in. The provider is
+  // mounted on the login page too, where asking only collects a 401 — and the
+  // chrome then read "Unknown" after sign-in until the next poll.
+  const session = user ? `${user.tenantId ?? ""}/${user.userId ?? ""}` : null;
+  const inFlight = useRef<Promise<void> | null>(null);
 
-  const refresh = useCallback(async () => {
+  const fetchShell = useCallback(async () => {
     try {
       // Two tokens: the sections live on two planes and each plane verifies
       // its own audience. The iam one is allowed to fail on its own — that
@@ -161,7 +168,24 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     }
   }, [adminAllowed]);
 
+  // One fetch at a time. The poll and the sign-in refresh below can land in
+  // the same tick, and two fetches minting tokens for different audiences
+  // from one cookie is the refresh-token replay the comment in fetchShell
+  // describes — it revokes the session.
+  const refresh = useCallback(() => {
+    if (!session) return Promise.resolve();
+    inFlight.current ??= fetchShell().finally(() => {
+      inFlight.current = null;
+    });
+    return inFlight.current;
+  }, [fetchShell, session]);
+
   useVisiblePolling(refresh, POLL_INTERVAL);
+
+  // Ask as soon as someone is signed in, not on the next tick.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const value = useMemo<ShellState>(
     () => ({ version, health, operations, error, lastUpdated, refresh }),
