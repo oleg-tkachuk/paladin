@@ -138,7 +138,7 @@ test.describe("Storage backend — advanced fields", () => {
 
     // The section is collapsed by default — an operator opens it deliberately,
     // and so does this.
-    await page.getByText("Advanced", { exact: true }).click();
+    await page.getByText(/^Advanced —/).click();
 
     const policy = page.getByLabel(/cedar policy/i);
     await expect(policy).toBeVisible({ timeout: 15_000 });
@@ -167,7 +167,7 @@ test.describe("Storage backend — advanced fields", () => {
 
     await gotoSettled(page, `/storage-backends/${be.backendId}`);
     await page.getByRole("button", { name: /^Edit$/ }).click();
-    await page.getByText("Advanced", { exact: true }).click();
+    await page.getByText(/^Advanced —/).click();
 
     await page.getByRole("checkbox", { name: /ingest events/i }).check();
     // 1500ms is the value a seconds-only conversion loses in either direction:
@@ -192,7 +192,7 @@ test.describe("Storage backend — advanced fields", () => {
 
     await gotoSettled(page, `/storage-backends/${be.backendId}`);
     await page.getByRole("button", { name: /^Edit$/ }).click();
-    await page.getByText("Advanced", { exact: true }).click();
+    await page.getByText(/^Advanced —/).click();
 
     // Radix's Select is a listbox, not a <select>: open it, then pick.
     await page.getByRole("combobox").first().click();

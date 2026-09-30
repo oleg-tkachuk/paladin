@@ -71,7 +71,7 @@ test.describe("Event subscriptions", () => {
       .fill("https://hooks.example.invalid/e2e");
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: /^Create$/ })
+      .getByRole("button", { name: /^Create subscription$/ })
       .click();
 
     await expect
@@ -104,7 +104,7 @@ test.describe("Event subscriptions", () => {
     // headroom rather than asserting on one moment.
     const create = page
       .getByRole("dialog")
-      .getByRole("button", { name: /^Create$/ });
+      .getByRole("button", { name: /^Create subscription$/ });
     await expect
       .poll(() => create.isDisabled(), { timeout: 30_000 })
       .toBe(true);
@@ -193,7 +193,7 @@ test.describe("Event subscriptions", () => {
     await page.locator("#sub-filter").fill(first as string);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: /^Create$/ })
+      .getByRole("button", { name: /^Create subscription$/ })
       .click();
 
     await expect

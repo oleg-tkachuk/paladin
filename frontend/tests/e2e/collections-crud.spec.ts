@@ -96,7 +96,7 @@ test.describe("Collections CRUD", () => {
     await openCreateDialog(page);
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog.locator("#ok-name")).toBeVisible({ timeout: 15_000 });
+    await expect(dialog.getByLabel(/^Path/)).toBeVisible({ timeout: 15_000 });
     const created = `e2e/${uniqueSlug("ok")}`;
     trackCollection({
       tenantId,
@@ -104,12 +104,12 @@ test.describe("Collections CRUD", () => {
       collection: created,
       displayName: "",
     });
-    await dialog.locator("#ok-name").fill(created);
+    await dialog.getByLabel(/^Path/).fill(created);
 
     // Choosing the empty backend leaves nothing to bind to.
     await pickOption(
       page,
-      dialog.locator("#ok-backend"),
+      dialog.getByRole("combobox", { name: /^Backend/ }),
       new RegExp(empty.backendId),
     );
 
@@ -117,7 +117,9 @@ test.describe("Collections CRUD", () => {
     // storage to bind to, so the dialog holds the submit rather than creating
     // something unusable — and says why rather than leaving the operator to
     // guess which field is at fault.
-    await expect(dialog.locator("#ok-bucket")).toBeDisabled();
+    await expect(
+      dialog.getByRole("combobox", { name: /^Bucket/ }),
+    ).toBeDisabled();
     await expect(
       dialog.getByRole("button", { name: /^Create Collection$/ }),
     ).toBeDisabled();
@@ -142,12 +144,20 @@ test.describe("Collections CRUD", () => {
       collection: name,
       displayName: "",
     });
-    await dialog.locator("#ok-name").fill(name);
+    await dialog.getByLabel(/^Path/).fill(name);
 
     // Backend then bucket: the bucket list is derived from the chosen backend,
     // so picking them out of order leaves the second empty.
-    await pickOption(page, dialog.locator("#ok-backend"), /^primary$/);
-    await pickOption(page, dialog.locator("#ok-bucket"), /./);
+    await pickOption(
+      page,
+      dialog.getByRole("combobox", { name: /^Backend/ }),
+      /^primary$/,
+    );
+    await pickOption(
+      page,
+      dialog.getByRole("combobox", { name: /^Bucket/ }),
+      /./,
+    );
 
     const submit = dialog.getByRole("button", { name: /^Create Collection$/ });
     await expect(submit).toBeEnabled();
