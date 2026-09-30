@@ -31,6 +31,15 @@ function isEntityChild(parentSegment?: string): boolean {
   return !!parentSegment && ENTITY_PARENTS.has(parentSegment);
 }
 
+/**
+ * Segments whose title-cased form is wrong: acronyms, which title case
+ * turns into "Mcp" and "M2m tokens".
+ */
+const SEGMENT_LABELS: Record<string, string> = {
+  mcp: "MCP",
+  "m2m-tokens": "M2M tokens",
+};
+
 /** Resolve a URL segment into a readable label. */
 function resolveLabel(segment: string, parentSegment?: string): string {
   if (isEntityChild(parentSegment)) {
@@ -41,6 +50,8 @@ function resolveLabel(segment: string, parentSegment?: string): string {
       : decoded;
     return leaf.length > 32 ? leaf.slice(0, 29) + "…" : leaf;
   }
+  const fixed = SEGMENT_LABELS[segment];
+  if (fixed) return fixed;
   return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
 }
 

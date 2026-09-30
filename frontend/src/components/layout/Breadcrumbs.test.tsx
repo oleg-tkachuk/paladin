@@ -35,6 +35,15 @@ describe("Breadcrumbs", () => {
     expect(screen.getByText("Storage backends")).toBeInTheDocument();
   });
 
+  it.each([
+    ["/mcp", "MCP"],
+    ["/tenants/platform/m2m-tokens", "M2M tokens"],
+  ])("keeps the acronym in %s", (path, label) => {
+    pathname = path;
+    render(<Breadcrumbs />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
   it("marks the last segment aria-current=page and leaves earlier ones linked", () => {
     pathname = "/tenants/abc-123/buckets";
     render(<Breadcrumbs />);
