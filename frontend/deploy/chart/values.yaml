@@ -10,51 +10,37 @@ metadata:
   commit: "unknown"
   buildTime: "unknown"
 
-# Per-plane backend URLs consumed by the BFF (src/app/api/rpc/[[...connect]]/route.ts
-# and src/lib/auth/bff.ts) via the PALADIN_<PLANE>_URL env vars. The browser
-# never sees these — it only ever hits the in-cluster Next.js service.
+# Where the backend chart's planes are. The BFF (src/app/api/rpc and
+# src/lib/auth/bff.ts) reaches them through the PALADIN_<PLANE>_URL env vars;
+# the browser never sees them.
 #
-# Service-name assumption: the backend chart renders one Service per
-# role via roleFullname (`<release>-<chart>-<role>`). The defaults
-# below assume `helm install paladin-core paladin-core …` in namespace
-# `paladin` (release name == chart name, so chart.fullname collapses and
-# drops the duplicate prefix), which gives:
-#   paladin-core-api    (ports data:8080, iam:8085)
-#   paladin-core-admin  (port  admin:8090)
-# Note that data + iam share the api role — same Service, different
-# port. Admin sits on its own role / Service.
-#
-# If your backend release name differs (e.g. installed under a
-# different name), override these URLs in the ArgoCD overlay
-# at applications/overlays/local/patches/paladin-values.yaml so the BFF
-# resolves to the actual Service names in your cluster.
+# By default the URLs are built from the backend chart's release name and
+# namespace: its Services are named <fullname>-<role>, where fullname is the
+# release name, suffixed with the chart name unless the release name already
+# contains it. Set a url below to override one plane.
 backend:
+  # The backend chart's release name, and the chart's own name.
+  release: paladin-core
+  chart: paladin-core
+  # Empty: this release's namespace.
+  namespace: ""
+  # The backend's internalTLS.enabled. On, data / iam / admin are dialled over
+  # https and caSecret — a Secret holding the CA as `key` — is mounted and
+  # trusted through NODE_EXTRA_CA_CERTS.
+  tls: false
+  caSecret: {name: "", key: ca.crt}
+  # Roles the health page polls. ingest is off in the backend chart by
+  # default; add it when the backend runs it.
+  healthRoles: [api, admin, worker, mcp, dispatcher]
+  # Explicit per-plane URLs. Empty: built from the fields above.
   urls:
-    data:   "http://paladin-core-api.paladin.svc.cluster.local:8080"
-    iam:    "http://paladin-core-api.paladin.svc.cluster.local:8085"
-    admin:  "http://paladin-core-admin.paladin.svc.cluster.local:8090"
-    # worker + mcp expose /system/health.json on these ports for the
-    # BFF /api/health/all aggregator. They do NOT serve Connect; the
-    # browser never hits them.
-    #
-    # Port mapping pitfall: the worker Deployment's containerPort is
-    # 8090 but the chart's worker Service exposes it as :8099 (see
-    # backend chart values, deployments.worker.service.ports). The BFF
-    # must hit the Service port — `8090` would route to a non-existent
-    # endpoint on whichever Service happens to listen there.
-    worker: "http://paladin-core-worker.paladin.svc.cluster.local:8099"
-    mcp:    "http://paladin-core-mcp.paladin.svc.cluster.local:8095"
-    # dispatcher exposes /system/health.json on the same ops port shape
-    # as worker. Service port 8099 (matches the backend chart's
-    # deployments.dispatcher.service.ports). Surfaces in the BFF
-    # /api/health/all aggregator alongside api/admin/worker/mcp.
-    dispatcher: "http://paladin-core-dispatcher.paladin.svc.cluster.local:8099"
-    # ingest exposes /system/health.json on 8100 — the ingest webhook
-    # addr (cfg.Ingest.Webhook.Addr), bound for ops regardless of driver:
-    # the webhook driver serves receiver routes there, and the nats /
-    # rabbitmq drivers bind the same addr ops-only (see the backend's
-    # serve_ingest.go::runIngestOpsServer).
-    ingest: "http://paladin-core-ingest.paladin.svc.cluster.local:8100"
+    data: ""
+    iam: ""
+    admin: ""
+    worker: ""
+    mcp: ""
+    dispatcher: ""
+    ingest: ""
 
 # Extra environment variables appended to the UI container's env block.
 # Use for knobs the chart doesn't model first-class. Common cases:

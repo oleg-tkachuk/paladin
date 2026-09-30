@@ -37,3 +37,7 @@ tls:
     enabled: false
   existingSecret: traefik-tls
 
+
+# The local backend runs the ingest role too.
+backend:
+  healthRoles: [api, admin, worker, mcp, dispatcher, ingest]

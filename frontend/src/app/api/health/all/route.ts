@@ -132,9 +132,26 @@ async function fetchSnapshot(role: string, baseUrl: string): Promise<Snapshot> {
   }
 }
 
+// Which roles to poll: PALADIN_HEALTH_ROLES, comma-separated. A role the
+// deployment does not run would otherwise report as unreachable on every
+// check. Unset means every role in the table above.
+export const HEALTH_ROLES_ENV = "PALADIN_HEALTH_ROLES";
+
+function polledRoles(): typeof ROLES {
+  const raw = process.env[HEALTH_ROLES_ENV];
+  if (raw === undefined) return ROLES;
+  const wanted = new Set(
+    raw
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean),
+  );
+  return ROLES.filter((r) => wanted.has(r.name));
+}
+
 export async function GET(_req: NextRequest) {
   const snapshots = await Promise.all(
-    ROLES.map((r) =>
+    polledRoles().map((r) =>
       fetchSnapshot(r.name, process.env[r.envKey] || r.defaultUrl),
     ),
   );

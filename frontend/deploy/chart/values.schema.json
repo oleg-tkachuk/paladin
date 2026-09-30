@@ -29,6 +29,39 @@
     "backend": {
       "additionalProperties": false,
       "properties": {
+        "caSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "chart": {
+          "type": "string",
+          "minLength": 1
+        },
+        "healthRoles": {
+          "type": "array",
+          "items": {
+            "enum": ["api", "admin", "worker", "mcp", "dispatcher", "ingest"]
+          }
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tls": {
+          "type": "boolean"
+        },
         "urls": {
           "additionalProperties": false,
           "properties": {

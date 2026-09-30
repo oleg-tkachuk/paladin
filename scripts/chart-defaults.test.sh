@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# chart-defaults.test.sh — what the backend chart wires by itself, asserted
-# on the rendered manifests.
+# chart-defaults.test.sh — what the charts wire by themselves, asserted on
+# the rendered manifests.
 #
 # A fresh `helm install` has to come up without the operator hand-writing
 # Secrets the chart could have made, and an overlay that already answers a
@@ -168,6 +168,48 @@ check "tls on: api probe over HTTPS" "$(deployment tls api '.spec.template.spec.
 check "tls on: mcp probe stays plain" "$(deployment tls mcp '.spec.template.spec.containers[0].livenessProbe.httpGet.scheme // "HTTP"')" "HTTP"
 
 refuse tls-no-secret "internalTLS.existingSecret is required" -f "$CHART/$REQUIRED_VALUES" --set internalTLS.enabled=true
+
+# ─── console: where the backend is ────────────────────────────────────────────
+
+readonly CONSOLE_CHART=frontend/deploy/chart
+
+# console_env <render> <var> — an env var of the console container.
+console_env() {
+    yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.containers[0].env[] | select(.name == "'"$2"'") | .value' \
+        "$scratch/console-$1.yaml"
+}
+console() {
+    local name=$1
+    shift
+    helm template paladin-console "$CONSOLE_CHART" --namespace "$NAMESPACE" "$@" >"$scratch/console-$name.yaml"
+}
+
+console defaults
+check "console: data URL from the default release" "$(console_env defaults PALADIN_DATA_URL)" \
+    "http://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
+check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,admin,worker,mcp,dispatcher"
+
+console other-release --set backend.release=pic --set backend.namespace=platform
+check "console: release without the chart name is suffixed" "$(console_env other-release PALADIN_ADMIN_URL)" \
+    "http://pic-paladin-core-admin.platform.svc.cluster.local:8090"
+
+console explicit --set backend.urls.iam=https://iam.example
+check "console: an explicit URL wins" "$(console_env explicit PALADIN_IAM_URL)" "https://iam.example"
+
+console tls --set backend.tls=true --set backend.caSecret.name=planes-ca
+check "console: tls dials data over https" "$(console_env tls PALADIN_DATA_URL)" \
+    "https://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
+check "console: tls leaves the ops ports plain" "$(console_env tls PALADIN_WORKER_URL)" \
+    "http://paladin-core-worker.$NAMESPACE.svc.cluster.local:8099"
+check "console: tls trusts the mounted CA" "$(console_env tls NODE_EXTRA_CA_CERTS)" "/etc/paladin-backend-ca/ca.crt"
+check "console: tls mounts the CA Secret" \
+    "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.volumes[] | select(.name == "backend-ca") | .secret.secretName' "$scratch/console-tls.yaml")" \
+    "planes-ca"
+cases=$((cases + 1))
+if helm template paladin-console "$CONSOLE_CHART" --set backend.tls=true >/dev/null 2>"$scratch/console-no-ca.err" ||
+    ! grep -q "backend.caSecret.name is required" "$scratch/console-no-ca.err"; then
+    bad "console: backend.tls without a caSecret was not refused"
+fi
 
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"

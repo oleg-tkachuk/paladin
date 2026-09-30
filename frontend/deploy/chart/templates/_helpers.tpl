@@ -61,3 +61,45 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
+
+{{/*
+paladin-console.backendURL — one backend plane's URL: backend.urls.<plane>
+when set, otherwise built from the backend release. Called with
+(dict "ctx" $ "plane" "<plane>").
+
+The ports are the backend chart's Service ports; its worker and dispatcher
+Services map :8099 onto container ports of their own.
+*/}}
+{{- define "paladin-console.backendURL" -}}
+{{- $b := .ctx.Values.backend -}}
+{{- $explicit := index $b.urls .plane -}}
+{{- if $explicit -}}
+{{- $explicit -}}
+{{- else -}}
+{{- $services := dict
+      "data" (list "api" 8080 true)
+      "iam" (list "api" 8085 true)
+      "admin" (list "admin" 8090 true)
+      "worker" (list "worker" 8099 false)
+      "mcp" (list "mcp" 8095 false)
+      "dispatcher" (list "dispatcher" 8099 false)
+      "ingest" (list "ingest" 8100 false) -}}
+{{- $svc := index $services .plane -}}
+{{- $fullname := $b.release -}}
+{{- if not (contains $b.chart $b.release) -}}
+{{- $fullname = printf "%s-%s" $b.release $b.chart -}}
+{{- end -}}
+{{- $scheme := "http" -}}
+{{- if and $b.tls (index $svc 2) -}}{{- $scheme = "https" -}}{{- end -}}
+{{- $ns := $b.namespace | default .ctx.Release.Namespace -}}
+{{- printf "%s://%s-%s.%s.svc.cluster.local:%v" $scheme $fullname (index $svc 0) $ns (index $svc 1) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+paladin-console.backendCA — the mount path of the backend CA, when backend.tls
+is on. Fails without a caSecret: Node rejects the internal CA otherwise.
+*/}}
+{{- define "paladin-console.backendCAPath" -}}
+/etc/paladin-backend-ca
+{{- end -}}
