@@ -129,4 +129,11 @@ COPY --from=builder --chown=${APP_UID}:${APP_GID} /out/paladin-core /app/bin/pal
 EXPOSE 8080 8085 8090
 
 USER ${APP_UID}:${APP_GID}
+
+# No image-level healthcheck: the image is distroless (nothing to run one
+# with), and what "healthy" means depends on the role — /livez on a plane,
+# /healthz on the worker. The chart's probes and compose's service checks are
+# per role.
+HEALTHCHECK NONE
+
 ENTRYPOINT ["/app/bin/paladin-core"]

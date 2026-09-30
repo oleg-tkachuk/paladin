@@ -77,7 +77,7 @@ RUN pnpm run build
 
 # -----------------------------------------------------------------------------
 # Stage 3 — runtime. Minimal layout: only what the standalone bundle
-# needs, dropped to UID 1001 for non-root execution.
+# needs, dropped to a non-root UID above 10000.
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS runtime
 
@@ -89,8 +89,10 @@ ARG BUILD_TIME=undefined
 # The app user. Numeric in USER, so a runtime that cannot read the image's
 # /etc/passwd — and a PodSecurity check for runAsNonRoot — still sees a
 # non-root UID. Must equal the chart's runAsUser / runAsGroup.
-ARG APP_UID=1001
-ARG APP_GID=1001
+ARG APP_UID=10001
+ARG APP_GID=10001
+# The port Next.js listens on; also what the healthcheck dials.
+ARG APP_PORT=3000
 
 # Which commit is this image? Until now the answer was "nobody can tell": the
 # console image carried the metadata as ENV inside the build stage and no OCI
@@ -115,10 +117,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3000 \
+    PORT=${APP_PORT} \
     HOSTNAME=0.0.0.0
 
-# Dedicated non-root user. UID/GID 1001 matches the Helm chart's
+# Dedicated non-root user, above 10000 so it cannot collide with a host
+# account. UID/GID match the Helm chart's
 # `runAsUser` / `runAsGroup` so bind-mounted volumes share owner with
 # the in-cluster pod.
 #
@@ -130,7 +133,7 @@ ENV NODE_ENV=production \
 # happened to work; it was not what any of these lines say.
 #
 # In-cluster it worked for a second accidental reason: the chart sets
-# runAsGroup: 1001, which supplies at run time the membership the image failed
+# runAsGroup, which supplies at run time the membership the image failed
 # to build in. An image that only behaves under one chart's securityContext is
 # a dependency nobody wrote down.
 #
@@ -157,7 +160,13 @@ COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/.next/static ./.next/stat
 
 USER ${APP_UID}:${APP_GID}
 
-EXPOSE 3000
+EXPOSE ${APP_PORT}
+
+# For `docker run` and compose; Kubernetes ignores it and uses the chart's
+# probes. The liveness route touches no backend, so a backend outage does not
+# mark the console unhealthy.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \
+    CMD ["sh", "-c", "wget -q -O /dev/null http://127.0.0.1:${PORT}/api/health/live || exit 1"]
 
 # server.js is emitted by `next build` when output: "standalone" is set
 # in next.config.ts. It's the entrypoint for the trimmed bundle.

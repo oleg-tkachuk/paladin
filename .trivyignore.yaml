@@ -5,3 +5,15 @@ vulnerabilities:
       fixed version to move to. Nothing here imports it: govulncheck, which
       resolves reachability rather than presence, reports "0 vulnerabilities in
       packages you import". Revisit if that ever stops being true.
+
+misconfigurations:
+  - id: KSV-0110
+    statement: >-
+      The charts install into the release namespace, which the operator picks
+      with `helm install -n`; every namespaced template sets it. Trivy renders
+      the charts without one, so it sees `default`.
+  - id: KSV-0125
+    statement: >-
+      The images come from the project's own GHCR packages by default, and the
+      registry is the operator's choice through image.repository. Trivy's
+      built-in list of trusted registries does not include ghcr.io.
