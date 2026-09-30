@@ -36,7 +36,9 @@ describe("legacy Select", () => {
 // a button, so a <Label htmlFor> reaches it only through an id on the trigger.
 const SRC = join(__dirname, "..", "..");
 const OPENING_TAG = /<(SelectTrigger|Select)\b([^>]*?)(\/?)>/gs;
-const LABELLED = /\bid=|\baria-label=|\baria-labelledby=/;
+// `{...control}` is what a FormField hands its control: the id its label
+// points at.
+const LABELLED = /\bid=|\baria-label=|\baria-labelledby=|\{\.\.\.control\}/;
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
