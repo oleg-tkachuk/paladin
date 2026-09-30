@@ -25,6 +25,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The inputs a chart cannot default; a render without them fails before
+# any NetworkPolicy is looked at.
+REQUIRED_VALUES = "ci/required-values.yaml"
+
 # Off by default and not enabled by any values file, so the gate sets them
 # itself — together with every role, since a role that is off renders no policy
 # and would otherwise leave a hole in what this checks.
@@ -43,6 +47,9 @@ def render(chart: Path) -> list[dict]:
                   file=sys.stderr)
             sys.exit(1)
     cmd = ["helm", "template", "netpoltest", str(chart), "--set", "networkPolicies.enabled=true"]
+    required = chart / REQUIRED_VALUES
+    if required.exists():
+        cmd += ["-f", str(required)]
     for role in ROLES:
         cmd += ["--set", f"deployments.{role}.enabled=true"]
     out = subprocess.run(cmd, capture_output=True, text=True)

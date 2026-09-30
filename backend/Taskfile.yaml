@@ -45,6 +45,11 @@ vars:
   # equality: adding a resource is free, removing one is a deliberate edit
   # here.
   CHART_MIN_RESOURCES: "25"
+  # The inputs the chart cannot default (the database), so chart:verify lints
+  # and renders the defaults instead of stopping at the missing-database
+  # error the chart raises on purpose.
+  HELM_LINT_FLAGS: '-f deploy/chart/ci/required-values.yaml'
+  HELM_TEMPLATE_FLAGS: '-f deploy/chart/ci/required-values.yaml'
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }

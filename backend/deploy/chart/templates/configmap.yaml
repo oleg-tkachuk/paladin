@@ -42,6 +42,16 @@ data:
     {{- $_ := set $b.auth "secret_key_secret" (dict "name" $sec.name "key" "secret_key") }}
     {{- end }}
     {{- end }}
+    {{- $pg := fromJson (include "chart.postgres" .) }}
+    {{- $pgCfg := $cfg.datastores.postgres }}
+    {{- if $pg.active }}
+    {{- $_ := set $pgCfg "dsn" $pg.dsn }}
+    {{- $_ := set $pgCfg "migrate_dsn" $pg.migrateDsn }}
+    {{- $_ := set $pgCfg "password_secret" $pg.app }}
+    {{- $_ := set $pgCfg "migrate_password_secret" $pg.migrate }}
+    {{- else if not $pgCfg.dsn }}
+    {{- fail "no database configured: set postgres.host and postgres.{app,migrate}.existingSecret, or config.datastores.postgres.dsn" }}
+    {{- end }}
     {{- $sk := fromJson (include "chart.authSigningKey" .) }}
     {{- if $sk.active }}
     {{- $_ := set $cfg.auth "signing_key_secret" (dict "name" $sk.name "key" $sk.key) }}

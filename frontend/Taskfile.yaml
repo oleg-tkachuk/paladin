@@ -45,6 +45,10 @@ vars:
   # equality: adding a resource is free, removing one is a deliberate edit
   # here.
   CHART_MIN_RESOURCES: "4"
+  # Empty: the console chart has no input it cannot default. Declared so the
+  # variable does not fall through from the backend (taskfile-vars.test.sh).
+  HELM_LINT_FLAGS: ""
+  HELM_TEMPLATE_FLAGS: ""
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }

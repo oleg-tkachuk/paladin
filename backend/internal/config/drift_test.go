@@ -350,6 +350,12 @@ var unsetKnobAllowlist = map[string]string{
 	"datastores.postgres.reaper_password_secret": "secret ref; per-deploy",
 	"runtime.health_snapshot_token":              "secret; opt-in debug endpoint",
 
+	// Built by the chart's ConfigMap template from the top-level `postgres`
+	// block, so they never appear under `config:` in values.yaml.
+	"datastores.postgres.migrate_dsn":             "rendered from chart values postgres.*",
+	"datastores.postgres.password_secret":         "rendered from chart values postgres.app",
+	"datastores.postgres.migrate_password_secret": "rendered from chart values postgres.migrate",
+
 	// TLS knobs whose empty value IS the configuration: the certificate's
 	// SANs already cover the Service names, and skipping verification is
 	// something you turn on, never something you leave on.

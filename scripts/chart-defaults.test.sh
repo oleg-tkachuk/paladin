@@ -18,6 +18,7 @@ readonly CHART=backend/deploy/chart
 readonly RELEASE=paladin-core
 readonly NAMESPACE=paladin
 readonly SIGNING_SECRET="$RELEASE-auth-signing-key"
+readonly REQUIRED_VALUES=ci/required-values.yaml
 
 for tool in helm yq; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -37,7 +38,7 @@ bad() { echo "!!! $*" >&2; fail=1; }
 render() {
     local name=$1
     shift
-    helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "$@" >"$scratch/$name.yaml"
+    helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" -f "$CHART/$REQUIRED_VALUES" "$@" >"$scratch/$name.yaml"
 }
 
 # config <name> <yq path> — a value from the rendered application config.
@@ -94,6 +95,48 @@ render replaced-list --set 'rbac.secretReader.secretNames={only-this}'
 cases=$((cases + 1))
 rbac_names replaced-list | grep -x paladin-bootstrap-admin >/dev/null ||
     bad "a replaced rbac.secretReader.secretNames dropped the bootstrap admin Secret"
+
+# ─── PostgreSQL ───────────────────────────────────────────────────────────────
+
+check "postgres: dsn built from the block" "$(config defaults .datastores.postgres.dsn)" \
+    "postgres://paladin_app@postgres.example.internal:5432/paladin?sslmode=require"
+check "postgres: migrate dsn built from the block" "$(config defaults .datastores.postgres.migrate_dsn)" \
+    "postgres://paladin_migrate@postgres.example.internal:5432/paladin?sslmode=require"
+check "postgres: app password ref" "$(config defaults .datastores.postgres.password_secret.name)" "paladin-postgres-app"
+check "postgres: refs default to the release namespace" \
+    "$(config defaults '.datastores.postgres.password_secret.namespace // "release"')" "release"
+for secret in paladin-postgres-app paladin-postgres-migrate; do
+    cases=$((cases + 1))
+    rbac_names defaults | grep -x "$secret" >/dev/null || bad "postgres: RBAC cannot read $secret"
+done
+check "postgres: a namespaced Role by default" \
+    "$(yq -r 'select(.kind == "Role" or .kind == "ClusterRole") | .kind' "$scratch/defaults.yaml")" "Role"
+
+render other-ns --set postgres.app.namespace=database
+check "postgres: namespace override lands on the ref" \
+    "$(config other-ns .datastores.postgres.password_secret.namespace)" "database"
+
+# refuse <name> <expected message> [helm args...] — the render must fail and
+# say why. Rendered without the required values, so each case sets its own.
+refuse() {
+    local name=$1 want=$2
+    shift 2
+    cases=$((cases + 1))
+    if helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "$@" >/dev/null 2>"$scratch/$name.err"; then
+        bad "$name: rendered, want a refusal mentioning '$want'"
+    elif ! grep -q -- "$want" "$scratch/$name.err"; then
+        bad "$name: refused without mentioning '$want': $(head -1 "$scratch/$name.err")"
+    fi
+}
+refuse no-database "no database configured"
+refuse no-app-secret "postgres.app.existingSecret is required" \
+    --set postgres.host=db --set postgres.migrate.existingSecret=m
+
+cases=$((cases + 1))
+helm template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
+    --set config.datastores.postgres.dsn=postgres://u@h/d >"$scratch/raw-dsn.yaml" ||
+    bad "postgres: a DSN written under config.datastores.postgres was refused"
+check "postgres: a written DSN is used as is" "$(config raw-dsn .datastores.postgres.dsn)" "postgres://u@h/d"
 
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"

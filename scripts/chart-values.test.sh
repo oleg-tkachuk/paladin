@@ -34,6 +34,8 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+readonly REQUIRED_VALUES=ci/required-values.yaml
+
 for chart in "${charts[@]}"; do
     name=$(basename "$(dirname "$(dirname "$chart")")")
 
@@ -42,10 +44,22 @@ for chart in "${charts[@]}"; do
         exit 1
     fi
 
+    # The inputs a chart cannot default (ci/required-values.yaml), so a render
+    # fails only for the reason being tested.
+    required=()
+    [[ -f "$chart/$REQUIRED_VALUES" ]] && required=(-f "$chart/$REQUIRED_VALUES")
+
     # 1. The shipped values must all pass. A schema that rejects prod is worse
     #    than none: it fails at deploy time, on the environment that matters.
     for values in "$chart"/values*.yaml; do
-        if ! helm template schematest "$chart" -f "$values" >"$tmp/render.yaml" 2>"$tmp/err"; then
+        # After the chart's own values.yaml, which would otherwise reset them;
+        # before an overlay, which must win.
+        if [[ "$(basename "$values")" == values.yaml ]]; then
+            args=(-f "$values" ${required[@]+"${required[@]}"})
+        else
+            args=(${required[@]+"${required[@]}"} -f "$values")
+        fi
+        if ! helm template schematest "$chart" "${args[@]}" >"$tmp/render.yaml" 2>"$tmp/err"; then
             {
                 echo "!!! $name: $(basename "$values") does not satisfy values.schema.json"
                 sed 's/^/      /' "$tmp/err"
@@ -72,7 +86,7 @@ for chart in "${charts[@]}"; do
     # 2. An unknown top-level key must be refused. This is the assertion that
     #    makes the rest of the file mean something.
     printf 'aKeyThatDoesNotExist: true\n' >"$tmp/unknown.yaml"
-    if helm template schematest "$chart" -f "$tmp/unknown.yaml" >/dev/null 2>&1; then
+    if helm template schematest "$chart" ${required[@]+"${required[@]}"} -f "$tmp/unknown.yaml" >/dev/null 2>&1; then
         echo "!!! $name: values.schema.json accepted an unknown top-level key" >&2
         echo "      additionalProperties is not set, or the schema is not being read" >&2
         exit 1

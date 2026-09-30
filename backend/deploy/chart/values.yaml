@@ -695,23 +695,9 @@ config:
 
   datastores:
     postgres:
-      # sslmode=require: encrypt all app↔DB traffic. CNPG serves TLS by
-      # default, so this works out of the box for every in-cluster
-      # overlay (dev/staging/prod). `require` encrypts but does not
-      # verify the server cert; upgrading to verify-full (mount the CNPG
-      # CA + sslrootcert=) is tracked in BACKLOG. An environment that
-      # genuinely can't do TLS must override this back to disable
-      # explicitly — secure is the default.
-      dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=require"
-      password_secret:
-        name: paladin-postgresql-app-user
-        key: password
-        namespace: database
-      migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=require"
-      migrate_password_secret:
-        name: paladin-postgresql-migrate-user
-        key: password
-        namespace: database
+      # The connection is normally built from the top-level `postgres` block.
+      # Set dsn / migrate_dsn and the two password_secret refs here instead
+      # when the DSN needs more than host, port, database and sslmode.
       # reaper_dsn / reaper_password_secret: the worker's cross-tenant
       # background DML jobs connect here, as a dedicated least-privilege
       # BYPASSRLS role (paladin_reaper, migration 058 — DML-only, no DDL). Empty
@@ -1108,6 +1094,34 @@ bootstrap:
       name: "paladin-bootstrap-admin"
       key: "password"
 
+# ─── PostgreSQL ──────────────────────────────────────────────────────────────
+#
+# The chart does not run Postgres. Point it at one and name the Secrets that
+# hold the two roles' passwords; the chart builds both DSNs and the password
+# refs from this block. The roles and the database are created beforehand —
+# see docs/install.md. Leave host empty to write config.datastores.postgres
+# yourself.
+postgres:
+  host: ""
+  port: 5432
+  database: paladin
+  # require encrypts without verifying the server; verify-full needs the CA
+  # (postgresCa below) and a DSN written under config.datastores.postgres.
+  sslmode: require
+  # The runtime role: DML only, no BYPASSRLS.
+  app:
+    user: paladin_app
+    existingSecret: ""
+    key: password
+    # Empty: the release namespace.
+    namespace: ""
+  # The role migrations run as: owns the schema, BYPASSRLS.
+  migrate:
+    user: paladin_migrate
+    existingSecret: ""
+    key: password
+    namespace: ""
+
 # ─── Access-token signing key ────────────────────────────────────────────────
 #
 # Used only when config.auth sets neither `signing_key` nor
@@ -1324,38 +1338,21 @@ capabilitySigningKeySecret:
 rbac:
   secretReader:
     enabled: true
-    clusterWide: true
-    # NOTE: the chart automatically appends the primary-storage credential
-    # Secret name (storage.s3CredentialsSecret.existingSecret or .name)
-    # to this list at render time — no manual entry needed when the
-    # storage block is enabled. See templates/rbac.yaml.
+    # A Role in the release namespace. Set true when a referenced Secret lives
+    # in another namespace (a Postgres operator's, say): a namespaced Role
+    # cannot grant that.
+    clusterWide: false
+    # Secrets the chart does not wire itself. The ones it does — the Postgres
+    # passwords, the S3 credentials, the bootstrap admin and the generated
+    # signing key — are appended at render time (chart.secretReaderNames).
     #
-    # If you use a SecretRef for the auth signing key
-    # (config.auth.signing_key_secret) or the ingest webhook HMAC
-    # (config.ingest.webhook.shared_secret_ref), add those Secret names here
-    # too — the resolver GETs them via this allowlist, so a missing name
-    # surfaces as a 403 at boot.
-    #
-    # The same applies to "k8s:<name>/<key>" refs inside EVENT-SINK configs
-    # (HTTP signing_secret_ref, Kafka sasl_password / mTLS PEM, NATS
-    # credentials_ref, the AMQP URL): the dispatcher + admin pods resolve
-    # them at delivery time through this allowlist — a missing name fails
-    # the delivery with an RBAC error.
-    secretNames:
-      - paladin-postgresql-app-user
-      - paladin-postgresql-migrate-user
-      # Least-privilege reaper credential (config.datastores.postgres.
-      # reaper_password_secret) — pre-allowlisted so a prod overlay that wires
-      # reaper_dsn "just works". Granting GET on an absent name is harmless in
-      # dev, where reaper_dsn is empty and the secret isn't read.
-      - paladin-postgresql-reaper-user
-      - paladin-admin-key
-      - paladin-bootstrap-admin
-      # Default names for the optional signing-key / ingest-HMAC SecretRefs
-      # above. Pre-allowlisted so uncommenting those options "just works";
-      # granting GET on a name that doesn't exist is harmless.
-      - paladin-auth-signing-key
-      - paladin-ingest-hmac
+    # Add the names behind any other SecretRef: config.auth.signing_key_secret,
+    # config.ingest.webhook.shared_secret_ref, the reaper password, and the
+    # "k8s:<name>/<key>" refs inside event-sink configs (HTTP
+    # signing_secret_ref, Kafka sasl_password / mTLS PEM, NATS credentials_ref,
+    # the AMQP URL). The resolver GETs through this allowlist, so a missing
+    # name surfaces as a 403 at boot or at delivery time.
+    secretNames: []
 
 # ─── NetworkPolicies (per role) ───────────────────────────────────────────────
 # Default-deny ingress+egress scoped to THIS chart's pods, with explicit

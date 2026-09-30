@@ -46,6 +46,8 @@ config:
       # cover the cluster service DNS, so the host below validates.
       dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca/ca.crt"
       migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca/ca.crt"
+      password_secret: { name: paladin-postgresql-app-user, key: password, namespace: database }
+      migrate_password_secret: { name: paladin-postgresql-migrate-user, key: password, namespace: database }
 
   runtime:
     # Gates /system/health.json (component tree + subsystem + Postgres
@@ -244,3 +246,17 @@ metrics:
 bootstrap:
   admin:
     enabled: false
+
+# The Postgres operator keeps its user Secrets in the `database` namespace,
+# which a namespaced Role cannot reach.
+rbac:
+  secretReader:
+    clusterWide: true
+    secretNames:
+      - paladin-postgresql-app-user
+      - paladin-postgresql-migrate-user
+      - paladin-postgresql-reaper-user
+      - paladin-admin-key
+      - paladin-bootstrap-admin
+      - paladin-auth-signing-key
+      - paladin-ingest-hmac

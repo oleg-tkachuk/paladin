@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -9,46 +11,52 @@ import (
 	goyaml "gopkg.in/yaml.v3"
 )
 
-// TestHelmValuesConfigBlock pins the config: subtree of the chart values.yaml
-// against the live CUE schema. Helm bakes this subtree into the ConfigMap
-// the pod reads, so any drift between configs/config.yaml and the chart
-// breaks every cluster deploy.
+// TestHelmValuesConfigBlock loads the config the chart renders for the local
+// overlay against the live CUE schema. Rendered through `helm template` rather
+// than read out of values.yaml: the ConfigMap template adds keys of its own
+// (the Postgres DSNs, the signing-key ref, the issuer), and the rendered file
+// is what the pod reads.
 //
-// The bare values.yaml is intentionally prod-safe (empty app.env, empty
-// signing_key, empty storage endpoints) — every env overlay supplies
-// the deltas. So we validate the merge values.yaml + values-local.yaml,
-// which is the one overlay holding concrete (non-placeholder) secrets
-// suitable for the CUE schema's min-length / URL-format constraints.
-// dev/staging/prod overlays carry `<placeholder>` tokens that get
-// replaced by SealedSecrets / external-secrets at deploy time and would
-// fail Validate() here by design.
+// values-local.yaml is the one overlay holding concrete secrets that satisfy
+// the schema's min-length / URL-format constraints; dev/staging/prod carry
+// `<placeholder>` tokens that deploy-time Secrets replace and would fail
+// Validate() here by design.
 func TestHelmValuesConfigBlock(t *testing.T) {
-	extract := func(srcPath, dstPath string) {
-		body, err := os.ReadFile(srcPath)
-		if err != nil {
-			t.Fatalf("read %s: %v", srcPath, err)
-		}
-		var wrap struct {
-			Config map[string]any `yaml:"config"`
-		}
-		if err := goyaml.Unmarshal(body, &wrap); err != nil {
-			t.Fatalf("decode %s: %v", srcPath, err)
-		}
-		out, err := goyaml.Marshal(wrap.Config)
-		if err != nil {
-			t.Fatalf("re-marshal %s: %v", srcPath, err)
-		}
-		if err := os.WriteFile(dstPath, out, 0o600); err != nil {
-			t.Fatalf("write %s: %v", dstPath, err)
-		}
+	const (
+		chartDir     = "../../deploy/chart"
+		localOverlay = chartDir + "/values-local.yaml"
+		configMapKey = "config.yaml"
+	)
+	helm, err := exec.LookPath("helm")
+	if err != nil {
+		t.Fatal("helm is not installed; the chart's rendered config went unchecked")
 	}
-	dir := t.TempDir()
-	base := filepath.Join(dir, "base.yaml")
-	overlay := filepath.Join(dir, "local.yaml")
-	extract("../../deploy/chart/values.yaml", base)
-	extract("../../deploy/chart/values-local.yaml", overlay)
-	if _, err := Load([]string{base, overlay}, zap.NewNop()); err != nil {
-		t.Fatalf("Load chart values.yaml + values-local.yaml -> .config: %v", err)
+	out, err := exec.CommandContext(t.Context(), helm, "template", "paladin-core", chartDir,
+		"--namespace", "paladin", "-f", localOverlay,
+		"--show-only", "templates/configmap.yaml").Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.Fatalf("helm template: %v\n%s", err, exitErr.Stderr)
+		}
+		t.Fatalf("helm template: %v", err)
+	}
+	var cm struct {
+		Data map[string]string `yaml:"data"`
+	}
+	if err := goyaml.Unmarshal(out, &cm); err != nil {
+		t.Fatalf("decode rendered ConfigMap: %v", err)
+	}
+	rendered, ok := cm.Data[configMapKey]
+	if !ok {
+		t.Fatalf("rendered ConfigMap has no %s key", configMapKey)
+	}
+	path := filepath.Join(t.TempDir(), configMapKey)
+	if err := os.WriteFile(path, []byte(rendered), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load([]string{path}, zap.NewNop()); err != nil {
+		t.Fatalf("Load the config the chart renders for values-local.yaml: %v", err)
 	}
 }
 

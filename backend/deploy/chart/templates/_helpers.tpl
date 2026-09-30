@@ -222,5 +222,34 @@ depends on. Returns a JSON list.
 {{- end -}}
 {{- $auth := fromJson (include "chart.authSigningKey" .) -}}
 {{- if $auth.active -}}{{- $names = append $names $auth.name -}}{{- end -}}
+{{- $pg := fromJson (include "chart.postgres" .) -}}
+{{- if $pg.active -}}{{- $names = concat $names (list $pg.app.name $pg.migrate.name) -}}{{- end -}}
 {{- $names | uniq | toJson -}}
+{{- end -}}
+
+{{/*
+chart.postgres — the connection the chart builds from the top-level
+`postgres` block. Returns JSON {active, dsn, migrateDsn, app, migrate}, where
+app and migrate are password SecretRefs. Inactive when postgres.host is empty:
+config.datastores.postgres is then used as written.
+*/}}
+{{- define "chart.postgres" -}}
+{{- $pg := .Values.postgres | default dict -}}
+{{- if $pg.host -}}
+{{- $url := printf "%s:%v/%s?sslmode=%s" $pg.host $pg.port $pg.database $pg.sslmode -}}
+{{- $ref := dict -}}
+{{- $out := dict "active" true
+      "dsn" (printf "postgres://%s@%s" $pg.app.user $url)
+      "migrateDsn" (printf "postgres://%s@%s" $pg.migrate.user $url) -}}
+{{- range $role := list "app" "migrate" -}}
+{{- $spec := index $pg $role -}}
+{{- $name := required (printf "postgres.%s.existingSecret is required when postgres.host is set: the Secret holding the %s role's password" $role $spec.user) $spec.existingSecret -}}
+{{- $r := dict "name" $name "key" $spec.key -}}
+{{- if $spec.namespace -}}{{- $_ := set $r "namespace" $spec.namespace -}}{{- end -}}
+{{- $_ := set $out $role $r -}}
+{{- end -}}
+{{- $out | toJson -}}
+{{- else -}}
+{{- dict "active" false | toJson -}}
+{{- end -}}
 {{- end -}}

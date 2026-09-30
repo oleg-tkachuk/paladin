@@ -141,3 +141,28 @@ bootstrap:
   admin:
     enabled: true
     password: "admin-dev-password-change-me"
+
+# The in-cluster CNPG cluster; its operator publishes the role passwords in
+# the `database` namespace.
+postgres:
+  host: paladin-postgresql-rw.database.svc.cluster.local
+  app:
+    existingSecret: paladin-postgresql-app-user
+    namespace: database
+  migrate:
+    existingSecret: paladin-postgresql-migrate-user
+    namespace: database
+
+# The Postgres operator keeps its user Secrets in the `database` namespace,
+# which a namespaced Role cannot reach.
+rbac:
+  secretReader:
+    clusterWide: true
+    secretNames:
+      - paladin-postgresql-app-user
+      - paladin-postgresql-migrate-user
+      - paladin-postgresql-reaper-user
+      - paladin-admin-key
+      - paladin-bootstrap-admin
+      - paladin-auth-signing-key
+      - paladin-ingest-hmac

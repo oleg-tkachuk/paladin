@@ -24,6 +24,8 @@ readonly RELEASE_CONFIG=release.config.cjs
 readonly CHART_DIR=deploy/chart
 # Any valid SemVer; it only has to come back out of the render unchanged.
 readonly PROBE_VERSION=0.0.0-probe
+# The inputs a chart cannot default, added to every render.
+readonly REQUIRED_VALUES=ci/required-values.yaml
 # What the workflow's IMAGE_NAMESPACE must be: the repository owner, which is
 # only known to Actions, so it is compared against the owner release.config.cjs
 # names instead.
@@ -81,7 +83,9 @@ for component in $components; do
     want="$registry/$namespace/$name:$PROBE_VERSION"
     helm package "$component/$CHART_DIR" --version "$PROBE_VERSION" \
         --app-version "$PROBE_VERSION" --destination "$scratch" >/dev/null
-    got=$(helm template probe "$scratch/$name-$PROBE_VERSION.tgz" |
+    required=()
+    [[ -f "$component/$CHART_DIR/$REQUIRED_VALUES" ]] && required=(-f "$component/$CHART_DIR/$REQUIRED_VALUES")
+    got=$(helm template probe "$scratch/$name-$PROBE_VERSION.tgz" ${required[@]+"${required[@]}"} |
         sed -n 's/^ *image: *"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' | sort -u)
     [[ "$got" == "$want" ]] ||
         bad "$component: the chart pulls '$(echo $got)', release.yaml publishes '$want'"

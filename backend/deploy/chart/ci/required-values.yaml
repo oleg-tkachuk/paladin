@@ -1,0 +1,10 @@
+# The inputs the chart cannot default: where the database is and which Secrets
+# hold its passwords. Every gate that renders the chart's own defaults adds
+# this file, so a render fails only for the reason being tested. See
+# docs/install.md for what an install needs in their place.
+postgres:
+  host: postgres.example.internal
+  app:
+    existingSecret: paladin-postgres-app
+  migrate:
+    existingSecret: paladin-postgres-migrate
