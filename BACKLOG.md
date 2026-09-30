@@ -206,6 +206,21 @@ egress verified first is still the cheap order.
   egress), and api-pod DNS egress works. Entry complete — delete on next
   touch if nothing new accrues.
 
+### Release stream for the `capability/` module
+
+- **Status:** Deferred
+- **Reason:** No consumer outside this repository depends on the module, and
+  Paladin takes it through a `replace` directive, so an independent
+  `capability/vX.Y.Z` pipeline would be maintained for nobody. See
+  [capability/README.md](capability/README.md#versioning) and
+  [docs/releasing.md](docs/releasing.md).
+- **Definition of Done:** a workflow that cuts `capability/v0.x.y` only when
+  the module changed, versioned independently of the product tag (a mirrored
+  `capability/v4…` is refused at `go get`), gated on the module's own tests
+  and its wire-format golden fixture; `capability/README.md` §Versioning and
+  `docs/releasing.md` rewritten to match.
+- **Blockers:** a real outside consumer asking for `go get …@vX.Y.Z`.
+
 ### KMS-wrapped capability signing key
 
 - **Status:** Deferred

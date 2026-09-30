@@ -9,6 +9,9 @@ and where its boundaries are. This directory holds the detail.
   charts: prerequisites, database roles, the values an install needs.
 - [upgrading.md](upgrading.md) — breaking changes between releases and
   what to do about them. Read before upgrading an existing deployment.
+- [releasing.md](releasing.md) — what each tag family publishes, who
+  cuts it, and why the product, the SDKs and `capability/` are versioned
+  apart.
 - [configuration.md](configuration.md) — every configuration surface:
   files, overlays, environment overrides, secrets, and the validation
   that runs at load.
