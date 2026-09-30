@@ -8,19 +8,18 @@
 [![MCP](https://img.shields.io/badge/MCP-000000?logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io)
 [![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 
-A multi-tenant control plane in front of object storage, built for workloads
-where the caller is an agent rather than a person. Applications hold no S3
-credentials and no bucket name: they hold a Paladin credential scoped to a
-tenant, and Paladin decides what it may do, routes the bytes to whichever
-backend that tenant is on, meters what was spent, and emits an auditable
-event trail.
+A multi-tenant control plane for S3-compatible object storage. Applications
+authenticate with a Paladin credential scoped to a tenant instead of holding
+storage credentials; Paladin checks each request against the tenant's Cedar
+policies, routes it to the backend the tenant is on, meters usage against
+quotas, and writes an audit trail.
 
-An orchestrator spawns sub-agents, and every call they make needs four
-answers: may it, can it afford it, whose spend was it, and can it be stopped
-now. A long-lived API key answers none of them. The primitive that does —
-budgeted, delegable, individually revocable authority — is
+Access is granted through users, API tokens and capability tokens —
+short-lived, budgeted and individually revocable. The capability primitive is
 [`capability/`](capability/), a separate Go module with no database driver
-and no storage SDK among its dependencies, usable without the rest of Paladin.
+and no storage SDK among its dependencies. Besides the Connect API, the
+console and the Go and Python SDKs, the same operations are exposed over the
+Model Context Protocol, so AI agents can use them as tools.
 
 ```
 backend/      one Go binary (paladin serve <role>), one Deployment per role
@@ -34,6 +33,9 @@ backend/      one Go binary (paladin serve <role>), one Deployment per role
   └─ S3           SeaweedFS, MinIO, Garage or AWS S3, switchable at runtime
 capability/   standalone module: capability tokens ◄── imported by backend/
 frontend/     Next.js console + BFF ──Connect RPC──► api, admin
+proto/        the API contract, read by backend, console and both SDKs
+sdk/go/       Go SDK: generated Connect clients + a thin client
+sdk/python/   Python SDK: the same, on connect-python
 ```
 
 ## Contents
@@ -151,17 +153,20 @@ CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
 
 | Path | Holds |
 |------|-------|
-| [backend/](backend) | the Go control plane: binary, proto, migrations, policies, chart, compose stack |
+| [backend/](backend) | the Go control plane: binary, migrations, policies, chart, compose stack |
 | [frontend/](frontend) | the Next.js console and BFF, its chart and Playwright suite |
 | [capability/](capability) | the standalone authorisation module |
+| [proto/](proto) | the API contract |
+| [sdk/go/](sdk/go) | the Go SDK |
+| [sdk/python/](sdk/python) | the Python SDK |
 | [deploy/](deploy) | Grafana dashboards and alerts |
 | [scripts/](scripts) | the repository's own contract checks, run by `verify-all` |
 | [specs/](specs) | spec-driven-development artifacts, per feature |
 | [docs/](docs) | the documents above |
 
-Both halves share a repository because a wire-contract change is a change to
-both: the proto in `proto/` is the source of truth, and the console
-regenerates its Connect-ES stubs from it.
+The components share a repository because a wire-contract change is a change
+to all of them: the proto in `proto/` is the source of truth, and the backend,
+the console and both SDKs generate their stubs from it.
 
 Compatibility is not kept across releases yet, and only `main` is supported —
 [docs/upgrading.md](docs/upgrading.md) lists what each release breaks.
