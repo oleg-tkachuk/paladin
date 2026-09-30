@@ -32,8 +32,14 @@ import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  FormDialog,
+  FormDisclosure,
+  FormField,
+  FormRow,
+  FormSection,
+} from "@/components/ui/form-dialog";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -151,11 +157,8 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
             });
             setEditOpen(false);
           } catch (err) {
-            showNotification({
-              type: "error",
-              title: "Could not update backend",
-              message: errText(err),
-            });
+            // Shown in the dialog, which stays open to correct and retry.
+            throw new Error(errText(err));
           }
         }}
       />
@@ -175,11 +178,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
             });
             setRotateOpen(false);
           } catch (err) {
-            showNotification({
-              type: "error",
-              title: "Could not rotate credentials",
-              message: errText(err),
-            });
+            throw new Error(errText(err));
           }
         }}
       />
@@ -225,24 +224,13 @@ function EditBackendDialog({
   backend: StorageBackend;
   onSubmit: (input: UpdateBackendInput) => Promise<void>;
 }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit backend</DialogTitle>
-          <DialogDescription>
-            {backend.backendId} · credentials, enable/drain state are managed
-            separately.
-          </DialogDescription>
-        </DialogHeader>
-        <EditBackendForm
-          backend={backend}
-          onCancel={() => onOpenChange(false)}
-          onSubmit={onSubmit}
-        />
-      </DialogContent>
-    </Dialog>
-  );
+  return open ? (
+    <EditBackendForm
+      backend={backend}
+      onOpenChange={onOpenChange}
+      onSubmit={onSubmit}
+    />
+  ) : null;
 }
 
 // Duration ⇄ milliseconds. The form edits a single integer because "poll every
@@ -266,11 +254,11 @@ const EVENT_TARGET_OPTIONS = [
 
 function EditBackendForm({
   backend,
-  onCancel,
+  onOpenChange,
   onSubmit,
 }: {
   backend: StorageBackend;
-  onCancel: () => void;
+  onOpenChange: (v: boolean) => void;
   onSubmit: (input: UpdateBackendInput) => Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState(backend.displayName);
@@ -324,7 +312,9 @@ function EditBackendForm({
     pollMs !== original.eventsPollMs;
   const cedarDirty = cedarPolicy !== original.cedarPolicy;
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const submit = async () => {
+    setSubmitError(null);
     setBusy(true);
     try {
       await onSubmit({
@@ -344,158 +334,176 @@ function EditBackendForm({
         }),
         ...(cedarDirty && { cedarPolicy }),
       });
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   };
 
-  return (
-    <>
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Label htmlFor="edit-display">Display name</Label>
-          <Input
-            id="edit-display"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="edit-endpoint">Endpoint</Label>
-          <Input
-            id="edit-endpoint"
-            value={endpoint}
-            onChange={(e) => setEndpoint(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="edit-public">Public endpoint</Label>
-          <Input
-            id="edit-public"
-            value={publicEndpoint}
-            onChange={(e) => setPublicEndpoint(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="edit-region">Region</Label>
-          <Input
-            id="edit-region"
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-          />
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={forcePathStyle}
-            onCheckedChange={(v) => setForcePathStyle(v === true)}
-          />
-          Force path-style addressing
-        </label>
+  const blockedReason = kmsNeedsKey
+    ? "KMS needs a key id."
+    : !pollMsValid
+      ? "Fix the poll interval."
+      : !endpoint.trim()
+        ? "The endpoint cannot be empty."
+        : null;
 
-        {/* Collapsed by default, and in the same dialog rather than a panel of
-            its own: these are fields of the same resource under the same OCC
-            token, so a separate surface would mean a second write that has to
-            re-read resource_version to succeed. */}
-        <details className="rounded-lg border border-input px-3 py-2">
-          <summary className="cursor-pointer text-sm font-medium select-none">
-            Advanced
-          </summary>
-          <div className="mt-3 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-sse-type">Server-side encryption</Label>
+  return (
+    <FormDialog
+      open
+      onOpenChange={onOpenChange}
+      title="Edit backend"
+      description={`${backend.backendId} · credentials and the enable and drain state are changed separately.`}
+      width="lg"
+      onSubmit={() => void submit()}
+      submitLabel="Save changes"
+      submittingLabel="Saving…"
+      submitting={busy}
+      blockedReason={blockedReason}
+      error={submitError}
+    >
+      <FormSection title="Connection">
+        <FormField label="Display name">
+          {(control) => (
+            <Input
+              {...control}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          )}
+        </FormField>
+        <FormRow>
+          <FormField label="Endpoint" required>
+            {(control) => (
+              <Input
+                {...control}
+                className="font-mono text-xs"
+                value={endpoint}
+                onChange={(e) => setEndpoint(e.target.value)}
+              />
+            )}
+          </FormField>
+          <FormField label="Public endpoint" hint="Used in presigned URLs.">
+            {(control) => (
+              <Input
+                {...control}
+                className="font-mono text-xs"
+                value={publicEndpoint}
+                onChange={(e) => setPublicEndpoint(e.target.value)}
+              />
+            )}
+          </FormField>
+        </FormRow>
+        <FormRow>
+          <FormField label="Region">
+            {(control) => (
+              <Input
+                {...control}
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+              />
+            )}
+          </FormField>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <Checkbox
+              checked={forcePathStyle}
+              onCheckedChange={(v) => setForcePathStyle(v === true)}
+            />
+            Force path-style addressing
+          </label>
+        </FormRow>
+      </FormSection>
+
+      {/* In the same dialog rather than a panel of its own: these are fields
+          of the same resource under the same OCC token, so a separate surface
+          would mean a second write that has to re-read resource_version. */}
+      <FormDisclosure title="Advanced — encryption, storage events, Cedar policy">
+        <FormRow>
+          <FormField label="Server-side encryption">
+            {(control) => (
               <Select
-                id="edit-sse-type"
+                id={control.id}
                 options={SSE_OPTIONS}
                 value={String(sseType)}
                 onChange={(v) => setSseType(Number(v) as SseType)}
               />
-              {sseType === SseType.KMS && (
-                <div className="space-y-1">
-                  <Label htmlFor="edit-sse-key">KMS key id</Label>
-                  <Input
-                    id="edit-sse-key"
-                    value={sseKeyId}
-                    onChange={(e) => setSseKeyId(e.target.value)}
-                    aria-invalid={kmsNeedsKey}
-                  />
-                  {kmsNeedsKey && (
-                    <p className="text-xs text-destructive">
-                      Required when the type is KMS.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Storage events</Label>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={eventsEnabled}
-                  onCheckedChange={(v) => setEventsEnabled(v === true)}
+            )}
+          </FormField>
+          {sseType === SseType.KMS ? (
+            <FormField
+              label="KMS key id"
+              required
+              error={kmsNeedsKey ? "Required when the type is KMS." : null}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  value={sseKeyId}
+                  onChange={(e) => setSseKeyId(e.target.value)}
                 />
-                Ingest events from this backend
-              </label>
+              )}
+            </FormField>
+          ) : null}
+        </FormRow>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={eventsEnabled}
+            onCheckedChange={(v) => setEventsEnabled(v === true)}
+          />
+          Ingest events from this backend
+        </label>
+        <FormRow>
+          <FormField label="Events target">
+            {(control) => (
               <Select
-                aria-label="Storage events target"
+                id={control.id}
                 options={EVENT_TARGET_OPTIONS}
                 value={String(eventsTarget)}
                 onChange={(v) => setEventsTarget(Number(v) as EventTarget)}
               />
-              <div className="space-y-1">
-                <Label htmlFor="edit-events-queue">Queue URL</Label>
-                <Input
-                  id="edit-events-queue"
-                  value={eventsQueueUrl}
-                  onChange={(e) => setEventsQueueUrl(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-events-poll">Poll interval (ms)</Label>
-                <Input
-                  id="edit-events-poll"
-                  inputMode="numeric"
-                  value={eventsPollMs}
-                  onChange={(e) => setEventsPollMs(e.target.value)}
-                  aria-invalid={!pollMsValid}
-                />
-                {!pollMsValid && (
-                  <p className="text-xs text-destructive">
-                    Whole milliseconds, zero or more.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="edit-cedar">Cedar policy</Label>
-              <Textarea
-                id="edit-cedar"
-                rows={6}
-                className="font-mono text-xs"
-                value={cedarPolicy}
-                onChange={(e) => setCedarPolicy(e.target.value)}
+            )}
+          </FormField>
+          <FormField
+            label="Poll interval (ms)"
+            error={pollMsValid ? null : "Whole milliseconds, zero or more."}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                inputMode="numeric"
+                value={eventsPollMs}
+                onChange={(e) => setEventsPollMs(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Attached to the backend itself — typically a forbid rule pinning
-                which tenants may bind buckets here.
-              </p>
-            </div>
-          </div>
-        </details>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          onClick={() => void submit()}
-          disabled={busy || kmsNeedsKey || !pollMsValid}
+            )}
+          </FormField>
+        </FormRow>
+        <FormField label="Queue URL">
+          {(control) => (
+            <Input
+              {...control}
+              className="font-mono text-xs"
+              value={eventsQueueUrl}
+              onChange={(e) => setEventsQueueUrl(e.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="Cedar policy"
+          hint="Attached to the backend itself — typically a forbid rule pinning which tenants may bind buckets here."
         >
-          {busy ? "Saving…" : "Save changes"}
-        </Button>
-      </DialogFooter>
-    </>
+          {(control) => (
+            <Textarea
+              {...control}
+              rows={6}
+              className="font-mono text-xs"
+              value={cedarPolicy}
+              onChange={(e) => setCedarPolicy(e.target.value)}
+            />
+          )}
+        </FormField>
+      </FormDisclosure>
+    </FormDialog>
   );
 }
 
@@ -512,87 +520,90 @@ function RotateCredentialsDialog({
   currentRef: string;
   onSubmit: (newSecretRef: string, gracePeriod: string) => Promise<void>;
 }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Rotate credentials</DialogTitle>
-          <DialogDescription>
-            {backendId} · the old secret stays valid until the grace window
-            elapses.
-          </DialogDescription>
-        </DialogHeader>
-        <RotateCredentialsForm
-          currentRef={currentRef}
-          onCancel={() => onOpenChange(false)}
-          onSubmit={onSubmit}
-        />
-      </DialogContent>
-    </Dialog>
-  );
+  // Mounted only while open, so every open starts from an empty form.
+  return open ? (
+    <RotateCredentialsForm
+      backendId={backendId}
+      currentRef={currentRef}
+      onOpenChange={onOpenChange}
+      onSubmit={onSubmit}
+    />
+  ) : null;
 }
 
 function RotateCredentialsForm({
+  backendId,
   currentRef,
-  onCancel,
+  onOpenChange,
   onSubmit,
 }: {
+  backendId: string;
   currentRef: string;
-  onCancel: () => void;
+  onOpenChange: (v: boolean) => void;
   onSubmit: (newSecretRef: string, gracePeriod: string) => Promise<void>;
 }) {
   const [newSecretRef, setNewSecretRef] = useState("");
   const [gracePeriod, setGracePeriod] = useState("");
   const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const submit = async () => {
+    setSubmitError(null);
     setBusy(true);
     try {
       await onSubmit(newSecretRef.trim(), gracePeriod.trim());
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <>
-      <div className="space-y-3">
-        {currentRef && (
+    <FormDialog
+      open
+      onOpenChange={onOpenChange}
+      title="Rotate credentials"
+      description={`${backendId} · the old secret stays valid until the grace period ends.`}
+      onSubmit={() => void submit()}
+      submitLabel="Rotate"
+      submittingLabel="Rotating…"
+      submitting={busy}
+      blockedReason={
+        newSecretRef.trim() === "" ? "Enter the new secret reference." : null
+      }
+      error={submitError}
+    >
+      <FormSection>
+        {currentRef ? (
           <p className="font-mono text-[11px] text-muted-foreground">
             current: {currentRef}
           </p>
-        )}
-        <div className="space-y-1">
-          <Label htmlFor="rot-ref">New secret ref</Label>
-          <Input
-            id="rot-ref"
-            placeholder="vault://kv/paladin/primary"
-            value={newSecretRef}
-            onChange={(e) => setNewSecretRef(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="rot-grace">Grace period</Label>
-          <Input
-            id="rot-grace"
-            placeholder="30m (blank = server default)"
-            value={gracePeriod}
-            onChange={(e) => setGracePeriod(e.target.value)}
-          />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          onClick={() => void submit()}
-          disabled={busy || newSecretRef.trim() === ""}
-        >
-          {busy ? "Rotating…" : "Rotate"}
-        </Button>
-      </DialogFooter>
-    </>
+        ) : null}
+        <FormField label="New secret reference" required>
+          {(control) => (
+            <Input
+              {...control}
+              autoFocus
+              placeholder="vault://kv/paladin/primary"
+              className="font-mono text-xs"
+              value={newSecretRef}
+              onChange={(e) => setNewSecretRef(e.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField label="Grace period" hint="Empty uses the server default.">
+          {(control) => (
+            <Input
+              {...control}
+              placeholder="30m"
+              value={gracePeriod}
+              onChange={(e) => setGracePeriod(e.target.value)}
+            />
+          )}
+        </FormField>
+      </FormSection>
+    </FormDialog>
   );
 }
 

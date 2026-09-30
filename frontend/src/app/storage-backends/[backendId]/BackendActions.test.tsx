@@ -45,6 +45,10 @@ const backend = {
   resourceVersion: "7",
 } as unknown as StorageBackend;
 
+// The advanced groups render only once their disclosure is opened.
+const openAdvanced = () =>
+  userEvent.click(screen.getByRole("button", { name: /^Advanced/ }));
+
 describe("BackendActions", () => {
   beforeEach(() => {
     Object.values(h).forEach((fn) => fn.mockReset());
@@ -121,6 +125,7 @@ describe("BackendActions", () => {
   it("adds cedar_policy to the mask only when the policy is edited", async () => {
     render(<BackendActions backend={backend} />);
     await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    await openAdvanced();
 
     const policy = await screen.findByLabelText(/cedar policy/i);
     await userEvent.type(policy, "forbid(principal,action,resource);");
@@ -139,6 +144,7 @@ describe("BackendActions", () => {
   it("sends the whole events group once any part of it is touched", async () => {
     render(<BackendActions backend={backend} />);
     await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    await openAdvanced();
 
     await userEvent.click(
       await screen.findByRole("checkbox", { name: /ingest events/i }),
@@ -162,6 +168,7 @@ describe("BackendActions", () => {
   it("refuses to save a poll interval that is not whole milliseconds", async () => {
     render(<BackendActions backend={backend} />);
     await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    await openAdvanced();
 
     const poll = await screen.findByLabelText(/poll interval/i);
     await userEvent.clear(poll);
@@ -171,6 +178,21 @@ describe("BackendActions", () => {
       screen.getByRole("button", { name: /save changes/i }),
     ).toBeDisabled();
     expect(h.update).not.toHaveBeenCalled();
+  });
+
+  // It used to close into a toast; the dialog now keeps the edit and the reason.
+  it("keeps a failed update in the dialog, with the reason", async () => {
+    h.update.mockRejectedValueOnce(new Error("resource_version mismatch"));
+    render(<BackendActions backend={backend} />);
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    await userEvent.type(await screen.findByLabelText(/display name/i), "x");
+    await userEvent.click(
+      screen.getByRole("button", { name: /save changes/i }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "resource_version mismatch",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("rotates credentials via RotateCredentials with the new ref + grace", async () => {
