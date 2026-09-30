@@ -1,0 +1,183 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# uv — Python projects managed by uv rather than Poetry.
+#
+#   includes:
+#     python: { taskfile: '{{printf .TASKLIB "python/uv"}}', dir: . }
+#
+# Same task names as the `python` module, so a project that moves between the
+# two changes one include line and nothing else.
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+# Pass these at the include's own `vars:`, not the consumer's top-level
+# `vars:`. In a repository with more than one component the top level is
+# shared with every other component — see README.md#variable-scoping.
+#
+#   PROJECT_NAME    the label in every log line
+#   PY              interpreter to build the venv on (default: uv's choice)
+#   PY_SRC          source directory for lint/format   (default src)
+#   PY_TEST_FLAGS   default "-q"
+#   UV_SYNC_FLAGS   which dependency sets to install   (default "--group dev";
+#
+# The three tools each task runs are inputs, not assumptions. ruff, pytest and
+# mypy are the defaults because they are what most projects reach for; a project
+# on black, flake8 or pyright sets the command rather than doing without the
+# task.
+#
+#   TEST_CMD        default pytest
+#   LINT_CMD        default "ruff check"
+#   FORMAT_CMD      default "ruff format"
+#   TYPECHECK_CMD   default mypy
+#   TYPECHECK_MODULE  what typecheck probes for before running (default mypy)
+#                   an extras-based project passes "--extra dev --extra ...")
+#
+# uv resolves and installs from the lockfile by default, which is the
+# reproducible path — `uv sync` on an unchanged lock is a no-op measured in
+# milliseconds, so it is cheap to depend on.
+# ─────────────────────────────────────────────────────────────────────────────
+
+silent: true
+
+vars:
+  _UV_NAME: '{{.PROJECT_NAME | default "python"}}'
+  _UV_SRC: '{{.PY_SRC | default "src"}}'
+  _UV_TEST_CMD: '{{.TEST_CMD | default "pytest"}}'
+  _UV_LINT_CMD: '{{.LINT_CMD | default "ruff check"}}'
+  _UV_FMT_CMD: '{{.FORMAT_CMD | default "ruff format"}}'
+  _UV_TC_CMD: '{{.TYPECHECK_CMD | default "mypy"}}'
+  _UV_TC_MOD: '{{.TYPECHECK_MODULE | default "mypy"}}'
+  _UV_TEST_FLAGS: '{{.PY_TEST_FLAGS | default "-q"}}'
+  _UV_LOCK_FLAGS: '{{.UV_LOCK_FLAGS | default ""}}'
+  _UV_SYNC: '{{.UV_SYNC_FLAGS | default "--group dev"}}'
+  # uv picks an interpreter from .python-version or the pyproject constraint
+  # unless one is named; pin PY to the version the deployed image runs.
+  _UV_PY: '{{if .PY}} --python {{.PY}}{{end}}'
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _UV_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _UV_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _UV_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
+  _UV_ERR: '{{if .NO_COLOR}}✖{{else}}{{"\x1b[31m✖\x1b[0m"}}{{end}}'
+
+tasks:
+
+  doctor:
+    desc: "Check that the interpreter, lock and project this component declares resolve"
+    # A report rather than a gate chain, the shape release:doctor uses.
+    #
+    # PY is the line that earned it. It pins the interpreter uv builds the
+    # venv on, it is an input, and in a monorepo a sibling component's
+    # top-level `vars:` can supply it (see README.md#variable-scoping) — so
+    # the version a venv is built on is not always the one this component
+    # wrote down. Nothing else prints it.
+    cmds:
+      - cmd: |-
+          set -u
+          fail=0
+
+          say() { printf '%s %s · doctor · %s\n' "$1" '{{._UV_NAME}}' "$2"; }
+          bad() { say '{{._UV_ERR}}' "$1" >&2; fail=1; }
+
+          command -v uv >/dev/null 2>&1 \
+            && say '{{._UV_OK}}' "$(uv --version 2>/dev/null)" \
+            || bad "uv is not installed — https://docs.astral.sh/uv/getting-started/installation/"
+
+          # Unpinned is a supported answer here, unlike poetry's: uv reads
+          # .python-version or the pyproject constraint when PY says nothing.
+          # Printing which of the two happened is the whole point.
+          if [ -z '{{.PY}}' ]; then
+            say '{{._UV_OK}}' "interpreter: uv's choice (PY unset)"
+          elif command -v '{{.PY}}' >/dev/null 2>&1; then
+            say '{{._UV_OK}}' "interpreter {{.PY}} ($('{{.PY}}' -V 2>&1))"
+          else
+            say '{{._UV_WARN}}' "interpreter {{.PY}} is not on PATH — uv will try to fetch it"
+          fi
+
+          if [ ! -f pyproject.toml ]; then
+            bad "no pyproject.toml here — is the include missing dir: . ?"
+          else
+            say '{{._UV_OK}}' "pyproject.toml is here"
+            [ -f uv.lock ] \
+              && say '{{._UV_OK}}' "uv.lock is here" \
+              || say '{{._UV_WARN}}' "no uv.lock yet — run lock before install"
+            [ -d '{{._UV_SRC}}' ] \
+              || say '{{._UV_WARN}}' "PY_SRC {{._UV_SRC}} is not a directory — lint and format would find nothing"
+          fi
+
+          say '{{._UV_OK}}' "sync flags {{._UV_SYNC}}"
+
+          [ "$fail" = 0 ] && say '{{._UV_OK}}' "ready"
+          exit "$fail"
+
+  install:
+    desc: "uv sync (skipped when the manifests are unchanged)"
+    sources:
+      - pyproject.toml
+      - uv.lock
+    preconditions:
+      - sh: command -v uv >/dev/null
+        msg: "uv is not installed — https://docs.astral.sh/uv/getting-started/installation/"
+    cmds:
+      - printf '%s\n' "{{._UV_RUN}} {{._UV_NAME}} · uv · sync"
+      - uv sync {{._UV_SYNC}}{{._UV_PY}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · dependencies installed"
+
+  test:
+    desc: "pytest"
+    deps: [install]
+    cmds:
+      - printf '%s\n' "{{._UV_RUN}} {{._UV_NAME}} · uv · {{._UV_TEST_CMD}}"
+      - uv run {{._UV_TEST_CMD}} {{._UV_TEST_FLAGS}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · tests pass"
+
+  lint:
+    desc: "ruff check"
+    deps: [install]
+    cmds:
+      - printf '%s\n' "{{._UV_RUN}} {{._UV_NAME}} · uv · {{._UV_LINT_CMD}}"
+      - uv run {{._UV_LINT_CMD}} {{._UV_SRC}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · lint clean"
+
+  fmt:
+    desc: "ruff format"
+    # `fmt` to match the Go module's verb for the same operation; `format` is
+    # what ruff calls it, so it stays as an alias.
+    aliases: [format]
+    deps: [install]
+    cmds:
+      - uv run {{._UV_FMT_CMD}} {{._UV_SRC}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · formatted"
+
+  typecheck:
+    desc: "mypy (skipped when mypy is not a project dependency)"
+    deps: [install]
+    status:
+      - "! uv run python -c 'import {{._UV_TC_MOD}}' >/dev/null 2>&1"
+    cmds:
+      - printf '%s\n' "{{._UV_RUN}} {{._UV_NAME}} · uv · {{._UV_TC_CMD}}"
+      - uv run {{._UV_TC_CMD}} {{._UV_SRC}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · types clean"
+
+  lock:
+    desc: "Regenerate uv.lock without changing any version"
+    cmds:
+      - uv lock {{._UV_LOCK_FLAGS}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · uv.lock regenerated"
+
+  deps:update:
+    desc: "Bump dependencies within their pyproject constraints, then refresh the lock"
+    cmds:
+      - printf '%s\n' "{{._UV_RUN}} {{._UV_NAME}} · uv · lock --upgrade"
+      - uv lock --upgrade {{._UV_LOCK_FLAGS}}
+      - uv sync {{._UV_SYNC}}
+      - printf '%s\n' "{{._UV_OK}} {{._UV_NAME}} · uv · deps bumped — review uv.lock, then lint + test"
+
+  deps:outdated:
+    desc: "Show dependencies with a newer version available (read-only)"
+    # `uv tree --outdated` reports without touching the lock. Unlike
+    # `pnpm outdated`, it does not exit non-zero just for finding something
+    # outdated — it exits 0 either way and only fails for a real reason (an
+    # unresolvable dependency, say), so nothing here should swallow that.
+    cmds:
+      - uv tree --outdated --depth 1

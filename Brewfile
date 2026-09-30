@@ -33,6 +33,9 @@ brew "go"
 brew "go-task"          # bin: task
 brew "golangci-lint"
 brew "buf"
+# The Python SDK: its venv, dependencies and the protoc it generates with
+# (grpcio-tools, pinned in sdk/python/pyproject.toml).
+brew "uv"
 brew "helm"
 brew "yq"               # chart-netpol.py needs YAML; jq reads only JSON
 

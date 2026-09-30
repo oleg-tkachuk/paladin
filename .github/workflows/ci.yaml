@@ -42,6 +42,8 @@ env:
   NODE_VERSION: "26"
   # renovate: datasource=go depName=github.com/rhysd/actionlint
   ACTIONLINT_VERSION: "v1.7.12"
+  # renovate: datasource=github-releases depName=astral-sh/uv
+  UV_VERSION: "0.12.21"
   # renovate: datasource=pypi depName=zizmor
   ZIZMOR_VERSION: "1.30.1"
 
@@ -171,6 +173,13 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: ${{ env.HELM_VERSION }}
+
+      # The Python SDK's gate: its venv, and the protoc it generates with.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
 
       # The runner image ships a yq, but not a version this repository chose.
       # The chart and Taskfile checks read YAML through it.
