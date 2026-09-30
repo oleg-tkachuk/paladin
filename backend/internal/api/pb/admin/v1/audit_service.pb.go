@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -247,7 +247,7 @@ const file_paladin_admin_v1_audit_service_proto_rawDesc = "" +
 	"\x0fAuditLogService\x12b\n" +
 	"\fListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12c\n" +
 	"\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n" +
-	"\x0eExportAuditLog\x12'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x0eExportAuditLog\x12'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_audit_service_proto_rawDescOnce sync.Once

@@ -21,9 +21,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
-	tokenstore "github.com/oleg-tkachuk/paladin/internal/auth/api_token/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	tokenstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/postgres"
 )
 
 // mkToken builds a Token with every field populated, so a round-trip that

@@ -11,7 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -283,7 +283,7 @@ const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	"\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05B\x03\xe0A\x03R\x17refreshExpiresInSeconds\x12\"\n" +
 	"\n" +
 	"token_type\x18\x05 \x01(\tB\x03\xe0A\x03R\ttokenType\x12\x1f\n" +
-	"\baudience\x18\x06 \x01(\tB\x03\xe0A\x03R\baudienceBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\baudience\x18\x06 \x01(\tB\x03\xe0A\x03R\baudienceBMZKgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_types_proto_rawDescOnce sync.Once

@@ -11,8 +11,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 )
 
 // HeaderAPIToken is the additional accepted header for API tokens.

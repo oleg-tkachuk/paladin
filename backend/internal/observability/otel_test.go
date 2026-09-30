@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/stretchr/testify/require"
 )
 

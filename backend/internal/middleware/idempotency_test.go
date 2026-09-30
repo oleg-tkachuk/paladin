@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 // TestIsMutationMethod pins the Connect-procedure-name parser

@@ -1,6 +1,6 @@
 package mcp
 
-import "github.com/oleg-tkachuk/paladin/internal/rpcmeta"
+import "github.com/oleg-tkachuk/paladin/backend/internal/rpcmeta"
 
 // wantsIdempotencyKey asks the contract instead of the method name.
 //

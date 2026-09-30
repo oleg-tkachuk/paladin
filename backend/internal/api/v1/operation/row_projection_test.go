@@ -3,7 +3,7 @@ package operation
 import (
 	"testing"
 
-	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // A filter compiles against the SCHEMA and evaluates against the PROJECTION.

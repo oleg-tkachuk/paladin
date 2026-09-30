@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // auditMirror adapts *worker.Dispatcher to middleware.AuditMirrorEmitter.

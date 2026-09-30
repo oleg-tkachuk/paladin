@@ -1730,7 +1730,7 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\rSystemService\x12Y\n" +
 	"\tGetConfig\x12\".paladin.admin.v1.GetConfigRequest\x1a#.paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\x12GetDispatcherStats\x12+.paladin.admin.v1.GetDispatcherStatsRequest\x1a,.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12n\n" +
-	"\x10GetPlatformStats\x12).paladin.admin.v1.GetPlatformStatsRequest\x1a*.paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x10GetPlatformStats\x12).paladin.admin.v1.GetPlatformStatsRequest\x1a*.paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_system_service_proto_rawDescOnce sync.Once

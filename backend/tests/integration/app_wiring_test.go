@@ -45,14 +45,14 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	pbdata "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
-	"github.com/oleg-tkachuk/paladin/internal/app"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	pbdata "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
 const wiringSigningKey = "wiring-test-signing-key-not-a-secret-000000000000"

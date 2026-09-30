@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 )
 
 // stripVersionSuffix removes "/versions/{ver}" tail. Returns the parent name.

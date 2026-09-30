@@ -6,12 +6,12 @@ package iam
 import (
 	"fmt"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
-	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
 // ─── Wire helpers ───────────────────────────────────────────────────────────

@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // CompleteObject and CopyObject were the last two of the thirteen handlers at

@@ -20,7 +20,7 @@ import (
 
 	"go.uber.org/zap"
 
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
 // RefreshTokenPurger removes expired refresh tokens.

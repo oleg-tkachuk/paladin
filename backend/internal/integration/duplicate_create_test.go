@@ -9,11 +9,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	objecttag "github.com/oleg-tkachuk/paladin/internal/api/v1/object_tag"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object_tag"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // Creating something that already exists is an ordinary answer to an ordinary

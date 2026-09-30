@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -1918,7 +1918,7 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x14RestoreObjectVersion\x12,.paladin.data.v1.RestoreObjectVersionRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x02\x12g\n" +
 	"\x12SetObjectRetention\x12*.paladin.data.v1.SetObjectRetentionRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12g\n" +
 	"\x12SetObjectLegalHold\x12*.paladin.data.v1.SetObjectLegalHoldRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12]\n" +
-	"\rGetObjectLock\x12%.paladin.data.v1.GetObjectLockRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\rGetObjectLock\x12%.paladin.data.v1.GetObjectLockRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01BOZMgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_service_proto_rawDescOnce sync.Once

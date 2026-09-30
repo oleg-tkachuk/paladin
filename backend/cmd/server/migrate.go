@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/migrations"
+	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
 // migrateCmd applies the embedded SQL migration set against the configured

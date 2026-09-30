@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
 // requireCompilablePolicy refuses Cedar text the engine cannot parse, at the

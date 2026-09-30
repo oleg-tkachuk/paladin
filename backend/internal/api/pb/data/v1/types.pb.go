@@ -675,7 +675,7 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\x14OBJECT_STATE_PENDING\x10\x01\x12\x1a\n" +
 	"\x16OBJECT_STATE_AVAILABLE\x10\x02\x12\x17\n" +
 	"\x13OBJECT_STATE_FAILED\x10\x03\x12\x18\n" +
-	"\x14OBJECT_STATE_DELETED\x10\x04BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x14OBJECT_STATE_DELETED\x10\x04BOZMgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_types_proto_rawDescOnce sync.Once

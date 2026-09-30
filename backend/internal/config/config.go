@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/backend/internal/utils"
 
 	_ "embed"
 

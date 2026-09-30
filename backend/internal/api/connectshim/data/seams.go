@@ -6,12 +6,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/presign"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/storagebootstrap"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/batch"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/presign"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/storagebootstrap"
 )
 
 // The remaining shims' seams, same shape and same reason as object_seam.go:

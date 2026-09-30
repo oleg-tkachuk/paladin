@@ -1,4 +1,4 @@
-module github.com/oleg-tkachuk/paladin
+module github.com/oleg-tkachuk/paladin/backend
 
 go 1.27.0
 

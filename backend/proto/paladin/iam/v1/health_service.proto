@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package paladin.iam.v1;
 
-option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
+option go_package = "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1;paladiniamv1";
 
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";

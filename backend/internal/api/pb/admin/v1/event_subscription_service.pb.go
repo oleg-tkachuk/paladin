@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -530,7 +530,7 @@ const file_paladin_admin_v1_event_subscription_service_proto_rawDesc = "" +
 	"\x12UpdateSubscription\x12+.paladin.admin.v1.UpdateSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\"\x03\x90\x02\x02\x12t\n" +
 	"\x12DeleteSubscription\x12+.paladin.admin.v1.DeleteSubscriptionRequest\x1a,.paladin.admin.v1.DeleteSubscriptionResponse\"\x03\x90\x02\x02\x12q\n" +
 	"\x11ListSubscriptions\x12*.paladin.admin.v1.ListSubscriptionsRequest\x1a+.paladin.admin.v1.ListSubscriptionsResponse\"\x03\x90\x02\x01\x12i\n" +
-	"\x10TestSubscription\x12).paladin.admin.v1.TestSubscriptionRequest\x1a*.paladin.admin.v1.TestSubscriptionResponseBIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x10TestSubscription\x12).paladin.admin.v1.TestSubscriptionRequest\x1a*.paladin.admin.v1.TestSubscriptionResponseBQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_event_subscription_service_proto_rawDescOnce sync.Once

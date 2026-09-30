@@ -8,11 +8,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 )
 
 // Where a shim makes MORE THAN ONE call, "an error came back" is not the same

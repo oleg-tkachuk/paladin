@@ -427,7 +427,7 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\rHealthService\x12Q\n" +
 	"\n" +
 	"GetVersion\x12!.paladin.iam.v1.GetVersionRequest\x1a\x1b.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12N\n" +
-	"\tGetHealth\x12 .paladin.iam.v1.GetHealthRequest\x1a\x1a.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\tGetHealth\x12 .paladin.iam.v1.GetHealthRequest\x1a\x1a.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01BMZKgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_health_service_proto_rawDescOnce sync.Once

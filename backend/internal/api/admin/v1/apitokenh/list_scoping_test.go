@@ -7,9 +7,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 )
 
 // List is the only tenant-addressed RPC on this service, and it was the one

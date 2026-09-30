@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	tenantapi "github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	tenantapi "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // TestRenameRecordsSlugHistory proves the schema baseline (001_initial_schema.sql) + the transactional

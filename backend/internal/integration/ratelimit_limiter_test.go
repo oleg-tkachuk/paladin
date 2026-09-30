@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	ratelimitstore "github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit/postgres"
+	ratelimitstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit/postgres"
 )
 
 // newLimiterFixture seeds a tenant and a token, because api_token_rate_buckets

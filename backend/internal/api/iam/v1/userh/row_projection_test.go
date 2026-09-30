@@ -3,8 +3,8 @@ package userh
 import (
 	"testing"
 
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
-	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // A filter compiles against the SCHEMA and evaluates against the PROJECTION.

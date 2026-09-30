@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // A pushdown that narrows nothing is always correct — the authoritative CEL

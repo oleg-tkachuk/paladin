@@ -8,12 +8,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
-	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 )
 
 // userIDFromName is the only thing standing between a caller-supplied string

@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 // VersionHandler.GetVersion was one of the thirteen handlers at 0.0% across

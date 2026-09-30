@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 )
 
 // With the three gates in one function they are pure, so the whole policy

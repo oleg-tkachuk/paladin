@@ -21,7 +21,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 )
 
 func asTokenInterceptor(t *testing.T, i connect.Interceptor) *apiTokenInterceptor {

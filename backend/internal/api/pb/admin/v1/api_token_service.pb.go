@@ -871,7 +871,7 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x06Revoke\x12..paladin.admin.v1.APITokenServiceRevokeRequest\x1a/.paladin.admin.v1.APITokenServiceRevokeResponse\"\x03\x90\x02\x02\x12h\n" +
 	"\x04List\x12,.paladin.admin.v1.APITokenServiceListRequest\x1a-.paladin.admin.v1.APITokenServiceListResponse\"\x03\x90\x02\x01\x12q\n" +
 	"\aGetSelf\x12/.paladin.admin.v1.APITokenServiceGetSelfRequest\x1a0.paladin.admin.v1.APITokenServiceGetSelfResponse\"\x03\x90\x02\x01\x12t\n" +
-	"\bGetUsage\x120.paladin.admin.v1.APITokenServiceGetUsageRequest\x1a1.paladin.admin.v1.APITokenServiceGetUsageResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\bGetUsage\x120.paladin.admin.v1.APITokenServiceGetUsageRequest\x1a1.paladin.admin.v1.APITokenServiceGetUsageResponse\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_api_token_service_proto_rawDescOnce sync.Once

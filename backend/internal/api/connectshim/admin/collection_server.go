@@ -7,16 +7,16 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/resolve"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 )
 
 // defaultBindingSource resolves a tenant's default (backend, bucket) route so

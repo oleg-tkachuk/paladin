@@ -10,10 +10,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
 // ─── Test doubles ────────────────────────────────────────────────────────────

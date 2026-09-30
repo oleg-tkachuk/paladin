@@ -39,9 +39,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 )
 
 // Default plane addresses for a stack on this host, shared with smoke_test.go.

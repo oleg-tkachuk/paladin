@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 )
 
 func TestValidate_EmptyExpression(t *testing.T) {

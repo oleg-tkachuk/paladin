@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"connectrpc.com/connect"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/backendh"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
 )
 
 type BackendServer struct {

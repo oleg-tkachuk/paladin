@@ -13,10 +13,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
-	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // An audit writer that always fails, which is the state this test is about.

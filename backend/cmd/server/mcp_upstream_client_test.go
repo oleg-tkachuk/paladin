@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // writeCAFile serialises the test server's own certificate as a PEM bundle —

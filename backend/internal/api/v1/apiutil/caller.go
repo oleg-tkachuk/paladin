@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 // CallerContext extracts (tenant_id, principal) from the request context and

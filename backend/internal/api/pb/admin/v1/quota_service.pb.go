@@ -202,7 +202,7 @@ const file_paladin_admin_v1_quota_service_proto_rawDesc = "" +
 	"\bGetQuota\x12!.paladin.admin.v1.GetQuotaRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x01\x12K\n" +
 	"\bSetQuota\x12!.paladin.admin.v1.SetQuotaRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x02\x12O\n" +
 	"\n" +
-	"ResetUsage\x12#.paladin.admin.v1.ResetUsageRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"ResetUsage\x12#.paladin.admin.v1.ResetUsageRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x02BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_quota_service_proto_rawDescOnce sync.Once

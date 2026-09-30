@@ -21,12 +21,12 @@ import (
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/health"
-	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
-	"github.com/oleg-tkachuk/paladin/internal/observability"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/health"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 )
 
 // ConfigSource carries the resolved config file path + overlay chain the CLI

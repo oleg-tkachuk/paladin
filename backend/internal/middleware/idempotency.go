@@ -56,14 +56,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/rpcmeta"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcmeta"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
 const idempotencyHeader = "Idempotency-Key"

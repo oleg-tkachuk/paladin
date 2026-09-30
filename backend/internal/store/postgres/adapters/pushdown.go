@@ -3,7 +3,7 @@ package adapters
 import (
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // hints extracts the SQL-expressible subset of a caller's CEL filter.

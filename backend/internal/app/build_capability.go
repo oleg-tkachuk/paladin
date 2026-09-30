@@ -9,9 +9,9 @@ import (
 
 	"go.uber.org/zap"
 
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/capability"
-	capabilitypg "github.com/oleg-tkachuk/paladin/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 // CapabilityBundle bundles the ready-to-use issuer / verifier / store

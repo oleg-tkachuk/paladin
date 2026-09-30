@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 )
 
 // PartitionMaintainer keeps RANGE-partitioned tables (the schema baseline (001_initial_schema.sql)

@@ -25,10 +25,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 func subtestBucketSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

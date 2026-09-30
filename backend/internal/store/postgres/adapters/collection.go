@@ -5,16 +5,16 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // CollectionRepo satisfies objectkey.Repository. Stats require an aggregation that

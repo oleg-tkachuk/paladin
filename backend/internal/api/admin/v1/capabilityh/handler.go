@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/safecast"
+	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"github.com/jackc/pgx/v5"
 
@@ -27,11 +27,11 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/capability"
-	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // Handler wires the dependencies the four RPCs need.

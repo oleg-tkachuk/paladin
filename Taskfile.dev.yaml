@@ -181,6 +181,7 @@ tasks:
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:publish-target
+      - task: verify:go-module-paths
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
@@ -303,6 +304,12 @@ tasks:
     # So the list is in three places, and this fails when they stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
+
+  verify:go-module-paths:
+    desc: "Fail when a Go module's path does not match its directory"
+    # A mismatch builds inside the tree and cannot be fetched outside it.
+    cmds:
+      - ./scripts/go-module-paths.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"

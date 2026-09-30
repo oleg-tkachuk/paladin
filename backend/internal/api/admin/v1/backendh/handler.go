@@ -10,19 +10,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/safecast"
+	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
-	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // EventProducer is the ADR-0003 outbox seam: DispatchTx writes the event's

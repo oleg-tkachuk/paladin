@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // http.Server writes its own errors — TLS handshake failures, malformed

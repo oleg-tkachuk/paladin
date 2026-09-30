@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
 
 type fakeKafka struct {

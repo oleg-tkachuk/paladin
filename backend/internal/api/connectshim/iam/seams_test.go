@@ -8,13 +8,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/userh"
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 )
 
 // The property, for every handler-backed server on the IAM plane: a handler

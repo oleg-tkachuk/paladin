@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -606,7 +606,7 @@ const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"\x10DeleteCollection\x12).paladin.admin.v1.DeleteCollectionRequest\x1a*.paladin.admin.v1.DeleteCollectionResponse\"\x03\x90\x02\x02\x12k\n" +
 	"\x0fListCollections\x12(.paladin.admin.v1.ListCollectionsRequest\x1a).paladin.admin.v1.ListCollectionsResponse\"\x03\x90\x02\x01\x12f\n" +
 	"\x13SetCollectionPolicy\x12,.paladin.admin.v1.SetCollectionPolicyRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x02\x12l\n" +
-	"\x16BindCollectionToBucket\x12/.paladin.admin.v1.BindCollectionToBucketRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x16BindCollectionToBucket\x12/.paladin.admin.v1.BindCollectionToBucketRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x02BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_collection_service_proto_rawDescOnce sync.Once

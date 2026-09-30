@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 )
 
 // serveAdminCmd runs only the admin Connect listener on Uber fx. Sized for low

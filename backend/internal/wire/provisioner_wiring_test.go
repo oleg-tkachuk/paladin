@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 )
 
 // The bucket handler's provisioner must reach it exactly as wired — nil

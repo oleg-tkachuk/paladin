@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 // UpstreamStatus is one plane's reachability as the bridge sees it.

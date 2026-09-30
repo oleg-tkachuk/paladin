@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	mcppkg "github.com/oleg-tkachuk/paladin/internal/mcp"
+	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 )
 
 func TestSessionTargets_Fallbacks(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 // fakeRateStore is a shared sliding window in memory: one counter per tenant,

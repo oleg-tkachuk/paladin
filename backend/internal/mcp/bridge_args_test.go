@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	commonv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 )
 
 // TestStringScopesToProto covers the "type:value" mini-language agents type

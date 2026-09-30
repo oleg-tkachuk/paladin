@@ -8,8 +8,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
 // A browser cannot update its cookie between two requests already in flight,

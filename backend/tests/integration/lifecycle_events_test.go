@@ -22,15 +22,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
-	quotahpkg "github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
-	objectkeypkg "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	objectpkg "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	quotahpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
+	objectkeypkg "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	objectpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // lifecycleEventProbe wires an embedded NATS subscriber + a dispatcher whose

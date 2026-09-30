@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/eventsubh"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 )
 
 type EventSubscriptionServer struct {

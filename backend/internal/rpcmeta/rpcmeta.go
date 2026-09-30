@@ -28,9 +28,9 @@ import (
 	// every caller below treats that as "I know nothing" rather than guessing —
 	// but a silent registry is still a silent guard, so TestEveryRPCResolves
 	// fails rather than letting it happen.
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 )
 
 var cache sync.Map // procedure string → result

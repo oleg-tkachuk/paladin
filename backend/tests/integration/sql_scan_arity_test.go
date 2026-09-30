@@ -30,7 +30,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
 // scanSite is one Scan call paired with the query whose row it consumes.

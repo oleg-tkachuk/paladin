@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/userh"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
 type UserServer struct {

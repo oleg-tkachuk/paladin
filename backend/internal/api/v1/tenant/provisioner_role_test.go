@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
 )
 
 // provisionerCtx carries ONLY platform.tenant-provisioner — no platform.admin.

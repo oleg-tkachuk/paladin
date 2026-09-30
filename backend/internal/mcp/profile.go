@@ -3,7 +3,7 @@ package mcp
 import (
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // Profile gating for the MCP tool catalog.

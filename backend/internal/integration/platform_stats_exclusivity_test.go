@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/platformstats"
+	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
 
 // Both credential censuses state the same contract in a comment and enforce

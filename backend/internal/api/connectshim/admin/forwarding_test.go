@@ -9,15 +9,15 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
 
-	commonv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 )
 
 // Optional request fields — a tenant filter, a page cursor, a bucket scope —

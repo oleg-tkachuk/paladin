@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────

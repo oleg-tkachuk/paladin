@@ -21,12 +21,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // The adversarial rows, shared by both lists below: mixed case, a name with no

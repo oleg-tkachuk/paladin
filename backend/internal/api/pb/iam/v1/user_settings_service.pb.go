@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -536,7 +536,7 @@ const file_paladin_iam_v1_user_settings_service_proto_rawDesc = "" +
 	"\n" +
 	"GetForUser\x12!.paladin.iam.v1.GetForUserRequest\x1a\x1c.paladin.iam.v1.UserSettings\"\x03\x90\x02\x01\x12^\n" +
 	"\fListByTenant\x12#.paladin.iam.v1.ListByTenantRequest\x1a$.paladin.iam.v1.ListByTenantResponse\"\x03\x90\x02\x01\x12a\n" +
-	"\rDeleteForUser\x12$.paladin.iam.v1.DeleteForUserRequest\x1a%.paladin.iam.v1.DeleteForUserResponse\"\x03\x90\x02\x02BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\rDeleteForUser\x12$.paladin.iam.v1.DeleteForUserRequest\x1a%.paladin.iam.v1.DeleteForUserResponse\"\x03\x90\x02\x02BMZKgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_user_settings_service_proto_rawDescOnce sync.Once

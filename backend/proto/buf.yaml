@@ -22,3 +22,10 @@ lint:
     # buf-STANDARD ValidateRequest/InspectRequest. Consistent with the two
     # exceptions above; avoids a breaking rename of established messages.
     - RPC_REQUEST_STANDARD_NAME
+breaking:
+  use:
+    - FILE
+  except:
+    # go_package names where this repository's Go stubs are generated, not
+    # anything on the wire. Moving the stubs must not read as a contract break.
+    - FILE_SAME_GO_PACKAGE

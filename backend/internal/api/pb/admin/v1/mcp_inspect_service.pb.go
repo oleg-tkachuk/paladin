@@ -11,7 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -1020,7 +1020,7 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\x11MCPInspectService\x12Y\n" +
 	"\aInspect\x12#.paladin.admin.v1.MCPInspectRequest\x1a$.paladin.admin.v1.MCPInspectResponse\"\x03\x90\x02\x01\x12b\n" +
 	"\fListSessions\x12%.paladin.admin.v1.ListSessionsRequest\x1a&.paladin.admin.v1.ListSessionsResponse\"\x03\x90\x02\x01\x12k\n" +
-	"\x0fGetBridgeStatus\x12(.paladin.admin.v1.GetBridgeStatusRequest\x1a).paladin.admin.v1.GetBridgeStatusResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x0fGetBridgeStatus\x12(.paladin.admin.v1.GetBridgeStatusRequest\x1a).paladin.admin.v1.GetBridgeStatusResponse\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_mcp_inspect_service_proto_rawDescOnce sync.Once

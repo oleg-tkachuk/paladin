@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 )
 
 // objectHandler is what ObjectServer needs from the domain handler, and the

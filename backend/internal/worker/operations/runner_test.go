@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 )
 
 // memRepo is a tiny in-memory operation.Repository sufficient to drive

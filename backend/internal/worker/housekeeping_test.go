@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
 // ─── RefreshTokenPurger ─────────────────────────────────────────────────────

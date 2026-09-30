@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 func TestToolFilter_BuiltinProfiles(t *testing.T) {

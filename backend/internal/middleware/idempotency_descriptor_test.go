@@ -10,12 +10,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
+	iamv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1/paladiniamv1connect"
 
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	_ "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	_ "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
 )
 
 // ─── behaviour, not just the predicate ──────────────────────────────────────

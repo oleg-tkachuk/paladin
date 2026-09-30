@@ -16,7 +16,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 )
 
 func TestSchemaConstraintNamesExist(t *testing.T) {

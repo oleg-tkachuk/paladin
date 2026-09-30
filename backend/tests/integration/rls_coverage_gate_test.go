@@ -21,7 +21,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
 // exemptFromRLS names every table that carries tenant_id and deliberately has

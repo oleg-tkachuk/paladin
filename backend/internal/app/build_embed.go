@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/oleg-tkachuk/paladin/internal/health"
+	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 )
 
 // EmbedMuxes is the bundle returned to in-process callers (the embedded

@@ -8,13 +8,13 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	authh "github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
-	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
-	"github.com/oleg-tkachuk/paladin/internal/health"
+	authh "github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
+	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 )
 
 // The iam shim is a pure translation layer: resource-name parsing and

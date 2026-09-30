@@ -31,10 +31,10 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/encoding/protowire"
 
-	"github.com/oleg-tkachuk/paladin/internal/eventingest"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
 func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {

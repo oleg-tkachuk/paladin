@@ -20,8 +20,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/capability"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // CapabilityPurger periodically calls Store.PurgeExpired and, when

@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/convx"
-	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 )
 
 // OperationServer is the data-plane mirror — caller sees only operations

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package paladin.admin.v1;
 
-option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+option go_package = "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1";
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";

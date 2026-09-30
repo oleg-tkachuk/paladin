@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -553,7 +553,7 @@ const file_paladin_data_v1_object_tag_service_proto_rawDesc = "" +
 	"\rGetObjectTags\x12%.paladin.data.v1.GetObjectTagsRequest\x1a&.paladin.data.v1.GetObjectTagsResponse\"\x03\x90\x02\x01\x12c\n" +
 	"\rPutObjectTags\x12%.paladin.data.v1.PutObjectTagsRequest\x1a&.paladin.data.v1.PutObjectTagsResponse\"\x03\x90\x02\x02\x12l\n" +
 	"\x10DeleteObjectTags\x12(.paladin.data.v1.DeleteObjectTagsRequest\x1a).paladin.data.v1.DeleteObjectTagsResponse\"\x03\x90\x02\x02\x12l\n" +
-	"\x10ListDistinctTags\x12(.paladin.data.v1.ListDistinctTagsRequest\x1a).paladin.data.v1.ListDistinctTagsResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x10ListDistinctTags\x12(.paladin.data.v1.ListDistinctTagsRequest\x1a).paladin.data.v1.ListDistinctTagsResponse\"\x03\x90\x02\x01BOZMgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_tag_service_proto_rawDescOnce sync.Once

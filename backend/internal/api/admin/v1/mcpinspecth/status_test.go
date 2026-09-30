@@ -8,10 +8,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	mcppkg "github.com/oleg-tkachuk/paladin/internal/mcp"
+	adminv1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 )
 
 // The behaviour this RPC exists for: when the bridge cannot be reached, say

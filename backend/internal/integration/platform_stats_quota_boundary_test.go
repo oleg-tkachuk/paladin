@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/platformstats"
+	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
 
 // The quota census decides what the console's /stats page reports as a fleet

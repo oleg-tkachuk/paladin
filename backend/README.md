@@ -104,25 +104,12 @@ task stack:up
 
 ### Not `go install`-able
 
-`go.mod` here declares `module github.com/oleg-tkachuk/paladin` while the
-file lives in `backend/`. Go resolves a module path to a repository plus a
-subdirectory, so the proxy looks for a `go.mod` at the repository root, finds
-none, and
-
-```bash
-go install github.com/oleg-tkachuk/paladin/cmd/server@latest   # does not work
-```
-
-fails. Nothing inside the repository notices, because the backend is only
-ever built from this directory.
+The module is `github.com/oleg-tkachuk/paladin/backend`, matching its
+directory, but it is not tagged as a Go module and it resolves its sibling
+modules through `replace` directives, which `go install …@version` refuses.
 
 **Container images are the distribution path** — build from
-`deploy/Dockerfile`, or clone and `go build ./...` from here. Renaming the
-module to `…/paladin/backend` would make `go install` resolve, at the price
-of rewriting every import path in the repository; it is not worth doing for
-a control plane nobody installs that way. Recorded here so the mismatch
-reads as a decision rather than a bug. (`capability/` does not have this
-problem: its path ends in `/capability` and it sits in `capability/`.)
+`deploy/Dockerfile`, or clone and `go build ./...` from here.
 
 ## Configuration
 

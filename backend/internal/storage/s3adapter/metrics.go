@@ -8,7 +8,7 @@ import (
 
 	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 
-	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
 // withCallMetrics instruments every call this client makes to its storage

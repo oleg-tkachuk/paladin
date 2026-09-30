@@ -14,13 +14,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/oleg-tkachuk/paladin/internal/safecast"
+	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"connectrpc.com/connect"
 
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
-	celfilter "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1/paladinadminv1connect"
+	celfilter "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // Handler implements paladinadminv1connect.CELServiceHandler.

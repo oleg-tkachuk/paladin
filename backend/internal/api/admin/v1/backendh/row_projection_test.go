@@ -3,8 +3,8 @@ package backendh
 import (
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // A filter compiles against the SCHEMA and evaluates against the PROJECTION.

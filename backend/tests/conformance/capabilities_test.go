@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
 // TestCapabilities measures what varies. Nothing here fails the run: every

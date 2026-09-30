@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 )
 
 // The verify histogram is emitted from one place and consumed by nobody in

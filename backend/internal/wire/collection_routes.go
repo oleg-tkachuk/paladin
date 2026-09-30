@@ -6,11 +6,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	policy "github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
 const (

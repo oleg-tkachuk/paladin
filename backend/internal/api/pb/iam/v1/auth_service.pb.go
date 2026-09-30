@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -1143,7 +1143,7 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x0eChangePassword\x12%.paladin.iam.v1.ChangePasswordRequest\x1a&.paladin.iam.v1.ChangePasswordResponse\x12e\n" +
 	"\x10ExchangeAudience\x12'.paladin.iam.v1.ExchangeAudienceRequest\x1a(.paladin.iam.v1.ExchangeAudienceResponse\x12m\n" +
 	"\x11ListMyMemberships\x12(.paladin.iam.v1.ListMyMembershipsRequest\x1a).paladin.iam.v1.ListMyMembershipsResponse\"\x03\x90\x02\x01\x12Y\n" +
-	"\fSwitchTenant\x12#.paladin.iam.v1.SwitchTenantRequest\x1a$.paladin.iam.v1.SwitchTenantResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\fSwitchTenant\x12#.paladin.iam.v1.SwitchTenantRequest\x1a$.paladin.iam.v1.SwitchTenantResponseBMZKgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_auth_service_proto_rawDescOnce sync.Once

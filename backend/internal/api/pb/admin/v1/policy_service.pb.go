@@ -526,7 +526,7 @@ const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\rPolicyService\x12V\n" +
 	"\bValidate\x12!.paladin.admin.v1.ValidateRequest\x1a\".paladin.admin.v1.ValidateResponse\"\x03\x90\x02\x01\x12e\n" +
 	"\rSimulateAuthz\x12&.paladin.admin.v1.SimulateAuthzRequest\x1a'.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12t\n" +
-	"\x12GetEffectivePolicy\x12+.paladin.admin.v1.GetEffectivePolicyRequest\x1a,.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x12GetEffectivePolicy\x12+.paladin.admin.v1.GetEffectivePolicyRequest\x1a,.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_policy_service_proto_rawDescOnce sync.Once

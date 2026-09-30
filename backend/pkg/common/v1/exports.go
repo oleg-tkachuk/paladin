@@ -1,7 +1,7 @@
 // Package commonv1 re-exports the shared types under paladin.common.v1.
 package commonv1
 
-import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+import internal "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 
 type (
 	PageRequest         = internal.PageRequest

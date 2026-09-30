@@ -41,7 +41,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
 // queryMethods are the pgx entry points that take SQL as their second

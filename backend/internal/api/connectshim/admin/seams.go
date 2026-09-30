@@ -6,19 +6,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/audith"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/backendh"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/eventsubh"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
-	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/collection"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/audith"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/collection"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/v1/policy"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // auditHandler is what AuditServer needs from *audith.Handler.

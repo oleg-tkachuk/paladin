@@ -12,7 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -424,7 +424,7 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\x18PlatformOperationService\x12W\n" +
 	"\fGetOperation\x12%.paladin.admin.v1.GetOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x12h\n" +
 	"\x0eListOperations\x12'.paladin.admin.v1.ListOperationsRequest\x1a(.paladin.admin.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12]\n" +
-	"\x0fCancelOperation\x12(.paladin.admin.v1.CancelOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x0fCancelOperation\x12(.paladin.admin.v1.CancelOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x02BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_operation_service_proto_rawDescOnce sync.Once

@@ -1,7 +1,7 @@
 // Package datav1 re-exports the protobuf-generated types for paladin.data.v1.
 package datav1
 
-import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
+import internal "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
 
 type (
 	Object            = internal.Object

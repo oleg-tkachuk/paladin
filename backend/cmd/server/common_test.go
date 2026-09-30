@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 )
 
 // flushOTel is the shutdown hook every serve/migrate subcommand defers

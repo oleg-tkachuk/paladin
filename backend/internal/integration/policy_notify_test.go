@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
 // TestPolicyChangedNotify proves the trigger baseline (003_triggers.sql): writes to the two Cedar

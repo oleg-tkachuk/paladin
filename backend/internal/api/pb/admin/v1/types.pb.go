@@ -11,7 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	v1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -2872,7 +2872,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0eObjectLockMode\x12 \n" +
 	"\x1cOBJECT_LOCK_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bOBJECT_LOCK_MODE_GOVERNANCE\x10\x01\x12\x1f\n" +
-	"\x1bOBJECT_LOCK_MODE_COMPLIANCE\x10\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x1bOBJECT_LOCK_MODE_COMPLIANCE\x10\x02BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_types_proto_rawDescOnce sync.Once

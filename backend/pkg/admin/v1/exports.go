@@ -7,7 +7,7 @@
 // a sub-package import (`adminv1connect "...pkg/admin/v1/connect"`).
 package adminv1
 
-import internal "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+import internal "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1"
 
 // ─── Storage backend ────────────────────────────────────────────────────────
 

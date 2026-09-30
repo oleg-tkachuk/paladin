@@ -617,7 +617,7 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\x13TenantBudgetService\x12m\n" +
 	"\x03Get\x12/.paladin.admin.v1.TenantBudgetServiceGetRequest\x1a0.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12m\n" +
 	"\x03Set\x12/.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a0.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12\x7f\n" +
-	"\tSummarize\x125.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a6.paladin.admin.v1.TenantBudgetServiceSummarizeResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\tSummarize\x125.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a6.paladin.admin.v1.TenantBudgetServiceSummarizeResponse\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_tenant_budget_service_proto_rawDescOnce sync.Once

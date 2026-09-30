@@ -1,6 +1,6 @@
 package adapters
 
-import "github.com/oleg-tkachuk/paladin/internal/store/postgres/pgerr"
+import "github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 
 // blockingRelation names the table whose rows are refusing a delete, for the
 // message an operator reads.

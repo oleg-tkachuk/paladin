@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	datav1 "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
+	datav1 "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
 )
 
 // The interceptor read only the header. Two request messages declare an

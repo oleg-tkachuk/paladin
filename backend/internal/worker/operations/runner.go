@@ -26,11 +26,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 )
 
 // Executor is the per-operation-type seam. Implementations parse the

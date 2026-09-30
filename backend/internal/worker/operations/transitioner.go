@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // Transitioner is the slice of *statemachine.Transitioner the batch

@@ -32,7 +32,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
 // generatedQuery is one `const name = ` + "`" + `SQL` + "`" + “ in the sqlc output.

@@ -1114,7 +1114,7 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\bDelegate\x122.paladin.admin.v1.CapabilityServiceDelegateRequest\x1a0.paladin.admin.v1.CapabilityServiceIssueResponse\x12r\n" +
 	"\x06Revoke\x120.paladin.admin.v1.CapabilityServiceRevokeRequest\x1a1.paladin.admin.v1.CapabilityServiceRevokeResponse\"\x03\x90\x02\x02\x12l\n" +
 	"\x04List\x12..paladin.admin.v1.CapabilityServiceListRequest\x1a/.paladin.admin.v1.CapabilityServiceListResponse\"\x03\x90\x02\x01\x12x\n" +
-	"\bGetUsage\x122.paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a3.paladin.admin.v1.CapabilityServiceGetUsageResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\bGetUsage\x122.paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a3.paladin.admin.v1.CapabilityServiceGetUsageResponse\"\x03\x90\x02\x01BQZOgithub.com/oleg-tkachuk/paladin/backend/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_capability_service_proto_rawDescOnce sync.Once

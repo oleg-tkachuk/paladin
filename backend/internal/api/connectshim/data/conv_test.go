@@ -11,12 +11,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	commonpb "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
-	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/internal/auth"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	commonpb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/common/v1"
+	pb "github.com/oleg-tkachuk/paladin/backend/internal/api/pb/data/v1"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // The data-plane shim's job is name parsing, tenant assertion, and proto

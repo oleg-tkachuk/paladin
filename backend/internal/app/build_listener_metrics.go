@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 )
 
 // BuildMetricsListener returns the Prometheus scrape endpoint, or nil when

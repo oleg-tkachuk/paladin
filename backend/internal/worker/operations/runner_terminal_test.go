@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/operation"
 )
 
 // recordingRepo captures terminal writes and refuses any write whose context

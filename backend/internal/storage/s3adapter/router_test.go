@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/v1/object"
 )
 
 // TestObjectRouter_UnknownBackendPropagates proves the router routes on the
