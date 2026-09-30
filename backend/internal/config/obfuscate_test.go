@@ -20,17 +20,21 @@ func TestObfuscated_RedactsAllCredentials(t *testing.T) {
 	c.Bootstrap.Admin.Password = "admin-secret"
 	c.APIToken.HMACKey = "pepper-secret"
 	c.Ingest.Webhook.SharedSecret = "ingest-secret"
+	c.Ingest.NATS.Token = "nats-secret"
+	c.Runtime.HealthSnapshotToken = "health-secret"
 
 	o := c.Obfuscated()
 
 	checks := map[string]string{
-		"postgres.password":            o.Datastores.Postgres.Password,
-		"postgres.migrate_password":    o.Datastores.Postgres.MigratePassword,
-		"postgres.reaper_password":     o.Datastores.Postgres.ReaperPassword,
-		"auth.signing_key":             o.Auth.SigningKey,
-		"bootstrap.admin.password":     o.Bootstrap.Admin.Password,
-		"api_token.hmac_key":           o.APIToken.HMACKey,
-		"ingest.webhook.shared_secret": o.Ingest.Webhook.SharedSecret,
+		"postgres.password":             o.Datastores.Postgres.Password,
+		"postgres.migrate_password":     o.Datastores.Postgres.MigratePassword,
+		"postgres.reaper_password":      o.Datastores.Postgres.ReaperPassword,
+		"auth.signing_key":              o.Auth.SigningKey,
+		"bootstrap.admin.password":      o.Bootstrap.Admin.Password,
+		"api_token.hmac_key":            o.APIToken.HMACKey,
+		"ingest.webhook.shared_secret":  o.Ingest.Webhook.SharedSecret,
+		"ingest.nats.token":             o.Ingest.NATS.Token,
+		"runtime.health_snapshot_token": o.Runtime.HealthSnapshotToken,
 	}
 	for field, got := range checks {
 		if got != Redacted {
@@ -41,5 +45,23 @@ func TestObfuscated_RedactsAllCredentials(t *testing.T) {
 	// Obfuscated() must not mutate the source config.
 	if c.Datastores.Postgres.ReaperPassword != "reaper-secret" {
 		t.Errorf("Obfuscated() mutated the source: reaper_password = %q", c.Datastores.Postgres.ReaperPassword)
+	}
+}
+
+func TestObfuscated_RedactsTheRabbitMQPassword(t *testing.T) {
+	cases := []struct{ name, url, want string }{
+		{"password", "amqp://paladin:hunter2@rabbit:5672/", "amqp://paladin:" + Redacted + "@rabbit:5672/"},
+		{"no password", "amqp://rabbit:5672/", "amqp://rabbit:5672/"},
+		{"unset", "", ""},
+		{"unparseable", "amqp://paladin:hunter2@rabbit:port/", Redacted},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{}
+			c.Ingest.RabbitMQ.URL = tc.url
+			if got := c.Obfuscated().Ingest.RabbitMQ.URL; got != tc.want {
+				t.Errorf("url = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

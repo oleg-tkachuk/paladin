@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -370,5 +372,39 @@ func (c *Config) Obfuscated() Config {
 		cc.Ingest.Webhook.SharedSecret = Redacted
 	}
 
+	// Ingest broker credentials (resolved from token_ref / url_ref).
+	if cc.Ingest.NATS.Token != "" {
+		cc.Ingest.NATS.Token = Redacted
+	}
+	cc.Ingest.RabbitMQ.URL = redactURLPassword(cc.Ingest.RabbitMQ.URL)
+
+	// The /system/health.json gate, shared with the console.
+	if cc.Runtime.HealthSnapshotToken != "" {
+		cc.Runtime.HealthSnapshotToken = Redacted
+	}
+
 	return cc
+}
+
+// redactURLPassword replaces the password in a URL's userinfo, keeping the
+// host and user an operator debugs with. A URL that does not parse is
+// redacted whole: there is no telling where its password is.
+func redactURLPassword(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return Redacted
+	}
+	if _, hasPassword := u.User.Password(); !hasPassword {
+		return raw
+	}
+	// Spliced in rather than set through url.UserPassword, which would
+	// percent-encode the sentinel into "%2A%2A%2A".
+	user := url.User(u.User.Username()).String()
+	u.User = nil
+	const schemeSep = "://"
+	rest := strings.TrimPrefix(u.String(), u.Scheme+schemeSep)
+	return u.Scheme + schemeSep + user + ":" + Redacted + "@" + rest
 }
