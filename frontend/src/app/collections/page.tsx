@@ -17,14 +17,12 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useCollections } from "@/hooks/useCollections";
-import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
 import { useScope } from "@/context/ScopeContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import {
@@ -42,14 +40,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -59,18 +49,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  SelectRoot,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
+import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 
 type SortColumn = "name" | "displayName" | "backendId";
 
@@ -117,13 +101,17 @@ export default function CollectionsPage() {
     createCollection,
     deleteCollection,
   } = useCollections();
-  const { buckets, fetchBuckets } = useBuckets();
   const { backends: backendRows } = useBackends();
-  const { tenantId, tenant } = useScope();
+  const { tenantId } = useScope();
   const { showNotification } = useNotification();
 
+  // Only backends that can take a Collection: a disabled or draining one
+  // leaves a dialog that cannot be completed.
   const backends = useMemo(
-    () => backendRows.map((b) => b.backendId),
+    () =>
+      backendRows
+        .filter((b) => b.enabled && !b.readOnly)
+        .map((b) => b.backendId),
     [backendRows],
   );
 
@@ -134,11 +122,6 @@ export default function CollectionsPage() {
 
   // ── create
   const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDisplayName, setNewDisplayName] = useState("");
-  const [newBackend, setNewBackend] = useState("");
-  const [newBucketRef, setNewBucketRef] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   // ── delete
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -160,28 +143,6 @@ export default function CollectionsPage() {
   useEffect(() => {
     fetchCollections(searchFilter(debouncedSearch));
   }, [fetchCollections, debouncedSearch]);
-
-  useEffect(() => {
-    if (createOpen) fetchBuckets(newBackend || undefined);
-  }, [createOpen, newBackend, fetchBuckets]);
-
-  // Default the create form to the first backend / first bucket once the
-  // dialog opens and the lists have loaded. Render-phase adjust-on-condition
-  // (the !newBackend / !newBucketRef guards converge in one extra render) —
-  // not set-state-in-effect.
-  if (createOpen && !newBackend && backends.length > 0) {
-    setNewBackend(backends[0]);
-  }
-
-  const availableBuckets = useMemo(
-    () =>
-      newBackend ? buckets.filter((b) => b.backendId === newBackend) : buckets,
-    [buckets, newBackend],
-  );
-
-  if (createOpen && !newBucketRef && availableBuckets.length > 0) {
-    setNewBucketRef(availableBuckets[0].bucketId);
-  }
 
   const sorted = useMemo(() => {
     const list = [...collections];
@@ -205,32 +166,6 @@ export default function CollectionsPage() {
     }
     return list;
   }, [collections, sort]);
-
-  const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!newName || !newBucketRef) return;
-    try {
-      setSubmitting(true);
-      await createCollection(newName, newDisplayName, newBackend, newBucketRef);
-      showNotification({
-        type: "success",
-        title: "Collection created",
-        message: `${newName} → s3://${newBucketRef}/`,
-      });
-      setNewName("");
-      setNewDisplayName("");
-      setCreateOpen(false);
-      fetchCollections(searchFilter(debouncedSearch));
-    } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Creation failed",
-        message: (err as Error).message || "Failed to create Collection.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -437,152 +372,14 @@ export default function CollectionsPage() {
       </Card>
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <form onSubmit={handleCreate}>
-            <DialogHeader>
-              <DialogTitle>Provision Collection</DialogTitle>
-              <DialogDescription>
-                Tenant-scoped prefix bound to a physical S3 bucket. Layout is{" "}
-                <code className="font-mono text-foreground">
-                  s3://&lt;bucket&gt;/&lt;tenant&gt;/&lt;object_key&gt;/&lt;key&gt;
-                </code>
-                .
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              {/* Active tenant — read-only. The signed-in JWT pins which
-                  tenant owns the new Collection, so the dialog displays
-                  it explicitly to remove any ambiguity about where the
-                  resource will land. */}
-              <div className="space-y-1.5">
-                <Label>Tenant</Label>
-                <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
-                  <span className="text-sm font-medium">
-                    {tenant?.displayName || (
-                      <span className="italic text-muted-foreground">
-                        (unnamed)
-                      </span>
-                    )}
-                  </span>
-                  <span className={cn(T.code, "text-muted-foreground")}>
-                    {tenantId || "no tenant"}
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-backend">Storage backend</Label>
-                <SelectRoot
-                  value={newBackend}
-                  onValueChange={(v) => {
-                    setNewBackend(v);
-                    setNewBucketRef("");
-                  }}
-                  disabled={backends.length === 0}
-                >
-                  <SelectTrigger id="ok-backend" className="w-full">
-                    <SelectValue
-                      placeholder={
-                        backends.length === 0
-                          ? "— no backends configured —"
-                          : "Select a backend"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {backends.map((b) => (
-                      <SelectItem key={b} value={b}>
-                        {b}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-bucket">S3 bucket</Label>
-                <SelectRoot
-                  value={newBucketRef}
-                  onValueChange={setNewBucketRef}
-                  disabled={availableBuckets.length === 0}
-                >
-                  <SelectTrigger id="ok-bucket" className="w-full">
-                    <SelectValue
-                      placeholder={
-                        availableBuckets.length === 0
-                          ? "— no buckets in this backend —"
-                          : "Select a bucket"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableBuckets.map((b) => (
-                      <SelectItem
-                        key={`${b.backendId}/${b.bucketId}`}
-                        value={b.bucketId}
-                      >
-                        <span className="font-mono">{b.bucketId}</span>
-                        {b.displayName ? (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            — {b.displayName}
-                          </span>
-                        ) : null}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-                {availableBuckets.length === 0 && newBackend && (
-                  <p className="text-xs text-destructive">
-                    Create a bucket in this backend via{" "}
-                    <Link href="/buckets" className="underline">
-                      S3 Buckets
-                    </Link>{" "}
-                    first.
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-name">Collection name</Label>
-                <Input
-                  id="ok-name"
-                  autoFocus
-                  placeholder="assets-prod"
-                  className="font-mono text-xs"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value.toLowerCase())}
-                />
-                <p className={T.hint}>
-                  3–63 lowercase alphanumerics or hyphens.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-display-name">Display name</Label>
-                <Input
-                  id="ok-display-name"
-                  placeholder="Production assets"
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setCreateOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !newName || !newBucketRef}
-              >
-                {submitting ? "Provisioning…" : "Create Collection"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CollectionCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        backends={backends}
+        bucketsHref="/buckets"
+        createCollection={createCollection}
+        onCreated={() => void fetchCollections(searchFilter(debouncedSearch))}
+      />
 
       {/* Delete */}
       <AlertDialog

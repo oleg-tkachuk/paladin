@@ -31,7 +31,6 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useCollections } from "@/hooks/useCollections";
-import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/components/ui/Notification";
@@ -42,7 +41,6 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import {
@@ -60,14 +58,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -77,19 +67,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  SelectRoot,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
+import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 
 type SortColumn = "name" | "displayName" | "bucket";
 
@@ -131,7 +115,6 @@ export default function TenantCollectionsPage() {
   const tenant = useTenant();
   const { user } = useAuth();
   const { createCollection, deleteCollection } = useCollections();
-  const { buckets, fetchBuckets } = useBuckets();
   const { backends: backendRows } = useBackends();
   const { showNotification } = useNotification();
 
@@ -217,48 +200,9 @@ export default function TenantCollectionsPage() {
 
   // ── create dialog
   const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDisplayName, setNewDisplayName] = useState("");
-  const [newBackend, setNewBackend] = useState("");
-  const [newBucketRef, setNewBucketRef] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   // ── delete confirm
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (createOpen) fetchBuckets(newBackend || undefined);
-  }, [createOpen, newBackend, fetchBuckets]);
-
-  // Default the create form to the first backend / first bucket once the
-  // dialog opens and the lists have loaded. Render-phase adjust-on-condition
-  // (the !newBackend / !newBucketRef guards converge in one extra render) —
-  // not set-state-in-effect.
-  // Default to a backend that has buckets when one exists — a Collection
-  // binds to a bucket, so defaulting to a usable-but-empty backend produces a
-  // dialog that cannot be submitted until the operator works out that the
-  // backend, not the form, is the problem.
-  const defaultBackend = useMemo(() => {
-    if (backends.length === 0) return "";
-    const withBuckets = backends.find((id) =>
-      buckets.some((b) => b.backendId === id),
-    );
-    return withBuckets ?? backends[0];
-  }, [backends, buckets]);
-
-  if (createOpen && !newBackend && defaultBackend) {
-    setNewBackend(defaultBackend);
-  }
-
-  const availableBuckets = useMemo(
-    () =>
-      newBackend ? buckets.filter((b) => b.backendId === newBackend) : buckets,
-    [buckets, newBackend],
-  );
-
-  if (createOpen && !newBucketRef && availableBuckets.length > 0) {
-    setNewBucketRef(availableBuckets[0].bucketId);
-  }
 
   const sorted = useMemo(() => {
     const arr = [...list];
@@ -282,32 +226,6 @@ export default function TenantCollectionsPage() {
     }
     return arr;
   }, [list, sort]);
-
-  const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!newName || !newBucketRef) return;
-    try {
-      setSubmitting(true);
-      await createCollection(newName, newDisplayName, newBackend, newBucketRef);
-      showNotification({
-        type: "success",
-        title: "Collection created",
-        message: `${newName} → s3://${newBucketRef}/`,
-      });
-      setNewName("");
-      setNewDisplayName("");
-      setCreateOpen(false);
-      void fetchList(search);
-    } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Creation failed",
-        message: (err as Error).message || "Failed to create Collection.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -517,143 +435,14 @@ export default function TenantCollectionsPage() {
       </Card>
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <form onSubmit={handleCreate}>
-            <DialogHeader>
-              <DialogTitle>
-                Provision Collection for{" "}
-                <span className="font-mono">{tenant.slug}</span>
-              </DialogTitle>
-              <DialogDescription>
-                Tenant-scoped prefix bound to a physical S3 bucket. Layout is{" "}
-                <code className="font-mono text-foreground">
-                  s3://&lt;bucket&gt;/&lt;tenant&gt;/&lt;object_key&gt;/&lt;key&gt;
-                </code>
-                .
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-backend">Storage backend</Label>
-                <SelectRoot
-                  value={newBackend}
-                  onValueChange={(v) => {
-                    setNewBackend(v);
-                    setNewBucketRef("");
-                  }}
-                  disabled={backends.length === 0}
-                >
-                  <SelectTrigger id="ok-backend" className="w-full">
-                    <SelectValue
-                      placeholder={
-                        backends.length === 0
-                          ? "— no backends configured —"
-                          : "Select a backend"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {backends.map((b) => (
-                      <SelectItem key={b} value={b}>
-                        {b}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-bucket">S3 bucket</Label>
-                <SelectRoot
-                  value={newBucketRef}
-                  onValueChange={setNewBucketRef}
-                  disabled={availableBuckets.length === 0}
-                >
-                  <SelectTrigger id="ok-bucket" className="w-full">
-                    <SelectValue
-                      placeholder={
-                        availableBuckets.length === 0
-                          ? "— no buckets in this backend —"
-                          : "Select a bucket"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableBuckets.map((b) => (
-                      <SelectItem
-                        key={`${b.backendId}/${b.bucketId}`}
-                        value={b.bucketId}
-                      >
-                        <span className="font-mono">{b.bucketId}</span>
-                        {b.displayName ? (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            — {b.displayName}
-                          </span>
-                        ) : null}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-                {availableBuckets.length === 0 && newBackend && (
-                  <p className="text-xs text-destructive">
-                    Create a bucket in this backend via{" "}
-                    <Link
-                      href={`/tenants/${tenant.slug}/buckets`}
-                      className="underline"
-                    >
-                      the tenant Buckets tab
-                    </Link>{" "}
-                    first.
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-name">Collection path</Label>
-                <Input
-                  id="ok-name"
-                  autoFocus
-                  placeholder="invoices/2026/q1"
-                  className="font-mono text-xs"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value.toLowerCase())}
-                />
-                <p className={T.hint}>
-                  Slash-separated path. Each segment: 1–63 lowercase
-                  alphanumerics or hyphens (kebab-case), starts and ends
-                  alphanumeric. Examples:{" "}
-                  <span className={T.code}>assets-prod</span> or{" "}
-                  <span className={T.code}>invoices/2026/q1</span>.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ok-display-name">Display name</Label>
-                <Input
-                  id="ok-display-name"
-                  placeholder="Production assets"
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setCreateOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !newName || !newBucketRef}
-              >
-                {submitting ? "Provisioning…" : "Create Collection"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CollectionCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        backends={backends}
+        bucketsHref={`/tenants/${tenant.slug}/buckets`}
+        createCollection={createCollection}
+        onCreated={() => void fetchList(search)}
+      />
 
       {/* Delete */}
       <AlertDialog

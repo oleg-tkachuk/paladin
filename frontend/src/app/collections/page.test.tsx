@@ -89,7 +89,9 @@ describe("CollectionsPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /New Collection/i }),
     );
-    expect(screen.getByText("Provision Collection")).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "New Collection" }),
+    ).toBeInTheDocument();
   });
 });
 
