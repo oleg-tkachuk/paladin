@@ -191,8 +191,22 @@ tasks:
 
   verify-all:
     desc: "Test + lint + build both halves. The commit gate: seconds, no Docker."
-    # The local green bar, and what .github/workflows/ci.yaml runs as-is so the
-    # pipeline and a developer's machine check the same thing.
+    # The local green bar. CI runs the same groups, each only when its paths
+    # changed, so a group here and a CI job there check the same thing.
+    cmds:
+      - task: verify-backend
+      # The third Go tree. Every lefthook Go job is `root: backend/` and this
+      # aggregate reached backend + frontend only, so `capability/` was checked
+      # by nothing a developer runs — its CI job caught an unformatted file that
+      # had been committed and pushed.
+      - task: verify-capability
+      - task: verify-sdk
+      - task: verify-frontend
+      - task: verify-repo
+      - echo "{{._OK}} paladin · the commit gate passed"
+
+  verify-backend:
+    desc: "The backend: tests, the tagged suites compiling, lint, sqlc, image metadata"
     cmds:
       - task: backend:test
       # The tagged suites are excluded from `go test ./...` by their build tag,
@@ -200,20 +214,31 @@ tasks:
       # stopped compiling. Both of them had.
       - task: backend:go:test:tagged:compile
       - task: backend:lint
-      # The third Go tree. Every lefthook Go job is `root: backend/` and this
-      # aggregate reached backend + frontend only, so `capability/` was checked
-      # by nothing a developer runs — its CI job caught an unformatted file that
-      # had been committed and pushed. Same checks that workflow runs, minus the
-      # ones needing a toolchain install.
-      - task: verify-capability
-      - task: verify-go-sdk
-      - task: verify-py-sdk
+      - task: verify:sqlc-pin
+      - task: verify:image-build-meta
+
+  verify-frontend:
+    desc: "The console: tests, lint, generated stubs, build"
+    cmds:
       # The frontend's unit tests. Their absence here is how a breaking API
       # change reached a green gate: three vitest specs had been failing for
       # days and nothing local ran them. Lint and build assert nothing.
       - task: frontend:test
       - task: frontend:lint
+      - task: verify:frontend-gen
+      - task: frontend:build
+
+  verify-sdk:
+    desc: "Both SDKs: lint, tests, and stubs that match the contract"
+    cmds:
+      - task: verify-go-sdk
+      - task: verify-py-sdk
+
+  verify-repo:
+    desc: "What spans components: the contract, charts, images, Taskfiles, the repository itself"
+    cmds:
       - task: verify:proto-breaking
+      - task: verify:ci-groups
       - task: verify:stack-ports
       - task: verify:chart-values
       - task: verify:chart-reads
@@ -223,12 +248,9 @@ tasks:
       - task: verify:taskfile-drift
       - task: verify:publish-target
       - task: verify:go-module-paths
-      - task: verify:frontend-gen
       - task: verify:image-uid
-      - task: verify:image-build-meta
       - task: verify:admin-audience-roles
       - task: verify:private-refs
-      - task: verify:sqlc-pin
       - task: verify:checkov
       # hadolint over both images; the checkov Dockerfile scan does not lint
       # the shell inside RUN.
@@ -237,8 +259,6 @@ tasks:
       # Last on purpose: toolchain drift is the least urgent thing in this
       # list, and running it earlier would mask a real test failure behind it.
       - task: verify:brewfile
-      - task: frontend:build
-      - echo "{{._OK}} paladin · the commit gate passed"
 
   verify-go-sdk:
     desc: "gofmt + lint + test the Go SDK, and fail when its stubs are stale"
@@ -308,6 +328,11 @@ tasks:
     # four days once already.
     cmds:
       - ./backend/scripts/proto-breaking.sh
+
+  verify:ci-groups:
+    desc: "CI runs every Verify group a change can reach, and no fewer"
+    cmds:
+      - ./scripts/ci-groups.test.sh
 
   verify:stack-ports:
     desc: "Fail when the port script and the compose file disagree"
