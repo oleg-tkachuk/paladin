@@ -177,6 +177,7 @@ tasks:
       - task: verify:chart-netpol
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
+      - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
       # Last on purpose: toolchain drift is the least urgent thing in this
@@ -297,6 +298,15 @@ tasks:
     # So the list is in two places, and this fails when they stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
+
+  verify:private-refs:
+    desc: "Fail when the tree points at a private repository or a home directory"
+    # This repository is public, and the two ways it stops being safe to publish
+    # are a reference a reader cannot open and a path naming somebody's machine.
+    # The check asserts both positively — see the script for why it holds no list
+    # of forbidden names.
+    cmds:
+      - ./scripts/no-private-refs.test.sh
 
   verify:sqlc-pin:
     desc: "Fail when the sqlc drift gate would regenerate with an unpinned sqlc"
