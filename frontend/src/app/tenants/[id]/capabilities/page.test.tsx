@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@/test/utils";
+import { render, screen, fireEvent, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the capabilities Issue dialog. The page talks
@@ -31,7 +31,9 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import CapabilitiesPage from "./page";
 
-const SUBJECT_PLACEHOLDER = /agent-id \/ user subject/i;
+// The page has its own Subject box for browsing; this is the dialog's.
+const dialogSubject = () =>
+  within(screen.getByRole("dialog")).getByLabelText(/Subject/);
 const issueButtons = () =>
   screen.getAllByRole("button", { name: /Issue capability/i });
 
@@ -61,9 +63,7 @@ describe("CapabilitiesPage", () => {
     render(<CapabilitiesPage />);
     await userEvent.click(issueButtons()[0]);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText(SUBJECT_PLACEHOLDER),
-    ).toBeInTheDocument();
+    expect(dialogSubject()).toBeInTheDocument();
   });
 
   it("does not call issue when the subject is empty", async () => {
@@ -79,10 +79,7 @@ describe("CapabilitiesPage", () => {
     h.issue.mockRejectedValue(new Error("boom"));
     render(<CapabilitiesPage />);
     await userEvent.click(issueButtons()[0]);
-    await userEvent.type(
-      screen.getByPlaceholderText(SUBJECT_PLACEHOLDER),
-      "agent-x",
-    );
+    await userEvent.type(dialogSubject(), "agent-x");
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
   });
@@ -110,10 +107,7 @@ describe("CapabilitiesPage", () => {
     });
     render(<CapabilitiesPage />);
     await userEvent.click(issueButtons()[0]);
-    await userEvent.type(
-      screen.getByPlaceholderText(SUBJECT_PLACEHOLDER),
-      "agent-x",
-    );
+    await userEvent.type(dialogSubject(), "agent-x");
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
 
     // One-shot token reveal panel (the JWT is shown in a readOnly textarea).

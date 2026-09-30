@@ -1,66 +1,11 @@
 import React from "react";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { T } from "@/lib/ui/typography";
 
 // Presentational form building blocks for the capabilities page (the Issue
 // dialog is built from these). Extracted from page.tsx — pure, props-only.
 
-export function FormSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h3>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
-
-// Field is one labelled control. `optional` flag drops a low-contrast
-// "(optional)" tag next to the label so we don't have to bake the
-// hint into the label string itself; `hint` renders below the control
-// in muted small text.
-export function Field({
-  label,
-  htmlFor,
-  optional,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  optional?: boolean;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor} className="text-xs">
-        {label}
-        {optional && (
-          <span className="ml-1.5 font-normal text-muted-foreground">
-            (optional)
-          </span>
-        )}
-      </Label>
-      {children}
-      {hint && <p className={T.hint}>{hint}</p>}
-    </div>
-  );
-}
-
-// ToggleRow renders a horizontal row of pill-buttons for multi-select
-// enums. The active state is obvious (filled background) and keyboard
-// activation works through standard button semantics (Enter / Space).
 export function ToggleRow({
   options,
   selected,
@@ -107,8 +52,12 @@ export function LimitInput({
   placeholder,
   type = "number",
   step,
+  "aria-describedby": describedBy,
+  "aria-invalid": invalid,
 }: {
   id: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: true;
   value: string;
   onChange: (v: string) => void;
   unlimited: boolean;
@@ -124,6 +73,8 @@ export function LimitInput({
     <div className="flex items-center gap-1.5">
       <Input
         id={id}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
         type={type}
         step={step}
         min={0}
