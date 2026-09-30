@@ -50,10 +50,12 @@ FROM gobase AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
-# Build metadata threaded into the binary's main package via -ldflags.
-ARG APP_VERSION=undefined
-ARG GIT_COMMIT_HASH=undefined
-ARG BUILD_TIME=undefined
+# Build metadata threaded into the binary's main package via -ldflags, each
+# only when given: an unset one keeps the default cmd/server/root.go declares
+# rather than baking a placeholder the console then displays.
+ARG APP_VERSION
+ARG GIT_COMMIT_HASH
+ARG BUILD_TIME
 
 WORKDIR /app
 
@@ -87,9 +89,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
         -trimpath \
         -tags=go_json \
         -ldflags="-w -s \
-            -X 'main.version=${APP_VERSION}' \
-            -X 'main.commit=${GIT_COMMIT_HASH}' \
-            -X 'main.buildTime=${BUILD_TIME}'" \
+            ${APP_VERSION:+-X 'main.version=${APP_VERSION}'} \
+            ${GIT_COMMIT_HASH:+-X 'main.commit=${GIT_COMMIT_HASH}'} \
+            ${BUILD_TIME:+-X 'main.buildTime=${BUILD_TIME}'}" \
         -o /out/paladin-core ./cmd/server
 
 # -----------------------------------------------------------------------------
@@ -101,9 +103,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 # floating tag that moves often, so the digest is the real reproducibility pin.
 FROM gcr.io/distroless/static:nonroot@sha256:1c2c046bc09ed40fad370b599a0b1ae7987f55b01e247cf27a7c27cd97e5bbc7 AS runtime
 
-ARG APP_VERSION=undefined
-ARG GIT_COMMIT_HASH=undefined
-ARG BUILD_TIME=undefined
+ARG APP_VERSION
+ARG GIT_COMMIT_HASH
+ARG BUILD_TIME
 # The distroless `nonroot` user. Numeric, so a runtime that cannot read the
 # image's /etc/passwd — and a PodSecurity check for runAsNonRoot — still sees
 # a non-root UID.

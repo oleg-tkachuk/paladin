@@ -225,6 +225,7 @@ tasks:
       - task: verify:go-module-paths
       - task: verify:frontend-gen
       - task: verify:image-uid
+      - task: verify:image-build-meta
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
@@ -378,6 +379,11 @@ tasks:
     desc: "Fail when the console's Connect-ES stubs are stale against proto/"
     cmds:
       - ./scripts/frontend-gen.test.sh
+
+  verify:image-build-meta:
+    desc: "Fail when the backend image would bake a placeholder version into the binary"
+    cmds:
+      - ./scripts/image-build-meta.test.sh
 
   verify:go-module-paths:
     desc: "Fail when a Go module's path does not match its directory"
