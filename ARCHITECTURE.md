@@ -8,9 +8,10 @@ For the decisions themselves and the alternatives that lost, read
 
 Paladin puts a control plane in front of object storage. Applications do not
 hold S3 credentials or a bucket name; they hold a Paladin credential scoped
-to a tenant, and Paladin decides what that credential may do, routes the
-bytes to whichever backend the tenant is on, meters what was spent, and
-emits an event trail.
+to a tenant, and Paladin decides what that credential may do, resolves
+which backend and bucket the tenant is on, meters what was spent, and emits
+an event trail. It is a control plane only: object bytes never pass through
+the API (see [Storage](#storage)).
 
 The problem it was built for is agentic workloads: an orchestrator spawns
 sub-agents, each calling tools that cost money, and every call needs four
@@ -23,11 +24,9 @@ without the rest of this system.
 
 ```mermaid
 flowchart TB
-    subgraph clients [" "]
-        browser["Admin console<br/>(browser)"]
-        app["Application / SDK"]
-        agent["Agent<br/>(MCP client)"]
-    end
+    browser["Admin console<br/>(browser)"]
+    app["Application · SDK"]
+    agent["Agent<br/>(MCP client)"]
 
     bff["Next.js BFF<br/>:3000"]
 
@@ -37,32 +36,33 @@ flowchart TB
         mcp["serve mcp<br/>:8095"]
         worker["serve worker"]
         dispatcher["serve dispatcher"]
-        ingest["serve ingest"]
+        ingest["serve ingest<br/>(off by default)"]
     end
 
     pg[("PostgreSQL<br/>row-level security")]
-    s3[("S3 backends<br/>SeaweedFS · MinIO · Garage · AWS")]
-    sinks["Event sinks<br/>webhook · NATS · Kafka · RabbitMQ · SQS"]
+    s3[("S3 backends")]
+    sinks["Event sinks<br/>HTTP · NATS · Kafka · RabbitMQ · SQS"]
 
     browser --> bff --> api & admin
     app --> api
-    agent --> mcp
+    agent --> mcp --> api & admin
+    app <-. "object bytes, presigned" .-> s3
 
-    api & admin & mcp --> pg
-    api --> s3
-    worker --> pg & s3
-    dispatcher --> pg --> sinks
-    s3 -. object events .-> ingest --> pg
+    api & admin & worker & dispatcher & ingest --> pg
+    api -- "HEAD · multipart · copy · delete" --> s3
+    admin -- "health probe" --> s3
+    worker -- "buckets · purge · migration" --> s3
+    dispatcher --> sinks
+    s3 -. "storage events" .-> ingest
 ```
 
 Roles are processes, not modules: the Helm chart deploys one Deployment
 per `paladin serve <role>`, so a stuck worker cannot take the API plane with
 it, and each role gets its own resource envelope and network policy.
 
-`serve mcp` is the exception that proves the rule — it is a superset of
-the api and admin surfaces with no TCP listeners of its own, because an
-agent needs both and there is no useful boundary to draw between them for
-one process.
+`serve mcp` holds no data of its own: it exposes the api and admin RPCs as
+MCP tools and calls those planes over HTTP with the caller's credential, so
+every policy and quota check still happens there.
 
 ## How a request is authorised
 
@@ -105,16 +105,45 @@ in whichever S3-compatible backend the tenant's bucket is routed to.
 Anything S3 tracks weakly and Postgres tracks well — versions, tags,
 quotas — is tracked in Postgres.
 
-Uploads and downloads go direct to the backend through presigned URLs, so
-bytes do not stream through the control plane. Presigning is why backends
-carry two endpoints: the one the plane talks to, and the one URLs are
-signed for. They differ whenever the plane and the browser reach storage
-by different names, and SigV4 covers the Host header, so mixing them up
-produces a signature failure rather than a connection error.
+**Paladin does not proxy object traffic.** Uploads and downloads go
+directly between the client and the backend over presigned URLs, which the
+api plane signs locally. What Paladin itself sends to S3:
 
-Backends can be added, disabled and rotated at runtime, and objects can
-be migrated between them, including across backend types by streaming
-through.
+| Role | Calls | Why |
+| --- | --- | --- |
+| api | `HeadObject` | verify a completed upload |
+| api | `CreateMultipartUpload`, `CompleteMultipartUpload`, `AbortMultipartUpload` | open and close a multipart upload; its parts are uploaded over presigned URLs |
+| api, worker | `CopyObject`, `DeleteObject` | server-side copy; permanent delete, purge of the trash |
+| worker | `CreateBucket`, `DeleteBucket` | provision and remove buckets |
+| worker | `GetObject` → `PutObject` | copy objects during an operator-started migration between backends — the one path where bytes pass through a Paladin process |
+| admin | `ListBuckets` | health probe of a registered backend |
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as serve api
+    participant DB as PostgreSQL
+    participant S3 as S3 backend
+    C->>A: UploadObject(parent, key, content_type)
+    A->>DB: insert object, state PENDING
+    A-->>C: object + presigned PUT URL
+    C->>S3: PUT bytes
+    alt completion_mode EXPLICIT
+        C->>A: CompleteObject
+        A->>S3: HeadObject
+    else completion_mode IMPLICIT
+        S3-->>A: storage event (via serve ingest)
+    end
+    A->>DB: state ACTIVE
+```
+
+Presigning is why backends carry two endpoints: the one the plane talks
+to, and the one URLs are signed for. They differ whenever the plane and
+the client reach storage by different names, and SigV4 covers the Host
+header, so mixing them up produces a signature failure rather than a
+connection error.
+
+Backends can be added, disabled and rotated at runtime.
 
 ## Events
 
@@ -140,6 +169,11 @@ never holds a plane URL or an upstream credential; it talks to
 clients from the same `proto/` directory, which is the main
 reason they share a repository — a wire change is a two-sided change and
 should be one commit.
+
+## Diagrams
+
+The context, request sequence, schema and deployment diagrams are in
+[`backend/docs/diagrams.md`](backend/docs/diagrams.md).
 
 ## Repository layout
 

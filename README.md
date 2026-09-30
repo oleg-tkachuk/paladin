@@ -14,8 +14,38 @@
 A multi-tenant control plane for S3-compatible object storage. Applications
 authenticate with a Paladin credential scoped to a tenant instead of holding
 storage credentials; Paladin checks each request against the tenant's Cedar
-policies, routes it to the backend the tenant is on, meters usage against
-quotas, and writes an audit trail.
+policies, resolves the backend and bucket the tenant is on, meters usage
+against quotas, and writes an audit trail.
+
+**Paladin does not proxy traffic to S3.** Object bytes move between the client
+and the storage backend over presigned URLs that Paladin signs; the API
+carries metadata only. Paladin itself calls S3 to manage buckets and objects —
+create and delete buckets, open and close multipart uploads, verify a
+completed upload, copy and delete objects server-side — never to relay a
+client's upload or download. [ARCHITECTURE.md](ARCHITECTURE.md#storage) lists
+every call.
+
+```mermaid
+flowchart LR
+    app["Application · SDK"]
+    agent["AI agent<br/>(MCP client)"]
+    op["Operator<br/>(console)"]
+
+    subgraph paladin ["Paladin — control plane"]
+        cp["IAM · policy · quotas<br/>metadata · audit · events"]
+    end
+
+    pg[("PostgreSQL")]
+    s3[("S3 buckets<br/>SeaweedFS · MinIO · Garage · AWS")]
+    sinks["Webhooks · brokers"]
+
+    app & agent & op -- "Connect RPC · MCP<br/>metadata only" --> cp
+    cp -- "presigned URL" --> app
+    app <== "object bytes<br/>(presigned PUT / GET)" ==> s3
+    cp -- "bucket and object management" --> s3
+    cp --- pg
+    cp -- "events" --> sinks
+```
 
 Access is granted through users, API tokens and capability tokens —
 short-lived, budgeted and individually revocable. The capability primitive is
