@@ -42,6 +42,8 @@ env:
   GOIMPORTS_VERSION: "v0.50.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v4.3.0"
+  # renovate: datasource=github-releases depName=hadolint/hadolint
+  HADOLINT_VERSION: "v2.15.1"
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.53.6"
   # Matches NODE_VERSION in frontend/deploy/Dockerfile, so the suite runs on
@@ -70,6 +72,7 @@ jobs:
       contents: read
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
+      groups: ${{ steps.filter.outputs.groups }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,8 +93,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          inert='(^|/)[^/]*\.md$|^docs/|^LICENSE$|^NOTICE$|^\.gitignore$|\.(png|jpe?g|svg|gif)$'
-
           if [ -n "${BASE:-}" ]; then
             from="$BASE"
             to="$HEAD"
@@ -100,42 +101,40 @@ jobs:
             to="$AFTER"
           fi
 
-          # A push that created the branch reports all zeros, and a force-push
-          # can name a commit this clone does not have. Neither is a diff, so
-          # both mean everything.
+          # A push that created the branch reports all zeros, a force-push can
+          # name a commit this clone does not have, and a run by hand has no
+          # diff at all. None of them is a diff, so all mean everything.
           zero=0000000000000000000000000000000000000000
-
           if [ -z "$from" ] || [ "$from" = "$zero" ] || ! git cat-file -e "${from}^{commit}" 2>/dev/null; then
-            printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
             printf '%s\n' "no usable base (${from:-none}) — running everything"
-            exit 0
+            groups="$(./scripts/ci-groups.sh --all)"
+          else
+            changed="$(git diff --name-only "$from" "$to")"
+            printf '%s\n' "$changed"
+            groups="$(printf '%s\n' "$changed" | ./scripts/ci-groups.sh)"
           fi
 
-          changed="$(git diff --name-only "$from" "$to")"
-          printf '%s\n' "$changed"
-
-          # grep exits 1 when every line is inert, which is an answer here.
-          relevant="$(printf '%s\n' "$changed" | grep -vE "$inert" || true)"
-
-          if [ -n "$relevant" ]; then
-            printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
-            printf '%s\n' "outside documentation:"
-            printf '%s\n' "$relevant" | sed 's/^/  /'
-          else
+          printf '%s\n' "groups: $groups"
+          printf '%s\n' "groups=$groups" >>"$GITHUB_OUTPUT"
+          if [ "$groups" = "[]" ]; then
             printf '%s\n' "relevant=false" >>"$GITHUB_OUTPUT"
             printf '%s\n' "documentation only — the checks below will report as skipped"
+          else
+            printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
           fi
 
-  # `task -t Taskfile.dev.yaml verify-all` — the repository's own commit gate,
-  # run as-is rather than re-implemented here, so CI and a developer's machine
-  # check the same thing: backend and capability tests and lint, the tagged
-  # suites compiling, the frontend's tests, lint and build, the proto
-  # wire-compatibility check and the chart and Taskfile contract scripts.
-  # No Docker.
+  # The repository's own commit gate, `task -t Taskfile.dev.yaml verify-all`,
+  # run as its groups: one job per group the change can reach, each installing
+  # only what that group runs. Together the groups are exactly verify-all, so
+  # CI and a developer's machine check the same thing. No Docker.
   test:
-    name: Verify
+    name: Verify (${{ matrix.group }})
     needs: [changes]
-    if: needs.changes.outputs.relevant != 'false'
+    if: needs.changes.outputs.groups != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.changes.outputs.groups) }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
@@ -156,6 +155,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
+        if: matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk' || matrix.group == 'repo'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
@@ -165,17 +165,20 @@ jobs:
             sdk/go/go.sum
 
       - name: Set up goimports
+        if: matrix.group == 'backend' || matrix.group == 'sdk'
         run: |
           set -euo pipefail
           go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"
           printf '%s\n' "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
       - name: Set up golangci-lint
+        if: matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk'
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           install-only: true
 
       - name: Set up buf
+        if: matrix.group == 'sdk' || matrix.group == 'frontend' || matrix.group == 'repo'
         uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
         with:
           setup_only: true
@@ -183,12 +186,14 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Set up Helm
+        if: matrix.group == 'repo'
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: ${{ env.HELM_VERSION }}
 
       # The Python SDK's gate: its venv, and the protoc it generates with.
       - name: Set up uv
+        if: matrix.group == 'sdk' || matrix.group == 'repo'
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: ${{ env.UV_VERSION }}
@@ -197,6 +202,7 @@ jobs:
       # The runner image ships a yq, but not a version this repository chose.
       # The chart and Taskfile checks read YAML through it.
       - name: Set up yq
+        if: matrix.group == 'repo'
         run: |
           set -euo pipefail
           sudo curl -fsSL -o /usr/local/bin/yq \
@@ -212,11 +218,13 @@ jobs:
 
       # Version comes from frontend/package.json "packageManager".
       - name: Set up pnpm
+        if: matrix.group == 'frontend'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: frontend/package.json
 
       - name: Set up Node
+        if: matrix.group == 'frontend'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -224,13 +232,24 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install frontend dependencies
+        if: matrix.group == 'frontend'
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
       # --yes accepts the first-fetch trust prompt for the shared task library
       # include; unattended, that prompt is a hang rather than a question.
-      - name: task verify-all
-        run: task --yes -t Taskfile.dev.yaml verify-all
+      - name: Set up hadolint
+        if: matrix.group == 'repo'
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/hadolint \
+            "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          sudo chmod +x /usr/local/bin/hadolint
+          hadolint --version
+      - name: task verify-${{ matrix.group }}
+        env:
+          GROUP: ${{ matrix.group }}
+        run: task --yes -t Taskfile.dev.yaml "verify-${GROUP}"
 
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,
