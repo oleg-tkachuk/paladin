@@ -23,14 +23,14 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useBackends, CreateBackendInput } from "@/hooks/useBackends";
-import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
+import { useBackends } from "@/hooks/useBackends";
+import { BackendRegisterDialog } from "./BackendRegisterDialog";
+import { STORAGE_KIND_LABELS } from "@/lib/storageKind";
 import { useNotification } from "@/components/ui/Notification";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -42,38 +42,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  SelectRoot,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
-
-// backend_id format mirrors the `backend_id` CHECK on the buckets table
-// and the existing `storage.backends.id` config keys (kebab-case, 3..63
-// chars, ASCII alnum + '-'). Letting the server reject is fine but a
-// client-side hint avoids the round-trip.
-const BACKEND_ID_RE = /^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$/;
-
-const KIND_LABELS: Record<number, string> = {
-  [StorageKind.AWS_S3]: "AWS S3",
-  [StorageKind.S3_COMPATIBLE]: "S3-compatible",
-  [StorageKind.GCS]: "GCS",
-  [StorageKind.UNSPECIFIED]: "—",
-};
 
 // Vendor/implementation behind `kind` (`kind` is too coarse — every
 // self-hosted S3 is S3_COMPATIBLE). The server carries an explicit `provider`
@@ -345,18 +317,6 @@ export default function StorageBackendsPage() {
   };
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState<CreateBackendInput>({
-    backendId: "",
-    displayName: "",
-    kind: StorageKind.S3_COMPATIBLE,
-    endpoint: "",
-    publicEndpoint: "",
-    region: "",
-    forcePathStyle: true,
-    credentialsSecretRef: "",
-  });
-
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
@@ -381,73 +341,6 @@ export default function StorageBackendsPage() {
   const hasSearch = search.trim() !== "";
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
-
-  const resetForm = () =>
-    setForm({
-      backendId: "",
-      displayName: "",
-      kind: StorageKind.S3_COMPATIBLE,
-      endpoint: "",
-      publicEndpoint: "",
-      region: "",
-      forcePathStyle: true,
-      credentialsSecretRef: "",
-    });
-
-  const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!BACKEND_ID_RE.test(form.backendId)) {
-      showNotification({
-        type: "error",
-        title: "Invalid backend ID",
-        message:
-          "3–63 chars, kebab-case (lowercase alphanumeric + hyphens, alnum on edges).",
-      });
-      return;
-    }
-    if (!form.endpoint.trim()) {
-      showNotification({
-        type: "error",
-        title: "Endpoint required",
-        message: "Internal endpoint is required (e.g. https://s3.example.com).",
-      });
-      return;
-    }
-    if (!form.credentialsSecretRef.trim()) {
-      showNotification({
-        type: "error",
-        title: "Credentials reference required",
-        message:
-          'Provide a secret-store reference (e.g. "vault://kv/paladin/primary").',
-      });
-      return;
-    }
-    try {
-      setSubmitting(true);
-      const created = await createBackend(form);
-      showNotification({
-        type: "success",
-        title: "Backend registered",
-        message: created.displayName || created.backendId,
-      });
-      resetForm();
-      setCreateOpen(false);
-    } catch (err) {
-      const message =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      showNotification({
-        type: "error",
-        title: "Creation failed",
-        message,
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -680,7 +573,7 @@ export default function StorageBackendsPage() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <Badge variant="outline" className={T.labelTight}>
-                        {KIND_LABELS[b.kind] || "—"}
+                        {STORAGE_KIND_LABELS[b.kind] || "—"}
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -837,188 +730,11 @@ export default function StorageBackendsPage() {
         </Table>
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
-          <form onSubmit={handleCreate}>
-            <DialogHeader>
-              <DialogTitle>Register storage backend</DialogTitle>
-              <DialogDescription>
-                Physical S3-compatible target. Buckets and tenants bind here —
-                register the backend before provisioning either.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="be-id">
-                  Backend ID <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="be-id"
-                  autoFocus
-                  placeholder="aws-eu, r2-global, minio-dev"
-                  value={form.backendId}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, backendId: e.target.value }))
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  3–63 chars, kebab-case. Used in resource names and bucket
-                  refs. Immutable.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="be-display">Display name</Label>
-                <Input
-                  id="be-display"
-                  placeholder={form.backendId || "AWS Frankfurt"}
-                  value={form.displayName}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, displayName: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="be-kind">Kind</Label>
-                  <SelectRoot
-                    value={String(form.kind)}
-                    onValueChange={(v) =>
-                      setForm((f) => ({ ...f, kind: Number(v) as StorageKind }))
-                    }
-                  >
-                    <SelectTrigger id="be-kind">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={String(StorageKind.AWS_S3)}>
-                        AWS S3
-                      </SelectItem>
-                      <SelectItem value={String(StorageKind.S3_COMPATIBLE)}>
-                        S3-compatible
-                      </SelectItem>
-                      <SelectItem value={String(StorageKind.GCS)}>
-                        GCS
-                      </SelectItem>
-                    </SelectContent>
-                  </SelectRoot>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="be-region">Region</Label>
-                  <Input
-                    id="be-region"
-                    placeholder="eu-central-1"
-                    value={form.region}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, region: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="be-endpoint">
-                  Internal endpoint <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="be-endpoint"
-                  placeholder="https://s3.eu-central-1.amazonaws.com"
-                  value={form.endpoint}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, endpoint: e.target.value }))
-                  }
-                  className="font-mono text-xs"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="be-secret">
-                  Credentials secret reference{" "}
-                  <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="be-secret"
-                  placeholder="vault://kv/paladin/primary"
-                  value={form.credentialsSecretRef}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      credentialsSecretRef: e.target.value,
-                    }))
-                  }
-                  className="font-mono text-xs"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Opaque reference to the secret store. Credentials are never
-                  stored or returned.
-                </p>
-              </div>
-              {/* Advanced — public_endpoint + force_path_style live
-                  here because the typical AWS S3 setup uses defaults
-                  for both. MinIO/SeaweedFS operators expand this. */}
-              <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
-                  Advanced — public endpoint, path-style addressing
-                </summary>
-                <div className="space-y-3 pt-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="be-pub" className="text-xs">
-                      Public endpoint
-                    </Label>
-                    <Input
-                      id="be-pub"
-                      placeholder="defaults to internal endpoint"
-                      value={form.publicEndpoint}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          publicEndpoint: e.target.value,
-                        }))
-                      }
-                      className="font-mono text-xs"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Used in presigned URLs handed to clients.
-                    </p>
-                  </div>
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox
-                      checked={form.forcePathStyle}
-                      onCheckedChange={(v) =>
-                        setForm((f) => ({ ...f, forcePathStyle: v === true }))
-                      }
-                      id="be-pathstyle"
-                    />
-                    <span className="space-y-0.5">
-                      <span className="font-medium leading-none">
-                        Force path-style addressing
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        Required for MinIO/SeaweedFS; usually off for AWS S3.
-                      </span>
-                    </span>
-                  </label>
-                </div>
-              </details>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setCreateOpen(false);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !form.backendId || !form.endpoint}
-              >
-                {submitting ? "Registering…" : "Register backend"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <BackendRegisterDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        createBackend={createBackend}
+      />
     </div>
   );
 }
