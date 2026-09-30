@@ -58,14 +58,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -87,7 +79,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
-import { bucketNameError } from "@/lib/bucketName";
+import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 
@@ -149,13 +141,6 @@ export default function TenantBucketsPage() {
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [newBackend, setNewBackend] = useState("");
-  const [newName, setNewName] = useState("");
-  // Shown only once something is typed: an empty field is not yet wrong.
-  const newNameError = newName ? bucketNameError(newName) : null;
-  const [newDisplayName, setNewDisplayName] = useState("");
-  const [newRegion, setNewRegion] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
   const [deleteRemote, setDeleteRemote] = useState(false);
@@ -180,13 +165,6 @@ export default function TenantBucketsPage() {
     () => void refetch(),
     PROVISION_POLL_MS,
   );
-
-  // Default the create form to the first backend once the dialog opens and
-  // backends have loaded. Render-phase adjust-on-condition (the !newBackend
-  // guard converges in one extra render) — not set-state-in-effect.
-  if (createOpen && !newBackend && backends.length > 0) {
-    setNewBackend(backends[0]);
-  }
 
   // The server-side `owner_tenant_id` filter (passed in fetchBuckets
   // above) already narrows `buckets` to this tenant's rows; we list
@@ -226,37 +204,6 @@ export default function TenantBucketsPage() {
     }
     return list;
   }, [buckets, filterBackend, search, sort]);
-
-  const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!newBackend || !newName) return;
-    try {
-      setSubmitting(true);
-      // Note: useBuckets.createBucket doesn't yet wire ownerTenantId
-      // through. Tracked in BACKLOG — for now the new bucket lands
-      // shared and an operator can rebind via the cross-tenant page.
-      // The CTA still reads "Create bucket for <tenant>" so the intent
-      // is recorded in the audit log copy.
-      await createBucket(newBackend, newName, newDisplayName, newRegion);
-      showNotification({
-        type: "success",
-        title: "Bucket created",
-        message: `${newName} (backend ${newBackend})`,
-      });
-      setNewName("");
-      setNewDisplayName("");
-      setNewRegion("");
-      setCreateOpen(false);
-    } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Creation failed",
-        message: errorMessage(err, "Failed to create bucket."),
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -486,111 +433,12 @@ export default function TenantBucketsPage() {
         </Table>
       </Card>
 
-      {/* ─── Create dialog ───────────────────────────────────────────────── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <form onSubmit={handleCreate}>
-            <DialogHeader>
-              <DialogTitle>
-                New S3 bucket for{" "}
-                <span className="font-mono">{tenant.slug}</span>
-              </DialogTitle>
-              <DialogDescription>
-                Calls the underlying backend&apos;s CreateBucket API. Object
-                layout is{" "}
-                <code className="font-mono text-foreground">
-                  s3://&lt;bucket&gt;/&lt;tenant&gt;/&lt;object_key&gt;/&lt;key&gt;
-                </code>
-                .
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="bucket-backend">Storage backend</Label>
-                <SelectRoot
-                  value={newBackend}
-                  onValueChange={setNewBackend}
-                  disabled={backends.length === 0}
-                >
-                  <SelectTrigger id="bucket-backend" className="w-full">
-                    <SelectValue
-                      placeholder={
-                        backends.length === 0
-                          ? "— no backends configured —"
-                          : "Select a backend"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {backends.map((b) => (
-                      <SelectItem key={b} value={b}>
-                        {b}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="bucket-name">Bucket name</Label>
-                <Input
-                  id="bucket-name"
-                  autoFocus
-                  placeholder="paladin-primary"
-                  className="font-mono text-xs"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value.toLowerCase())}
-                  aria-invalid={newNameError !== null}
-                  aria-describedby="bucket-name-hint"
-                />
-                <p
-                  id="bucket-name-hint"
-                  className={cn(T.hint, newNameError && "text-destructive")}
-                >
-                  {newNameError ?? "Lowercase, S3 naming rules apply."}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="bucket-display-name">Display name</Label>
-                  <Input
-                    id="bucket-display-name"
-                    placeholder="Friendly label"
-                    value={newDisplayName}
-                    onChange={(e) => setNewDisplayName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="bucket-region">Region</Label>
-                  <Input
-                    id="bucket-region"
-                    placeholder="us-east-1"
-                    className="font-mono text-xs"
-                    value={newRegion}
-                    onChange={(e) => setNewRegion(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setCreateOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  submitting || !newBackend || !newName || newNameError !== null
-                }
-              >
-                {submitting ? "Provisioning…" : "Create bucket"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <BucketCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        backends={backends}
+        createBucket={createBucket}
+      />
 
       {/* ─── Delete confirmation ─────────────────────────────────────────── */}
       <AlertDialog

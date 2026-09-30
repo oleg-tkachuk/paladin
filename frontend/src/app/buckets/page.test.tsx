@@ -187,27 +187,13 @@ describe("BucketsPage create dialog", () => {
     h.backends.backends = [{ backendId: "primary", displayName: "" }];
   });
 
-  // The API refuses a name S3 refuses; the form says so before submit
-  // instead of the row turning up later as "failed".
-  it("holds Create and says why when the name breaks the S3 rules", () => {
+  // The dialog's own behaviour is BucketCreateDialog.test.tsx.
+  it("opens the shared create dialog", () => {
     render(<BucketsPage />);
     fireEvent.click(
       screen.getByRole("button", { name: /create the first bucket/i }),
     );
-
-    const name = screen.getByLabelText("Bucket name");
-    fireEvent.change(name, { target: { value: "bad_name" } });
-
-    expect(
-      screen.getByText(/letters, digits, dots and hyphens/),
-    ).toBeInTheDocument();
-    expect(name).toHaveAttribute("aria-invalid", "true");
-    expect(
-      screen.getByRole("button", { name: "Create bucket" }),
-    ).toBeDisabled();
-
-    fireEvent.change(name, { target: { value: "good-name" } });
-    expect(screen.queryByText(/letters, digits, dots and hyphens/)).toBeNull();
+    expect(screen.getByRole("dialog")).toHaveTextContent("New S3 bucket");
   });
 });
 
