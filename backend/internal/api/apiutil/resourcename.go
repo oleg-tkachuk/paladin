@@ -31,6 +31,9 @@ type TenantRef struct {
 // HasID reports whether the ref carries a UUID directly (no slug lookup needed).
 func (r TenantRef) HasID() bool { return r.ID != uuid.Nil }
 
+// TenantNamePrefix starts every tenant resource name: "tenants/{tenant_id_or_slug}".
+const TenantNamePrefix = "tenants/"
+
 // ParseTenantName parses "tenants/{tenant_id}". Bare UUIDs are accepted as a
 // permissive fallback — matches the pre-existing behavior callers rely on.
 //
@@ -38,7 +41,7 @@ func (r TenantRef) HasID() bool { return r.ID != uuid.Nil }
 // handlers that still hard-require a UUID. New handlers that want to accept
 // slugs should use ParseTenantNameRef instead.
 func ParseTenantName(name string) (uuid.UUID, error) {
-	const prefix = "tenants/"
+	const prefix = TenantNamePrefix
 	if strings.HasPrefix(name, prefix) {
 		return uuid.Parse(name[len(prefix):])
 	}
@@ -50,7 +53,7 @@ func ParseTenantName(name string) (uuid.UUID, error) {
 // accept the human-readable slug form call this and resolve the slug via
 // the tenant repository.
 func ParseTenantNameRef(name string) (TenantRef, error) {
-	const prefix = "tenants/"
+	const prefix = TenantNamePrefix
 	body := name
 	if strings.HasPrefix(name, prefix) {
 		body = name[len(prefix):]

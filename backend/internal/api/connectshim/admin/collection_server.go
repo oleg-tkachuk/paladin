@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
@@ -14,6 +15,7 @@ import (
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -26,14 +28,47 @@ type defaultBindingSource interface {
 	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenanth.DefaultBinding, error)
 }
 
+// tenantSlugSource resolves a tenant slug to its row, authorising the caller
+// on the way. Satisfied by tenanth.Handler.
+type tenantSlugSource interface {
+	GetTenantBySlug(ctx context.Context, slug string) (*tenanth.Tenant, error)
+}
+
 type CollectionServer struct {
 	paladinadminv1connect.UnimplementedCollectionServiceHandler
 	H        collectionHandler
 	bindings defaultBindingSource
+	tenants  tenantSlugSource
 }
 
-func NewCollectionServer(h *objectkey.Handler, bindings defaultBindingSource) *CollectionServer {
-	return &CollectionServer{H: h, bindings: bindings}
+func NewCollectionServer(h *objectkey.Handler, bindings defaultBindingSource, tenants tenantSlugSource) *CollectionServer {
+	return &CollectionServer{H: h, bindings: bindings, tenants: tenants}
+}
+
+// tenantParent resolves a `tenants/{tenant_id_or_slug}` parent, as the proto
+// documents it, to a tenant id; empty means the caller's whole scope. A trailing
+// "/…" after the tenant segment is tolerated. ListCollections used to parse the
+// parent as a UUID and drop the filter when that failed, so a slug listed
+// across every tenant — which for most callers is an empty page, and read as
+// "this tenant has no collections".
+func (s *CollectionServer) tenantParent(ctx context.Context, parent string) (uuid.UUID, error) {
+	if parent == "" {
+		return uuid.Nil, nil
+	}
+	tenant, _, _ := strings.Cut(strings.TrimPrefix(parent, apiutil.TenantNamePrefix), "/")
+	ref, err := apiutil.ParseTenantNameRef(tenant)
+	if err != nil {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid tenant parent %q: %w", parent, err))
+	}
+	if ref.HasID() {
+		return ref.ID, nil
+	}
+	t, err := s.tenants.GetTenantBySlug(ctx, ref.Slug)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return t.TenantID, nil
 }
 
 func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Request[pb.CreateCollectionRequest]) (*connect.Response[pb.Collection], error) {
@@ -41,9 +76,9 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 		return nil, err
 	}
 	m := req.Msg
-	tenantID, err := resolve.ResolveTenantParent(m.GetParent())
+	tenantID, err := s.tenantParent(ctx, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	src := m.GetCollectionResource()
 	backend, bucket, _ := bucketRef(src.GetBucket())
@@ -160,11 +195,11 @@ func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Req
 		PageToken: m.GetPage().GetPageToken(),
 		Filter:    m.GetFilter(),
 	}
-	if m.GetParent() != "" {
-		if id, err := resolve.ResolveTenantParent(m.GetParent()); err == nil {
-			args.TenantID = id
-		}
+	tenantID, err := s.tenantParent(ctx, m.GetParent())
+	if err != nil {
+		return nil, err
 	}
+	args.TenantID = tenantID
 	if b := m.GetBucket(); b != "" {
 		backend, bucket, err := bucketRef(b)
 		if err != nil {

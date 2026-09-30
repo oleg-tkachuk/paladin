@@ -63,17 +63,3 @@ func TestResolveCollectionName(t *testing.T) {
 		}
 	})
 }
-
-func TestResolveTenantParent(t *testing.T) {
-	tid := uuid.New()
-	got, err := ResolveTenantParent("tenants/" + tid.String())
-	if err != nil || got != tid {
-		t.Fatalf("got %v, %v", got, err)
-	}
-	if got, _ := ResolveTenantParent(""); got != uuid.Nil {
-		t.Errorf("empty parent should be Nil, got %v", got)
-	}
-	if _, err := ResolveTenantParent("tenants/bad"); err == nil {
-		t.Error("want error for bad tenant parent")
-	}
-}

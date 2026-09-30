@@ -30,7 +30,8 @@ func TestCreateCollection_UsesDefaultBinding(t *testing.T) {
 	okRepo := adapters.NewCollectionRepo(q, f.h.PoolMigrate)
 	tenantRepo := adapters.NewTenantRepo(q, f.h.PoolMigrate)
 	handler := objectkey.NewHandler(okRepo, allowAll{})
-	server := admin.NewCollectionServer(handler, tenantRepo)
+	// No slug source: every parent here is a UUID, which never reaches it.
+	server := admin.NewCollectionServer(handler, tenantRepo, nil)
 
 	ctx := ctxAdmin(t, tid)
 	createNoBucket := func(name string) (*connect.Response[pb.Collection], error) {

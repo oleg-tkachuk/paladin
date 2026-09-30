@@ -137,27 +137,6 @@ func ResolveCollectionNameWithBinding(ctx context.Context, name string, bindings
 	return ref, nil
 }
 
-// ResolveTenantParent parses the `parent` field shape "tenants/{t}" into a
-// tenant id. An empty parent returns uuid.Nil (the "list across the caller's
-// scope" convention the admin handlers use), preserving the prior
-// tenantUUIDFromParent behaviour.
-func ResolveTenantParent(parent string) (uuid.UUID, error) {
-	if parent == "" {
-		return uuid.Nil, nil
-	}
-	s := strings.TrimPrefix(parent, prefixTenant)
-	// Tolerate a trailing "/..." (e.g. "tenants/{t}/collections") by taking the
-	// first segment as the id.
-	if i := strings.IndexByte(s, '/'); i >= 0 {
-		s = s[:i]
-	}
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid tenant parent %q: %w", parent, err)
-	}
-	return id, nil
-}
-
 // parseCanonical decodes storageBackends/{b}/buckets/{bk}/tenants/{t}/collections/{ok}.
 func parseCanonical(name string) (CanonicalRef, error) {
 	bad := func() (CanonicalRef, error) {
