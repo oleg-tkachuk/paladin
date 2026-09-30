@@ -66,45 +66,6 @@ egress, and whether the matrix is complete for the live topology, are answers
 only that cluster has. Enabling per-namespace with the dispatcher's open
 egress verified first is still the cheap order.
 
-### Push renamed charts/images before syncing the renamed ApplicationSet
-
-- **Status:** Blocked (operator action — cannot deploy from a coding session).
-- **Reason:** The project was renamed from `paladin` / `paladin` to
-  `paladin` (2026-08-19). Chart names, image repos, Helm release/app names and
-  every in-cluster resource name follow: `paladin-core` / `paladin-console`.
-  This supersedes the earlier, never-completed
-  `paladin`→`paladin-core` cutover — do NOT run that one; go
-  straight from whatever is deployed to the `paladin-*` names, so the cluster
-  takes one disruption instead of two.
-  The ArgoCD ApplicationSet must pull
-  `oci://registry.local/charts/{paladin-core,paladin-console}` and images
-  `registry.local/paladin/{paladin-core,paladin-console}`. Until those exist, a
-  sync cannot resolve its sources.
-- **Definition of Done:**
-  - Build+push the renamed charts and images first (`task -d backend deploy`,
-    `task -d frontend deploy`) so `charts/paladin-core`, `charts/paladin-console`
-    and the `paladin/{paladin-core,paladin-console}` images exist in the registry.
-  - Update the gitops ApplicationSet + overlays to the new names, then sync.
-    Because the release name changed, the old `paladin*` /
-    `paladin-*` Deployments/Services/ServiceAccounts/Certificates/Linkerd Servers
-    are pruned and new `paladin-core-*` / `paladin-console` ones created — mTLS
-    certs (SANs `paladin-core-api`/`paladin-core-admin`, SPIFFE
-    `…/sa/paladin-core-api`) regenerate. Expect a brief in-namespace
-    disruption; confirm the `/login` redirect, BFF→backend health aggregation
-    and internal mTLS all recover.
-  - Reprovision the database rather than migrating it — the maintainer's
-    call, 2026-08-19. Follow [docs/upgrading.md](docs/upgrading.md): drop the
-    old database and roles, let `migrate` build the schema from empty, run
-    `bootstrap`, reissue every API token, and rewrite every `PALADIN_*` variable
-    in the overlays to `PALADIN_*` BEFORE the new pods start. The control-plane
-    rows (tenants, buckets, ObjectKeys, capabilities, subscriptions, audit
-    log) are lost by design; object bytes in the S3 backend survive but are
-    orphaned, and Paladin will not adopt them on its own.
-  - Delete the orphaned `charts/{paladin*,paladin-*}` OCI repos and
-    the matching images once the cutover is verified.
-  - Delete this entry when the cutover is done and verified.
-- **Blockers:** operator must run the deploy + sync; not automatable from here.
-
 ### The `paladin` name collides — decide qualify-vs-rename before publishing
 
 - **Status:** Open, and now informed. Registries checked 2026-08-21; the
