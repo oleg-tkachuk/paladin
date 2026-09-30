@@ -138,13 +138,9 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 		return nil, err
 	}
 	m := req.Msg
-	idStr, err := tenantIDFromName(m.GetName())
+	id, err := s.resolveTenantID(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
@@ -187,13 +183,9 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb.DeleteTenantRequest]) (*connect.Response[pb.DeleteTenantResponse], error) {
-	idStr, err := tenantIDFromName(req.Msg.GetName())
+	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
@@ -220,21 +212,9 @@ func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb
 // commentary for the failure modes (ALREADY_EXISTS on slug collision,
 // FAILED_PRECONDITION on already-active rows).
 func (s *TenantServer) RestoreTenant(ctx context.Context, req *connect.Request[pb.RestoreTenantRequest]) (*connect.Response[pb.Tenant], error) {
-	ref, err := apiutil.ParseTenantNameRef(req.Msg.GetName())
+	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	// Restore needs a UUID — slug-form lookup would require a list
-	// query against trashed rows. Resolve via GetTenantBySlug when
-	// slug-form is passed; the handler authz layer rejects if the
-	// caller isn't allowed to even see the row.
-	tid := ref.ID
-	if !ref.HasID() {
-		t, err := s.H.GetTenantBySlug(ctx, ref.Slug)
-		if err != nil {
-			return nil, err
-		}
-		tid = t.TenantID
+		return nil, err
 	}
 	t, err := s.H.RestoreTenant(ctx, tid)
 	if err != nil {
@@ -246,17 +226,9 @@ func (s *TenantServer) RestoreTenant(ctx context.Context, req *connect.Request[p
 // PurgeTenant — hard-delete on a trashed row. Refuses to operate on
 // an active tenant.
 func (s *TenantServer) PurgeTenant(ctx context.Context, req *connect.Request[pb.PurgeTenantRequest]) (*connect.Response[pb.PurgeTenantResponse], error) {
-	ref, err := apiutil.ParseTenantNameRef(req.Msg.GetName())
+	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	tid := ref.ID
-	if !ref.HasID() {
-		t, err := s.H.GetTenantBySlug(ctx, ref.Slug)
-		if err != nil {
-			return nil, err
-		}
-		tid = t.TenantID
+		return nil, err
 	}
 	if err := s.H.PurgeTenant(ctx, tid); err != nil {
 		return nil, err
@@ -285,13 +257,9 @@ func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.
 
 func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Request[pb.SetInheritedPolicyRequest]) (*connect.Response[pb.Tenant], error) {
 	m := req.Msg
-	idStr, err := tenantIDFromName(m.GetName())
+	id, err := s.resolveTenantID(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
@@ -317,13 +285,9 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 // `Tenant::"<old_slug>"` reference in inherited + per-collection
 // policies. See proto comments and tenant.Handler.RenameTenantSlug.
 func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Request[pb.RenameTenantSlugRequest]) (*connect.Response[pb.Tenant], error) {
-	idStr, err := tenantIDFromName(req.Msg.GetName())
+	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
 	if err != nil {
@@ -391,7 +355,9 @@ func tenantDomainToProto(t *tenanth.Tenant) *pb.Tenant {
 // ─── Tenant default binding (ADR-0014 Phase 3) ──────────────────────────────
 
 // resolveTenantID maps a "tenants/{id_or_slug}" name to a tenant UUID, using
-// GetTenantBySlug for the slug form (its authz layer gates visibility).
+// GetTenantBySlug for the slug form (its authz layer gates visibility). Every
+// RPC that names one tenant goes through it, so a slug works wherever the
+// proto documents the name.
 func (s *TenantServer) resolveTenantID(ctx context.Context, name string) (uuid.UUID, error) {
 	ref, err := apiutil.ParseTenantNameRef(name)
 	if err != nil {
