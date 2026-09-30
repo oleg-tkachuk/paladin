@@ -1,6 +1,9 @@
 # paladin
 
 [![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
+[![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin?sort=semver)](https://github.com/oleg-tkachuk/paladin/releases/latest)
+[![go](https://img.shields.io/github/go-mod/go-version/oleg-tkachuk/paladin?filename=backend%2Fgo.mod&logo=go&logoColor=white)](backend/go.mod)
+[![license](https://img.shields.io/github/license/oleg-tkachuk/paladin)](LICENSE)
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![Connect RPC](https://img.shields.io/badge/Connect%20RPC-1D4ED8)](https://connectrpc.com)
