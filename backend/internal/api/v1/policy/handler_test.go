@@ -438,7 +438,7 @@ func TestSimulateAuthz_CarriesThePrincipalKind(t *testing.T) {
 	h := NewHandler(fe, &fakeStore{})
 
 	_, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
-		PrincipalSubject: "consumer",
+		PrincipalSubject: "acme",
 		PrincipalKind:    "capability",
 		Action:           "DeleteObject",
 		ResourceName:     "tenants/" + tid.String() + "/collections/k",

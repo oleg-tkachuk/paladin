@@ -91,7 +91,7 @@ func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter rateli
 // auth.Principal from a valid token — so an `paladin_pat_…` API key can stand ALONE as the
 // request's identity, not merely as an additive attribute on top of a JWT. It is used on
 // the data plane (paired with auth.InterceptorSkipAPITokens, which lets a PAT bearer past
-// the JWT verifier) so a service (e.g. consumer) authenticates document uploads with a
+// the JWT verifier) so a service authenticates document uploads with a
 // long-lived service API key. The derived principal is tenant-scoped, Kind=ApiKey, carries
 // the token's roles (empty unless a platform admin granted them at creation — migration
 // 063 — so role-gated ops stay denied for an ordinary service token), and — opt-in — its own

@@ -33,7 +33,7 @@ func authzDelete(t *testing.T, kind, action string, sameTenant bool) Decision {
 
 	e := NewEngine(fakeStore{}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
-		&Principal{Subject: "consumer", TenantID: tid, Kind: kind},
+		&Principal{Subject: "acme", TenantID: tid, Kind: kind},
 		action,
 		&Resource{TenantID: resourceTenant, Collection: "acme-avatars", Key: "a/b.png"},
 		RequestContext{},
@@ -118,7 +118,7 @@ when { principal has kind && principal.kind == "capability" };`
 	tid := uuid.New()
 	e := NewEngine(fakeStore{text: policy}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
-		&Principal{Subject: "consumer", TenantID: tid, Kind: kindCapability},
+		&Principal{Subject: "acme", TenantID: tid, Kind: kindCapability},
 		ActionDeleteObject,
 		&Resource{TenantID: tid, Collection: "acme-avatars", Key: "a/b.png"},
 		RequestContext{},

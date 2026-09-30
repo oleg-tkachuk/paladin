@@ -96,7 +96,7 @@ func ctxWithPAT(tenantID uuid.UUID) context.Context {
 
 const (
 	backendID = "garage-local"
-	bucket    = "acme-consumer"
+	bucket    = "acme-documents"
 )
 
 func newHandler(authz cedar.Authorizer, backends BackendChecker, buckets BucketEnsurer, keys CollectionEnsurer) *Handler {

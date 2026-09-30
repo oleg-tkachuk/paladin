@@ -177,8 +177,8 @@ func TestLoadRealConfigYAML(t *testing.T) {
 // TestShippedConfigDataPortMatchesSchema pins configs/config.yaml's data
 // listener and MCP data upstream to the schema defaults. The file's header
 // promises "defaults match schema.cue"; for the data port that promise is
-// load-bearing, because a host-run stack on 8080 collides with another-service's
-// core-api.
+// load-bearing, because a host-run stack on 8080 collides with another
+// local service.
 func TestShippedConfigDataPortMatchesSchema(t *testing.T) {
 	shipped, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
 	if err != nil {

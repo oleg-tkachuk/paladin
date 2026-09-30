@@ -115,7 +115,7 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	}
 
 	// Ensure the shared bucket. OwnerTenantID is left empty (uuid.Nil) so the
-	// bucket is SHARED — matching how the consumer bucket is modeled today.
+	// bucket is SHARED — matching how the shared consumer bucket is modeled today.
 	// provision_on_backend=true reuses the admin physical-provisioning path.
 	_, bucketCreated, err := h.buckets.EnsureBucket(ctx, bucketh.CreateBucketInput{
 		Bucket: admindomain.Bucket{

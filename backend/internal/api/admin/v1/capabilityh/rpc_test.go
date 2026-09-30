@@ -491,7 +491,7 @@ func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
 // carries no other authority.
 func issuerCtx(tenant uuid.UUID) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{
-		Subject: "apikey:consumer", TenantID: tenant,
+		Subject: "apikey:acme", TenantID: tenant,
 		Roles: []string{"platform.capability-issuer"},
 	})
 }

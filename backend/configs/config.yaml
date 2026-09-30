@@ -56,7 +56,7 @@ runtime:
 api:
   server:
     data: &http_defaults
-      # 8083 on the host: another-service core-api owns 8080. In-cluster the chart
+      # 8083 on the host: another local service owns 8080. In-cluster the chart
       # pins 8080 (deploy/chart/values.yaml), and compose.yaml does in-container.
       addr: "0.0.0.0:8083"
       read_header_timeout: 5s

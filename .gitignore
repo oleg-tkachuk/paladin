@@ -74,3 +74,15 @@ backend/cmd/seed-fixture/main.go.bak
 
 # ── Release tooling (root package.json: semantic-release only) ──────
 /node_modules/
+
+docs/BACKLOG.md
+
+# Local-only lefthook overrides. Gates that belong to a working copy rather
+# than to the project; lefthook merges the file automatically when present.
+lefthook-local.yml
+
+# Claude Code's working state on this machine: agent worktrees, each a full
+# checkout of the repository on its own branch, and the tool's bookkeeping.
+# Nothing in it is project configuration, so the directory is ignored whole.
+.claude/
+

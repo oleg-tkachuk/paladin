@@ -331,7 +331,7 @@ func TestCreate_PlatformAdminMintsForAnotherTenant(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAsTenant(caller, "platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + target.String(), DisplayName: "consumer-service", Audience: []string{"data"},
+		Parent: "tenants/" + target.String(), DisplayName: "acme-service", Audience: []string{"data"},
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -403,7 +403,7 @@ func TestCreate_PlatformAdminMayGrantTheNarrowRole(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + uuid.NewString(), DisplayName: "consumer-issuer", Audience: []string{"admin"},
+		Parent: "tenants/" + uuid.NewString(), DisplayName: "acme-issuer", Audience: []string{"admin"},
 		Roles: []string{"platform.capability-issuer"},
 	}))
 	if err != nil {

@@ -57,7 +57,7 @@ task stack:up        # every plane + Postgres + SeaweedFS + the console, in comp
 ```
 
 The console is on <http://localhost:3002>, the data plane on `:8083` (not
-`:8080`, which another-service's core-api uses), admin on `:8090`. The compose file,
+`:8080`, which another local service uses), admin on `:8090`. The compose file,
 [`backend/deploy/docker-compose.yaml`](backend/deploy/docker-compose.yaml),
 lists the rest.
 

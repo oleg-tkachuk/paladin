@@ -46,8 +46,8 @@ import (
 
 // Default plane addresses for a stack on this host, shared with smoke_test.go.
 // They mirror the e2e compose file's published host ports
-// (scripts/stack-ports.sh). Data is 8083, not 8080: another-service's core-api owns
-// 8080 on the same machine.
+// (scripts/stack-ports.sh). Data is 8083, not 8080: another local service
+// owns 8080 on the same machine.
 const (
 	defaultDataURL  = "http://127.0.0.1:8083"
 	defaultIAMURL   = "http://127.0.0.1:8085"

@@ -63,8 +63,8 @@ runtime: {
 }
 
 // #LocalDataPort is the data plane's port when the binary runs on the host
-// with these defaults. 8083, not 8080: another-service's core-api owns 8080 on the
-// same machine. The data listener and mcp.upstreams.data_url both derive
+// with these defaults. 8083, not 8080: another local service owns 8080 on
+// the same machine. The data listener and mcp.upstreams.data_url both derive
 // from it so the two cannot drift. Containers are unaffected — the chart
 // (deploy/chart/values.yaml) and configs/compose.yaml pin 8080 explicitly.
 #LocalDataPort: 8083

@@ -673,7 +673,7 @@ when {
 // able to reap what nothing references. Neither can hold a role: an API token's
 // principal carries none, and a capability carries none BY DESIGN (ADR-0010).
 //
-// Before this, the consequence was silent. consumer's avatar replacement deleted
+// Before this, the consequence was silent. A consumer's avatar replacement deleted
 // the previous object best-effort and swallowed the denial into a warning, so
 // every replacement orphaned a file; the sweeper written to reap those orphans
 // ran in dry-run and had never attempted a delete. Nothing failed loudly enough

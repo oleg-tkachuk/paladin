@@ -12,7 +12,7 @@
   authenticate one on its own.
 
   That made capabilities unusable for the case they are shaped for. A consumer
-  such as consumer serves many tenants from one process. A Paladin API token is
+  may serve many tenants from one process. A Paladin API token is
   bound to one tenant for its whole life — the principal derived from it carries
   no roles, the only cross-tenant bypass is role-based, and `tenant:` scopes are
   read by no authorization site — so serving N tenants meant holding N
@@ -59,7 +59,7 @@
     site consumes it; making it authoritative would be a second, parallel
     tenancy mechanism next to the one in `assertJWTTenant`.
   - **Leave capabilities additive and let consumers hold N credentials.** Works
-    today and is what consumer did with one; at per-account tenancy it means a
+    today and is what such a consumer did with one; at per-account tenancy it means a
     credential store the size of the user base.
 
 - **Consequences:**

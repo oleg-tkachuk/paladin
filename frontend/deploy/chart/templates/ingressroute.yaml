@@ -1,7 +1,6 @@
 {{/*
 IngressRoute — Traefik CRD that Paladin UI exposes its Next.js SSR
-through. Same shape as acme's IngressRoute pattern — uniform
-routing model across consumer-shipped services.
+through. One routing model across the platform's services.
 
 Renders only when Traefik is enabled AND at least one host is
 configured. routes:[] fails Traefik CRD validation; we skip emission

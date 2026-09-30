@@ -25,7 +25,7 @@ func authzAsProvisioner(t *testing.T, action string) Decision {
 	e := NewEngine(fakeStore{}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
 		&Principal{
-			Subject:  "consumer-provisioner",
+			Subject:  "acme-provisioner",
 			TenantID: uuid.New(), // a DIFFERENT tenant from the resource
 			Roles:    []string{roleTenantProvisioner},
 		},
@@ -96,7 +96,7 @@ when { principal has roles && principal.roles.contains("platform.tenant-provisio
 	e := NewEngine(fakeStore{text: policy}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
 		&Principal{
-			Subject:  "consumer-provisioner",
+			Subject:  "acme-provisioner",
 			TenantID: uuid.New(),
 			Roles:    []string{roleTenantProvisioner},
 		},

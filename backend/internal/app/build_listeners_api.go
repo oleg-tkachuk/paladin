@@ -184,7 +184,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	var apiTokData, apiTokIAM connect.Interceptor
 	if deps.APIToken != nil {
 		// Data plane: the API-token interceptor ESTABLISHES the principal, so a service
-		// (e.g. consumer) can authenticate uploads with a long-lived `paladin_pat_…` key alone
+		// can authenticate uploads with a long-lived `paladin_pat_…` key alone
 		// (paired with auth.InterceptorSkipAPITokens below). IAM plane stays additive.
 		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, "data")
 		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "iam")

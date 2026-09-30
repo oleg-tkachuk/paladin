@@ -111,7 +111,7 @@ func TestDefaultPolicy_ReadTenant(t *testing.T) {
 // TENANT (no bucket), so the grant is at TENANT granularity: the resource
 // carries scope_keys = [tenant:<id>].
 //
-// Proves: a same-tenant api_token (ApiKey) principal — the acme PAT case — is
+// Proves: a same-tenant api_token (ApiKey) principal — the first-party consumer PAT case — is
 // admitted; cross-tenant is denied; and the scope-enforcement interaction is at
 // tenant granularity (a PAT must be unscoped or carry a tenant:/wildcard scope;
 // a PAT scoped only to a bucket cannot self-provision).
@@ -140,7 +140,7 @@ func TestBuiltinPolicy_EnsureTenantStorage(t *testing.T) {
 		return dec
 	}
 
-	// Same-tenant, unscoped PAT → Allow (the acme startup call).
+	// Same-tenant, unscoped PAT → Allow (the consumer's startup call).
 	if got := authz(tid, nil, tid); got != cedar.DecisionAllow {
 		t.Errorf("same-tenant unscoped ApiKey = %v, want Allow", got)
 	}
@@ -158,7 +158,7 @@ func TestBuiltinPolicy_EnsureTenantStorage(t *testing.T) {
 	}
 	// Same-tenant PAT scoped ONLY to a bucket → Deny: self-provisioning is a
 	// tenant-level op, so a bucket-only scope doesn't cover it (scope forbid).
-	if got := authz(tid, []string{"bucket:acme-consumer"}, tid); got != cedar.DecisionDeny {
+	if got := authz(tid, []string{"bucket:acme-documents"}, tid); got != cedar.DecisionDeny {
 		t.Errorf("same-tenant ApiKey scoped only to a bucket = %v, want Deny", got)
 	}
 }

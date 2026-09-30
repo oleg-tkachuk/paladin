@@ -17,12 +17,12 @@
   no way around it. A consumer records an object, later removes the record, and
   has to remove the object with it; a garbage collector has to reap what nothing
   references. Neither can hold a role: an API token's principal carries none
-  (the reading behind acme ADR-0031), and a capability carries none **by
+  and a capability carries none **by
   design** (ADR-0010) — its authority lives in caveats, not roles. So every
   delete a consumer attempted came back `permission_denied`, under both
   credentials.
 
-  The failure was silent, which is why it survived so long. consumer's avatar
+  The failure was silent, which is why it survived so long. A consumer's avatar
   replacement deleted the previous object best-effort and swallowed the denial
   into a warning, so each replacement orphaned a file; the sweeper written to
   reap those orphans shipped in dry-run and had never attempted a delete. It was

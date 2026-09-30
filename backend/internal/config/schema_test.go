@@ -70,7 +70,7 @@ func TestCueSchema(t *testing.T) {
 		t.Error("MCP.Stdio.Enabled: default should be true")
 	}
 
-	// The host-run data plane listens on 8083 because another-service's core-api
+	// The host-run data plane listens on 8083 because another local service
 	// owns 8080; the MCP bridge's default upstream must follow it.
 	const (
 		wantDataAddr = "0.0.0.0:8083"

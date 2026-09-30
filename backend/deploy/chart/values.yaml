@@ -1186,8 +1186,7 @@ storage:
 # VPN / bastion. To expose admin externally, render a separate
 # IngressRoute in the env overlay or fork this chart.
 #
-# Routing model: Traefik IngressRoute (consistent with acme's
-# core-api). The chart previously shipped both generic `Ingress` and
+# Routing model: Traefik IngressRoute. The chart previously shipped both generic `Ingress` and
 # Gateway API `HTTPRoute` templates gated off; both removed to commit
 # to a single routing path.
 traefik:

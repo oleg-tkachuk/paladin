@@ -142,8 +142,7 @@ service:
   stickySessions: false
 
 # ─── Traefik IngressRoute ──────────────────────────────────────────────────
-# Paladin UI fronted by Traefik (consistent with acme's IngressRoute
-# pattern). The chart previously shipped both generic Ingress AND
+# Paladin UI fronted by Traefik. The chart previously shipped both generic Ingress AND
 # Gateway API HTTPRoute gated off; both removed — one routing model.
 traefik:
   enabled: true
