@@ -7,6 +7,8 @@ and where its boundaries are. This directory holds the detail.
 
 - [install.md](install.md) — installing on Kubernetes with the Helm
   charts: prerequisites, database roles, the values an install needs.
+- [task.md](task.md) — running from a clone with Task: the compose stack,
+  a local cluster fed from the working tree, the gates; what each needs.
 - [upgrading.md](upgrading.md) — breaking changes between releases and
   what to do about them. Read before upgrading an existing deployment.
 - [releasing.md](releasing.md) — what each tag family publishes, who

@@ -44,9 +44,7 @@ sdk/python/   Python SDK: the same, on connect-python
 ## Contents
 
 - [Deploy to Kubernetes](#deploy-to-kubernetes) — the Helm charts, on your cluster
-- [Run it with Task](#run-it-with-task) — the whole stack locally, or on a local cluster
-- [Prerequisites](#prerequisites) — what has to be installed to work on it
-- [Commands](#commands) — the handful worth knowing
+- [Run it with Task](#run-it-with-task) — from a clone: compose, a local cluster, the gates
 - [How changes land](#how-changes-land) — trunk, CI and releases
 - [Documentation](#documentation) — the rest, by document
 - [Layout](#layout) — where things live in the tree
@@ -121,82 +119,11 @@ planes, and what to set when ArgoCD renders the charts.
 
 ## Run it with Task
 
-Running the stack on one machine needs Docker and [Task](https://taskfile.dev)
-— no cluster and no credentials to arrange.
-
-```bash
-git clone https://github.com/oleg-tkachuk/paladin.git && cd paladin
-task stack:up        # every plane + Postgres + SeaweedFS + the console, in compose
-```
-
-The console is on <http://localhost:3002>, the data plane on `:8083` (not
-`:8080`, which another local service uses), admin on `:8090`. The compose file,
-[`backend/deploy/docker-compose.yaml`](backend/deploy/docker-compose.yaml),
-lists the rest.
-
-```bash
-task stack:down      # stop, keep volumes
-task stack:reset     # stop and delete volumes
-```
-
-On a local cluster with ArgoCD, `Taskfile.local.yaml` builds both images and
-charts from the working tree, publishes them to the host-only
-`registry.local`, and syncs the applications:
-
-```bash
-task -t Taskfile.local.yaml deploy        # build and publish images and charts
-task -t Taskfile.local.yaml deploy:sync   # hard-refresh the ArgoCD applications
-```
-
-Working on the code rather than running it is the third entry point:
-
-```bash
-task -t Taskfile.dev.yaml             # the gates, codegen and dependency bumps
-task -t Taskfile.dev.yaml verify-all  # the commit gate: tests, lint and build
-```
-
-## Prerequisites
-
-Installing from the charts needs none of this. `task stack:up` needs only the
-first two rows; working on the code needs the rest.
-
-| Tool | Why |
-|------|-----|
-| [Docker](https://docs.docker.com/get-started/get-docker/) | the compose stack, testcontainers, `verify-deep` and `verify-e2e` |
-| [Task](https://taskfile.dev/installation/) 3.53+ | every entry point; CI pins 3.53.1, and the shared [task library](https://github.com/oleg-tkachuk/taskfiles) is a remote include |
-| [Go](https://go.dev/dl/) 1.27+ | `backend/` and `capability/`, per their `go.mod` |
-| [Node](https://nodejs.org) 26 | the console; the version its image ships and CI verifies with |
-| [pnpm](https://pnpm.io) 12.7 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.7.0` |
-
-`verify-all` also shells out to golangci-lint, buf, helm, yq and
-python3. On macOS `brew bundle` installs that set; the [Brewfile](Brewfile)
-says which tools are pinned elsewhere instead, and why.
-[docs/development.md](docs/development.md) covers the optional git hooks.
-
-## Commands
-
-Three entry points, split by who runs the command. `task` operates the stack;
-`task -t Taskfile.local.yaml` publishes to the host-only `registry.local` and
-syncs the local ArgoCD applications; `task -t Taskfile.dev.yaml` works on the
-repository. Each on its own prints its handful of commands, and `--list` after
-any of them prints everything it reaches.
-
-Releases are published by CI: for every release tag,
-[release.yaml](.github/workflows/release.yaml) pushes both images
-(linux/amd64 and linux/arm64) and both Helm charts to GHCR, under the
-repository owner.
-
-| Task | Does |
-|------|------|
-| `task stack:up` | the whole stack in compose, waiting until every service is healthy |
-| `task -t Taskfile.local.yaml deploy` | build and publish both images and charts to `registry.local` |
-| `task -t Taskfile.local.yaml deploy:sync` | hard-refresh the local ArgoCD applications after a deploy |
-| `task -t Taskfile.dev.yaml verify-all` | the commit gate: every tree's tests and lint, the proto compatibility check, the chart and Taskfile contract checks, the console build; no Docker |
-| `task -t Taskfile.dev.yaml verify-deep` | the Postgres-backed integration suites and the gates needing a live stack; Docker, ~15 min |
-| `task -t Taskfile.dev.yaml verify-e2e` | Playwright against images built from the current branch; Docker, ~10 min |
-
-Per half, from any of them: `task backend:test`, `task backend:test:integration`,
-`task frontend:test`, `task frontend:build`.
+Paladin also runs from a clone of the repository through
+[Task](https://taskfile.dev): the whole stack in compose with nothing but
+Docker (`task stack:up`), a local cluster fed from the working tree, or the
+gates while you work on the code. [docs/task.md](docs/task.md) covers each
+flow and what it needs installed.
 
 ## How changes land
 
@@ -224,6 +151,7 @@ only by `release.yaml`, for a release tag. `verify-deep` and
 | [frontend/README.md](frontend/README.md) | the console and its BFF |
 | [capability/README.md](capability/README.md) | the standalone authorisation primitive, and why it has no version stream |
 | [docs/install.md](docs/install.md) | installing on Kubernetes with the Helm charts |
+| [docs/task.md](docs/task.md) | running it with Task — compose, a local cluster, the gates — and the prerequisites of each |
 | [docs/configuration.md](docs/configuration.md) | every configuration surface, and the validation run at load |
 | [docs/upgrading.md](docs/upgrading.md) | breaking changes between releases |
 | [docs/releasing.md](docs/releasing.md) | what each tag family publishes and who cuts it |
