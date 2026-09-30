@@ -28,7 +28,10 @@ const (
 type CreateBucketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent: "storageBackends/{backend_id}".
-	Parent   string  `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	// The S3 bucket name: lowercase letters, digits, dots and hyphens, starting
+	// and ending with a letter or digit. Checked here rather than by the
+	// backend, which refuses it only after the bucket row exists.
 	BucketId string  `protobuf:"bytes,2,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
 	Bucket   *Bucket `protobuf:"bytes,3,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	// When true, Paladin also calls the backend to physically create the bucket.
@@ -827,10 +830,10 @@ var File_paladin_admin_v1_bucket_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xca\x01\n" +
+	"%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xe9\x01\n" +
 	"\x13CreateBucketRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12&\n" +
-	"\tbucket_id\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\bbucketId\x128\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12E\n" +
+	"\tbucket_id\x18\x02 \x01(\tB(\xbaH%r#\x10\x03\x18?2\x1d^[a-z0-9][a-z0-9.-]*[a-z0-9]$R\bbucketId\x128\n" +
 	"\x06bucket\x18\x03 \x01(\v2\x18.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01R\x06bucket\x120\n" +
 	"\x14provision_on_backend\x18\x04 \x01(\bR\x12provisionOnBackend\"/\n" +
 	"\x10GetBucketRequest\x12\x1b\n" +

@@ -75,6 +75,7 @@ import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
+import { bucketNameError } from "@/lib/bucketName";
 
 type SortColumn = "backend" | "name" | "region";
 
@@ -158,6 +159,8 @@ export default function BucketsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newBackend, setNewBackend] = useState("");
   const [newName, setNewName] = useState("");
+  // Shown only once something is typed: an empty field is not yet wrong.
+  const newNameError = newName ? bucketNameError(newName) : null;
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newRegion, setNewRegion] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -562,8 +565,15 @@ export default function BucketsPage() {
                   className="font-mono text-xs"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value.toLowerCase())}
+                  aria-invalid={newNameError !== null}
+                  aria-describedby="bucket-name-hint"
                 />
-                <p className={T.hint}>Lowercase, S3 naming rules apply.</p>
+                <p
+                  id="bucket-name-hint"
+                  className={cn(T.hint, newNameError && "text-destructive")}
+                >
+                  {newNameError ?? "Lowercase, S3 naming rules apply."}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -597,7 +607,9 @@ export default function BucketsPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={submitting || !newBackend || !newName}
+                disabled={
+                  submitting || !newBackend || !newName || newNameError !== null
+                }
               >
                 {submitting ? "Provisioning…" : "Create bucket"}
               </Button>

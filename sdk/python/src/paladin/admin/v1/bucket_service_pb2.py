@@ -28,7 +28,7 @@ from paladin.admin.v1 import types_pb2 as paladin_dot_admin_dot_v1_dot_types__pb
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\x9c\x01\n\x13\x43reateBucketRequest\x12\x17\n\x06parent\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1c\n\tbucket_id\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?\x12\x30\n\x06\x62ucket\x18\x03 \x01(\x0b\x32\x18.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01\x12\x1c\n\x14provision_on_backend\x18\x04 \x01(\x08\")\n\x10GetBucketRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\xb2\x01\n\x13UpdateBucketRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x37\n\x0bupdate_mask\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01\x12(\n\x06\x62ucket\x18\x04 \x01(\x0b\x32\x18.paladin.admin.v1.Bucket\"}\n\x13\x44\x65leteBucketRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x18\n\x10resource_version\x18\x02 \x01(\t\x12\x19\n\x11\x64\x65lete_on_backend\x18\x03 \x01(\x08\x12\x1a\n\x12skip_version_check\x18\x04 \x01(\x08\"\x16\n\x14\x44\x65leteBucketResponse\"{\n\x12ListBucketsRequest\x12\x0e\n\x06parent\x18\x01 \x01(\t\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x03 \x01(\t\x12\x17\n\x0fowner_tenant_id\x18\x04 \x01(\t\"o\n\x13ListBucketsResponse\x12)\n\x07\x62uckets\x18\x01 \x03(\x0b\x32\x18.paladin.admin.v1.Bucket\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"h\n\x16SetBucketPolicyRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x14\n\x0c\x63\x65\x64\x61r_policy\x18\x03 \x01(\t\"\x84\x01\n\x18SetLifecycleRulesRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12.\n\x05rules\x18\x03 \x03(\x0b\x32\x1f.paladin.admin.v1.LifecycleRule\"\x8c\x01\n\x14SetObjectLockRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12:\n\x06\x63onfig\x18\x03 \x01(\x0b\x32\".paladin.admin.v1.ObjectLockConfigB\x06\xbaH\x03\xc8\x01\x01\"\x90\x01\n\x14SetVersioningRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12>\n\nversioning\x18\x03 \x01(\x0b\x32\".paladin.admin.v1.BucketVersioningB\x06\xbaH\x03\xc8\x01\x01\"\x93\x01\n\x15SetReplicationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12@\n\x0breplication\x18\x03 \x01(\x0b\x32#.paladin.admin.v1.BucketReplicationB\x06\xbaH\x03\xc8\x01\x01\"e\n\x1cListAccessibleBucketsRequest\x12\x17\n\x06tenant\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest2\x86\x08\n\rBucketService\x12O\n\x0c\x43reateBucket\x12%.paladin.admin.v1.CreateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\x12N\n\tGetBucket\x12\".paladin.admin.v1.GetBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x01\x12T\n\x0cUpdateBucket\x12%.paladin.admin.v1.UpdateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12\x62\n\x0c\x44\x65leteBucket\x12%.paladin.admin.v1.DeleteBucketRequest\x1a&.paladin.admin.v1.DeleteBucketResponse\"\x03\x90\x02\x02\x12_\n\x0bListBuckets\x12$.paladin.admin.v1.ListBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01\x12Z\n\x0fSetBucketPolicy\x12(.paladin.admin.v1.SetBucketPolicyRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12^\n\x11SetLifecycleRules\x12*.paladin.admin.v1.SetLifecycleRulesRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n\rSetObjectLock\x12&.paladin.admin.v1.SetObjectLockRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n\rSetVersioning\x12&.paladin.admin.v1.SetVersioningRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12X\n\x0eSetReplication\x12\'.paladin.admin.v1.SetReplicationRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12s\n\x15ListAccessibleBuckets\x12..paladin.admin.v1.ListAccessibleBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xbb\x01\n\x13\x43reateBucketRequest\x12\x17\n\x06parent\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12;\n\tbucket_id\x18\x02 \x01(\tB(\xbaH%r#\x10\x03\x18?2\x1d^[a-z0-9][a-z0-9.-]*[a-z0-9]$\x12\x30\n\x06\x62ucket\x18\x03 \x01(\x0b\x32\x18.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01\x12\x1c\n\x14provision_on_backend\x18\x04 \x01(\x08\")\n\x10GetBucketRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\xb2\x01\n\x13UpdateBucketRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x37\n\x0bupdate_mask\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01\x12(\n\x06\x62ucket\x18\x04 \x01(\x0b\x32\x18.paladin.admin.v1.Bucket\"}\n\x13\x44\x65leteBucketRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x18\n\x10resource_version\x18\x02 \x01(\t\x12\x19\n\x11\x64\x65lete_on_backend\x18\x03 \x01(\x08\x12\x1a\n\x12skip_version_check\x18\x04 \x01(\x08\"\x16\n\x14\x44\x65leteBucketResponse\"{\n\x12ListBucketsRequest\x12\x0e\n\x06parent\x18\x01 \x01(\t\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x03 \x01(\t\x12\x17\n\x0fowner_tenant_id\x18\x04 \x01(\t\"o\n\x13ListBucketsResponse\x12)\n\x07\x62uckets\x18\x01 \x03(\x0b\x32\x18.paladin.admin.v1.Bucket\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"h\n\x16SetBucketPolicyRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x14\n\x0c\x63\x65\x64\x61r_policy\x18\x03 \x01(\t\"\x84\x01\n\x18SetLifecycleRulesRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12.\n\x05rules\x18\x03 \x03(\x0b\x32\x1f.paladin.admin.v1.LifecycleRule\"\x8c\x01\n\x14SetObjectLockRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12:\n\x06\x63onfig\x18\x03 \x01(\x0b\x32\".paladin.admin.v1.ObjectLockConfigB\x06\xbaH\x03\xc8\x01\x01\"\x90\x01\n\x14SetVersioningRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12>\n\nversioning\x18\x03 \x01(\x0b\x32\".paladin.admin.v1.BucketVersioningB\x06\xbaH\x03\xc8\x01\x01\"\x93\x01\n\x15SetReplicationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12@\n\x0breplication\x18\x03 \x01(\x0b\x32#.paladin.admin.v1.BucketReplicationB\x06\xbaH\x03\xc8\x01\x01\"e\n\x1cListAccessibleBucketsRequest\x12\x17\n\x06tenant\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest2\x86\x08\n\rBucketService\x12O\n\x0c\x43reateBucket\x12%.paladin.admin.v1.CreateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\x12N\n\tGetBucket\x12\".paladin.admin.v1.GetBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x01\x12T\n\x0cUpdateBucket\x12%.paladin.admin.v1.UpdateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12\x62\n\x0c\x44\x65leteBucket\x12%.paladin.admin.v1.DeleteBucketRequest\x1a&.paladin.admin.v1.DeleteBucketResponse\"\x03\x90\x02\x02\x12_\n\x0bListBuckets\x12$.paladin.admin.v1.ListBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01\x12Z\n\x0fSetBucketPolicy\x12(.paladin.admin.v1.SetBucketPolicyRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12^\n\x11SetLifecycleRules\x12*.paladin.admin.v1.SetLifecycleRulesRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n\rSetObjectLock\x12&.paladin.admin.v1.SetObjectLockRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n\rSetVersioning\x12&.paladin.admin.v1.SetVersioningRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12X\n\x0eSetReplication\x12\'.paladin.admin.v1.SetReplicationRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12s\n\x15ListAccessibleBuckets\x12..paladin.admin.v1.ListAccessibleBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,7 +39,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CREATEBUCKETREQUEST'].fields_by_name['parent']._loaded_options = None
   _globals['_CREATEBUCKETREQUEST'].fields_by_name['parent']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_CREATEBUCKETREQUEST'].fields_by_name['bucket_id']._loaded_options = None
-  _globals['_CREATEBUCKETREQUEST'].fields_by_name['bucket_id']._serialized_options = b'\272H\006r\004\020\003\030?'
+  _globals['_CREATEBUCKETREQUEST'].fields_by_name['bucket_id']._serialized_options = b'\272H%r#\020\003\030?2\035^[a-z0-9][a-z0-9.-]*[a-z0-9]$'
   _globals['_CREATEBUCKETREQUEST'].fields_by_name['bucket']._loaded_options = None
   _globals['_CREATEBUCKETREQUEST'].fields_by_name['bucket']._serialized_options = b'\272H\003\310\001\001'
   _globals['_GETBUCKETREQUEST'].fields_by_name['name']._loaded_options = None
@@ -101,31 +101,31 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_BUCKETSERVICE'].methods_by_name['ListAccessibleBuckets']._loaded_options = None
   _globals['_BUCKETSERVICE'].methods_by_name['ListAccessibleBuckets']._serialized_options = b'\220\002\001'
   _globals['_CREATEBUCKETREQUEST']._serialized_start=189
-  _globals['_CREATEBUCKETREQUEST']._serialized_end=345
-  _globals['_GETBUCKETREQUEST']._serialized_start=347
-  _globals['_GETBUCKETREQUEST']._serialized_end=388
-  _globals['_UPDATEBUCKETREQUEST']._serialized_start=391
-  _globals['_UPDATEBUCKETREQUEST']._serialized_end=569
-  _globals['_DELETEBUCKETREQUEST']._serialized_start=571
-  _globals['_DELETEBUCKETREQUEST']._serialized_end=696
-  _globals['_DELETEBUCKETRESPONSE']._serialized_start=698
-  _globals['_DELETEBUCKETRESPONSE']._serialized_end=720
-  _globals['_LISTBUCKETSREQUEST']._serialized_start=722
-  _globals['_LISTBUCKETSREQUEST']._serialized_end=845
-  _globals['_LISTBUCKETSRESPONSE']._serialized_start=847
-  _globals['_LISTBUCKETSRESPONSE']._serialized_end=958
-  _globals['_SETBUCKETPOLICYREQUEST']._serialized_start=960
-  _globals['_SETBUCKETPOLICYREQUEST']._serialized_end=1064
-  _globals['_SETLIFECYCLERULESREQUEST']._serialized_start=1067
-  _globals['_SETLIFECYCLERULESREQUEST']._serialized_end=1199
-  _globals['_SETOBJECTLOCKREQUEST']._serialized_start=1202
-  _globals['_SETOBJECTLOCKREQUEST']._serialized_end=1342
-  _globals['_SETVERSIONINGREQUEST']._serialized_start=1345
-  _globals['_SETVERSIONINGREQUEST']._serialized_end=1489
-  _globals['_SETREPLICATIONREQUEST']._serialized_start=1492
-  _globals['_SETREPLICATIONREQUEST']._serialized_end=1639
-  _globals['_LISTACCESSIBLEBUCKETSREQUEST']._serialized_start=1641
-  _globals['_LISTACCESSIBLEBUCKETSREQUEST']._serialized_end=1742
-  _globals['_BUCKETSERVICE']._serialized_start=1745
-  _globals['_BUCKETSERVICE']._serialized_end=2775
+  _globals['_CREATEBUCKETREQUEST']._serialized_end=376
+  _globals['_GETBUCKETREQUEST']._serialized_start=378
+  _globals['_GETBUCKETREQUEST']._serialized_end=419
+  _globals['_UPDATEBUCKETREQUEST']._serialized_start=422
+  _globals['_UPDATEBUCKETREQUEST']._serialized_end=600
+  _globals['_DELETEBUCKETREQUEST']._serialized_start=602
+  _globals['_DELETEBUCKETREQUEST']._serialized_end=727
+  _globals['_DELETEBUCKETRESPONSE']._serialized_start=729
+  _globals['_DELETEBUCKETRESPONSE']._serialized_end=751
+  _globals['_LISTBUCKETSREQUEST']._serialized_start=753
+  _globals['_LISTBUCKETSREQUEST']._serialized_end=876
+  _globals['_LISTBUCKETSRESPONSE']._serialized_start=878
+  _globals['_LISTBUCKETSRESPONSE']._serialized_end=989
+  _globals['_SETBUCKETPOLICYREQUEST']._serialized_start=991
+  _globals['_SETBUCKETPOLICYREQUEST']._serialized_end=1095
+  _globals['_SETLIFECYCLERULESREQUEST']._serialized_start=1098
+  _globals['_SETLIFECYCLERULESREQUEST']._serialized_end=1230
+  _globals['_SETOBJECTLOCKREQUEST']._serialized_start=1233
+  _globals['_SETOBJECTLOCKREQUEST']._serialized_end=1373
+  _globals['_SETVERSIONINGREQUEST']._serialized_start=1376
+  _globals['_SETVERSIONINGREQUEST']._serialized_end=1520
+  _globals['_SETREPLICATIONREQUEST']._serialized_start=1523
+  _globals['_SETREPLICATIONREQUEST']._serialized_end=1670
+  _globals['_LISTACCESSIBLEBUCKETSREQUEST']._serialized_start=1672
+  _globals['_LISTACCESSIBLEBUCKETSREQUEST']._serialized_end=1773
+  _globals['_BUCKETSERVICE']._serialized_start=1776
+  _globals['_BUCKETSERVICE']._serialized_end=2806
 # @@protoc_insertion_point(module_scope)

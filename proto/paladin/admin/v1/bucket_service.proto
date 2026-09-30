@@ -77,7 +77,14 @@ service BucketService {
 message CreateBucketRequest {
   // Parent: "storageBackends/{backend_id}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
-  string bucket_id = 2 [(buf.validate.field).string = {min_len: 3, max_len: 63}];
+  // The S3 bucket name: lowercase letters, digits, dots and hyphens, starting
+  // and ending with a letter or digit. Checked here rather than by the
+  // backend, which refuses it only after the bucket row exists.
+  string bucket_id = 2 [(buf.validate.field).string = {
+    min_len: 3
+    max_len: 63
+    pattern: "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+  }];
   Bucket bucket = 3 [(buf.validate.field).required = true];
   // When true, Paladin also calls the backend to physically create the bucket.
   // When false, the bucket is assumed to exist out-of-band.
