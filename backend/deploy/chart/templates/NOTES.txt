@@ -26,8 +26,17 @@ Per-role pods:
 ──────────────────────────────────────────────────────────────────────────
 
 Reach the api plane (data + iam):
+{{- $scheme := include "chart.internalScheme" . }}
+{{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") }}
 
-{{- if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) }}
+{{- if .Values.ingress.enabled }}
+
+  Via the {{ .Values.ingress.className }} Ingress:
+    {{- range .Values.ingress.hosts }}
+    curl https://{{ . }}/livez
+    {{- end }}
+
+{{- else if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) }}
 
   Via Traefik IngressRoute:
     {{- range .Values.traefik.hosts }}
@@ -37,15 +46,17 @@ Reach the api plane (data + iam):
 {{- else }}
 
   Via port-forward (api Service):
-    {{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") }}
-    {{- $apiSpec := index .Values.deployments "api" }}
-    {{- $dataPort := 8080 }}
-    {{- if and $apiSpec $apiSpec.service $apiSpec.service.ports }}
-    {{- $dataPort = (index $apiSpec.service.ports 0).port }}
-    {{- end }}
-    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $apiSvc }} {{ $dataPort }}:{{ $dataPort }}
-    curl http://localhost:{{ $dataPort }}/livez
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $apiSvc }} {{ .Values.ingress.data.port }}:{{ .Values.ingress.data.port }}
+    curl {{ if eq $scheme "https" }}-k {{ end }}{{ $scheme }}://localhost:{{ .Values.ingress.data.port }}/livez
 
+{{- end }}
+
+{{- if .Values.config.bootstrap.admin.enabled }}
+
+Sign in as the platform admin, subject `{{ .Values.config.bootstrap.admin.subject }}`:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ .Values.config.bootstrap.admin.password_secret.name }} \
+    -o jsonpath='{.data.{{ .Values.config.bootstrap.admin.password_secret.key }}}' | base64 -d
 {{- end }}
 
 ──────────────────────────────────────────────────────────────────────────
@@ -54,9 +65,5 @@ Disable a role: `--set deployments.<role>.enabled=false`. Toggling the
 api role takes the public listeners offline; toggling the worker or mcp
 roles is safe (no client traffic).
 
-Worker leases:
-
-  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "chart.roleFullname" (dict "ctx" . "role" "api") }} -- paladin cap show     # (placeholder — when the cap CLI lands)
-
-  Until then, inspect lease state directly via psql:
+Worker leases, via psql:
     SELECT name, holder_id, expires_at, generation FROM worker_leases;

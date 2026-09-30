@@ -140,6 +140,7 @@ CI builds no image, publishes no chart and deploys nothing. `verify-deep` and
 | [backend/README.md](backend/README.md) | roles, ports, packages, wire contracts, database |
 | [frontend/README.md](frontend/README.md) | the console and its BFF |
 | [capability/README.md](capability/README.md) | the standalone authorisation primitive, and why it has no version stream |
+| [docs/install.md](docs/install.md) | installing on Kubernetes with the Helm charts |
 | [docs/configuration.md](docs/configuration.md) | every configuration surface, and the validation run at load |
 | [docs/upgrading.md](docs/upgrading.md) | breaking changes between releases |
 | [docs/](docs/README.md) | subsystems, [ADRs](docs/adr/) and [runbooks](docs/runbooks/) |

@@ -5,6 +5,8 @@ and where its boundaries are. This directory holds the detail.
 
 ## Reference
 
+- [install.md](install.md) — installing on Kubernetes with the Helm
+  charts: prerequisites, database roles, the values an install needs.
 - [upgrading.md](upgrading.md) — breaking changes between releases and
   what to do about them. Read before upgrading an existing deployment.
 - [configuration.md](configuration.md) — every configuration surface:

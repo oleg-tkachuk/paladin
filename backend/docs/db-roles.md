@@ -24,12 +24,17 @@ Connect as a superuser. Replace the placeholder passwords with values
 from your secret manager (Vault, AWS Secrets Manager, etc.).
 
 ```sql
--- Database owner / DDL role.
-CREATE ROLE paladin_migrate WITH LOGIN PASSWORD '<from-secret>' CREATEDB;
+-- Database owner / DDL role. BYPASSRLS: migrations and the cross-tenant
+-- maintenance work must see every tenant's rows.
+CREATE ROLE paladin_migrate WITH LOGIN PASSWORD '<from-secret>' BYPASSRLS;
 
 -- Runtime role. NOLOGIN at first so misconfigured deploys can't connect
 -- before the password is set.
 CREATE ROLE paladin_app WITH NOLOGIN;
+
+-- The worker's least-privilege cross-tenant DML role (reaper_dsn). The
+-- migrations grant it DML whether or not it ever logs in.
+CREATE ROLE paladin_reaper WITH NOLOGIN BYPASSRLS;
 
 -- Create the database, owned by the migrate role.
 CREATE DATABASE paladin OWNER paladin_migrate;
@@ -43,8 +48,11 @@ GRANT CONNECT ON DATABASE paladin TO paladin_app;
 ALTER ROLE paladin_app WITH LOGIN PASSWORD '<from-secret>';
 ```
 
-That's all the manual SQL you need. Migration `011_app_role.sql` does the
-GRANTs against `paladin_app` automatically when goose runs as `paladin_migrate`.
+That's all the manual SQL you need. Migration `002_roles_and_rls.sql` grants
+`paladin_app` and `paladin_reaper` their DML when goose runs as
+`paladin_migrate`. Only a superuser can grant `BYPASSRLS`, so the migration
+cannot do it for you when it runs as `paladin_migrate`; without it, migrations
+fail at the first row-level-security policy.
 
 ---
 
@@ -129,9 +137,10 @@ further into separate namespaces or even separate secret stores.
 
 ### Helm
 
-The chart's `values.yaml` ships both DSNs and both `password_secret`
-references. `helm upgrade --install` does not create the DB roles —
-that's a one-time DBA step (§1).
+The chart builds both DSNs and both `password_secret` references from its
+`postgres` block — see [docs/install.md](../../docs/install.md).
+`helm upgrade --install` does not create the DB roles — that's a one-time DBA
+step (§1).
 
 ### CI / preview environments
 
