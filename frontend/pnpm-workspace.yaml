@@ -38,3 +38,4 @@ overrides:
 #     would otherwise resolve back to 3.9.6 and undo it.
 minimumReleaseAgeExclude:
   - prettier@3.9.8
+  - lucide-react@1.49.0
