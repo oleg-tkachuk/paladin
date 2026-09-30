@@ -29,8 +29,7 @@ const inflight = new Map<Audience, Promise<TokenEntry>>();
 let channel: BroadcastChannel | null = null;
 
 type ChannelMsg =
-  | { kind: "set"; audience: Audience; entry: TokenEntry }
-  | { kind: "clear" };
+  { kind: "set"; audience: Audience; entry: TokenEntry } | { kind: "clear" };
 
 function getChannel(): BroadcastChannel | null {
   if (typeof window === "undefined") return null;

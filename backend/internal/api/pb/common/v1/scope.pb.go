@@ -142,9 +142,9 @@ var File_paladin_common_v1_scope_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_scope_proto_rawDesc = "" +
 	"\n" +
-	"\x1clegate/common/v1/scope.proto\x12\x10legate.common.v1\x1a\x1bbuf/validate/validate.proto\"c\n" +
-	"\x05Scope\x12;\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x1b.paladin.common.v1.ScopeTypeB\n" +
+	"\x1dpaladin/common/v1/scope.proto\x12\x11paladin.common.v1\x1a\x1bbuf/validate/validate.proto\"d\n" +
+	"\x05Scope\x12<\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x1c.paladin.common.v1.ScopeTypeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04type\x12\x1d\n" +
 	"\x05value\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05value*\x88\x01\n" +
 	"\tScopeType\x12\x1a\n" +
@@ -152,7 +152,7 @@ const file_paladin_common_v1_scope_proto_rawDesc = "" +
 	"\x11SCOPE_TYPE_TENANT\x10\x01\x12\x16\n" +
 	"\x12SCOPE_TYPE_BACKEND\x10\x02\x12\x15\n" +
 	"\x11SCOPE_TYPE_BUCKET\x10\x03\x12\x19\n" +
-	"\x15SCOPE_TYPE_OBJECT_KEY\x10\x04BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
+	"\x15SCOPE_TYPE_OBJECT_KEY\x10\x04BKZIgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_scope_proto_rawDescOnce sync.Once

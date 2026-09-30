@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"github.com/google/uuid"

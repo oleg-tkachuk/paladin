@@ -1581,19 +1581,19 @@ var File_paladin_admin_v1_system_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/system_service.proto\x12\x0flegate.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x12\n" +
+	"%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x12\n" +
 	"\x10GetConfigRequest\"H\n" +
 	"\x11GetConfigResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1f\n" +
 	"\vsource_path\x18\x02 \x01(\tR\n" +
 	"sourcePath\"\x1b\n" +
-	"\x19GetDispatcherStatsRequest\"\xf3\x01\n" +
+	"\x19GetDispatcherStatsRequest\"\xf4\x01\n" +
 	"\x1aGetDispatcherStatsResponse\x12\x1c\n" +
 	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x18\n" +
 	"\apending\x18\x02 \x01(\x03R\apending\x12\x16\n" +
 	"\x06failed\x18\x03 \x01(\x03R\x06failed\x124\n" +
-	"\x16oldest_pending_seconds\x18\x04 \x01(\x03R\x14oldestPendingSeconds\x12O\n" +
-	"\rsubscriptions\x18\x05 \x03(\v2).paladin.admin.v1.SubscriptionDeliveryStatR\rsubscriptions\"\x83\x02\n" +
+	"\x16oldest_pending_seconds\x18\x04 \x01(\x03R\x14oldestPendingSeconds\x12P\n" +
+	"\rsubscriptions\x18\x05 \x03(\v2*.paladin.admin.v1.SubscriptionDeliveryStatR\rsubscriptions\"\x83\x02\n" +
 	"\x18SubscriptionDeliveryStat\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x18\n" +
@@ -1603,23 +1603,23 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"last_error\x18\x05 \x01(\tR\tlastError\x12(\n" +
 	"\x10last_status_code\x18\x06 \x01(\x05R\x0elastStatusCode\x12&\n" +
 	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\"\x19\n" +
-	"\x17GetPlatformStatsRequest\"\xb6\x03\n" +
-	"\x18GetPlatformStatsResponse\x126\n" +
-	"\atenants\x18\x01 \x01(\v2\x1c.paladin.admin.v1.TenantStatsR\atenants\x129\n" +
-	"\bbackends\x18\x02 \x01(\v2\x1d.paladin.admin.v1.BackendStatsR\bbackends\x126\n" +
-	"\abuckets\x18\x03 \x01(\v2\x1c.paladin.admin.v1.BucketStatsR\abuckets\x12B\n" +
-	"\vcollections\x18\x04 \x01(\v2 .paladin.admin.v1.CollectionStatsR\vcollections\x120\n" +
-	"\x05users\x18\x05 \x01(\v2\x1a.paladin.admin.v1.UserStatsR\x05users\x12=\n" +
-	"\fcollected_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12+\n" +
-	"\x03rls\x18\b \x01(\v2\x19.paladin.admin.v1.RLSStatsR\x03rlsJ\x04\b\x06\x10\aR\aobjects\"\xe4\x02\n" +
+	"\x17GetPlatformStatsRequest\"\xbc\x03\n" +
+	"\x18GetPlatformStatsResponse\x127\n" +
+	"\atenants\x18\x01 \x01(\v2\x1d.paladin.admin.v1.TenantStatsR\atenants\x12:\n" +
+	"\bbackends\x18\x02 \x01(\v2\x1e.paladin.admin.v1.BackendStatsR\bbackends\x127\n" +
+	"\abuckets\x18\x03 \x01(\v2\x1d.paladin.admin.v1.BucketStatsR\abuckets\x12C\n" +
+	"\vcollections\x18\x04 \x01(\v2!.paladin.admin.v1.CollectionStatsR\vcollections\x121\n" +
+	"\x05users\x18\x05 \x01(\v2\x1b.paladin.admin.v1.UserStatsR\x05users\x12=\n" +
+	"\fcollected_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12,\n" +
+	"\x03rls\x18\b \x01(\v2\x1a.paladin.admin.v1.RLSStatsR\x03rlsJ\x04\b\x06\x10\aR\aobjects\"\xe9\x02\n" +
 	"\bRLSStats\x12\x1c\n" +
-	"\tavailable\x18\x01 \x01(\bR\tavailable\x126\n" +
-	"\aobjects\x18\x02 \x01(\v2\x1c.paladin.admin.v1.ObjectStatsR\aobjects\x123\n" +
-	"\x06quotas\x18\x03 \x01(\v2\x1b.paladin.admin.v1.QuotaStatsR\x06quotas\x12D\n" +
-	"\fcapabilities\x18\x04 \x01(\v2 .paladin.admin.v1.CapabilityStatsR\fcapabilities\x12=\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x127\n" +
+	"\aobjects\x18\x02 \x01(\v2\x1d.paladin.admin.v1.ObjectStatsR\aobjects\x124\n" +
+	"\x06quotas\x18\x03 \x01(\v2\x1c.paladin.admin.v1.QuotaStatsR\x06quotas\x12E\n" +
+	"\fcapabilities\x18\x04 \x01(\v2!.paladin.admin.v1.CapabilityStatsR\fcapabilities\x12>\n" +
 	"\n" +
-	"api_tokens\x18\x05 \x01(\v2\x1e.paladin.admin.v1.APITokenStatsR\tapiTokens\x12H\n" +
-	"\rsubscriptions\x18\x06 \x01(\v2\".paladin.admin.v1.SubscriptionStatsR\rsubscriptions\"\xa1\x02\n" +
+	"api_tokens\x18\x05 \x01(\v2\x1f.paladin.admin.v1.APITokenStatsR\tapiTokens\x12I\n" +
+	"\rsubscriptions\x18\x06 \x01(\v2#.paladin.admin.v1.SubscriptionStatsR\rsubscriptions\"\xa1\x02\n" +
 	"\n" +
 	"QuotaStats\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12#\n" +
@@ -1631,15 +1631,15 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\n" +
 	"near_limit\x18\x06 \x01(\x03R\tnearLimit\x12,\n" +
 	"\x12usage_object_count\x18\a \x01(\x03R\x10usageObjectCount\x12*\n" +
-	"\x11usage_total_bytes\x18\b \x01(\x03R\x0fusageTotalBytes\"\xdd\x02\n" +
+	"\x11usage_total_bytes\x18\b \x01(\x03R\x0fusageTotalBytes\"\xde\x02\n" +
 	"\x0fCapabilityStats\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x16\n" +
 	"\x06active\x18\x02 \x01(\x03R\x06active\x12\x18\n" +
 	"\aexpired\x18\x03 \x01(\x03R\aexpired\x12\x18\n" +
 	"\arevoked\x18\x04 \x01(\x03R\arevoked\x12\x1c\n" +
 	"\tdelegated\x18\x05 \x01(\x03R\tdelegated\x12#\n" +
-	"\rexpiring_soon\x18\x06 \x01(\x03R\fexpiringSoon\x12a\n" +
-	"\x11by_principal_kind\x18\a \x03(\v25.paladin.admin.v1.CapabilityStats.ByPrincipalKindEntryR\x0fbyPrincipalKind\x1aB\n" +
+	"\rexpiring_soon\x18\x06 \x01(\x03R\fexpiringSoon\x12b\n" +
+	"\x11by_principal_kind\x18\a \x03(\v26.paladin.admin.v1.CapabilityStats.ByPrincipalKindEntryR\x0fbyPrincipalKind\x1aB\n" +
 	"\x14ByPrincipalKindEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xb5\x01\n" +
@@ -1650,14 +1650,14 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\arevoked\x18\x04 \x01(\x03R\arevoked\x12#\n" +
 	"\rexpiring_soon\x18\x05 \x01(\x03R\fexpiringSoon\x12\x1d\n" +
 	"\n" +
-	"never_used\x18\x06 \x01(\x03R\tneverUsed\"\x95\x02\n" +
+	"never_used\x18\x06 \x01(\x03R\tneverUsed\"\x96\x02\n" +
 	"\x11SubscriptionStats\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\x03R\aenabled\x12\x1a\n" +
 	"\bdisabled\x18\x03 \x01(\x03R\bdisabled\x12\x1f\n" +
 	"\vwith_filter\x18\x04 \x01(\x03R\n" +
-	"withFilter\x12T\n" +
-	"\fby_sink_kind\x18\x05 \x03(\v22.paladin.admin.v1.SubscriptionStats.BySinkKindEntryR\n" +
+	"withFilter\x12U\n" +
+	"\fby_sink_kind\x18\x05 \x03(\v23.paladin.admin.v1.SubscriptionStats.BySinkKindEntryR\n" +
 	"bySinkKind\x1a=\n" +
 	"\x0fBySinkKindEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1668,22 +1668,22 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\atrashed\x18\x03 \x01(\x03R\atrashed\x12#\n" +
 	"\rshared_layout\x18\x04 \x01(\x03R\fsharedLayout\x12)\n" +
 	"\x10dedicated_layout\x18\x05 \x01(\x03R\x0fdedicatedLayout\x126\n" +
-	"\x17without_default_binding\x18\x06 \x01(\x03R\x15withoutDefaultBinding\"\x98\x02\n" +
+	"\x17without_default_binding\x18\x06 \x01(\x03R\x15withoutDefaultBinding\"\x99\x02\n" +
 	"\fBackendStats\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\x03R\aenabled\x12\x1a\n" +
 	"\bdisabled\x18\x03 \x01(\x03R\bdisabled\x12\x1b\n" +
 	"\tread_only\x18\x04 \x01(\x03R\breadOnly\x12 \n" +
-	"\vmaintenance\x18\x05 \x01(\x03R\vmaintenance\x12B\n" +
-	"\aby_kind\x18\x06 \x03(\v2).paladin.admin.v1.BackendStats.ByKindEntryR\x06byKind\x1a9\n" +
+	"\vmaintenance\x18\x05 \x01(\x03R\vmaintenance\x12C\n" +
+	"\aby_kind\x18\x06 \x03(\v2*.paladin.admin.v1.BackendStats.ByKindEntryR\x06byKind\x1a9\n" +
 	"\vByKindEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x9f\x04\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa1\x04\n" +
 	"\vBucketStats\x12\x14\n" +
-	"\x05total\x18\x01 \x01(\x03R\x05total\x12`\n" +
-	"\x12by_provision_state\x18\x02 \x03(\v22.paladin.admin.v1.BucketStats.ByProvisionStateEntryR\x10byProvisionState\x12J\n" +
+	"\x05total\x18\x01 \x01(\x03R\x05total\x12a\n" +
+	"\x12by_provision_state\x18\x02 \x03(\v23.paladin.admin.v1.BucketStats.ByProvisionStateEntryR\x10byProvisionState\x12K\n" +
 	"\n" +
-	"by_backend\x18\x03 \x03(\v2+.paladin.admin.v1.BucketStats.ByBackendEntryR\tbyBackend\x12!\n" +
+	"by_backend\x18\x03 \x03(\v2,.paladin.admin.v1.BucketStats.ByBackendEntryR\tbyBackend\x12!\n" +
 	"\ftenant_owned\x18\x04 \x01(\x03R\vtenantOwned\x12\x16\n" +
 	"\x06shared\x18\x05 \x01(\x03R\x06shared\x12-\n" +
 	"\x12versioning_enabled\x18\x06 \x01(\x03R\x11versioningEnabled\x12.\n" +
@@ -1694,11 +1694,11 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a<\n" +
 	"\x0eByBackendEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xcf\x01\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xd0\x01\n" +
 	"\x0fCollectionStats\x12\x14\n" +
-	"\x05total\x18\x01 \x01(\x03R\x05total\x12N\n" +
+	"\x05total\x18\x01 \x01(\x03R\x05total\x12O\n" +
 	"\n" +
-	"by_backend\x18\x02 \x03(\v2/.paladin.admin.v1.CollectionStats.ByBackendEntryR\tbyBackend\x12\x18\n" +
+	"by_backend\x18\x02 \x03(\v20.paladin.admin.v1.CollectionStats.ByBackendEntryR\tbyBackend\x12\x18\n" +
 	"\aunbound\x18\x03 \x01(\x03R\aunbound\x1a<\n" +
 	"\x0eByBackendEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1709,28 +1709,28 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\x0fObjectStateStat\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x03R\x05count\x12\x14\n" +
-	"\x05bytes\x18\x03 \x01(\x03R\x05bytes\"\xe3\x01\n" +
+	"\x05bytes\x18\x03 \x01(\x03R\x05bytes\"\xe4\x01\n" +
 	"\x11TenantObjectStats\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12!\n" +
-	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x128\n" +
-	"\x06states\x18\x04 \x03(\v2 .paladin.admin.v1.ObjectStateStatR\x06states\x12\x1f\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x129\n" +
+	"\x06states\x18\x04 \x03(\v2!.paladin.admin.v1.ObjectStateStatR\x06states\x12\x1f\n" +
 	"\vtotal_count\x18\x05 \x01(\x03R\n" +
 	"totalCount\x12\x1f\n" +
 	"\vtotal_bytes\x18\x06 \x01(\x03R\n" +
-	"totalBytes\"\x85\x02\n" +
-	"\vObjectStats\x128\n" +
-	"\x06states\x18\x02 \x03(\v2 .paladin.admin.v1.ObjectStateStatR\x06states\x12\x1f\n" +
+	"totalBytes\"\x87\x02\n" +
+	"\vObjectStats\x129\n" +
+	"\x06states\x18\x02 \x03(\v2!.paladin.admin.v1.ObjectStateStatR\x06states\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
 	"totalCount\x12\x1f\n" +
 	"\vtotal_bytes\x18\x04 \x01(\x03R\n" +
-	"totalBytes\x12<\n" +
-	"\atenants\x18\x05 \x03(\v2\".paladin.admin.v1.TenantObjectStatsR\atenants\x12+\n" +
-	"\x11tenants_truncated\x18\x06 \x01(\x03R\x10tenantsTruncatedJ\x04\b\x01\x10\x02R\tavailable2\xca\x02\n" +
-	"\rSystemService\x12W\n" +
-	"\tGetConfig\x12!.paladin.admin.v1.GetConfigRequest\x1a\".paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12r\n" +
-	"\x12GetDispatcherStats\x12*.paladin.admin.v1.GetDispatcherStatsRequest\x1a+.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12l\n" +
-	"\x10GetPlatformStats\x12(.paladin.admin.v1.GetPlatformStatsRequest\x1a).paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"totalBytes\x12=\n" +
+	"\atenants\x18\x05 \x03(\v2#.paladin.admin.v1.TenantObjectStatsR\atenants\x12+\n" +
+	"\x11tenants_truncated\x18\x06 \x01(\x03R\x10tenantsTruncatedJ\x04\b\x01\x10\x02R\tavailable2\xd0\x02\n" +
+	"\rSystemService\x12Y\n" +
+	"\tGetConfig\x12\".paladin.admin.v1.GetConfigRequest\x1a#.paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x12GetDispatcherStats\x12+.paladin.admin.v1.GetDispatcherStatsRequest\x1a,.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x10GetPlatformStats\x12).paladin.admin.v1.GetPlatformStatsRequest\x1a*.paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_system_service_proto_rawDescOnce sync.Once

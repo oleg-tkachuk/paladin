@@ -154,7 +154,8 @@ func (c *userSettingsServiceClient) DeleteForUser(ctx context.Context, req *conn
 	return c.deleteForUser.CallUnary(ctx, req)
 }
 
-// UserSettingsServiceHandler is an implementation of the paladin.iam.v1.UserSettingsService service.
+// UserSettingsServiceHandler is an implementation of the paladin.iam.v1.UserSettingsService
+// service.
 type UserSettingsServiceHandler interface {
 	// GetMine returns the calling user's settings, creating nothing: a user who
 	// has never saved settings gets the zero value with an empty

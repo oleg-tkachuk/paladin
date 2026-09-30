@@ -804,7 +804,7 @@ var File_paladin_admin_v1_api_token_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\n" +
-	"'paladin/admin/v1/api_token_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xac\x04\n" +
+	"(paladin/admin/v1/api_token_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xac\x04\n" +
 	"\bAPIToken\x12\x17\n" +
 	"\x04name\x18\x0e \x01(\tB\x03\xe0A\bR\x04name\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12 \n" +
@@ -834,9 +834,9 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12$\n" +
 	"\baudience\x18\x05 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12-\n" +
 	"\x0erate_limit_rpm\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\frateLimitRpm\x12\x14\n" +
-	"\x05roles\x18\a \x03(\tR\x05roles\"m\n" +
-	"\x1dAPITokenServiceCreateResponse\x126\n" +
-	"\tapi_token\x18\x01 \x01(\v2\x19.paladin.admin.v1.APITokenR\bapiToken\x12\x14\n" +
+	"\x05roles\x18\a \x03(\tR\x05roles\"n\n" +
+	"\x1dAPITokenServiceCreateResponse\x127\n" +
+	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\";\n" +
 	"\x1cAPITokenServiceRevokeRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x1f\n" +
@@ -847,14 +847,14 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x0finclude_expired\x18\x03 \x01(\bR\x0eincludeExpired\x12$\n" +
 	"\tpage_size\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x05 \x01(\tR\tpageToken\"\x7f\n" +
-	"\x1bAPITokenServiceListResponse\x128\n" +
+	"page_token\x18\x05 \x01(\tR\tpageToken\"\x80\x01\n" +
+	"\x1bAPITokenServiceListResponse\x129\n" +
 	"\n" +
-	"api_tokens\x18\x01 \x03(\v2\x19.paladin.admin.v1.APITokenR\tapiTokens\x12&\n" +
+	"api_tokens\x18\x01 \x03(\v2\x1a.paladin.admin.v1.APITokenR\tapiTokens\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x1f\n" +
-	"\x1dAPITokenServiceGetSelfRequest\"X\n" +
-	"\x1eAPITokenServiceGetSelfResponse\x126\n" +
-	"\tapi_token\x18\x01 \x01(\v2\x19.paladin.admin.v1.APITokenR\bapiToken\"=\n" +
+	"\x1dAPITokenServiceGetSelfRequest\"Y\n" +
+	"\x1eAPITokenServiceGetSelfResponse\x127\n" +
+	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\"=\n" +
 	"\x1eAPITokenServiceGetUsageRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe3\x02\n" +
 	"\x1fAPITokenServiceGetUsageResponse\x12\x12\n" +
@@ -865,13 +865,13 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x0eweighted_count\x18\x05 \x01(\x01R\rweightedCount\x12D\n" +
 	"\x10window_resets_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x0ewindowResetsAt\x12<\n" +
 	"\flast_used_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastUsedAt2\xb5\x04\n" +
-	"\x0fAPITokenService\x12g\n" +
-	"\x06Create\x12-.paladin.admin.v1.APITokenServiceCreateRequest\x1a..paladin.admin.v1.APITokenServiceCreateResponse\x12l\n" +
-	"\x06Revoke\x12-.paladin.admin.v1.APITokenServiceRevokeRequest\x1a..paladin.admin.v1.APITokenServiceRevokeResponse\"\x03\x90\x02\x02\x12f\n" +
-	"\x04List\x12+.paladin.admin.v1.APITokenServiceListRequest\x1a,.paladin.admin.v1.APITokenServiceListResponse\"\x03\x90\x02\x01\x12o\n" +
-	"\aGetSelf\x12..paladin.admin.v1.APITokenServiceGetSelfRequest\x1a/.paladin.admin.v1.APITokenServiceGetSelfResponse\"\x03\x90\x02\x01\x12r\n" +
-	"\bGetUsage\x12/.paladin.admin.v1.APITokenServiceGetUsageRequest\x1a0.paladin.admin.v1.APITokenServiceGetUsageResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"lastUsedAt2\xbf\x04\n" +
+	"\x0fAPITokenService\x12i\n" +
+	"\x06Create\x12..paladin.admin.v1.APITokenServiceCreateRequest\x1a/.paladin.admin.v1.APITokenServiceCreateResponse\x12n\n" +
+	"\x06Revoke\x12..paladin.admin.v1.APITokenServiceRevokeRequest\x1a/.paladin.admin.v1.APITokenServiceRevokeResponse\"\x03\x90\x02\x02\x12h\n" +
+	"\x04List\x12,.paladin.admin.v1.APITokenServiceListRequest\x1a-.paladin.admin.v1.APITokenServiceListResponse\"\x03\x90\x02\x01\x12q\n" +
+	"\aGetSelf\x12/.paladin.admin.v1.APITokenServiceGetSelfRequest\x1a0.paladin.admin.v1.APITokenServiceGetSelfResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\bGetUsage\x120.paladin.admin.v1.APITokenServiceGetUsageRequest\x1a1.paladin.admin.v1.APITokenServiceGetUsageResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_api_token_service_proto_rawDescOnce sync.Once

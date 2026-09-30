@@ -186,7 +186,7 @@ var File_paladin_common_v1_pagination_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_pagination_proto_rawDesc = "" +
 	"\n" +
-	"!paladin/common/v1/pagination.proto\x12\x10legate.common.v1\x1a\x1bbuf/validate/validate.proto\"U\n" +
+	"\"paladin/common/v1/pagination.proto\x12\x11paladin.common.v1\x1a\x1bbuf/validate/validate.proto\"U\n" +
 	"\vPageRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
@@ -199,7 +199,7 @@ const file_paladin_common_v1_pagination_proto_rawDesc = "" +
 	"\tSortOrder\x12\x1a\n" +
 	"\x16SORT_ORDER_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSORT_ORDER_ASC\x10\x01\x12\x13\n" +
-	"\x0fSORT_ORDER_DESC\x10\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
+	"\x0fSORT_ORDER_DESC\x10\x02BKZIgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_pagination_proto_rawDescOnce sync.Once

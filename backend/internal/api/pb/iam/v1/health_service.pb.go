@@ -394,7 +394,7 @@ var File_paladin_iam_v1_health_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\n" +
-	"\"paladin/iam/v1/health_service.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x13\n" +
+	"#paladin/iam/v1/health_service.proto\x12\x0epaladin.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x13\n" +
 	"\x11GetVersionRequest\"\x9e\x01\n" +
 	"\vVersionInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
@@ -403,31 +403,31 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"build_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tbuildTime\x12\x1d\n" +
 	"\n" +
 	"go_version\x18\x04 \x01(\tR\tgoVersion\"\x12\n" +
-	"\x10GetHealthRequest\"\xd3\x01\n" +
+	"\x10GetHealthRequest\"\xd4\x01\n" +
 	"\x0fComponentHealth\x12\x17\n" +
-	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x126\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1e.paladin.iam.v1.ComponentStatusR\x06status\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x127\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
 	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\x12\x1a\n" +
 	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x1a\n" +
-	"\bcritical\x18\x06 \x01(\bR\bcritical\"\x98\x01\n" +
+	"\bcritical\x18\x06 \x01(\bR\bcritical\"\x9a\x01\n" +
 	"\n" +
-	"HealthInfo\x126\n" +
-	"\x06status\x18\x01 \x01(\x0e2\x1e.paladin.iam.v1.ComponentStatusR\x06status\x12>\n" +
+	"HealthInfo\x127\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12?\n" +
 	"\n" +
-	"components\x18\x02 \x03(\v2\x1e.paladin.iam.v1.ComponentHealthR\n" +
+	"components\x18\x02 \x03(\v2\x1f.paladin.iam.v1.ComponentHealthR\n" +
 	"components\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role*\x90\x01\n" +
 	"\x0fComponentStatus\x12 \n" +
 	"\x1cCOMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n" +
 	"\x19COMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n" +
-	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x032\xae\x01\n" +
-	"\rHealthService\x12O\n" +
+	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x032\xb2\x01\n" +
+	"\rHealthService\x12Q\n" +
 	"\n" +
-	"GetVersion\x12 .paladin.iam.v1.GetVersionRequest\x1a\x1a.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12L\n" +
-	"\tGetHealth\x12\x1f.paladin.iam.v1.GetHealthRequest\x1a\x19.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01BCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"GetVersion\x12!.paladin.iam.v1.GetVersionRequest\x1a\x1b.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12N\n" +
+	"\tGetHealth\x12 .paladin.iam.v1.GetHealthRequest\x1a\x1a.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_health_service_proto_rawDescOnce sync.Once

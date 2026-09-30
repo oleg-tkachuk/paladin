@@ -508,52 +508,52 @@ var File_paladin_data_v1_object_tag_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_object_tag_service_proto_rawDesc = "" +
 	"\n" +
-	"'paladin/data/v1/object_tag_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a!paladin/common/v1/pagination.proto\"m\n" +
+	"(paladin/data/v1/object_tag_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\"n\n" +
 	"\x17ListDistinctTagsRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\xea\x01\n" +
-	"\x18ListDistinctTagsResponse\x12F\n" +
-	"\x04tags\x18\x01 \x03(\v22.paladin.data.v1.ListDistinctTagsResponse.TagsEntryR\x04tags\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\x1aR\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\xed\x01\n" +
+	"\x18ListDistinctTagsResponse\x12G\n" +
+	"\x04tags\x18\x01 \x03(\v23.paladin.data.v1.ListDistinctTagsResponse.TagsEntryR\x04tags\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\x1aS\n" +
 	"\tTagsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12/\n" +
-	"\x05value\x18\x02 \x01(\v2\x19.paladin.data.v1.TagValuesR\x05value:\x028\x01\"A\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.paladin.data.v1.TagValuesR\x05value:\x028\x01\"A\n" +
 	"\tTagValues\x12\x16\n" +
 	"\x06values\x18\x01 \x03(\tR\x06values\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"3\n" +
 	"\x14GetObjectTagsRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x95\x01\n" +
-	"\x15GetObjectTagsResponse\x12C\n" +
-	"\x04tags\x18\x01 \x03(\v2/.paladin.data.v1.GetObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x96\x01\n" +
+	"\x15GetObjectTagsResponse\x12D\n" +
+	"\x04tags\x18\x01 \x03(\v20.paladin.data.v1.GetObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe4\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x01\n" +
 	"\x14PutObjectTagsRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12B\n" +
-	"\x04tags\x18\x03 \x03(\v2..paladin.data.v1.PutObjectTagsRequest.TagsEntryR\x04tags\x1a7\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
+	"\x04tags\x18\x03 \x03(\v2/.paladin.data.v1.PutObjectTagsRequest.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
-	"\x15PutObjectTagsResponse\x12C\n" +
-	"\x04tags\x18\x01 \x03(\v2/.paladin.data.v1.PutObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x96\x01\n" +
+	"\x15PutObjectTagsResponse\x12D\n" +
+	"\x04tags\x18\x01 \x03(\v20.paladin.data.v1.PutObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"~\n" +
 	"\x17DeleteObjectTagsRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x12\n" +
-	"\x04keys\x18\x03 \x03(\tR\x04keys\"\x9b\x01\n" +
-	"\x18DeleteObjectTagsResponse\x12F\n" +
-	"\x04tags\x18\x01 \x03(\v22.paladin.data.v1.DeleteObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
+	"\x04keys\x18\x03 \x03(\tR\x04keys\"\x9c\x01\n" +
+	"\x18DeleteObjectTagsResponse\x12G\n" +
+	"\x04tags\x18\x01 \x03(\v23.paladin.data.v1.DeleteObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xb0\x03\n" +
-	"\x10ObjectTagService\x12a\n" +
-	"\rGetObjectTags\x12$.paladin.data.v1.GetObjectTagsRequest\x1a%.paladin.data.v1.GetObjectTagsResponse\"\x03\x90\x02\x01\x12a\n" +
-	"\rPutObjectTags\x12$.paladin.data.v1.PutObjectTagsRequest\x1a%.paladin.data.v1.PutObjectTagsResponse\"\x03\x90\x02\x02\x12j\n" +
-	"\x10DeleteObjectTags\x12'.paladin.data.v1.DeleteObjectTagsRequest\x1a(.paladin.data.v1.DeleteObjectTagsResponse\"\x03\x90\x02\x02\x12j\n" +
-	"\x10ListDistinctTags\x12'.paladin.data.v1.ListDistinctTagsRequest\x1a(.paladin.data.v1.ListDistinctTagsResponse\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xb8\x03\n" +
+	"\x10ObjectTagService\x12c\n" +
+	"\rGetObjectTags\x12%.paladin.data.v1.GetObjectTagsRequest\x1a&.paladin.data.v1.GetObjectTagsResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\rPutObjectTags\x12%.paladin.data.v1.PutObjectTagsRequest\x1a&.paladin.data.v1.PutObjectTagsResponse\"\x03\x90\x02\x02\x12l\n" +
+	"\x10DeleteObjectTags\x12(.paladin.data.v1.DeleteObjectTagsRequest\x1a).paladin.data.v1.DeleteObjectTagsResponse\"\x03\x90\x02\x02\x12l\n" +
+	"\x10ListDistinctTags\x12(.paladin.data.v1.ListDistinctTagsRequest\x1a).paladin.data.v1.ListDistinctTagsResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_tag_service_proto_rawDescOnce sync.Once

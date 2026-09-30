@@ -4,9 +4,9 @@
 # Pre-1.0 this project still breaks compatibility deliberately (see
 # docs/upgrading.md, "Changing the API contract"). This does not forbid that.
 # It forbids doing it by accident — the failure mode that already happened:
-# forty-five breaking changes accumulated in the four days after the paladin
-# rename, most of them field renames that keep the field number. gRPC clients
-# survive those. JSON clients do not. Nothing said so.
+# forty-five breaking changes accumulated in four days, most of them field
+# renames that keep the field number. gRPC clients survive those. JSON clients
+# do not. Nothing said so.
 #
 # Why it lives here and not only in CI: it ran for months in a workflow that
 # Actions never started on this account. A guard that only exists in a
@@ -25,7 +25,7 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 
 # The published API contract this tree must stay wire-compatible with.
-API_BASELINE_TAG=api/v0.9.0
+API_BASELINE_TAG=api/v0.10.0
 
 if ! command -v buf >/dev/null 2>&1; then
     {

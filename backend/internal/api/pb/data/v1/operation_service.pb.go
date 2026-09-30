@@ -236,25 +236,25 @@ var File_paladin_data_v1_operation_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
-	"&paladin/data/v1/operation_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a!paladin/common/v1/pagination.proto\x1a\"paladin/data/v1/batch_service.proto\"2\n" +
+	"'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x9e\x01\n" +
-	"\x15ListOperationsRequest\x121\n" +
-	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xa0\x01\n" +
+	"\x15ListOperationsRequest\x122\n" +
+	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
 	"\n" +
-	"sort_order\x18\x03 \x01(\x0e2\x1b.paladin.common.v1.SortOrderR\tsortOrder\"\x87\x01\n" +
-	"\x16ListOperationsResponse\x129\n" +
+	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"\x89\x01\n" +
+	"\x16ListOperationsResponse\x12:\n" +
 	"\n" +
-	"operations\x18\x01 \x03(\v2\x19.paladin.data.v1.OperationR\n" +
-	"operations\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"5\n" +
+	"operations\x18\x01 \x03(\v2\x1a.paladin.data.v1.OperationR\n" +
+	"operations\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xa8\x02\n" +
-	"\x10OperationService\x12S\n" +
-	"\fGetOperation\x12#.paladin.data.v1.GetOperationRequest\x1a\x19.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12d\n" +
-	"\x0eListOperations\x12%.paladin.data.v1.ListOperationsRequest\x1a&.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12Y\n" +
-	"\x0fCancelOperation\x12&.paladin.data.v1.CancelOperationRequest\x1a\x19.paladin.data.v1.Operation\"\x03\x90\x02\x02BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xae\x02\n" +
+	"\x10OperationService\x12U\n" +
+	"\fGetOperation\x12$.paladin.data.v1.GetOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12f\n" +
+	"\x0eListOperations\x12&.paladin.data.v1.ListOperationsRequest\x1a'.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n" +
+	"\x0fCancelOperation\x12'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_operation_service_proto_rawDescOnce sync.Once

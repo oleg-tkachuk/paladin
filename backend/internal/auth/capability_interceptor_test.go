@@ -20,13 +20,13 @@ func TestExtractCapabilityToken(t *testing.T) {
 		authz   string
 		want    string
 	}{
-		"x-paladin wins":        {xlegate: "tok-a", authz: "Capability tok-b", want: "tok-a"},
+		"x-paladin wins":       {xlegate: "tok-a", authz: "Capability tok-b", want: "tok-a"},
 		"authz capability":     {xlegate: "", authz: "Capability tok-b", want: "tok-b"},
 		"authz lowercase":      {xlegate: "", authz: "capability tok-b", want: "tok-b"},
 		"authz bearer ignored": {xlegate: "", authz: "Bearer tok-b", want: ""},
 		"authz malformed":      {xlegate: "", authz: "Capability", want: ""},
 		"authz empty":          {xlegate: "", authz: "", want: ""},
-		"x-paladin whitespace":  {xlegate: "  tok-c  ", authz: "", want: "tok-c"},
+		"x-paladin whitespace": {xlegate: "  tok-c  ", authz: "", want: "tok-c"},
 		"both empty":           {xlegate: "   ", authz: "", want: ""},
 	}
 	for name, tc := range cases {

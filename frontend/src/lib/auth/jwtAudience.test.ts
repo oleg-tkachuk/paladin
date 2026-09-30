@@ -20,18 +20,22 @@ describe("tokenMatchesPlane", () => {
   });
 
   it("accepts a token whose aud matches the plane", () => {
-    expect(tokenMatchesPlane(`Bearer ${jwt("paladin-admin")}`, "admin")).toBe(true);
+    expect(tokenMatchesPlane(`Bearer ${jwt("paladin-admin")}`, "admin")).toBe(
+      true,
+    );
     expect(tokenMatchesPlane(jwt("paladin-data"), "data")).toBe(true);
   });
 
   it("rejects a token aimed at the wrong plane (confused-deputy)", () => {
-    expect(tokenMatchesPlane(`Bearer ${jwt("paladin-data")}`, "admin")).toBe(false);
+    expect(tokenMatchesPlane(`Bearer ${jwt("paladin-data")}`, "admin")).toBe(
+      false,
+    );
   });
 
   it("supports aud as an array per RFC 7519", () => {
-    expect(tokenMatchesPlane(jwt(["paladin-iam", "paladin-admin"]), "admin")).toBe(
-      true,
-    );
+    expect(
+      tokenMatchesPlane(jwt(["paladin-iam", "paladin-admin"]), "admin"),
+    ).toBe(true);
   });
 
   it("rejects a malformed token", () => {

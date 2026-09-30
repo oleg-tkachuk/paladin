@@ -563,34 +563,34 @@ var File_paladin_admin_v1_collection_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/collection_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\xbb\x01\n" +
+	")paladin/admin/v1/collection_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xbc\x01\n" +
 	"\x17CreateCollectionRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12)\n" +
 	"\n" +
 	"collection\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18?R\n" +
-	"collection\x12T\n" +
-	"\x13collection_resource\x18\x03 \x01(\v2\x1b.paladin.admin.v1.CollectionB\x06\xbaH\x03\xc8\x01\x01R\x12collectionResource\"3\n" +
+	"collection\x12U\n" +
+	"\x13collection_resource\x18\x03 \x01(\v2\x1c.paladin.admin.v1.CollectionB\x06\xbaH\x03\xc8\x01\x01R\x12collectionResource\"3\n" +
 	"\x14GetCollectionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfd\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfe\x01\n" +
 	"\x17UpdateCollectionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateMask\x12L\n" +
-	"\x13collection_resource\x18\x04 \x01(\v2\x1b.paladin.admin.v1.CollectionR\x12collectionResource\"\x8f\x01\n" +
+	"updateMask\x12M\n" +
+	"\x13collection_resource\x18\x04 \x01(\v2\x1c.paladin.admin.v1.CollectionR\x12collectionResource\"\x8f\x01\n" +
 	"\x17DeleteCollectionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12,\n" +
 	"\x12skip_version_check\x18\x03 \x01(\bR\x10skipVersionCheck\"\x1a\n" +
-	"\x18DeleteCollectionResponse\"\x93\x01\n" +
+	"\x18DeleteCollectionResponse\"\x94\x01\n" +
 	"\x16ListCollectionsRequest\x12\x16\n" +
-	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06parent\x18\x01 \x01(\tR\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12\x16\n" +
-	"\x06bucket\x18\x04 \x01(\tR\x06bucket\"\x8c\x01\n" +
-	"\x17ListCollectionsResponse\x12=\n" +
-	"\vcollections\x18\x01 \x03(\v2\x1b.paladin.admin.v1.CollectionR\vcollections\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x90\x01\n" +
+	"\x06bucket\x18\x04 \x01(\tR\x06bucket\"\x8e\x01\n" +
+	"\x17ListCollectionsResponse\x12>\n" +
+	"\vcollections\x18\x01 \x03(\v2\x1c.paladin.admin.v1.CollectionR\vcollections\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\x90\x01\n" +
 	"\x1aSetCollectionPolicyRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12!\n" +
@@ -598,15 +598,15 @@ const file_paladin_admin_v1_collection_service_proto_rawDesc = "" +
 	"\x1dBindCollectionToBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x1f\n" +
-	"\x06bucket\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket2\xd3\x05\n" +
-	"\x11CollectionService\x12Y\n" +
-	"\x10CreateCollection\x12(.paladin.admin.v1.CreateCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\x12X\n" +
-	"\rGetCollection\x12%.paladin.admin.v1.GetCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\"\x03\x90\x02\x01\x12^\n" +
-	"\x10UpdateCollection\x12(.paladin.admin.v1.UpdateCollectionRequest\x1a\x1b.paladin.admin.v1.Collection\"\x03\x90\x02\x02\x12l\n" +
-	"\x10DeleteCollection\x12(.paladin.admin.v1.DeleteCollectionRequest\x1a).paladin.admin.v1.DeleteCollectionResponse\"\x03\x90\x02\x02\x12i\n" +
-	"\x0fListCollections\x12'.paladin.admin.v1.ListCollectionsRequest\x1a(.paladin.admin.v1.ListCollectionsResponse\"\x03\x90\x02\x01\x12d\n" +
-	"\x13SetCollectionPolicy\x12+.paladin.admin.v1.SetCollectionPolicyRequest\x1a\x1b.paladin.admin.v1.Collection\"\x03\x90\x02\x02\x12j\n" +
-	"\x16BindCollectionToBucket\x12..paladin.admin.v1.BindCollectionToBucketRequest\x1a\x1b.paladin.admin.v1.Collection\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x06bucket\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket2\xe1\x05\n" +
+	"\x11CollectionService\x12[\n" +
+	"\x10CreateCollection\x12).paladin.admin.v1.CreateCollectionRequest\x1a\x1c.paladin.admin.v1.Collection\x12Z\n" +
+	"\rGetCollection\x12&.paladin.admin.v1.GetCollectionRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x01\x12`\n" +
+	"\x10UpdateCollection\x12).paladin.admin.v1.UpdateCollectionRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x02\x12n\n" +
+	"\x10DeleteCollection\x12).paladin.admin.v1.DeleteCollectionRequest\x1a*.paladin.admin.v1.DeleteCollectionResponse\"\x03\x90\x02\x02\x12k\n" +
+	"\x0fListCollections\x12(.paladin.admin.v1.ListCollectionsRequest\x1a).paladin.admin.v1.ListCollectionsResponse\"\x03\x90\x02\x01\x12f\n" +
+	"\x13SetCollectionPolicy\x12,.paladin.admin.v1.SetCollectionPolicyRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x02\x12l\n" +
+	"\x16BindCollectionToBucket\x12/.paladin.admin.v1.BindCollectionToBucketRequest\x1a\x1c.paladin.admin.v1.Collection\"\x03\x90\x02\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_collection_service_proto_rawDescOnce sync.Once

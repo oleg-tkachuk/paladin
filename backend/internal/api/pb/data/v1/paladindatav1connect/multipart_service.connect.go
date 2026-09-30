@@ -72,10 +72,10 @@ type MultipartUploadServiceClient interface {
 	ListParts(context.Context, *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error)
 }
 
-// NewMultipartUploadServiceClient constructs a client for the paladin.data.v1.MultipartUploadService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+// NewMultipartUploadServiceClient constructs a client for the
+// paladin.data.v1.MultipartUploadService service. By default, it uses the Connect protocol with the
+// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
+// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).

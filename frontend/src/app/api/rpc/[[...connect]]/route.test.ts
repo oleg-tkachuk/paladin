@@ -37,7 +37,8 @@ function rpc(
   });
 }
 
-const BUCKET_CREATE = "/api/rpc/admin/paladin.admin.v1.BucketService/CreateBucket";
+const BUCKET_CREATE =
+  "/api/rpc/admin/paladin.admin.v1.BucketService/CreateBucket";
 const BUCKET_LIST = "/api/rpc/admin/paladin.admin.v1.BucketService/ListBuckets";
 
 describe("BFF /api/rpc router", () => {

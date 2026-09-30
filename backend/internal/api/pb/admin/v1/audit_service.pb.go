@@ -232,22 +232,22 @@ var File_paladin_admin_v1_audit_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_audit_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/admin/v1/audit_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a'paladin/admin/v1/operation_service.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"`\n" +
-	"\x13ListAuditLogRequest\x121\n" +
-	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x84\x01\n" +
-	"\x14ListAuditLogResponse\x128\n" +
-	"\aentries\x18\x01 \x03(\v2\x1e.paladin.admin.v1.AuditLogEntryR\aentries\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"=\n" +
+	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"a\n" +
+	"\x13ListAuditLogRequest\x122\n" +
+	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x86\x01\n" +
+	"\x14ListAuditLogResponse\x129\n" +
+	"\aentries\x18\x01 \x03(\v2\x1f.paladin.admin.v1.AuditLogEntryR\aentries\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"=\n" +
 	"\x17GetAuditLogEntryRequest\x12\"\n" +
 	"\bentry_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aentryId\"Z\n" +
 	"\x15ExportAuditLogRequest\x12\x16\n" +
 	"\x06filter\x18\x01 \x01(\tR\x06filter\x12)\n" +
-	"\vdestination\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdestination2\xb1\x02\n" +
-	"\x0fAuditLogService\x12`\n" +
-	"\fListAuditLog\x12$.paladin.admin.v1.ListAuditLogRequest\x1a%.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12a\n" +
-	"\x10GetAuditLogEntry\x12(.paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1e.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12Y\n" +
-	"\x0eExportAuditLog\x12&.paladin.admin.v1.ExportAuditLogRequest\x1a\x1a.paladin.admin.v1.Operation\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\vdestination\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdestination2\xb7\x02\n" +
+	"\x0fAuditLogService\x12b\n" +
+	"\fListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n" +
+	"\x0eExportAuditLog\x12'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_audit_service_proto_rawDescOnce sync.Once

@@ -573,7 +573,7 @@ var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescripto
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\n" +
-	"+paladin/admin/v1/tenant_budget_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xa0\x03\n" +
+	",paladin/admin/v1/tenant_budget_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xa0\x03\n" +
 	"\fTenantBudget\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12)\n" +
 	"\x10resource_version\x18\b \x01(\tR\x0fresourceVersion\x12:\n" +
@@ -586,9 +586,9 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12\x1b\n" +
 	"\tunit_code\x18\a \x01(\tR\bunitCode\"F\n" +
 	"\x1dTenantBudgetServiceGetRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"W\n" +
-	"\x1eTenantBudgetServiceGetResponse\x125\n" +
-	"\x06budget\x18\x01 \x01(\v2\x1d.paladin.admin.v1.TenantBudgetR\x06budget\"\xaf\x02\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"X\n" +
+	"\x1eTenantBudgetServiceGetResponse\x126\n" +
+	"\x06budget\x18\x01 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\"\xaf\x02\n" +
 	"\x1dTenantBudgetServiceSetRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x122\n" +
 	"\x10resource_version\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12:\n" +
@@ -597,27 +597,27 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"resetSpend\x129\n" +
 	"\n" +
 	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12\x1b\n" +
-	"\tunit_code\x18\x05 \x01(\tR\bunitCode\"W\n" +
-	"\x1eTenantBudgetServiceSetResponse\x125\n" +
-	"\x06budget\x18\x01 \x01(\v2\x1d.paladin.admin.v1.TenantBudgetR\x06budget\"\xc9\x01\n" +
+	"\tunit_code\x18\x05 \x01(\tR\bunitCode\"X\n" +
+	"\x1eTenantBudgetServiceSetResponse\x126\n" +
+	"\x06budget\x18\x01 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\"\xca\x01\n" +
 	"\x13TenantBudgetSummary\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12!\n" +
-	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x125\n" +
-	"\x06budget\x18\x04 \x01(\v2\x1d.paladin.admin.v1.TenantBudgetR\x06budget\x12'\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x126\n" +
+	"\x06budget\x18\x04 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\x12'\n" +
 	"\x0futilisation_pct\x18\x05 \x01(\x01R\x0eutilisationPct\"\xd7\x01\n" +
 	"#TenantBudgetServiceSummarizeRequest\x12<\n" +
 	"\rthreshold_pct\x18\x01 \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00Y@)\x00\x00\x00\x00\x00\x00\x00\x00R\fthresholdPct\x12%\n" +
 	"\x0eunlimited_only\x18\x02 \x01(\bR\runlimitedOnly\x12)\n" +
 	"\x10exclude_inactive\x18\x03 \x01(\bR\x0fexcludeInactive\x12 \n" +
 	"\x05limit\x18\x04 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x05limit\"j\n" +
-	"$TenantBudgetServiceSummarizeResponse\x12B\n" +
-	"\tsummaries\x18\x01 \x03(\v2$.paladin.admin.v1.TenantBudgetSummaryR\tsummaries2\xee\x02\n" +
-	"\x13TenantBudgetService\x12k\n" +
-	"\x03Get\x12..paladin.admin.v1.TenantBudgetServiceGetRequest\x1a/.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12k\n" +
-	"\x03Set\x12..paladin.admin.v1.TenantBudgetServiceSetRequest\x1a/.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12}\n" +
-	"\tSummarize\x124.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a5.paladin.admin.v1.TenantBudgetServiceSummarizeResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x05limit\"k\n" +
+	"$TenantBudgetServiceSummarizeResponse\x12C\n" +
+	"\tsummaries\x18\x01 \x03(\v2%.paladin.admin.v1.TenantBudgetSummaryR\tsummaries2\xf4\x02\n" +
+	"\x13TenantBudgetService\x12m\n" +
+	"\x03Get\x12/.paladin.admin.v1.TenantBudgetServiceGetRequest\x1a0.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12m\n" +
+	"\x03Set\x12/.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a0.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12\x7f\n" +
+	"\tSummarize\x125.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a6.paladin.admin.v1.TenantBudgetServiceSummarizeResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_tenant_budget_service_proto_rawDescOnce sync.Once

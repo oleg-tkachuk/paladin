@@ -654,14 +654,14 @@ var File_paladin_iam_v1_user_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\n" +
-	" paladin/iam/v1/user_service.proto\x12\rlegate.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1clegate/common/v1/scope.proto\x1a\x19legate/iam/v1/types.proto\"\xec\x01\n" +
+	"!paladin/iam/v1/user_service.proto\x12\x0epaladin.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1dpaladin/common/v1/scope.proto\x1a\x1apaladin/iam/v1/types.proto\"\xed\x01\n" +
 	"\x11CreateUserRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x12!\n" +
 	"\asubject\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x122\n" +
 	"\x10initial_password\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\fR\x0finitialPassword\x12\x14\n" +
-	"\x05roles\x18\x05 \x03(\tR\x05roles\x12/\n" +
-	"\x06scopes\x18\x06 \x03(\v2\x17.paladin.common.v1.ScopeR\x06scopes\"-\n" +
+	"\x05roles\x18\x05 \x03(\tR\x05roles\x120\n" +
+	"\x06scopes\x18\x06 \x03(\v2\x18.paladin.common.v1.ScopeR\x06scopes\"-\n" +
 	"\x0eGetUserRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfe\x01\n" +
 	"\x11UpdateUserRequest\x12\x1b\n" +
@@ -675,37 +675,37 @@ const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\x11DeleteUserRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x14\n" +
-	"\x12DeleteUserResponse\"u\n" +
+	"\x12DeleteUserResponse\"v\n" +
 	"\x10ListUsersRequest\x12\x16\n" +
-	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"r\n" +
-	"\x11ListUsersResponse\x12)\n" +
-	"\x05users\x18\x01 \x03(\v2\x13.paladin.iam.v1.UserR\x05users\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"l\n" +
+	"\x06parent\x18\x01 \x01(\tR\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\"t\n" +
+	"\x11ListUsersResponse\x12*\n" +
+	"\x05users\x18\x01 \x03(\v2\x14.paladin.iam.v1.UserR\x05users\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"m\n" +
 	"\x12GrantScopesRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x129\n" +
-	"\x06scopes\x18\x02 \x03(\v2\x17.paladin.common.v1.ScopeB\b\xbaH\x05\x92\x01\x02\b\x01R\x06scopes\"m\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12:\n" +
+	"\x06scopes\x18\x02 \x03(\v2\x18.paladin.common.v1.ScopeB\b\xbaH\x05\x92\x01\x02\b\x01R\x06scopes\"n\n" +
 	"\x13RevokeScopesRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x129\n" +
-	"\x06scopes\x18\x02 \x03(\v2\x17.paladin.common.v1.ScopeB\b\xbaH\x05\x92\x01\x02\b\x01R\x06scopes\"V\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12:\n" +
+	"\x06scopes\x18\x02 \x03(\v2\x18.paladin.common.v1.ScopeB\b\xbaH\x05\x92\x01\x02\b\x01R\x06scopes\"V\n" +
 	"\x14ResetPasswordRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"F\n" +
 	"\x15ResetPasswordResponse\x12-\n" +
-	"\x12generated_password\x18\x01 \x01(\tR\x11generatedPassword2\x88\x05\n" +
-	"\vUserService\x12C\n" +
+	"\x12generated_password\x18\x01 \x01(\tR\x11generatedPassword2\x98\x05\n" +
+	"\vUserService\x12E\n" +
 	"\n" +
-	"CreateUser\x12 .paladin.iam.v1.CreateUserRequest\x1a\x13.paladin.iam.v1.User\x12B\n" +
-	"\aGetUser\x12\x1d.paladin.iam.v1.GetUserRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x01\x12H\n" +
+	"CreateUser\x12!.paladin.iam.v1.CreateUserRequest\x1a\x14.paladin.iam.v1.User\x12D\n" +
+	"\aGetUser\x12\x1e.paladin.iam.v1.GetUserRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x01\x12J\n" +
 	"\n" +
-	"UpdateUser\x12 .paladin.iam.v1.UpdateUserRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x02\x12V\n" +
+	"UpdateUser\x12!.paladin.iam.v1.UpdateUserRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12X\n" +
 	"\n" +
-	"DeleteUser\x12 .paladin.iam.v1.DeleteUserRequest\x1a!.paladin.iam.v1.DeleteUserResponse\"\x03\x90\x02\x02\x12S\n" +
-	"\tListUsers\x12\x1f.paladin.iam.v1.ListUsersRequest\x1a .paladin.iam.v1.ListUsersResponse\"\x03\x90\x02\x01\x12J\n" +
-	"\vGrantScopes\x12!.paladin.iam.v1.GrantScopesRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x02\x12L\n" +
-	"\fRevokeScopes\x12\".paladin.iam.v1.RevokeScopesRequest\x1a\x13.paladin.iam.v1.User\"\x03\x90\x02\x02\x12_\n" +
-	"\rResetPassword\x12#.paladin.iam.v1.ResetPasswordRequest\x1a$.paladin.iam.v1.ResetPasswordResponse\"\x03\x90\x02\x02BCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"DeleteUser\x12!.paladin.iam.v1.DeleteUserRequest\x1a\".paladin.iam.v1.DeleteUserResponse\"\x03\x90\x02\x02\x12U\n" +
+	"\tListUsers\x12 .paladin.iam.v1.ListUsersRequest\x1a!.paladin.iam.v1.ListUsersResponse\"\x03\x90\x02\x01\x12L\n" +
+	"\vGrantScopes\x12\".paladin.iam.v1.GrantScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12N\n" +
+	"\fRevokeScopes\x12#.paladin.iam.v1.RevokeScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12a\n" +
+	"\rResetPassword\x12$.paladin.iam.v1.ResetPasswordRequest\x1a%.paladin.iam.v1.ResetPasswordResponse\"\x03\x90\x02\x02BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_user_service_proto_rawDescOnce sync.Once

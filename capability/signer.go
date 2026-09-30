@@ -131,12 +131,12 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 
 	header := jwtHeader{Alg: "EdDSA", Kid: s.keyID, Typ: "paladin-cap+jwt"}
 	claims := jwtClaims{
-		Issuer:          c.Issuer,
-		Subject:         c.Subject.Subject,
-		Audience:        c.Audience,
-		IssuedAt:        c.IssuedAt.Unix(),
-		ExpiresAt:       c.ExpiresAt.Unix(),
-		ID:              c.ID.String(),
+		Issuer:           c.Issuer,
+		Subject:          c.Subject.Subject,
+		Audience:         c.Audience,
+		IssuedAt:         c.IssuedAt.Unix(),
+		ExpiresAt:        c.ExpiresAt.Unix(),
+		ID:               c.ID.String(),
 		PaladinPrincipal: &c.Subject,
 		PaladinCaveats:   c.Caveats,
 		PaladinGen:       c.Generation,

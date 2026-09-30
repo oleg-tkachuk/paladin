@@ -699,48 +699,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Trigger to do:** customer ask — banking / fintech enterprise already
   running a RabbitMQ cluster as their event bus.
 
-### NATS auth: NKey / JWT support — broker-side (gitops)
-
-- **Status:** Partially done — the Paladin-side (client) half shipped 2026-06-29.
-  The remaining work is **broker-side** (enable auth on the NATS broker), which
-  lives in gitops (separate repo). Two client-side surfaces publish to that
-  broker unauthenticated today: the Paladin dispatcher NATS sink **and** the
-  SeaweedFS filer→NATS publisher — both verified live 2026-07-05 (see below).
-- **Correction (2026-07-05):** an earlier revision of this entry claimed the
-  SeaweedFS-publisher leg was *moot because the cluster moved to Garage*. That
-  was wrong. Garage became the `primary` backend, but SeaweedFS is still
-  deployed as **`secondary`** (`seaweedfs-filer.storage:8333`) with its
-  `gocdk_pub_sub` publisher active, and the full SF→NATS→Paladin ingest pipeline is
-  live. The "Garage" move was a `primary`-pointer change, not an SF teardown.
-- **Shipped (this repo):** the outbound `Dispatcher` → NATS sink supports NKey /
-  JWT. `NatsSink.credentials_ref` honours `token:`, `nkey:<seed>` (in-memory
-  `nats.Nkey` via `nkeys.FromSeed`) and `jwt:<jwt>+<seed>` (in-memory
-  `nats.UserJWTAndSeed`) — no temp-file materialisation. Covered by
-  embedded-server auth round-trip tests per scheme (nkey + decentralized JWT).
-  This is client-side only: it has nothing to authenticate against until the
-  broker itself requires auth (the lab `nats` chart runs auth-free, and there is
-  no NATS broker chart in this repo).
-- **Still unauthenticated (both live in the lab cluster):**
-  - **SeaweedFS filer publisher** — `notification.toml`
-    `[notification.gocdk_pub_sub] topic_url = "nats://seaweedfs.filer"`, dialing
-    `NATS_SERVER_URL=nats://nats.nats.svc.cluster.local:4222` with no
-    credentials (gocloud.dev's natspubsub driver surfaces no auth fields). Fires
-    on every filer write; Paladin ingest consumes on subject `seaweedfs.filer`.
-  - **The broker itself** — the gitops `nats` chart runs auth-free, so the
-    dispatcher's shipped NKey/JWT support has nothing to authenticate against.
-- **Definition of Done (remaining — all gitops / out of this repo):**
-  - Enable NKey/JWT on the NATS broker deployment (gitops's `nats` chart).
-  - Give the SF filer credentials for the authed broker: `NATS_SERVER_URL`
-    carries them as `nats://<token>@host:port` (simplest flavour) via a
-    Kubernetes `Secret`, since gocloud.dev exposes no structured auth fields.
-  - Document the credential-rotation flow. Deferred **with** the broker change,
-    not before it — a rotation runbook for a scheme the broker doesn't yet
-    enforce would drift.
-- **Trigger to do:** before any non-lab deployment — both the dispatcher sink
-  and the SF publisher fan events into an unauthenticated broker, so a stolen
-  Pod identity could publish arbitrary events. Fine for the lab (NATS has no
-  exposed ingress, cluster-network only).
-
 ### Storage event ingest pipeline — JetStream upgrade + integration coverage
 
 - **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
@@ -1664,46 +1622,6 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
-### SealedSecrets for prod-class clusters
-
-- **Status:** This-repo half SHIPPED (2026-07-01) — only the gitops
-  controller install + the SealedSecrets-vs-Vault decision remain.
-- **Shipped:** the chart already references pre-existing Secrets (the
-  SealedSecrets contract). Closed the two gaps where a `*_secret` /
-  `*_ref` field existed but the resolver never walked it, so a
-  SealedSecret-backed prod deploy would have booted with an empty value:
-  `K8sSecretResolver` now resolves `auth.signing_key_secret` (the JWT HMAC
-  key) and `ingest.webhook.shared_secret_ref` (the storage-event webhook
-  HMAC). `values.yaml` documents both SecretRef options and pre-allowlists
-  their default names in `rbac.secretReader.secretNames`;
-  `values-prod.yaml` moves the signing key off the inline placeholder onto
-  `signing_key_secret`. `docs/security.md` §5 gained a `kubeseal --raw`
-  runbook (strict-scoped per namespace+name) covering the signing key +
-  webhook HMAC. Resolver tests pin both new resolutions.
-- **Definition of Done (remaining):**
-  - SealedSecrets controller installed via gitops (out of this repo).
-  - The sealed YAML for each secret lives in gitops alongside the
-    ApplicationSet.
-- **Blockers:** decision between SealedSecrets vs external-secrets with
-  Vault — an org call that gates the controller install.
-
----
-
-## Architecture (post-review 2026-06)
-
-_Context: full-codebase architecture audit on 2026-06-11 (backend,
-frontend, infra). Items the audit surfaced that aren't already covered
-elsewhere in this file. Handler-level tracing/metrics intentionally has
-no entry here — it shipped as [ADR-0001](docs/adr/0001-otel-observability-baseline.md)
-(traces + RED metrics + log↔trace correlation)._
-
-## CI / Delivery pipeline
-
-_Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)
-mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
-gitleaks, trivy-fs). The items below are the deliberately deferred rest
-of the pipeline._
-
 ### `collections-crud › deleting a Collection removes it` is flaky in CI
 
 - **Status:** Open — one attempt made and reverted 2026-09-10; the flake stands.
@@ -1794,35 +1712,6 @@ of the pipeline._
   that: a workflow step nobody can execute is unverified code, and this
   repository has already shipped one of those (a Helm `ternary` that rendered
   everywhere except the one overlay that mattered).
-
----
-
-### The console's ConfigMap outlived what read it
-
-- **Status:** Deferred (the code side is done; what is left needs a repository
-  this session was told not to touch). Surfaced 2026-09-10.
-- **What was removed:** `paladin`, `oidc` and `auth` from the console's config
-  schema, the chart's own values files, and `PALADIN_GRPC_URL` from
-  next.config.ts. None of it was read by any code. `oidc.authority` /
-  `clientId` described a browser-side OIDC flow that never landed — there is no
-  OIDC client library in the bundle, and the console authenticates through the
-  backend's IAM plane — and `PALADIN_GRPC_URL` was written in one place and read
-  in none, in either repository.
-- **Reason it is not finished:** the chart still renders a ConfigMap from
-  `config:` (now `{}`), and `values.schema.json` still accepts the three removed
-  subtrees, because the ArgoCD overlay in `gitops` sets two of them and mounts
-  the ConfigMap at `/app/configs`. Dropping either would refuse that overlay and
-  leave the app `Unknown` in ArgoCD — the exact failure the values schema caused
-  when it first shipped. The schema marks them "accepted and ignored".
-- **Definition of Done:** the overlay stops setting `config.runtimeConfig.public`
-  and stops mounting the ConfigMap; then the ConfigMap template, the `config:`
-  key, its schema subtree and the loader's cluster search path all go.
-- **Worth knowing while it lasts:** the overlay ships a live dev JWT in
-  `config.runtimeConfig.public.auth.devToken`, so it sits in a ConfigMap in the
-  cluster. Nothing reads it — the console's bearer comes from
-  `localStorage.paladin_token`. The chart comment claiming the value "is served
-  to the browser" was describing a path that does not exist.
-- **Blockers:** a change in `gitops`, which is not this repository.
 
 ---
 

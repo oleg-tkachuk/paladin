@@ -187,22 +187,22 @@ var File_paladin_admin_v1_quota_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_quota_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/admin/v1/quota_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\".\n" +
+	"$paladin/admin/v1/quota_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\".\n" +
 	"\x0fGetQuotaRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdd\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xde\x01\n" +
 	"\x0fSetQuotaRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateMask\x124\n" +
-	"\x05quota\x18\x04 \x01(\v2\x16.paladin.admin.v1.QuotaB\x06\xbaH\x03\xc8\x01\x01R\x05quota\"0\n" +
+	"updateMask\x125\n" +
+	"\x05quota\x18\x04 \x01(\v2\x17.paladin.admin.v1.QuotaB\x06\xbaH\x03\xc8\x01\x01R\x05quota\"0\n" +
 	"\x11ResetUsageRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xf3\x01\n" +
-	"\fQuotaService\x12I\n" +
-	"\bGetQuota\x12 .paladin.admin.v1.GetQuotaRequest\x1a\x16.paladin.admin.v1.Quota\"\x03\x90\x02\x01\x12I\n" +
-	"\bSetQuota\x12 .paladin.admin.v1.SetQuotaRequest\x1a\x16.paladin.admin.v1.Quota\"\x03\x90\x02\x02\x12M\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xf9\x01\n" +
+	"\fQuotaService\x12K\n" +
+	"\bGetQuota\x12!.paladin.admin.v1.GetQuotaRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x01\x12K\n" +
+	"\bSetQuota\x12!.paladin.admin.v1.SetQuotaRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x02\x12O\n" +
 	"\n" +
-	"ResetUsage\x12\".paladin.admin.v1.ResetUsageRequest\x1a\x16.paladin.admin.v1.Quota\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"ResetUsage\x12#.paladin.admin.v1.ResetUsageRequest\x1a\x17.paladin.admin.v1.Quota\"\x03\x90\x02\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_quota_service_proto_rawDescOnce sync.Once

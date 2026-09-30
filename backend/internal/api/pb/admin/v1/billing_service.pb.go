@@ -431,20 +431,20 @@ var File_paladin_admin_v1_billing_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/billing_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xba\x01\n" +
+	"&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xba\x01\n" +
 	"\x17GetTenantSummaryRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
-	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xdd\x02\n" +
+	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xe0\x02\n" +
 	"\x18GetTenantSummaryResponse\x12!\n" +
 	"\ftotal_amount\x18\x01 \x01(\x01R\vtotalAmount\x12\x1b\n" +
 	"\tunit_code\x18\x02 \x01(\tR\bunitCode\x12*\n" +
-	"\x11max_budget_amount\x18\x03 \x01(\x01R\x0fmaxBudgetAmount\x12D\n" +
-	"\x10top_capabilities\x18\x04 \x03(\v2\x19.paladin.admin.v1.TopEntryR\x0ftopCapabilities\x128\n" +
+	"\x11max_budget_amount\x18\x03 \x01(\x01R\x0fmaxBudgetAmount\x12E\n" +
+	"\x10top_capabilities\x18\x04 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x0ftopCapabilities\x129\n" +
 	"\n" +
-	"top_actors\x18\x05 \x03(\v2\x19.paladin.admin.v1.TopEntryR\ttopActors\x122\n" +
-	"\atop_ops\x18\x06 \x03(\v2\x19.paladin.admin.v1.TopEntryR\x06topOps\x12!\n" +
+	"top_actors\x18\x05 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\ttopActors\x123\n" +
+	"\atop_ops\x18\x06 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x06topOps\x12!\n" +
 	"\fcharge_count\x18\a \x01(\x03R\vchargeCount\"[\n" +
 	"\bTopEntry\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
@@ -455,18 +455,18 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
 	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12 \n" +
-	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"q\n" +
-	"\x1bGetTenantTimeSeriesResponse\x125\n" +
-	"\abuckets\x18\x01 \x03(\v2\x1b.paladin.admin.v1.TimeBucketR\abuckets\x12\x1b\n" +
+	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"r\n" +
+	"\x1bGetTenantTimeSeriesResponse\x126\n" +
+	"\abuckets\x18\x01 \x03(\v2\x1c.paladin.admin.v1.TimeBucketR\abuckets\x12\x1b\n" +
 	"\tunit_code\x18\x02 \x01(\tR\bunitCode\"~\n" +
 	"\n" +
 	"TimeBucket\x125\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\x01R\x06amount\x12!\n" +
-	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount2\xf5\x01\n" +
-	"\x0eBillingService\x12l\n" +
-	"\x10GetTenantSummary\x12(.paladin.admin.v1.GetTenantSummaryRequest\x1a).paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12u\n" +
-	"\x13GetTenantTimeSeries\x12+.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a,.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount2\xf9\x01\n" +
+	"\x0eBillingService\x12n\n" +
+	"\x10GetTenantSummary\x12).paladin.admin.v1.GetTenantSummaryRequest\x1a*.paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12w\n" +
+	"\x13GetTenantTimeSeries\x12,.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a-.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_billing_service_proto_rawDescOnce sync.Once

@@ -179,7 +179,7 @@ func TestKindFromType(t *testing.T) {
 		{"paladin.quota.set", "quota"},
 		{"paladin.backend.credentials_rotated", "backend"},
 		{"paladin.audit.login", "audit"},
-		{"object.created", ""},      // legacy 2-segment, non-canonical
+		{"object.created", ""},       // legacy 2-segment, non-canonical
 		{"paladin.object", ""},       // no verb segment
 		{"paladin.", ""},             // empty kind
 		{"not.paladin.prefixed", ""}, // wrong prefix
@@ -245,8 +245,8 @@ func TestBucketFromResourceName(t *testing.T) {
 	}{
 		{"storageBackends/primary/buckets/paladin-primary/tenants/t/collections/inv/objects-by-key/k", "paladin-primary"},
 		{"storageBackends/primary/buckets/paladin-primary", "paladin-primary"}, // bucket-lifecycle event
-		{"tenants/t/collections/inv/objects-by-key/k", ""},                   // C-shape: no bucket
-		{"tenants/019f26db-31d0-71ec-9b25-4b3f8636791a", ""},                 // tenant event
+		{"tenants/t/collections/inv/objects-by-key/k", ""},                     // C-shape: no bucket
+		{"tenants/019f26db-31d0-71ec-9b25-4b3f8636791a", ""},                   // tenant event
 		{"", ""},
 	}
 	for _, tc := range cases {

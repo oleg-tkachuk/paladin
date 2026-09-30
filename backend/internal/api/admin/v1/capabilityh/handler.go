@@ -17,8 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"github.com/jackc/pgx/v5"
 

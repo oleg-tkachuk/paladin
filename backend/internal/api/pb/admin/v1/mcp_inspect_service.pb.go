@@ -949,12 +949,12 @@ var File_paladin_admin_v1_mcp_inspect_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\n" +
-	")paladin/admin/v1/mcp_inspect_service.proto\x12\x0flegate.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x18\n" +
-	"\x16GetBridgeStatusRequest\"\xff\x01\n" +
+	"*paladin/admin/v1/mcp_inspect_service.proto\x12\x10paladin.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x18\n" +
+	"\x16GetBridgeStatusRequest\"\x80\x02\n" +
 	"\x17GetBridgeStatusResponse\x12!\n" +
 	"\treachable\x18\x01 \x01(\bB\x03\xe0A\x03R\treachable\x12\x19\n" +
-	"\x05error\x18\x02 \x01(\tB\x03\xe0A\x03R\x05error\x12E\n" +
-	"\tupstreams\x18\x03 \x03(\v2\".paladin.admin.v1.MCPUpstreamHealthB\x03\xe0A\x03R\tupstreams\x12\x1f\n" +
+	"\x05error\x18\x02 \x01(\tB\x03\xe0A\x03R\x05error\x12F\n" +
+	"\tupstreams\x18\x03 \x03(\v2#.paladin.admin.v1.MCPUpstreamHealthB\x03\xe0A\x03R\tupstreams\x12\x1f\n" +
 	"\bsessions\x18\x04 \x01(\x05B\x03\xe0A\x03R\bsessions\x12>\n" +
 	"\n" +
 	"checked_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcheckedAt\"\xa5\x01\n" +
@@ -965,12 +965,12 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\x05error\x18\x04 \x01(\tB\x03\xe0A\x03R\x05error\x12\"\n" +
 	"\n" +
 	"latency_ms\x18\x05 \x01(\x03B\x03\xe0A\x03R\tlatencyMs\"\x13\n" +
-	"\x11MCPInspectRequest\"H\n" +
-	"\x13ListSessionsRequest\x121\n" +
-	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\x83\x01\n" +
-	"\x14ListSessionsResponse\x127\n" +
-	"\bsessions\x18\x01 \x03(\v2\x1b.paladin.admin.v1.MCPSessionR\bsessions\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\xa0\x02\n" +
+	"\x11MCPInspectRequest\"I\n" +
+	"\x13ListSessionsRequest\x122\n" +
+	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x85\x01\n" +
+	"\x14ListSessionsResponse\x128\n" +
+	"\bsessions\x18\x01 \x03(\v2\x1c.paladin.admin.v1.MCPSessionR\bsessions\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\xa0\x02\n" +
 	"\n" +
 	"MCPSession\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12(\n" +
@@ -979,15 +979,15 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tstartedAt\x12<\n" +
 	"\tlast_seen\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\blastSeen\x12+\n" +
 	"\x0ftool_call_count\x18\x05 \x01(\x03B\x03\xe0A\x03R\rtoolCallCount\x12(\n" +
-	"\rrequest_count\x18\x06 \x01(\x03B\x03\xe0A\x03R\frequestCount\"\xa8\x02\n" +
-	"\x12MCPInspectResponse\x127\n" +
-	"\bprofiles\x18\x01 \x03(\v2\x1b.paladin.admin.v1.MCPProfileR\bprofiles\x12\x1f\n" +
+	"\rrequest_count\x18\x06 \x01(\x03B\x03\xe0A\x03R\frequestCount\"\xac\x02\n" +
+	"\x12MCPInspectResponse\x128\n" +
+	"\bprofiles\x18\x01 \x03(\v2\x1c.paladin.admin.v1.MCPProfileR\bprofiles\x12\x1f\n" +
 	"\valways_deny\x18\x02 \x03(\tR\n" +
-	"alwaysDeny\x12;\n" +
-	"\ftool_catalog\x18\x03 \x03(\v2\x18.paladin.admin.v1.MCPToolR\vtoolCatalog\x12;\n" +
-	"\tupstreams\x18\x04 \x01(\v2\x1d.paladin.admin.v1.MCPUpstreamsR\tupstreams\x12>\n" +
+	"alwaysDeny\x12<\n" +
+	"\ftool_catalog\x18\x03 \x03(\v2\x19.paladin.admin.v1.MCPToolR\vtoolCatalog\x12<\n" +
+	"\tupstreams\x18\x04 \x01(\v2\x1e.paladin.admin.v1.MCPUpstreamsR\tupstreams\x12?\n" +
 	"\n" +
-	"transports\x18\x05 \x01(\v2\x1e.paladin.admin.v1.MCPTransportsR\n" +
+	"transports\x18\x05 \x01(\v2\x1f.paladin.admin.v1.MCPTransportsR\n" +
 	"transports\"\x8a\x01\n" +
 	"\n" +
 	"MCPProfile\x12\x17\n" +
@@ -1005,10 +1005,10 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\fMCPUpstreams\x12\x1b\n" +
 	"\tadmin_url\x18\x01 \x01(\tR\badminUrl\x12\x19\n" +
 	"\bdata_url\x18\x02 \x01(\tR\adataUrl\x12\x17\n" +
-	"\aiam_url\x18\x03 \x01(\tR\x06iamUrl\"\x80\x01\n" +
-	"\rMCPTransports\x128\n" +
-	"\x05stdio\x18\x01 \x01(\v2\".paladin.admin.v1.MCPTransportStdioR\x05stdio\x125\n" +
-	"\x04http\x18\x02 \x01(\v2!.paladin.admin.v1.MCPTransportHTTPR\x04http\"G\n" +
+	"\aiam_url\x18\x03 \x01(\tR\x06iamUrl\"\x82\x01\n" +
+	"\rMCPTransports\x129\n" +
+	"\x05stdio\x18\x01 \x01(\v2#.paladin.admin.v1.MCPTransportStdioR\x05stdio\x126\n" +
+	"\x04http\x18\x02 \x01(\v2\".paladin.admin.v1.MCPTransportHTTPR\x04http\"G\n" +
 	"\x11MCPTransportStdio\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x18\n" +
 	"\aprofile\x18\x02 \x01(\tR\aprofile\"\x92\x01\n" +
@@ -1016,11 +1016,11 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x12\n" +
 	"\x04addr\x18\x02 \x01(\tR\x04addr\x12\x18\n" +
 	"\aprofile\x18\x03 \x01(\tR\aprofile\x126\n" +
-	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2\xb9\x02\n" +
-	"\x11MCPInspectService\x12W\n" +
-	"\aInspect\x12\".paladin.admin.v1.MCPInspectRequest\x1a#.paladin.admin.v1.MCPInspectResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\fListSessions\x12$.paladin.admin.v1.ListSessionsRequest\x1a%.paladin.admin.v1.ListSessionsResponse\"\x03\x90\x02\x01\x12i\n" +
-	"\x0fGetBridgeStatus\x12'.paladin.admin.v1.GetBridgeStatusRequest\x1a(.paladin.admin.v1.GetBridgeStatusResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2\xbf\x02\n" +
+	"\x11MCPInspectService\x12Y\n" +
+	"\aInspect\x12#.paladin.admin.v1.MCPInspectRequest\x1a$.paladin.admin.v1.MCPInspectResponse\"\x03\x90\x02\x01\x12b\n" +
+	"\fListSessions\x12%.paladin.admin.v1.ListSessionsRequest\x1a&.paladin.admin.v1.ListSessionsResponse\"\x03\x90\x02\x01\x12k\n" +
+	"\x0fGetBridgeStatus\x12(.paladin.admin.v1.GetBridgeStatusRequest\x1a).paladin.admin.v1.GetBridgeStatusResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_mcp_inspect_service_proto_rawDescOnce sync.Once

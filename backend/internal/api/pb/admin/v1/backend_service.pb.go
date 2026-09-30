@@ -738,29 +738,29 @@ var File_paladin_admin_v1_backend_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/backend_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\x81\x01\n" +
+	"&paladin/admin/v1/backend_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\x82\x01\n" +
 	"\x14CreateBackendRequest\x12&\n" +
 	"\n" +
-	"backend_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbackendId\x12A\n" +
-	"\abackend\x18\x02 \x01(\v2\x1f.paladin.admin.v1.StorageBackendB\x06\xbaH\x03\xc8\x01\x01R\abackend\"0\n" +
+	"backend_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbackendId\x12B\n" +
+	"\abackend\x18\x02 \x01(\v2 .paladin.admin.v1.StorageBackendB\x06\xbaH\x03\xc8\x01\x01R\abackend\"0\n" +
 	"\x11GetBackendRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe7\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe8\x01\n" +
 	"\x14UpdateBackendRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateMask\x129\n" +
-	"\abackend\x18\x04 \x01(\v2\x1f.paladin.admin.v1.StorageBackendR\abackend\"t\n" +
+	"updateMask\x12:\n" +
+	"\abackend\x18\x04 \x01(\v2 .paladin.admin.v1.StorageBackendR\abackend\"t\n" +
 	"\x14DeleteBackendRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersionJ\x04\b\x03\x10\x04R\x05force\"\x17\n" +
-	"\x15DeleteBackendResponse\"`\n" +
-	"\x13ListBackendsRequest\x121\n" +
-	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x87\x01\n" +
-	"\x14ListBackendsResponse\x12;\n" +
-	"\bbackends\x18\x01 \x03(\v2\x1f.paladin.admin.v1.StorageBackendR\bbackends\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x89\x01\n" +
+	"\x15DeleteBackendResponse\"a\n" +
+	"\x13ListBackendsRequest\x122\n" +
+	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x89\x01\n" +
+	"\x14ListBackendsResponse\x12<\n" +
+	"\bbackends\x18\x01 \x03(\v2 .paladin.admin.v1.StorageBackendR\bbackends\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\x89\x01\n" +
 	"\x18RotateCredentialsRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12-\n" +
 	"\x0enew_secret_ref\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fnewSecretRef\x12!\n" +
@@ -783,19 +783,19 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\x1cSetBackendMaintenanceRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12 \n" +
 	"\vmaintenance\x18\x02 \x01(\bR\vmaintenance\x122\n" +
-	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xe2\a\n" +
-	"\x0eBackendService\x12W\n" +
-	"\rCreateBackend\x12%.paladin.admin.v1.CreateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12V\n" +
+	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xf6\a\n" +
+	"\x0eBackendService\x12Y\n" +
+	"\rCreateBackend\x12&.paladin.admin.v1.CreateBackendRequest\x1a .paladin.admin.v1.StorageBackend\x12X\n" +
 	"\n" +
-	"GetBackend\x12\".paladin.admin.v1.GetBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x01\x12\\\n" +
-	"\rUpdateBackend\x12%.paladin.admin.v1.UpdateBackendRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12c\n" +
-	"\rDeleteBackend\x12%.paladin.admin.v1.DeleteBackendRequest\x1a&.paladin.admin.v1.DeleteBackendResponse\"\x03\x90\x02\x02\x12`\n" +
-	"\fListBackends\x12$.paladin.admin.v1.ListBackendsRequest\x1a%.paladin.admin.v1.ListBackendsResponse\"\x03\x90\x02\x01\x12_\n" +
-	"\x11RotateCredentials\x12).paladin.admin.v1.RotateCredentialsRequest\x1a\x1f.paladin.admin.v1.StorageBackend\x12]\n" +
-	"\vTestBackend\x12#.paladin.admin.v1.TestBackendRequest\x1a$.paladin.admin.v1.TestBackendResponse\"\x03\x90\x02\x02\x12d\n" +
-	"\x11SetBackendEnabled\x12).paladin.admin.v1.SetBackendEnabledRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12f\n" +
-	"\x12SetBackendReadOnly\x12*.paladin.admin.v1.SetBackendReadOnlyRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12l\n" +
-	"\x15SetBackendMaintenance\x12-.paladin.admin.v1.SetBackendMaintenanceRequest\x1a\x1f.paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"GetBackend\x12#.paladin.admin.v1.GetBackendRequest\x1a .paladin.admin.v1.StorageBackend\"\x03\x90\x02\x01\x12^\n" +
+	"\rUpdateBackend\x12&.paladin.admin.v1.UpdateBackendRequest\x1a .paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12e\n" +
+	"\rDeleteBackend\x12&.paladin.admin.v1.DeleteBackendRequest\x1a'.paladin.admin.v1.DeleteBackendResponse\"\x03\x90\x02\x02\x12b\n" +
+	"\fListBackends\x12%.paladin.admin.v1.ListBackendsRequest\x1a&.paladin.admin.v1.ListBackendsResponse\"\x03\x90\x02\x01\x12a\n" +
+	"\x11RotateCredentials\x12*.paladin.admin.v1.RotateCredentialsRequest\x1a .paladin.admin.v1.StorageBackend\x12_\n" +
+	"\vTestBackend\x12$.paladin.admin.v1.TestBackendRequest\x1a%.paladin.admin.v1.TestBackendResponse\"\x03\x90\x02\x02\x12f\n" +
+	"\x11SetBackendEnabled\x12*.paladin.admin.v1.SetBackendEnabledRequest\x1a .paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12h\n" +
+	"\x12SetBackendReadOnly\x12+.paladin.admin.v1.SetBackendReadOnlyRequest\x1a .paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02\x12n\n" +
+	"\x15SetBackendMaintenance\x12..paladin.admin.v1.SetBackendMaintenanceRequest\x1a .paladin.admin.v1.StorageBackend\"\x03\x90\x02\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_backend_service_proto_rawDescOnce sync.Once

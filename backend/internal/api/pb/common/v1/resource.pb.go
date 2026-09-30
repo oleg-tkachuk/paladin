@@ -270,19 +270,19 @@ var File_paladin_common_v1_resource_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_resource_proto_rawDesc = "" +
 	"\n" +
-	"\x1flegate/common/v1/resource.proto\x12\x10legate.common.v1\"\xd2\x02\n" +
+	" paladin/common/v1/resource.proto\x12\x11paladin.common.v1\"\xd4\x02\n" +
 	"\fPresignedUrl\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
-	"\x06method\x18\x02 \x01(\tR\x06method\x12^\n" +
-	"\x10required_headers\x18\x03 \x03(\v23.paladin.common.v1.PresignedUrl.RequiredHeadersEntryR\x0frequiredHeaders\x12F\n" +
-	"\vpost_policy\x18\x04 \x01(\v2%.paladin.common.v1.PresignedPostPolicyR\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12_\n" +
+	"\x10required_headers\x18\x03 \x03(\v24.paladin.common.v1.PresignedUrl.RequiredHeadersEntryR\x0frequiredHeaders\x12G\n" +
+	"\vpost_policy\x18\x04 \x01(\v2&.paladin.common.v1.PresignedPostPolicyR\n" +
 	"postPolicy\x12,\n" +
 	"\x12expires_at_rfc3339\x18\x05 \x01(\tR\x10expiresAtRfc3339\x1aB\n" +
 	"\x14RequiredHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb3\x01\n" +
-	"\x13PresignedPostPolicy\x12I\n" +
-	"\x06fields\x18\x01 \x03(\v21.paladin.common.v1.PresignedPostPolicy.FieldsEntryR\x06fields\x12\x16\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb4\x01\n" +
+	"\x13PresignedPostPolicy\x12J\n" +
+	"\x06fields\x18\x01 \x03(\v22.paladin.common.v1.PresignedPostPolicy.FieldsEntryR\x06fields\x12\x16\n" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -295,7 +295,7 @@ const file_paladin_common_v1_resource_proto_rawDesc = "" +
 	"\x1eCHECKSUM_ALGORITHM_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CHECKSUM_ALGORITHM_CRC32C\x10\x01\x12\x1d\n" +
 	"\x19CHECKSUM_ALGORITHM_SHA256\x10\x02\x12\x1a\n" +
-	"\x16CHECKSUM_ALGORITHM_MD5\x10\x03BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
+	"\x16CHECKSUM_ALGORITHM_MD5\x10\x03BKZIgithub.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_resource_proto_rawDescOnce sync.Once

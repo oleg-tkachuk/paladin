@@ -17,13 +17,13 @@ func TestExtractAPIToken(t *testing.T) {
 		authz   string
 		want    string
 	}{
-		"x-paladin wins":                {xlegate: "paladin_pat_AAA", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_AAA"},
+		"x-paladin wins":               {xlegate: "paladin_pat_AAA", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_AAA"},
 		"authz bearer with prefix":     {xlegate: "", authz: "Bearer paladin_pat_BBB", want: "paladin_pat_BBB"},
 		"authz bearer non-pat ignored": {xlegate: "", authz: "Bearer some.jwt.value", want: ""},
 		"authz scheme not bearer":      {xlegate: "", authz: "Basic paladin_pat_BBB", want: ""},
 		"authz malformed":              {xlegate: "", authz: "Bearer", want: ""},
 		"authz empty":                  {xlegate: "", authz: "", want: ""},
-		"x-paladin without prefix":      {xlegate: "not-a-pat", authz: "", want: ""},
+		"x-paladin without prefix":     {xlegate: "not-a-pat", authz: "", want: ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

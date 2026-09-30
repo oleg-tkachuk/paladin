@@ -1069,31 +1069,31 @@ var File_paladin_iam_v1_auth_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\n" +
-	" paladin/iam/v1/auth_service.proto\x12\rlegate.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a!paladin/common/v1/pagination.proto\x1a\x19legate/iam/v1/types.proto\"\xa1\x01\n" +
+	"!paladin/iam/v1/auth_service.proto\x12\x0epaladin.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1apaladin/iam/v1/types.proto\"\xa1\x01\n" +
 	"\fLoginRequest\x12!\n" +
 	"\asubject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12#\n" +
 	"\rupstream_code\x18\x03 \x01(\tR\fupstreamCode\x12-\n" +
-	"\x12requested_audience\x18\x04 \x01(\tR\x11requestedAudience\"j\n" +
-	"\rLoginResponse\x120\n" +
-	"\x06tokens\x18\x01 \x01(\v2\x18.paladin.iam.v1.TokenPairR\x06tokens\x12'\n" +
-	"\x04user\x18\x02 \x01(\v2\x13.paladin.iam.v1.UserR\x04user\"r\n" +
+	"\x12requested_audience\x18\x04 \x01(\tR\x11requestedAudience\"l\n" +
+	"\rLoginResponse\x121\n" +
+	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\x12(\n" +
+	"\x04user\x18\x02 \x01(\v2\x14.paladin.iam.v1.UserR\x04user\"r\n" +
 	"\x13RefreshTokenRequest\x12,\n" +
 	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\x12-\n" +
-	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"H\n" +
-	"\x14RefreshTokenResponse\x120\n" +
-	"\x06tokens\x18\x01 \x01(\v2\x18.paladin.iam.v1.TokenPairR\x06tokens\".\n" +
+	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"I\n" +
+	"\x14RefreshTokenResponse\x121\n" +
+	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\".\n" +
 	"\rRevokeRequest\x12\x1d\n" +
 	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
 	"\x0eRevokeResponse\"9\n" +
 	"\rWhoAmIRequest\x12(\n" +
-	"\x10route_page_token\x18\x01 \x01(\tR\x0eroutePageToken\"\x81\x02\n" +
-	"\x0eWhoAmIResponse\x12'\n" +
-	"\x04user\x18\x01 \x01(\v2\x13.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
+	"\x10route_page_token\x18\x01 \x01(\tR\x0eroutePageToken\"\x83\x02\n" +
+	"\x0eWhoAmIResponse\x12(\n" +
+	"\x04user\x18\x01 \x01(\v2\x14.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1f\n" +
 	"\vtenant_slug\x18\x03 \x01(\tR\n" +
-	"tenantSlug\x126\n" +
-	"\x06routes\x18\x04 \x03(\v2\x1e.paladin.iam.v1.CollectionRouteR\x06routes\x12)\n" +
+	"tenantSlug\x127\n" +
+	"\x06routes\x18\x04 \x03(\v2\x1f.paladin.iam.v1.CollectionRouteR\x06routes\x12)\n" +
 	"\x10routes_truncated\x18\x05 \x01(\bR\x0froutesTruncated\x12&\n" +
 	"\x0fnext_page_token\x18\x06 \x01(\tR\rnextPageToken\"\xa1\x01\n" +
 	"\x0fCollectionRoute\x12\x1c\n" +
@@ -1115,9 +1115,9 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
 	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12\x1d\n" +
 	"\n" +
-	"token_type\x18\x03 \x01(\tR\ttokenType\"M\n" +
-	"\x18ListMyMembershipsRequest\x121\n" +
-	"\x04page\x18\x01 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\x96\x01\n" +
+	"token_type\x18\x03 \x01(\tR\ttokenType\"N\n" +
+	"\x18ListMyMembershipsRequest\x122\n" +
+	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x96\x01\n" +
 	"\n" +
 	"Membership\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1f\n" +
@@ -1125,25 +1125,25 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"tenantSlug\x12\x14\n" +
 	"\x05roles\x18\x03 \x03(\tR\x05roles\x12\x1a\n" +
 	"\bdisabled\x18\x04 \x01(\bR\bdisabled\x12\x18\n" +
-	"\acurrent\x18\x05 \x01(\bR\acurrent\"\x8c\x01\n" +
-	"\x19ListMyMembershipsResponse\x12;\n" +
-	"\vmemberships\x18\x01 \x03(\v2\x19.paladin.iam.v1.MembershipR\vmemberships\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"w\n" +
+	"\acurrent\x18\x05 \x01(\bR\acurrent\"\x8e\x01\n" +
+	"\x19ListMyMembershipsResponse\x12<\n" +
+	"\vmemberships\x18\x01 \x03(\v2\x1a.paladin.iam.v1.MembershipR\vmemberships\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"w\n" +
 	"\x13SwitchTenantRequest\x121\n" +
 	"\x10target_tenant_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0etargetTenantId\x12-\n" +
-	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"q\n" +
-	"\x14SwitchTenantResponse\x120\n" +
-	"\x06tokens\x18\x01 \x01(\v2\x18.paladin.iam.v1.TokenPairR\x06tokens\x12'\n" +
-	"\x04user\x18\x02 \x01(\v2\x13.paladin.iam.v1.UserR\x04user2\xcc\x05\n" +
-	"\vAuthService\x12B\n" +
-	"\x05Login\x12\x1b.paladin.iam.v1.LoginRequest\x1a\x1c.paladin.iam.v1.LoginResponse\x12W\n" +
-	"\fRefreshToken\x12\".paladin.iam.v1.RefreshTokenRequest\x1a#.paladin.iam.v1.RefreshTokenResponse\x12J\n" +
-	"\x06Revoke\x12\x1c.paladin.iam.v1.RevokeRequest\x1a\x1d.paladin.iam.v1.RevokeResponse\"\x03\x90\x02\x02\x12J\n" +
-	"\x06WhoAmI\x12\x1c.paladin.iam.v1.WhoAmIRequest\x1a\x1d.paladin.iam.v1.WhoAmIResponse\"\x03\x90\x02\x01\x12]\n" +
-	"\x0eChangePassword\x12$.paladin.iam.v1.ChangePasswordRequest\x1a%.paladin.iam.v1.ChangePasswordResponse\x12c\n" +
-	"\x10ExchangeAudience\x12&.paladin.iam.v1.ExchangeAudienceRequest\x1a'.paladin.iam.v1.ExchangeAudienceResponse\x12k\n" +
-	"\x11ListMyMemberships\x12'.paladin.iam.v1.ListMyMembershipsRequest\x1a(.paladin.iam.v1.ListMyMembershipsResponse\"\x03\x90\x02\x01\x12W\n" +
-	"\fSwitchTenant\x12\".paladin.iam.v1.SwitchTenantRequest\x1a#.paladin.iam.v1.SwitchTenantResponseBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"s\n" +
+	"\x14SwitchTenantResponse\x121\n" +
+	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\x12(\n" +
+	"\x04user\x18\x02 \x01(\v2\x14.paladin.iam.v1.UserR\x04user2\xdc\x05\n" +
+	"\vAuthService\x12D\n" +
+	"\x05Login\x12\x1c.paladin.iam.v1.LoginRequest\x1a\x1d.paladin.iam.v1.LoginResponse\x12Y\n" +
+	"\fRefreshToken\x12#.paladin.iam.v1.RefreshTokenRequest\x1a$.paladin.iam.v1.RefreshTokenResponse\x12L\n" +
+	"\x06Revoke\x12\x1d.paladin.iam.v1.RevokeRequest\x1a\x1e.paladin.iam.v1.RevokeResponse\"\x03\x90\x02\x02\x12L\n" +
+	"\x06WhoAmI\x12\x1d.paladin.iam.v1.WhoAmIRequest\x1a\x1e.paladin.iam.v1.WhoAmIResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0eChangePassword\x12%.paladin.iam.v1.ChangePasswordRequest\x1a&.paladin.iam.v1.ChangePasswordResponse\x12e\n" +
+	"\x10ExchangeAudience\x12'.paladin.iam.v1.ExchangeAudienceRequest\x1a(.paladin.iam.v1.ExchangeAudienceResponse\x12m\n" +
+	"\x11ListMyMemberships\x12(.paladin.iam.v1.ListMyMembershipsRequest\x1a).paladin.iam.v1.ListMyMembershipsResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\fSwitchTenant\x12#.paladin.iam.v1.SwitchTenantRequest\x1a$.paladin.iam.v1.SwitchTenantResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_auth_service_proto_rawDescOnce sync.Once

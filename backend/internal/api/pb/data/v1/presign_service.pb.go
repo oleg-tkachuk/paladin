@@ -237,23 +237,23 @@ var File_paladin_data_v1_presign_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_presign_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/data/v1/presign_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1flegate/common/v1/resource.proto\"f\n" +
+	"%paladin/data/v1/presign_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a paladin/common/v1/resource.proto\"f\n" +
 	"\x1aRegenerateUploadUrlRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12+\n" +
-	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\"\xa7\x01\n" +
-	"\x1bRegenerateUploadUrlResponse\x12=\n" +
+	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\"\xa9\x01\n" +
+	"\x1bRegenerateUploadUrlResponse\x12>\n" +
 	"\n" +
-	"upload_url\x18\x01 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\tuploadUrl\x12I\n" +
-	"\x0fcompletion_mode\x18\x02 \x01(\x0e2 .paladin.common.v1.CompletionModeR\x0ecompletionMode\"\x93\x01\n" +
+	"upload_url\x18\x01 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\tuploadUrl\x12J\n" +
+	"\x0fcompletion_mode\x18\x02 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\"\x93\x01\n" +
 	"\x16PresignDownloadRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12+\n" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12/\n" +
-	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"\\\n" +
-	"\x17PresignDownloadResponse\x12A\n" +
-	"\fdownload_url\x18\x01 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\vdownloadUrl2\xe9\x01\n" +
-	"\x0ePresignService\x12s\n" +
-	"\x13RegenerateUploadUrl\x12*.paladin.data.v1.RegenerateUploadUrlRequest\x1a+.paladin.data.v1.RegenerateUploadUrlResponse\"\x03\x90\x02\x02\x12b\n" +
-	"\x0fPresignDownload\x12&.paladin.data.v1.PresignDownloadRequest\x1a'.paladin.data.v1.PresignDownloadResponseBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"]\n" +
+	"\x17PresignDownloadResponse\x12B\n" +
+	"\fdownload_url\x18\x01 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\vdownloadUrl2\xed\x01\n" +
+	"\x0ePresignService\x12u\n" +
+	"\x13RegenerateUploadUrl\x12+.paladin.data.v1.RegenerateUploadUrlRequest\x1a,.paladin.data.v1.RegenerateUploadUrlResponse\"\x03\x90\x02\x02\x12d\n" +
+	"\x0fPresignDownload\x12'.paladin.data.v1.PresignDownloadRequest\x1a(.paladin.data.v1.PresignDownloadResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_presign_service_proto_rawDescOnce sync.Once

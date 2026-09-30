@@ -39,7 +39,8 @@ const (
 	StorageBootstrapServiceEnsureTenantStorageProcedure = "/paladin.data.v1.StorageBootstrapService/EnsureTenantStorage"
 )
 
-// StorageBootstrapServiceClient is a client for the paladin.data.v1.StorageBootstrapService service.
+// StorageBootstrapServiceClient is a client for the paladin.data.v1.StorageBootstrapService
+// service.
 type StorageBootstrapServiceClient interface {
 	// EnsureTenantStorage idempotently ensures the shared Paladin bucket exists and
 	// that each requested object-key is bound to (backend_id, bucket) under the
@@ -49,9 +50,9 @@ type StorageBootstrapServiceClient interface {
 }
 
 // NewStorageBootstrapServiceClient constructs a client for the
-// paladin.data.v1.StorageBootstrapService service. By default, it uses the Connect protocol with the
-// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
-// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
+// paladin.data.v1.StorageBootstrapService service. By default, it uses the Connect protocol with
+// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
+// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
@@ -79,8 +80,8 @@ func (c *storageBootstrapServiceClient) EnsureTenantStorage(ctx context.Context,
 	return c.ensureTenantStorage.CallUnary(ctx, req)
 }
 
-// StorageBootstrapServiceHandler is an implementation of the paladin.data.v1.StorageBootstrapService
-// service.
+// StorageBootstrapServiceHandler is an implementation of the
+// paladin.data.v1.StorageBootstrapService service.
 type StorageBootstrapServiceHandler interface {
 	// EnsureTenantStorage idempotently ensures the shared Paladin bucket exists and
 	// that each requested object-key is bound to (backend_id, bucket) under the

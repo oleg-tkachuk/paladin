@@ -76,9 +76,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-sm space-y-6 p-8">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Paladin
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Paladin</h1>
           <p className="text-sm text-muted-foreground">Sign in to continue</p>
         </div>
 

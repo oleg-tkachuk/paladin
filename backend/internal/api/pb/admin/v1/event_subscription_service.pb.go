@@ -495,42 +495,42 @@ var File_paladin_admin_v1_event_subscription_service_proto protoreflect.FileDesc
 
 const file_paladin_admin_v1_event_subscription_service_proto_rawDesc = "" +
 	"\n" +
-	"0legate/admin/v1/event_subscription_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\x8c\x01\n" +
+	"1paladin/admin/v1/event_subscription_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\x8d\x01\n" +
 	"\x19CreateSubscriptionRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12N\n" +
-	"\fsubscription\x18\x02 \x01(\v2\".paladin.admin.v1.EventSubscriptionB\x06\xbaH\x03\xc8\x01\x01R\fsubscription\"5\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12O\n" +
+	"\fsubscription\x18\x02 \x01(\v2#.paladin.admin.v1.EventSubscriptionB\x06\xbaH\x03\xc8\x01\x01R\fsubscription\"5\n" +
 	"\x16GetSubscriptionRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xf9\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfa\x01\n" +
 	"\x19UpdateSubscriptionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateMask\x12F\n" +
-	"\fsubscription\x18\x04 \x01(\v2\".paladin.admin.v1.EventSubscriptionR\fsubscription\"l\n" +
+	"updateMask\x12G\n" +
+	"\fsubscription\x18\x04 \x01(\v2#.paladin.admin.v1.EventSubscriptionR\fsubscription\"l\n" +
 	"\x19DeleteSubscriptionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x1c\n" +
-	"\x1aDeleteSubscriptionResponse\"e\n" +
+	"\x1aDeleteSubscriptionResponse\"f\n" +
 	"\x18ListSubscriptionsRequest\x12\x16\n" +
-	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\x99\x01\n" +
-	"\x19ListSubscriptionsResponse\x12H\n" +
-	"\rsubscriptions\x18\x01 \x03(\v2\".paladin.admin.v1.EventSubscriptionR\rsubscriptions\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"6\n" +
+	"\x06parent\x18\x01 \x01(\tR\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x9b\x01\n" +
+	"\x19ListSubscriptionsResponse\x12I\n" +
+	"\rsubscriptions\x18\x01 \x03(\v2#.paladin.admin.v1.EventSubscriptionR\rsubscriptions\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"6\n" +
 	"\x17TestSubscriptionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"~\n" +
 	"\x18TestSubscriptionResponse\x12\x1c\n" +
 	"\tdelivered\x18\x01 \x01(\bR\tdelivered\x12\x1f\n" +
 	"\vstatus_code\x18\x02 \x01(\x05R\n" +
 	"statusCode\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\x9e\x05\n" +
-	"\x18EventSubscriptionService\x12d\n" +
-	"\x12CreateSubscription\x12*.paladin.admin.v1.CreateSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\x12c\n" +
-	"\x0fGetSubscription\x12'.paladin.admin.v1.GetSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\"\x03\x90\x02\x01\x12i\n" +
-	"\x12UpdateSubscription\x12*.paladin.admin.v1.UpdateSubscriptionRequest\x1a\".paladin.admin.v1.EventSubscription\"\x03\x90\x02\x02\x12r\n" +
-	"\x12DeleteSubscription\x12*.paladin.admin.v1.DeleteSubscriptionRequest\x1a+.paladin.admin.v1.DeleteSubscriptionResponse\"\x03\x90\x02\x02\x12o\n" +
-	"\x11ListSubscriptions\x12).paladin.admin.v1.ListSubscriptionsRequest\x1a*.paladin.admin.v1.ListSubscriptionsResponse\"\x03\x90\x02\x01\x12g\n" +
-	"\x10TestSubscription\x12(.paladin.admin.v1.TestSubscriptionRequest\x1a).paladin.admin.v1.TestSubscriptionResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xaa\x05\n" +
+	"\x18EventSubscriptionService\x12f\n" +
+	"\x12CreateSubscription\x12+.paladin.admin.v1.CreateSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\x12e\n" +
+	"\x0fGetSubscription\x12(.paladin.admin.v1.GetSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\"\x03\x90\x02\x01\x12k\n" +
+	"\x12UpdateSubscription\x12+.paladin.admin.v1.UpdateSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\"\x03\x90\x02\x02\x12t\n" +
+	"\x12DeleteSubscription\x12+.paladin.admin.v1.DeleteSubscriptionRequest\x1a,.paladin.admin.v1.DeleteSubscriptionResponse\"\x03\x90\x02\x02\x12q\n" +
+	"\x11ListSubscriptions\x12*.paladin.admin.v1.ListSubscriptionsRequest\x1a+.paladin.admin.v1.ListSubscriptionsResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x10TestSubscription\x12).paladin.admin.v1.TestSubscriptionRequest\x1a*.paladin.admin.v1.TestSubscriptionResponseBIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_event_subscription_service_proto_rawDescOnce sync.Once

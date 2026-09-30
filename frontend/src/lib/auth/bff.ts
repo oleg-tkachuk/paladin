@@ -22,7 +22,8 @@ export { refreshCookieName };
  * design carried as separate cookies are gone.
  */
 
-const IAM_BACKEND_URL = process.env.PALADIN_IAM_URL || "http://paladin-core:8085";
+const IAM_BACKEND_URL =
+  process.env.PALADIN_IAM_URL || "http://paladin-core:8085";
 
 let iamClientCache: Client<typeof AuthService> | null = null;
 

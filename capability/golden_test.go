@@ -10,11 +10,11 @@ import (
 
 // The wire-format guard (FR-006 / SC-004, research R-007).
 //
-// testdata/golden_token.jwt was minted by the PRE-extraction code (see
-// goldengen_test.go) from the fixed seed and clock below. If this test fails,
-// the token format changed — which invalidates capabilities already held by
-// running agents, not merely a build. That is why it ships in the same commit
-// as the move it guards rather than a later one (analysis finding C1).
+// testdata/golden_token.jwt is minted by goldengen_test.go from the fixed seed
+// and clock below. If this test fails, the token format changed — which
+// invalidates capabilities already held by running agents, not merely a build.
+// That is why it ships in the same commit as the move it guards rather than a
+// later one (analysis finding C1).
 //
 // Regenerating the fixture is a deliberate act, not a fix: it declares the old
 // format dead. Do it only with the format change reviewed on its own merits.

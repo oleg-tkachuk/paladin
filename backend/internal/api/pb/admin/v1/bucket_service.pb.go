@@ -827,71 +827,71 @@ var File_paladin_admin_v1_bucket_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/bucket_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1blegate/admin/v1/types.proto\x1a!paladin/common/v1/pagination.proto\"\xc9\x01\n" +
+	"%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xca\x01\n" +
 	"\x13CreateBucketRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12&\n" +
-	"\tbucket_id\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\bbucketId\x127\n" +
-	"\x06bucket\x18\x03 \x01(\v2\x17.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01R\x06bucket\x120\n" +
+	"\tbucket_id\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x03\x18?R\bbucketId\x128\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x18.paladin.admin.v1.BucketB\x06\xbaH\x03\xc8\x01\x01R\x06bucket\x120\n" +
 	"\x14provision_on_backend\x18\x04 \x01(\bR\x12provisionOnBackend\"/\n" +
 	"\x10GetBucketRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdc\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xdd\x01\n" +
 	"\x13UpdateBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateMask\x12/\n" +
-	"\x06bucket\x18\x04 \x01(\v2\x17.paladin.admin.v1.BucketR\x06bucket\"\xb7\x01\n" +
+	"updateMask\x120\n" +
+	"\x06bucket\x18\x04 \x01(\v2\x18.paladin.admin.v1.BucketR\x06bucket\"\xb7\x01\n" +
 	"\x13DeleteBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12*\n" +
 	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\x12,\n" +
 	"\x12skip_version_check\x18\x04 \x01(\bR\x10skipVersionCheck\"\x16\n" +
-	"\x14DeleteBucketResponse\"\x9f\x01\n" +
+	"\x14DeleteBucketResponse\"\xa0\x01\n" +
 	"\x12ListBucketsRequest\x12\x16\n" +
-	"\x06parent\x18\x01 \x01(\tR\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06parent\x18\x01 \x01(\tR\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12&\n" +
-	"\x0fowner_tenant_id\x18\x04 \x01(\tR\rownerTenantId\"|\n" +
-	"\x13ListBucketsResponse\x121\n" +
-	"\abuckets\x18\x01 \x03(\v2\x17.paladin.admin.v1.BucketR\abuckets\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"\x8c\x01\n" +
+	"\x0fowner_tenant_id\x18\x04 \x01(\tR\rownerTenantId\"~\n" +
+	"\x13ListBucketsResponse\x122\n" +
+	"\abuckets\x18\x01 \x03(\v2\x18.paladin.admin.v1.BucketR\abuckets\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\x8c\x01\n" +
 	"\x16SetBucketPolicyRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12!\n" +
-	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"\xa1\x01\n" +
+	"\fcedar_policy\x18\x03 \x01(\tR\vcedarPolicy\"\xa2\x01\n" +
 	"\x18SetLifecycleRulesRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x124\n" +
-	"\x05rules\x18\x03 \x03(\v2\x1e.paladin.admin.v1.LifecycleRuleR\x05rules\"\xaa\x01\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x125\n" +
+	"\x05rules\x18\x03 \x03(\v2\x1f.paladin.admin.v1.LifecycleRuleR\x05rules\"\xab\x01\n" +
 	"\x14SetObjectLockRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12A\n" +
-	"\x06config\x18\x03 \x01(\v2!.paladin.admin.v1.ObjectLockConfigB\x06\xbaH\x03\xc8\x01\x01R\x06config\"\xb2\x01\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12B\n" +
+	"\x06config\x18\x03 \x01(\v2\".paladin.admin.v1.ObjectLockConfigB\x06\xbaH\x03\xc8\x01\x01R\x06config\"\xb3\x01\n" +
 	"\x14SetVersioningRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12I\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12J\n" +
 	"\n" +
-	"versioning\x18\x03 \x01(\v2!.paladin.admin.v1.BucketVersioningB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"versioning\"\xb6\x01\n" +
+	"versioning\x18\x03 \x01(\v2\".paladin.admin.v1.BucketVersioningB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"versioning\"\xb7\x01\n" +
 	"\x15SetReplicationRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12L\n" +
-	"\vreplication\x18\x03 \x01(\v2\".paladin.admin.v1.BucketReplicationB\x06\xbaH\x03\xc8\x01\x01R\vreplication\"r\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12M\n" +
+	"\vreplication\x18\x03 \x01(\v2#.paladin.admin.v1.BucketReplicationB\x06\xbaH\x03\xc8\x01\x01R\vreplication\"s\n" +
 	"\x1cListAccessibleBucketsRequest\x12\x1f\n" +
-	"\x06tenant\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06tenant\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page2\xf0\a\n" +
-	"\rBucketService\x12M\n" +
-	"\fCreateBucket\x12$.paladin.admin.v1.CreateBucketRequest\x1a\x17.paladin.admin.v1.Bucket\x12L\n" +
-	"\tGetBucket\x12!.paladin.admin.v1.GetBucketRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x01\x12R\n" +
-	"\fUpdateBucket\x12$.paladin.admin.v1.UpdateBucketRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12`\n" +
-	"\fDeleteBucket\x12$.paladin.admin.v1.DeleteBucketRequest\x1a%.paladin.admin.v1.DeleteBucketResponse\"\x03\x90\x02\x02\x12]\n" +
-	"\vListBuckets\x12#.paladin.admin.v1.ListBucketsRequest\x1a$.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01\x12X\n" +
-	"\x0fSetBucketPolicy\x12'.paladin.admin.v1.SetBucketPolicyRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12\\\n" +
-	"\x11SetLifecycleRules\x12).paladin.admin.v1.SetLifecycleRulesRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12T\n" +
-	"\rSetObjectLock\x12%.paladin.admin.v1.SetObjectLockRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12T\n" +
-	"\rSetVersioning\x12%.paladin.admin.v1.SetVersioningRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n" +
-	"\x0eSetReplication\x12&.paladin.admin.v1.SetReplicationRequest\x1a\x17.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12q\n" +
-	"\x15ListAccessibleBuckets\x12-.paladin.admin.v1.ListAccessibleBucketsRequest\x1a$.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x06tenant\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06tenant\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page2\x86\b\n" +
+	"\rBucketService\x12O\n" +
+	"\fCreateBucket\x12%.paladin.admin.v1.CreateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\x12N\n" +
+	"\tGetBucket\x12\".paladin.admin.v1.GetBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x01\x12T\n" +
+	"\fUpdateBucket\x12%.paladin.admin.v1.UpdateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12b\n" +
+	"\fDeleteBucket\x12%.paladin.admin.v1.DeleteBucketRequest\x1a&.paladin.admin.v1.DeleteBucketResponse\"\x03\x90\x02\x02\x12_\n" +
+	"\vListBuckets\x12$.paladin.admin.v1.ListBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01\x12Z\n" +
+	"\x0fSetBucketPolicy\x12(.paladin.admin.v1.SetBucketPolicyRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12^\n" +
+	"\x11SetLifecycleRules\x12*.paladin.admin.v1.SetLifecycleRulesRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n" +
+	"\rSetObjectLock\x12&.paladin.admin.v1.SetObjectLockRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n" +
+	"\rSetVersioning\x12&.paladin.admin.v1.SetVersioningRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12X\n" +
+	"\x0eSetReplication\x12'.paladin.admin.v1.SetReplicationRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12s\n" +
+	"\x15ListAccessibleBuckets\x12..paladin.admin.v1.ListAccessibleBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_bucket_service_proto_rawDescOnce sync.Once

@@ -1013,9 +1013,9 @@ var File_paladin_admin_v1_capability_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/capability_service.proto\x12\x0flegate.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd7\x02\n" +
-	"\x13CapabilityPrincipal\x12>\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x1e.paladin.admin.v1.PrincipalKindB\n" +
+	")paladin/admin/v1/capability_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd8\x02\n" +
+	"\x13CapabilityPrincipal\x12?\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12%\n" +
 	"\ttenant_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12!\n" +
 	"\asubject\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12\x1d\n" +
@@ -1037,14 +1037,14 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x12allow_tainted_read\x18\x06 \x01(\bR\x10allowTaintedRead\x128\n" +
 	"\x18idempotency_key_required\x18\a \x01(\bR\x16idempotencyKeyRequired\x12$\n" +
 	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12\x1b\n" +
-	"\tunit_code\x18\t \x01(\tR\bunitCode\"\xd3\x03\n" +
+	"\tunit_code\x18\t \x01(\tR\bunitCode\"\xd5\x03\n" +
 	"\n" +
 	"Capability\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12\x1b\n" +
-	"\x06issuer\x18\x02 \x01(\tB\x03\xe0A\x03R\x06issuer\x12>\n" +
-	"\asubject\x18\x03 \x01(\v2$.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +
-	"\baudience\x18\x04 \x03(\tR\baudience\x12<\n" +
-	"\acaveats\x18\x05 \x01(\v2\".paladin.admin.v1.CapabilityCaveatsR\acaveats\x12<\n" +
+	"\x06issuer\x18\x02 \x01(\tB\x03\xe0A\x03R\x06issuer\x12?\n" +
+	"\asubject\x18\x03 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +
+	"\baudience\x18\x04 \x03(\tR\baudience\x12=\n" +
+	"\acaveats\x18\x05 \x01(\v2#.paladin.admin.v1.CapabilityCaveatsR\acaveats\x12<\n" +
 	"\tissued_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\bissuedAt\x12>\n" +
 	"\n" +
 	"not_before\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tnotBefore\x12>\n" +
@@ -1054,25 +1054,25 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
 	"generation\x18\n" +
 	" \x01(\x03R\n" +
-	"generation\"\xb8\x02\n" +
-	"\x1dCapabilityServiceIssueRequest\x12F\n" +
-	"\asubject\x18\x01 \x01(\v2$.paladin.admin.v1.CapabilityPrincipalB\x06\xbaH\x03\xc8\x01\x01R\asubject\x12$\n" +
-	"\baudience\x18\x02 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12D\n" +
-	"\acaveats\x18\x03 \x01(\v2\".paladin.admin.v1.CapabilityCaveatsB\x06\xbaH\x03\xc8\x01\x01R\acaveats\x12(\n" +
+	"generation\"\xba\x02\n" +
+	"\x1dCapabilityServiceIssueRequest\x12G\n" +
+	"\asubject\x18\x01 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalB\x06\xbaH\x03\xc8\x01\x01R\asubject\x12$\n" +
+	"\baudience\x18\x02 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12E\n" +
+	"\acaveats\x18\x03 \x01(\v2#.paladin.admin.v1.CapabilityCaveatsB\x06\xbaH\x03\xc8\x01\x01R\acaveats\x12(\n" +
 	"\vttl_seconds\x18\x04 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x129\n" +
 	"\n" +
-	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\"s\n" +
-	"\x1eCapabilityServiceIssueResponse\x12;\n" +
+	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\"t\n" +
+	"\x1eCapabilityServiceIssueResponse\x12<\n" +
 	"\n" +
-	"capability\x18\x01 \x01(\v2\x1b.paladin.admin.v1.CapabilityR\n" +
+	"capability\x18\x01 \x01(\v2\x1c.paladin.admin.v1.CapabilityR\n" +
 	"capability\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"\xc8\x02\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\xca\x02\n" +
 	" CapabilityServiceDelegateRequest\x12%\n" +
-	"\tparent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bparentId\x12>\n" +
-	"\asubject\x18\x02 \x01(\v2$.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +
-	"\baudience\x18\x03 \x03(\tR\baudience\x12<\n" +
-	"\acaveats\x18\x04 \x01(\v2\".paladin.admin.v1.CapabilityCaveatsR\acaveats\x12(\n" +
+	"\tparent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bparentId\x12?\n" +
+	"\asubject\x18\x02 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +
+	"\baudience\x18\x03 \x03(\tR\baudience\x12=\n" +
+	"\acaveats\x18\x04 \x01(\v2#.paladin.admin.v1.CapabilityCaveatsR\acaveats\x12(\n" +
 	"\vttl_seconds\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x129\n" +
 	"\n" +
@@ -1081,19 +1081,19 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12)\n" +
 	"\x10cascade_children\x18\x03 \x01(\bR\x0fcascadeChildren\"!\n" +
-	"\x1fCapabilityServiceRevokeResponse\"\xd2\x02\n" +
+	"\x1fCapabilityServiceRevokeResponse\"\xd3\x02\n" +
 	"\x1cCapabilityServiceListRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12Q\n" +
-	"\x0eprincipal_kind\x18\x02 \x01(\x0e2\x1e.paladin.admin.v1.PrincipalKindB\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12R\n" +
+	"\x0eprincipal_kind\x18\x02 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\rprincipalKind\x12!\n" +
 	"\asubject\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12'\n" +
 	"\x0finclude_expired\x18\x04 \x01(\bR\x0eincludeExpired\x12'\n" +
 	"\x0finclude_revoked\x18\x05 \x01(\bR\x0eincludeRevoked\x12$\n" +
 	"\tpage_size\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\a \x01(\tR\tpageToken\"\x88\x01\n" +
-	"\x1dCapabilityServiceListResponse\x12?\n" +
-	"\fcapabilities\x18\x01 \x03(\v2\x1b.paladin.admin.v1.CapabilityR\fcapabilities\x12&\n" +
+	"page_token\x18\a \x01(\tR\tpageToken\"\x89\x01\n" +
+	"\x1dCapabilityServiceListResponse\x12@\n" +
+	"\fcapabilities\x18\x01 \x03(\v2\x1c.paladin.admin.v1.CapabilityR\fcapabilities\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"<\n" +
 	" CapabilityServiceGetUsageRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xe8\x01\n" +
@@ -1108,13 +1108,13 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PRINCIPAL_KIND_USER\x10\x01\x12\x18\n" +
 	"\x14PRINCIPAL_KIND_AGENT\x10\x02\x12\x1a\n" +
-	"\x16PRINCIPAL_KIND_SERVICE\x10\x032\xc3\x04\n" +
-	"\x11CapabilityService\x12h\n" +
-	"\x05Issue\x12..paladin.admin.v1.CapabilityServiceIssueRequest\x1a/.paladin.admin.v1.CapabilityServiceIssueResponse\x12n\n" +
-	"\bDelegate\x121.paladin.admin.v1.CapabilityServiceDelegateRequest\x1a/.paladin.admin.v1.CapabilityServiceIssueResponse\x12p\n" +
-	"\x06Revoke\x12/.paladin.admin.v1.CapabilityServiceRevokeRequest\x1a0.paladin.admin.v1.CapabilityServiceRevokeResponse\"\x03\x90\x02\x02\x12j\n" +
-	"\x04List\x12-.paladin.admin.v1.CapabilityServiceListRequest\x1a..paladin.admin.v1.CapabilityServiceListResponse\"\x03\x90\x02\x01\x12v\n" +
-	"\bGetUsage\x121.paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a2.paladin.admin.v1.CapabilityServiceGetUsageResponse\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x16PRINCIPAL_KIND_SERVICE\x10\x032\xcd\x04\n" +
+	"\x11CapabilityService\x12j\n" +
+	"\x05Issue\x12/.paladin.admin.v1.CapabilityServiceIssueRequest\x1a0.paladin.admin.v1.CapabilityServiceIssueResponse\x12p\n" +
+	"\bDelegate\x122.paladin.admin.v1.CapabilityServiceDelegateRequest\x1a0.paladin.admin.v1.CapabilityServiceIssueResponse\x12r\n" +
+	"\x06Revoke\x120.paladin.admin.v1.CapabilityServiceRevokeRequest\x1a1.paladin.admin.v1.CapabilityServiceRevokeResponse\"\x03\x90\x02\x02\x12l\n" +
+	"\x04List\x12..paladin.admin.v1.CapabilityServiceListRequest\x1a/.paladin.admin.v1.CapabilityServiceListResponse\"\x03\x90\x02\x01\x12x\n" +
+	"\bGetUsage\x122.paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a3.paladin.admin.v1.CapabilityServiceGetUsageResponse\"\x03\x90\x02\x01BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_capability_service_proto_rawDescOnce sync.Once

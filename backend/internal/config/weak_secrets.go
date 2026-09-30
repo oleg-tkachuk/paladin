@@ -67,10 +67,10 @@ var weakSecretValues = map[string]bool{
 	"admin-dev-password-change-me":      true,
 	"smoke-admin-password-change-me":    true,
 	"e2e-not-a-secret-2026":             true,
-	"paladin":                            true, // compose Postgres password
+	"paladin":                           true, // compose Postgres password
 	"minioadmin":                        true,
-	"paladin-e2e-access":                 true,
-	"paladin-e2e-secret-key":             true,
+	"paladin-e2e-access":                true,
+	"paladin-e2e-secret-key":            true,
 }
 
 // weakSecretMarkers are substrings that mark a value as a fill-me-in

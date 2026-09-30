@@ -259,15 +259,15 @@ var File_paladin_iam_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x19legate/iam/v1/types.proto\x12\rlegate.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1clegate/common/v1/scope.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf4\x03\n" +
+	"\x1apaladin/iam/v1/types.proto\x12\x0epaladin.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpaladin/common/v1/scope.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf5\x03\n" +
 	"\x04User\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1c\n" +
 	"\auser_id\x18\x02 \x01(\tB\x03\xe0A\x03R\x06userId\x12 \n" +
 	"\ttenant_id\x18\x03 \x01(\tB\x03\xe0A\x05R\btenantId\x12\x18\n" +
 	"\asubject\x18\x04 \x01(\tR\asubject\x12!\n" +
 	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12\x14\n" +
-	"\x05roles\x18\x06 \x03(\tR\x05roles\x12/\n" +
-	"\x06scopes\x18\a \x03(\v2\x17.paladin.common.v1.ScopeR\x06scopes\x12\x1a\n" +
+	"\x05roles\x18\x06 \x03(\tR\x05roles\x120\n" +
+	"\x06scopes\x18\a \x03(\v2\x18.paladin.common.v1.ScopeR\x06scopes\x12\x1a\n" +
 	"\bdisabled\x18\b \x01(\bR\bdisabled\x12.\n" +
 	"\x10resource_version\x18\t \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
@@ -283,7 +283,7 @@ const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	"\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05B\x03\xe0A\x03R\x17refreshExpiresInSeconds\x12\"\n" +
 	"\n" +
 	"token_type\x18\x05 \x01(\tB\x03\xe0A\x03R\ttokenType\x12\x1f\n" +
-	"\baudience\x18\x06 \x01(\tB\x03\xe0A\x03R\baudienceBCZAgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\baudience\x18\x06 \x01(\tB\x03\xe0A\x03R\baudienceBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_types_proto_rawDescOnce sync.Once

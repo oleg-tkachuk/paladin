@@ -2626,21 +2626,21 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1blegate/admin/v1/types.proto\x12\x0flegate.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1flegate/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe1\b\n" +
+	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe4\b\n" +
 	"\x0eStorageBackend\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
 	"\n" +
 	"backend_id\x18\x02 \x01(\tR\tbackendId\x12!\n" +
-	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x120\n" +
-	"\x04kind\x18\x04 \x01(\x0e2\x1c.paladin.admin.v1.StorageKindR\x04kind\x12\x1a\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x121\n" +
+	"\x04kind\x18\x04 \x01(\x0e2\x1d.paladin.admin.v1.StorageKindR\x04kind\x12\x1a\n" +
 	"\bendpoint\x18\x05 \x01(\tR\bendpoint\x12'\n" +
 	"\x0fpublic_endpoint\x18\x06 \x01(\tR\x0epublicEndpoint\x12\x16\n" +
 	"\x06region\x18\a \x01(\tR\x06region\x12(\n" +
 	"\x10force_path_style\x18\b \x01(\bR\x0eforcePathStyle\x124\n" +
-	"\x16credentials_secret_ref\x18\t \x01(\tR\x14credentialsSecretRef\x127\n" +
+	"\x16credentials_secret_ref\x18\t \x01(\tR\x14credentialsSecretRef\x128\n" +
 	"\x03sse\x18\n" +
-	" \x01(\v2%.paladin.admin.v1.ServerSideEncryptionR\x03sse\x12:\n" +
-	"\x06events\x18\v \x01(\v2\".paladin.admin.v1.EventSourceConfigR\x06events\x12!\n" +
+	" \x01(\v2&.paladin.admin.v1.ServerSideEncryptionR\x03sse\x12;\n" +
+	"\x06events\x18\v \x01(\v2#.paladin.admin.v1.EventSourceConfigR\x06events\x12!\n" +
 	"\fcedar_policy\x18\f \x01(\tR\vcedarPolicy\x12.\n" +
 	"\x10resource_version\x18\r \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
@@ -2655,15 +2655,15 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0ehealth_message\x18\x15 \x01(\tR\rhealthMessage\x12K\n" +
 	"\x11health_checked_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x0fhealthCheckedAt\x12 \n" +
 	"\vmaintenance\x18\x17 \x01(\bR\vmaintenance\x12\x1a\n" +
-	"\bprovider\x18\x18 \x01(\tR\bprovider\"[\n" +
-	"\x14ServerSideEncryption\x12,\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x18.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
-	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xc0\x01\n" +
+	"\bprovider\x18\x18 \x01(\tR\bprovider\"\\\n" +
+	"\x14ServerSideEncryption\x12-\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x19.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
+	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xc1\x01\n" +
 	"\x11EventSourceConfig\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\x124\n" +
-	"\x06target\x18\x02 \x01(\x0e2\x1c.paladin.admin.v1.EventTargetR\x06target\x12\x1b\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x125\n" +
+	"\x06target\x18\x02 \x01(\x0e2\x1d.paladin.admin.v1.EventTargetR\x06target\x12\x1b\n" +
 	"\tqueue_url\x18\x03 \x01(\tR\bqueueUrl\x12>\n" +
-	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\x9a\a\n" +
+	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xa0\a\n" +
 	"\x06Bucket\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\"\n" +
 	"\n" +
@@ -2672,17 +2672,17 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x16\n" +
 	"\x06region\x18\x05 \x01(\tR\x06region\x12&\n" +
 	"\x0fowner_tenant_id\x18\x06 \x01(\tR\rownerTenantId\x12!\n" +
-	"\fcedar_policy\x18\a \x01(\tR\vcedarPolicy\x12D\n" +
-	"\vconstraints\x18\b \x01(\v2\".paladin.admin.v1.BucketConstraintsR\vconstraints\x12G\n" +
-	"\x0flifecycle_rules\x18\t \x03(\v2\x1e.paladin.admin.v1.LifecycleRuleR\x0elifecycleRules\x12B\n" +
+	"\fcedar_policy\x18\a \x01(\tR\vcedarPolicy\x12E\n" +
+	"\vconstraints\x18\b \x01(\v2#.paladin.admin.v1.BucketConstraintsR\vconstraints\x12H\n" +
+	"\x0flifecycle_rules\x18\t \x03(\v2\x1f.paladin.admin.v1.LifecycleRuleR\x0elifecycleRules\x12C\n" +
 	"\vobject_lock\x18\n" +
-	" \x01(\v2!.paladin.admin.v1.ObjectLockConfigR\n" +
-	"objectLock\x12A\n" +
+	" \x01(\v2\".paladin.admin.v1.ObjectLockConfigR\n" +
+	"objectLock\x12B\n" +
 	"\n" +
-	"versioning\x18\v \x01(\v2!.paladin.admin.v1.BucketVersioningR\n" +
-	"versioning\x12D\n" +
-	"\vreplication\x18\f \x01(\v2\".paladin.admin.v1.BucketReplicationR\vreplication\x12;\n" +
-	"\x06labels\x18\r \x03(\v2#.paladin.admin.v1.Bucket.LabelsEntryR\x06labels\x12.\n" +
+	"versioning\x18\v \x01(\v2\".paladin.admin.v1.BucketVersioningR\n" +
+	"versioning\x12E\n" +
+	"\vreplication\x18\f \x01(\v2#.paladin.admin.v1.BucketReplicationR\vreplication\x12<\n" +
+	"\x06labels\x18\r \x03(\v2$.paladin.admin.v1.Bucket.LabelsEntryR\x06labels\x12.\n" +
 	"\x10resource_version\x18\x0e \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
 	"created_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
@@ -2691,7 +2691,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0fprovision_state\x18\x11 \x01(\tR\x0eprovisionState\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xef\x03\n" +
 	"\x11BucketConstraints\x121\n" +
 	"\x15max_object_size_bytes\x18\x01 \x01(\x03R\x12maxObjectSizeBytes\x12-\n" +
 	"\x13min_part_size_bytes\x18\x02 \x01(\x03R\x10minPartSizeBytes\x12-\n" +
@@ -2699,27 +2699,27 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\tmax_parts\x18\x04 \x01(\x05R\bmaxParts\x122\n" +
 	"\x15allowed_content_types\x18\x05 \x03(\tR\x13allowedContentTypes\x12H\n" +
 	"\x13max_presign_put_ttl\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x10maxPresignPutTtl\x12H\n" +
-	"\x13max_presign_get_ttl\x18\a \x01(\v2\x19.google.protobuf.DurationR\x10maxPresignGetTtl\x12c\n" +
-	"\x1brequired_checksum_algorithm\x18\b \x01(\x0e2#.paladin.common.v1.ChecksumAlgorithmR\x19requiredChecksumAlgorithm\"\xe9\x01\n" +
+	"\x13max_presign_get_ttl\x18\a \x01(\v2\x19.google.protobuf.DurationR\x10maxPresignGetTtl\x12d\n" +
+	"\x1brequired_checksum_algorithm\x18\b \x01(\x0e2$.paladin.common.v1.ChecksumAlgorithmR\x19requiredChecksumAlgorithm\"\xeb\x01\n" +
 	"\rLifecycleRule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\x12\x14\n" +
-	"\x05match\x18\x03 \x01(\tR\x05match\x12F\n" +
+	"\x05match\x18\x03 \x01(\tR\x05match\x12G\n" +
 	"\n" +
-	"transition\x18\x04 \x01(\v2$.paladin.admin.v1.LifecycleTransitionH\x00R\n" +
-	"transition\x12F\n" +
+	"transition\x18\x04 \x01(\v2%.paladin.admin.v1.LifecycleTransitionH\x00R\n" +
+	"transition\x12G\n" +
 	"\n" +
-	"expiration\x18\x05 \x01(\v2$.paladin.admin.v1.LifecycleExpirationH\x00R\n" +
+	"expiration\x18\x05 \x01(\v2%.paladin.admin.v1.LifecycleExpirationH\x00R\n" +
 	"expirationB\b\n" +
 	"\x06action\"k\n" +
 	"\x13LifecycleTransition\x12/\n" +
 	"\x05after\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x05after\x12#\n" +
 	"\rstorage_class\x18\x02 \x01(\tR\fstorageClass\"F\n" +
 	"\x13LifecycleExpiration\x12/\n" +
-	"\x05after\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x05after\"\xb8\x01\n" +
+	"\x05after\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x05after\"\xb9\x01\n" +
 	"\x10ObjectLockConfig\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\x12B\n" +
-	"\fdefault_mode\x18\x02 \x01(\x0e2\x1f.paladin.admin.v1.ObjectLockModeR\vdefaultMode\x12F\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12C\n" +
+	"\fdefault_mode\x18\x02 \x01(\x0e2 .paladin.admin.v1.ObjectLockModeR\vdefaultMode\x12F\n" +
 	"\x11default_retention\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x10defaultRetention\"^\n" +
 	"\x10BucketVersioning\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x120\n" +
@@ -2727,12 +2727,12 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x11BucketReplication\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
 	"\x12destination_bucket\x18\x02 \x01(\tR\x11destinationBucket\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xf5\x04\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xf6\x04\n" +
 	"\x06Tenant\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
 	"\ttenant_id\x18\x02 \x01(\tB\x03\xe0A\x05R\btenantId\x12!\n" +
-	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12;\n" +
-	"\x06labels\x18\x04 \x03(\v2#.paladin.admin.v1.Tenant.LabelsEntryR\x06labels\x124\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12<\n" +
+	"\x06labels\x18\x04 \x03(\v2$.paladin.admin.v1.Tenant.LabelsEntryR\x06labels\x124\n" +
 	"\x16inherited_cedar_policy\x18\x05 \x01(\tR\x14inheritedCedarPolicy\x12.\n" +
 	"\x10resource_version\x18\x06 \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
@@ -2747,7 +2747,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0estorage_layout\x18\f \x01(\tB\x03\xe0A\x05R\rstorageLayout\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8b\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8d\x04\n" +
 	"\n" +
 	"Collection\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
@@ -2756,23 +2756,23 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"collection\x18\x03 \x01(\tB\x03\xe0A\x05R\n" +
 	"collection\x12!\n" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x16\n" +
-	"\x06bucket\x18\x05 \x01(\tR\x06bucket\x12I\n" +
-	"\x0fcompletion_mode\x18\x06 \x01(\x0e2 .paladin.common.v1.CompletionModeR\x0ecompletionMode\x12!\n" +
-	"\fcedar_policy\x18\a \x01(\tR\vcedarPolicy\x12D\n" +
-	"\vconstraints\x18\b \x01(\v2\".paladin.admin.v1.BucketConstraintsR\vconstraints\x12.\n" +
+	"\x06bucket\x18\x05 \x01(\tR\x06bucket\x12J\n" +
+	"\x0fcompletion_mode\x18\x06 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\x12!\n" +
+	"\fcedar_policy\x18\a \x01(\tR\vcedarPolicy\x12E\n" +
+	"\vconstraints\x18\b \x01(\v2#.paladin.admin.v1.BucketConstraintsR\vconstraints\x12.\n" +
 	"\x10resource_version\x18\t \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\xef\x02\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\xf0\x02\n" +
 	"\x05Quota\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12&\n" +
 	"\x0fmax_total_bytes\x18\x02 \x01(\x03R\rmaxTotalBytes\x12(\n" +
 	"\x10max_object_count\x18\x03 \x01(\x03R\x0emaxObjectCount\x12)\n" +
 	"\x11max_bytes_per_day\x18\x04 \x01(\x03R\x0emaxBytesPerDay\x12-\n" +
-	"\x13max_objects_per_day\x18\x05 \x01(\x03R\x10maxObjectsPerDay\x121\n" +
-	"\x05usage\x18\x06 \x01(\v2\x1b.paladin.admin.v1.QuotaUsageR\x05usage\x12.\n" +
+	"\x13max_objects_per_day\x18\x05 \x01(\x03R\x10maxObjectsPerDay\x122\n" +
+	"\x05usage\x18\x06 \x01(\v2\x1c.paladin.admin.v1.QuotaUsageR\x05usage\x12.\n" +
 	"\x10resource_version\x18\a \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
 	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\xdb\x01\n" +
@@ -2802,24 +2802,24 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"after_json\x18\v \x01(\fR\tafterJson\x12#\n" +
 	"\rerror_message\x18\f \x01(\tR\ferrorMessage\x12#\n" +
-	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\"\xdd\x02\n" +
+	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\"\xde\x02\n" +
 	"\x11EventSubscription\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\x12.\n" +
-	"\x04sink\x18\x04 \x01(\v2\x1a.paladin.admin.v1.EventSinkR\x04sink\x12\x1a\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\x12/\n" +
+	"\x04sink\x18\x04 \x01(\v2\x1b.paladin.admin.v1.EventSinkR\x04sink\x12\x1a\n" +
 	"\bdisabled\x18\x05 \x01(\bR\bdisabled\x12.\n" +
 	"\x10resource_version\x18\x06 \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\x96\x02\n" +
-	"\tEventSink\x12/\n" +
-	"\x04http\x18\x01 \x01(\v2\x19.paladin.admin.v1.HttpSinkH\x00R\x04http\x122\n" +
-	"\x05kafka\x18\x02 \x01(\v2\x1a.paladin.admin.v1.KafkaSinkH\x00R\x05kafka\x12,\n" +
-	"\x03sqs\x18\x03 \x01(\v2\x18.paladin.admin.v1.SqsSinkH\x00R\x03sqs\x12/\n" +
-	"\x04nats\x18\x04 \x01(\v2\x19.paladin.admin.v1.NatsSinkH\x00R\x04nats\x12;\n" +
-	"\brabbitmq\x18\x05 \x01(\v2\x1d.paladin.admin.v1.RabbitMqSinkH\x00R\brabbitmqB\b\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\x9b\x02\n" +
+	"\tEventSink\x120\n" +
+	"\x04http\x18\x01 \x01(\v2\x1a.paladin.admin.v1.HttpSinkH\x00R\x04http\x123\n" +
+	"\x05kafka\x18\x02 \x01(\v2\x1b.paladin.admin.v1.KafkaSinkH\x00R\x05kafka\x12-\n" +
+	"\x03sqs\x18\x03 \x01(\v2\x19.paladin.admin.v1.SqsSinkH\x00R\x03sqs\x120\n" +
+	"\x04nats\x18\x04 \x01(\v2\x1a.paladin.admin.v1.NatsSinkH\x00R\x04nats\x12<\n" +
+	"\brabbitmq\x18\x05 \x01(\v2\x1e.paladin.admin.v1.RabbitMqSinkH\x00R\brabbitmqB\b\n" +
 	"\x06target\"\x85\x01\n" +
 	"\bHttpSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12,\n" +
@@ -2872,7 +2872,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0eObjectLockMode\x12 \n" +
 	"\x1cOBJECT_LOCK_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bOBJECT_LOCK_MODE_GOVERNANCE\x10\x01\x12\x1f\n" +
-	"\x1bOBJECT_LOCK_MODE_COMPLIANCE\x10\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x1bOBJECT_LOCK_MODE_COMPLIANCE\x10\x02BIZGgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_types_proto_rawDescOnce sync.Once

@@ -145,7 +145,7 @@ func TestWrapStreamingHandler_VerifiedTokenReachesHandler(t *testing.T) {
 
 	for name, set := range map[string]func(http.Header){
 		"Authorization bearer": func(h http.Header) { h.Set("Authorization", "Bearer "+tok.Plaintext) },
-		"X-Paladin-API-Token":   func(h http.Header) { h.Set(HeaderAPIToken, tok.Plaintext) },
+		"X-Paladin-API-Token":  func(h http.Header) { h.Set(HeaderAPIToken, tok.Plaintext) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			conn := newStreamConn()

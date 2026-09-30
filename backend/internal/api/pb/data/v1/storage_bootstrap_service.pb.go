@@ -157,7 +157,7 @@ var File_paladin_data_v1_storage_bootstrap_service_proto protoreflect.FileDescri
 
 const file_paladin_data_v1_storage_bootstrap_service_proto_rawDesc = "" +
 	"\n" +
-	".paladin/data/v1/storage_bootstrap_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\"\x89\x01\n" +
+	"/paladin/data/v1/storage_bootstrap_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\"\x89\x01\n" +
 	"\x1aEnsureTenantStorageRequest\x12&\n" +
 	"\n" +
 	"backend_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tbackendId\x12!\n" +
@@ -166,9 +166,9 @@ const file_paladin_data_v1_storage_bootstrap_service_proto_rawDesc = "" +
 	"\x1bEnsureTenantStorageResponse\x12%\n" +
 	"\x0ebucket_created\x18\x01 \x01(\bR\rbucketCreated\x12/\n" +
 	"\x13collections_created\x18\x02 \x03(\tR\x12collectionsCreated\x121\n" +
-	"\x14collections_existing\x18\x03 \x03(\tR\x13collectionsExisting2\x8e\x01\n" +
-	"\x17StorageBootstrapService\x12s\n" +
-	"\x13EnsureTenantStorage\x12*.paladin.data.v1.EnsureTenantStorageRequest\x1a+.paladin.data.v1.EnsureTenantStorageResponse\"\x03\x90\x02\x02BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x14collections_existing\x18\x03 \x03(\tR\x13collectionsExisting2\x90\x01\n" +
+	"\x17StorageBootstrapService\x12u\n" +
+	"\x13EnsureTenantStorage\x12+.paladin.data.v1.EnsureTenantStorageRequest\x1a,.paladin.data.v1.EnsureTenantStorageResponse\"\x03\x90\x02\x02BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_storage_bootstrap_service_proto_rawDescOnce sync.Once

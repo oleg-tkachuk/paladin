@@ -1746,7 +1746,7 @@ var File_paladin_data_v1_object_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/data/v1/object_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!paladin/common/v1/pagination.proto\x1a\x1flegate/common/v1/resource.proto\x1a\x1alegate/data/v1/types.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd3\x05\n" +
+	"$paladin/data/v1/object_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\x1a paladin/common/v1/resource.proto\x1a\x1bpaladin/data/v1/types.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd7\x05\n" +
 	"\rObjectVersion\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
 	"\n" +
@@ -1756,13 +1756,13 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\fstorage_path\x18\x05 \x01(\tR\vstoragePath\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x06 \x01(\x03R\tsizeBytes\x12\x12\n" +
-	"\x04etag\x18\a \x01(\tR\x04etag\x12:\n" +
-	"\bchecksum\x18\b \x01(\v2\x1e.paladin.data.v1.ChecksumDigestR\bchecksum\x12!\n" +
-	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12G\n" +
+	"\x04etag\x18\a \x01(\tR\x04etag\x12;\n" +
+	"\bchecksum\x18\b \x01(\v2\x1f.paladin.data.v1.ChecksumDigestR\bchecksum\x12!\n" +
+	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12H\n" +
 	"\bmetadata\x18\n" +
-	" \x03(\v2+.paladin.data.v1.ObjectVersion.MetadataEntryR\bmetadata\x12;\n" +
-	"\x04tags\x18\v \x03(\v2'.paladin.data.v1.ObjectVersion.TagsEntryR\x04tags\x123\n" +
-	"\x04lock\x18\f \x01(\v2\x1f.paladin.data.v1.ObjectLockStateR\x04lock\x12>\n" +
+	" \x03(\v2,.paladin.data.v1.ObjectVersion.MetadataEntryR\bmetadata\x12<\n" +
+	"\x04tags\x18\v \x03(\v2(.paladin.data.v1.ObjectVersion.TagsEntryR\x04tags\x124\n" +
+	"\x04lock\x18\f \x01(\v2 .paladin.data.v1.ObjectLockStateR\x04lock\x12>\n" +
 	"\n" +
 	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -1772,28 +1772,28 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"o\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
 	"\x19ListObjectVersionsRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\"\x8b\x01\n" +
-	"\x1aListObjectVersionsResponse\x129\n" +
-	"\bversions\x18\x01 \x03(\v2\x1d.paladin.data.v1.ObjectVersionR\bversions\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"6\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x8d\x01\n" +
+	"\x1aListObjectVersionsResponse\x12:\n" +
+	"\bversions\x18\x01 \x03(\v2\x1e.paladin.data.v1.ObjectVersionR\bversions\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"6\n" +
 	"\x17GetObjectVersionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"n\n" +
 	"\x1bRestoreObjectVersionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x8e\x05\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x92\x05\n" +
 	"\x13UploadObjectRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
 	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12&\n" +
-	"\x0fsize_hint_bytes\x18\x04 \x01(\x03R\rsizeHintBytes\x12\\\n" +
-	"\x12checksum_algorithm\x18\x05 \x01(\x0e2#.paladin.common.v1.ChecksumAlgorithmB\b\xbaH\x05\x82\x01\x02\x10\x01R\x11checksumAlgorithm\x12M\n" +
-	"\bmetadata\x18\x06 \x03(\v21.paladin.data.v1.UploadObjectRequest.MetadataEntryR\bmetadata\x12A\n" +
-	"\x04tags\x18\a \x03(\v2-.paladin.data.v1.UploadObjectRequest.TagsEntryR\x04tags\x12!\n" +
-	"\fexternal_ref\x18\b \x01(\tR\vexternalRef\x12>\n" +
-	"\ttransport\x18\t \x01(\x0e2 .paladin.data.v1.PresignTransportR\ttransport\x12'\n" +
+	"\x0fsize_hint_bytes\x18\x04 \x01(\x03R\rsizeHintBytes\x12]\n" +
+	"\x12checksum_algorithm\x18\x05 \x01(\x0e2$.paladin.common.v1.ChecksumAlgorithmB\b\xbaH\x05\x82\x01\x02\x10\x01R\x11checksumAlgorithm\x12N\n" +
+	"\bmetadata\x18\x06 \x03(\v22.paladin.data.v1.UploadObjectRequest.MetadataEntryR\bmetadata\x12B\n" +
+	"\x04tags\x18\a \x03(\v2..paladin.data.v1.UploadObjectRequest.TagsEntryR\x04tags\x12!\n" +
+	"\fexternal_ref\x18\b \x01(\tR\vexternalRef\x12?\n" +
+	"\ttransport\x18\t \x01(\x0e2!.paladin.data.v1.PresignTransportR\ttransport\x12'\n" +
 	"\x0fidempotency_key\x18\n" +
 	" \x01(\tR\x0eidempotencyKey\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
@@ -1801,31 +1801,31 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd0\x01\n" +
-	"\x14UploadObjectResponse\x12.\n" +
-	"\x06object\x18\x01 \x01(\v2\x16.paladin.data.v1.ObjectR\x06object\x12=\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd3\x01\n" +
+	"\x14UploadObjectResponse\x12/\n" +
+	"\x06object\x18\x01 \x01(\v2\x17.paladin.data.v1.ObjectR\x06object\x12>\n" +
 	"\n" +
-	"upload_url\x18\x02 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\tuploadUrl\x12I\n" +
-	"\x0fcompletion_mode\x18\x03 \x01(\x0e2 .paladin.common.v1.CompletionModeR\x0ecompletionMode\"\x92\x01\n" +
+	"upload_url\x18\x02 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\tuploadUrl\x12J\n" +
+	"\x0fcompletion_mode\x18\x03 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\"\x92\x01\n" +
 	"\x15DownloadObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12+\n" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12/\n" +
-	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"\x8b\x01\n" +
-	"\x16DownloadObjectResponse\x12.\n" +
-	"\x06object\x18\x01 \x01(\v2\x16.paladin.data.v1.ObjectR\x06object\x12A\n" +
-	"\fdownload_url\x18\x02 \x01(\v2\x1e.paladin.common.v1.PresignedUrlR\vdownloadUrl\"/\n" +
+	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"\x8d\x01\n" +
+	"\x16DownloadObjectResponse\x12/\n" +
+	"\x06object\x18\x01 \x01(\v2\x17.paladin.data.v1.ObjectR\x06object\x12B\n" +
+	"\fdownload_url\x18\x02 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\vdownloadUrl\"/\n" +
 	"\x10GetObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"Q\n" +
 	"\x13LookupObjectRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x19\n" +
-	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"\xf9\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"\xfb\x03\n" +
 	"\x13UpdateObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"updateMask\x12M\n" +
-	"\bmetadata\x18\x04 \x03(\v21.paladin.data.v1.UpdateObjectRequest.MetadataEntryR\bmetadata\x12A\n" +
-	"\x04tags\x18\x05 \x03(\v2-.paladin.data.v1.UpdateObjectRequest.TagsEntryR\x04tags\x12!\n" +
+	"updateMask\x12N\n" +
+	"\bmetadata\x18\x04 \x03(\v22.paladin.data.v1.UpdateObjectRequest.MetadataEntryR\bmetadata\x12B\n" +
+	"\x04tags\x18\x05 \x03(\v2..paladin.data.v1.UpdateObjectRequest.TagsEntryR\x04tags\x12!\n" +
 	"\fcontent_type\x18\x06 \x01(\tR\vcontentType\x12!\n" +
 	"\fexternal_ref\x18\a \x01(\tR\vexternalRef\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
@@ -1842,9 +1842,9 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x1c\n" +
 	"\tpermanent\x18\x03 \x01(\bR\tpermanent\x12>\n" +
-	"\x1bbypass_governance_retention\x18\x04 \x01(\bR\x19bypassGovernanceRetention\"F\n" +
-	"\x14DeleteObjectResponse\x12.\n" +
-	"\x06object\x18\x01 \x01(\v2\x16.paladin.data.v1.ObjectR\x06object\"\xf2\x01\n" +
+	"\x1bbypass_governance_retention\x18\x04 \x01(\bR\x19bypassGovernanceRetention\"G\n" +
+	"\x14DeleteObjectResponse\x12/\n" +
+	"\x06object\x18\x01 \x01(\v2\x17.paladin.data.v1.ObjectR\x06object\"\xf2\x01\n" +
 	"\x19SetObjectRetentionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x121\n" +
 	"\x04mode\x18\x02 \x01(\tB\x1d\xbaH\x1ar\x18R\n" +
@@ -1860,36 +1860,36 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"g\n" +
 	"\x14RestoreObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\xf3\x02\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\xf5\x02\n" +
 	"\x11CopyObjectRequest\x12(\n" +
 	"\vsource_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"sourceName\x12>\n" +
 	"\x16destination_collection\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x120\n" +
-	"\x0fdestination_key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0edestinationKey\x12R\n" +
-	"\x11metadata_override\x18\x04 \x01(\v2 .paladin.data.v1.MetadataOverrideH\x00R\x10metadataOverride\x88\x01\x01\x12F\n" +
-	"\rtags_override\x18\x05 \x01(\v2\x1c.paladin.data.v1.TagsOverrideH\x01R\ftagsOverride\x88\x01\x01B\x14\n" +
+	"\x0fdestination_key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0edestinationKey\x12S\n" +
+	"\x11metadata_override\x18\x04 \x01(\v2!.paladin.data.v1.MetadataOverrideH\x00R\x10metadataOverride\x88\x01\x01\x12G\n" +
+	"\rtags_override\x18\x05 \x01(\v2\x1d.paladin.data.v1.TagsOverrideH\x01R\ftagsOverride\x88\x01\x01B\x14\n" +
 	"\x12_metadata_overrideB\x10\n" +
-	"\x0e_tags_override\"\x9b\x01\n" +
-	"\x10MetadataOverride\x12J\n" +
-	"\bmetadata\x18\x01 \x03(\v2..paladin.data.v1.MetadataOverride.MetadataEntryR\bmetadata\x1a;\n" +
+	"\x0e_tags_override\"\x9c\x01\n" +
+	"\x10MetadataOverride\x12K\n" +
+	"\bmetadata\x18\x01 \x03(\v2/.paladin.data.v1.MetadataOverride.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x83\x01\n" +
-	"\fTagsOverride\x12:\n" +
-	"\x04tags\x18\x01 \x03(\v2&.paladin.data.v1.TagsOverride.TagsEntryR\x04tags\x1a7\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x84\x01\n" +
+	"\fTagsOverride\x12;\n" +
+	"\x04tags\x18\x01 \x03(\v2'.paladin.data.v1.TagsOverride.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd7\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd9\x01\n" +
 	"\x12ListObjectsRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x121\n" +
-	"\x04page\x18\x02 \x01(\v2\x1d.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12\x19\n" +
-	"\border_by\x18\x04 \x01(\tR\aorderBy\x12:\n" +
+	"\border_by\x18\x04 \x01(\tR\aorderBy\x12;\n" +
 	"\n" +
-	"sort_order\x18\x05 \x01(\x0e2\x1b.paladin.common.v1.SortOrderR\tsortOrder\"{\n" +
-	"\x13ListObjectsResponse\x120\n" +
-	"\aobjects\x18\x01 \x03(\v2\x16.paladin.data.v1.ObjectR\aobjects\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageResponseR\x04page\"N\n" +
+	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"}\n" +
+	"\x13ListObjectsResponse\x121\n" +
+	"\aobjects\x18\x01 \x03(\v2\x17.paladin.data.v1.ObjectR\aobjects\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"N\n" +
 	"\x13CountObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\"Y\n" +
@@ -1899,26 +1899,26 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x10PresignTransport\x12!\n" +
 	"\x1dPRESIGN_TRANSPORT_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESIGN_TRANSPORT_PUT\x10\x01\x12\x1a\n" +
-	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xa6\f\n" +
-	"\rObjectService\x12Y\n" +
-	"\fUploadObject\x12#.paladin.data.v1.UploadObjectRequest\x1a$.paladin.data.v1.UploadObjectResponse\x12_\n" +
-	"\x0eDownloadObject\x12%.paladin.data.v1.DownloadObjectRequest\x1a&.paladin.data.v1.DownloadObjectResponse\x12J\n" +
-	"\tGetObject\x12 .paladin.data.v1.GetObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12P\n" +
-	"\fLookupObject\x12#.paladin.data.v1.LookupObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x01\x12P\n" +
-	"\fUpdateObject\x12#.paladin.data.v1.UpdateObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x02\x12O\n" +
-	"\x0eCompleteObject\x12%.paladin.data.v1.CompleteObjectRequest\x1a\x16.paladin.data.v1.Object\x12^\n" +
-	"\fDeleteObject\x12#.paladin.data.v1.DeleteObjectRequest\x1a$.paladin.data.v1.DeleteObjectResponse\"\x03\x90\x02\x02\x12R\n" +
-	"\rRestoreObject\x12$.paladin.data.v1.RestoreObjectRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x02\x12G\n" +
+	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xc8\f\n" +
+	"\rObjectService\x12[\n" +
+	"\fUploadObject\x12$.paladin.data.v1.UploadObjectRequest\x1a%.paladin.data.v1.UploadObjectResponse\x12a\n" +
+	"\x0eDownloadObject\x12&.paladin.data.v1.DownloadObjectRequest\x1a'.paladin.data.v1.DownloadObjectResponse\x12L\n" +
+	"\tGetObject\x12!.paladin.data.v1.GetObjectRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x01\x12R\n" +
+	"\fLookupObject\x12$.paladin.data.v1.LookupObjectRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x01\x12R\n" +
+	"\fUpdateObject\x12$.paladin.data.v1.UpdateObjectRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x02\x12Q\n" +
+	"\x0eCompleteObject\x12&.paladin.data.v1.CompleteObjectRequest\x1a\x17.paladin.data.v1.Object\x12`\n" +
+	"\fDeleteObject\x12$.paladin.data.v1.DeleteObjectRequest\x1a%.paladin.data.v1.DeleteObjectResponse\"\x03\x90\x02\x02\x12T\n" +
+	"\rRestoreObject\x12%.paladin.data.v1.RestoreObjectRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x02\x12I\n" +
 	"\n" +
-	"CopyObject\x12!.paladin.data.v1.CopyObjectRequest\x1a\x16.paladin.data.v1.Object\x12[\n" +
-	"\vListObjects\x12\".paladin.data.v1.ListObjectsRequest\x1a#.paladin.data.v1.ListObjectsResponse\"\x03\x90\x02\x01\x12^\n" +
-	"\fCountObjects\x12#.paladin.data.v1.CountObjectsRequest\x1a$.paladin.data.v1.CountObjectsResponse\"\x03\x90\x02\x01\x12p\n" +
-	"\x12ListObjectVersions\x12).paladin.data.v1.ListObjectVersionsRequest\x1a*.paladin.data.v1.ListObjectVersionsResponse\"\x03\x90\x02\x01\x12_\n" +
-	"\x10GetObjectVersion\x12'.paladin.data.v1.GetObjectVersionRequest\x1a\x1d.paladin.data.v1.ObjectVersion\"\x03\x90\x02\x01\x12`\n" +
-	"\x14RestoreObjectVersion\x12+.paladin.data.v1.RestoreObjectVersionRequest\x1a\x16.paladin.data.v1.Object\"\x03\x90\x02\x02\x12e\n" +
-	"\x12SetObjectRetention\x12).paladin.data.v1.SetObjectRetentionRequest\x1a\x1f.paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12e\n" +
-	"\x12SetObjectLegalHold\x12).paladin.data.v1.SetObjectLegalHoldRequest\x1a\x1f.paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12[\n" +
-	"\rGetObjectLock\x12$.paladin.data.v1.GetObjectLockRequest\x1a\x1f.paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01BEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"CopyObject\x12\".paladin.data.v1.CopyObjectRequest\x1a\x17.paladin.data.v1.Object\x12]\n" +
+	"\vListObjects\x12#.paladin.data.v1.ListObjectsRequest\x1a$.paladin.data.v1.ListObjectsResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\fCountObjects\x12$.paladin.data.v1.CountObjectsRequest\x1a%.paladin.data.v1.CountObjectsResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12ListObjectVersions\x12*.paladin.data.v1.ListObjectVersionsRequest\x1a+.paladin.data.v1.ListObjectVersionsResponse\"\x03\x90\x02\x01\x12a\n" +
+	"\x10GetObjectVersion\x12(.paladin.data.v1.GetObjectVersionRequest\x1a\x1e.paladin.data.v1.ObjectVersion\"\x03\x90\x02\x01\x12b\n" +
+	"\x14RestoreObjectVersion\x12,.paladin.data.v1.RestoreObjectVersionRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x02\x12g\n" +
+	"\x12SetObjectRetention\x12*.paladin.data.v1.SetObjectRetentionRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12g\n" +
+	"\x12SetObjectLegalHold\x12*.paladin.data.v1.SetObjectLegalHoldRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12]\n" +
+	"\rGetObjectLock\x12%.paladin.data.v1.GetObjectLockRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01BGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_service_proto_rawDescOnce sync.Once

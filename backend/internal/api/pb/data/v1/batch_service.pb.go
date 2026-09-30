@@ -484,7 +484,7 @@ var File_paladin_data_v1_batch_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\n" +
-	"\"paladin/data/v1/batch_service.proto\x12\x0elegate.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe8\x02\n" +
+	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe8\x02\n" +
 	"\tOperation\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x120\n" +
@@ -499,32 +499,32 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\x06result\"H\n" +
 	"\x0eObjectSelector\x12\x1e\n" +
 	"\x05names\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10dR\x05names\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x9e\x01\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x9f\x01\n" +
 	"\x19BatchDeleteObjectsRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12B\n" +
-	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12\x1c\n" +
-	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\x8e\x02\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12C\n" +
+	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12\x1c\n" +
+	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\x8f\x02\n" +
 	"\x17BatchCopyObjectsRequest\x12,\n" +
-	"\rsource_parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceParent\x12B\n" +
-	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12>\n" +
+	"\rsource_parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceParent\x12C\n" +
+	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12>\n" +
 	"\x16destination_collection\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x12A\n" +
-	"\x18destination_key_template\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x16destinationKeyTemplate\"\x81\x01\n" +
+	"\x18destination_key_template\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x16destinationKeyTemplate\"\x82\x01\n" +
 	"\x1aBatchRestoreObjectsRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12B\n" +
-	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\"\x96\x02\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12C\n" +
+	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\"\x98\x02\n" +
 	"\x16BatchUpdateTagsRequest\x12\x1f\n" +
-	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12B\n" +
-	"\bselector\x18\x02 \x01(\v2\x1e.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12D\n" +
-	"\x04tags\x18\x03 \x03(\v20.paladin.data.v1.BatchUpdateTagsRequest.TagsEntryR\x04tags\x12\x18\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12C\n" +
+	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12E\n" +
+	"\x04tags\x18\x03 \x03(\v21.paladin.data.v1.BatchUpdateTagsRequest.TagsEntryR\x04tags\x12\x18\n" +
 	"\areplace\x18\x04 \x01(\bR\areplace\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xf6\x02\n" +
-	"\fBatchService\x12Z\n" +
-	"\x12BatchDeleteObjects\x12).paladin.data.v1.BatchDeleteObjectsRequest\x1a\x19.paladin.data.v1.Operation\x12V\n" +
-	"\x10BatchCopyObjects\x12'.paladin.data.v1.BatchCopyObjectsRequest\x1a\x19.paladin.data.v1.Operation\x12\\\n" +
-	"\x13BatchRestoreObjects\x12*.paladin.data.v1.BatchRestoreObjectsRequest\x1a\x19.paladin.data.v1.Operation\x12T\n" +
-	"\x0fBatchUpdateTags\x12&.paladin.data.v1.BatchUpdateTagsRequest\x1a\x19.paladin.data.v1.OperationBEZCgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xfe\x02\n" +
+	"\fBatchService\x12\\\n" +
+	"\x12BatchDeleteObjects\x12*.paladin.data.v1.BatchDeleteObjectsRequest\x1a\x1a.paladin.data.v1.Operation\x12X\n" +
+	"\x10BatchCopyObjects\x12(.paladin.data.v1.BatchCopyObjectsRequest\x1a\x1a.paladin.data.v1.Operation\x12^\n" +
+	"\x13BatchRestoreObjects\x12+.paladin.data.v1.BatchRestoreObjectsRequest\x1a\x1a.paladin.data.v1.Operation\x12V\n" +
+	"\x0fBatchUpdateTags\x12'.paladin.data.v1.BatchUpdateTagsRequest\x1a\x1a.paladin.data.v1.OperationBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_batch_service_proto_rawDescOnce sync.Once

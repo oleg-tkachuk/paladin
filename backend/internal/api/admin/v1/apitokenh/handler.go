@@ -15,9 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"strings"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
