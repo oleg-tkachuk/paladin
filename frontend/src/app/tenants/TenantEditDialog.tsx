@@ -2,17 +2,14 @@
 
 import React, { useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { ConnectError } from "@connectrpc/connect";
+
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  FormDialog,
+  FormField,
+  FormSection,
+} from "@/components/ui/form-dialog";
 import { IdentityField } from "@/components/IdentityField";
 import { useNotification } from "@/components/ui/Notification";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
@@ -42,8 +39,11 @@ export function TenantEditDialog({
   updateTenantMetadata,
 }: TenantEditDialogProps) {
   const { showNotification } = useNotification();
-  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editDisplayName, setEditDisplayName] = useState(
+    editing?.displayName || "",
+  );
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Seed the field whenever a new tenant opens the dialog — render-phase
   // adjust-on-change keyed on the `editing` prop identity (not a
@@ -52,11 +52,14 @@ export function TenantEditDialog({
   if (editing !== seededEditing) {
     setSeededEditing(editing);
     if (editing) setEditDisplayName(editing.displayName || "");
+    setSubmitError(null);
   }
 
-  const handleUpdate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const unchanged = editDisplayName === (editing?.displayName || "");
+
+  const handleUpdate = async () => {
     if (!editing) return;
+    setSubmitError(null);
     try {
       setSubmitting(true);
       await updateTenantMetadata(
@@ -73,68 +76,59 @@ export function TenantEditDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      showNotification({
-        type: "error",
-        title: "Update failed",
-        message: "Failed to update tenant display name.",
-      });
+      setSubmitError(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Failed to update the display name.",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={!!editing} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <form onSubmit={handleUpdate}>
-          <DialogHeader>
-            <DialogTitle>Edit tenant</DialogTitle>
-            <DialogDescription>
-              Display name is the only editable identity field. Tenant ID and
-              slug are immutable — slug rotation requires the RenameTenantSlug
-              RPC.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-              <IdentityField
-                label="slug"
-                value={editing?.slug || ""}
-                immutable
-                labelWidth="w-20"
-              />
-              <IdentityField
-                label="tenant id"
-                value={editing?.tenantId || ""}
-                immutable
-                truncate
-                labelWidth="w-20"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-display-name">Display name</Label>
-              <Input
-                id="edit-display-name"
-                autoFocus
-                placeholder="Acme Corporation"
-                value={editDisplayName}
-                onChange={(e) => setEditDisplayName(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Must be unique across tenants.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Saving…" : "Save changes"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={!!editing}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+      title="Edit tenant"
+      description="Only the display name changes here; the slug has its own rename."
+      onSubmit={() => void handleUpdate()}
+      submitLabel="Save changes"
+      submittingLabel="Saving…"
+      submitting={submitting}
+      blockedReason={unchanged ? "No change to save." : null}
+      error={submitError}
+    >
+      <FormSection>
+        <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-2">
+          <IdentityField
+            label="slug"
+            value={editing?.slug || ""}
+            immutable
+            labelWidth="w-20"
+          />
+          <IdentityField
+            label="tenant id"
+            value={editing?.tenantId || ""}
+            immutable
+            truncate
+            labelWidth="w-20"
+          />
+        </div>
+        <FormField label="Display name" hint="Unique across tenants.">
+          {(control) => (
+            <Input
+              {...control}
+              autoFocus
+              placeholder="Acme Corporation"
+              value={editDisplayName}
+              onChange={(e) => setEditDisplayName(e.target.value)}
+            />
+          )}
+        </FormField>
+      </FormSection>
+    </FormDialog>
   );
 }
