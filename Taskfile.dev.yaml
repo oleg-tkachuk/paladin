@@ -213,6 +213,7 @@ tasks:
       - task: verify:taskfile-drift
       - task: verify:publish-target
       - task: verify:go-module-paths
+      - task: verify:frontend-gen
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
@@ -350,6 +351,11 @@ tasks:
     # So the list is in three places, and this fails when they stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
+
+  verify:frontend-gen:
+    desc: "Fail when the console's Connect-ES stubs are stale against proto/"
+    cmds:
+      - ./scripts/frontend-gen.test.sh
 
   verify:go-module-paths:
     desc: "Fail when a Go module's path does not match its directory"
