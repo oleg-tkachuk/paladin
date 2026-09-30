@@ -35,7 +35,7 @@ vars:
   # cannot hand a var upward. Held to the same version as Taskfile.yaml by
   # hand; a half-applied bump fails one entry point with a message about trust
   # rather than about the version.
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.1'
   # Pinned, and run through `pipx run` rather than installed: the rules a scan
   # asserts against change between releases, so an unpinned checkov makes a
   # local run and the pipeline's disagree — a red nobody else can reproduce, or
