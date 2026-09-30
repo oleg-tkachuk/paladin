@@ -52,7 +52,7 @@ fi
 # problem from the cluster being down — say which.
 for host in "$BASE_HOST" "$API_HOST" "$ADMIN_HOST"; do
     if ! curl -sk -o /dev/null --max-time 8 "https://${host}/"; then
-        echo "https://${host}/ is unreachable — check DNS (gitops 'task dns:setup') and the IngressRoute" >&2
+        echo "https://${host}/ is unreachable — check DNS (the GitOps repo's 'task dns:setup') and the IngressRoute" >&2
         exit 1
     fi
 done

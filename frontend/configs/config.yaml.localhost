@@ -5,9 +5,9 @@
 # PALADIN_*_URL environment variables, so this file and its sibling differ only
 # in the comment above. It is kept because the README names it.
 #
-# It used to carry a pre-minted JWT. That token had expired and was issued by
-# `paladin-dev` for `paladin-api` — both names predate the rename to paladin — so it
-# authenticated nothing, while contradicting the rule its sibling states: a
+# It used to carry a pre-minted JWT. That token had expired and was issued
+# under service names this project no longer uses, so it authenticated
+# nothing, while contradicting the rule its sibling states: a
 # committed dev token in a public repository is a token everyone holds.
 runtimeConfig:
   public:
