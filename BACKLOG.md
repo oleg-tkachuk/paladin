@@ -2136,3 +2136,43 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** it stopped happening. What remains is a client that leaves no
   trace in the tree, so `ss -tnp` inside the pod during a burst is still the
   step that finishes this — and there is no burst to catch.
+
+## The console's admin views still open for a pure tenant.user by URL
+
+- **Status:** Deferred.
+- **Reason:** the sidebar and dashboard now leave out what reads the admin
+  plane when IAM will not issue that audience (`canUseAdminPlane`), but the
+  routes themselves, the command palette's entries and the scope picker's
+  tenant lookup still run for such a user and fail request by request with
+  PermissionDenied; the scope picker shows the tenant's UUID for the same
+  reason.
+- **Definition of Done:** an admin-plane route reached without the admin
+  audience renders one "needs an admin role" state, the palette lists only
+  what the sidebar does, and the scope picker names the tenant from the iam
+  plane.
+- **Blockers:** none.
+
+## Which roles receive the admin audience is decided by a name suffix
+
+- **Status:** Open question.
+- **Reason:** `authh.isAdminRole` admits a role ending in `.admin`, so
+  `platform.tenant-provisioner`, `platform.capability-issuer` and
+  `mcp.operator` — roles whose work is on the admin plane — are refused the
+  paladin-admin audience unless they also hold an `*.admin` role. The console
+  mirrors the suffix (`ADMIN_TIER_ROLE_SUFFIX`).
+- **Definition of Done:** the audience grant is an explicit per-role list in
+  one place, the console reads it rather than a suffix, and a test pins each
+  role's answer.
+- **Blockers:** the intended powers of the three roles.
+
+## A proto change cannot pass the gate before it is committed
+
+- **Status:** Deferred.
+- **Reason:** the codegen module's stub check fails on any uncommitted file
+  under the stub directories (`git status --porcelain`), so a contract change
+  with its regenerated stubs is red until committed — against this
+  repository's gate-before-commit rule.
+- **Definition of Done:** the check compares the regenerated stubs with the
+  working tree's sources, not with HEAD, so a staged change with fresh stubs
+  passes and a stale stub still fails.
+- **Blockers:** the check lives in the shared task library.

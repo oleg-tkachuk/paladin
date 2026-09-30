@@ -29,6 +29,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
+import { canUseAdminPlane } from "@/constants/roles";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -56,6 +57,8 @@ import {
 type NavItem = {
   name: string;
   icon: React.ElementType;
+  /** Works without an admin-plane token; see visibleNavigationGroups. */
+  withoutAdminPlane?: true;
 } & ({ path: string; tenantTab?: never } | { path?: never; tenantTab: string });
 
 const navigationGroups: Array<{
@@ -70,7 +73,7 @@ const navigationGroups: Array<{
     // pre-selected OK and is the most-used Core entry-point.
     title: "Core",
     items: [
-      { name: "Dashboard", path: "/", icon: HomeIcon },
+      { name: "Dashboard", path: "/", icon: HomeIcon, withoutAdminPlane: true },
       { name: "Upload", path: "/upload", icon: CloudArrowUpIcon },
     ],
   },
@@ -151,17 +154,40 @@ const navigationGroups: Array<{
       { name: "Platform Stats", path: "/stats", icon: ChartBarSquareIcon },
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
       { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
-      { name: "Health Status", path: "/health", icon: CheckCircleIcon },
+      {
+        name: "Health Status",
+        path: "/health",
+        icon: CheckCircleIcon,
+        withoutAdminPlane: true,
+      },
     ],
   },
   {
     title: "Settings",
     items: [
-      { name: "Profile", path: "/profile", icon: UserCircleIcon },
+      {
+        name: "Profile",
+        path: "/profile",
+        icon: UserCircleIcon,
+        withoutAdminPlane: true,
+      },
       { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
     ],
   },
 ];
+
+/**
+ * The groups to show for these roles. A principal IAM will not issue the
+ * admin audience gets only what works without it — everything else would
+ * fail on its first request. Until the user is known (null) nothing is taken
+ * away, so an operator's sidebar does not flash short on load.
+ */
+export function visibleNavigationGroups(roles: readonly string[] | null) {
+  if (roles === null || canUseAdminPlane(roles)) return navigationGroups;
+  return navigationGroups
+    .map((g) => ({ ...g, items: g.items.filter((i) => i.withoutAdminPlane) }))
+    .filter((g) => g.items.length > 0);
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -296,85 +322,87 @@ function SidebarBody({
       */}
       <ScrollArea className="min-h-0 flex-1 paladin-scroll">
         <nav className="px-3 py-4">
-          {navigationGroups.map((group, groupIdx) => (
-            <div key={group.title} className="space-y-0.5">
-              {!collapsed && (
-                <div
-                  className={cn(
-                    // Each group except the first gets an explicit
-                    // top margin so the previous group's last (often
-                    // active-tinted) item can never butt up against
-                    // the SETTINGS / SYSTEM / etc. label. Picked over
-                    // a parent `space-y-X` because the inter-group
-                    // gap is the only spacing concern that needs
-                    // calling out — items inside a group keep their
-                    // tight space-y-0.5.
-                    "px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
-                    groupIdx > 0 && "mt-7",
-                  )}
-                >
-                  {group.title}
-                </div>
-              )}
-              {group.items.map((item) => {
-                const href = resolveItemHref(item);
-                // Tenant-scoped item without a known tenant — hide
-                // rather than render a broken `/tenants//capabilities`
-                // placeholder. Restored after auth resolves.
-                if (href === null) return null;
-                const active = isCurrent(href);
-                const Icon = item.icon;
-                const link = (
-                  <Link
-                    key={item.name}
-                    href={href}
-                    onClick={onNavigate}
+          {visibleNavigationGroups(user?.roles ?? null).map(
+            (group, groupIdx) => (
+              <div key={group.title} className="space-y-0.5">
+                {!collapsed && (
+                  <div
                     className={cn(
-                      // Layout — left rail consumes 2px on the inside
-                      "group relative flex h-9 items-center gap-3 rounded-md pr-2 text-sm transition-colors",
-                      collapsed ? "justify-center pl-0" : "pl-3",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      // Active = brighter sidebar-accent + primary-tinted bg
-                      active
-                        ? "bg-primary/10 text-foreground font-medium"
-                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                      // Each group except the first gets an explicit
+                      // top margin so the previous group's last (often
+                      // active-tinted) item can never butt up against
+                      // the SETTINGS / SYSTEM / etc. label. Picked over
+                      // a parent `space-y-X` because the inter-group
+                      // gap is the only spacing concern that needs
+                      // calling out — items inside a group keep their
+                      // tight space-y-0.5.
+                      "px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
+                      groupIdx > 0 && "mt-7",
                     )}
-                    aria-current={active ? "page" : undefined}
                   >
-                    {/* Left rail accent — visible on active row only */}
-                    {active && !collapsed && (
-                      <span
-                        aria-hidden
-                        className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary"
-                      />
-                    )}
-                    <Icon
+                    {group.title}
+                  </div>
+                )}
+                {group.items.map((item) => {
+                  const href = resolveItemHref(item);
+                  // Tenant-scoped item without a known tenant — hide
+                  // rather than render a broken `/tenants//capabilities`
+                  // placeholder. Restored after auth resolves.
+                  if (href === null) return null;
+                  const active = isCurrent(href);
+                  const Icon = item.icon;
+                  const link = (
+                    <Link
+                      key={item.name}
+                      href={href}
+                      onClick={onNavigate}
                       className={cn(
-                        "size-4 shrink-0 transition-colors",
+                        // Layout — left rail consumes 2px on the inside
+                        "group relative flex h-9 items-center gap-3 rounded-md pr-2 text-sm transition-colors",
+                        collapsed ? "justify-center pl-0" : "pl-3",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        // Active = brighter sidebar-accent + primary-tinted bg
                         active
-                          ? "text-primary"
-                          : "text-muted-foreground group-hover:text-foreground",
+                          ? "bg-primary/10 text-foreground font-medium"
+                          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
                       )}
-                    />
-                    {!collapsed && (
-                      <>
-                        <span className="truncate">{item.name}</span>
-                      </>
-                    )}
-                  </Link>
-                );
+                      aria-current={active ? "page" : undefined}
+                    >
+                      {/* Left rail accent — visible on active row only */}
+                      {active && !collapsed && (
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary"
+                        />
+                      )}
+                      <Icon
+                        className={cn(
+                          "size-4 shrink-0 transition-colors",
+                          active
+                            ? "text-primary"
+                            : "text-muted-foreground group-hover:text-foreground",
+                        )}
+                      />
+                      {!collapsed && (
+                        <>
+                          <span className="truncate">{item.name}</span>
+                        </>
+                      )}
+                    </Link>
+                  );
 
-                return collapsed ? (
-                  <Tooltip key={item.name}>
-                    <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right">{item.name}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  link
-                );
-              })}
-            </div>
-          ))}
+                  return collapsed ? (
+                    <Tooltip key={item.name}>
+                      <TooltipTrigger asChild>{link}</TooltipTrigger>
+                      <TooltipContent side="right">{item.name}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    link
+                  );
+                })}
+              </div>
+            ),
+          )}
         </nav>
       </ScrollArea>
 

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useStats } from "@/context/StatsContext";
 import { useAuth } from "@/context/AuthContext";
+import { canUseAdminPlane } from "@/constants/roles";
 import {
   type ComponentHealth,
   componentStatusLabel,
@@ -74,9 +75,14 @@ function backendBuild(
   };
 }
 
+const NO_ADMIN_ROLE_TITLE = "This account holds no admin role.";
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { stats } = useStats();
+  // Until the user is known, render as an operator would see it: the widgets
+  // hold skeletons, which is right for both.
+  const adminPlane = !user || canUseAdminPlane(user.roles);
   // UI build-info is bundle-time static — three baked-in env lookups.
   const ui = uiBuildInfo();
 
@@ -124,20 +130,36 @@ export default function DashboardPage() {
         title="Dashboard"
         description="System health, recent activity, and anything that needs attention."
         actions={
-          <Button size="sm" asChild>
-            <Link href="/upload">
-              <ArrowUpTrayIcon className="size-4" />
-              Upload
-            </Link>
-          </Button>
+          adminPlane && (
+            <Button size="sm" asChild>
+              <Link href="/upload">
+                <ArrowUpTrayIcon className="size-4" />
+                Upload
+              </Link>
+            </Button>
+          )
         }
       />
 
-      {/* ─── Attention widgets: recent activity, failed ops, budgets ── */}
-      <DashboardWidgets />
+      {adminPlane ? (
+        <>
+          {/* ─── Attention widgets: recent activity, failed ops, budgets ── */}
+          <DashboardWidgets />
 
-      {/* ─── Event-dispatcher backlog (SystemService.GetDispatcherStats) */}
-      <DispatcherStatsCard />
+          {/* ─── Event-dispatcher backlog (SystemService.GetDispatcherStats) */}
+          <DispatcherStatsCard />
+        </>
+      ) : (
+        <Card>
+          <CardContent className="space-y-1 px-5 py-4">
+            <p className="text-sm font-medium">{NO_ADMIN_ROLE_TITLE}</p>
+            <p className={T.hint}>
+              The console&apos;s management views need an admin role. Objects
+              are reached through the API and the SDKs.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Footer strip: health rollup · identity · build pair ────── */}
       <Card>
