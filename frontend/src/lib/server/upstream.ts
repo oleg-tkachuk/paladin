@@ -1,6 +1,6 @@
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import { ConnectError } from "@connectrpc/connect";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 
 import type { Plane } from "@/constants";
 
@@ -48,15 +48,24 @@ const upstreamAgent = new Agent({
   connect: { timeout: 10_000 },
 });
 
+/**
+ * fetch over the shared pool. undici's own fetch rather than Node's global
+ * one: an Agent only works with the fetch of the same undici major, and
+ * Node's bundled undici follows the Node release — Node 24 ships undici 7,
+ * which rejects this undici 8 Agent and fails every request with "fetch
+ * failed". The casts bridge undici's WHATWG types and the DOM's.
+ */
+export const upstreamFetch: typeof fetch = (input, init) =>
+  undiciFetch(
+    input as Parameters<typeof undiciFetch>[0],
+    { ...init, dispatcher: upstreamAgent } as Parameters<typeof undiciFetch>[1],
+  ) as unknown as Promise<Response>;
+
 /** A grpc-web transport to one plane, over the shared connection pool. */
 export function planeTransport(plane: Plane) {
   return createGrpcWebTransport({
     baseUrl: planeBackendUrls[plane],
-    // Node's fetch honours a `dispatcher` in the init object; the DOM types
-    // do not model it, which is what the cast is for. Using the global fetch
-    // rather than undici's keeps the Response type connect-web expects.
-    fetch: (input, init) =>
-      fetch(input, { ...init, dispatcher: upstreamAgent } as RequestInit),
+    fetch: upstreamFetch,
     interceptors: [
       (next) => async (req) => {
         try {

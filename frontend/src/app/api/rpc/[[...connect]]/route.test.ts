@@ -11,6 +11,14 @@ const ADMIN = "https://admin.test";
 const DATA = "https://data.test";
 const IAM = "https://iam.test";
 
+// The BFF calls the planes through undici's fetch; route it to the global one
+// each test stubs.
+vi.mock("undici", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("undici")>()),
+  fetch: (input: unknown, init?: RequestInit) =>
+    globalThis.fetch(input as RequestInfo, init),
+}));
+
 type BackendCall = { url: string; headers: Headers };
 let calls: BackendCall[] = [];
 
