@@ -11,6 +11,8 @@ and where its boundaries are. This directory holds the detail.
   a local cluster fed from the working tree, the gates; what each needs.
 - [upgrading.md](upgrading.md) — breaking changes between releases and
   what to do about them. Read before upgrading an existing deployment.
+- [how-changes-land.md](how-changes-land.md) — trunk, Conventional Commits,
+  what CI checks and what a green push to `main` releases.
 - [releasing.md](releasing.md) — what each tag family publishes, who
   cuts it, and why the product, the SDKs and `capability/` are versioned
   apart.

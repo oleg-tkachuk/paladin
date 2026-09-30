@@ -44,8 +44,8 @@ sdk/python/   Python SDK: the same, on connect-python
 ## Contents
 
 - [Deploy to Kubernetes](#deploy-to-kubernetes) — the Helm charts, on your cluster
-- [Run it with Task](#run-it-with-task) — from a clone: compose, a local cluster, the gates
-- [How changes land](#how-changes-land) — trunk, CI and releases
+- [Run it with Task](docs/task.md) — from a clone: compose, a local cluster, the gates
+- [How changes land](docs/how-changes-land.md) — trunk, CI and releases
 - [Documentation](#documentation) — the rest, by document
 - [Layout](#layout) — where things live in the tree
 - [License](#license)
@@ -117,31 +117,6 @@ and an S3-compatible store whose access key may create buckets. Kubernetes
 [docs/install.md](docs/install.md) covers the rest: ingress, TLS between the
 planes, and what to set when ArgoCD renders the charts.
 
-## Run it with Task
-
-Paladin also runs from a clone of the repository through
-[Task](https://taskfile.dev): the whole stack in compose with nothing but
-Docker (`task stack:up`), a local cluster fed from the working tree, or the
-gates while you work on the code. [docs/task.md](docs/task.md) covers each
-flow and what it needs installed.
-
-## How changes land
-
-`main` is the only long-lived branch. Changes reach it through pull requests,
-with [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
-
-[`ci.yaml`](.github/workflows/ci.yaml) runs `verify-all` and audits the
-workflows with actionlint and zizmor. A green push to `main` dispatches
-[`release.yaml`](.github/workflows/release.yaml): semantic-release computes
-the next tag from the commits since the last one, a GitHub release with
-generated notes is created for it, and both images and charts are pushed to
-GHCR at that version. The SDK and API-contract tags follow their own stream —
-see [docs/releasing.md](docs/releasing.md).
-
-`ci.yaml` builds no image and deploys nothing; images and charts are published
-only by `release.yaml`, for a release tag. `verify-deep` and
-`verify-e2e` need Docker and run locally, before a merge.
-
 ## Documentation
 
 | Document | Covers |
@@ -154,6 +129,7 @@ only by `release.yaml`, for a release tag. `verify-deep` and
 | [docs/task.md](docs/task.md) | running it with Task — compose, a local cluster, the gates — and the prerequisites of each |
 | [docs/configuration.md](docs/configuration.md) | every configuration surface, and the validation run at load |
 | [docs/upgrading.md](docs/upgrading.md) | breaking changes between releases |
+| [docs/how-changes-land.md](docs/how-changes-land.md) | trunk, CI, and what a green push to `main` releases |
 | [docs/releasing.md](docs/releasing.md) | what each tag family publishes and who cuts it |
 | [docs/](docs/README.md) | subsystems, [ADRs](docs/adr/) and [runbooks](docs/runbooks/) |
 | [CONTRIBUTING.md](.github/CONTRIBUTING.md) | pull requests are not accepted yet; security fixes are |
