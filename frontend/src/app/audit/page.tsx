@@ -32,6 +32,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { ActorName } from "@/components/features/audit/ActorName";
 
 // /audit — read-only view of admin/v1.AuditLogService.ListAuditLog.
 //
@@ -280,7 +281,12 @@ export default function AuditPage() {
                     <TableCell>
                       <div className="space-y-0.5">
                         <span className={T.body}>
-                          {e.actorSubject || (
+                          {e.actorSubject ? (
+                            <ActorName
+                              subject={e.actorSubject}
+                              tenantId={e.actorTenantId}
+                            />
+                          ) : (
                             <span className="italic text-muted-foreground">
                               system
                             </span>

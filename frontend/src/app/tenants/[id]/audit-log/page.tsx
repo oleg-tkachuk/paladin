@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
+import { ActorName } from "@/components/features/audit/ActorName";
 
 function formatTimestamp(ts: { seconds: bigint } | undefined): string {
   if (!ts) return "—";
@@ -229,7 +230,12 @@ export default function TenantAuditLogPage() {
                     <TableCell>
                       <div className="space-y-0.5">
                         <span className={T.body}>
-                          {e.actorSubject || (
+                          {e.actorSubject ? (
+                            <ActorName
+                              subject={e.actorSubject}
+                              tenantId={e.actorTenantId}
+                            />
+                          ) : (
                             <span className="italic text-muted-foreground">
                               system
                             </span>

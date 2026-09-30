@@ -89,6 +89,7 @@ const QUICK_LINKS: Array<{
 // "0 / 1,000" — same digits the cap had. The shared formatter
 // emits "0 units / 1,000 units" for that case.
 import { formatMoney } from "@/lib/format/money";
+import { ActorName } from "@/components/features/audit/ActorName";
 
 // IdentityCard renders the tenant's three identity fields in priority
 // order — display name as the heading (mutable, human-friendly), slug
@@ -568,8 +569,11 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
           )}
         >
           <span className="text-muted-foreground">by</span>
-          <span className="font-mono text-xs truncate">
-            {entry.actorSubject || "—"}
+          <span className="text-xs truncate">
+            <ActorName
+              subject={entry.actorSubject}
+              tenantId={entry.actorTenantId}
+            />
           </span>
           {entry.resourceName && (
             <>

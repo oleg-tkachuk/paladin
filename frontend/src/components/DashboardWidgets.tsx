@@ -48,6 +48,7 @@ import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { ActorName } from "@/components/features/audit/ActorName";
 
 export function DashboardWidgets() {
   return (
@@ -124,7 +125,10 @@ function RecentActivityWidget() {
                   />
                   <span className="font-medium">{action}</span>
                   <span className="truncate text-muted-foreground">
-                    {e.actorSubject}
+                    <ActorName
+                      subject={e.actorSubject}
+                      tenantId={e.actorTenantId}
+                    />
                   </span>
                   <span className="ml-auto whitespace-nowrap text-[10px] text-muted-foreground">
                     <RelativeTime ts={e.at} />

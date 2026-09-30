@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { ActorName } from "@/components/features/audit/ActorName";
 
 // Decode a bytes state-snapshot to a display string. The backend stores
 // sanitized JSON; pretty-print it when it parses, else show the raw text.
@@ -94,7 +95,16 @@ export function AuditEntryDetailDialog({
                 {data.action || "—"}
               </Badge>
             </Field>
-            <Field k="actor" v={data.actorSubject || "system"} mono />
+            <Field k="actor" v={data.actorSubject || "system"}>
+              <ActorName
+                subject={data.actorSubject}
+                tenantId={data.actorTenantId}
+                fallback="system"
+              />
+            </Field>
+            {data.actorSubject && (
+              <Field k="actor id" v={data.actorSubject} mono />
+            )}
             {data.actorTenantId && (
               <Field k="tenant" v={data.actorTenantId} mono />
             )}
