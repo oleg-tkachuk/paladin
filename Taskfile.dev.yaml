@@ -209,6 +209,7 @@ tasks:
       - task: verify:chart-values
       - task: verify:chart-reads
       - task: verify:chart-netpol
+      - task: verify:chart-defaults
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:publish-target
@@ -319,6 +320,11 @@ tasks:
     # refused by them.
     cmds:
       - python3 ./scripts/chart-reads.py
+
+  verify:chart-defaults:
+    desc: "Fail when the backend chart stops wiring what a fresh install needs"
+    cmds:
+      - ./scripts/chart-defaults.test.sh
 
   verify:chart-netpol:
     desc: "Fail when a role has no NetworkPolicy and the baseline does not cover it"

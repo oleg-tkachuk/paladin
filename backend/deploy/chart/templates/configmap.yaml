@@ -42,4 +42,11 @@ data:
     {{- $_ := set $b.auth "secret_key_secret" (dict "name" $sec.name "key" "secret_key") }}
     {{- end }}
     {{- end }}
+    {{- $sk := fromJson (include "chart.authSigningKey" .) }}
+    {{- if $sk.active }}
+    {{- $_ := set $cfg.auth "signing_key_secret" (dict "name" $sk.name "key" $sk.key) }}
+    {{- end }}
+    {{- if not $cfg.auth.issuer }}
+    {{- $_ := set $cfg.auth "issuer" (include "chart.fullname" .) }}
+    {{- end }}
     {{- tpl (toYaml $cfg) . | nindent 4 }}

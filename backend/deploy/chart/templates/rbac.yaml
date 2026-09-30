@@ -34,17 +34,7 @@ metadata:
     "argocd.argoproj.io/sync-wave": "-5"
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-{{- /*
-  Build the allowlist. The static list from values comes first; if the
-  primary-storage credential Secret is wired (create or existingSecret),
-  append its name so the resolver can GET it without manual values upkeep.
-*/}}
-{{- $secretNames := .Values.rbac.secretReader.secretNames | default (list) -}}
-{{- range $backend, $sec := fromJson (include "chart.s3CredentialSecrets" .) -}}
-{{- if and $sec.active (not (has $sec.name $secretNames)) -}}
-{{- $secretNames = append $secretNames $sec.name -}}
-{{- end -}}
-{{- end }}
+{{- $secretNames := fromJsonArray (include "chart.secretReaderNames" .) }}
 rules:
   - apiGroups: [""]
     resources: ["secrets"]

@@ -2,6 +2,32 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "auth": {
+      "additionalProperties": false,
+      "properties": {
+        "signingKey": {
+          "additionalProperties": false,
+          "properties": {
+            "generate": {
+              "type": "boolean"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "generatedLength": {
+              "type": "integer",
+              "minimum": 32
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "bootstrap": {
       "additionalProperties": false,
       "properties": {

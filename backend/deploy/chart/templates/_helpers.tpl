@@ -178,3 +178,49 @@ the map that name nothing get `<fullname>-s3-<backend>`.
 {{- end -}}
 {{- toJson $out -}}
 {{- end -}}
+
+{{/*
+chart.authSigningKey — where auth.signing_key comes from when config.auth
+names neither an inline key nor a Secret: a Secret this chart generates, or
+auth.signingKey.existingSecret. Returns JSON {active, create, name, key};
+inactive when config.auth already answers the question, so overlays that set
+it render exactly as before.
+*/}}
+{{- define "chart.authSigningKey" -}}
+{{- $sk := .Values.auth.signingKey -}}
+{{- $cfgAuth := .Values.config.auth | default dict -}}
+{{- $configured := false -}}
+{{- if or $cfgAuth.signing_key (and $cfgAuth.signing_key_secret $cfgAuth.signing_key_secret.name) -}}
+{{- $configured = true -}}
+{{- end -}}
+{{- $name := $sk.existingSecret | default (printf "%s-auth-signing-key" (include "chart.fullname" .)) -}}
+{{- $active := false -}}
+{{- if and (not $configured) (or $sk.generate $sk.existingSecret) -}}
+{{- $active = true -}}
+{{- end -}}
+{{- $create := false -}}
+{{- if and $active $sk.generate (not $sk.existingSecret) -}}
+{{- $create = true -}}
+{{- end -}}
+{{- dict "active" $active "create" $create "name" $name "key" $sk.key | toJson -}}
+{{- end -}}
+
+{{/*
+chart.secretReaderNames — every Secret the in-process resolver GETs: the
+static rbac.secretReader.secretNames, plus each one this chart wires itself,
+so an operator who replaces the static list cannot drop a Secret the chart
+depends on. Returns a JSON list.
+*/}}
+{{- define "chart.secretReaderNames" -}}
+{{- $names := .Values.rbac.secretReader.secretNames | default (list) -}}
+{{- range $backend, $sec := fromJson (include "chart.s3CredentialSecrets" .) -}}
+{{- if $sec.active -}}{{- $names = append $names $sec.name -}}{{- end -}}
+{{- end -}}
+{{- $boot := (.Values.config.bootstrap | default dict).admin | default dict -}}
+{{- if and $boot.enabled $boot.password_secret $boot.password_secret.name -}}
+{{- $names = append $names $boot.password_secret.name -}}
+{{- end -}}
+{{- $auth := fromJson (include "chart.authSigningKey" .) -}}
+{{- if $auth.active -}}{{- $names = append $names $auth.name -}}{{- end -}}
+{{- $names | uniq | toJson -}}
+{{- end -}}

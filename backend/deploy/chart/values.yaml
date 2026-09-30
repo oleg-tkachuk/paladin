@@ -1099,11 +1099,30 @@ config:
 
 bootstrap:
   admin:
-    enabled: false
+    # On by default: a fresh install gets a platform admin whose password is
+    # generated once and kept in the Secret below (NOTES.txt says how to read
+    # it). GitOps installs set false and ship the Secret themselves.
+    enabled: true
     password: ""
     passwordSecret:
       name: "paladin-bootstrap-admin"
       key: "password"
+
+# ─── Access-token signing key ────────────────────────────────────────────────
+#
+# Used only when config.auth sets neither `signing_key` nor
+# `signing_key_secret`. Then the chart generates a Secret named
+# <fullname>-auth-signing-key (kept across upgrades via lookup), or points the
+# config at `existingSecret` when that is set. Under ArgoCD or any client-side
+# render, set `existingSecret`: lookup cannot see the cluster there, and a
+# generated key would change on every sync.
+auth:
+  signingKey:
+    generate: true
+    existingSecret: ""
+    key: signing_key
+    # Characters in a generated key.
+    generatedLength: 64
 
 # ─── Primary storage backend credentials ────────────────────────────────────
 #
