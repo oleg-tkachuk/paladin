@@ -32,6 +32,8 @@ import {
 import { anyRegistry } from "@/lib/connect/any-registry";
 import { getAccessToken } from "@/lib/auth/tokenStore";
 import { AUDIENCES } from "@/constants";
+import { canUseAdminPlane } from "@/constants/roles";
+import { useAuth } from "@/context/AuthContext";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 
 export type SectionStatus = "ok" | "unavailable" | "loading";
@@ -92,6 +94,10 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     useState<ShellSection<Operation[]>>(LOADING);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // IAM never issues a pure tenant.user the admin audience; asking on every
+  // poll only collects a refusal. The aggregate serves the iam sections alone.
+  const { user } = useAuth();
+  const adminAllowed = canUseAdminPlane(user?.roles ?? []);
 
   const refresh = useCallback(async () => {
     try {
@@ -107,11 +113,13 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       // reuse and revokes the whole family. That logs the operator out. Only
       // the first poll of a cold session pays for the extra round trip; the
       // token store caches both afterwards.
-      const adminToken = await getAccessToken(AUDIENCES.admin);
+      const adminToken = adminAllowed
+        ? await getAccessToken(AUDIENCES.admin)
+        : null;
       const iamToken = await getAccessToken(AUDIENCES.iam).catch(() => null);
       const res = await fetch("/api/shell", {
         headers: {
-          Authorization: `Bearer ${adminToken}`,
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
           ...(iamToken
             ? { "X-Paladin-Iam-Authorization": `Bearer ${iamToken}` }
             : {}),
@@ -151,7 +159,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       setHealth({ status: "unavailable", reason: message, data: null });
       setOperations({ status: "unavailable", reason: message, data: null });
     }
-  }, []);
+  }, [adminAllowed]);
 
   useVisiblePolling(refresh, POLL_INTERVAL);
 

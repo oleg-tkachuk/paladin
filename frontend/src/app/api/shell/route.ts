@@ -81,8 +81,11 @@ async function section<T>(
 }
 
 export async function GET(req: Request) {
+  // The admin token is optional, like the iam one: a tenant.user is never
+  // issued one, and the iam sections are still theirs. With neither there is
+  // nobody to answer for.
   const auth = req.headers.get("Authorization");
-  if (!auth) {
+  if (!auth && !req.headers.get(IAM_AUTH_HEADER)) {
     return Response.json(
       { code: "unauthenticated", message: "missing Authorization" },
       { status: 401 },
@@ -90,7 +93,7 @@ export async function GET(req: Request) {
   }
   // The same audience gate the RPC bridge applies: this route reaches the
   // same cluster-only planes, so it must not become a way around it.
-  if (!tokenMatchesPlane(auth, "admin")) {
+  if (auth && !tokenMatchesPlane(auth, "admin")) {
     return Response.json(
       {
         code: "permission_denied",
@@ -99,7 +102,7 @@ export async function GET(req: Request) {
       { status: 403 },
     );
   }
-  const headers = { Authorization: auth };
+  const headers = auth ? { Authorization: auth } : null;
 
   // The iam half is optional in the sense that its absence degrades two
   // sections rather than the response — but it is never guessed at.
@@ -131,8 +134,9 @@ export async function GET(req: Request) {
           )
         : noIamToken(),
     ),
-    section("operations", async () =>
-      toJson(
+    section("operations", async () => {
+      if (!headers) throw new Error("missing Authorization (admin plane)");
+      return toJson(
         ListOperationsResponseSchema,
         await adminOperations.listOperations(
           {
@@ -150,8 +154,8 @@ export async function GET(req: Request) {
         // re-encode throws "not in the type registry" and turns a healthy
         // response into a failed section.
         { registry: anyRegistry },
-      ),
-    ),
+      );
+    }),
   ]);
 
   const body: Record<string, Section<JsonValue>> = {

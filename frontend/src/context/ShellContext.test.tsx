@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@/test/utils";
 
-const h = vi.hoisted(() => ({ token: vi.fn() }));
+const h = vi.hoisted(() => ({
+  token: vi.fn(),
+  roles: ["platform.admin"] as string[],
+}));
 vi.mock("@/lib/auth/tokenStore", () => ({ getAccessToken: h.token }));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { roles: h.roles } }),
+}));
 
 import { ShellProvider, useShell } from "./ShellContext";
 
@@ -36,7 +42,33 @@ describe("ShellContext", () => {
   beforeEach(() => {
     h.token.mockReset();
     h.token.mockResolvedValue("tok");
+    h.roles = ["platform.admin"];
     vi.unstubAllGlobals();
+  });
+
+  // IAM refuses a pure tenant.user the admin audience. Asking anyway failed
+  // the whole shell, so the header sat on "checking" with health reachable.
+  it("asks a tenant.user's shell for no admin token", async () => {
+    h.roles = ["tenant.user"];
+    mockShellResponse({
+      version: { status: "ok", data: { version: "1.2.3" } },
+      health: { status: "ok", data: {} },
+      operations: { status: "unavailable", reason: "missing Authorization" },
+    });
+
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("health")).toHaveTextContent("ok"),
+    );
+    expect(h.token).not.toHaveBeenCalledWith("paladin-admin");
+    const headers = (fetch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
   });
 
   // The point of the aggregate: one section being down must not cost the

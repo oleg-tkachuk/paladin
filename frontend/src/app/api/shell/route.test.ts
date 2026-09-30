@@ -122,9 +122,26 @@ describe("GET /api/shell", () => {
     );
   });
 
-  it("401s without an Authorization header, and calls nothing", async () => {
+  it("401s with no token for either plane, and calls nothing", async () => {
     const res = await GET(shellReq());
     expect(res.status).toBe(401);
+    expect(h.listOperations).not.toHaveBeenCalled();
+    expect(h.getHealth).not.toHaveBeenCalled();
+  });
+
+  // A tenant.user holds no admin-plane token. Version and health live on the
+  // iam plane and are theirs to see; only the operations list is not.
+  it("serves the iam sections to a caller with no admin token", async () => {
+    const res = await GET(
+      shellReq({ "X-Paladin-Iam-Authorization": `Bearer ${IAM_TOKEN}` }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Body;
+
+    expect(body.version.status).toBe("ok");
+    expect(body.health.status).toBe("ok");
+    expect(body.operations.status).toBe("unavailable");
+    expect(body.operations.reason).toMatch(/Authorization/);
     expect(h.listOperations).not.toHaveBeenCalled();
   });
 

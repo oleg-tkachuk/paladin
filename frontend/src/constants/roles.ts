@@ -32,3 +32,18 @@ export const ASSIGNABLE_ROLES: readonly string[] = [
   ROLES.tenantProvisioner,
   ROLES.capabilityIssuer,
 ];
+
+/**
+ * IAM issues the paladin-admin audience only to a principal holding a role
+ * that ends in this (authh.isAdminRole); a pure tenant.user never gets one.
+ */
+export const ADMIN_TIER_ROLE_SUFFIX = ".admin";
+
+/**
+ * Whether the admin plane is reachable at all for these roles. The console
+ * uses it to leave out what would only fail; the server still decides every
+ * call.
+ */
+export function canUseAdminPlane(roles: readonly string[]): boolean {
+  return roles.some((r) => r.endsWith(ADMIN_TIER_ROLE_SUFFIX));
+}
