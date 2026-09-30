@@ -98,7 +98,13 @@ func (s *UserServer) DeleteUser(ctx context.Context, req *connect.Request[pb.Del
 
 func (s *UserServer) ListUsers(ctx context.Context, req *connect.Request[pb.ListUsersRequest]) (*connect.Response[pb.ListUsersResponse], error) {
 	m := req.Msg
-	tenantID, _ := tenantFromParent(m.GetParent()) // empty parent → cross-tenant; handler enforces role
+	// Empty parent is cross-tenant, and the handler enforces the role for it. A
+	// parent that does not parse is refused: it used to be dropped, which turned
+	// a request for one tenant's users into a listing of every tenant's.
+	tenantID, err := tenantFromParent(m.GetParent())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	users, next, err := s.H.ListUsers(ctx, userh.ListUsersInput{
 		TenantID:  tenantID,
 		PageSize:  m.GetPage().GetPageSize(),

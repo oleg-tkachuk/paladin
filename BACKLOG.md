@@ -111,6 +111,21 @@ egress verified first is still the cheap order.
 ---
 
 
+## IAM plane
+
+### Tenant slugs in IAM `parent` fields
+
+- **Status:** Deferred
+- **Reason:** The proto documents `tenants/{tenant_id_or_slug}` for
+  `CreateUser` and `ListUsers`, but the IAM shim parses a UUID only and has no
+  slug lookup; wiring one in needs the same enumeration-safe authorisation the
+  admin plane's `GetTenantBySlug` does. A slug is refused with InvalidArgument
+  rather than dropped, which it used to be for `ListUsers`.
+- **Definition of Done:** both RPCs resolve a slug parent through an authorised
+  lookup, with shim tests for slug, unknown slug and unparseable parent; the
+  console and SDKs can pass either form.
+- **Blockers:** none.
+
 ## MCP bridge
 
 ### Tool-coverage gaps vs the Paladin RPC surface
