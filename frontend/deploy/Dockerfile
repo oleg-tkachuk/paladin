@@ -34,12 +34,11 @@ ARG PNPM_VERSION=12.8.2
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS deps
 ARG PNPM_VERSION
 
-# libc6-compat keeps prebuilt addons (sharp, swc) loadable on Alpine's
-# musl. `node:${VERSION}-alpine` ships npm but NOT corepack since
-# upstream removed it from official images — install pnpm directly to
-# match the local-dev pin in package.json's `packageManager` field.
-RUN apk add --no-cache libc6-compat && \
-    npm install -g pnpm@${PNPM_VERSION}
+# `node:${VERSION}-alpine` ships npm but NOT corepack since upstream removed
+# it from official images — install pnpm directly to match the local-dev pin
+# in package.json's `packageManager` field. No libc6-compat: the native
+# addons in the tree ship musl builds.
+RUN npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /app
 
 # Copy lockfile + manifest first so this layer caches across source-
@@ -87,6 +86,11 @@ FROM node:${NODE_VERSION}-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf99
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
+# The app user. Numeric in USER, so a runtime that cannot read the image's
+# /etc/passwd — and a PodSecurity check for runAsNonRoot — still sees a
+# non-root UID. Must equal the chart's runAsUser / runAsGroup.
+ARG APP_UID=1001
+ARG APP_GID=1001
 
 # Which commit is this image? Until now the answer was "nobody can tell": the
 # console image carried the metadata as ENV inside the build stage and no OCI
@@ -135,8 +139,8 @@ ENV NODE_ENV=production \
 # with its own transitive deps (brace-expansion/tar/undici) that Trivy flags as
 # HIGH/CRITICAL. Removing it keeps those CVEs out of the shipped image without
 # affecting the runtime (the build stages keep their own npm).
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser  --system --uid 1001 --ingroup nodejs nextjs && \
+RUN addgroup --system --gid ${APP_GID} nodejs && \
+    adduser  --system --uid ${APP_UID} --ingroup nodejs nextjs && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Prerender cache — created up-front with correct ownership so the runtime
@@ -144,14 +148,14 @@ RUN addgroup --system --gid 1001 nodejs && \
 # `.next`: Next creates it on the first ISR write, which succeeds only because
 # the parent happens to be owned by the app user. Making it here means the
 # runtime never depends on that.
-RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
+RUN mkdir -p .next/cache && chown -R ${APP_UID}:${APP_GID} .next
 
 # Standalone output (https://nextjs.org/docs/advanced-features/output-file-tracing)
 # trims the runtime to only the modules `next build` actually traced.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/.next/standalone ./
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/.next/static ./.next/static
 
-USER nextjs:nodejs
+USER ${APP_UID}:${APP_GID}
 
 EXPOSE 3000
 

@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1
 #
-# Paladin container image — three stages:
+# Paladin container image — two stages:
 #
-#   1. tools   — installs the codegen binary (sqlc) on BUILDPLATFORM,
-#                resolved from go.mod + cache mounts.
-#   2. builder — runs codegen + go build for TARGETPLATFORM.
-#   3. runtime — distroless static; ENTRYPOINTs the binary.
+#   1. builder — go build for TARGETPLATFORM from the committed sources.
+#   2. runtime — distroless static; ENTRYPOINTs the binary.
 #
 # Migrations are embedded into the binary (migrations/migrations.go); the
 # image carries no on-disk SQL. Configs are mounted at runtime via the
@@ -23,7 +21,7 @@ ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
 # -----------------------------------------------------------------------------
-# Shared Go base — same toolchain + workspace layout for tools and builder.
+# Go base — the toolchain and workspace layout the builder extends.
 # Everything below extends this stage so we don't duplicate ENV blocks.
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS gobase
@@ -36,40 +34,16 @@ ENV GOPATH=/go_workspace \
     PATH=/go_workspace/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     CGO_ENABLED=0
 
-# `git` is a hard dep for `go install` (resolves module proxy fallbacks).
-# `mkdir -p` is required for GOTMPDIR + GOBIN — Go stat-checks GOTMPDIR
-# before use and refuses to start with `creating work dir: stat …: no
-# such file or directory`. GOMODCACHE + GOCACHE are mounted at use-site
-# via BuildKit cache mounts, so they don't need pre-creation.
-RUN apk add --no-cache git && \
-    mkdir -p /go_workspace/tmp /go_workspace/bin
+# No git: every module comes through the module proxy, and the two sibling
+# modules through replace directives. `mkdir -p` is required for GOTMPDIR +
+# GOBIN — Go stat-checks GOTMPDIR before use and refuses to start with
+# `creating work dir: stat …: no such file or directory`. GOMODCACHE + GOCACHE
+# are mounted at use-site via BuildKit cache mounts, so they don't need
+# pre-creation.
+RUN mkdir -p /go_workspace/tmp /go_workspace/bin
 
 # -----------------------------------------------------------------------------
-# Tools stage — code-generation binaries built for BUILDPLATFORM. Versions
-# come from this module's own go.mod, so the image cannot generate against a
-# different toolchain than a developer does; cache mounts make repeats fast.
-# -----------------------------------------------------------------------------
-FROM gobase AS tools
-
-WORKDIR /app
-
-# go.mod, go.sum and tools.go are all `go install` needs to resolve the
-# generators. Keeping the copy this small means editing source does not
-# invalidate the stage.
-COPY --link backend/go.mod backend/go.sum backend/tools.go ./
-
-# Installed WITHOUT an @version, so each generator resolves to the version this
-# module already selects — the code generated inside the image is then the code
-# a developer generates locally.
-#
-# GOOS/GOARCH stay unset: these run during the build, on the build platform.
-RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    go install \
-      github.com/sqlc-dev/sqlc/cmd/sqlc
-
-# -----------------------------------------------------------------------------
-# Builder stage — runs codegen + cross-compiles the binary.
+# Builder stage — cross-compiles the binary from the committed sources.
 # -----------------------------------------------------------------------------
 FROM gobase AS builder
 
@@ -80,8 +54,6 @@ ARG TARGETARCH
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
-
-COPY --from=tools /go_workspace/bin/ /go_workspace/bin/
 
 WORKDIR /app
 
@@ -104,12 +76,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 COPY --link backend/cmd/ cmd/
 COPY --link backend/internal/ internal/
 COPY --link backend/migrations/ migrations/
-COPY --link backend/sqlc.yaml ./
 
-RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    go generate ./...
-
+# No `go generate`: the sqlc bindings and mocks are committed, and the gates
+# fail when they drift from their sources — the image builds what was reviewed.
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
     GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
@@ -135,6 +104,11 @@ FROM gcr.io/distroless/static:nonroot@sha256:1c2c046bc09ed40fad370b599a0b1ae7987
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
+# The distroless `nonroot` user. Numeric, so a runtime that cannot read the
+# image's /etc/passwd — and a PodSecurity check for runAsNonRoot — still sees
+# a non-root UID.
+ARG APP_UID=65532
+ARG APP_GID=65532
 
 LABEL org.opencontainers.image.title="paladin-core" \
       org.opencontainers.image.description="Paladin — Connect RPC service" \
@@ -145,7 +119,7 @@ LABEL org.opencontainers.image.title="paladin-core" \
 
 WORKDIR /app
 
-COPY --from=builder --chown=nonroot:nonroot /out/paladin-core /app/bin/paladin-core
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /out/paladin-core /app/bin/paladin-core
 
 # Three-plane HTTP service. Documentation only — Kubernetes binds via the
 # Service object, compose binds via the `ports:` stanza.
@@ -154,5 +128,5 @@ COPY --from=builder --chown=nonroot:nonroot /out/paladin-core /app/bin/paladin-c
 #   8090 — admin plane (internal/SRE)
 EXPOSE 8080 8085 8090
 
-USER nonroot:nonroot
+USER ${APP_UID}:${APP_GID}
 ENTRYPOINT ["/app/bin/paladin-core"]

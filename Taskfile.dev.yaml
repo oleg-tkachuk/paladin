@@ -214,6 +214,7 @@ tasks:
       - task: verify:publish-target
       - task: verify:go-module-paths
       - task: verify:frontend-gen
+      - task: verify:image-uid
       - task: verify:private-refs
       - task: verify:sqlc-pin
       - task: verify:checkov
@@ -351,6 +352,11 @@ tasks:
     # So the list is in three places, and this fails when they stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
+
+  verify:image-uid:
+    desc: "Fail when an image's UID/GID differs from what its chart runs it as"
+    cmds:
+      - ./scripts/image-uid.test.sh
 
   verify:frontend-gen:
     desc: "Fail when the console's Connect-ES stubs are stale against proto/"
