@@ -114,7 +114,7 @@ may grant which scopes to which clients.
   the operator grants consent once via config instead. Per-user remembered
   consent is revisitable if/when a browser session lands (ADR-0006 Phase
   5b.1 / OIDC).
-- **End-to-end test:** `internal/integration/oauth_e2e_test.go`
+- **End-to-end test:** `backend/tests/integration/components/oauth_e2e_test.go`
   (`-tags=integration`, testcontainers) drives authorize → token → refresh +
   single-use replay over real HTTP against real Postgres. This supersedes the
   live-stack hurl variant, which needs a full compose stack + a password user

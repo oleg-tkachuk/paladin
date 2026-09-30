@@ -68,7 +68,7 @@ func (*copyFakeRepo) RunInTx(context.Context, func(context.Context, pgx.Tx) erro
 }
 
 // Purge debt is a no-op in these fakes: the permanent-delete path is
-// covered end-to-end in internal/integration, where a real pending_purges
+// covered end-to-end in tests/integration/components, where a real pending_purges
 // row is the assertion.
 func (*copyFakeRepo) EnqueuePurgeTx(context.Context, pgx.Tx, object.PurgeDebt) error { return nil }
 func (*copyFakeRepo) SettlePurgeTx(context.Context, pgx.Tx, uuid.UUID) error         { return nil }

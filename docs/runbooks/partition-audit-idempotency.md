@@ -47,7 +47,7 @@ the window) so the rewrite copies less.
    scratch instance and apply 041+042 there. Confirm it succeeds, time the
    copy, and run the post-checks below. **Do not skip this** — the data copy
    is the part no fresh-DB test exercises. (The structure + copy *are*
-   covered on synthetic data by `internal/integration/partition_test.go`
+   covered on synthetic data by `backend/tests/integration/components/partition_test.go`
    (`go test -tags integration -run TestPartitionRewrite`); the dry-run adds
    real volume + real timing.)
 2. **Take a fresh backup** immediately before the window. Rollback = restore

@@ -139,7 +139,7 @@ it is called only *after* the Cedar check that authorised this caller for
 this tenant, and only with the tenant that check ran against — it is the
 mechanism RLS otherwise denies, so the gate ahead of it is the protection.
 It moves access rather than widening it: acting as B makes A's rows
-invisible, which `internal/integration/acting_tenant_test.go` pins.
+invisible, which `tests/integration/components/acting_tenant_test.go` pins.
 
 `tenants`, `storage_backends` and `buckets` stay uncovered for a different
 reason: they are platform-level resources with no single owning tenant, so

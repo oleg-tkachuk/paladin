@@ -4,7 +4,7 @@ import "testing"
 
 // The first tests in this package. Everything else here takes a
 // *pgxpool.Pool and is held — where it is held at all — by
-// internal/integration; these two functions are pure, and they encode
+// tests/integration/components; these two functions are pure, and they encode
 // promises the surrounding comments make to the console.
 
 // stateOrder pins the lifecycle sequence so the console renders the same

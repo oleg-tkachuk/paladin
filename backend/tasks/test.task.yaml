@@ -32,16 +32,15 @@ tasks:
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
     vars:
-      # Named rather than left to Go's 10m default: internal/integration takes
+      # Named rather than left to Go's 10m default: tests/integration/components takes
       # ~622s on a developer machine, so the default failed `verify-deep`
       # on a suite that passes. This used to be read out of the integration
       # workflow; that workflow is gone and this task is the only place the
       # suites run, so the number lives here.
       INTEGRATION_TIMEOUT: 20m
     cmds:
-      # BOTH suites. tests/integration/ (pgharness-backed) was previously
-      # unreferenced by any task — 62 tests that ran nowhere, local or CI.
-      - go test -tags=integration -count=1 -timeout={{.INTEGRATION_TIMEOUT}} ./internal/integration/... ./tests/integration/...
+      # Both levels: the assembled application and components/.
+      - go test -tags=integration -count=1 -timeout={{.INTEGRATION_TIMEOUT}} ./tests/integration/...
 
   mutate:
     desc: "Mutation testing over one package: how much of it do the tests hold?"
@@ -53,12 +52,12 @@ tasks:
 
       For a DB-backed package the default denominator is wrong — its own tests
       cannot reach the branches, and reporting them as gaps sends someone to
-      write tests for behaviour internal/integration already covers. Pass the
+      write tests for behaviour tests/integration/components already covers. Pass the
       suite that does cover it:
 
         task backend:test:mutate -- ./internal/capability/... \
           'internal/capability/postgres/*.go' 15 \
-          --test-cmd 'go test -tags=integration -count=1 -run Capability ./internal/integration/'
+          --test-cmd 'go test -tags=integration -count=1 -run Capability ./tests/integration/components/'
 
       Not part of any gate. It rewrites source in place, takes minutes per
       package, and its output is a list of questions rather than a pass or a
@@ -71,7 +70,7 @@ tasks:
     cmds:
       - task: ":go:bench"
         vars:
-          GO_BENCH_PKG: "./internal/integration/... ./tests/integration/..."
+          GO_BENCH_PKG: "./tests/integration/..."
           GO_BENCH_FLAGS: "-benchtime=20x -timeout=600s"
 
   stack:

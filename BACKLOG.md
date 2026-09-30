@@ -602,7 +602,7 @@ finding moving from "packages you import" to "your code is affected".
   cache-key uniqueness + delivery threading. Inline creds are lab-grade — a
   secret-store-resolved ref is the remaining hardening (shared with NATS).
 - **Shipped (2026-07-02) — broker verify + secret-store creds:**
-  `TestKafkaSinkDelivery_SCRAM` (internal/integration, tags=integration) runs
+  `TestKafkaSinkDelivery_SCRAM` (tests/integration/components, tags=integration) runs
   DeliverOne against a real redpanda with SASL/SCRAM-SHA-256 + authorization
   enabled — handshake, per-tenant message key, and CloudEvents envelope all
   consumed back; passed locally against Docker. Credential fields
@@ -673,7 +673,7 @@ finding moving from "packages you import" to "your code is affected".
   "Kafka/SQS are roadmap stubs" Target hint was corrected (all sinks are
   delivery-wired). `_form.test.ts` covers build + hydrate + validation.
 - **Shipped (2026-07-02) — broker verify + secret URL:**
-  `TestRabbitMQSinkDelivery` (internal/integration, tags=integration) runs
+  `TestRabbitMQSinkDelivery` (tests/integration/components, tags=integration) runs
   DeliverOne against a real rabbitmq:4.0 — publisher-confirmed publish
   consumed back as the CloudEvents envelope; passed locally against Docker.
   The AMQP URL (credentials embedded) now accepts a `k8s:<name>/<key>`
@@ -911,7 +911,7 @@ finding moving from "packages you import" to "your code is affected".
   diagnosis).
 - **The correction.** This entry used to say the remaining branches "need a
   transaction and a failing dependency, so they belong in
-  internal/integration". That was true of the outbox runner and wrong of three
+  tests/integration/components". That was true of the outbox runner and wrong of three
   other files. BucketReconciler takes interfaces for everything it touches and
   had no test file at all; ReplicationWorker and StaleOperationReclaimer are
   likewise fully seamed and were half-held. None of that needed Postgres. The
@@ -939,7 +939,7 @@ finding moving from "packages you import" to "your code is affected".
   and mark-delivered paths cannot be driven without a database. The remaining
   survivors live there.
 - **A denominator trap specific to this repo:** there are TWO integration
-  suites, `internal/integration` and `tests/integration`, and the dispatcher's
+  suites, `tests/integration/components` and `tests/integration`, and the dispatcher's
   own tests are in the second. A measurement whose --test-cmd names only the
   first reports branches as unheld that the other suite covers. Name both.
 - **`sink_nats.go` was measured 2026-09-10, and this bullet was wrong.** It
@@ -1013,7 +1013,7 @@ finding moving from "packages you import" to "your code is affected".
 - **The denominator is the argument that matters.** Running a package's own
   tests is the wrong measure for anything DB-backed.
   `internal/capability/postgres` showed 8 survivors and the one checked by hand
-  is caught by `internal/integration`. Reporting those as gaps sends someone to
+  is caught by `tests/integration/components`. Reporting those as gaps sends someone to
   write tests for behaviour that is already held. `--test-cmd` exists for that,
   and a filter that matches the wrong test names produces a 0% which is also
   not a finding.
@@ -1029,7 +1029,7 @@ finding moving from "packages you import" to "your code is affected".
 ### The integration suite starts a Postgres per test function
 
 - **Status:** Deferred (works today; the headroom is shrinking).
-- **Reason:** `startPostgres(t)` in `backend/internal/integration` runs a fresh
+- **Reason:** `startPostgres(t)` in `backend/tests/integration/components` runs a fresh
   testcontainers Postgres on every call, and there are 96 calls in the package.
   The suite is the longest thing in `task verify-deep` and it runs against a
   ceiling: CI passes `-timeout=20m`, and `backend/tasks/test.task.yaml` now
@@ -1061,7 +1061,7 @@ finding moving from "packages you import" to "your code is affected".
 ### Index-usage tests are pinned to measured table sizes
 
 - **Status:** Deferred (works today; a trap for later).
-- **Reason:** `internal/integration/index_usage_test.go` proves the planner
+- **Reason:** `tests/integration/components/index_usage_test.go` proves the planner
   *chooses* each new index rather than merely being able to. That makes the
   tests sensitive to seed size: the operations keyset index is not chosen
   below roughly 8k rows / 40 tenants (the primary key is a UUIDv7, so it
@@ -1567,7 +1567,7 @@ finding moving from "packages you import" to "your code is affected".
   source→target + error) that polls `GetTenantStorageMigration` while a
   migration is in flight and renders nothing when the tenant never migrated.
 - **Shipped — Phase 3 cross-backend integration test:** a two-backend
-  integration test (`internal/integration/storage_migration_crossbackend_test.go`)
+  integration test (`tests/integration/components/storage_migration_crossbackend_test.go`)
   stands up two physically distinct MinIO backends and drives the router's
   cross-backend copy (`ObjectRouter.CopyObject` → `GetStream` piped into the
   destination's multipart writer) for a 12 MiB object, asserting size + a

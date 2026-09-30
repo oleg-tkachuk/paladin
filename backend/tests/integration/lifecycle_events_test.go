@@ -255,7 +255,7 @@ func (s *deleteOnlyStorage) DeleteObject(context.Context, string, string, uuid.U
 
 // A permanent delete emits TWO events, and they are the ones an operator is
 // most likely to be subscribed to. Both were tested only as far as the outbox
-// — internal/integration/permanent_delete_test.go counts event_deliveries
+// — components/permanent_delete_test.go counts event_deliveries
 // rows — which proves they were enqueued, not that anything can receive them.
 // The join between "the handler enqueued it" and "a subscription matched and
 // the runner delivered it" is where an event type can quietly stop matching

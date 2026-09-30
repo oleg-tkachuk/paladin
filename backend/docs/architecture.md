@@ -168,8 +168,9 @@ See [configuration.md](configuration.md) for the field reference.
   one package per plane.
 - `migrations/` — The three-file schema baseline; see
   [database.md](database.md).
-- `internal/integration/`, `tests/integration/` — Postgres-backed integration
-  suites, both behind the `integration` build tag.
+- `tests/integration/` — Postgres-backed suites behind the `integration`
+  build tag: the assembled application at the top level, one component
+  against real Postgres or S3 in `components/`.
 
 ## Related documents
 

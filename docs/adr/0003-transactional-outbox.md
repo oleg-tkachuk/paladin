@@ -126,7 +126,7 @@ which settles the debt and emits in one tx. Shape follows
   implicit-mode CompleteObject does. The `changed` guard keeps emission
   exactly-once across the two producers. Same for the synchronous
   server-side CopyObject promote.
-- Integration test: `internal/integration/outbox_crash_test.go`
+- Integration test: `backend/tests/integration/components/outbox_crash_test.go`
   (`-tags=integration`, testcontainers Postgres) asserts the invariant on
   a live DB for both seams — the statemachine (`PromoteToAvailableInTx`)
   and the repo (`RunInTx` + `HardDeleteTx`): a committed transition carries

@@ -51,7 +51,7 @@ unacceptable under load:
     `BenchmarkAuditInterceptor` (`internal/middleware/audit_bench_test.go`)
     isolates the interceptor's non-DB overhead (~0.5µs, 152 B/6 allocs —
     negligible). `BenchmarkAuditInsertDurable`
-    (`internal/integration/audit_insert_bench_test.go`, `-tags=integration`,
+    (`backend/tests/integration/components/audit_insert_bench_test.go`, `-tags=integration`,
     testcontainers Postgres) measures the real synchronous-insert tax: on
     postgres:17 / Apple M3 Max, **~0.16–0.18 ms/op** per audit row
     (no_payload 185µs / with ~1KB payload 160µs). That is the per-mutating-

@@ -20,12 +20,12 @@ USAGE
 
     scripts/mutate.py ./internal/auth 'internal/auth/*.go' 25
     scripts/mutate.py ./internal/capability/... 'internal/capability/postgres/*.go' 15 \
-        --test-cmd 'go test -tags=integration -count=1 -run Capability ./internal/integration/'
+        --test-cmd 'go test -tags=integration -count=1 -run Capability ./tests/integration/components/'
 
 THE DENOMINATOR IS THE ARGUMENT THAT MATTERS. By default this runs the
 package's own tests, and for anything DB-backed that is the wrong measure:
 internal/capability/postgres showed 8 survivors, and the one checked by hand is
-caught by internal/integration. Reporting those as gaps sends someone to write
+caught by tests/integration/components. Reporting those as gaps sends someone to write
 tests for behaviour that is already held. Pass --test-cmd to measure a package
 against the suite that actually covers it.
 

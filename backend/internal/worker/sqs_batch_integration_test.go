@@ -23,7 +23,7 @@ import (
 // TestSQSSinkBatchDelivery_Wire pins the SendMessageBatch fan-in against a
 // real elasticmq: 12 same-queue rows go out via the chunked batch path
 // (10+2) and all 12 land as valid CloudEvents envelopes. Lives in package
-// worker (unlike its siblings in internal/integration) because it exercises
+// worker (unlike its siblings in tests/integration/components) because it exercises
 // the unexported batch surface directly.
 func TestSQSSinkBatchDelivery_Wire(t *testing.T) {
 	if testing.Short() {

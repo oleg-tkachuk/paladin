@@ -18,7 +18,7 @@ import (
 // repo, the provisioner, the outbox producer — and had no test file at all.
 // The BACKLOG entry that measured this package concluded its remaining
 // branches "need a transaction and a failing dependency, so they belong in
-// internal/integration". For this file that was wrong: the seam is already
+// tests/integration/components". For this file that was wrong: the seam is already
 // here, and none of what follows needs a database.
 //
 // What it does need is dependencies that fail in ONE place, because every
