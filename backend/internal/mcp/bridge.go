@@ -802,7 +802,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_update_subscription",
-		Description: "Replace filter / sink / disabled on an existing subscription. Resource name from paladin_list_subscriptions; pass resource_version from the prior fetch for OCC.",
+		Description: "Replace filter / sink / disabled on an existing subscription — all three, so pass the current values of any you are not changing: an omitted filter matches every event and an omitted disabled enables the subscription. Resource name and resource_version from paladin_get_subscription.",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in updateSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
 		sub, err := buildEventSubscription(in.createSubscriptionArgs)
