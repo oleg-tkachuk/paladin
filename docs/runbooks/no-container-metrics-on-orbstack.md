@@ -14,7 +14,7 @@ The scrape looks healthy. Alloy reports
 up{job="cadvisor"} = 1
 ```
 
-because the endpoint answers 200 — it simply answers with `machine_*` and
+because the endpoint answers 200 — it answers with `machine_*` and
 nothing else. So the failure mode is not a red target you would notice; it is
 a green target serving nine lines where thousands are expected.
 

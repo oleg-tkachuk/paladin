@@ -90,12 +90,12 @@ table.
 
 ## Per-backend matrix
 
-| Backend | Emits notifications? | Wire format | Transport(s) | source_format | Live in lab? |
-|---|:---:|---|---|---|:---:|
-| **SeaweedFS** | ✅ | gob+protobuf `filer_pb.EventNotification` **or** webhook JSON | NATS (gocdk_pubsub) / HTTP webhook | `seaweedfs_nats` / `seaweedfs` | ✅ (`seaweedfs_nats`, JetStream) |
-| **MinIO** | ✅ (native bucket notifications) | AWS S3 event JSON (`Records[]`) | webhook / AMQP / Kafka | `s3` / `minio` | — (not deployed) |
-| **AWS S3** | ✅ (→ SQS/SNS/EventBridge/Lambda) | AWS S3 event JSON (`Records[]`) | SNS→HTTPS webhook / (SQS driver: BACKLOG) | `s3` | — (not deployed) |
-| **Garage** | ❌ **none** | — | — | *(rejected — see below)* | — |
+| Backend | Emits notifications? | Wire format | Transport(s) | source_format |
+|---|:---:|---|---|---|
+| **SeaweedFS** | ✅ | gob+protobuf `filer_pb.EventNotification` **or** webhook JSON | NATS (gocdk_pubsub) / HTTP webhook | `seaweedfs_nats` / `seaweedfs` |
+| **MinIO** | ✅ (native bucket notifications) | AWS S3 event JSON (`Records[]`) | webhook / AMQP / Kafka | `s3` / `minio` |
+| **AWS S3** | ✅ (→ SQS/SNS/EventBridge/Lambda) | AWS S3 event JSON (`Records[]`) | SNS→HTTPS webhook / SQS (`ingest.driver: sqs`) | `s3` |
+| **Garage** | ❌ **none** | — | — | *(rejected — see below)* |
 
 ---
 
@@ -104,13 +104,13 @@ table.
 Two publishers; **not interchangeable** — the wrong `source_format` yields
 `ErrUnrecognisedEvent` on every message.
 
-### `seaweedfs_nats` — gocdk_pubsub over NATS (what the lab runs)
+### `seaweedfs_nats` — gocdk_pubsub over NATS
 
 Source: `source_seaweedfs_nats.go` decodes the gob envelope wrapping a
 proto-marshalled `filer_pb.EventNotification`, then `parseSeaweedFSPath`
 (`source_seaweedfs.go`) parses the path.
 
-gitops config (`deploy/manifests/storage/seaweedfs/notification-config.yaml`):
+SeaweedFS filer notification config (`notification.toml`):
 
 ```toml
 [notification.gocdk_pub_sub]
@@ -137,7 +137,7 @@ Two publishers disagree on the leading path:
 | Publisher | Emitted path |
 |---|---|
 | SF S3-gateway **webhook** | `<bucket>/<tenant>/<collection>/<key>` |
-| **gocdk_pubsub-over-NATS** (lab) | `buckets/<bucket>/<tenant>/<collection>/<key>` |
+| **gocdk_pubsub-over-NATS** | `buckets/<bucket>/<tenant>/<collection>/<key>` |
 
 The NATS path observes the **full filer namespace**, where the S3 gateway
 materialises bucket-rooted objects under `/buckets/<bucket>/…`. So
@@ -261,16 +261,16 @@ Authoritative (verified 2026-07-06):
 - No non-S3 event / webhook / change-feed / pub-sub mechanism exists either —
   the [feature list][garage-feat] has none (K2V is a key-value API, not a
   change feed).
-- `garage.toml` in gitops (`charts/garage/templates/configmap.yaml`) has no
-  `[notification.*]` block — there is nothing to configure.
+- Garage's configuration has no `[notification.*]` section — there is
+  nothing to configure.
 
 **Consequence:** even when Garage is the primary (or only) backend, Paladin cannot
-ingest its writes via events. This is exactly why the lab runs the ingest
-source on **SeaweedFS** (the `secondary` backend), not Garage. Direct writes to
-Garage are caught by the **data-plane Reconciler** (it lists/compares on a
-schedule). To get event-driven ingest for Garage-stored objects you must front
-Garage with an S3-notification-capable layer (e.g. SeaweedFS) and use that
-layer's `source_format`.
+ingest its writes via events. An upload made through Paladin is still
+completed: the worker's reconciler (`internal/worker/reconciler.go`) HEADs
+`PENDING` objects on a schedule and promotes the ones whose bytes arrived. A
+write that bypassed Paladin has no row and is not discovered. For event-driven
+ingest of Garage-stored objects, front Garage with an S3-notification-capable
+layer (e.g. SeaweedFS) and use that layer's `source_format`.
 
 [garage-s3]: https://garagehq.deuxfleurs.fr/documentation/reference-manual/s3-compatibility/
 [garage-feat]: https://garagehq.deuxfleurs.fr/documentation/reference-manual/features/
@@ -288,12 +288,11 @@ write to avoid no-op rows.
 **Delivery (NATS driver).** Two modes (`ingest.nats.jetstream`):
 
 - `false` — core pub/sub, at-most-once. A missed event on a broker restart is
-  caught by the Reconciler. Cheap.
+  caught by the reconciler's HEAD of `PENDING` objects.
 - `true` — JetStream durable consumer, at-least-once. ACK after the pipeline
   returns nil; NAK → redelivery; unparseable → term (dead-letter). Requires
   the stream to be pre-provisioned out-of-band (the driver errors if it's
-  absent). The lab runs this on the `seaweedfs_filer` stream with durable
-  `paladin-ingest-sf`. See `driver_nats.go` `runJetStream` and its integration
+  absent). See `driver_nats.go` `runJetStream` and its integration
   coverage in `driver_nats_jetstream_test.go`.
 
 **`Nats-Msg-Id` override.** When a NATS message carries `Nats-Msg-Id`, the

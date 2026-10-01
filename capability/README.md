@@ -170,7 +170,7 @@ shows the split.
 
 `UsageStore` is generic in `TX` — *your* transaction type. Have none?
 Instantiate `UsageStore[struct{}]` and always pass `nil` for the callback.
-Everything works identically; you simply forgo the atomic-side-effect
+Everything works identically; you forgo the atomic-side-effect
 guarantee.
 
 ## Key rotation
