@@ -79,6 +79,12 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_get_audit_entry", Audience: "admin", Description: "Read a single audit-log entry by id."},
 	{Name: "paladin_system_config", Audience: "admin", Description: "Read the platform's effective runtime config (admin profile only)."},
 	{Name: "paladin_reset_usage", Audience: "admin", Description: "Reset accumulated usage counters on a quota (limits unchanged).", Mutates: true},
+	{Name: "paladin_get_tenant_budget", Audience: "admin", Description: "Read a tenant's capability budget and spend."},
+	{Name: "paladin_budget_summary", Audience: "admin", Description: "Summarise capability budgets across tenants (admin profile only)."},
+	{Name: "paladin_billing_summary", Audience: "admin", Description: "A tenant's charges over a period, by operation (admin profile only)."},
+	{Name: "paladin_billing_timeseries", Audience: "admin", Description: "A tenant's charges over a period, bucketed in time (admin profile only)."},
+	{Name: "paladin_list_platform_operations", Audience: "admin", Description: "List platform-wide long-running operations."},
+	{Name: "paladin_get_platform_operation", Audience: "admin", Description: "Read one platform-wide long-running operation."},
 
 	// ── data plane: object operations ────────────────────────────
 	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under a collection with CEL filter.", CapabilityOp: "list"},

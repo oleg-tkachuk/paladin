@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"sort"
+	"strings"
 	"testing"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -213,6 +214,12 @@ func TestCoverageToolsDispatch(t *testing.T) {
 		{"paladin_get_audit_entry", "admin", map[string]any{"entry_id": "a1"}, "/paladin.admin.v1.AuditLogService/GetAuditLogEntry"},
 		{"paladin_system_config", "admin", map[string]any{}, "/paladin.admin.v1.SystemService/GetConfig"},
 		{"paladin_reset_usage", "admin", map[string]any{"name": "tenants/t1"}, "/paladin.admin.v1.QuotaService/ResetUsage"},
+		{"paladin_get_tenant_budget", "admin", map[string]any{"tenant_id": "01a0f4e1-317d-7b26-b084-756c50a82939"}, "/paladin.admin.v1.TenantBudgetService/Get"},
+		{"paladin_budget_summary", "admin", map[string]any{"threshold_pct": 80}, "/paladin.admin.v1.TenantBudgetService/Summarize"},
+		{"paladin_billing_summary", "admin", map[string]any{"tenant_id": "01a0f4e1-317d-7b26-b084-756c50a82939", "period_start": "2026-09-01T00:00:00Z"}, "/paladin.admin.v1.BillingService/GetTenantSummary"},
+		{"paladin_billing_timeseries", "admin", map[string]any{"tenant_id": "01a0f4e1-317d-7b26-b084-756c50a82939", "granularity": "day"}, "/paladin.admin.v1.BillingService/GetTenantTimeSeries"},
+		{"paladin_list_platform_operations", "admin", map[string]any{"page_size": 10}, "/paladin.admin.v1.PlatformOperationService/ListOperations"},
+		{"paladin_get_platform_operation", "admin", map[string]any{"name": "operations/op1"}, "/paladin.admin.v1.PlatformOperationService/GetOperation"},
 	}
 
 	for _, tc := range cases {
@@ -242,6 +249,38 @@ func TestCoverageToolsDispatch(t *testing.T) {
 			}
 			if paths[0] != tc.want {
 				t.Fatalf("%s: dispatched to %q, want %q", tc.tool, paths[0], tc.want)
+			}
+		})
+	}
+}
+
+// A billing period the agent spelled wrong is refused before any RPC, with
+// the field and the expected format named, rather than silently becoming the
+// server's default period — which would answer a different question.
+func TestBillingToolsRejectAMalformedPeriod(t *testing.T) {
+	t.Parallel()
+
+	for _, tool := range []string{"paladin_billing_summary", "paladin_billing_timeseries"} {
+		t.Run(tool, func(t *testing.T) {
+			var paths []string
+			cs := dialInProcess(t, NewInlineClients(InlineHandlers{Admin: recordingPlane(&paths)}, "tok"))
+
+			res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+				Name:      tool,
+				Arguments: map[string]any{"tenant_id": "01a0f4e1-317d-7b26-b084-756c50a82939", "period_end": "yesterday"},
+			})
+			if err != nil {
+				t.Fatalf("CallTool: %v", err)
+			}
+			if !res.IsError {
+				t.Fatal("a malformed period_end was accepted")
+			}
+			text := res.Content[0].(*mcpsdk.TextContent).Text
+			if !strings.Contains(text, "period_end") || !strings.Contains(text, "RFC 3339") {
+				t.Errorf("error %q does not name the field and the format", text)
+			}
+			if len(paths) != 0 {
+				t.Errorf("a malformed period still reached the plane: %v", paths)
 			}
 		})
 	}

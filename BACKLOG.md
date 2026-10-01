@@ -116,21 +116,26 @@ egress verified first is still the cheap order.
 ### Tool-coverage gaps vs the Paladin RPC surface
 
 - **Status:** Deferred (partial — the data-plane cluster + admin read gaps
-  landed 2026-06-26; 59 tools). Remaining items below need a product call.
+  landed 2026-06-26, budget / billing / platform-operation reads 2026-10-01).
+  The remaining item below needs a product call.
 - **Reason:** The MCP bridge (`internal/mcp/bridge.go`) exposes a curated
-  subset of the ~110 Paladin RPCs (59 tools). `DefaultCatalog` in
+  subset of the ~110 Paladin RPCs. `DefaultCatalog` in
   `internal/mcp/profile.go` is the ground-truth list and is pinned to the
   real registrations by `TestServerRegistersDefaultCatalog`. Now wired:
   `UpdateObject`, `DeleteObjectTags`, `ListDistinctTags`, `BatchUpdateTags`,
   `RegenerateUploadUrl`, the 5 `MultipartUploadService` RPCs, data
   `CancelOperation`, admin `ResetUsage` / `GetAuditLogEntry` / `GetConfig`
-  (`SystemService` client added). The agent-usable upload/tag mutations are
-  in `agent_safe`; `ResetUsage` / `system_config` / batch tools stay
-  admin-only. The following Paladin capabilities are still **not** reachable
-  from an MCP agent. Some are deliberate (see the next entry); the rest are
-  unfilled coverage pending a product decision:
-  - **Whole services with no client wired:** BillingService,
-    TenantBudgetService, admin OperationService, UserSettingsService.
+  (`SystemService` client added). The budget, billing and platform-operation
+  reads are wired too: `paladin_get_tenant_budget` and the platform-operation
+  reads match `agent_safe`'s `get_*` / `list_*`, while the cross-tenant
+  `paladin_budget_summary` and both billing tools are named outside those
+  patterns so only the admin profile sees them. Budget `Set` and platform
+  `CancelOperation` stay off the bridge: changing a tenant's spend cap or
+  stopping a migration is an operator's call. The agent-usable upload/tag
+  mutations are in `agent_safe`; `ResetUsage` / `system_config` / batch tools
+  stay admin-only. UserSettingsService is not bridged on purpose — it holds a
+  console user's display preferences, which mean nothing to an agent. What is
+  still **not** reachable from an MCP agent, pending a product decision:
   - **Lifecycle writes** on Backend / Bucket / ObjectKey / Tenant
     (create/update/delete) — Tenant lifecycle is intentionally human-only
     (denylist); the others are gaps if agent-driven provisioning is wanted.
@@ -140,8 +145,7 @@ egress verified first is still the cheap order.
   `DefaultProfiles` entry (destructive ops stay out of `agent_safe`). Wire any
   missing Connect client into `Clients`.
 - **Blockers:** none technical. Needs a product call on whether an agent
-  should drive provisioning (lifecycle writes) and billing/budget/settings
-  surfaces vs. keep them human-operated.
+  should drive provisioning (lifecycle writes) or leave it human-operated.
 
 ### Capability / API-token issuance via MCP — intentionally excluded
 
