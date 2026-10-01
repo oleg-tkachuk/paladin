@@ -1,8 +1,22 @@
-# Grafana dashboards
+# Grafana dashboards and alerts
 
-Committed dashboards for the OpenTelemetry baseline (ADR-0001). Import the
-JSON via Grafana → Dashboards → Import, and pick your Prometheus datasource
-when prompted.
+Committed dashboards and Prometheus alerting rules for the OpenTelemetry
+baseline (ADR-0001). Import a dashboard's JSON via Grafana → Dashboards →
+Import and pick your Prometheus datasource when prompted; load a rule file
+through `rule_files:` or as the `spec.groups` of a `PrometheusRule`.
+
+| File | Contents |
+|------|----------|
+| `paladin-rpc-red.json` | RPC rate, errors and duration per service and method |
+| `paladin-operations.json` | outbox, workers, Postgres, rate limiting, presigns, capability charges |
+| `worker-alerts.yaml` | a worker that stopped ticking, or fails every tick |
+| `paladin-alerts.yaml` | outbox not draining, rate limiting failing open, refused capability charges, throttled tenants |
+
+`task -t Taskfile.dev.yaml verify:grafana-rules` parses every rule file and
+dashboard query with `promtool`, and runs the alert unit tests in
+`*-alerts.test.yaml`. Metric names are the Prometheus rendering of the
+instruments in the code (`paladin.outbox.pending` →
+`paladin_outbox_pending`); all of them exist only with `otel.enabled: true`.
 
 ## Datasource provisioning + log↔trace correlation
 
@@ -71,3 +85,32 @@ Signal: the `paladin_worker_*` instruments emitted by `internal/worker.RunTicker
 dashboard — only live when `otel.enabled: true`. Drop the file
 into Prometheus `rule_files:` or wrap it in a `PrometheusRule` CR. Response
 procedure: [`docs/runbooks/worker-stalled.md`](../../docs/runbooks/worker-stalled.md).
+
+## `paladin-operations.json` — Operations
+
+The work that does not show up in RPC metrics.
+
+| Panel | Metric | Source |
+|-------|--------|--------|
+| Outbox backlog, Outbox depth | `paladin_outbox_pending`, `paladin_outbox_pending_max_per_tenant` | `internal/worker/metrics.go` |
+| Stalled workers, Worker ticks, Worker tick duration | `paladin_worker_*` | `internal/worker.RunTicker` |
+| Postgres errors, Postgres operation latency | `db_client_operation_errors_total`, `db_client_operation_duration_seconds` (label `pgx_operation_type`) | otelpgx |
+| Rate limiting failing open, Per-tenant rate-limit decisions | `paladin_tenant_ratelimit_*`, `paladin_api_token_ratelimit_fail_open_total` | `internal/middleware/tenant_ratelimit.go`, `internal/auth/api_token_metrics.go` |
+| Presigns, Presign latency | `paladin_presign_total`, `paladin_presign_duration_seconds` (labels `op`, `outcome`) | `internal/metrics/domain.go` |
+| Capability charges | `paladin_capability_charges_total` (labels `outcome`, `tenant_id`) | `internal/metrics/domain.go` |
+
+`tenant_id` appears on the rate-limit and capability-charge series only; the
+outbox gauge carries the deepest tenant's depth, not a per-tenant series.
+
+## `paladin-alerts.yaml` — outbox, rate limiting, charges
+
+| Alert | Fires when | Severity |
+|-------|-----------|----------|
+| `PaladinOutboxNotDraining` | the minimum outbox depth over 15m is above 500, for 10m | critical |
+| `PaladinRateLimitFailingOpen` | either limiter admitted a request because its storage failed, in the last 10m | critical |
+| `PaladinCapabilityChargesRefused` | over 90% of a tenant's charges were refused for 15m | warning |
+| `PaladinTenantThrottled` | the per-tenant limiter refused over 1 req/s for 10m | warning |
+
+The counters behind the last three exist only after their path has run once.
+The fail-open rule treats an absent counter as zero; none of the rules alert
+on absence.

@@ -1,0 +1,108 @@
+# promtool unit tests for paladin-alerts.yaml (`promtool test rules`).
+# Each rule has a case where it fires and one where it does not.
+rule_files:
+  - paladin-alerts.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # Outbox floor stays above 500 → fires after the 15m window plus `for: 10m`.
+  - interval: 1m
+    input_series:
+      - series: paladin_outbox_pending
+        values: "800x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinOutboxNotDraining
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Paladin outbox has not drained below 500 rows in 15m"
+              description: >-
+                The dispatcher is not clearing pending outbox rows. Check the
+                dispatcher logs, and the deepest-tenant line on the Operations
+                dashboard to tell a dispatcher problem from one tenant's sink.
+
+  # Bursts above 500 that drain back down once per window do not fire.
+  - interval: 1m
+    input_series:
+      - series: paladin_outbox_pending
+        values: "900 900 900 900 900 900 900 900 900 900 0 900 900 900 900 900 900 900 900 900 900 900 900 900 900 0 900 900 900 900 900 900 900 900 900 900 900 900 900 900 0"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: PaladinOutboxNotDraining
+        exp_alerts: []
+
+  # The tenant limiter failed open; the token limiter series does not exist.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_tenant_ratelimit_fail_open_total{tenant_id="t1"}'
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PaladinRateLimitFailingOpen
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Paladin rate limiting is failing open"
+              description: >-
+                Requests are admitted without a rate-limit decision; the per-tenant
+                or per-token ceiling is not in force. Check the limiter's Postgres
+                tables and the api logs.
+
+  # Neither fail-open counter moves.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_tenant_ratelimit_fail_open_total{tenant_id="t1"}'
+        values: "3x20"
+      - series: paladin_api_token_ratelimit_fail_open_total
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PaladinRateLimitFailingOpen
+        exp_alerts: []
+
+  # t1: every charge refused → fires. t2: charges succeed → silent.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_capability_charges_total{tenant_id="t1", outcome="tenant_exhausted"}'
+        values: "0+10x60"
+      - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="charged"}'
+        values: "0+10x60"
+      - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="capability_exhausted"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: PaladinCapabilityChargesRefused
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tenant_id: t1
+            exp_annotations:
+              summary: "Tenant t1 has nearly every capability charge refused"
+              description: >-
+                Over 90% of charge attempts were refused for 15m. Check the
+                tenant's quota and the issuing capability's budget.
+
+  # t1 refused at 2 req/s → fires. t2 refused at 0.5 req/s → silent.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_tenant_ratelimit_decisions_total{tenant_id="t1", allowed="false"}'
+        values: "0+120x40"
+      - series: 'paladin_tenant_ratelimit_decisions_total{tenant_id="t2", allowed="false"}'
+        values: "0+30x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinTenantThrottled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tenant_id: t1
+            exp_annotations:
+              summary: "Tenant t1 is rate-limited steadily"
+              description: >-
+                The per-tenant limiter has refused more than 1 request/s for 10m.
+                Either a client is looping or middleware.rate_limit is too low for
+                this tenant.
