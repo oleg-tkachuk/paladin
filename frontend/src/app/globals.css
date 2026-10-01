@@ -24,6 +24,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -69,6 +70,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
   --success: oklch(0.696 0.17 162.48);
   --warning: oklch(0.769 0.188 70.08);
   --info: oklch(0.6 0.118 184.704);
@@ -119,6 +121,9 @@
   --accent-foreground: oklch(0.955 0.006 230);
 
   --destructive: oklch(0.66 0.185 23);
+  /* Text on a solid destructive fill. Eleven confirm buttons named this token
+     before it existed and showed the inherited foreground; this is that value. */
+  --destructive-foreground: oklch(0.955 0.006 230);
   --success: oklch(0.74 0.14 160);
   --warning: oklch(0.79 0.13 76);
   --info: oklch(0.72 0.09 232);
