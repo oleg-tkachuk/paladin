@@ -53,6 +53,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 
 import { useCollection } from "../collection-context";
+import { formatDateTime } from "@/lib/format/locale";
 
 export default function CollectionTrashPage() {
   const { collection: collectionResource } = useCollection();
@@ -307,7 +308,7 @@ export default function CollectionTrashPage() {
                     {obj.terminatedAt
                       ? useRelativeTime
                         ? formatDate(timestampToDate(obj.terminatedAt))
-                        : timestampToDate(obj.terminatedAt).toLocaleString()
+                        : formatDateTime(timestampToDate(obj.terminatedAt))
                       : "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">

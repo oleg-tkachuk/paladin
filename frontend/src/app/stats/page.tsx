@@ -52,6 +52,7 @@ import type {
   QuotaStats,
   TenantObjectStats,
 } from "@/gen/paladin/admin/v1/system_service_pb";
+import { formatCount, formatTime } from "@/lib/format/locale";
 
 // Poll cadence. Slower than /health's 15s: this is inventory, which moves
 // on operator actions and bulk uploads rather than second-to-second, and
@@ -76,7 +77,7 @@ const STATE_ACCENT: Record<string, string> = {
 
 function num(n: bigint | number | undefined): string {
   if (n === undefined) return "—";
-  return Number(n).toLocaleString();
+  return formatCount(Number(n));
 }
 
 // ─── Building blocks ────────────────────────────────────────────────────────
@@ -377,9 +378,10 @@ export default function StatsPage() {
 
   const globalStates = useMemo(() => byState(objects?.states ?? []), [objects]);
 
-  const collectedAt = data?.collectedAt
-    ? timestampToDate(data.collectedAt)?.toLocaleTimeString()
+  const collectedDate = data?.collectedAt
+    ? timestampToDate(data.collectedAt)
     : null;
+  const collectedAt = collectedDate ? formatTime(collectedDate) : null;
 
   return (
     <div className="space-y-4">

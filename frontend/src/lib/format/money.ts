@@ -9,6 +9,8 @@
 // Allowed unit codes. ISO 4217 fiat + UNIT sentinel for non-currency
 // metering. Backend constrains writes; frontend mirrors for type
 // safety on the consumer side.
+import { DISPLAY_LOCALE } from "./locale";
+
 export const ALLOWED_UNIT_CODES = ["USD", "EUR", "UAH", "GBP", "UNIT"] as const;
 
 export type UnitCode = (typeof ALLOWED_UNIT_CODES)[number];
@@ -41,7 +43,7 @@ export function isISOCurrency(code: string): boolean {
 export function formatMoney(
   amount: number,
   unitCode: string,
-  locale?: string,
+  locale: string = DISPLAY_LOCALE,
   fractionDigits?: number,
 ): string {
   if (!Number.isFinite(amount)) return "—";

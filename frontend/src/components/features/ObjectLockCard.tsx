@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { T } from "@/lib/ui/typography";
 import { useObjectLock } from "@/hooks/useObjectLock";
+import { formatDateTime } from "@/lib/format/locale";
 
 /**
  * Object Lock card (ADR-0013).
@@ -111,7 +112,7 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
               <p className={T.hint}>
                 Retained under <strong>{lock?.mode}</strong> until{" "}
                 <time dateTime={activeUntil?.toISOString()}>
-                  {activeUntil?.toLocaleString()}
+                  {activeUntil ? formatDateTime(activeUntil) : null}
                 </time>
                 .{" "}
                 {lock?.mode === "COMPLIANCE"

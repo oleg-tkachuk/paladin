@@ -31,6 +31,7 @@ import type {
   GetTenantTimeSeriesResponse,
   TopEntry,
 } from "@/gen/paladin/admin/v1/billing_service_pb";
+import { formatCompactCount } from "@/lib/format/locale";
 
 // /billing — per-tenant capability spend dashboard. Reads the
 // charges ledger (migration 027) via BillingService:
@@ -54,19 +55,6 @@ const PRESETS: Array<{ key: PresetKey; label: string; days: number | null }> = [
   { key: "90d", label: "90d", days: 90 },
   { key: "custom", label: "Custom", days: null },
 ];
-
-// Compact number formatter for charge counts > 9999 — keeps the
-// KPI tile from blowing out (e.g. 12.3k vs 12,345).
-function formatCount(n: number | bigint): string {
-  const v = typeof n === "bigint" ? Number(n) : n;
-  if (v > 9999) {
-    return new Intl.NumberFormat(undefined, {
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(v);
-  }
-  return v.toLocaleString();
-}
 
 function tsToDate(ts: Timestamp | undefined): Date | null {
   if (!ts) return null;
@@ -187,7 +175,7 @@ function BreakdownCard({
                     {spend}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatCount(e.chargeCount)}
+                    {formatCompactCount(e.chargeCount)}
                   </TableCell>
                 </TableRow>
               );
@@ -400,7 +388,7 @@ export default function BillingPage() {
               />
               <KPITile
                 label="Charges"
-                value={formatCount(chargeCount)}
+                value={formatCompactCount(chargeCount)}
                 helper="this period"
               />
               <KPITile
