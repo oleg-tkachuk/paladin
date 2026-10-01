@@ -1580,32 +1580,6 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
-### CI runs again, and the workflows disagree with the local gate
-
-- **Status:** Deferred — the four failures found on 2026-09-10 are fixed; what
-  is left is the disagreement that let them accumulate.
-- **What happened:** three entries in this file assume GitHub Actions cannot
-  start (the account-wide spending limit). That stopped being true. Runs
-  execute, and three workflows were failing on `develop` with nobody looking,
-  because the documentation said there was nothing to look at.
-- **Each failure was invisible to `task verify-all` by construction:**
-  golangci-lint refused to load its config because the version the workflow
-  pins was built with an older Go than go.mod targets — locally the developer's
-  own newer binary passes; the generated TS client drifted a patch version
-  behind the lockfile, which only the CI drift check compares; `capability/` had
-  an unformatted file, and every lefthook Go job is `root: backend/` while
-  `verify-all` reached backend and frontend only; and a base-image CVE needs a
-  built image, which the fast gate does not build.
-- **Still divergent:** the security workflow does not pass `--ignorefile`, so
-  `.trivyignore.yaml` applies to `task sec:*` locally and to nothing in CI. A
-  suppression a reviewer approves in that file is therefore not the suppression
-  CI honours.
-- **Definition of Done:** every check CI runs is reachable from a local task,
-  or is documented here as deliberately CI-only with the reason.
-- **Blockers:** none.
-
----
-
 ## Documentation
 
 ## Capability module
@@ -1666,58 +1640,6 @@ finding moving from "packages you import" to "your code is affected".
   object and audit paths established is narrow-only for exactly that reason.
 
 ---
-
-## Actions will not start a job: the account, not the code
-
-- **Status:** Blocked (account action — outside this repository). Confirmed
-  2026-08-28 from GitHub's own annotation.
-- **Reason:** Every workflow — Test, Integration, E2E, Security, Capability
-  module — fails with **zero steps executed**. Not a config error, not a flaky
-  runner. The annotation on the check run says it plainly:
-
-      The job was not started because recent account payments have failed
-      or your spending limit needs to be increased.
-
-  So nothing in CI has ever gated anything here. Every green result this
-  repository has seen was produced by a human running the suites by hand, while
-  the workflow files sit in the tree implying otherwise — which is what an
-  integrator would read them as.
-- **Definition of Done:** jobs start. Two routes, both the owner's: restore
-  billing / raise the spending limit, or make the repository public, where
-  Actions minutes are free. The workflows need no change; they are correct and
-  unrun.
-- **Meanwhile:** every gate that matters has a local home that does not depend
-  on Actions — `task verify-all` (unit, lint, build, tagged-suite compile) for
-  the fast loop, `task verify-deep` (integration suites, RPC surface, Go admin
-  e2e, S3 conformance, dev-bootstrap) for the slow one, and `task verify-e2e`
-  (Playwright, against freshly built images) for the browser. Those are the
-  only gates that actually run, and as of 2026-09-01 they cover everything the
-  workflows do.
-  What is missing is not coverage; it is enforcement — nothing makes a merge
-  wait for them.
-
-- **Re-checked 2026-08-30:** unchanged. The latest runs (Test, Integration,
-  Security) all report `conclusion: failure` with **zero steps executed** on
-  every job — the same signature, not a new failure. Nothing in the repository
-  can move this.
-- **Also unrun:** the `publish` job in `release.yaml` (multi-arch images and
-  charts to GHCR on each release tag). It is linted by actionlint, zizmor and
-  checkov; it has never executed. The first run is also the first time the
-  version check (library version == tag) and the GHCR logins meet a runner.
-
-## GHCR packages are created private
-
-- **Status:** Deferred (owner action on the first release).
-- **Reason:** the first push to GHCR creates each package with the
-  repository's visibility, and the repository is private. Both charts'
-  `values.yaml` default `image.repository` to GHCR so that `helm install` works
-  without building anything; against a private package it fails with an
-  image pull error unless the cluster has a pull secret.
-- **Definition of Done:** `paladin-core`, `paladin-console` and both
-  `charts/*` packages are public, or the charts document the pull secret
-  they need.
-- **Blockers:** the first release tag, and the same publish decision as the
-  name-collision item.
 
 ## The Python SDK is not published
 

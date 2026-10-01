@@ -341,6 +341,13 @@ tasks:
     cmds:
       - ./scripts/ci-groups.test.sh
 
+  verify:workflows:
+    desc: "actionlint and zizmor over the workflows, at the versions CI pins"
+    # Not part of verify-all: it fetches both tools. CI runs the same two as
+    # its Workflow syntax and Workflow audit jobs.
+    cmds:
+      - ./scripts/workflows-audit.sh
+
   verify:portable-shell:
     desc: "The tracked shell scripts use no form only BSD or only GNU accepts"
     cmds:
