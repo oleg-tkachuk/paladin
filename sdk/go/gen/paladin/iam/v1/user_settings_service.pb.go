@@ -36,7 +36,7 @@ type UserSettings struct {
 	TenantId string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Timezone string `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"` // IANA tz database name, e.g. "Europe/Kyiv".
 	Locale   string `protobuf:"bytes,5,opt,name=locale,proto3" json:"locale,omitempty"`     // BCP-47, e.g. "uk-UA".
-	Theme    string `protobuf:"bytes,6,opt,name=theme,proto3" json:"theme,omitempty"`       // "light" | "dark" | "violet" | "system".
+	Theme    string `protobuf:"bytes,6,opt,name=theme,proto3" json:"theme,omitempty"`       // "light" | "dark" | "ember" | "system".
 	// Free-form UI state. Server treats as opaque; bounded at 16 KiB on write.
 	Preferences     *structpb.Struct       `protobuf:"bytes,7,opt,name=preferences,proto3" json:"preferences,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,8,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`

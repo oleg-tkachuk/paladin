@@ -19,9 +19,9 @@ describe("ThemeSync", () => {
   });
 
   it("applies the saved theme", async () => {
-    h.getMine.mockResolvedValue({ theme: "violet" });
+    h.getMine.mockResolvedValue({ theme: "ember" });
     render(<ThemeSync />);
-    await waitFor(() => expect(h.setTheme).toHaveBeenCalledWith("violet"));
+    await waitFor(() => expect(h.setTheme).toHaveBeenCalledWith("ember"));
   });
 
   it.each([

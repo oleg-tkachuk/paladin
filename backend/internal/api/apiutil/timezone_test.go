@@ -44,12 +44,12 @@ func TestValidateLocale(t *testing.T) {
 
 func TestValidateTheme(t *testing.T) {
 	t.Parallel()
-	for _, ok := range []string{"light", "dark", "system", "violet"} {
+	for _, ok := range []string{"light", "dark", "system", "ember"} {
 		if err := ValidateTheme(ok); err != nil {
 			t.Errorf("ValidateTheme(%q): %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "midnight", "Light", "auto"} {
+	for _, bad := range []string{"", "midnight", "Light", "auto", "violet"} {
 		if err := ValidateTheme(bad); err == nil {
 			t.Errorf("ValidateTheme(%q): want error", bad)
 		}
