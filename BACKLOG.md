@@ -1606,70 +1606,9 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
-### The slow gate exists; nothing enforces that anyone runs it
-
-- **Status:** Narrowed 2026-09-01 — the gate itself is DONE; only enforcement
-  is left. Surfaced 2026-08-21, and this entry has absorbed two siblings that
-  asked the same question for `dev-bootstrap.sh` and the Go admin e2e suite.
-- **What this replaces:** three entries, each about a suite that compiled and
-  never ran, each parked on the same unreachable CI. They are one problem, and
-  it now has one answer: `task verify-deep` — the Postgres-backed integration
-  suites, then `backend/scripts/verify-stack.sh`, which boots the compose
-  stack once, asserts every plane is ready, and drives the RPC-surface gate,
-  the Go admin e2e suite, the S3 conformance suite (against the stack's own
-  MinIO — it had no endpoint before and so conformed to nothing) and
-  `dev-bootstrap.sh` (twice, so the idempotency keys are actually tested)
-  against it. `verify-all` stays the fast pre-commit gate: ~15 minutes and a
-  Docker daemon do not belong in front of every commit, which is why these
-  suites were not there and is still a good reason.
-- **What the first run found**, within a minute of existing: `CreateTenant`
-  with a default binding could not succeed at all. The create tx ran as the
-  calling platform admin, so the `tenant_default_bindings` insert — keyed to
-  the NEW tenant — hit `WITH CHECK (tenant_id = paladin_session_tenant_id())`
-  and Postgres refused it. Broken since migration 016 turned RLS on for that
-  table, in both spellings (`default_binding` on a shared tenant, and the
-  derived bucket of a dedicated one), invisible because `tenants` and
-  `buckets` carry no RLS and the ordinary no-binding create kept working. The
-  e2e suite had covered it the whole time. Nothing ran the e2e suite.
-- **Definition of Done (remaining):** that a merge cannot happen without the
-  slow gate having run. Today it is a task a person has to remember, which is
-  a weaker claim than the one this entry started with and is the only claim
-  left. The mechanism is a required status check, and that needs jobs to
-  start at all.
-- **Blockers:** the account-wide Actions spending limit — see *Actions will
-  not start a job*. Deliberately NOT wired into `.github/workflows/` ahead of
-  that: a workflow step nobody can execute is unverified code, and this
-  repository has already shipped one of those (a Helm `ternary` that rendered
-  everywhere except the one overlay that mattered).
-
----
-
 ## Documentation
 
 ## Capability module
-
-### Smoke test has no CI home — runs only on demand
-
-- **Status:** Deferred
-- **Reason:** `TestSmokeStackReady` (tests/integration/smoke_test.go) probes a
-  live docker-compose stack on localhost — it is not a testcontainers test.
-  Wiring the integration suite into CI made it fail on every run, because no
-  job brings the compose stack up. It now skips unless `PALADIN_SMOKE=1`, which
-  keeps the gate green but means the smoke test gates nothing: the "the stack
-  composes and every plane binds" claim it exists to check is unverified in
-  CI. The frontend e2e workflow brings up a DIFFERENT compose file
-  (`frontend/tests/e2e/docker-compose.test.yaml`), so it is not covered there
-  either.
-- **Definition of Done:**
-  - A CI job (or a step in an existing one) brings up
-    `backend/deploy/docker-compose.yaml`, waits for health, then runs the
-    smoke test with `PALADIN_SMOKE=1`, and tears the stack down.
-  - The 60s in-test timeout is reconciled with the job-level timeout so a
-    stack that never comes up fails fast with a clear message rather than
-    hanging.
-- **Blockers:** none. Needs a decision on whether it lives in the integration
-  workflow (adds a compose bring-up to a testcontainers job — mixed concerns)
-  or its own smoke workflow.
 
 ### Capability module CI: deny network egress in the standalone job
 

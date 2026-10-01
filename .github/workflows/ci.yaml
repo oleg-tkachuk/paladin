@@ -7,7 +7,9 @@ name: CI
 # both for each release tag. `verify-e2e` — Playwright against a stack built
 # from the change — runs here for a change the console or the backend reaches:
 # while it ran only locally, console bugs piled up behind a suite nobody ran.
-# `verify-deep` (the Postgres-backed suites) stays local.
+# `verify-deep` — the Postgres-backed integration suites and the stack gate
+# (RPC surface, Go admin e2e, S3 conformance, dev-bootstrap, smoke) — runs for
+# a change the backend reaches; it too had been local-only, and rotted there.
 
 on:
   push:
@@ -61,6 +63,9 @@ env:
   UV_VERSION: "0.12.21"
   # renovate: datasource=pypi depName=zizmor
   ZIZMOR_VERSION: "1.30.1"
+  # The stack gate mints its dev token with `step` (task backend:auth:mint-token).
+  # renovate: datasource=github-releases depName=smallstep/cli
+  STEP_VERSION: "0.31.0"
 
 jobs:
   # Whether anything the checks below read has changed.
@@ -79,6 +84,7 @@ jobs:
       relevant: ${{ steps.filter.outputs.relevant }}
       groups: ${{ steps.filter.outputs.groups }}
       e2e: ${{ steps.filter.outputs.e2e }}
+      deep: ${{ steps.filter.outputs.deep }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -125,6 +131,9 @@ jobs:
           e2e="$(printf '%s' "$groups" | ./scripts/ci-groups.sh --needs-e2e)"
           printf '%s\n' "end-to-end: $e2e"
           printf '%s\n' "e2e=$e2e" >>"$GITHUB_OUTPUT"
+          deep="$(printf '%s' "$groups" | ./scripts/ci-groups.sh --needs-deep)"
+          printf '%s\n' "deep: $deep"
+          printf '%s\n' "deep=$deep" >>"$GITHUB_OUTPUT"
           if [ "$groups" = "[]" ]; then
             printf '%s\n' "relevant=false" >>"$GITHUB_OUTPUT"
             printf '%s\n' "documentation only — the checks below will report as skipped"
@@ -367,6 +376,64 @@ jobs:
             frontend/test-results/
           retention-days: 7
 
+  # verify-deep, through the same task a developer runs: the Postgres-backed
+  # integration suites (testcontainers), then the stack gate — the RPC-surface
+  # gate, the Go admin e2e suite, S3 conformance, dev-bootstrap twice and the
+  # smoke test, against a compose stack built from this change. Only for a
+  # change the backend reaches (ci-groups.sh --needs-deep).
+  deep:
+    name: Deep
+    needs: [changes]
+    if: needs.changes.outputs.deep == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The image version is derived from git describe.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: |
+            backend/go.sum
+            capability/go.sum
+            sdk/go/go.sum
+
+      - name: Set up Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Set up step
+        run: |
+          set -euo pipefail
+          base="https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}"
+          deb="step-cli_${STEP_VERSION}-1_amd64.deb"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "${base}/${deb}"
+          curl -fsSL "${base}/checksums.txt" | grep " ${deb}\$" | sha256sum -c -
+          sudo dpkg -i "$deb"
+          step version
+
+      - name: task verify-deep
+        run: task --yes -t Taskfile.dev.yaml verify-deep
+
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,
   # `needs:` naming a job that exists, and shellcheck over every `run:` block.
@@ -438,7 +505,7 @@ jobs:
   # change, which is a pass; a failure or a cancellation anywhere is not.
   checks:
     name: All checks passed
-    needs: [changes, test, e2e, syntax, audit]
+    needs: [changes, test, e2e, deep, syntax, audit]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -462,7 +529,7 @@ jobs:
 
   dispatch-release:
     name: Dispatch release
-    needs: [changes, test, e2e, syntax, audit]
+    needs: [changes, test, e2e, deep, syntax, audit]
     # Not for a documentation-only push: its code is byte-identical to the
     # commit before it, so a release would rebuild and republish the same
     # images under a new version. Its commits are not lost — semantic-release
