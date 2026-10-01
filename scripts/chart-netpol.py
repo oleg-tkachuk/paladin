@@ -34,8 +34,26 @@ REQUIRED_VALUES = "ci/required-values.yaml"
 # and would otherwise leave a hole in what this checks.
 ROLES = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
 
+# Observability as a cluster that pulls metrics runs it. The two values the
+# policies derive ports from are set to something other than the chart's
+# defaults, so a port that is hardcoded instead of derived shows up as a
+# mismatch rather than passing by coincidence.
+OBSERVED = {
+    "config.otel.enabled": "true",
+    "config.otel.metrics_exporter": "prometheus",
+    "config.otel.metrics_addr": "0.0.0.0:19095",
+    "config.otel.endpoint": "collector.observability:14318",
+    "networkPolicies.monitoring.namespace": "scrapers",
+}
+METRICS_PORT = int(OBSERVED["config.otel.metrics_addr"].rsplit(":", 1)[1])
+OTLP_PORT = int(OBSERVED["config.otel.endpoint"].rsplit(":", 1)[1])
+MONITORING_NS = OBSERVED["networkPolicies.monitoring.namespace"]
+# The roles whose scrape listener is a port of its own (config.otel.metrics_addr);
+# the others serve /metrics on an ops port their policy already opens.
+SCRAPE_LISTENER_ROLES = ("api", "admin")
 
-def render(chart: Path) -> list[dict]:
+
+def render(chart: Path, extra: dict[str, str] | None = None) -> list[dict]:
     # yq, not jq: helm emits YAML and jq parses only JSON, so `jq .` on a
     # rendered chart fails at the first `key: value`. yq is the only new tool
     # this gate needs.
@@ -52,6 +70,8 @@ def render(chart: Path) -> list[dict]:
         cmd += ["-f", str(required)]
     for role in ROLES:
         cmd += ["--set", f"deployments.{role}.enabled=true"]
+    for key, value in (extra or {}).items():
+        cmd += ["--set-string" if key.endswith(("addr", "endpoint")) else "--set", f"{key}={value}"]
     out = subprocess.run(cmd, capture_output=True, text=True)
     if out.returncode != 0:
         print("!!! the chart does not render with networkPolicies.enabled=true", file=sys.stderr)
@@ -91,6 +111,49 @@ def egress_has_dns(doc: dict) -> bool:
         if 53 in ports:
             return True
     return False
+
+
+def admits_scrape(doc: dict) -> bool:
+    """Whether a policy lets the monitoring namespace reach the metrics port."""
+    for rule in doc["spec"].get("ingress") or []:
+        ports = {p.get("port") for p in rule.get("ports") or []}
+        if METRICS_PORT not in ports:
+            continue
+        for peer in rule.get("from") or []:
+            labels = (peer.get("namespaceSelector") or {}).get("matchLabels") or {}
+            if labels.get("kubernetes.io/metadata.name") == MONITORING_NS:
+                return True
+    return False
+
+
+def egress_reaches_otlp(doc: dict) -> bool:
+    for rule in doc["spec"].get("egress") or []:
+        if not rule:  # `- {}` — open egress
+            return True
+        if OTLP_PORT in {p.get("port") for p in rule.get("ports") or []}:
+            return True
+    return False
+
+
+def observability_problems(chart: Path) -> list[str]:
+    """With metrics pulled and traces pushed, both must still get through.
+
+    Neither failure is loud. A scrape the policy drops is a target that reads
+    down; a span it drops is a trace that never arrives."""
+    problems: list[str] = []
+    policies = {component(d): d for d in render(chart, OBSERVED)
+                if d.get("kind") == "NetworkPolicy" and component(d)}
+    for role in SCRAPE_LISTENER_ROLES:
+        if role in policies and not admits_scrape(policies[role]):
+            problems.append(
+                f"role {role!r} does not admit {MONITORING_NS!r} on its metrics port "
+                f"{METRICS_PORT} — the scrape is dropped and the target reads down")
+    for role, doc in sorted(policies.items()):
+        if "Egress" in (doc["spec"].get("policyTypes") or []) and not egress_reaches_otlp(doc):
+            problems.append(
+                f"role {role!r} cannot reach the OTLP collector on port {OTLP_PORT} "
+                f"— its spans are dropped")
+    return problems
 
 
 def main() -> int:
@@ -140,6 +203,8 @@ def main() -> int:
             continue
         if not egress_has_dns(p):
             problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
+
+    problems += observability_problems(root / "backend/deploy/chart")
 
     if problems:
         print("!!! backend: the rendered NetworkPolicies break what they promise", file=sys.stderr)

@@ -54,6 +54,14 @@ unable to reach Postgres. The Jobs now get an egress policy in the hook phase
 at weight -10. `scripts/chart-netpol.py` compared only Deployments, which is
 why the gate written to catch exactly this did not; it reads pod-template
 labels now and covers Jobs.
+- **Found and fixed (2026-10-01), for clusters that observe Paladin:** the
+OTLP egress was fixed at 4317, the gRPC port, while the chart's default
+exporter speaks OTLP/HTTP to 4318, so every span would have been dropped. And
+with `metrics_exporter: prometheus`, api and admin serve `/metrics` on a
+listener of their own (`metrics_addr`, 9095) that no ingress rule admitted, so
+both would have read as down to the scraper. Both ports are now derived from
+`config.otel`, and `scripts/chart-netpol.py` renders the observed shape with
+non-default ports to catch either regression.
 - **Definition of Done:** `networkPolicies.enabled: true` in at least the prod
 overlay, every workload rendering a policy, and the `CKV2_K8S_6` skip deleted
 from `.checkov.yaml`.
