@@ -27,34 +27,34 @@ every call.
 
 ```mermaid
 flowchart LR
-    subgraph clients [" "]
-        direction TB
-        op(["Operator · console"])
-        agent(["AI agent · MCP"])
-        app(["Application · SDK"])
-    end
+    op(["Operator · console"])
+    agent(["AI agent · MCP"])
+    app(["Application · SDK"])
 
     cp["<b>Paladin</b><br/>IAM · Cedar policy · quotas<br/>object metadata · audit · events"]
 
     pg[("<b>PostgreSQL</b>")]
-    s3[("<b>S3 backends</b><br/>SeaweedFS · MinIO · Garage · AWS")]
     sinks{{"<b>Event sinks</b><br/>webhooks · brokers"}}
+    s3[("<b>S3 backends</b><br/>SeaweedFS · MinIO<br/>Garage · AWS")]
 
-    clients -- "Connect RPC · MCP<br/>metadata only" --> cp
-    cp --- pg
-    cp -- "bucket and object<br/>management" --> s3
+    op -- "Connect RPC" --> cp
+    agent -- "MCP" --> cp
+    app -- "Connect RPC" --> cp
+    cp --> pg
     cp -- "events" --> sinks
-    app <== "object bytes<br/>over presigned URLs" ==> s3
+    cp -- "bucket and object management" --> s3
+    app -. "object bytes, presigned" .-> s3
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class app,agent,op client
     class cp role
     class pg,s3 store
     class sinks external
-    style clients fill:none,stroke:#94A3B8,stroke-dasharray:3 3
 ```
 
 Access is granted through users, API tokens and capability tokens —

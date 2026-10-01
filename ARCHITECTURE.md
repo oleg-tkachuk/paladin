@@ -25,38 +25,26 @@ without the rest of this system.
 ```mermaid
 flowchart TB
     browser(["Browser"])
-    app(["Application · SDK"])
     agent(["AI agent · MCP client"])
+    app(["Application · SDK"])
 
     bff["<b>paladin-console</b><br/>Next.js BFF · :3000"]
+    mcp["<b>mcp</b> · :8095"]
 
-    subgraph core ["paladin-core · one binary, one Deployment per role"]
+    subgraph planes ["paladin-core planes"]
         direction LR
-        mcp["<b>mcp</b><br/>:8095"]
+        admin["<b>admin</b> · :8090"]
         api["<b>api</b><br/>:8080 data · :8085 iam"]
-        admin["<b>admin</b><br/>:8090"]
-        worker["<b>worker</b>"]
-        dispatcher["<b>dispatcher</b>"]
-        ingest["<b>ingest</b> · :8100<br/>off by default"]
     end
 
-    pg[("<b>PostgreSQL</b><br/>row-level security")]
-    s3[("<b>S3 backends</b><br/>SeaweedFS · MinIO · Garage · AWS")]
-    sinks{{"<b>Event sinks</b><br/>HTTP · NATS/JetStream · Kafka<br/>RabbitMQ · SQS"}}
+    s3[("<b>S3 backends</b>")]
 
     browser --> bff
-    bff --> api & admin
-    app --> api
     agent --> mcp
-    mcp --> api & admin
-    app <== "object bytes over presigned URLs" ==> s3
-
-    core -- "every role except mcp (bridge mode)" --- pg
-    api -- "HEAD · multipart · copy · delete" --> s3
-    worker -- "buckets · purge · migration" --> s3
-    admin -- "ListBuckets probe" --> s3
-    dispatcher -- "outbox delivery" --> sinks
-    s3 -. "storage notifications" .-> ingest
+    bff --> planes
+    mcp --> planes
+    app --> api
+    app -. "object bytes over presigned URLs" .-> s3
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -66,11 +54,47 @@ flowchart TB
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class browser,app,agent client
     class bff ui
-    class api,admin,mcp,worker,dispatcher role
+    class api,admin,mcp role
+    class s3 store
+    style planes fill:#F8FAFC,stroke:#16A34A
+```
+
+What each role reaches. Every role but `mcp` (in its default bridge mode)
+uses PostgreSQL; `ingest` also receives storage notifications, over a webhook,
+NATS, RabbitMQ or SQS. The S3 calls each role makes are in [Storage](#storage).
+
+```mermaid
+flowchart LR
+    api["<b>api</b>"]
+    admin["<b>admin</b>"]
+    worker["<b>worker</b>"]
+    ingest["<b>ingest</b><br/>off by default"]
+    dispatcher["<b>dispatcher</b>"]
+
+    s3[("<b>S3 backends</b>")]
+    pg[("<b>PostgreSQL</b><br/>row-level security")]
+    sinks{{"<b>Event sinks</b><br/>HTTP · NATS · Kafka<br/>RabbitMQ · SQS"}}
+
+    api --> s3
+    admin --> s3
+    worker --> s3
+    api --> pg
+    admin --> pg
+    worker --> pg
+    ingest --> pg
+    dispatcher --> pg
+    dispatcher --> sinks
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class api,admin,worker,dispatcher role
     class ingest optional
     class pg,s3 store
     class sinks external
-    style core fill:#F8FAFC,stroke:#16A34A,stroke-width:1px
 ```
 
 Roles are processes, not modules: the Helm chart deploys one Deployment
