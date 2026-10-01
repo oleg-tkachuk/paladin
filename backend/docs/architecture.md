@@ -17,43 +17,50 @@ plane runs without `BYPASSRLS`, so a missing policy is a missing wall.
 
 - **Language**: Go
 - **Frameworks**:
-  - [Connect RPC](https://connectrpc.com/): Connect-compatible RPC framework (replaces Gin).
+  - [Connect RPC](https://connectrpc.com/): the RPC framework, over HTTP/1.1 and HTTP/2.
   - [Protobuf + buf/validate](https://buf.build/bufbuild/protovalidate): Contract-first API with declarative validation.
   - [SQLC](https://sqlc.dev/): Type-safe SQL generator.
-  - [Google Wire](https://github.com/google/wire): Dependency injection.
+  - [Uber fx](https://github.com/uber-go/fx): dependency injection and lifecycle (`internal/app/appfx.go`).
   - [CUE](https://cuelang.org/): Configuration schema validation.
   - [Koanf](https://github.com/knadh/koanf): Configuration management.
 
 ## Service Topology & Dependencies
 
-### Upstream Dependencies
+### Dependencies
 
-- **PostgreSQL**: Primary metadata store (objects, tenants, audit logs).
-- **S3-compatible Storage (e.g., SeaweedFS)**: Physical object storage.
-- **OpenTelemetry Collector**: For distributed tracing and metrics.
+- **PostgreSQL** — every fact: tenants, objects, policies, quotas, audit,
+  the outbox.
+- **S3-compatible storage** — object bytes only (SeaweedFS, MinIO, Garage,
+  AWS S3).
+- **OpenTelemetry collector** — traces over OTLP; metrics over OTLP or a
+  Prometheus scrape (`otel.metrics_exporter`).
+- **Event sinks** — HTTP, NATS (core or JetStream), Kafka, RabbitMQ, SQS;
+  reached by the dispatcher only.
 
-### Downstream Consumers
+### Consumers
 
-- **Tenant applications**: Consume Paladin for document and asset management.
-- **Workflow workers**: Use Paladin for hard deletion and object lifecycle management.
-- **Frontend applications**: Directly consume signed URLs for uploads and downloads.
+- **Applications and SDKs** — the data plane; bytes go to S3 over presigned
+  URLs.
+- **The console** — through its BFF, the data, admin and iam planes.
+- **AI agents** — through `serve mcp`.
 
-### Data Flow
+### Data flow
 
-1. **Metadata Registration**: Metadata for an object is stored in Postgres.
-2. **Signed Action**: Paladin provides pre-signed S3 URLs for direct client-to-storage upload/download.
-3. **Completion**: Clients notify Paladin when an upload is complete to finalize metadata.
-4. **Lifecycle**: Background workers reap expired `PENDING` objects and
-   abandoned multipart sessions, drain the purge queue, roll partitions,
-   and reconcile quota usage.
-5. **Events**: Mutations write to the transactional outbox on the same
-   transaction (ADR-0003), and a dispatcher delivers them to subscriptions
-   — so a crash can never record the change without its event.
+1. **Register.** An upload creates the object row in `PENDING`.
+2. **Transfer.** The client moves bytes over a presigned URL.
+3. **Complete.** `CompleteObject` (explicit) or a storage notification to
+   `serve ingest` (implicit) promotes the object to `AVAILABLE`.
+4. **Events.** The state change and its outbox row commit in one
+   transaction (ADR-0003); the dispatcher delivers them to subscriptions.
+5. **Housekeeping.** Workers reap expired `PENDING` objects and abandoned
+   multipart sessions, drain the purge queue, roll partitions and reconcile
+   quota usage ([ops-housekeeping.md](ops-housekeeping.md)).
 
 ## Transport Layer
 
-RPCs are served over Connect on three planes, each its own service with its
-own protobuf package, auth audience and Postgres role:
+RPCs are served over Connect on three planes, each with its own protobuf
+package and token audience. All three run as the `paladin_app` database role
+([db-roles.md](db-roles.md)):
 
 | Plane | Package | Serves |
 |-------|---------|--------|
@@ -83,23 +90,22 @@ in one shared chain — the planes accept different credentials and enforce
 different audiences. The data plane's order, which carries the most
 constraints:
 
-1. **OTel** — trace/span per RPC
-2. **Auth (JWT)** — verifies non-PAT bearers; steps aside for a PAT or a
-   capability-only request, which carries no `Authorization` header at all
+1. **OTel** — trace and span per RPC
+2. **LogOutcome** — logs failed calls, including auth rejections
+3. **Auth (JWT)** — verifies non-PAT bearers; steps aside for a PAT or a
+   capability-only request, which carries no `Authorization` header
    (ADR-0010: a capability may be the entire credential)
-3. **API token** — verifies `paladin_pat_…` and establishes the principal
-4. **Capability** — same, for capability credentials
-5. **RequireAudience** — must follow 2–4: the audience check reads the
-   principal, so anything that *establishes* one has to run first
-6. **QuotaSoftCheck** — tenant and bucket scope; the bucket scope resolves
-   the upload's Collection to its bucket, without which bucket quota rows
-   are maintained and displayed but reject nothing
-7. **Validation** — `buf/validate` annotations via `protovalidate`
-8. **Idempotency** — reads/writes `idempotency_keys` for replayable writes
+4. **API token** — verifies `paladin_pat_…` and establishes the principal
+5. **Capability** — same, for capability credentials
+6. **RequireAudience** — after 3–5, since it reads the principal they set
+7. **Tenant rate limit** — per-tenant token bucket, before any database work
+8. **Log context** — adds trace, request and tenant ids to handler logs
+9. **QuotaSoftCheck** — tenant and bucket scope
+10. **Validation** — `buf.validate` rules via `protovalidate`
+11. **Idempotency** — `idempotency_keys` for replayable writes
 
-Rate limiting (`internal/middleware/ratelimit.go`, a per-tenant token
-bucket) and audit (`audit.go`) are wired where they apply rather than into
-every chain.
+The admin and iam chains differ in credentials and audience; audit is written
+by the handlers that change state.
 
 ## Runtime Entry Points
 
@@ -109,18 +115,19 @@ together on a laptop:
 
 | Command | Role |
 |---------|------|
-| `serve-api` | Data plane (`paladin.data.v1`) + IAM |
-| `serve-admin` | Admin plane (`paladin.admin.v1`) |
-| `serve-worker` | Reapers, partition maintainer, purge drainer, quota reconciler |
-| `serve-dispatcher` | Outbox drain → sinks |
-| `serve-ingest` | Storage-event ingest (SQS / NATS / webhook) |
-| `serve-mcp` | MCP bridge |
-| `migrate` | Apply the schema baseline |
+| `serve api` | Data plane (`paladin.data.v1`) + IAM (`paladin.iam.v1`) |
+| `serve admin` | Admin plane (`paladin.admin.v1`) |
+| `serve worker` | Reapers, partition maintainer, purge drainer, quota reconciler, bucket reconciler |
+| `serve dispatcher` | Outbox drain → sinks |
+| `serve ingest` | Storage notifications: webhook, NATS, RabbitMQ, SQS |
+| `serve mcp` | MCP bridge (`--embedded` hosts the handlers in-process) |
+| `migrate` | Apply the migrations |
 | `bootstrap` | Create the platform admin |
 
 Composition lives in `internal/app/` — `build_listeners_*.go` assemble the
 serving planes, `build_jobs.go` the background workers, `build_deps.go` the
-shared dependencies. `internal/wire/wire.go` holds the Wire provider graph.
+shared dependencies, and `appfx.go` runs them under Uber fx. `internal/wire/`
+holds the plain `Provide*` constructors and the `Repos` / `Storage` seams.
 
 ## Configuration Sources
 
@@ -129,8 +136,9 @@ shared dependencies. `internal/wire/wire.go` holds the Wire provider graph.
 - **Environment variables** — prefixed `PALADIN_`. The loader keys on that
   prefix and *ignores* anything else, so a stale prefix goes quiet rather
   than erroring.
-- **Kubernetes secrets** — fields with a `_secret` suffix resolve from a
-  mounted secret rather than the YAML value.
+- **Kubernetes Secrets** — fields with a `_secret` / `_ref` suffix are read
+  through the Kubernetes API at boot (`K8sSecretResolver`, using the pod's
+  ServiceAccount) and replace the inline value.
 
 Every key is validated against `internal/config/schema.cue` at startup. The
 loader is strict: an unknown key is a startup failure, not a warning. That
@@ -152,9 +160,8 @@ See [configuration.md](configuration.md) for the field reference.
 - `internal/store/postgres/` — Repositories. `queries/` holds the sqlc source,
   `sqlc/` the generated code, `adapters/` the domain-facing wrappers.
 - `internal/storage/s3adapter/` — S3-compatible backend client.
-- `internal/storage/events/` — Inbound storage-event drivers (SQS, NATS, …).
-- `internal/eventingest/` — Ingest pipeline: parse, dedup, promote to
-  `AVAILABLE`.
+- `internal/eventingest/` — Ingest pipeline: the webhook, NATS, RabbitMQ
+  and SQS drivers, parse, dedup, promote to `AVAILABLE`.
 - `internal/policy/cedar/` — Cedar engine, policy cache, LISTEN/NOTIFY
   invalidation.
 - `internal/capability/` — Capability issuance, verification, usage counters.
@@ -168,8 +175,9 @@ See [configuration.md](configuration.md) for the field reference.
 - `internal/config/` — Koanf loader + CUE schema.
 - `proto/paladin/{admin,data,iam,common}/v1/` — Protobuf service definitions,
   one package per plane.
-- `migrations/` — The three-file schema baseline; see
-  [database.md](database.md).
+- `migrations/` — goose migrations: the `001`–`003` baseline and
+  forward-only changes after it; see [database.md](database.md) and
+  [CONVENTIONS.md](../migrations/CONVENTIONS.md).
 - `tests/integration/` — Postgres-backed suites behind the `integration`
   build tag: the assembled application at the top level, one component
   against real Postgres or S3 in `components/`.
@@ -181,4 +189,4 @@ See [configuration.md](configuration.md) for the field reference.
 - [API.md](API.md) — RPC surface and HTTP mappings
 - [cedar-authoring.md](cedar-authoring.md) — writing policies
 - [ops-housekeeping.md](ops-housekeeping.md) — background jobs and their knobs
-- [adr/](adr/) — backend architecture decisions
+- [docs/adr/](../../docs/adr/) — architecture decisions
