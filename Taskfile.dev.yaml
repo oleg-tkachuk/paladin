@@ -247,6 +247,7 @@ tasks:
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:publish-target
+      - task: verify:new-release-tag
       - task: verify:go-module-paths
       - task: verify:image-uid
       - task: verify:admin-audience-roles
@@ -424,6 +425,13 @@ tasks:
     # A mismatch builds inside the tree and cannot be fetched outside it.
     cmds:
       - ./scripts/go-module-paths.test.sh
+
+  verify:new-release-tag:
+    desc: "Fail when release.yaml would take an earlier run's tag for its own"
+    # Two dispatches to one commit made the second publish a release that
+    # already existed, and fail.
+    cmds:
+      - ./scripts/new-release-tag.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"
