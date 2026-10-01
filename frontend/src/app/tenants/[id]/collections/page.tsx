@@ -76,6 +76,9 @@ import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "name" | "displayName" | "bucket";
 
+// Position of the tenant id in the list query's key.
+const TENANT_KEY_INDEX = 1;
+
 export default function TenantCollectionsPage() {
   const tenant = useTenant();
   const { user } = useAuth();
@@ -134,6 +137,14 @@ export default function TenantCollectionsPage() {
   const listQuery = useQuery({
     queryKey: ["tenantCollections", tenant.tenantId, celFilter],
     retry: false, // queryFn toasts real failures.
+    // While a new search loads, keep showing the last result for this tenant.
+    // Without it every keystroke emptied the table for a round trip, which
+    // also unmounted an open row menu under the cursor. Never across tenants:
+    // another tenant's rows must not stand in for this one's, even briefly.
+    placeholderData: (previous: Collection[] | undefined, previousQuery) =>
+      previousQuery?.queryKey[TENANT_KEY_INDEX] === tenant.tenantId
+        ? previous
+        : undefined,
     queryFn: async ({ signal }) => {
       try {
         const res = await collectionClient.listCollections(

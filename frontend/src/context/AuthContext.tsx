@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -126,14 +127,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  // Bumped by every sign-in, tenant switch and sign-out. The on-mount
+  // rehydrate applies its answer only if none of them happened while it was
+  // in flight: a slow "no session" arriving after a login succeeded used to
+  // sign the user straight back out to /login.
+  const generation = useRef(0);
 
   // On mount, try to rehydrate from BFF. The fetch is deduped at module
   // scope (see rehydrate()) so StrictMode's double-mount doesn't race the
   // refresh-token rotation.
   useEffect(() => {
     let cancelled = false;
+    const startedAt = generation.current;
     void rehydrate().then((result) => {
-      if (cancelled) return;
+      if (cancelled || generation.current !== startedAt) return;
       if (!result.ok) {
         setStatus("unauthenticated");
         return;
@@ -149,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (subject: string, password: string, upstreamCode?: string) => {
+      generation.current++;
       setError(null);
       setStatus("loading");
       try {
@@ -183,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const switchTenant = useCallback(async (tenantId: string) => {
+    generation.current++;
     const res = await fetch("/api/auth/switch-tenant", {
       method: "POST",
       credentials: "same-origin",
@@ -207,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    generation.current++;
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
