@@ -20,8 +20,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -61,46 +59,6 @@ func marshalAuditPayload(v any) []byte {
 		return nil
 	}
 	return b
-}
-
-// redacted returns a copy of m with every field marked `debug_redact` in the
-// proto cleared, at any depth. The audit row stores the request; without this
-// it stored refresh tokens and initial passwords in plaintext, readable by
-// anyone allowed to read the audit log.
-func redacted(m proto.Message) proto.Message {
-	c := proto.Clone(m)
-	clearRedacted(c.ProtoReflect())
-	return c
-}
-
-func clearRedacted(m protoreflect.Message) {
-	// Cleared after the walk: Range does not promise a message may change
-	// under it.
-	var clear []protoreflect.FieldDescriptor
-	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if opts, ok := fd.Options().(*descriptorpb.FieldOptions); ok && opts.GetDebugRedact() {
-			clear = append(clear, fd)
-			return true
-		}
-		switch {
-		case fd.IsList() && fd.Message() != nil:
-			list := v.List()
-			for i := range list.Len() {
-				clearRedacted(list.Get(i).Message())
-			}
-		case fd.IsMap() && fd.MapValue().Message() != nil:
-			v.Map().Range(func(_ protoreflect.MapKey, mv protoreflect.Value) bool {
-				clearRedacted(mv.Message())
-				return true
-			})
-		case fd.Message() != nil && !fd.IsList() && !fd.IsMap():
-			clearRedacted(v.Message())
-		}
-		return true
-	})
-	for _, fd := range clear {
-		m.Clear(fd)
-	}
 }
 
 // AuditWriter inserts audit log entries. Implementations are typically the

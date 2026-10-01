@@ -268,6 +268,10 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 			// Preferred: generic factory (no reflection).
 			if f, ok := responseFactories.Load(method); ok {
 				if replay, rerr := f.(responseFactory)(cached); rerr == nil {
+					if err := refuseCredentialReplay(replay); err != nil {
+						metrics.RecordIdempotencyLookup(ctx, method, lookupRefused)
+						return nil, err
+					}
 					metrics.RecordIdempotencyLookup(ctx, method, "replayed")
 					return replay, nil
 				}
@@ -277,6 +281,10 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 				// Fallback: reflection registry auto-populated on a prior
 				// cache miss for an unregistered method.
 				if replay, rerr := reconstructResponse(respType.(reflect.Type), cached); rerr == nil {
+					if err := refuseCredentialReplay(replay); err != nil {
+						metrics.RecordIdempotencyLookup(ctx, method, lookupRefused)
+						return nil, err
+					}
 					metrics.RecordIdempotencyLookup(ctx, method, "replayed")
 					return replay, nil
 				}
@@ -331,12 +339,35 @@ func (i *idempotencyInterceptor) WrapStreamingHandler(next connect.StreamingHand
 // marshals it to bytes. Connect responses always wrap a proto.Message
 // (the generated Resp type), so the type assertion is safe in
 // production; the explicit error keeps test fixtures honest.
+// marshalResponse serialises the response for the cache with every
+// debug_redact field cleared: a minted API or capability token is returned
+// once, to the first caller, and never written to idempotency_keys.
 func marshalResponse(resp connect.AnyResponse) ([]byte, error) {
 	msg, ok := resp.Any().(proto.Message)
 	if !ok {
 		return nil, errors.New("idempotency: response message is not a proto.Message")
 	}
-	return proto.Marshal(msg)
+	return proto.Marshal(redacted(msg))
+}
+
+// lookupRefused is the idempotency lookup outcome for a repeated key whose
+// response carried a credential and is not replayed.
+const lookupRefused = "refused"
+
+// errCredentialNotReplayed answers a repeated key whose response type carries
+// a credential. The cached copy has it cleared, and a success without it
+// would read as a token that is empty rather than one that was not kept.
+var errCredentialNotReplayed = connect.NewError(connect.CodeAlreadyExists, errors.New(
+	"this Idempotency-Key already completed; its response carried a credential, "+
+		"which is returned once and not stored — use a new key to issue another"))
+
+// refuseCredentialReplay returns errCredentialNotReplayed when replay is of a
+// type that can carry a credential, and nil otherwise.
+func refuseCredentialReplay(replay connect.AnyResponse) error {
+	if msg, ok := replay.Any().(proto.Message); ok && carriesCredentials(msg.ProtoReflect().Descriptor()) {
+		return errCredentialNotReplayed
+	}
+	return nil
 }
 
 // reconstructResponse builds a fresh *connect.Response[T] from the

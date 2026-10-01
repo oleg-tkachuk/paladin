@@ -76,7 +76,7 @@ resp, err := tenants.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantR
 
 | Function | Does |
 | --- | --- |
-| `WithIdempotencyKey(ctx, key) context.Context` | Every call made with the returned context sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. Reuse the key only for the same logical operation. |
+| `WithIdempotencyKey(ctx, key) context.Context` | Every call made with the returned context sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. A response that carries a credential (a minted API or capability token, a generated password) is not replayed: the repeat returns `AlreadyExists`, because the credential is delivered once and not stored. Reuse the key only for the same logical operation. |
 | `IdempotencyKey(ctx) (string, bool)` | The key attached to `ctx`; an empty key counts as none. |
 
 ### Header names

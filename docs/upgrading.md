@@ -65,7 +65,10 @@ prefixes were not:
   rotated refresh token is wrong. That is true, and it is enforced on the
   server, which refuses to memoize those four at all
   (`middleware.CredentialMintingProcedures`). An Idempotency-Key is a caller's
-  de-duplication token, not a request to cache.
+  de-duplication token, not a request to cache. Methods that mint a credential
+  and are memoized (`CapabilityService/Issue`, `APITokenService/Create`,
+  `UserService/ResetPassword`) store their response with the credential cleared
+  and answer a repeated key with `AlreadyExists`.
 
 If you integrate with Paladin, this is the rule to implement. `buf` puts
 `idempotency_level` in every generated descriptor;
