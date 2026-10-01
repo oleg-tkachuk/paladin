@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,15 +18,19 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
 
-// fakeSinkSecrets counts resolutions so tests can pin the TTL cache.
+// fakeSinkSecrets counts resolutions so tests can pin the TTL cache. The
+// counter is atomic: resolveSinkValue calls the resolver outside the cache
+// lock, so concurrent first uses reach it together — the case
+// TestResolveSinkValue_ConcurrentFirstUse exists for, and which raced on a
+// plain int.
 type fakeSinkSecrets struct {
 	values map[string]string // "ns/name/key" (ns may be "") → value
-	calls  int
+	calls  atomic.Int64
 	err    error
 }
 
 func (f *fakeSinkSecrets) ResolveSinkSecret(_ context.Context, ns, name, key string) (string, error) {
-	f.calls++
+	f.calls.Add(1)
 	if f.err != nil {
 		return "", f.err
 	}
@@ -76,8 +81,8 @@ func TestResolveSinkValue_PassthroughAndRefs(t *testing.T) {
 	if err != nil || got != "inline-value" {
 		t.Fatalf("passthrough = (%q, %v)", got, err)
 	}
-	if secrets.calls != 0 {
-		t.Fatalf("resolver called %d times for a non-ref value", secrets.calls)
+	if secrets.calls.Load() != 0 {
+		t.Fatalf("resolver called %d times for a non-ref value", secrets.calls.Load())
 	}
 
 	// Ref resolves; repeat serves from the TTL cache (one backend call).
@@ -87,8 +92,8 @@ func TestResolveSinkValue_PassthroughAndRefs(t *testing.T) {
 			t.Fatalf("resolve #%d = (%q, %v)", i, got, err)
 		}
 	}
-	if secrets.calls != 1 {
-		t.Errorf("resolver calls = %d, want 1 (TTL cache)", secrets.calls)
+	if secrets.calls.Load() != 1 {
+		t.Errorf("resolver calls = %d, want 1 (TTL cache)", secrets.calls.Load())
 	}
 }
 
@@ -128,8 +133,8 @@ func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 		t.Fatalf("signature header = %q", gotSig)
 	}
 	// The signature must correspond to the resolved key, not the literal ref.
-	if secrets.calls != 1 {
-		t.Errorf("resolver calls = %d, want 1", secrets.calls)
+	if secrets.calls.Load() != 1 {
+		t.Errorf("resolver calls = %d, want 1", secrets.calls.Load())
 	}
 
 	// Resolution failure → delivery error, no signed request with the literal.
