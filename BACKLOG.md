@@ -1547,14 +1547,22 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
-### `context.ip` is declared and never filled
+### Three readers take the client address from the leftmost X-Forwarded-For
 
 - **Status:** Deferred.
-- **Reason:** `cedar.RequestContext.IP` is in the schema and the docs, but no
-handler sets it, so a policy on `context.ip` compares against "".
-- **Definition of Done:** the interceptor that resolves the client address
-passes it to every authorization call, with a test; or the key is removed.
-- **Blockers:** which header is trusted behind the ingress.
+- **Reason:** `capability_interceptor.clientIP` (the `SourceIPCIDR` caveat),
+`LoginRateLimiter.coords` and the audit interceptor read the first entry of
+`real_ip_header` regardless of the peer. The client writes that entry, so a
+capability restricted to a network is usable from anywhere by sending the
+header, and the login limiter can be keyed on an address of the caller's
+choosing. `clientip.Resolver` (trusted proxies, right to left) now exists and
+feeds `context.ip`; these three do not use it yet.
+- **Definition of Done:** all three read `clientip.FromContext`, the console's
+login route forwards `X-Forwarded-For`, and tests prove a spoofed leftmost
+entry is not taken.
+- **Blockers:** deployments must have `trusted_proxies` set first, or every
+client resolves to the ingress address and the login limiter shares one
+bucket; the chart default does this.
 
 ### A backend created through the API cannot hold buckets
 

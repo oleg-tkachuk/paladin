@@ -477,10 +477,17 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 		return nil, nil, err
 	}
 	cfg := deps.Cfg
-	l := deps.Logger
+	dataSrv, err := BuildHTTPServer(cfg.API.Server.Data, dataMux, deps.Logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	iamSrv, err := BuildHTTPServer(cfg.API.Server.IAM, iamMux, deps.Logger)
+	if err != nil {
+		return nil, nil, err
+	}
 	listeners := []HTTPListener{
-		{Plane: "data", Server: BuildHTTPServer(cfg.API.Server.Data, dataMux, l), TLS: cfg.API.Server.Data.TLS},
-		{Plane: "iam", Server: BuildHTTPServer(cfg.API.Server.IAM, iamMux, l), TLS: cfg.API.Server.IAM.TLS},
+		{Plane: "data", Server: dataSrv, TLS: cfg.API.Server.Data.TLS},
+		{Plane: "iam", Server: iamSrv, TLS: cfg.API.Server.IAM.TLS},
 	}
 	return listeners, healthH, nil
 }

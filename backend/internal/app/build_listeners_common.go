@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -22,7 +23,16 @@ import (
 // per-plane timeouts taken from cfg.HTTPServer. Connect over HTTP/2 cleartext
 // is the Paladin default — the plane is fronted by an ingress that terminates TLS,
 // so h2c keeps the binary contract simple and lets the gateway handle ALPN.
-func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http.Server {
+//
+// The handler is wrapped in a clientip.Resolver built from the plane's
+// real_ip_header and trusted_proxies, so every request's context carries the
+// client address — the Cedar engine reads it as context.ip. An invalid
+// trusted_proxies entry is an error, not a silently ignored proxy.
+func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) (*http.Server, error) {
+	resolver, err := clientip.New(c.RealIPHeader, c.TrustedProxies)
+	if err != nil {
+		return nil, fmt.Errorf("listener %s: %w", c.Addr, err)
+	}
 	// HTTP/2 cleartext (h2c) via the stdlib Protocols API (Go 1.24+), replacing
 	// the deprecated golang.org/x/net/http2/h2c handler wrapper. The plane is
 	// fronted by an ingress that terminates TLS, so unencrypted H2 keeps the
@@ -33,7 +43,7 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http
 	protocols.SetUnencryptedHTTP2(true)
 	return &http.Server{
 		Addr:              c.Addr,
-		Handler:           mux,
+		Handler:           resolver.Middleware(mux),
 		Protocols:         protocols,
 		ReadHeaderTimeout: c.ReadHeaderTimeout,
 		ReadTimeout:       c.ReadTimeout,
@@ -55,7 +65,7 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http
 		// in bursts on the api pod, which serves data and iam, and the missing
 		// half of the sentence is why the client is still unidentified.
 		ErrorLog: serverErrorLog(l, c.Addr),
-	}
+	}, nil
 }
 
 // serverErrorLog adapts zap for http.Server.ErrorLog at warn level, tagged

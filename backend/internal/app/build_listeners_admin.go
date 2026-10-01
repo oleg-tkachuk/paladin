@@ -380,10 +380,13 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 		return HTTPListener{}, nil, err
 	}
 	cfg := deps.Cfg
-	l := deps.Logger
+	srv, err := BuildHTTPServer(cfg.Admin.Server, mux, deps.Logger)
+	if err != nil {
+		return HTTPListener{}, nil, err
+	}
 	listener := HTTPListener{
 		Plane:  "admin",
-		Server: BuildHTTPServer(cfg.Admin.Server, mux, l),
+		Server: srv,
 		TLS:    cfg.Admin.Server.TLS,
 	}
 	return listener, healthH, nil

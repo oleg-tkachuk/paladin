@@ -18,6 +18,8 @@ import (
 	cedartypes "github.com/cedar-policy/cedar-go/types"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 )
 
 // Decision is the outcome of an authorization check.
@@ -397,6 +399,13 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 		return DecisionDeny, err
 	}
 
+	// context.ip: the client address the listener resolved from its trusted
+	// proxies (clientip.Middleware), unless the caller set one.
+	if rc.IP == "" {
+		if a, ok := clientip.FromContext(ctx); ok {
+			rc.IP = a.String()
+		}
+	}
 	entities := e.buildEntities(p, r, authSlug)
 	req := cedartypes.Request{
 		Principal: userUID(p),

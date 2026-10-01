@@ -19,7 +19,10 @@ import (
 // unattributed.
 func TestBuildHTTPServer_ErrorLogIsStructuredAndTagged(t *testing.T) {
 	core, logs := observer.New(zapcore.WarnLevel)
-	srv := BuildHTTPServer(config.HTTPServer{Addr: "0.0.0.0:8085"}, nil, zap.New(core))
+	srv, err := BuildHTTPServer(config.HTTPServer{Addr: "0.0.0.0:8085"}, nil, zap.New(core))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if srv.ErrorLog == nil {
 		t.Fatal("ErrorLog is nil — the server's own errors go to Go's global logger")
@@ -48,7 +51,10 @@ func TestBuildHTTPServer_ErrorLogIsStructuredAndTagged(t *testing.T) {
 // than trusting the encoder.
 func TestBuildHTTPServer_ErrorLogEncodesAsJSON(t *testing.T) {
 	core, logs := observer.New(zapcore.WarnLevel)
-	srv := BuildHTTPServer(config.HTTPServer{Addr: "0.0.0.0:8080"}, nil, zap.New(core))
+	srv, err := BuildHTTPServer(config.HTTPServer{Addr: "0.0.0.0:8080"}, nil, zap.New(core))
+	if err != nil {
+		t.Fatal(err)
+	}
 	srv.ErrorLog.Print("boom")
 
 	if len(logs.All()) != 1 {
