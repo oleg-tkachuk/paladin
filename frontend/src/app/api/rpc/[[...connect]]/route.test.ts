@@ -94,6 +94,30 @@ describe("BFF /api/rpc router", () => {
     expect(calls[0].headers.get("Idempotency-Key")).toBe("key-123");
   });
 
+  // The plane resolves the client address (Cedar's context.ip) from this
+  // header, trusting it from the BFF's own address. Dropped here, every
+  // console request looked like it came from the console pod.
+  it("forwards the client's X-Forwarded-For chain unchanged", async () => {
+    await post(
+      rpc(BUCKET_LIST, {
+        authorization: `Bearer ${jwt("paladin-admin")}`,
+        "x-forwarded-for": "198.51.100.7, 10.0.0.2",
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers.get("X-Forwarded-For")).toBe(
+      "198.51.100.7, 10.0.0.2",
+    );
+  });
+
+  it("does not invent an X-Forwarded-For", async () => {
+    await post(
+      rpc(BUCKET_LIST, { authorization: `Bearer ${jwt("paladin-admin")}` }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers.get("X-Forwarded-For")).toBeNull();
+  });
+
   it("forwards the Authorization header to the backend", async () => {
     const token = jwt("paladin-admin");
     await post(rpc(BUCKET_LIST, { authorization: `Bearer ${token}` }));

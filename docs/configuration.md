@@ -126,6 +126,22 @@ comment. What each top-level block owns:
 | `capability` | issuer, signing key, verification, budgets |
 | `api_token` | the HMAC key for token lookup digests |
 
+### Client address behind proxies
+
+Each listener (`api.server.data`, `api.server.iam`, `admin.server`) resolves
+the client address from `real_ip_header` (default `X-Forwarded-For`), and the
+Cedar engine exposes it as `context.ip`. The header is read only when the TCP
+peer is in `trusted_proxies` (CIDRs or addresses), and the chain is walked from
+the right past every trusted hop: the first address that is not a trusted
+proxy is the client. A leftmost entry the client wrote itself is never taken.
+Nothing is specific to one ingress; any proxy that appends to the header works.
+
+`trusted_proxies: []` ignores the header, and the peer is the client. The chart
+defaults to the private ranges, which trusts every in-cluster hop — the
+ingress controller and the console's BFF, which forwards the header unchanged.
+Narrow it to the ingress and pod networks where clients can sit inside the
+private ranges, or such a client can name its own address.
+
 ### Storage backend auth modes
 
 `storage.backends.<name>.auth.mode` is mandatory — there is no default,

@@ -166,7 +166,7 @@ whether the bucket was resolved.
 | `size_bytes` | Long | uploads: the declared size |
 | `content_type` | String | uploads |
 | `now` | Long | every request: Unix seconds |
-| `ip` | String | nothing yet: always empty |
+| `ip` | String | every request with a resolvable client address; see `trusted_proxies` in [configuration](../../docs/configuration.md#client-address-behind-proxies) |
 | `oauth_client_id` | String | `AuthorizeOAuth` |
 | `oauth_scopes` | Set&lt;String&gt; | `AuthorizeOAuth` |
 
