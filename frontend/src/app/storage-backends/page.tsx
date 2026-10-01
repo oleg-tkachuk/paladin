@@ -44,55 +44,9 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
+import { providerLabel } from "@/lib/storageProvider";
 import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
-
-// Vendor/implementation behind `kind` (`kind` is too coarse — every
-// self-hosted S3 is S3_COMPATIBLE). The server carries an explicit `provider`
-// slug (mirrored from config); when unset we fall back to an endpoint
-// heuristic so the "Type" column is still useful for backends predating the
-// field. Known slugs get a nice label; unknown ones render verbatim.
-const PROVIDER_LABELS: Record<string, string> = {
-  garage: "Garage",
-  seaweedfs: "SeaweedFS",
-  minio: "MinIO",
-  ceph: "Ceph",
-  aws: "AWS",
-  gcp: "GCP",
-  azure: "Azure",
-  digitalocean: "DigitalOcean",
-  wasabi: "Wasabi",
-  backblaze: "Backblaze",
-  cloudflare: "Cloudflare R2",
-};
-
-function providerFromEndpoint(endpoint: string): string {
-  const e = endpoint.toLowerCase();
-  if (e.includes("garage")) return "garage";
-  if (e.includes("seaweed")) return "seaweedfs";
-  if (e.includes("minio")) return "minio";
-  if (e.includes("amazonaws.com")) return "aws";
-  if (e.includes("googleapis") || e.includes("storage.google")) return "gcp";
-  if (e.includes("digitaloceanspaces") || e.includes("digitalocean"))
-    return "digitalocean";
-  if (e.includes("r2.cloudflarestorage")) return "cloudflare";
-  if (e.includes("wasabisys")) return "wasabi";
-  if (e.includes("backblazeb2")) return "backblaze";
-  if (e.includes("blob.core.windows.net")) return "azure";
-  return "";
-}
-
-// providerLabel resolves the display label: explicit `provider` wins, else
-// the endpoint heuristic, else "—". `derived` flags a heuristic guess so the
-// UI can mark it as unconfirmed.
-function providerLabel(b: { provider: string; endpoint: string }): {
-  label: string;
-  derived: boolean;
-} {
-  const slug = b.provider || providerFromEndpoint(b.endpoint);
-  if (!slug) return { label: "—", derived: false };
-  return { label: PROVIDER_LABELS[slug] || slug, derived: !b.provider };
-}
 
 export default function StorageBackendsPage() {
   const {
