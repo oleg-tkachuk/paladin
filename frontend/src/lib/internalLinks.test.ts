@@ -37,7 +37,7 @@ function pagePatterns(): RegExp[] {
           ? ".*"
           : /^\[.*\]$/.test(s)
             ? "[^/]+"
-            : s.replace(/[.*+?^${}()|]/g, "\\$&"),
+            : s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
       );
     return new RegExp(`^/${parts.join("/")}/?$`);
   });
