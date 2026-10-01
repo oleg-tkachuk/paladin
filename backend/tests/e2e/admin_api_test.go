@@ -18,8 +18,7 @@
 //	kubectl port-forward -n paladin svc/paladin-admin 8090:8090
 //	PALADIN_E2E_ADMIN_URL=http://localhost:8090 go test -tags=e2e ./tests/e2e/...
 //
-// When PALADIN_E2E_ADMIN_URL is unset (and the deprecated PALADIN_ADMIN_URL with
-// it) the test SKIPs — keeps `go test ./...`
+// When PALADIN_E2E_ADMIN_URL is unset the test SKIPs — keeps `go test ./...`
 // green in CI without a cluster.
 //
 // Each test creates its own scoped resources and tears them down on
@@ -57,6 +56,10 @@ import (
 // three suites — PALADIN_E2E_*_URL, PALADIN_RPC_*_URL and this one's bare
 // PALADIN_ADMIN_URL — and setting one left the others on their defaults. The
 // first name is canonical; the rest are deprecated aliases kept for a release.
+// envAdminURL names the admin plane's address — the variable
+// scripts/stack-ports.sh exports and every suite reads.
+const envAdminURL = "PALADIN_E2E_ADMIN_URL"
+
 func envOrSkip(t *testing.T, names ...string) string {
 	t.Helper()
 	for _, name := range names {
@@ -95,7 +98,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	adminURL := envOrSkip(t, "PALADIN_E2E_ADMIN_URL", "PALADIN_ADMIN_URL")
+	adminURL := envOrSkip(t, envAdminURL)
 	secret := os.Getenv("PALADIN_JWT_SECRET")
 	if secret == "" {
 		secret = "dev-secret-change-me-32-bytes-min"

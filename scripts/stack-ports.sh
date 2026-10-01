@@ -45,10 +45,7 @@ stack_ui_url="http://localhost:${PALADIN_E2E_PORT_UI}"
 # target is the same species of bug as a suite silently skipping.
 #
 # PALADIN_E2E_*_URL won because it is the set the compose file's port overrides
-# already feed. The other two survive as deprecated aliases inside the suites
-# that used them (see the comments there) for one release; this function
-# deliberately does NOT export them, so if a suite still depends on an alias the
-# gate fails and names it rather than working by accident.
+# already feed; the other two are gone.
 stack_export_urls() {
     export PALADIN_E2E_DATA_URL="$stack_data_url"
     export PALADIN_E2E_IAM_URL="$stack_iam_url"
