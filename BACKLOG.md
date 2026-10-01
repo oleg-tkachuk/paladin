@@ -1667,29 +1667,6 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
-### A rotation whose response is lost still ends the session
-
-- **Status:** Narrowed. `/api/auth/me` used to rotate the refresh chain on
-  every page load; it now rotates only once the token is five minutes old
-  (`lib/auth/rotation.ts`) and derives the access token without rotating
-  otherwise.
-- **Reason:** the mechanism is reproduced on the cluster. Drop the
-  `Set-Cookie` of one rotating `/me` response and the browser keeps the
-  superseded token. Inside IAM's 30-second supersession grace it is
-  forgiven; the first load after the grace is a replay, reuse detection
-  revokes the family, and the operator is signed out. Rotating less often
-  makes that rare, not impossible: a rotation that is due can still lose
-  its response.
-- **Definition of Done:** a lost rotation response is recoverable whenever the
-  next request comes, without weakening reuse detection for a genuine replay
-  — for example a successor that only supersedes its predecessor on first use.
-- **Blockers:** an IAM design change to the refresh-token store.
-
-The cluster e2e's login bounces (`loginAsAdmin` back on `/login?next=%2F`, one
-to four specs a run, never on rerun) were the trail to this. Their own cause
-is not confirmed: with the schedule above, the suite's young tokens no longer
-rotate at all, so a bounce that survives this change has another cause.
-
 ### `collections-crud › deleting a Collection removes it` is flaky in CI
 
 - **Status:** Open — one attempt made and reverted 2026-09-10; the flake stands.
