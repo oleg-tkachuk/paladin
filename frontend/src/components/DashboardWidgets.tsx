@@ -19,6 +19,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowRightIcon,
   BoltIcon,
@@ -49,6 +50,7 @@ import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { CAPABILITIES_DOCS_URL } from "@/constants";
 
 export function DashboardWidgets() {
   return (
@@ -282,9 +284,20 @@ function BudgetAlertsWidget() {
         {loading ? (
           <Skeleton className="h-16 w-full" />
         ) : error ? (
-          <p className="py-2 text-center text-xs text-muted-foreground">
-            Summary unavailable — capability subsystem may be disabled.
-          </p>
+          // The server says why — usually that capabilities are off in this
+          // deployment. Saying it "may be disabled" was a guess shown even
+          // when the cause was something else.
+          <div className="space-y-1 py-2 text-center text-xs text-muted-foreground">
+            <p>Summary unavailable: {ConnectError.from(error).rawMessage}</p>
+            <a
+              href={CAPABILITIES_DOCS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              How to enable capabilities
+            </a>
+          </div>
         ) : rows.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
             No tenants are approaching their cap.

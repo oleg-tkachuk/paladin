@@ -120,6 +120,7 @@ and an S3-compatible store whose access key may create buckets. Kubernetes
        backends:
          primary:
            endpoint: http://seaweedfs.storage.svc.cluster.local:8333
+           public_endpoint: https://s3.example.com   # what clients reach the store by
            region: us-east-1
    storage:
      s3CredentialsSecret:
