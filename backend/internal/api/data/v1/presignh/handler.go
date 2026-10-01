@@ -85,7 +85,7 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	// counts whether it produced a usable URL.
 	start := time.Now()
 	defer func() {
-		metrics.RecordPresign(ctx, "get", presignOutcome(err), time.Since(start).Seconds())
+		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
 	tenantID, p, err := apiutil.CallerContext(ctx)
@@ -147,7 +147,7 @@ func (h *Handler) PresignPut(ctx context.Context, collection, objectIDStr, conte
 	// counts whether it produced a usable URL.
 	start := time.Now()
 	defer func() {
-		metrics.RecordPresign(ctx, "put", presignOutcome(err), time.Since(start).Seconds())
+		metrics.RecordPresign(ctx, metrics.PresignOpPut, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
 	tenantID, p, err := apiutil.CallerContext(ctx)
@@ -206,7 +206,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	// counts whether it produced a usable URL.
 	start := time.Now()
 	defer func() {
-		metrics.RecordPresign(ctx, "part", presignOutcome(err), time.Since(start).Seconds())
+		metrics.RecordPresign(ctx, metrics.PresignOpPart, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
 	tenantID, p, err := apiutil.CallerContext(ctx)
@@ -271,15 +271,4 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 	return nil
-}
-
-// presignOutcome collapses an error into a bounded label. The connect code is
-// the right granularity: it separates "denied by policy" from "no such object"
-// from "budget exhausted" — three different operational problems — without
-// admitting the unbounded set of error strings.
-func presignOutcome(err error) string {
-	if err == nil {
-		return "ok"
-	}
-	return connect.CodeOf(err).String()
 }
