@@ -240,6 +240,7 @@ tasks:
       - task: verify:proto-breaking
       - task: verify:ci-groups
       - task: verify:stack-ports
+      - task: verify:stack-disk
       - task: verify:chart-values
       - task: verify:chart-reads
       - task: verify:chart-netpol
@@ -338,6 +339,11 @@ tasks:
     desc: "CI runs every Verify group a change can reach, and no fewer"
     cmds:
       - ./scripts/ci-groups.test.sh
+
+  verify:stack-disk:
+    desc: "The disk check before a Docker gate reads free space on Linux and macOS"
+    cmds:
+      - ./scripts/stack-disk.test.sh
 
   verify:stack-ports:
     desc: "Fail when the port script and the compose file disagree"
