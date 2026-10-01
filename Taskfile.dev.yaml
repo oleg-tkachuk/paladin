@@ -251,6 +251,7 @@ tasks:
       - task: verify:go-module-paths
       - task: verify:image-uid
       - task: verify:admin-audience-roles
+      - task: verify:grafana-rules
       - task: verify:private-refs
       - task: verify:checkov
       # hadolint over both images; the checkov Dockerfile scan does not lint
@@ -409,6 +410,11 @@ tasks:
     desc: "Fail when the console's Connect-ES stubs are stale against proto/"
     cmds:
       - ./scripts/frontend-gen.test.sh
+
+  verify:grafana-rules:
+    desc: "Fail when an alert rule or dashboard query does not parse, or an alert does not fire"
+    cmds:
+      - ./scripts/grafana-rules.test.sh
 
   verify:admin-audience-roles:
     desc: "Fail when the console and IAM disagree on which roles reach the admin plane"

@@ -46,6 +46,8 @@ env:
   TRIVY_VERSION: "v0.74.0"
   # renovate: datasource=github-releases depName=hadolint/hadolint
   HADOLINT_VERSION: "v2.15.1"
+  # renovate: datasource=github-releases depName=prometheus/prometheus
+  PROMETHEUS_VERSION: "v3.15.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.53.6"
   # Matches NODE_VERSION in frontend/deploy/Dockerfile, so the suite runs on
@@ -257,6 +259,19 @@ jobs:
           curl -fsSL "${base}/trivy_${v}_checksums.txt" | grep " ${archive}\$" | sha256sum -c -
           sudo tar -xzf "$archive" -C /usr/local/bin trivy
           trivy --version
+      - name: Set up promtool
+        if: matrix.group == 'repo'
+        run: |
+          set -euo pipefail
+          v="${PROMETHEUS_VERSION#v}"
+          base="https://github.com/prometheus/prometheus/releases/download/${PROMETHEUS_VERSION}"
+          dir="prometheus-${v}.linux-amd64"
+          archive="${dir}.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSL "${base}/sha256sums.txt" | grep " ${archive}\$" | sha256sum -c -
+          sudo tar -xzf "$archive" -C /usr/local/bin --strip-components=1 "${dir}/promtool"
+          promtool --version
       - name: task verify-${{ matrix.group }}
         env:
           GROUP: ${{ matrix.group }}
