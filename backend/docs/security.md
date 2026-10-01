@@ -1,32 +1,76 @@
-# Security - Paladin
+# Security
 
-## Overview
-
-Paladin is designed with a "Secure by Default" mindset, focusing on tenant isolation and least-privilege access.
+What the backend enforces, and where. The scope and the known non-findings are
+in [docs/security-model.md](../../docs/security-model.md); reporting a
+vulnerability is in [SECURITY.md](../../.github/SECURITY.md).
 
 ## 1. Authentication
 
-Access is controlled via two primary mechanisms:
+Every RPC carries one of four credentials. Each resolves to a `Principal` with
+a kind, a tenant and a role set.
 
-- **Tenant Context**: All requests must be associated with a valid `TenantId`. In production, this is usually extracted from a JWT or set by an upstream reverse proxy.
-- **Admin Authentication**: Administrative endpoints (e.g., `/admin/config`) are protected by a shared secret (`auth.admin_key`).
+| Credential | Format | Issued by | Notes |
+|---|---|---|---|
+| User access token | JWT, HS256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience` | signed with `auth.signing_key` (`internal/auth/issuer`) |
+| Refresh token | JWT, HS256, audience `paladin-iam` | `Login`, rotation in `RefreshToken` | stored by jti in `refresh_tokens`; rotation and reuse detection below |
+| API token | opaque, `TokenPrefix` + random body (`internal/auth/api_token/format.go`) | `APITokenService.Create` | stored as a keyed SHA-256 digest; per-token rate limit in `api_token_rate_buckets` |
+| Capability token | JWT, EdDSA (Ed25519), in `X-Paladin-Capability` or the bearer slot | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable; the [`capability`](../../capability/) module |
 
-## 2. Authorization & Isolation
+For MCP clients, the api role serves an OAuth 2.1 authorization server under
+`/oauth/*` ([ADR-0009](../../docs/adr/0009-oauth-authorization-server.md)) and
+the mcp role validates its tokens as a resource server
+([ADR-0008](../../docs/adr/0008-mcp-oauth-resource-server.md)).
 
-- **Tenant Scoping**: All database queries and storage operations are strictly scoped by `tenant_id`.
-- **Reject Tenant Mismatch**: If enabled (`security.reject_tenant_mismatch`), Paladin will reject any request where the derived tenant ID doesn't match the one explicitly provided in the request body or path.
-- **RLS (Planned)**: Future support for PostgreSQL Row Level Security to provide an additional layer of isolation at the database level.
+**Refresh-token rotation.** Every rotation supersedes the presented token and
+mints a successor in the same family. Presenting a superseded token is:
 
-## 3. Storage Security
+- inside the 30-second supersession grace: a race between two requests; the
+  loser is told `Aborted` and derives an access token with `ExchangeAudience`;
+- within 10 minutes, if the successor was never presented: a rotation whose
+  response was lost; the successor is re-issued (same jti);
+- otherwise: a replay; the whole family is revoked and an
+  `iam.RefreshTokenReuseDetected` audit entry is written.
 
-- **Signed URLs**: Clients never get direct access to storage credentials. Paladin issues time-limited pre-signed URLs (HMAC) for specific objects.
-- **SSE (Server Side Encryption)**: Paladin supports AES-256 or KMS-based encryption for objects at rest in S3/SeaweedFS.
+Logout and reuse detection clear `superseded_at`, so a deliberately ended
+session is never covered by either window (`internal/api/iam/v1/authh`).
 
-## 4. Input Validation
+Passwords are bcrypt hashes (`internal/auth/password.go`).
 
-- **JSON Schema**: All REST request bodies are validated against the OpenAPI specification.
-- **Content Type Enforcement**: Paladin rejects uploads with content types not in the `allowed_content_types` whitelist.
-- **Size Limits**: Enforced at the control plane layer (`max_object_size`) and propagated to S3 via pre-signed URL conditions.
+## 2. Authorization and isolation
+
+Applied in order on every request:
+
+1. **Cedar policy.** Platform defaults in [`backend/policies/`](../policies/),
+   tenant policies in the database. Authoring guide:
+   [cedar-authoring.md](cedar-authoring.md).
+2. **Scope.** CEL expressions narrow an API token or capability to a prefix,
+   an operation set or a source range.
+3. **Row-level security.** Tenant tables are `FORCE ROW LEVEL SECURITY`. The
+   runtime role `paladin_app` is `NOBYPASSRLS`; each transaction sets
+   `paladin.tenant_id` (or `paladin.cross_tenant` for an authorised
+   cross-tenant read) and a missing setting yields zero rows. Background jobs
+   use a separate BYPASSRLS pool. Roles: [db-roles.md](db-roles.md).
+
+`security.reject_tenant_mismatch` (default `true`) answers 403 when the token's
+tenant differs from the tenant header on the request.
+
+## 3. Storage
+
+- **Presigned URLs.** Clients never receive storage credentials. The api plane
+  signs SigV4 URLs for single objects; lifetimes are `limits.presign.*`
+  (`put_ttl`, `get_ttl`, `part_ttl`, `max_ttl`).
+- **Server-side encryption.** Per backend, `storage.backends.<name>.sse`
+  selects none, `AES256` or `aws:kms`; the S3 adapter sets it on writes.
+
+## 4. Input validation
+
+- **Request shape.** Connect handlers run behind a `protovalidate` interceptor
+  (`internal/middleware/validate.go`); a request violating its
+  `buf.validate` rules is refused with `InvalidArgument` before the handler.
+- **Content type.** `limits.allowed_content_types` (empty accepts any).
+- **Size.** `limits.max_object_size` is enforced when the upload URL is
+  signed; `limits.max_multipart_size`, `min_part_size`, `max_part_size` and
+  `max_parts` bound multipart uploads.
 
 ## 5. Secret Management
 
@@ -53,8 +97,7 @@ error.
 
 For prod-class clusters keep no key material inline in Helm values. Seal each
 secret with [Bitnami SealedSecrets](https://github.com/bitnami-labs/sealed-secrets)
-so the encrypted form is safe to commit to git (in `gitops`, alongside the
-ArgoCD ApplicationSet); the controller unseals it into a normal Secret in the
+so the encrypted form is safe to commit to git; the controller unseals it into a normal Secret in the
 namespace, which the resolver then reads.
 
 Seal a value with `kubeseal --raw` (scoped to the target namespace + Secret
@@ -88,16 +131,16 @@ rbac:
 
 The same pattern applies to the Postgres, bootstrap-admin, and storage
 credential Secrets — seal each, reference it by `*_secret`, allowlist the
-name. The SealedSecrets **controller install** and the sealed YAML live in
-`gitops`, not this repo.
+name. The SealedSecrets controller and the sealed YAML live outside this
+repository.
 
 ## 6. Bootstrap admin (ArgoCD-style)
 
-A fresh Paladin cluster has no users. To avoid the chicken-and-egg of "you
-need an admin token to create the first user, but you need the first
-user to mint a token", the server can provision a platform-admin on
-first boot from a Kubernetes Secret — exactly like ArgoCD's
-`argocd-initial-admin-secret`.
+A fresh install has no users. The server provisions a platform admin on first
+boot from a Kubernetes Secret, the way ArgoCD's `argocd-initial-admin-secret`
+works. Both switches are on by default: `bootstrap.admin.enabled` (the chart
+creates the Secret) and `config.bootstrap.admin.enabled` (the server runs the
+step). A GitOps install that ships its own Secret sets the first to `false`.
 
 The Helm chart **creates the Secret itself** — operators don't pre-create
 it. The password is resolved by the same `K8sSecretResolver` that handles
@@ -107,9 +150,7 @@ deployment.
 ### Install (auto-generated password)
 
 ```bash
-helm install paladin ./deploy/chart \
-  --set bootstrap.admin.enabled=true \
-  --set config.bootstrap.admin.enabled=true
+helm install paladin ./deploy/chart
 
 # Retrieve the auto-generated password:
 kubectl get secret paladin-bootstrap-admin -n paladin \
@@ -130,8 +171,6 @@ order:
 ```bash
 echo -n "$NEW_PASSWORD" > /tmp/admin.pw
 helm install paladin ./deploy/chart \
-  --set bootstrap.admin.enabled=true \
-  --set config.bootstrap.admin.enabled=true \
   --set-file bootstrap.admin.password=/tmp/admin.pw
 shred -u /tmp/admin.pw
 ```
@@ -148,7 +187,7 @@ After migrations, before any listener accepts traffic,
 2. Creates the dedicated tenant (`platform` by default) if absent.
    Tagged `managed_by=paladin-bootstrap` for grep-ability.
 3. Hashes the password with bcrypt and inserts the `admin` user into
-   `iam.users` with role `platform.admin` (cross-tenant via Cedar).
+   `users` with role `platform.admin` (cross-tenant via Cedar).
 4. Writes an audit entry under action `iam.bootstrap_admin.create`.
 
 The step is **idempotent**: subsequent boots see the user already exists
