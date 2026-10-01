@@ -15,7 +15,7 @@
 // the audit_log; tracked in BACKLOG.
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { tenantClient } from "@/lib/connect/client";
@@ -58,6 +58,23 @@ export function isUuid(s: string): boolean {
  * the layer above 404'd on every flake — see the original symptom
  * "page sometimes shows data, sometimes blank on refresh".
  */
+// canonicalPath returns the current address with the tenant UUID `id`
+// replaced by `slug`, or null when the address is already canonical.
+function canonicalPath(id: string, slug: string): string | null {
+  if (!isUuid(id) || slug === id || typeof window === "undefined") {
+    return null;
+  }
+  const url = new URL(window.location.href);
+  const parts = url.pathname.split("/");
+  const idx = parts.indexOf("tenants");
+  if (idx < 0 || parts[idx + 1] !== id) {
+    return null;
+  }
+  parts[idx + 1] = encodeURIComponent(slug);
+  url.pathname = parts.join("/");
+  return url.pathname + url.search + url.hash;
+}
+
 export function useTenantResolve(id: string): {
   tenant: ResolvedTenant | null;
   loading: boolean;
@@ -76,27 +93,11 @@ export function useTenantResolve(id: string): {
   // changing `id` (which would also reset the URL canonicaliser).
   const [retryNonce, setRetryNonce] = useState(0);
   const retry = useCallback(() => setRetryNonce((n) => n + 1), []);
-  // The tenant last resolved, and the retry it was resolved under. The URL
-  // canonicaliser below swaps a UUID for the slug, which reaches this hook as
-  // a new id for the same tenant; refetching then reset to loading, and the
-  // layout's skeleton unmounted every page under it — typed input, open
-  // dialogs and all.
-  const resolved = useRef<{ tenant: ResolvedTenant; nonce: number } | null>(
-    null,
-  );
-
   useEffect(() => {
-    const prev = resolved.current;
-    if (
-      prev &&
-      prev.nonce === retryNonce &&
-      (prev.tenant.slug === id || prev.tenant.tenantId === id)
-    ) {
-      return;
-    }
     let cancelled = false;
     // Synchronously reset to loading on id/retry change so the
     // skeleton renders immediately while the new tenant is fetched.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({
       tenant: null,
       loading: true,
@@ -123,29 +124,30 @@ export function useTenantResolve(id: string): {
           displayName: res.displayName || slug,
           storageLayout: res.storageLayout || "shared",
         };
-        resolved.current = { tenant, nonce: retryNonce };
-        setState({
-          tenant,
-          loading: false,
-          error: null,
-          errorIsNotFound: false,
-        });
 
         // Auto-canonicalise: caller landed via UUID but slug differs.
         // window.location is the only reliable source of the FULL
         // current path here (router params don't expose it cleanly
         // from a layout). Replace just the `[id]` segment, keep the
         // rest verbatim — including query string and hash.
-        if (isUuid(id) && tenant.slug !== id && typeof window !== "undefined") {
-          const url = new URL(window.location.href);
-          const parts = url.pathname.split("/");
-          const idx = parts.indexOf("tenants");
-          if (idx >= 0 && parts[idx + 1] === id) {
-            parts[idx + 1] = encodeURIComponent(tenant.slug);
-            url.pathname = parts.join("/");
-            router.replace(url.pathname + url.search + url.hash);
-          }
+        //
+        // And stay loading while it lands. A different value in the [id]
+        // segment is a different route subtree to the app router, so the
+        // replace remounts this layout and every page under it. Resolving
+        // first rendered the page, then threw it away: a dialog the operator
+        // had opened closed, a policy being typed was cleared. The e2e suite
+        // caught it against a cluster, where the replace lands mid-test.
+        const canonical = canonicalPath(id, slug);
+        if (canonical) {
+          router.replace(canonical);
+          return;
         }
+        setState({
+          tenant,
+          loading: false,
+          error: null,
+          errorIsNotFound: false,
+        });
       })
       .catch((err) => {
         if (cancelled) return;

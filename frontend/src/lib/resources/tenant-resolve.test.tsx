@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 // The hook canonicalises a UUID URL to the tenant's slug with router.replace.
-// The layout then hands it the slug as a new id — for the same tenant. It used
-// to treat that as a different tenant: reset to loading, render the skeleton,
-// and unmount every page under the layout. Whatever an operator had typed into
-// a page that was opened by UUID was gone, and an open dialog closed.
+// A different value in the [id] segment is a different route subtree to the
+// app router, so the replace remounts the layout and every page under it. The
+// hook used to resolve, render the page, and only then replace — so an
+// operator's open dialog closed and a policy being typed was cleared when the
+// replace landed. The e2e suite caught it against a cluster, mid-test.
 //
 // Named .test.tsx so vitest runs it in jsdom; renderHook needs a DOM.
 
@@ -43,30 +44,37 @@ describe("useTenantResolve", () => {
     resolvesTo(TENANT_UUID, TENANT_SLUG);
   });
 
-  it("keeps the resolved tenant when the URL is canonicalised to its slug", async () => {
+  it("holds the page back until a UUID address is replaced by the slug", async () => {
     // The hook rewrites the [id] segment of the address bar, so it needs one.
     window.history.pushState(
       {},
       "",
       `/tenants/${TENANT_UUID}/buckets/primary/b1/policy`,
     );
-    const { result, rerender } = renderHook(({ id }) => useTenantResolve(id), {
-      initialProps: { id: TENANT_UUID },
-    });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(replace).toHaveBeenCalledOnce();
+    const { result } = renderHook(() => useTenantResolve(TENANT_UUID));
 
-    const loadingSeen: boolean[] = [];
-    rerender({ id: TENANT_SLUG });
-    loadingSeen.push(result.current.loading);
-    await act(async () => {});
-    loadingSeen.push(result.current.loading);
-
-    expect(loadingSeen, "the layout would unmount its pages").not.toContain(
-      true,
+    await waitFor(() => expect(replace).toHaveBeenCalledOnce());
+    expect(replace).toHaveBeenCalledWith(
+      `/tenants/${TENANT_SLUG}/buckets/primary/b1/policy`,
     );
-    expect(result.current.tenant?.slug).toBe(TENANT_SLUG);
-    expect(getTenant).toHaveBeenCalledOnce();
+    await act(async () => {});
+    // Still loading: the layout keeps its skeleton, so no page renders that
+    // the replace would then remount.
+    expect(result.current.loading).toBe(true);
+    expect(result.current.tenant).toBeNull();
+  });
+
+  it("renders straight away on the canonical address", async () => {
+    window.history.pushState(
+      {},
+      "",
+      `/tenants/${TENANT_SLUG}/buckets/primary/b1/policy`,
+    );
+    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.tenant?.tenantId).toBe(TENANT_UUID);
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("resolves a different tenant afresh", async () => {
