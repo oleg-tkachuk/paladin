@@ -51,13 +51,13 @@ export function RenamedSlugHint() {
   if (!target) return null;
 
   return (
-    <div className="mt-6 max-w-md rounded-2xl border border-indigo-500/30 bg-indigo-500/5 px-6 py-4 text-center">
-      <p className="mb-3 text-sm text-slate-300">
+    <div className="mt-6 max-w-md rounded-2xl border border-primary/30 bg-primary/5 px-6 py-4 text-center">
+      <p className="mb-3 text-sm text-foreground">
         This workspace was renamed — its address changed.
       </p>
       <Link
         href={target}
-        className="inline-block rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
+        className="inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-all hover:bg-primary active:scale-95"
       >
         Go to the new address
       </Link>

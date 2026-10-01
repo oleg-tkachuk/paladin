@@ -116,9 +116,9 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
     <tr
       key={obj.objectId}
       className={cn(
-        "hover:bg-indigo-500/[0.03] transition-colors group cursor-pointer relative",
-        isSelected && "bg-indigo-500/[0.05]",
-        isInspected && "bg-indigo-500/[0.08] shadow-inner",
+        "hover:bg-primary/[0.03] transition-colors group cursor-pointer relative",
+        isSelected && "bg-primary/[0.05]",
+        isInspected && "bg-primary/[0.08] shadow-inner",
       )}
       onClick={(e) => onToggleSelect(obj.objectId, e, obj.key)}
     >
@@ -126,7 +126,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <input
           type="checkbox"
           aria-label={`Select object ${obj.key}`}
-          className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-offset-0 focus:ring-indigo-600 focus:ring-opacity-50 cursor-pointer w-4 h-4"
+          className="rounded border-white/10 bg-white/5 text-primary focus:ring-offset-0 focus:ring-primary focus:ring-opacity-50 cursor-pointer w-4 h-4"
           checked={isSelected}
           onChange={() => onToggleSelect(obj.objectId)}
         />
@@ -140,8 +140,8 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
               className={cn(
                 "w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-inner relative",
                 isSelected || isInspected
-                  ? "bg-indigo-500 text-white"
-                  : "bg-indigo-500/10 text-indigo-400 group-hover:scale-110",
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-primary/10 text-primary group-hover:scale-110",
               )}
             >
               <DocumentIcon className="w-4 h-4" />
@@ -164,12 +164,12 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <div>
                 <div
-                  className="font-medium text-white group-hover:text-indigo-400 transition-colors truncate max-w-[200px]"
+                  className="font-medium text-white group-hover:text-primary transition-colors truncate max-w-[200px]"
                   title={obj.key}
                 >
                   {obj.key.split("/").pop()}
                 </div>
-                <div className="text-xs text-slate-600 font-mono">
+                <div className="text-xs text-muted-foreground font-mono">
                   {obj.objectId}
                 </div>
               </div>
@@ -198,10 +198,10 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <td className="px-6 py-4">
           {isEditingLabels ? (
             <div
-              className="flex items-center gap-2 p-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 animate-scale-in"
+              className="flex items-center gap-2 p-1.5 rounded-xl bg-primary/10 border border-primary/30 animate-scale-in"
               onClick={(e) => e.stopPropagation()}
             >
-              <TagIcon className="w-3 h-3 text-indigo-400" />
+              <TagIcon className="w-3 h-3 text-primary" />
               <input
                 autoFocus
                 className="bg-transparent border-none p-0 text-xs text-white font-mono focus:ring-0 w-full min-w-[150px] placeholder:text-white/20"
@@ -223,7 +223,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                 </button>
                 <button
                   onClick={() => onCancelInlineEdit()}
-                  className="p-1 px-1.5 rounded-lg bg-white/5 text-slate-400 hover:text-white transition-all active:scale-90"
+                  className="p-1 px-1.5 rounded-lg bg-white/5 text-muted-foreground hover:text-white transition-all active:scale-90"
                   title="Abort"
                 >
                   <XMarkIcon className="w-3 h-3" />
@@ -280,14 +280,14 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* MIME Type */}
       {visibleColumns.has("mime") && (
-        <td className="px-6 py-4 text-xs font-mono text-slate-400">
+        <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
           {obj.contentType || "binary/octet-stream"}
         </td>
       )}
 
       {/* Size */}
       {visibleColumns.has("size") && (
-        <td className="hidden md:table-cell px-6 py-4 text-right text-slate-400 font-mono text-xs whitespace-nowrap">
+        <td className="hidden md:table-cell px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap">
           {formatBytes(obj.sizeBytes)}
         </td>
       )}
@@ -297,7 +297,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <td className="px-6 py-4 whitespace-nowrap">
           <span
             className={`text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-              STATUS_STYLES[obj.state] || "bg-slate-500/10 text-slate-500"
+              STATUS_STYLES[obj.state] || "bg-muted/10 text-muted-foreground"
             }`}
           >
             {STATUS_LABELS[obj.state] || "UNKNOWN"}
@@ -307,7 +307,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Created */}
       {visibleColumns.has("created") && (
-        <td className="hidden sm:table-cell px-6 py-4 text-right text-slate-400 font-mono text-xs whitespace-nowrap">
+        <td className="hidden sm:table-cell px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap">
           {obj.createdAt
             ? useRelativeTime
               ? formatDate(timestampToDate(obj.createdAt))
@@ -396,7 +396,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                   }
                 >
                   <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
-                    <DocumentDuplicateIcon className="w-4 h-4 text-fuchsia-400" />
+                    <DocumentDuplicateIcon className="w-4 h-4 text-chart-4" />
                     Copy Object
                   </div>
                 </Dropdown.Item>
@@ -407,7 +407,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                   }
                 >
                   <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
-                    <ArrowRightCircleIcon className="w-4 h-4 text-cyan-400" />
+                    <ArrowRightCircleIcon className="w-4 h-4 text-chart-5" />
                     Move Object
                   </div>
                 </Dropdown.Item>

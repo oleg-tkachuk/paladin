@@ -8,13 +8,12 @@ import { describe, expect, it } from "vitest";
 // does not follow the theme, and it says how something looks rather than what
 // it means. The theme's tokens (`primary`, `muted-foreground`, `warning`, …)
 // carry both. Measured when this was written: 211 palette classes in 34
-// files. Status colours went first — amber, emerald and rose became warning,
-// success and destructive.
+// files, all converted since: amber, emerald and rose to warning, success and
+// destructive; indigo (the active and selected accent) to primary; slate to
+// muted-foreground and muted.
 //
-// RATCHET holds the files not yet converted, each with the count it has now.
-// A file may only go down: more palette classes than its entry fails, and so
-// does fewer, until the entry is lowered or removed. A file not listed may
-// have none.
+// RATCHET would hold a file that may keep palette classes for now, with its
+// count; a listed file may only go down. It is empty: no file may have any.
 
 const SRC = join(__dirname, "..");
 const GENERATED = "gen";
@@ -28,21 +27,7 @@ const PALETTE_CLASS = new RegExp(
   "g",
 );
 
-const RATCHET: Record<string, number> = {
-  "app/error.tsx": 5,
-  "app/not-found.tsx": 4,
-  "app/tenants/[id]/buckets/[backendId]/[bucketId]/object-lock/page.tsx": 4,
-  "app/tenants/[id]/buckets/[backendId]/[bucketId]/versioning/page.tsx": 3,
-  "app/tenants/[id]/not-found.tsx": 4,
-  "components/features/ObjectTagBadge.tsx": 6,
-  "components/features/objects/BulkActionsToolbar.tsx": 10,
-  "components/features/objects/BulkEditModal.tsx": 9,
-  "components/features/objects/ObjectTableRow.tsx": 21,
-  "components/features/objects/ObjectsFilterBar.tsx": 18,
-  "components/features/objects/SaveViewModal.tsx": 7,
-  "components/features/tenants/RenamedSlugHint.tsx": 5,
-  "components/layout/CommandPalette.tsx": 23,
-};
+const RATCHET: Record<string, number> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -83,8 +68,13 @@ function paletteCounts(): Map<string, number> {
 describe("palette colours", () => {
   const counts = paletteCounts();
 
-  it("finds the palette classes it is meant to count", () => {
-    expect(Object.keys(RATCHET).length).toBeGreaterThan(0);
+  it("recognises a palette class, so an empty result means none", () => {
+    expect(
+      "p-2 hover:bg-indigo-500/10 text-sm".match(PALETTE_CLASS),
+    ).toHaveLength(1);
+    expect(
+      "bg-primary/10 text-muted-foreground".match(PALETTE_CLASS),
+    ).toBeNull();
   });
 
   it("no file gains palette classes, and the ratchet only goes down", () => {

@@ -15,12 +15,12 @@ export default function TenantNotFound() {
       <h1 className="mb-3 text-2xl font-bold tracking-tight text-white">
         Workspace Not Found
       </h1>
-      <p className="mb-8 max-w-md text-center text-sm text-slate-400">
+      <p className="mb-8 max-w-md text-center text-sm text-muted-foreground">
         This workspace doesn’t exist, or its address has changed.
       </p>
       <Link
         href="/"
-        className="rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-500 active:scale-95"
+        className="rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary active:scale-95"
       >
         Return to Dashboard
       </Link>

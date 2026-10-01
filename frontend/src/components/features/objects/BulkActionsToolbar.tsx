@@ -25,8 +25,9 @@ export function BulkActionsToolbar({
       id: "edit",
       label: "Sync Labels",
       icon: TagIcon,
-      color: "text-indigo-400",
-      hover: "hover:bg-indigo-600 hover:text-white hover:border-indigo-500",
+      color: "text-primary",
+      hover:
+        "hover:bg-primary hover:text-primary-foreground hover:border-primary",
       onClick: onEditLabels,
     },
     {
@@ -42,12 +43,12 @@ export function BulkActionsToolbar({
   return (
     <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[80] animate-bounce-in">
       <div className="bg-[#0A0B10]/80 backdrop-blur-3xl rounded-[32px] px-8 py-5 flex items-center gap-10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-white/10 ring-1 ring-white/5 relative overflow-hidden group/toolbar">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
         <div className="flex items-center gap-4">
           <div className="relative">
-            <div className="absolute inset-0 bg-indigo-500 rounded-2xl animate-ping opacity-20" />
-            <div className="relative w-12 h-12 rounded-2xl bg-indigo-600 flex flex-col items-center justify-center text-white shadow-2xl shadow-indigo-600/40 border border-indigo-400/30">
+            <div className="absolute inset-0 bg-primary rounded-2xl animate-ping opacity-20" />
+            <div className="relative w-12 h-12 rounded-2xl bg-primary flex flex-col items-center justify-center text-primary-foreground shadow-2xl shadow-primary/40 border border-primary/30">
               <span className="text-sm font-bold leading-none">
                 {selectedCount}
               </span>
@@ -60,7 +61,7 @@ export function BulkActionsToolbar({
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">
               Bulk Actions
             </h3>
-            <p className="text-xs text-indigo-400/60 font-semibold uppercase tracking-wider">
+            <p className="text-xs text-primary/60 font-semibold uppercase tracking-wider">
               Multiple Objects Selected
             </p>
           </div>
@@ -98,7 +99,7 @@ export function BulkActionsToolbar({
 
         <button
           onClick={onClearSelection}
-          className="p-3 rounded-2xl bg-white/5 text-slate-500 hover:text-white hover:bg-white/10 transition-all active:scale-90"
+          className="p-3 rounded-2xl bg-white/5 text-muted-foreground hover:text-white hover:bg-white/10 transition-all active:scale-90"
           title="Discard Selection"
         >
           <XMarkIcon className="w-5 h-5" />

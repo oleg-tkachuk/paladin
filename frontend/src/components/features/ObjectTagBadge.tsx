@@ -21,9 +21,9 @@ export const ObjectTagBadge: React.FC<ObjectTagBadgeProps> = ({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all duration-200",
-        "bg-indigo-500/10 border-indigo-500/20 text-indigo-300",
+        "bg-primary/10 border-primary/20 text-primary",
         isInteractive
-          ? "cursor-pointer hover:bg-indigo-500/25 hover:border-indigo-400/40 hover:text-indigo-200 hover:-translate-y-px"
+          ? "cursor-pointer hover:bg-primary/25 hover:border-primary/40 hover:text-primary hover:-translate-y-px"
           : "cursor-default",
         className,
       )}

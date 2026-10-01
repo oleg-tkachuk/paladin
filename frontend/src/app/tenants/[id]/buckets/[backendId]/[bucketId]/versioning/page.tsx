@@ -58,7 +58,7 @@ export default function BucketVersioningPage() {
     <Card className="max-w-2xl space-y-6 p-6">
       <div>
         <h2 className="text-lg font-semibold text-white">Versioning</h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           When enabled, overwrites and deletes preserve prior object versions
           instead of replacing them in place.
         </p>
@@ -69,7 +69,7 @@ export default function BucketVersioningPage() {
           <Label htmlFor="versioning-enabled" className="text-sm text-white">
             Enable versioning
           </Label>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Keeps a version history per object.
           </p>
         </div>
@@ -85,7 +85,7 @@ export default function BucketVersioningPage() {
           <Label htmlFor="keep-deletes" className="text-sm text-white">
             Keep deletes forever
           </Label>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Soft-deletes never reclaim storage; delete markers are retained.
           </p>
         </div>
