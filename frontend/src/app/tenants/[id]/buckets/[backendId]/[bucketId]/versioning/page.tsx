@@ -57,7 +57,7 @@ export default function BucketVersioningPage() {
   return (
     <Card className="max-w-2xl space-y-6 p-6">
       <div>
-        <h2 className="text-lg font-semibold text-white">Versioning</h2>
+        <h2 className="text-lg font-semibold text-foreground">Versioning</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           When enabled, overwrites and deletes preserve prior object versions
           instead of replacing them in place.
@@ -66,7 +66,10 @@ export default function BucketVersioningPage() {
 
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Label htmlFor="versioning-enabled" className="text-sm text-white">
+          <Label
+            htmlFor="versioning-enabled"
+            className="text-sm text-foreground"
+          >
             Enable versioning
           </Label>
           <p className="text-xs text-muted-foreground">
@@ -82,7 +85,7 @@ export default function BucketVersioningPage() {
 
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Label htmlFor="keep-deletes" className="text-sm text-white">
+          <Label htmlFor="keep-deletes" className="text-sm text-foreground">
             Keep deletes forever
           </Label>
           <p className="text-xs text-muted-foreground">

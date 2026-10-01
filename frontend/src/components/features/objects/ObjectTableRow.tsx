@@ -126,7 +126,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <input
           type="checkbox"
           aria-label={`Select object ${obj.key}`}
-          className="rounded border-white/10 bg-white/5 text-primary focus:ring-offset-0 focus:ring-primary focus:ring-opacity-50 cursor-pointer w-4 h-4"
+          className="rounded border-border bg-foreground/5 text-primary focus:ring-offset-0 focus:ring-primary focus:ring-opacity-50 cursor-pointer w-4 h-4"
           checked={isSelected}
           onChange={() => onToggleSelect(obj.objectId)}
         />
@@ -146,7 +146,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <DocumentIcon className="w-4 h-4" />
               {obj.contentType?.startsWith("image/") && (
-                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-[#0A0C10] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-background shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
               )}
             </div>
             <Tooltip
@@ -164,7 +164,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <div>
                 <div
-                  className="font-medium text-white group-hover:text-primary transition-colors truncate max-w-[200px]"
+                  className="font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-[200px]"
                   title={obj.key}
                 >
                   {obj.key.split("/").pop()}
@@ -204,7 +204,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
               <TagIcon className="w-3 h-3 text-primary" />
               <input
                 autoFocus
-                className="bg-transparent border-none p-0 text-xs text-white font-mono focus:ring-0 w-full min-w-[150px] placeholder:text-white/20"
+                className="bg-transparent border-none p-0 text-xs text-foreground font-mono focus:ring-0 w-full min-w-[150px] placeholder:text-muted-foreground"
                 value={editLabelsValue}
                 placeholder="key:val, key2:val..."
                 onChange={(e) => onEditLabelsValueChange(e.target.value)}
@@ -213,17 +213,17 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                   if (e.key === "Escape") onCancelInlineEdit();
                 }}
               />
-              <div className="flex items-center gap-1 border-l border-white/10 pl-2 ml-1">
+              <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
                 <button
                   onClick={() => onSaveInlineLabels(obj.objectId)}
-                  className="p-1 px-1.5 rounded-lg bg-success text-white hover:bg-success transition-all active:scale-90"
+                  className="p-1 px-1.5 rounded-lg bg-success/15 text-success hover:bg-success/25 transition-all active:scale-90"
                   title="Synchronize"
                 >
                   <CheckIcon className="w-3 h-3" />
                 </button>
                 <button
                   onClick={() => onCancelInlineEdit()}
-                  className="p-1 px-1.5 rounded-lg bg-white/5 text-muted-foreground hover:text-white transition-all active:scale-90"
+                  className="p-1 px-1.5 rounded-lg bg-foreground/5 text-muted-foreground hover:text-foreground transition-all active:scale-90"
                   title="Abort"
                 >
                   <XMarkIcon className="w-3 h-3" />

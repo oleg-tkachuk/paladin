@@ -23,10 +23,10 @@ export function SaveViewModal({
         className="fixed inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-sm bg-[#0A0C10] rounded-[32px] border border-white/10 shadow-2xl p-8 space-y-6 overflow-hidden">
+      <div className="relative w-full max-w-sm bg-background rounded-[32px] border border-border shadow-2xl p-8 space-y-6 overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">
-          <h3 className="text-xl font-bold text-white uppercase tracking-tight">
+          <h3 className="text-xl font-bold text-foreground uppercase tracking-tight">
             Save View Configuration
           </h3>
           <p className="text-xs text-muted-foreground font-medium">
@@ -41,7 +41,7 @@ export function SaveViewModal({
           <input
             autoFocus
             type="text"
-            className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:border-primary/50 outline-none transition-all"
+            className="w-full bg-background/40 border border-border rounded-2xl px-4 py-3 text-foreground text-sm focus:border-primary/50 outline-none transition-all"
             placeholder="e.g. Production Assets"
             value={viewName}
             onChange={(e) => onViewNameChange(e.target.value)}
@@ -58,7 +58,7 @@ export function SaveViewModal({
           </button>
           <button
             onClick={onClose}
-            className="px-6 py-3.5 rounded-2xl bg-white/5 text-muted-foreground hover:text-white text-xs font-bold uppercase tracking-wider transition-all"
+            className="px-6 py-3.5 rounded-2xl bg-foreground/5 text-muted-foreground hover:text-foreground text-xs font-bold uppercase tracking-wider transition-all"
           >
             Abort
           </button>

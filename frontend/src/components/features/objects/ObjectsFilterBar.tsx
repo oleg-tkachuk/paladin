@@ -94,13 +94,13 @@ export function ObjectsFilterBar({
   const onRecursiveChange = (value: boolean) =>
     onFilterChange({ recursive: value });
   return (
-    <div className="flex flex-wrap items-center gap-4 bg-surface/30 border border-white/5 rounded-2xl p-4">
+    <div className="flex flex-wrap items-center gap-4 bg-surface/30 border border-border rounded-2xl p-4">
       <div className="flex-1 min-w-[240px] relative group">
         <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
         <input
           type="text"
           placeholder="Search objects..."
-          className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary/50 focus:bg-white/[0.08] transition-all"
+          className="w-full bg-foreground/5 border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:bg-foreground/[0.08] transition-all"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />
@@ -109,11 +109,11 @@ export function ObjectsFilterBar({
       <div className="flex items-center gap-2">
         <FunnelIcon className="w-4 h-4 text-muted-foreground" />
 
-        <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl">
+        <div className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl">
           <input
             id="recursive-toggle"
             type="checkbox"
-            className="rounded border-white/10 bg-white/5 text-primary focus:ring-offset-0 focus:ring-primary focus:ring-opacity-50 cursor-pointer w-3.5 h-3.5"
+            className="rounded border-border bg-foreground/5 text-primary focus:ring-offset-0 focus:ring-primary focus:ring-opacity-50 cursor-pointer w-3.5 h-3.5"
             checked={recursive}
             onChange={(e) => onRecursiveChange(e.target.checked)}
           />
@@ -148,7 +148,7 @@ export function ObjectsFilterBar({
         )}
 
         <Dropdown align="right" width="w-72">
-          <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-muted-foreground hover:text-white transition-all">
+          <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all">
             <DocumentIcon className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">
               Views
@@ -171,7 +171,7 @@ export function ObjectsFilterBar({
                 // an inner div applied the view for a mouse only.
                 onClick={() => onApplyView(view)}
               >
-                <div className="w-full flex items-center justify-between gap-3 px-4 py-3 text-xs font-bold uppercase tracking-wider text-foreground hover:text-white hover:bg-white/5 transition-all rounded-xl">
+                <div className="w-full flex items-center justify-between gap-3 px-4 py-3 text-xs font-bold uppercase tracking-wider text-foreground hover:text-foreground hover:bg-foreground/5 transition-all rounded-xl">
                   <div className="flex-1 cursor-pointer">{view.name}</div>
                   <button
                     type="button"
@@ -188,7 +188,7 @@ export function ObjectsFilterBar({
                 </div>
               </Dropdown.Item>
             ))}
-            <div className="h-px bg-white/5 my-1" />
+            <div className="h-px bg-foreground/5 my-1" />
             <Dropdown.Item onClick={onSaveView}>
               <div className="w-full flex items-center gap-3 px-4 py-3 text-xs font-bold uppercase tracking-wider text-primary hover:text-primary hover:bg-primary/5 transition-all rounded-xl">
                 <PlusIcon className="w-4 h-4" />
@@ -199,14 +199,14 @@ export function ObjectsFilterBar({
         </Dropdown>
 
         <Dropdown align="right" width="w-56">
-          <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-muted-foreground hover:text-white transition-all">
+          <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all">
             <EllipsisVerticalIcon className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">
               Layout
             </span>
           </Dropdown.Trigger>
           <Dropdown.Menu className="p-2 space-y-1">
-            <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-white/5 mb-1">
+            <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border mb-1">
               Table Columns
             </div>
             {COLUMN_OPTIONS.map((col) => (
@@ -216,7 +216,7 @@ export function ObjectsFilterBar({
                 className="p-0"
                 closeOnClick={false}
               >
-                <div className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-foreground hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                <div className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-all">
                   {col.label}
                   {visibleColumns.has(col.id) && (
                     <CheckIcon className="w-3.5 h-3.5 text-primary" />
@@ -230,7 +230,7 @@ export function ObjectsFilterBar({
         <button
           onClick={() => onRefresh()}
           title="Refresh object list from backend"
-          className="p-2 text-muted-foreground hover:text-white bg-white/5 border border-white/10 rounded-xl transition-colors"
+          className="p-2 text-muted-foreground hover:text-foreground bg-foreground/5 border border-border rounded-xl transition-colors"
         >
           <ArrowPathIcon
             className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}

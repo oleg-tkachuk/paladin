@@ -103,7 +103,7 @@ export default function BucketObjectLockPage() {
   return (
     <Card className="max-w-2xl space-y-6 p-6">
       <div>
-        <h2 className="text-lg font-semibold text-white">Object lock</h2>
+        <h2 className="text-lg font-semibold text-foreground">Object lock</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Write-once-read-many retention. Objects can&apos;t be deleted or
           overwritten until their retention expires.
@@ -112,7 +112,7 @@ export default function BucketObjectLockPage() {
 
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Label htmlFor="lock-enabled" className="text-sm text-white">
+          <Label htmlFor="lock-enabled" className="text-sm text-foreground">
             Enable object lock
           </Label>
           <p className="text-xs text-muted-foreground">
@@ -128,7 +128,7 @@ export default function BucketObjectLockPage() {
 
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Label className="text-sm text-white">Default mode</Label>
+          <Label className="text-sm text-foreground">Default mode</Label>
           <p className="text-xs text-muted-foreground">
             Governance is bypassable by a privileged role; Compliance is not,
             until expiry.
@@ -151,7 +151,7 @@ export default function BucketObjectLockPage() {
 
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Label htmlFor="lock-days" className="text-sm text-white">
+          <Label htmlFor="lock-days" className="text-sm text-foreground">
             Default retention (days)
           </Label>
           <p className="text-xs text-muted-foreground">

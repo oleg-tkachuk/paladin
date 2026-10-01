@@ -33,11 +33,11 @@ export function BulkEditModal({
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="max-w-lg bg-[#0A0C10] rounded-[32px] border border-white/10 shadow-2xl p-8 gap-6 overflow-hidden"
+        className="max-w-lg bg-background rounded-[32px] border border-border shadow-2xl p-8 gap-6 overflow-hidden"
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">
-          <DialogTitle className="text-xl font-bold text-white uppercase tracking-tight">
+          <DialogTitle className="text-xl font-bold text-foreground uppercase tracking-tight">
             Bulk Label Synchronization
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground font-medium">
@@ -50,7 +50,7 @@ export function BulkEditModal({
             New Object Tags
             <textarea
               autoFocus
-              className="mt-2 w-full h-32 bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-sm font-mono focus:border-primary/50 outline-none transition-all resize-none normal-case tracking-normal font-normal"
+              className="mt-2 w-full h-32 bg-background/40 border border-border rounded-2xl p-4 text-foreground text-sm font-mono focus:border-primary/50 outline-none transition-all resize-none normal-case tracking-normal font-normal"
               placeholder="key:value, key2:value2..."
               value={labels}
               onChange={(e) => onLabelsChange(e.target.value)}
@@ -71,7 +71,7 @@ export function BulkEditModal({
           </button>
           <button
             onClick={onClose}
-            className="px-8 py-4 rounded-2xl bg-white/5 text-muted-foreground hover:text-white text-xs font-bold uppercase tracking-wider transition-all border border-white/5"
+            className="px-8 py-4 rounded-2xl bg-foreground/5 text-muted-foreground hover:text-foreground text-xs font-bold uppercase tracking-wider transition-all border border-border"
           >
             Abort
           </button>
