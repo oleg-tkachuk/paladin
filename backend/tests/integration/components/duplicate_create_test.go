@@ -60,6 +60,33 @@ func TestCreateCollectionTwiceIsAlreadyExists(t *testing.T) {
 	}
 }
 
+// A Collection on a bucket the backend does not have: the create query
+// resolves bucket_id by name, so the row arrived with NULL there and the
+// caller got the NOT NULL violation as a 500. The console met it in the e2e
+// suite when another spec deleted a bucket between the list and the create.
+func TestCreateCollectionOnUnknownBucketIsNotFound(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
+
+	tenant, _ := mkTenant(t, ctx, pool, "shared")
+	backendID := "be-" + uuid.NewString()[:8]
+	mustExec(t, ctx, pool,
+		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
+		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,
+		backendID)
+
+	_, err := repo.Create(ctx, objectkey.CreateCollectionArgs{
+		TenantID:   tenant,
+		Collection: "docs",
+		BackendID:  backendID,
+		BucketName: "no-such-bucket",
+	})
+	if !errors.Is(err, objectkey.ErrBucketNotFound) {
+		t.Fatalf("create on an unknown bucket = %v, want ErrBucketNotFound", err)
+	}
+}
+
 func TestCreateObjectTagTwiceIsAlreadyExists(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)

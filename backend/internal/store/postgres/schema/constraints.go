@@ -51,6 +51,11 @@ const (
 	// one a duplicate CreateCollection trips, and until it was matched the
 	// caller got its raw text as CodeInternal.
 	CollectionsNameUnique = "collections_tenant_id_name_key"
+
+	// CollectionsBucketIDColumn — collections.bucket_id, NOT NULL. The create
+	// query resolves it from the backend and bucket names by subquery, so an
+	// unknown bucket arrives as a NOT NULL violation on this column.
+	CollectionsBucketIDColumn = "bucket_id"
 )
 
 // object_tags table constraint names — see the schema baseline
