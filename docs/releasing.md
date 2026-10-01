@@ -21,9 +21,11 @@ Nothing is tagged by hand. `ci.yaml` dispatches
 [`release.yaml`](../.github/workflows/release.yaml) once every check on
 `main` has passed. semantic-release computes the next version from the commit
 types (see [`release.config.cjs`](../release.config.cjs)), and the workflow
-publishes an image and a chart for each component at that tag. When the
-commits since the last tag are only docs, refactor, test, build, ci or chore,
-no release is due and nothing is published.
+publishes an image and a chart for each component at that tag. `feat` is a
+minor release, `fix` and `perf` a patch, a breaking change (`!` or a
+`BREAKING CHANGE:` footer) a major. Any other type — `docs`, `style`,
+`refactor`, `test`, `build`, `ci`, `chore`, `security` — releases nothing on
+its own.
 
 ## The SDKs: `api/vX.Y.Z`
 
