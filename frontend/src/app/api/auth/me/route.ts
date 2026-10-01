@@ -12,14 +12,15 @@ import {
   type AccessTokenDTO,
   type UserDTO,
 } from "@/lib/auth/bff";
+import { rotationDue } from "@/lib/auth/rotation";
 
 /**
  * GET /api/auth/me
  *
  * Re-hydration endpoint for client-side AuthContext on page load. Reads
- * the session cookie, refreshes the iam chain to get a short-lived iam
- * access token, calls WhoAmI, returns { user, accessTokens } with the iam
- * audience pre-seeded. Tokens for data/admin lazy-fetch via /exchange on
+ * the session cookie, derives a short-lived iam access token — rotating the
+ * chain only once the refresh token is due (lib/auth/rotation.ts) — calls
+ * WhoAmI, and returns { user, accessTokens } with the iam audience pre-seeded. Tokens for data/admin lazy-fetch via /exchange on
  * the first RPC into those planes.
  *
  * This is the ONLY route that rotates the chain, and two of them can still
@@ -47,7 +48,9 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const minted = await mintIamAccess(refreshToken, iamAudience);
+    const minted = rotationDue(refreshToken, Date.now())
+      ? await mintIamAccess(refreshToken, iamAudience)
+      : await exchangeIamAccess(refreshToken, iamAudience);
 
     const whoAmI = await iamAuthClient().whoAmI(
       {},
@@ -131,13 +134,25 @@ async function mintIamAccess(
     };
   } catch (err) {
     if (!(err instanceof ConnectError) || err.code !== Code.Aborted) throw err;
-    const res = await iamAuthClient().exchangeAudience({
-      refreshToken,
-      targetAudience: audience,
-    });
-    return {
-      accessToken: res.accessToken,
-      accessExpiresInSeconds: Number(res.accessExpiresInSeconds),
-    };
+    return exchangeIamAccess(refreshToken, audience);
   }
+}
+
+/**
+ * An iam access token from the refresh token, leaving the chain untouched: no
+ * refresh token comes back, so no cookie is written and nothing can be lost
+ * with the response.
+ */
+async function exchangeIamAccess(
+  refreshToken: string,
+  audience: Audience,
+): Promise<MintedIam> {
+  const res = await iamAuthClient().exchangeAudience({
+    refreshToken,
+    targetAudience: audience,
+  });
+  return {
+    accessToken: res.accessToken,
+    accessExpiresInSeconds: Number(res.accessExpiresInSeconds),
+  };
 }
