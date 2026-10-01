@@ -60,7 +60,7 @@ message CreateUserRequest {
   string parent = 1;
   string subject = 2 [(buf.validate.field).string.min_len = 1];
   string display_name = 3;
-  string initial_password = 4 [(buf.validate.field).string.min_len = 12];
+  string initial_password = 4 [(buf.validate.field).string.min_len = 12, debug_redact = true];
   repeated string roles = 5;
   repeated paladin.common.v1.Scope scopes = 6;
 }
@@ -117,10 +117,10 @@ message RevokeScopesRequest {
 message ResetPasswordRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   // If empty, server generates a random one and returns it once.
-  string new_password = 2;
+  string new_password = 2 [debug_redact = true];
 }
 
 message ResetPasswordResponse {
   // Set only when caller didn't provide a password — return-once.
-  string generated_password = 1;
+  string generated_password = 1 [debug_redact = true];
 }

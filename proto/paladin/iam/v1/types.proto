@@ -31,9 +31,9 @@ message User {
 // TokenPair is the OAuth-2-style result of Login / RefreshToken. Both tokens
 // are JWT with audience=`paladin-data` (access) / `paladin-iam` (refresh).
 message TokenPair {
-  string access_token = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string access_token = 1 [(google.api.field_behavior) = OUTPUT_ONLY, debug_redact = true];
   int32 access_expires_in_seconds = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
-  string refresh_token = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string refresh_token = 3 [(google.api.field_behavior) = OUTPUT_ONLY, debug_redact = true];
   int32 refresh_expires_in_seconds = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   string token_type = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
   // The audience actually minted into access_token.

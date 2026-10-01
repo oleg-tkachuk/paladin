@@ -1062,12 +1062,12 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\vttl_seconds\x18\x04 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x129\n" +
 	"\n" +
-	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\"t\n" +
+	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\"y\n" +
 	"\x1eCapabilityServiceIssueResponse\x12<\n" +
 	"\n" +
 	"capability\x18\x01 \x01(\v2\x1c.paladin.admin.v1.CapabilityR\n" +
-	"capability\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"\xca\x02\n" +
+	"capability\x12\x19\n" +
+	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\"\xca\x02\n" +
 	" CapabilityServiceDelegateRequest\x12%\n" +
 	"\tparent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bparentId\x12?\n" +
 	"\asubject\x18\x02 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +

@@ -27,7 +27,7 @@ from paladin.common.v1 import scope_pb2 as paladin_dot_common_dot_v1_dot_scope__
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1apaladin/iam/v1/types.proto\x12\x0epaladin.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpaladin/common/v1/scope.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xfa\x02\n\x04User\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12\x14\n\x07user_id\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x16\n\ttenant_id\x18\x03 \x01(\tB\x03\xe0\x41\x05\x12\x0f\n\x07subject\x18\x04 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x05 \x01(\t\x12\r\n\x05roles\x18\x06 \x03(\t\x12(\n\x06scopes\x18\x07 \x03(\x0b\x32\x18.paladin.common.v1.Scope\x12\x10\n\x08\x64isabled\x18\x08 \x01(\x08\x12\x1d\n\x10resource_version\x18\t \x01(\tB\x03\xe0\x41\x03\x12\x33\n\ncreated_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\x0b \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x36\n\rlast_login_at\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\"\xc3\x01\n\tTokenPair\x12\x19\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\tB\x03\xe0\x41\x03\x12&\n\x19\x61\x63\x63\x65ss_expires_in_seconds\x18\x02 \x01(\x05\x42\x03\xe0\x41\x03\x12\x1a\n\rrefresh_token\x18\x03 \x01(\tB\x03\xe0\x41\x03\x12\'\n\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05\x42\x03\xe0\x41\x03\x12\x17\n\ntoken_type\x18\x05 \x01(\tB\x03\xe0\x41\x03\x12\x15\n\x08\x61udience\x18\x06 \x01(\tB\x03\xe0\x41\x03\x42HZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1apaladin/iam/v1/types.proto\x12\x0epaladin.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpaladin/common/v1/scope.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xfa\x02\n\x04User\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12\x14\n\x07user_id\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x16\n\ttenant_id\x18\x03 \x01(\tB\x03\xe0\x41\x05\x12\x0f\n\x07subject\x18\x04 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x05 \x01(\t\x12\r\n\x05roles\x18\x06 \x03(\t\x12(\n\x06scopes\x18\x07 \x03(\x0b\x32\x18.paladin.common.v1.Scope\x12\x10\n\x08\x64isabled\x18\x08 \x01(\x08\x12\x1d\n\x10resource_version\x18\t \x01(\tB\x03\xe0\x41\x03\x12\x33\n\ncreated_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\x0b \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x36\n\rlast_login_at\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\"\xc9\x01\n\tTokenPair\x12\x1c\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\tB\x06\x80\x01\x01\xe0\x41\x03\x12&\n\x19\x61\x63\x63\x65ss_expires_in_seconds\x18\x02 \x01(\x05\x42\x03\xe0\x41\x03\x12\x1d\n\rrefresh_token\x18\x03 \x01(\tB\x06\x80\x01\x01\xe0\x41\x03\x12\'\n\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05\x42\x03\xe0\x41\x03\x12\x17\n\ntoken_type\x18\x05 \x01(\tB\x03\xe0\x41\x03\x12\x15\n\x08\x61udience\x18\x06 \x01(\tB\x03\xe0\x41\x03\x42HZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -50,11 +50,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_USER'].fields_by_name['last_login_at']._loaded_options = None
   _globals['_USER'].fields_by_name['last_login_at']._serialized_options = b'\340A\003'
   _globals['_TOKENPAIR'].fields_by_name['access_token']._loaded_options = None
-  _globals['_TOKENPAIR'].fields_by_name['access_token']._serialized_options = b'\340A\003'
+  _globals['_TOKENPAIR'].fields_by_name['access_token']._serialized_options = b'\200\001\001\340A\003'
   _globals['_TOKENPAIR'].fields_by_name['access_expires_in_seconds']._loaded_options = None
   _globals['_TOKENPAIR'].fields_by_name['access_expires_in_seconds']._serialized_options = b'\340A\003'
   _globals['_TOKENPAIR'].fields_by_name['refresh_token']._loaded_options = None
-  _globals['_TOKENPAIR'].fields_by_name['refresh_token']._serialized_options = b'\340A\003'
+  _globals['_TOKENPAIR'].fields_by_name['refresh_token']._serialized_options = b'\200\001\001\340A\003'
   _globals['_TOKENPAIR'].fields_by_name['refresh_expires_in_seconds']._loaded_options = None
   _globals['_TOKENPAIR'].fields_by_name['refresh_expires_in_seconds']._serialized_options = b'\340A\003'
   _globals['_TOKENPAIR'].fields_by_name['token_type']._loaded_options = None
@@ -64,5 +64,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_USER']._serialized_start=144
   _globals['_USER']._serialized_end=522
   _globals['_TOKENPAIR']._serialized_start=525
-  _globals['_TOKENPAIR']._serialized_end=720
+  _globals['_TOKENPAIR']._serialized_end=726
 # @@protoc_insertion_point(module_scope)

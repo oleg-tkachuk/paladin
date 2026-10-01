@@ -834,10 +834,10 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12$\n" +
 	"\baudience\x18\x05 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12-\n" +
 	"\x0erate_limit_rpm\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\frateLimitRpm\x12\x14\n" +
-	"\x05roles\x18\a \x03(\tR\x05roles\"n\n" +
+	"\x05roles\x18\a \x03(\tR\x05roles\"s\n" +
 	"\x1dAPITokenServiceCreateResponse\x127\n" +
-	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\";\n" +
+	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\x12\x19\n" +
+	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\";\n" +
 	"\x1cAPITokenServiceRevokeRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x1f\n" +
 	"\x1dAPITokenServiceRevokeResponse\"\xd4\x01\n" +
