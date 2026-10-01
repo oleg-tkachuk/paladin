@@ -16,7 +16,12 @@
     mcp        ← ingress-controller / monitoring   → common + api/admin pods
 
   "common" egress = DNS (kube-system:53), 443/6443 anywhere (K8s API for the
-  secret resolver + https webhooks/JWKS), Postgres, OTLP 4317 in-cluster.
+  secret resolver + https webhooks/JWKS), Postgres, and the OTLP collector on
+  the port config.otel.endpoint names.
+
+  With config.otel.metrics_exporter: prometheus, api and admin also admit the
+  monitoring namespace on the port of config.otel.metrics_addr — their scrape
+  listener is a port of its own, not one of the plane ports above.
 
   Kubelet liveness/readiness probes originate on the node and bypass policy
   enforcement in mainstream CNIs, so default-deny ingress does not break
@@ -31,8 +36,18 @@
 {{- $https := dict "ports" (list (dict "protocol" "TCP" "port" 443) (dict "protocol" "TCP" "port" 6443)) }}
 {{/* Postgres */}}
 {{- $pg := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.postgres.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.postgres.port)) }}
-{{/* OTLP collector — in-cluster, any namespace */}}
-{{- $otlp := dict "ports" (list (dict "protocol" "TCP" "port" 4317)) }}
+{{/*
+  OTLP collector — any namespace, on the port the exporter dials. Read from the
+  endpoint rather than fixed: it was fixed at 4317, the gRPC port, while the
+  chart's own default exporter speaks OTLP/HTTP to 4318, so every span was
+  dropped the moment policies were on.
+*/}}
+{{- $otlpPort := splitList ":" .Values.config.otel.endpoint | last | int }}
+{{- $otlp := dict "ports" (list (dict "protocol" "TCP" "port" $otlpPort)) }}
+{{/* The api / admin scrape listener, when metrics are pulled. */}}
+{{- $metricsPulled := and .Values.config.otel.enabled (eq .Values.config.otel.metrics_exporter "prometheus") }}
+{{- $metricsPort := splitList ":" .Values.config.otel.metrics_addr | last | int }}
+{{- $scrape := dict "from" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicies.monitoring.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $metricsPort)) }}
 {{- $common = list $dns $https $pg $otlp }}
 {{- $storageEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.storage.namespace)))) }}
 {{- $natsEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.nats.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.nats.port)) }}
@@ -75,6 +90,9 @@ spec:
       ports:
         - { protocol: TCP, port: 8080 }
         - { protocol: TCP, port: 8085 }
+    {{- if $metricsPulled }}
+    - {{ $scrape | toJson }}
+    {{- end }}
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}
@@ -101,6 +119,9 @@ spec:
         - {{ $fromMCP | toJson }}
       ports:
         - { protocol: TCP, port: 8090 }
+    {{- if $metricsPulled }}
+    - {{ $scrape | toJson }}
+    {{- end }}
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}
