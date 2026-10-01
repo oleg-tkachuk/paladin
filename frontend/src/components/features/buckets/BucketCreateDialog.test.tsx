@@ -77,4 +77,32 @@ describe("BucketCreateDialog", () => {
       screen.getByText("Register a storage backend first."),
     ).toBeInTheDocument();
   });
+
+  // A failed read and an empty one both leave `backends` empty; only one of
+  // them means "register a backend". Shown that advice, an operator goes off
+  // to register a backend that already exists.
+  it("says the backend list failed rather than that none is registered", async () => {
+    const retry = vi.fn();
+    render(
+      <BucketCreateDialog
+        open
+        onOpenChange={vi.fn()}
+        backends={[]}
+        backendsFailed={{ reason: "unavailable: upstream", retry }}
+        createBucket={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Backends could not be loaded/,
+    );
+    expect(
+      screen.getByText("Backends could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Register a storage backend first."),
+    ).not.toBeInTheDocument();
+    expect(submit()).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
 });

@@ -49,7 +49,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ListLoadError } from "@/components/ui/ListLoadError";
+import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
@@ -101,7 +101,11 @@ export default function CollectionsPage() {
     createCollection,
     deleteCollection,
   } = useCollections();
-  const { backends: backendRows } = useBackends();
+  const {
+    backends: backendRows,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends();
   const { tenantId } = useScope();
   const { showNotification } = useNotification();
 
@@ -376,6 +380,7 @@ export default function CollectionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
+        backendsFailed={failedRead(backendsError, fetchBackends)}
         bucketsHref="/buckets"
         createCollection={createCollection}
         onCreated={() => void fetchCollections(searchFilter(debouncedSearch))}

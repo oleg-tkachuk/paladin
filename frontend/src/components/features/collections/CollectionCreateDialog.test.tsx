@@ -3,10 +3,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({
   buckets: [] as Array<Record<string, unknown>>,
+  bucketsError: null as string | null,
   showNotification: vi.fn(),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
-  useBuckets: () => ({ buckets: h.buckets, fetchBuckets: vi.fn() }),
+  useBuckets: () => ({
+    buckets: h.buckets,
+    error: h.bucketsError,
+    fetchBuckets: vi.fn(),
+  }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -37,6 +42,7 @@ const submit = () => screen.getByRole("button", { name: "Create Collection" });
 describe("CollectionCreateDialog", () => {
   beforeEach(() => {
     h.buckets = [{ backendId: "full", bucketId: "b1", displayName: "" }];
+    h.bucketsError = null;
     h.showNotification.mockReset();
   });
 
@@ -74,5 +80,41 @@ describe("CollectionCreateDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "already exists",
     );
+  });
+
+  it("says the bucket list failed rather than that the backend has none", () => {
+    h.buckets = [];
+    h.bucketsError = "unavailable: upstream";
+    open();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Buckets could not be loaded/,
+    );
+    expect(
+      screen.getByText("Buckets could not be loaded."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/has no bucket/)).not.toBeInTheDocument();
+    expect(submit()).toBeDisabled();
+  });
+
+  it("says the backend list failed rather than that none can take a Collection", () => {
+    render(
+      <CollectionCreateDialog
+        open
+        onOpenChange={vi.fn()}
+        backends={[]}
+        backendsFailed={{ reason: "unavailable: upstream", retry: vi.fn() }}
+        bucketsHref="/buckets"
+        createCollection={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("alert")[0]).toHaveTextContent(
+      /Backends could not be loaded/,
+    );
+    expect(
+      screen.getByText("Backends could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No backend can take a Collection."),
+    ).not.toBeInTheDocument();
   });
 });

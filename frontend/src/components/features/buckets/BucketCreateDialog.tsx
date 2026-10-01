@@ -19,12 +19,15 @@ import {
 } from "@/components/ui/form-dialog";
 import { useNotification } from "@/components/ui/Notification";
 import { bucketNameError } from "@/lib/bucketName";
+import { type FailedRead, ListLoadError } from "@/components/ui/ListLoadError";
 
 interface BucketCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Backend ids to offer; the first is picked when the dialog opens. */
   backends: string[];
+  /** Set when the backend list failed to load: `backends` is then unknown. */
+  backendsFailed?: FailedRead | null;
   createBucket: (
     backendId: string,
     bucketId: string,
@@ -42,6 +45,7 @@ export function BucketCreateDialog({
   open,
   onOpenChange,
   backends,
+  backendsFailed = null,
   createBucket,
 }: BucketCreateDialogProps) {
   const { showNotification } = useNotification();
@@ -59,8 +63,11 @@ export function BucketCreateDialog({
 
   // Shown only once something is typed: an empty field is not yet wrong.
   const nameError = name ? bucketNameError(name) : null;
-  const blockedReason =
-    backends.length === 0
+  // A failed read is checked before an empty one: both leave `backends` empty,
+  // and only one of them means there is nothing to register a bucket on.
+  const blockedReason = backendsFailed
+    ? "Backends could not be loaded."
+    : backends.length === 0
       ? "Register a storage backend first."
       : !name
         ? "Enter a bucket name to continue."
@@ -112,30 +119,39 @@ export function BucketCreateDialog({
       <FormSection>
         <FormRow>
           <FormField label="Backend" required>
-            {(control) => (
-              <SelectRoot
-                value={backendId}
-                onValueChange={setBackendId}
-                disabled={backends.length === 0}
-              >
-                <SelectTrigger {...control}>
-                  <SelectValue
-                    placeholder={
-                      backends.length === 0
-                        ? "No backends registered"
-                        : "Pick backend"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {backends.map((b) => (
-                    <SelectItem key={b} value={b}>
-                      {b}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </SelectRoot>
-            )}
+            {(control) =>
+              backendsFailed ? (
+                <ListLoadError
+                  variant="inline"
+                  what="Backends"
+                  reason={backendsFailed.reason}
+                  onRetry={backendsFailed.retry}
+                />
+              ) : (
+                <SelectRoot
+                  value={backendId}
+                  onValueChange={setBackendId}
+                  disabled={backends.length === 0}
+                >
+                  <SelectTrigger {...control}>
+                    <SelectValue
+                      placeholder={
+                        backends.length === 0
+                          ? "No backends registered"
+                          : "Pick backend"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {backends.map((b) => (
+                      <SelectItem key={b} value={b}>
+                        {b}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </SelectRoot>
+              )
+            }
           </FormField>
           <FormField
             label="Bucket name"

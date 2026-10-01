@@ -73,6 +73,7 @@ import { T } from "@/lib/ui/typography";
 import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
+import { failedRead } from "@/components/ui/ListLoadError";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 
 type SortColumn = "name" | "displayName" | "bucket";
@@ -115,7 +116,11 @@ export default function TenantCollectionsPage() {
   const tenant = useTenant();
   const { user } = useAuth();
   const { createCollection, deleteCollection } = useCollections();
-  const { backends: backendRows } = useBackends();
+  const {
+    backends: backendRows,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends();
   const { showNotification } = useNotification();
 
   const isOwnTenant = user?.tenantId === tenant.tenantId;
@@ -439,6 +444,7 @@ export default function TenantCollectionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
+        backendsFailed={failedRead(backendsError, fetchBackends)}
         bucketsHref={`/tenants/${tenant.slug}/buckets`}
         createCollection={createCollection}
         onCreated={() => void fetchList(search)}

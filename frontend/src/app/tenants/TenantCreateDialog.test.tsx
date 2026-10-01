@@ -6,13 +6,23 @@ const h = vi.hoisted(() => ({
     Record<string, unknown>
   >,
   buckets: [] as Array<Record<string, unknown>>,
+  backendsError: null as string | null,
+  bucketsError: null as string | null,
   showNotification: vi.fn(),
 }));
 vi.mock("@/hooks/useBackends", () => ({
-  useBackends: () => ({ backends: h.backends }),
+  useBackends: () => ({
+    backends: h.backends,
+    error: h.backendsError,
+    fetchBackends: vi.fn(),
+  }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
-  useBuckets: () => ({ buckets: h.buckets, fetchBuckets: vi.fn() }),
+  useBuckets: () => ({
+    buckets: h.buckets,
+    error: h.bucketsError,
+    fetchBuckets: vi.fn(),
+  }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -38,6 +48,8 @@ describe("TenantCreateDialog", () => {
   beforeEach(() => {
     h.backends = [{ backendId: "primary", displayName: "" }];
     h.buckets = [];
+    h.backendsError = null;
+    h.bucketsError = null;
     h.showNotification.mockReset();
   });
 
@@ -96,5 +108,37 @@ describe("TenantCreateDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "slug already taken",
     );
+  });
+
+  // Each of these used to answer a failed read with advice: "none is
+  // registered — open Storage Backends", "no bucket to bind to yet — open
+  // Buckets". The read failed; nothing needs registering.
+  it("says the backend list failed rather than sending the operator to register one", () => {
+    h.backends = [];
+    h.backendsError = "unavailable: upstream";
+    open();
+    typeSlug("acme");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Backends could not be loaded/,
+    );
+    expect(
+      screen.getByText("Backends could not be loaded."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/none is registered/)).not.toBeInTheDocument();
+  });
+
+  it("says the bucket list failed rather than that the backend has none", () => {
+    h.bucketsError = "unavailable: upstream";
+    open();
+    typeSlug("acme");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Buckets could not be loaded/,
+    );
+    expect(
+      screen.getByText("Buckets could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/has no bucket to bind to/),
+    ).not.toBeInTheDocument();
   });
 });

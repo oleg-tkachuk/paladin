@@ -79,6 +79,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
+import { failedRead } from "@/components/ui/ListLoadError";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
@@ -128,7 +129,11 @@ export default function TenantBucketsPage() {
   const tenant = useTenant();
   const { buckets, loading, fetchBuckets, createBucket, deleteBucket } =
     useBuckets();
-  const { backends: backendRows } = useBackends();
+  const {
+    backends: backendRows,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends();
   const { showNotification } = useNotification();
 
   const backends = useMemo(
@@ -437,6 +442,7 @@ export default function TenantBucketsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
+        backendsFailed={failedRead(backendsError, fetchBackends)}
         createBucket={createBucket}
       />
 
