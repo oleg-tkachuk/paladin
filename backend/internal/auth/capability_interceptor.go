@@ -318,7 +318,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 	}
 
 	if i.usage != nil && cap.Caveats.MaxRequests > 0 {
-		if _, err := i.usage.BumpRequest(ctx, cap.ID, int64(cap.Caveats.MaxRequests)); err != nil {
+		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), cap.ID, int64(cap.Caveats.MaxRequests)); err != nil {
 			if errors.Is(err, capability.ErrRequestLimitExceeded) {
 				return connect.NewError(connect.CodeResourceExhausted, err)
 			}
@@ -329,6 +329,21 @@ func (i *capabilityInterceptor) enforceCaveats(
 		}
 	}
 	return nil
+}
+
+// ledgerContext scopes a write to a capability's own ledger — its request
+// counter, its spend, its tenant's budget and charges rows — to the
+// capability's tenant. Those rows are RLS-isolated by that tenant, and the
+// caller's context does not carry it: the request-count bump runs before the
+// interceptor establishes a principal, and a capability presented alongside a
+// JWT keeps the JWT's tenant. Either way the database refused the write.
+//
+// WithActingTenant authorises nothing, and here nothing needs authorising: the
+// verifier has checked the signature that covers this tenant, and the write is
+// to that capability's own accounting. Only the store call gets this context;
+// the request itself stays scoped to whoever the caller is.
+func ledgerContext(ctx context.Context, cap *capability.Capability) context.Context {
+	return WithActingTenant(ctx, cap.Subject.TenantID)
 }
 
 // HeaderGetter is the read-only header surface both connect.AnyRequest
@@ -630,7 +645,7 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
 		}
 	}
-	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor, onCharged)
+	_, err := store.Charge(ledgerContext(ctx, cap), cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor, onCharged)
 	if err != nil {
 		// The two exhaustion cases are separated because they need different
 		// answers: a capability at its cap is reissued, a tenant at its cap
@@ -701,11 +716,12 @@ func RefundCapability(ctx context.Context, amount float64) error {
 	if amount <= 0 {
 		return nil
 	}
-	if err := store.RefundCapability(ctx, cap.ID, amount); err != nil {
+	ledgerCtx := ledgerContext(ctx, cap)
+	if err := store.RefundCapability(ledgerCtx, cap.ID, amount); err != nil {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	if cap.Subject.TenantID != uuid.Nil {
-		if err := store.RefundTenant(ctx, cap.Subject.TenantID, amount); err != nil {
+		if err := store.RefundTenant(ledgerCtx, cap.Subject.TenantID, amount); err != nil {
 			return connect.NewError(connect.CodeUnavailable, err)
 		}
 	}
