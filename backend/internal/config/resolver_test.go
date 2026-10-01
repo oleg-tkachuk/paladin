@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -28,6 +30,7 @@ func newTestResolver(t *testing.T, tokenPath, nsPath string, secrets ...*corev1.
 	r := NewK8sSecretResolver(zap.NewNop())
 	r.tokenPath = tokenPath
 	r.nsPath = nsPath
+	r.backoff = testBackoff
 	if secrets != nil {
 		objs := make([]runtime.Object, len(secrets))
 		for i, sec := range secrets {
@@ -37,6 +40,9 @@ func newTestResolver(t *testing.T, tokenPath, nsPath string, secrets ...*corev1.
 	}
 	return r
 }
+
+// testBackoff retries as the real one does, without the waiting.
+var testBackoff = wait.Backoff{Duration: time.Microsecond, Factor: 1, Steps: secretReadAttempts}
 
 // secret builds a Secret as the API returns it: values in Data, decoded.
 func secret(namespace, name, key, value string) *corev1.Secret {
@@ -234,5 +240,103 @@ func TestResolveSecret_Refusals(t *testing.T) {
 				t.Errorf("err = %v, want it to contain %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// failGets makes the fake API fail the first `times` secret reads with err,
+// and counts every read.
+func failGets(r *K8sSecretResolver, times int, err error) *int {
+	calls := 0
+	r.client.(*fake.Clientset).PrependReactor("get", "secrets",
+		func(k8stesting.Action) (bool, runtime.Object, error) {
+			calls++
+			if calls <= times {
+				return true, nil, err
+			}
+			return false, nil, nil
+		})
+	return &calls
+}
+
+// An API server that is briefly unreachable is waited out: the pod used to
+// exit on the first refused connection and sit in CrashLoopBackOff.
+func TestResolveSecret_RetriesAnUnreachableAPI(t *testing.T) {
+	tokenPath, nsPath := inCluster(t)
+	unreachable := errors.New("dial tcp 10.0.0.1:443: connect: connection refused")
+	overloaded := apierrors.NewServiceUnavailable("etcd leader changed")
+
+	for _, transient := range []error{unreachable, overloaded} {
+		r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "v"))
+		calls := failGets(r, 2, transient)
+		got, err := r.ResolveSecret(context.Background(), &SecretRef{Name: "pg", Key: "password"})
+		if err != nil || got != "v" {
+			t.Errorf("%v: got %q, %v; want the secret after retrying", transient, got, err)
+		}
+		if *calls != 3 {
+			t.Errorf("%v: %d reads, want 3", transient, *calls)
+		}
+	}
+}
+
+func TestResolveSecret_GivesUpAfterTheLastAttempt(t *testing.T) {
+	tokenPath, nsPath := inCluster(t)
+	r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "v"))
+	calls := failGets(r, secretReadAttempts+1, errors.New("connection refused"))
+	_, err := r.ResolveSecret(context.Background(), &SecretRef{Name: "pg", Key: "password"})
+	if err == nil || !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("err = %v, want the last connection error", err)
+	}
+	if *calls != secretReadAttempts {
+		t.Errorf("%d reads, want %d", *calls, secretReadAttempts)
+	}
+}
+
+// What the API answered about the request is final: asking again changes
+// nothing and only delays the error an operator needs.
+func TestResolveSecret_DoesNotRetryARefusal(t *testing.T) {
+	tokenPath, nsPath := inCluster(t)
+	gr := schema.GroupResource{Resource: "secrets"}
+	for _, refusal := range []error{
+		apierrors.NewNotFound(gr, "pg"),
+		apierrors.NewForbidden(gr, "pg", errors.New("rbac")),
+		apierrors.NewUnauthorized("token expired"),
+	} {
+		r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "v"))
+		calls := failGets(r, secretReadAttempts, refusal)
+		if _, err := r.ResolveSecret(context.Background(), &SecretRef{Name: "pg", Key: "password"}); err == nil {
+			t.Errorf("%v: err = nil", refusal)
+		}
+		if *calls != 1 {
+			t.Errorf("%v: %d reads, want 1", refusal, *calls)
+		}
+	}
+}
+
+func TestResolveSecret_StopsWhenTheContextEnds(t *testing.T) {
+	tokenPath, nsPath := inCluster(t)
+	r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "v"))
+	calls := failGets(r, secretReadAttempts, errors.New("connection refused"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := r.ResolveSecret(ctx, &SecretRef{Name: "pg", Key: "password"}); err == nil {
+		t.Error("err = nil, want the read to fail")
+	}
+	if *calls != 1 {
+		t.Errorf("%d reads, want 1", *calls)
+	}
+}
+
+// The default waits out an API restart of about half a minute, no longer.
+func TestDefaultSecretReadBackoff_Span(t *testing.T) {
+	t.Parallel()
+	b := defaultSecretReadBackoff()
+	b.Jitter = 0
+	var total time.Duration
+	for b.Steps > 1 {
+		total += b.Step()
+	}
+	const lower, upper = 30 * time.Second, 40 * time.Second
+	if total < lower || total > upper {
+		t.Errorf("retries span %v, want between %v and %v", total, lower, upper)
 	}
 }

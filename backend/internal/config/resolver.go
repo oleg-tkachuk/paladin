@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -10,10 +11,13 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 )
 
 // Redacted is the placeholder used in Obfuscated() for sensitive fields.
@@ -24,6 +28,43 @@ const (
 	k8sNamespacePath   = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	defaultHTTPTimeout = 5 * time.Second
 )
+
+// How long a secret read keeps retrying a Kubernetes API that does not answer:
+// 7 attempts, the wait doubling from 0.5s to 16s, about 31s in all. A pod that
+// starts while the API server is briefly unreachable waits it out instead of
+// exiting, which left a rollout in CrashLoopBackOff until it was deleted by
+// hand. What the API refuses (not found, forbidden) is not retried.
+//
+// No wait.Backoff Cap: reaching it ends the retries rather than holding the
+// wait at that length.
+const (
+	secretReadFirstDelay = 500 * time.Millisecond
+	secretReadFactor     = 2.0
+	secretReadJitter     = 0.1
+	secretReadAttempts   = 7
+)
+
+func defaultSecretReadBackoff() wait.Backoff {
+	return wait.Backoff{
+		Duration: secretReadFirstDelay,
+		Factor:   secretReadFactor,
+		Jitter:   secretReadJitter,
+		Steps:    secretReadAttempts,
+	}
+}
+
+// retryableSecretRead reports whether a failed read may succeed if repeated:
+// the API was unreachable, timed out or was overloaded. An answer it gave
+// about the request itself will be the same next time.
+func retryableSecretRead(ctx context.Context, err error) bool {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	refused := apierrors.IsNotFound(err) || apierrors.IsForbidden(err) ||
+		apierrors.IsUnauthorized(err) || apierrors.IsBadRequest(err) ||
+		apierrors.IsInvalid(err) || apierrors.IsMethodNotSupported(err)
+	return !refused
+}
 
 // Resolver resolves secret references in the configuration.
 type Resolver interface {
@@ -42,6 +83,8 @@ type K8sSecretResolver struct {
 	clientOnce sync.Once
 	client     kubernetes.Interface
 	clientErr  error
+
+	backoff wait.Backoff
 }
 
 // NewK8sSecretResolver creates a new K8s Secret resolver.
@@ -50,6 +93,7 @@ func NewK8sSecretResolver(log *zap.Logger) *K8sSecretResolver {
 		tokenPath: k8sTokenPath,
 		nsPath:    k8sNamespacePath,
 		log:       log,
+		backoff:   defaultSecretReadBackoff(),
 	}
 }
 
@@ -253,7 +297,18 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 	if err != nil {
 		return "", err
 	}
-	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	var secret *corev1.Secret
+	attempt := 0
+	err = retry.OnError(r.backoff, func(err error) bool { return retryableSecretRead(ctx, err) }, func() error {
+		attempt++
+		var getErr error
+		secret, getErr = client.CoreV1().Secrets(namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if getErr != nil && retryableSecretRead(ctx, getErr) {
+			r.log.Warn("kubernetes API did not answer a secret read; retrying",
+				zap.String("secret", ref.Name), zap.Int("attempt", attempt), zap.Error(getErr))
+		}
+		return getErr
+	})
 	switch {
 	case apierrors.IsForbidden(err):
 		return "", fmt.Errorf("access denied reading secret %s (ensure RBAC allows get secrets)", ref.Name)
