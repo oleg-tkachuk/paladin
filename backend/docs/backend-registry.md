@@ -50,8 +50,9 @@ Each backend has its own `auth.mode` — `static_keys`, `default_chain`,
 `access_key_id` and `secret_access_key` from that Kubernetes Secret and builds a
 throwaway client (`internal/app/backend_prober.go`).
 
-The registry does not read those rows. A backend that exists only in the
-database has no client on the data plane or the worker, so a bucket placed on
-it fails provisioning and every storage call for it fails with
-`unknown storage backend`. Until that changes, a backend that will hold
-buckets must also be declared in `storage.backends` (see BACKLOG).
+The registry does not read those rows: a backend that exists only in the
+database has no client on the data plane or the worker. `BucketService.CreateBucket`
+therefore refuses, with `FailedPrecondition`, a bucket on any backend that
+`storage.backends` does not declare. A backend registered through the API can
+be listed and probed; to hold buckets it has to be declared in the
+configuration.

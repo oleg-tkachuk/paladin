@@ -53,7 +53,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		return nil, nil, fmt.Errorf("build backend prober: %w", err)
 	}
 	backendH.SetProber(backendProber)
-	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
+	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
 	eventSubH := wire.ProvideEventSubHandler(repos, polEngine)

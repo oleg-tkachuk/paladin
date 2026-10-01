@@ -259,6 +259,29 @@ func TestCreateBucket_BackendDisabled(t *testing.T) {
 	}
 }
 
+// The data plane and the worker build storage clients from storage.backends
+// only. A backend registered through the API alone has none, so a bucket on it
+// failed every later call with "unknown storage backend". It is refused when
+// the bucket is created, with the reason.
+func TestCreateBucket_BackendNotConfigured(t *testing.T) {
+	repo := &fakeRepo{backendEnabled: true, getTxBucket: validBucket()}
+	h := NewHandler(repo, nil, allowAuthorizer{})
+
+	h.SetConfiguredBackends([]string{"elsewhere"})
+	_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
+	if code(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("unconfigured backend: code = %v, want FailedPrecondition", code(err))
+	}
+	if !strings.Contains(err.Error(), "storage.backends") {
+		t.Errorf("error %q does not say where the backend has to be declared", err)
+	}
+
+	h.SetConfiguredBackends([]string{validBucket().BackendID})
+	if _, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()}); err != nil {
+		t.Fatalf("configured backend refused: %v", err)
+	}
+}
+
 func TestCreateBucket_ProvisionWithoutProvisioner(t *testing.T) {
 	repo := &fakeRepo{backendEnabled: true}
 	h := NewHandler(repo, nil, allowAuthorizer{}) // no provisioner
