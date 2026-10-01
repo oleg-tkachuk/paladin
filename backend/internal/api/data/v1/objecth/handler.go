@@ -1258,7 +1258,13 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/"
+	// Authorize against the object itself, so a policy on its key, tags or
+	// content type applies to an update the same way it does to a delete.
+	cur, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/" + cur.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
@@ -1270,9 +1276,10 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	// principals stay fail-closed, unscoped are unaffected).
 	updBackendID, updBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // update (read-only; authz scope only)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, Collection: in.Collection,
+		TenantID: tenantID, Collection: in.Collection, Key: cur.Key,
 		BackendID: updBackendID, BucketName: updBucket,
-	}, cedar.ActionUpdateObject, 0, ""); err != nil {
+		ContentType: cur.ContentType, SizeBytes: cur.SizeBytes, Tags: cur.Tags,
+	}, cedar.ActionUpdateObject, cur.SizeBytes, cur.ContentType); err != nil {
 		return nil, err
 	}
 	// Update + paladin.object.updated fan-out in one tx (ADR-0003): a dispatch
