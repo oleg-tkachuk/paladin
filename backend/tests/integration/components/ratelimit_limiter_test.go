@@ -58,6 +58,7 @@ func bucketRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tokenID u
 // token without an explicit RPM or write a row per request for tokens that
 // were meant to be free.
 func TestLimiterUnlimitedFastPath(t *testing.T) {
+	t.Parallel()
 	ctx, pool, lim, tokenID := newLimiterFixture(t)
 
 	for _, capacity := range []int{0, -1} {
@@ -78,6 +79,7 @@ func TestLimiterUnlimitedFastPath(t *testing.T) {
 // unconditional and happens before the check, so the Nth call at capacity N is
 // the last allowed one.
 func TestLimiterDeniesPastCapacity(t *testing.T) {
+	t.Parallel()
 	ctx, _, lim, tokenID := newLimiterFixture(t)
 	const capacity = 3
 
@@ -110,6 +112,7 @@ func TestLimiterDeniesPastCapacity(t *testing.T) {
 // TestLimiterCountsPerToken pins that buckets are keyed by token: one token
 // exhausting its quota must not deny another.
 func TestLimiterCountsPerToken(t *testing.T) {
+	t.Parallel()
 	ctx, pool, lim, tokenA := newLimiterFixture(t)
 
 	var tenant uuid.UUID
@@ -139,6 +142,7 @@ func TestLimiterCountsPerToken(t *testing.T) {
 // and the console depends on: a dashboard polling Usage every few seconds must
 // not spend the quota it is displaying.
 func TestLimiterUsageDoesNotMutate(t *testing.T) {
+	t.Parallel()
 	ctx, _, lim, tokenID := newLimiterFixture(t)
 
 	for i := 0; i < 3; i++ {
@@ -185,6 +189,7 @@ func TestLimiterUsageDoesNotMutate(t *testing.T) {
 // outside the window it is told to keep. Sweeping the current bucket would
 // hand a rate-limited caller a fresh quota on demand.
 func TestLimiterSweepRespectsCutoff(t *testing.T) {
+	t.Parallel()
 	ctx, pool, lim, tokenID := newLimiterFixture(t)
 
 	if _, err := lim.Allow(ctx, tokenID, 100); err != nil {
@@ -223,6 +228,7 @@ func TestLimiterSweepRespectsCutoff(t *testing.T) {
 // otherwise surface as a panic on the first rate-limited request rather than
 // at wiring time.
 func TestLimiterRejectsNilPool(t *testing.T) {
+	t.Parallel()
 	if _, err := ratelimitstore.New(nil); err == nil {
 		t.Fatal("nil pool accepted")
 	}

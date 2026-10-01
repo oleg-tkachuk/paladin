@@ -37,6 +37,7 @@ import (
 // sides — they never block a delete, so listing them would send an operator
 // after rows that clean themselves up.
 func TestBucketReferenceListMatchesSchema(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -97,6 +98,7 @@ func TestBucketReferenceListMatchesSchema(t *testing.T) {
 // handler's pre-count normally answers first; this covers the race, and any
 // relation the count has not learned about yet.
 func TestDeleteBucketHeldByANonCollectionIsAConflict(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -142,6 +144,7 @@ func TestDeleteBucketHeldByANonCollectionIsAConflict(t *testing.T) {
 // it is right for every referencing table without a list to maintain — the
 // thing that made the first bucket guard incomplete.
 func TestPurgeTenantNamesTheRelationHoldingIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)

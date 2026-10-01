@@ -24,6 +24,7 @@ import (
 // tenant-less digest lookup — is open. This test locks that access pattern:
 // reads work with no tenant GUC; writes still require the matching tenant.
 func TestAPITokensPreAuthLookup(t *testing.T) {
+	// Not parallel: ALTERs the server-wide paladin_app role, and concurrent updates of one role row fail with "tuple concurrently updated".
 	ctx := context.Background()
 	pool := startPostgres(t)
 

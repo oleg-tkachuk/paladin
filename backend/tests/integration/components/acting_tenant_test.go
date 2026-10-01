@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -26,6 +27,7 @@ import (
 )
 
 func TestActingTenantScopesRLS(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 
@@ -95,21 +97,42 @@ func TestActingTenantScopesRLS(t *testing.T) {
 	}
 }
 
+const (
+	// rlsRolePrefix names the NOBYPASSRLS role rlsPool connects as; the
+	// database name follows it.
+	rlsRolePrefix = "rls_"
+	// rlsRolePassword only has to match between CREATE ROLE and the pool.
+	rlsRolePassword = "x"
+)
+
 // rlsPool opens a second pool on the same database as a NOBYPASSRLS role,
 // mirroring how the runtime connects. The suite's own pool is a superuser,
 // for which RLS never engages — which is exactly why this class of bug
 // reached a cluster before a test saw it.
+//
+// Roles are server-wide and every test's database lives on one server, so
+// the role is named after the database: parallel tests never share it, and it
+// is never dropped — a role holding grants in another database cannot be, and
+// the container takes them all with it.
 func rlsPool(t *testing.T, ctx context.Context, admin *pgxpool.Pool) *pgxpool.Pool {
 	t.Helper()
-	const role = "paladin_app_rlstest"
-	mustExec(t, ctx, admin, `DROP ROLE IF EXISTS `+role)
-	mustExec(t, ctx, admin, `CREATE ROLE `+role+` LOGIN PASSWORD 'x' NOBYPASSRLS`)
-	mustExec(t, ctx, admin, `GRANT USAGE ON SCHEMA public TO `+role)
-	mustExec(t, ctx, admin, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO `+role)
+	var db string
+	if err := admin.QueryRow(ctx, `SELECT current_database()`).Scan(&db); err != nil {
+		t.Fatalf("current database: %v", err)
+	}
+	role := rlsRolePrefix + db
+	ident := pgx.Identifier{role}.Sanitize()
+	mustExec(t, ctx, admin, `DO $$ BEGIN
+		IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '`+role+`') THEN
+			CREATE ROLE `+ident+` LOGIN PASSWORD '`+rlsRolePassword+`' NOBYPASSRLS;
+		END IF;
+	END $$`)
+	mustExec(t, ctx, admin, `GRANT USAGE ON SCHEMA public TO `+ident)
+	mustExec(t, ctx, admin, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO `+ident)
 
 	cfg := admin.Config().Copy()
 	cfg.ConnConfig.User = role
-	cfg.ConnConfig.Password = "x"
+	cfg.ConnConfig.Password = rlsRolePassword
 	p, err := pgxpool.NewWithConfig(ctx, postgres.EnableRLS(cfg))
 	if err != nil {
 		t.Fatalf("rls pool: %v", err)
@@ -142,6 +165,7 @@ func seedCollectionFor(t *testing.T, ctx context.Context, pool *pgxpool.Pool, te
 // WITH CHECK. A misplaced flag can therefore show too much — never
 // cross-write, which is the failure that would actually corrupt data.
 func TestCrossTenantReadWidensSelectOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 

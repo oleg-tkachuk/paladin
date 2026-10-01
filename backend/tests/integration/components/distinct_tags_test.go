@@ -38,6 +38,7 @@ func insertTaggedObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f
 }
 
 func TestListDistinctTags(t *testing.T) {
+	t.Parallel()
 	ctx, pool, f := setupDistinctTags(t)
 
 	insert := func(state, tags string) {
@@ -78,6 +79,7 @@ func TestListDistinctTags(t *testing.T) {
 // cursor and the per-key value cap. Both were unbounded before — one response
 // carried every key and every value, and nothing in the response said so.
 func TestListDistinctTagsPaging(t *testing.T) {
+	t.Parallel()
 	ctx, pool, f := setupDistinctTags(t)
 
 	// One key with more values than the cap, plus enough keys to page.

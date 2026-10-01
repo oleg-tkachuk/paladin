@@ -17,6 +17,7 @@ import (
 // (ADR-0015 Phase 1): a tenant created with storage_layout="dedicated"
 // persists and reads back as such, while the default is "shared".
 func TestTenantStorageLayout(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)

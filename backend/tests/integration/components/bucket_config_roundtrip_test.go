@@ -59,6 +59,7 @@ func newBucketFixture(t *testing.T) (context.Context, *pgxpool.Pool, *adapters.B
 // between each so a setter that clobbers a sibling field is caught by the next
 // assertion rather than hidden by it.
 func TestBucketConfigSettersRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx, _, repo, b := newBucketFixture(t)
 	reread := func(t *testing.T) admindomain.Bucket {
 		t.Helper()
@@ -223,6 +224,7 @@ func TestBucketConfigSettersRoundTrip(t *testing.T) {
 // worth pinning too, because it is indistinguishable from a caller who simply
 // forgot to thread the version through.
 func TestBucketSettersEnforceOptimisticConcurrency(t *testing.T) {
+	t.Parallel()
 	ctx, _, repo, b := newBucketFixture(t)
 
 	// Advance the row once so a genuinely stale, non-zero version exists.
@@ -292,6 +294,7 @@ func TestBucketSettersEnforceOptimisticConcurrency(t *testing.T) {
 // setter that returns nil here tells an operator their policy was applied to a
 // bucket that never received it.
 func TestBucketSetterOnMissingBucketIsNotSuccess(t *testing.T) {
+	t.Parallel()
 	ctx, _, repo, b := newBucketFixture(t)
 
 	if err := repo.SetVersioning(ctx, b.BackendID, "no-such-bucket",

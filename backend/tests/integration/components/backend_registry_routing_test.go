@@ -104,6 +104,7 @@ func startS3(t *testing.T) (endpoint, accessKey, secretKey string) {
 // a negative Head on "b" can only happen if the router dispatched each call to
 // a different client — not a shared default.
 func TestBackendRegistryRouting(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}

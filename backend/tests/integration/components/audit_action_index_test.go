@@ -96,6 +96,7 @@ func explain(t *testing.T, ctx context.Context, pool *pgxpool.Pool, query string
 }
 
 func TestAuditActionIndex_PlannerChoice(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	seedRecentAudit(t, ctx, pool, idxTestRows)

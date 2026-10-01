@@ -17,6 +17,7 @@ import (
 // the engine's compiled-policy cache invalidates on the event path, not
 // just via its TTL.
 func TestPolicyChangedNotify(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pool := startPostgres(t)

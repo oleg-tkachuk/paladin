@@ -25,6 +25,7 @@ import (
 )
 
 func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
+	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
 	pgC, err := tcpostgres.Run(ctx,
@@ -121,6 +122,7 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 // into the partition and ATTACH it. Uses a synthetic RANGE-partitioned table
 // so the DDL is exercised without the idempotency_keys tenant FK.
 func TestPartitionMaintainer_RecoversDefaultOverlap(t *testing.T) {
+	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
 	pgC, err := tcpostgres.Run(ctx,

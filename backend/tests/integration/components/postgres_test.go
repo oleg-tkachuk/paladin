@@ -32,9 +32,12 @@ import (
 //
 // What a test could rely on is unchanged: its own database, migrated, with no
 // rows from any other test. Tables, sequences, LISTEN/NOTIFY channels and
-// advisory locks are all per database. Roles are not — they belong to the
-// server — but the tests run one at a time and every role a test alters is
-// set to the state the migrations give it.
+// advisory locks are all per database. What is not, the server and the
+// process share, so the tests run in parallel with three rules:
+//   - a role a test creates is named after its database (see rlsPool);
+//   - a query over pg_stat_activity filters on current_database();
+//   - a test that ALTERs a shared role, sets goose's globals or calls
+//     t.Setenv stays serial, and says so on its first line.
 const (
 	postgresImage = "postgres:17-alpine"
 	postgresUser  = "paladin"

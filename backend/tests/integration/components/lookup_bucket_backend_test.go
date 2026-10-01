@@ -18,6 +18,7 @@ import (
 // the SELECT (backend_id vs bucket_name) — the fixture's ids carry distinct
 // prefixes so a swap is caught, not just a nil.
 func TestLookupBucketReturnsBackendID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

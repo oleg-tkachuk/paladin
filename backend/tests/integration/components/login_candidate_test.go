@@ -35,6 +35,7 @@ import (
 // that actually happened: every leftover was in a trashed tenant, and nobody
 // can sign in to a tenant in the trash.
 func TestLoginCandidatesExcludeTrashedTenants(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -72,6 +73,7 @@ func TestLoginCandidatesExcludeTrashedTenants(t *testing.T) {
 // truncate a subject live in more than five tenants, so which five it keeps
 // has to be the ones being used — not whatever the planner returns.
 func TestLoginCandidatesPreferRecentlyUsed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -118,6 +120,7 @@ func TestLoginCandidatesPreferRecentlyUsed(t *testing.T) {
 // This asserts the property at the layer that decides it: the scope has to
 // move to the tenant being listed, or the answer is silently wrong.
 func TestNamedCrossTenantUserListNeedsTheActingScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 
@@ -160,6 +163,7 @@ func TestNamedCrossTenantUserListNeedsTheActingScope(t *testing.T) {
 // that quietly gave bootstrap the plain INSERT would fail every restart after
 // the first, and it would fail in a place nobody watches.
 func TestCreateBackendTwiceIsAlreadyExists(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
@@ -179,6 +183,7 @@ func TestCreateBackendTwiceIsAlreadyExists(t *testing.T) {
 }
 
 func TestBootstrapStillUpserts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)

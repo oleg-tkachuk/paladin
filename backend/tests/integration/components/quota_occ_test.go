@@ -21,6 +21,7 @@ import (
 // rather than a Go branch — the version compare has to happen in the same
 // statement as the write, or it is a TOCTOU with extra steps.
 func TestQuotaUpsertOCC(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

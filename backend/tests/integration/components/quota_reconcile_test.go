@@ -23,6 +23,7 @@ import (
 // would have) and asserts the reconciler drags it back to what `objects`
 // actually says, in both directions.
 func TestReconcileQuotaUsage_DrivesCountersToLiveTruth(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -86,6 +87,7 @@ func TestReconcileQuotaUsage_DrivesCountersToLiveTruth(t *testing.T) {
 // forever. The reconciler reaches them by hopping objects → collections →
 // (backend_id, bucket_name), and must not mix the two scopes up.
 func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -137,6 +139,7 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 // makes the day-boundary roll mandatory. Without it `max_bytes_per_day`
 // silently becomes a lifetime cap.
 func TestRollDailyCounters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

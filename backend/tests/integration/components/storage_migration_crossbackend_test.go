@@ -26,6 +26,7 @@ import (
 // the single-part happy path). Same-backend server-side copy is covered by the
 // unit tests; this closes the one gap that needed two real backends.
 func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}

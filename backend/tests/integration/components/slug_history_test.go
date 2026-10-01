@@ -21,6 +21,7 @@ import (
 // while the idempotent same-slug rename writes none. This is the durable
 // source a future ResolveRenamedSlug resolver reads to back a 404 redirect.
 func TestRenameRecordsSlugHistory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 
@@ -105,6 +106,7 @@ func TestRenameRecordsSlugHistory(t *testing.T) {
 // rename and accept every concurrent one, and the slug is the tenant's
 // identity in every Cedar policy that names it.
 func TestRenameRejectsStaleVersion(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

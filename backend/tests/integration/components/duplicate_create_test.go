@@ -28,6 +28,7 @@ import (
 // migrations) have classified unique violations since they were written.
 
 func TestCreateCollectionTwiceIsAlreadyExists(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -65,6 +66,7 @@ func TestCreateCollectionTwiceIsAlreadyExists(t *testing.T) {
 // caller got the NOT NULL violation as a 500. The console met it in the e2e
 // suite when another spec deleted a bucket between the list and the create.
 func TestCreateCollectionOnUnknownBucketIsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
@@ -88,6 +90,7 @@ func TestCreateCollectionOnUnknownBucketIsNotFound(t *testing.T) {
 }
 
 func TestCreateObjectTagTwiceIsAlreadyExists(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -108,6 +111,7 @@ func TestCreateObjectTagTwiceIsAlreadyExists(t *testing.T) {
 // Postgres: the unique violation has to reach the caller as ErrAlreadyExists,
 // not the ErrConflict it used to share with "that backend is not registered".
 func TestCreateBucketTwiceIsAlreadyExists(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
@@ -138,6 +142,7 @@ func TestCreateBucketTwiceIsAlreadyExists(t *testing.T) {
 // not exist is a precondition the caller has to fix, not a resource that is
 // already there. One sentinel used to serve both.
 func TestCreateBucketOnUnknownBackendStaysAConflict(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)

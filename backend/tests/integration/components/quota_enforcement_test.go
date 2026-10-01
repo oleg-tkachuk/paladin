@@ -41,6 +41,7 @@ const uploadProc = "/paladin.data.v1.ObjectService/UploadObject"
 // expects, or that the reconciled numbers are the ones enforcement reads.
 // This closes that gap.
 func TestQuotaEnforcementEndToEnd(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -98,6 +99,7 @@ func TestQuotaEnforcementEndToEnd(t *testing.T) {
 // rejected nothing: a bucket-scoped quota row, reached from an upload that
 // names only its Collection, resolved through the real object repository.
 func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

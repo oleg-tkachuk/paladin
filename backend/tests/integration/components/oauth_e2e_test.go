@@ -31,6 +31,7 @@ const e2eSigningKey = "e2e-oauth-signing-key-at-least-32bytes!!"
 // (the live-stack hurl variant needs a full compose stack + a password user
 // the e2e harness doesn't provision).
 func TestOAuthFlowE2E(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)

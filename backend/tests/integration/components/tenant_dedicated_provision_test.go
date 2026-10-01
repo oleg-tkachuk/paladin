@@ -18,6 +18,7 @@ import (
 // same tx, a pending bucket owned by the tenant plus a default binding to it.
 // The (backend-routed) bucket reconciler then creates it physically.
 func TestCreateDedicatedTenantProvisionsBucket(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

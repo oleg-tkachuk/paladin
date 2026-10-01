@@ -21,6 +21,7 @@ import (
 // object key; this test adds a second, deliberately-degenerate set on top
 // and asserts on deltas so it stays correct if seedFixture grows.
 func TestCollectControlPlane(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	base, err := platformstats.CollectControlPlane(ctx, pool)
@@ -83,6 +84,7 @@ func TestCollectControlPlane(t *testing.T) {
 // a PENDING row carries, and the count-descending tenant ordering the
 // console's table relies on.
 func TestCollectRLSObjects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	big := seedFixture(t, ctx, pool)
@@ -160,6 +162,7 @@ func assertDelta(t *testing.T, label string, before, after, want int64) {
 // event subscription and nothing else in these tables — the quota /
 // capability / token rows below are the only ones that exist.
 func TestCollectRLSSiblings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool) // seeds 1 enabled http subscription

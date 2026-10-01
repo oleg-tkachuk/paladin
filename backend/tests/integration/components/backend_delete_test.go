@@ -21,6 +21,7 @@ import (
 // the system working as designed. It must read as a conflict, like every other
 // "this thing still has children" refusal.
 func TestDeleteBackendWithBucketsIsAConflict(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	q := sqlc.New(pool)

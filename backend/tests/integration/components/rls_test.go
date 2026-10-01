@@ -25,6 +25,7 @@ import (
 // sets the `paladin.tenant_id` GUC exactly as internal/store/postgres/rls.go's
 // PrepareConn hook does per connection acquisition.
 func TestRLSTenantIsolation(t *testing.T) {
+	// Not parallel: ALTERs the server-wide paladin_app role, and concurrent updates of one role row fail with "tuple concurrently updated".
 	ctx := context.Background()
 	pool := startPostgres(t)
 

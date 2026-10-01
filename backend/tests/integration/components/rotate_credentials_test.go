@@ -15,6 +15,7 @@ import (
 // 038): a grace>0 rotation preserves the prior ref + a now()+grace validity
 // horizon; a grace=0 rotation swaps instantly and clears the window.
 func TestRotateCredentialsGraceWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	mustExec(t, ctx, pool,

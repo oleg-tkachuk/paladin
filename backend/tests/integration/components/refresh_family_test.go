@@ -19,6 +19,7 @@ import (
 // revocation against real Postgres (the schema baseline (001_initial_schema.sql)): RevokeFamilyOf revokes
 // only the compromised chain, leaving other families intact.
 func TestRefreshTokenFamilyRevoke(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewRefreshTokenRepo(sqlc.New(pool))
@@ -64,6 +65,7 @@ func TestRefreshTokenFamilyRevoke(t *testing.T) {
 // rotated token's parent, and whether it has been presented. A successor is
 // offered until it is used, and never once its family is revoked.
 func TestRefreshTokenUnusedSuccessor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewRefreshTokenRepo(sqlc.New(pool))

@@ -17,6 +17,7 @@ import (
 // client upsert/read roundtrip, code create + single-use consume, and the
 // expiry + unknown-client failure paths.
 func TestOAuthStore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	store := oauth.NewPgxStore(pool)

@@ -25,6 +25,7 @@ import (
 )
 
 func TestPartitionedTablesShape(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 
@@ -70,6 +71,7 @@ func TestPartitionedTablesShape(t *testing.T) {
 // going forward — otherwise the first month of every deployment is
 // permanently stuck in the catch-all.
 func TestPartitionMaintainerRoutesOutOfDefault(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

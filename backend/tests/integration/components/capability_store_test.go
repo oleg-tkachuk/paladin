@@ -72,6 +72,7 @@ var seedIssuer = capability.Principal{Type: capability.PrincipalService, Subject
 // TestCapabilityRoundTrip pins Insert → Get across every column, including
 // the two JSON-encoded ones the package chose hand-written SQL to handle.
 func TestCapabilityRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -120,6 +121,7 @@ func TestCapabilityRoundTrip(t *testing.T) {
 // children usable. A delegation tree that survives its root's revocation is
 // the failure this guards.
 func TestCapabilityRevokeCascade(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -186,6 +188,7 @@ func TestCapabilityRevokeCascade(t *testing.T) {
 // capabilities is that the revocation's foreign key points at a row A cannot
 // see. Run on a NOBYPASSRLS pool, which is how the runtime connects.
 func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenantA, _ := mkTenant(t, ctx, admin, "shared")
@@ -232,6 +235,7 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 // invisible and IsRevoked answered false: a revoked capability kept working
 // on the data plane, where it is the whole credential.
 func TestCapabilityIsRevokedBeforeTheTenantIsKnown(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -274,6 +278,7 @@ func TestCapabilityIsRevokedBeforeTheTenantIsKnown(t *testing.T) {
 // view hides expired and revoked capabilities, which is what makes the
 // console's "active credentials" count trustworthy.
 func TestCapabilityListByPrincipal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -375,6 +380,7 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 // too eagerly un-revokes a capability that has not yet expired, which is a
 // security regression rather than a cosmetic one.
 func TestCapabilityPurgeExpired(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -423,6 +429,7 @@ func TestCapabilityPurgeExpired(t *testing.T) {
 // for another tenant carries the platform tenant on its JWT, and without the
 // SET LOCAL the row's own tenant_id would trip the RLS WITH CHECK.
 func TestCapabilityInsertCrossTenant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	platform, _ := mkTenant(t, ctx, admin, "shared")
@@ -464,6 +471,7 @@ func TestCapabilityInsertCrossTenant(t *testing.T) {
 // inert, with it the purge works — because a test that only checked the second
 // would pass just as well if RLS were switched off entirely.
 func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
