@@ -33,14 +33,16 @@ type recordingStore struct {
 	fakeStore
 	revokeArgs *capability.RevokeArgs
 	revokeErr  error
+	revokeCtx  context.Context
 	listArgs   *capability.ListByPrincipalArgs
 	listOut    []capability.Capability
 	listNext   string
 	listErr    error
 }
 
-func (s *recordingStore) Revoke(_ context.Context, args capability.RevokeArgs) error {
+func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeArgs) error {
 	s.revokeArgs = &args
+	s.revokeCtx = ctx
 	return s.revokeErr
 }
 
@@ -57,10 +59,12 @@ type fakeUsage struct {
 	out capability.Usage
 	err error
 	got uuid.UUID
+	ctx context.Context
 }
 
-func (u *fakeUsage) Get(_ context.Context, id uuid.UUID) (capability.Usage, error) {
+func (u *fakeUsage) Get(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
 	u.got = id
+	u.ctx = ctx
 	return u.out, u.err
 }
 
@@ -512,5 +516,91 @@ func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
 	}))
 	if err != nil {
 		t.Fatalf("Issue as capability-issuer: %v", err)
+	}
+}
+
+// ─── another tenant's capability ───────────────────────────────────────────
+
+// lookupStore records the context the owner lookup ran on.
+type lookupStore struct {
+	recordingStore
+	getCtx context.Context
+}
+
+func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+	s.getCtx = ctx
+	return s.recordingStore.Get(ctx, id)
+}
+
+func callerCtx(tenant uuid.UUID, roles ...string) context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject: "operator", TenantID: tenant, Roles: roles,
+	})
+}
+
+// Revoke and GetUsage name a capability by id alone, and its rows are
+// RLS-isolated by its own tenant. A platform admin's connection is scoped to
+// the platform tenant, so before this both answered NotFound for every
+// capability the admin had just issued to a tenant.
+func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
+	owner := uuid.New()
+	target := mkParent(owner, capability.OpGet)
+
+	cases := map[string]struct {
+		ctx        context.Context
+		wantActing bool
+	}{
+		"platform admin":         {callerCtx(uuid.New(), "platform.admin"), true},
+		"capability issuer":      {callerCtx(uuid.New(), "platform.capability-issuer"), true},
+		"tenant-confined caller": {callerCtx(uuid.New()), false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
+			usage := &fakeUsage{out: capability.Usage{CapabilityID: target.ID}}
+			h := NewHandler(mkIssuer(t, &store.fakeStore), store, usage, &allowAuthorizer{})
+
+			if _, err := h.Revoke(tc.ctx, connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+				Id: target.ID.String(),
+			})); err != nil {
+				t.Fatalf("Revoke: %v", err)
+			}
+			if _, err := h.GetUsage(tc.ctx, connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+				Id: target.ID.String(),
+			})); err != nil {
+				t.Fatalf("GetUsage: %v", err)
+			}
+
+			for call, ctx := range map[string]context.Context{"Revoke": store.revokeCtx, "GetUsage": usage.ctx} {
+				acting, ok := auth.ActingTenant(ctx)
+				switch {
+				case tc.wantActing && (!ok || acting != owner):
+					t.Errorf("%s ran acting on %v (set=%v), want the owner %v", call, acting, ok, owner)
+				case !tc.wantActing && ok:
+					t.Errorf("%s acted on %v for a caller confined to its own tenant", call, acting)
+				}
+			}
+			if tc.wantActing {
+				if store.getCtx == nil || !auth.CrossTenantRead(store.getCtx) {
+					t.Error("the owner lookup must read across tenants, or RLS hides the record")
+				}
+			} else if store.getCtx != nil {
+				t.Error("a tenant-confined caller must not get a cross-tenant owner lookup")
+			}
+		})
+	}
+}
+
+// An id that matches no capability stays NotFound for an admin too, rather
+// than turning into Internal on the owner lookup.
+func TestRevokeUnknownIDIsNotFoundForAnAdmin(t *testing.T) {
+	store := &recordingStore{revokeErr: capability.ErrNotFound}
+	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+
+	_, err := h.Revoke(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+		Id: uuid.New().String(),
+	}))
+	if codeOf(err) != connect.CodeNotFound {
+		t.Fatalf("code = %v, want NotFound", codeOf(err))
 	}
 }

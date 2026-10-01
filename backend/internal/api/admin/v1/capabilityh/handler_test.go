@@ -50,7 +50,7 @@ func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (*capability.Capability
 	if s.cap != nil && s.cap.ID == id {
 		return s.cap, nil
 	}
-	return nil, errors.New("not found")
+	return nil, capability.ErrNotFound // the Store contract's sentinel
 }
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
 func (s *fakeStore) Revoke(context.Context, capability.RevokeArgs) error {

@@ -94,6 +94,37 @@ func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal
 	return p, nil
 }
 
+// spansTenants reports whether the caller may manage capabilities of tenants
+// other than its own: platform.admin, or platform.capability-issuer — the
+// narrow grant for a consumer that mints a capability per tenant it serves.
+func spansTenants(caller *auth.Principal) bool {
+	return caller.HasRole(apiutil.RolePlatformAdmin) || caller.HasRole(apiutil.RoleCapabilityIssuer)
+}
+
+// actOnCapabilitysTenant scopes ctx to the tenant that owns capability id, for
+// a caller that spans tenants. Revoke and GetUsage name a capability by id
+// alone, and its rows are RLS-isolated by its own tenant, so on the caller's
+// connection a platform admin saw nothing and every call answered NotFound.
+//
+// The owner is read under the cross-tenant flag, which widens that one read
+// and lets nothing write. A caller confined to its own tenant gets ctx back
+// unchanged: RLS keeps scoping it, and another tenant's id stays NotFound
+// rather than becoming an oracle. An id nobody owns is left to the store call,
+// which answers NotFound the same way.
+func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Principal, id uuid.UUID) (context.Context, error) {
+	if !spansTenants(caller) {
+		return ctx, nil
+	}
+	c, err := h.store.Get(auth.WithCrossTenantRead(ctx), id)
+	switch {
+	case errors.Is(err, capability.ErrNotFound):
+		return ctx, nil
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return auth.WithActingTenant(ctx, c.Subject.TenantID), nil
+}
+
 // Issue mints a top-level capability. Caller must be platform-admin.
 func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceIssueRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
 	caller, err := h.authorize(ctx, "issue")
@@ -115,9 +146,7 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	// other tenant — and since ADR-0010 a capability authenticates as its
 	// subject's tenant, that is a full cross-tenant escalation, not merely an
 	// extra restriction on an existing caller.
-	if subj.TenantID != caller.TenantID &&
-		!caller.HasRole(apiutil.RolePlatformAdmin) &&
-		!caller.HasRole(apiutil.RoleCapabilityIssuer) {
+	if subj.TenantID != caller.TenantID && !spansTenants(caller) {
 		// platform.capability-issuer is the narrow grant for exactly this: a
 		// consumer serving many tenants mints a short-lived capability per
 		// tenant. It carries no other authority — it cannot create or delete a
@@ -264,6 +293,10 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
 	}
+	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
+	if err != nil {
+		return nil, err
+	}
 	if err := h.store.Revoke(ctx, capability.RevokeArgs{
 		ID:              id,
 		Reason:          req.Msg.GetReason(),
@@ -296,9 +329,7 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	// Same gate as Issue: `list` in a tenant's own policy must not become a
 	// read of every other tenant's capabilities. Cedar above authorised the
 	// ACTION against the caller's own tenant, not against this one.
-	if tenantID != caller.TenantID &&
-		!caller.HasRole(apiutil.RolePlatformAdmin) &&
-		!caller.HasRole(apiutil.RoleCapabilityIssuer) {
+	if tenantID != caller.TenantID && !spansTenants(caller) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
 			errors.New("listing another tenant's capabilities requires platform.admin or platform.capability-issuer"))
 	}
@@ -339,7 +370,8 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 // the operator who can List a tenant's caps can also see their
 // usage.
 func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
-	if _, err := h.authorize(ctx, "list"); err != nil {
+	caller, err := h.authorize(ctx, "list")
+	if err != nil {
 		return nil, err
 	}
 	if h.usage == nil {
@@ -349,6 +381,10 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 	id, err := uuid.Parse(req.Msg.GetId())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+	}
+	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
+	if err != nil {
+		return nil, err
 	}
 	u, err := h.usage.Get(ctx, id)
 	if err != nil {
