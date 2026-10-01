@@ -1578,7 +1578,7 @@ an attribute an entity lacks passes, then denies at request time.
 `policies.Validate`, with a test for an unguarded read.
 - **Blockers:** none.
 
-### Three handlers authorize a less specific resource than the request names
+### Two handlers authorize a less specific resource than the request names
 
 - **Status:** Deferred.
 - **Reason:** Found while mapping each Cedar action to the resource type it is
@@ -1590,10 +1590,8 @@ reorder with its own test, out of scope for the schema fix.
   - `objecth/upload_small.go` authorizes `PutObject` before defaulting an empty
   key to the object id, so a keyless streaming upload is checked against the
   Collection. The presign path defaults the key first, on purpose.
-  - `userh` `CreateUser` authorizes before rejecting an empty subject, so that
-  request is checked against the Tenant instead of returning InvalidArgument.
-- **Definition of Done:** each handler builds the resource from the object or
-user it acts on before calling Cedar, with a test asserting the resource type;
+- **Definition of Done:** each handler builds the resource from the object it
+acts on before calling Cedar, with a test asserting the resource type;
 the schema's `appliesTo` for `UpdateObject` drops `Collection` if no batch path
 still needs it.
 - **Blockers:** none.
