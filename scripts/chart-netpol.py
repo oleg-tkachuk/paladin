@@ -145,12 +145,42 @@ def admits_role(doc: dict, role: str) -> bool:
     return False
 
 
+def ports_admitting(doc: dict, role: str) -> set[int]:
+    """The ports a policy opens to pods of another role of this release."""
+    ports: set[int] = set()
+    for rule in doc["spec"].get("ingress") or []:
+        for peer in rule.get("from") or []:
+            labels = (peer.get("podSelector") or {}).get("matchLabels") or {}
+            if labels.get("app.kubernetes.io/component") == role and "namespaceSelector" not in peer:
+                ports |= {p["port"] for p in rule.get("ports") or []}
+    return ports
+
+
+def egress_reaches_role(doc: dict, role: str, ports: set[int]) -> bool:
+    """Whether a policy lets its pods out to another role, on one of `ports`.
+
+    The ingress half alone proves nothing: the admin pod's own default-deny
+    egress refused its calls to the MCP bridge while the bridge's policy
+    admitted admin, and the /mcp page showed the server as down."""
+    for rule in doc["spec"].get("egress") or []:
+        peers = rule.get("to")
+        to_role = not peers or any(
+            (peer.get("podSelector") or {}).get("matchLabels", {}).get("app.kubernetes.io/component") == role
+            and "namespaceSelector" not in peer
+            for peer in peers
+        )
+        rule_ports = {p["port"] for p in rule.get("ports") or []}
+        if to_role and (not rule_ports or rule_ports & ports):
+            return True
+    return False
+
+
 # Calls one role makes to another inside the release, as the chart's own
 # config wires them: (caller, callee, what makes the call).
 IN_RELEASE_CALLS = [
     ("admin", "worker", "SystemService.GetPlatformStats"),
     ("admin", "dispatcher", "SystemService.GetDispatcherStats"),
-    ("admin", "mcp", "MCPInspectService.ListSessions via mcp.http.sessions_url"),
+    ("admin", "mcp", "MCPInspectService status and sessions via mcp.http.sessions_url"),
     ("mcp", "api", "the MCP bridge"),
     ("mcp", "admin", "the MCP bridge"),
 ]
@@ -178,8 +208,12 @@ def in_release_problems(policies: dict[str, dict]) -> list[str]:
     an error: RLS-style silence, at the network layer."""
     problems: list[str] = []
     for caller, callee, why in IN_RELEASE_CALLS:
-        if callee in policies and caller in policies and not admits_role(policies[callee], caller):
+        if callee not in policies or caller not in policies:
+            continue
+        if not admits_role(policies[callee], caller):
             problems.append(f"role {callee!r} does not admit {caller!r} ({why})")
+        elif not egress_reaches_role(policies[caller], callee, ports_admitting(policies[callee], caller)):
+            problems.append(f"role {caller!r} has no egress to {callee!r} ({why})")
     for role in UI_HEALTH_CALLS:
         if role in policies and not admits_ui(policies[role]):
             problems.append(f"role {role!r} does not admit the console (/api/health/all)")
