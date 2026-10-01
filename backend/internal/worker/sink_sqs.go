@@ -20,9 +20,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
 
-// sqsSender is the subset of the AWS SQS client the sink uses. Narrowed (the
-// same trick as internal/storage/events.SQSClient) so tests substitute a fake
-// without the SDK or a live queue.
+// sqsSender is the subset of the AWS SQS client the sink uses, narrowed so
+// tests substitute a fake without the SDK or a live queue.
 type sqsSender interface {
 	SendMessage(ctx context.Context, in *sqs.SendMessageInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
 	SendMessageBatch(ctx context.Context, in *sqs.SendMessageBatchInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageBatchOutput, error)
