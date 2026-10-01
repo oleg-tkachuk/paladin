@@ -164,9 +164,11 @@ export default function TenantBudgetPage() {
         resetSpend,
         // OCC guard. "0" asserts no row exists yet — the create case — and is
         // itself rejected if someone created one in the meantime. Anything
-        // else is the version this page last read, so a concurrent edit by
-        // another operator is refused instead of silently overwritten.
-        resourceVersion: budget?.resourceVersion || "0",
+        // else is the version the form was filled from: not the latest read,
+        // which a refetch during an edit moves forward while the form keeps
+        // the operator's values, and which would then carry a stale edit
+        // straight over another operator's change.
+        resourceVersion: seededFrom?.resourceVersion || "0",
         // Pin the period close date when set; blank leaves the server window.
         periodEnd: periodEnd
           ? timestampFromDate(new Date(`${periodEnd}T00:00:00Z`))
