@@ -5,6 +5,10 @@
 # scaling this out is a plain capacity decision again. One is simply the
 # sensible default.
 replicaCount: 1
+# Old ReplicaSets kept for `kubectl rollout undo`. Kubernetes keeps ten by
+# default; with a release per merge that is ten idle ReplicaSets. GitOps rolls
+# back by reverting the revision, so a few are enough.
+revisionHistoryLimit: 3
 metadata:
   version: ""
   commit: "unknown"

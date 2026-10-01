@@ -512,6 +512,10 @@
     },
     "volumes": {
       "type": "array"
+    },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0
     }
   },
   "title": "values",

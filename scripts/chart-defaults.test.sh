@@ -259,5 +259,19 @@ console console-ingress --set ingress.enabled=true --set 'ingress.hosts={console
 check "console ingress: to the console Service" \
     "$(yq ea -r '[select(.kind == "Ingress")] | .[0] | .spec.rules[0].http.paths[0].backend.service.port.number' "$scratch/console-console-ingress.yaml")" "3000"
 
+# ─── rollout history ─────────────────────────────────────────────────────────
+
+# Kubernetes keeps ten old ReplicaSets per Deployment unless told otherwise.
+readonly HISTORY_DEFAULT=3
+for role in api admin worker mcp dispatcher; do
+    check "history: $role keeps the default" "$(deployment defaults "$role" .spec.revisionHistoryLimit)" "$HISTORY_DEFAULT"
+done
+# 0 is a limit, not "unset": a per-role override of 0 must survive.
+render history-zero --set deployments.worker.revisionHistoryLimit=0
+check "history: a role's 0 is kept" "$(deployment history-zero worker .spec.revisionHistoryLimit)" "0"
+check "history: other roles keep the default" "$(deployment history-zero api .spec.revisionHistoryLimit)" "$HISTORY_DEFAULT"
+check "history: console keeps the default" \
+    "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.revisionHistoryLimit' "$scratch/console-defaults.yaml")" "$HISTORY_DEFAULT"
+
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"
