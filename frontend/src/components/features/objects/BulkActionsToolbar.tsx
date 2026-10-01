@@ -35,14 +35,15 @@ export function BulkActionsToolbar({
       label: "Delete",
       icon: TrashIcon,
       color: "text-destructive",
-      hover: "hover:bg-destructive hover:text-white hover:border-destructive",
+      hover:
+        "hover:bg-destructive hover:text-destructive-foreground hover:border-destructive",
       onClick: onBulkDelete,
     },
   ];
 
   return (
     <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[80] animate-bounce-in">
-      <div className="bg-[#0A0B10]/80 backdrop-blur-3xl rounded-[32px] px-8 py-5 flex items-center gap-10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-white/10 ring-1 ring-white/5 relative overflow-hidden group/toolbar">
+      <div className="bg-background/80 backdrop-blur-3xl rounded-[32px] px-8 py-5 flex items-center gap-10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-border ring-1 ring-border relative overflow-hidden group/toolbar">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
         <div className="flex items-center gap-4">
@@ -58,7 +59,7 @@ export function BulkActionsToolbar({
             </div>
           </div>
           <div className="space-y-0.5">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
               Bulk Actions
             </h3>
             <p className="text-xs text-primary/60 font-semibold uppercase tracking-wider">
@@ -67,7 +68,7 @@ export function BulkActionsToolbar({
           </div>
         </div>
 
-        <div className="h-10 w-px bg-white/10" />
+        <div className="h-10 w-px bg-foreground/10" />
 
         <div className="flex items-center gap-4">
           {actions.map((action) => (
@@ -85,7 +86,7 @@ export function BulkActionsToolbar({
                 className={cn(
                   "w-5 h-5 transition-transform group-hover/btn:scale-110",
                   action.color,
-                  "group-hover/btn:text-white",
+                  "group-hover/btn:text-foreground",
                 )}
               />
               <span className="text-xs font-bold uppercase tracking-wider">
@@ -95,11 +96,11 @@ export function BulkActionsToolbar({
           ))}
         </div>
 
-        <div className="h-10 w-px bg-white/10" />
+        <div className="h-10 w-px bg-foreground/10" />
 
         <button
           onClick={onClearSelection}
-          className="p-3 rounded-2xl bg-white/5 text-muted-foreground hover:text-white hover:bg-white/10 transition-all active:scale-90"
+          className="p-3 rounded-2xl bg-foreground/5 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all active:scale-90"
           title="Discard Selection"
         >
           <XMarkIcon className="w-5 h-5" />

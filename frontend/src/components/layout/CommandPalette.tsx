@@ -585,10 +585,10 @@ export function CommandPalette() {
       />
 
       {/* Palette Container */}
-      <div className="relative w-full max-w-2xl bg-[#0A0C10]/95 rounded-[32px] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 animate-bounce-in">
+      <div className="relative w-full max-w-2xl bg-background/95 rounded-[32px] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-border animate-bounce-in">
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
-        <div className="p-6 border-b border-white/5 flex items-center gap-4">
+        <div className="p-6 border-b border-border flex items-center gap-4">
           <div className="relative">
             {isSearching ? (
               <div className="w-6 h-6 border-2 border-primary/20 border-t-indigo-500 rounded-full animate-spin" />
@@ -600,12 +600,12 @@ export function CommandPalette() {
             autoFocus
             type="text"
             placeholder="Type to search objects, run actions, or navigate..."
-            className="bg-transparent border-none focus:ring-0 text-white placeholder-muted-foreground w-full text-xl font-medium outline-none"
+            className="bg-transparent border-none focus:ring-0 text-foreground placeholder-muted-foreground w-full text-xl font-medium outline-none"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <div className="flex items-center gap-2">
-            <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            <span className="px-2 py-1 rounded-lg bg-foreground/5 border border-border text-xs font-bold text-muted-foreground uppercase tracking-wider">
               ESC
             </span>
           </div>
@@ -641,7 +641,7 @@ export function CommandPalette() {
                 className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative ${
                   index === selectedIndex
                     ? "bg-primary/10 border-primary/30 shadow-lg"
-                    : "bg-transparent border-transparent hover:bg-white/[0.02]"
+                    : "bg-transparent border-transparent hover:bg-foreground/[0.02]"
                 }`}
                 onMouseEnter={() => setSelectedIndex(index)}
               >
@@ -653,7 +653,7 @@ export function CommandPalette() {
                     className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
                       index === selectedIndex
                         ? "bg-primary/20 text-primary"
-                        : "bg-white/5 text-muted-foreground group-hover:bg-white/10"
+                        : "bg-foreground/5 text-muted-foreground group-hover:bg-foreground/10"
                     }`}
                   >
                     <result.icon className="w-6 h-6" />
@@ -662,7 +662,7 @@ export function CommandPalette() {
                     <div
                       className={`text-sm font-bold truncate ${
                         index === selectedIndex
-                          ? "text-white"
+                          ? "text-foreground"
                           : "text-foreground"
                       }`}
                     >
@@ -682,7 +682,7 @@ export function CommandPalette() {
                       {result.shortcut.split(" ").map((s) => (
                         <span
                           key={s}
-                          className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-muted-foreground"
+                          className="px-2 py-1 rounded bg-foreground/5 border border-border text-xs font-mono text-muted-foreground"
                         >
                           {s}
                         </span>
@@ -697,7 +697,7 @@ export function CommandPalette() {
             ))
           ) : query !== "" && !isSearching ? (
             <div className="py-20 text-center space-y-4">
-              <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center mx-auto border border-dashed border-white/10">
+              <div className="w-16 h-16 rounded-3xl bg-foreground/5 flex items-center justify-center mx-auto border border-dashed border-border">
                 <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground" />
               </div>
               <div>
@@ -723,16 +723,16 @@ export function CommandPalette() {
           ) : null}
         </div>
 
-        <div className="p-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider">
+        <div className="p-4 bg-foreground/[0.02] border-t border-border flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider">
           <div className="flex gap-6">
             <span className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-muted-foreground">
+              <kbd className="px-1.5 py-0.5 rounded bg-foreground/5 border border-border text-muted-foreground">
                 ↑↓
               </kbd>
               Navigate
             </span>
             <span className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-muted-foreground">
+              <kbd className="px-1.5 py-0.5 rounded bg-foreground/5 border border-border text-muted-foreground">
                 Enter
               </kbd>
               Select

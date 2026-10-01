@@ -17,6 +17,9 @@ import { describe, expect, it } from "vitest";
 
 const SRC = join(__dirname, "..");
 const GENERATED = "gen";
+// The shared components are held by components/ui/paletteColours.test.ts,
+// with its own reasons for the few fixed colours they keep.
+const SHARED_UI = join("components", "ui");
 
 const COLOUR_UTILITY =
   "bg|text|border|ring|from|to|via|fill|stroke|shadow|outline|divide|placeholder|decoration|caret|accent";
@@ -28,6 +31,18 @@ const PALETTE_CLASS = new RegExp(
 );
 
 const RATCHET: Record<string, number> = {};
+
+// White, black and hex colours do not follow the theme either. White over the
+// dark theme was a tint of the foreground, so it became the foreground token at
+// the same opacity — and turns into the right darkening in a light theme. The
+// one fixed colour kept is the black scrim behind a dialog, recognised by the
+// `inset-0` it always sits with.
+const NEUTRAL_CLASS = new RegExp(
+  `(?:^|[\\s:])(?:${COLOUR_UTILITY})-(?:white|black|\\[#[0-9a-fA-F]{3,8}\\])(?=$|[\\s/])`,
+  "g",
+);
+const SCRIM = /(?:^|\s)inset-0(?:\s|$)/;
+const SCRIM_CLASS = /(?:^|\s)bg-black(?=$|[\s/])/g;
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -56,11 +71,17 @@ function paletteCounts(): Map<string, number> {
         ts.isTemplateTail(node)
       ) {
         n += [...node.text.matchAll(PALETTE_CLASS)].length;
+        const neutral = [...node.text.matchAll(NEUTRAL_CLASS)].length;
+        const scrims = SCRIM.test(node.text)
+          ? [...node.text.matchAll(SCRIM_CLASS)].length
+          : 0;
+        n += neutral - scrims;
       }
       ts.forEachChild(node, visit);
     };
     visit(sf);
-    if (n > 0) counts.set(relative(SRC, file), n);
+    const rel = relative(SRC, file);
+    if (n > 0 && !rel.startsWith(SHARED_UI)) counts.set(rel, n);
   }
   return counts;
 }
@@ -75,6 +96,8 @@ describe("palette colours", () => {
     expect(
       "bg-primary/10 text-muted-foreground".match(PALETTE_CLASS),
     ).toBeNull();
+    expect("border-white/10 bg-[#0A0C10]".match(NEUTRAL_CLASS)).toHaveLength(2);
+    expect("text-foreground/60 bg-background".match(NEUTRAL_CLASS)).toBeNull();
   });
 
   it("no file gains palette classes, and the ratchet only goes down", () => {

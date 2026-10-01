@@ -14,7 +14,7 @@ export default function GlobalError({
       <div className="w-20 h-20 rounded-3xl bg-destructive/10 border border-destructive/20 flex items-center justify-center mb-8">
         <ExclamationTriangleIcon className="w-10 h-10 text-destructive" />
       </div>
-      <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">
+      <h1 className="text-2xl font-bold text-foreground mb-3 tracking-tight">
         Something went wrong
       </h1>
       <p className="text-sm text-muted-foreground text-center max-w-md mb-2">
