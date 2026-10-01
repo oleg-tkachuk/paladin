@@ -90,6 +90,11 @@ jobs:
       - name: Install semantic-release
         run: npm ci
 
+      # What HEAD carried before this run, so the step after it can tell a tag
+      # it pushed from one an earlier dispatch to the same commit pushed.
+      - name: Note the tags already on HEAD
+        run: git tag --points-at HEAD >"$RUNNER_TEMP/tags-before"
+
       - name: Compute and push the tag
         run: npx semantic-release --no-ci
         env:
@@ -97,8 +102,9 @@ jobs:
 
       # Read from git rather than parsing semantic-release's prose: it tags the
       # commit that was checked out, so no new tag here means no release was
-      # due and there is nothing to publish. Only v* tags: the api/vX.Y.Z
-      # proto baselines can point at the same commit and are not releases.
+      # due and there is nothing to publish. "New" is against the list taken
+      # above — see scripts/new-release-tag.sh for why a tag on HEAD is not
+      # enough.
       - name: Publish the release for the tag it just pushed
         id: notes
         env:
@@ -106,10 +112,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          tag="$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -1 || true)"
+          tag="$(./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before")"
 
           if [ -z "$tag" ]; then
-            printf '%s\n' "no new tag on this commit — no release was due"
+            printf '%s\n' "no new tag from this run — no release was due"
             exit 0
           fi
 
