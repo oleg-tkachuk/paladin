@@ -178,8 +178,9 @@ require_free_ports "task backend:test:stack" || exit 1
 # skipped. compose still pulls in postgres, migrate, promote-app-role,
 # bootstrap and minio as declared dependencies.
 stack_pull_thirdparty frontend/tests/e2e/docker-compose.test.yaml
+stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${STACK_BUILT_IMAGE_PREFIX}paladin-core" || exit 1
 
-echo ">>> [stack] booting api + admin"
+echo ">>> [stack] booting api + admin (paladin-core:${PALADIN_CORE_TAG})"
 "${compose[@]}" up --wait api admin
 
 # Matches backend/configs/compose.yaml (auth.signing_key / auth.issuer).

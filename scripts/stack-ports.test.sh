@@ -58,4 +58,36 @@ for name in $published; do
     fi
 done
 
+# The compose file must read the image tags from the variables the library
+# exports; a renamed variable leaves the stack on `:latest` again, silently.
+for var in PALADIN_CORE_TAG PALADIN_CONSOLE_TAG; do
+    exported=$(bash -c "source '$lib'; echo \$STACK_${var#PALADIN_}_VAR")
+    if [[ "$exported" != "$var" ]]; then
+        echo "!!! scripts/stack-ports.sh exports $exported where compose reads $var" >&2
+        exit 1
+    fi
+    if ! grep -q "\${$var:-latest}" "$compose"; then
+        echo "!!! $compose does not read its image tag from \${$var:-latest}" >&2
+        exit 1
+    fi
+done
+
+# stack_built_version reads the stamped version and refuses a missing file or a
+# file without one, rather than handing compose an empty tag.
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+printf 'APP_VERSION=1.2.3-dev.1.gabc\nGIT_COMMIT_HASH=abc\n' >"$scratch/ok.env"
+printf 'GIT_COMMIT_HASH=abc\n' >"$scratch/none.env"
+got=$(bash -c "source '$lib'; stack_built_version '$scratch/ok.env'")
+if [[ "$got" != "1.2.3-dev.1.gabc" ]]; then
+    echo "!!! stack_built_version read '$got', want 1.2.3-dev.1.gabc" >&2
+    exit 1
+fi
+for bad in "$scratch/none.env" "$scratch/missing.env"; do
+    if bash -c "source '$lib'; stack_built_version '$bad'" >/dev/null 2>&1; then
+        echo "!!! stack_built_version accepted $bad" >&2
+        exit 1
+    fi
+done
+
 echo "stack ports agree: $(tr '\n' ' ' <<<"$declared")"

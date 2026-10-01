@@ -70,7 +70,7 @@
 # credential published in this repository.
 
 x-paladin-base: &paladin-base
-  image: registry.local/paladin/paladin-core:latest
+  image: registry.local/paladin/paladin-core:${PALADIN_CORE_TAG:-latest}
   volumes:
     - ../../../backend/configs:/app/configs:ro
   environment:
@@ -311,7 +311,7 @@ services:
     # Reuse the locally-built UI image; the dev-loop pipeline
     # rebuilds `:latest` in place on every code change, so the
     # test stack always picks up the operator's WIP.
-    image: registry.local/paladin/paladin-console:latest
+    image: registry.local/paladin/paladin-console:${PALADIN_CONSOLE_TAG:-latest}
     init: true
     restart: on-failure
     environment:
