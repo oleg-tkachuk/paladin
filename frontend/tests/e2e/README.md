@@ -183,14 +183,14 @@ pnpm exec playwright test capabilities.spec.ts --debug
 ```bash
 pnpm exec playwright show-report tests/e2e/test-results/html-report
 # Or open a trace directly:
-pnpm exec playwright show-trace tests/e2e/test-results/<failed-test-dir>/trace.zip
+pnpm exec playwright show-trace test-results/<failed-test-dir>/trace.zip
 ```
 
 ## Troubleshooting
 
 | Symptom                                          | Likely cause                    | Fix                                                        |
 | ------------------------------------------------ | ------------------------------- | ---------------------------------------------------------- |
-| `webServer` times out                            | Paladin backend image not built | `task -d backend build:image`                              |
+| `webServer` times out                            | Paladin backend image not built | `task -d backend release:image:build`                      |
 | `required variable PALADIN_E2E_S3_ACCESS_KEY`    | Garage creds not exported       | Re-run the two `export` commands in Quick start            |
 | Backend logs `dial tcp 3900: connection refused` | port-forward not running        | `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
 | Tests pass once, fail on second run              | Stale postgres data             | `pnpm run test:e2e:stack:down` then `:stack`               |
