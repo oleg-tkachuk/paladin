@@ -1,4 +1,5 @@
 import { Code, ConnectError } from "@connectrpc/connect";
+import { SignJWT } from "jose";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const h = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ vi.mock("@/lib/auth/bff", async (orig) => {
 
 import { GET } from "./route";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/bff";
+import { ROTATE_AFTER_SECONDS } from "@/lib/auth/rotation";
 
 const ROTATED = {
   accessToken: "iam-access",
@@ -167,5 +169,44 @@ describe("GET /api/auth/me", () => {
 
     const res = await GET();
     expect(res.status).toBe(401);
+  });
+
+  describe("rotation schedule", () => {
+    // Any key: the route reads iat and never verifies.
+    const KEY = new TextEncoder().encode("test-key-not-a-secret-0123456789");
+    const issuedSecondsAgo = (age: number) =>
+      new SignJWT({})
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt(Math.floor(Date.now() / 1000) - age)
+        .sign(KEY);
+
+    // Rotating on every load lost sessions: a navigation that dropped the
+    // response kept the browser on a superseded token, and reuse detection
+    // revoked the family once the grace ran out.
+    it("derives without rotating, and writes no cookie, while the token is young", async () => {
+      h.readSessionCookie.mockResolvedValue(await issuedSecondsAgo(1));
+      h.exchangeAudience.mockResolvedValue({
+        accessToken: "iam-access",
+        accessExpiresInSeconds: 900n,
+      });
+      h.whoAmI.mockResolvedValue(WHOAMI);
+      const res = await GET();
+      expect(res.status).toBe(200);
+      expect(h.refreshIamChain).not.toHaveBeenCalled();
+      expect(res.cookies.get(SESSION_COOKIE_NAME)).toBeUndefined();
+    });
+
+    it("rotates once the token is due, so the session still slides", async () => {
+      h.readSessionCookie.mockResolvedValue(
+        await issuedSecondsAgo(ROTATE_AFTER_SECONDS),
+      );
+      h.refreshIamChain.mockResolvedValue(ROTATED);
+      h.whoAmI.mockResolvedValue(WHOAMI);
+      const res = await GET();
+      expect(h.refreshIamChain).toHaveBeenCalledTimes(1);
+      expect(res.cookies.get(SESSION_COOKIE_NAME)?.value).toBe(
+        "iam-refresh-rotated",
+      );
+    });
   });
 });

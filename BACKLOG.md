@@ -1667,32 +1667,28 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
-### Cluster e2e: a login sometimes lands back on `/login?next=%2F`
+### A rotation whose response is lost still ends the session
 
-- **Status:** Open — seen in two full runs (4 specs on 4.2.13, 1 on 4.2.17),
-  never on a rerun of the same files.
-- **Shape:** `loginAsAdmin` submits the form, the browser reaches `/`, and the
-  AuthGate sends it back to `/login?next=%2F`. In the 4.2.17 run the console
-  logged `[BFF /me] … [unauthenticated] refresh token rejected` in that window:
-  IAM refused a superseded refresh token outside the supersession grace, which
-  is the reuse-detection path (`authh.RefreshToken`, `onRefreshReuse`), and
-  that revokes the family.
-- **Likely mechanism, not yet proven:** `/api/auth/me` is the route that
-  rotates the chain. If the browser drops its response, for example because
-  the next navigation starts while it is in flight (the fixtures navigate as
-  soon as the URL leaves `/login`), IAM has rotated but the new cookie never
-  lands. The next `/me` inside the grace is told it lost a race and writes no
-  cookie; the first one after the grace replays the superseded token and the
-  session is killed. A person who navigates while a page is still loading
-  could hit the same thing.
-- **Reason:** changing how rotation survives a lost response is an auth
-  design decision (a successor the loser can recover, or a longer grace), not
-  a test fix; and it needs a reproduction first.
-- **Definition of Done:** a reproduction (abort `/api/auth/me` mid-flight in a
-  Playwright test, then navigate after the grace) that fails today; a fix that
-  keeps reuse detection for genuine replays; the full suite passing three runs
-  in a row on the default worker count.
-- **Blockers:** the decision on how a lost rotation is recovered.
+- **Status:** Narrowed. `/api/auth/me` used to rotate the refresh chain on
+  every page load; it now rotates only once the token is five minutes old
+  (`lib/auth/rotation.ts`) and derives the access token without rotating
+  otherwise.
+- **Reason:** the mechanism is reproduced on the cluster. Drop the
+  `Set-Cookie` of one rotating `/me` response and the browser keeps the
+  superseded token. Inside IAM's 30-second supersession grace it is
+  forgiven; the first load after the grace is a replay, reuse detection
+  revokes the family, and the operator is signed out. Rotating less often
+  makes that rare, not impossible: a rotation that is due can still lose
+  its response.
+- **Definition of Done:** a lost rotation response is recoverable whenever the
+  next request comes, without weakening reuse detection for a genuine replay
+  — for example a successor that only supersedes its predecessor on first use.
+- **Blockers:** an IAM design change to the refresh-token store.
+
+The cluster e2e's login bounces (`loginAsAdmin` back on `/login?next=%2F`, one
+to four specs a run, never on rerun) were the trail to this. Their own cause
+is not confirmed: with the schedule above, the suite's young tokens no longer
+rotate at all, so a bounce that survives this change has another cause.
 
 ### `collections-crud › deleting a Collection removes it` is flaky in CI
 

@@ -67,8 +67,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     // perfectly well (assertAudienceAllowed permits it outright) and consumes
     // nothing, so there is no second rotation left to collapse.
     //
-    // The session still slides: /api/auth/me rotates once per page load,
-    // which is what advances the chain. This route deriving a token no longer
+    // The session still slides: /api/auth/me rotates on a page load once the
+    // refresh token is due (lib/auth/rotation.ts), which advances the chain. This route deriving a token no longer
     // does, and no longer needs to.
     // Sent as-is. The token may already have been rotated by a sibling request
     // — a browser cannot update its cookie between two requests in flight —
