@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // /audit — read-only view of admin/v1.AuditLogService.ListAuditLog.
 //
@@ -42,17 +43,6 @@ import { ActorName } from "@/components/features/audit/ActorName";
 // resource / error). The free-text search box filters client-side over
 // the loaded page; bigger filtering moves to the CEL `filter` arg in a
 // follow-up if it becomes useful.
-
-function formatTimestamp(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
-  }
-}
 
 function actionPalette(
   action: string,
@@ -258,7 +248,7 @@ export default function AuditPage() {
                     <TableCell
                       className={cn(T.codeSmall, "text-muted-foreground")}
                     >
-                      {formatTimestamp(e.at)}
+                      {formatTimestampUTC(e.at)}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">

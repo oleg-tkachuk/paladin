@@ -45,17 +45,7 @@ import { Select } from "@/components/ui/Select";
 import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
-
-function formatTimestamp(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
-  }
-}
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 function formatAmount(n: number, unit: string): string {
   return formatMoney(n, unit);
@@ -299,7 +289,7 @@ export default function TenantBudgetPage() {
                   Period start
                 </Label>
                 <div className="font-mono text-sm text-muted-foreground">
-                  {formatTimestamp(budget.periodStart)}
+                  {formatTimestampUTC(budget.periodStart)}
                 </div>
               </div>
               <div>
@@ -308,7 +298,7 @@ export default function TenantBudgetPage() {
                 </Label>
                 <div className="font-mono text-sm text-muted-foreground">
                   {budget.periodEnd
-                    ? formatTimestamp(budget.periodEnd)
+                    ? formatTimestampUTC(budget.periodEnd)
                     : "open-ended"}
                 </div>
               </div>

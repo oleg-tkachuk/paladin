@@ -5,11 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatMoney } from "@/lib/format/money";
-import {
-  PRINCIPAL_KIND_OPTIONS,
-  formatTimestamp,
-  isExpired,
-} from "./_constants";
+import { PRINCIPAL_KIND_OPTIONS, isExpired } from "./_constants";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 type UsageEntry =
   | { requestCount: bigint; spentAmount: number; unitCode: string }
@@ -218,15 +215,19 @@ export function DetailsBody({
             </Badge>
           }
         />
-        <DetailRow label="Issued" value={formatTimestamp(cap.issuedAt)} mono />
+        <DetailRow
+          label="Issued"
+          value={formatTimestampUTC(cap.issuedAt)}
+          mono
+        />
         <DetailRow
           label="Not before"
-          value={formatTimestamp(cap.notBefore)}
+          value={formatTimestampUTC(cap.notBefore)}
           mono
         />
         <DetailRow
           label="Expires"
-          value={formatTimestamp(cap.expiresAt)}
+          value={formatTimestampUTC(cap.expiresAt)}
           mono
         />
       </DetailsSection>

@@ -59,17 +59,6 @@ export function isValidScope(scope: string): boolean {
   );
 }
 
-export function formatTimestamp(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
-  }
-}
-
 export function isRevoked(t: APIToken): boolean {
   if (!t.revokedAt) return false;
   return Number(t.revokedAt.seconds) > 0;

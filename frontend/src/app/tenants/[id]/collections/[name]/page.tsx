@@ -39,6 +39,7 @@ import { CompletionMode } from "@/gen/paladin/common/v1/resource_pb";
 import { T } from "@/lib/ui/typography";
 
 import { useCollection } from "./collection-context";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 function completionModeLabel(m: CompletionMode): string {
   switch (m) {
@@ -48,17 +49,6 @@ function completionModeLabel(m: CompletionMode): string {
       return "explicit (CompleteObject)";
     default:
       return "unspecified";
-  }
-}
-
-function formatTimestamp(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
   }
 }
 
@@ -173,12 +163,12 @@ export default function CollectionOverviewPage() {
 
           <dt className="text-muted-foreground">Created</dt>
           <dd className="font-mono text-xs">
-            {formatTimestamp(collection.createdAt)}
+            {formatTimestampUTC(collection.createdAt)}
           </dd>
 
           <dt className="text-muted-foreground">Updated</dt>
           <dd className="font-mono text-xs">
-            {formatTimestamp(collection.updatedAt)}
+            {formatTimestampUTC(collection.updatedAt)}
           </dd>
         </dl>
 

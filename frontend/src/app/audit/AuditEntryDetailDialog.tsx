@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // Decode a bytes state-snapshot to a display string. The backend stores
 // sanitized JSON; pretty-print it when it parses, else show the raw text.
@@ -34,17 +35,6 @@ function decodeSnapshot(bytes: Uint8Array | undefined): string | null {
     return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {
     return raw;
-  }
-}
-
-function fmt(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
   }
 }
 
@@ -89,7 +79,7 @@ export function AuditEntryDetailDialog({
           </p>
         ) : data ? (
           <div className="max-h-[70vh] space-y-3 overflow-y-auto text-xs">
-            <Field k="when" v={fmt(data.at)} mono />
+            <Field k="when" v={formatTimestampUTC(data.at)} mono />
             <Field k="action" v={data.action || "—"}>
               <Badge variant="outline" className={T.code}>
                 {data.action || "—"}
