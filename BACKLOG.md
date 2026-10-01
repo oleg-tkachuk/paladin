@@ -1651,6 +1651,23 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
+### Cluster e2e: a login sometimes lands back on `/login?next=%2F`
+
+- **Status:** Open — seen once, not reproduced.
+- **Shape:** the full suite against the local cluster (4.2.13, Playwright's
+  default worker count) failed four unrelated specs at `loginAsAdmin`: the form
+  was submitted, the browser reached `/`, and the AuthGate sent it back to
+  `/login?next=%2F`. The same four specs passed on an immediate rerun of just
+  their files. Every worker signs in as the same `admin` subject at once.
+- **Reason:** one occurrence with no artifacts kept; the rerun overwrote
+  `test-results/`.
+- **Definition of Done:** the cause is known — a session the BFF drops when the
+  same subject signs in concurrently, a refresh racing the first request, or
+  something else — and either fixed or the fixture made to wait for it, with
+  the full suite passing three runs in a row on the default worker count.
+- **Blockers:** needs a failing run with its `error-context.md` and the BFF's
+  logs from the same minute.
+
 ### `collections-crud › deleting a Collection removes it` is flaky in CI
 
 - **Status:** Open — one attempt made and reverted 2026-09-10; the flake stands.

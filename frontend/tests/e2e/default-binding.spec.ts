@@ -110,6 +110,12 @@ test.describe("Tenant default route", () => {
     const clear = page.getByRole("button", { name: /^Clear$/ });
     await expect(clear).toBeVisible({ timeout: 15_000 });
     await clear.click();
+    // Every bare-name create in the tenant fails once the route is gone, so
+    // Clear asks first.
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Clear route" })
+      .click();
 
     await expect(page.getByText(/Default binding cleared/i)).toBeVisible({
       timeout: 15_000,
