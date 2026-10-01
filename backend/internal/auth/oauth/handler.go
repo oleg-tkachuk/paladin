@@ -160,10 +160,14 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_client", "unknown client_id")
 		return
 	}
-	if !redirectAllowed(client, p.RedirectURI) {
+	registered, ok := registeredRedirect(client, p.RedirectURI)
+	if !ok {
 		h.jsonError(w, http.StatusBadRequest, "invalid_request", "redirect_uri not registered for this client")
 		return
 	}
+	// Every redirect below goes to the client's stored URI, never to the
+	// request's copy of it.
+	p.RedirectURI = registered
 	// PKCE is mandatory (S256). Errors past this point redirect to the client.
 	if p.CodeChallenge == "" || p.CodeChallengeMethod != PKCEMethodS256 {
 		h.redirectError(w, r, p, "invalid_request", "code_challenge with method=S256 is required")
@@ -613,13 +617,16 @@ func (h *Handler) schemeAllowed(rawURL string) bool {
 	return false
 }
 
-func redirectAllowed(client Client, redirectURI string) bool {
+// registeredRedirect returns the client's registered URI equal to
+// redirectURI, and whether there is one. The comparison is exact, as RFC 6749
+// §3.1.2.3 requires.
+func registeredRedirect(client Client, redirectURI string) (string, bool) {
 	for _, u := range client.RedirectURIs {
 		if u == redirectURI {
-			return true
+			return u, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func audienceFor(client Client, resource string) string {

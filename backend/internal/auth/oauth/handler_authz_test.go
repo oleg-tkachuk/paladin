@@ -193,16 +193,16 @@ func TestToken_DisabledUserCannotRedeemACode(t *testing.T) {
 	}
 }
 
-// redirectAllowed is exact string comparison, which is what RFC 6749 §3.1.2.3
+// registeredRedirect is exact string comparison, which is what RFC 6749 §3.1.2.3
 // requires. Prefix or substring matching is the classic weakening, and it
 // hands the code to whoever controls the path — so the near-misses matter
 // more than the obvious mismatch.
-func TestRedirectAllowed_IsExact(t *testing.T) {
+func TestRegisteredRedirect_IsExact(t *testing.T) {
 	c := Client{RedirectURIs: []string{"https://app.example/cb", "claude-desktop://cb"}}
 
-	for _, ok := range c.RedirectURIs {
-		if !redirectAllowed(c, ok) {
-			t.Errorf("registered %q was rejected", ok)
+	for _, want := range c.RedirectURIs {
+		if got, ok := registeredRedirect(c, want); !ok || got != want {
+			t.Errorf("registered %q: got (%q, %v)", want, got, ok)
 		}
 	}
 	for _, bad := range []string{
@@ -214,7 +214,7 @@ func TestRedirectAllowed_IsExact(t *testing.T) {
 		"https://attacker.test/?u=https://app.example/cb", // registered one as a substring
 		"HTTPS://APP.EXAMPLE/CB",                          // case differs
 	} {
-		if redirectAllowed(c, bad) {
+		if _, ok := registeredRedirect(c, bad); ok {
 			t.Errorf("unregistered %q was accepted", bad)
 		}
 	}
