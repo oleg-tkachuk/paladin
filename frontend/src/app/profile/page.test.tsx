@@ -19,7 +19,7 @@ vi.mock("@/components/features/ChangePasswordCard", () => ({
 }));
 
 import ProfilePage from "./page";
-import { SETTINGS_NOT_APPLIED } from "./_constants";
+import { SETTINGS_APPLIED_NOTE } from "./_constants";
 
 const DEFAULTS = {
   timezone: "",
@@ -62,12 +62,12 @@ describe("ProfilePage preferences", () => {
     h.getMine.mockReset();
   });
 
-  // Theme, time zone and locale are stored and read by nothing in the
-  // console; the card used to present them as if they took effect.
-  it("says the console does not apply them", async () => {
+  // The console applies the theme only; the card says which settings take
+  // effect rather than presenting all three as if they did.
+  it("says which settings the console applies", async () => {
     h.getMine.mockResolvedValue(DEFAULTS);
     render(<ProfilePage />);
-    expect(await screen.findByText(SETTINGS_NOT_APPLIED)).toBeInTheDocument();
+    expect(await screen.findByText(SETTINGS_APPLIED_NOTE)).toBeInTheDocument();
   });
 });
 

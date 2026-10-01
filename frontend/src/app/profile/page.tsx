@@ -10,7 +10,6 @@ import {
   PaintBrushIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
@@ -44,7 +43,13 @@ import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
-import { SETTINGS_NOT_APPLIED } from "./_constants";
+import { SETTINGS_APPLIED_NOTE } from "./_constants";
+import {
+  fetchMySettings,
+  THEME_OPTIONS,
+  THEME_SYSTEM,
+  USER_SETTINGS_QUERY_KEY,
+} from "@/lib/theme";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
@@ -55,12 +60,6 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 // locale, theme). The opaque preferences struct is left for the apps
 // that own their own UI state to manage; surfacing it as a JSON editor
 // here would invite blob-shaped corruption from typos.
-
-const THEME_OPTIONS = [
-  { value: "system", label: "Match system" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-];
 
 // A small, well-known subset of IANA TZ ids. Operators who need a
 // timezone outside this list can type any IANA name into the input
@@ -91,24 +90,18 @@ export default function ProfilePage() {
   // "dirty" flag against the last-loaded baseline.
   const [timezone, setTimezone] = useState("");
   const [locale, setLocale] = useState("");
-  const [theme, setTheme] = useState("system");
+  const [theme, setTheme] = useState<string>(THEME_SYSTEM);
 
   const settingsQuery = useQuery({
-    queryKey: ["userSettings"],
+    queryKey: USER_SETTINGS_QUERY_KEY,
     retry: false, // queryFn toasts real failures; NotFound is a normal state.
     queryFn: async ({ signal }) => {
       try {
-        return await userSettingsClient.getMine({}, { signal });
+        return await fetchMySettings(signal);
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:
         // TanStack cancels in-flight reads on unmount and on supersede.
         if (isAbortError(err)) throw err;
-        // First-time users may not have a row yet; the backend creates an
-        // empty default on UpdateMine, so a NotFound here is fine → null.
-        // Decided on the code, not by matching the message text.
-        if (err instanceof ConnectError && err.code === Code.NotFound) {
-          return null;
-        }
         showNotification({
           type: "error",
           title: "Load failed",
@@ -132,17 +125,17 @@ export default function ProfilePage() {
     setSeededFrom(settings);
     setTimezone(settings?.timezone || "");
     setLocale(settings?.locale || "");
-    setTheme(settings?.theme || "system");
+    setTheme(settings?.theme || THEME_SYSTEM);
   }
 
   const dirty = useMemo(() => {
     if (!settings) {
-      return Boolean(timezone || locale || theme !== "system");
+      return Boolean(timezone || locale || theme !== THEME_SYSTEM);
     }
     return (
       timezone !== (settings.timezone || "") ||
       locale !== (settings.locale || "") ||
-      theme !== (settings.theme || "system")
+      theme !== (settings.theme || THEME_SYSTEM)
     );
   }, [settings, timezone, locale, theme]);
 
@@ -179,7 +172,7 @@ export default function ProfilePage() {
   const handleReset = useCallback(() => {
     setTimezone(settings?.timezone || "");
     setLocale(settings?.locale || "");
-    setTheme(settings?.theme || "system");
+    setTheme(settings?.theme || THEME_SYSTEM);
   }, [settings]);
 
   const detectedTz = useMemo(() => {
@@ -257,9 +250,9 @@ export default function ProfilePage() {
         <CardHeader className="px-6">
           <CardTitle className="text-base">Preferences</CardTitle>
           <CardDescription>
-            {/* Nothing in the console reads these back (see BACKLOG); saying
-                so beats a Theme picker that changes nothing. */}
-            {SETTINGS_NOT_APPLIED}
+            {/* The console applies the theme; time zone and locale are not
+                read back yet (see BACKLOG). */}
+            {SETTINGS_APPLIED_NOTE}
           </CardDescription>
         </CardHeader>
         <Separator />

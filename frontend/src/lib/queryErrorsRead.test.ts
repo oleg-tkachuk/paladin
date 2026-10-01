@@ -26,6 +26,8 @@ const ALLOWED: Record<string, string> = {
     "its queryFn is useTenants().fetchTenants, whose error the page renders",
   "components/features/audit/ActorName.tsx#user":
     "a failed lookup shows the subject id, which is what it resolves",
+  "components/ThemeSync.tsx#{data}":
+    "a failed read keeps the current theme; /profile renders the error",
   "components/features/tenants/RenamedSlugHint.tsx#{data}":
     "an optional hint: a failed lookup shows no hint, and nothing else",
   "context/ScopeContext.tsx#tenantQuery":
