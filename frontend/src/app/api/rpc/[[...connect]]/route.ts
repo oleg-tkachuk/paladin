@@ -97,6 +97,9 @@ const authKey = createContextKey<string | null>(null, { description: "auth" });
  * Build one router + internal transport per plane. Done lazily (per cold
  * start) so dev hot-reload picks up env changes without restart hassles.
  */
+/** The proxy chain header the planes read the client address from. */
+const FORWARDED_FOR_HEADER = "X-Forwarded-For";
+
 function buildPlaneRouter(plane: Plane) {
   const internalTransport = planeTransport(plane);
 
@@ -136,11 +139,17 @@ function buildPlaneRouter(plane: Plane) {
         // SAME key (don't mint a new one per hop) so a browser retry collapses
         // onto the original request server-side.
         const idempotencyKey = ctx.requestHeader?.get("Idempotency-Key");
+        // The forwarding chain, unchanged: the plane resolves the client
+        // address from it (Cedar's context.ip), trusting it because the BFF
+        // is one of its trusted proxies. Not appended to — the plane already
+        // sees the BFF as the TCP peer.
+        const forwardedFor = ctx.requestHeader?.get(FORWARDED_FOR_HEADER);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return await (internalClient as any)[name](req, {
           headers: {
             ...(auth ? { Authorization: auth } : {}),
             ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+            ...(forwardedFor ? { [FORWARDED_FOR_HEADER]: forwardedFor } : {}),
           },
         });
       };
