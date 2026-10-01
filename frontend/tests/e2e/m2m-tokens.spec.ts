@@ -26,6 +26,7 @@
  * in apitokenh/list_scoping_test.go, which drives both roles against List and
  * Revoke directly and asserts the acting tenant the handler hands to RLS.
  */
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
@@ -38,6 +39,19 @@ import { ConnectError, Code } from "@connectrpc/connect";
 
 function tokensURL(tenantId: string): string {
   return `/tenants/${tenantId}/m2m-tokens`;
+}
+
+// The Name field, by its accessible name. The dialog moved onto the shared FormField,
+// which generates the input's id, and these tests kept looking for the
+// hard-coded #m2m-name it used to carry — so every one of them failed the day
+// the page first ran against a deployment that serves it. A label is what an
+// operator reads; it is also the association FormField exists to make.
+function tokenName(page: Page) {
+  // By accessible name, not getByLabel: the label's text is "Name*", the
+  // asterisk aria-hidden, so only the role query sees what a reader hears.
+  return page
+    .getByRole("dialog")
+    .getByRole("textbox", { name: "Name", exact: true });
 }
 
 test.describe("M2M tokens", () => {
@@ -69,7 +83,7 @@ test.describe("M2M tokens", () => {
     await page.getByRole("button", { name: /New token/i }).click();
 
     const name = `ci-uploader-${Date.now().toString(36)}`;
-    await page.locator("#m2m-name").fill(name);
+    await tokenName(page).fill(name);
     await page.getByRole("button", { name: /Create token/i }).click();
 
     // The reveal panel is the only time the secret exists in the UI. Its
@@ -111,7 +125,7 @@ test.describe("M2M tokens", () => {
 
     await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
-    await page.locator("#m2m-name").fill(`ack-${Date.now().toString(36)}`);
+    await tokenName(page).fill(`ack-${Date.now().toString(36)}`);
     await page.getByRole("button", { name: /Create token/i }).click();
 
     const done = page.getByRole("button", { name: /^Done$/ });
@@ -138,7 +152,7 @@ test.describe("M2M tokens", () => {
     await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
     const name = `to-revoke-${Date.now().toString(36)}`;
-    await page.locator("#m2m-name").fill(name);
+    await tokenName(page).fill(name);
     await page.getByRole("button", { name: /Create token/i }).click();
     await expect(page.getByRole("button", { name: /^Done$/ })).toBeVisible({
       timeout: 15_000,
