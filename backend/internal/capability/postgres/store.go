@@ -153,10 +153,28 @@ WHERE  id = $1;
 // IsRevoked implements capability.Store. The query is intentionally
 // trivial — verifiers wrap this with an in-memory TTL cache so the
 // per-request cost stays flat.
+//
+// The verifier calls this before any tenant is on the context: the tenant is
+// inside the token still being checked, so the pool's PrepareConn hook binds
+// an empty paladin.tenant_id. capability_revocations is isolated through the
+// capability each row points at, so on that connection every revocation was
+// invisible and a revoked capability verified as live. The read therefore
+// runs under the cross-tenant flag, SET LOCAL to this transaction. The policy
+// admits that flag in USING only, so it widens this lookup and cannot let
+// anything write.
 func (s *Store) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return false, fmt.Errorf("capability/postgres: is_revoked begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // read-only: nothing to commit
+
+	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.cross_tenant', 'on', true)`); err != nil {
+		return false, fmt.Errorf("capability/postgres: is_revoked set cross-tenant: %w", err)
+	}
 	const stmt = `SELECT EXISTS (SELECT 1 FROM capability_revocations WHERE id = $1)`
 	var exists bool
-	if err := s.pool.QueryRow(ctx, stmt, id).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, stmt, id).Scan(&exists); err != nil {
 		return false, fmt.Errorf("capability/postgres: is_revoked: %w", err)
 	}
 	return exists, nil

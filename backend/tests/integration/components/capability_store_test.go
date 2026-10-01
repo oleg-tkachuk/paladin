@@ -224,6 +224,52 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 	}
 }
 
+// TestCapabilityIsRevokedBeforeTheTenantIsKnown pins the verifier's view of
+// the denylist. Verify runs before anything has put a tenant on the context —
+// the tenant is inside the token it is still checking — so the RLS pool binds
+// an empty paladin.tenant_id. capability_revocations is isolated through the
+// capability it points at, so on that connection every revocation was
+// invisible and IsRevoked answered false: a revoked capability kept working
+// on the data plane, where it is the whole credential.
+func TestCapabilityIsRevokedBeforeTheTenantIsKnown(t *testing.T) {
+	ctx := context.Background()
+	admin := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+
+	revokedCap := mkCap(tenant, "agent:revoked", time.Now().Add(time.Hour))
+	liveCap := mkCap(tenant, "agent:live", time.Now().Add(time.Hour))
+	seed := newCapStore(t, admin)
+	for _, c := range []capability.Capability{revokedCap, liveCap} {
+		if err := seed.Insert(ctx, c, seedIssuer); err != nil {
+			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
+		}
+	}
+	if err := seed.Revoke(ctx, capability.RevokeArgs{
+		ID: revokedCap.ID, Reason: "compromise", Actor: "user:ops",
+	}); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	// The runtime's connection, with no principal on the context.
+	verifier := newCapStore(t, rlsPool(t, ctx, admin))
+	for _, tc := range []struct {
+		cap  capability.Capability
+		want bool
+	}{
+		{revokedCap, true},
+		{liveCap, false},
+	} {
+		got, err := verifier.IsRevoked(ctx, tc.cap.ID)
+		if err != nil {
+			t.Fatalf("is_revoked %s: %v", tc.cap.Subject.Subject, err)
+		}
+		if got != tc.want {
+			t.Errorf("IsRevoked(%s) with no tenant on the context = %v, want %v",
+				tc.cap.Subject.Subject, got, tc.want)
+		}
+	}
+}
+
 // TestCapabilityListByPrincipal pins the filters and the cursor. The default
 // view hides expired and revoked capabilities, which is what makes the
 // console's "active credentials" count trustworthy.
