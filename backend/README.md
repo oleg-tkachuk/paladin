@@ -11,20 +11,21 @@ the process boundaries below are also the pod boundaries.
 | --- | --- | --- |
 | `paladin serve api` | `:8080` data (`:8083` on the host), `:8085` iam | Tenant-facing Connect-RPC. Objects, buckets, tags, presign, multipart, batch, auth. |
 | `paladin serve admin` | `:8090` | Platform-facing Connect-RPC. Tenants, quotas, policies, capabilities, API tokens, audit, billing, backends. |
-| `paladin serve worker` | `:8099` ops | Background jobs, lease-coordinated: object lifecycle transitions, reapers, quota reconciliation, storage migration. |
+| `paladin serve worker` | `:8090` ops (Service port `8099`) | Background jobs, lease-coordinated: object lifecycle transitions, reapers, quota reconciliation, storage migration. |
 | `paladin serve dispatcher` | `:8099` ops | Durable event fan-out. Drains the transactional outbox to webhook and broker sinks. |
-| `paladin serve ingest` | `:8099` ops | Receives storage-side events (webhook or JetStream) and promotes objects. Refuses to start when `ingest.enabled` is false. |
+| `paladin serve ingest` | `:8100` | Receives storage notifications (webhook, NATS, RabbitMQ or SQS) and promotes objects. Refuses to start when `ingest.enabled` is false. |
 | `paladin serve mcp` | `:8095` | Model Context Protocol server — stdio or streamable HTTP — exposing the RPC surface to agents. |
 | `paladin migrate` | — | Applies the embedded SQL migrations. Exits 0. |
 | `paladin bootstrap` | — | Provisions the platform admin and mirrors configured storage backends into the database. Idempotent. |
 
 The collapsed "everything in one process" mode is gone. `serve mcp` is
-the one role that spans planes: it is a superset of `api` + `admin`
-without their TCP listeners.
+the one role that spans planes: by default it calls `api` and `admin` over
+HTTP with the caller's credential; with `--embedded` it hosts their handlers
+in-process instead.
 
 Every role serves `/livez`, `/readyz` and `/startupz`, plus a
 `/system/health.json` snapshot that `runtime.health_snapshot_token`
-gates.
+gates. Metrics, traces and logs: [`docs/observability.md`](docs/observability.md).
 
 ## Layout
 
@@ -44,21 +45,21 @@ backend/
 │   ├── mcp/          MCP server and tool definitions
 │   └── config/       koanf loading, CUE schema, validation
 ├── migrations/       goose-style numbered SQL, embedded into the binary
-├── proto/            source of truth for every wire contract
 ├── policies/         Cedar policy sources, incl. examples/
 └── deploy/           Dockerfile, docker-compose.yaml, Helm chart
 ```
 
 ## Wire contracts
 
-`proto/` is the source of truth. Three API surfaces:
+[`proto/`](../proto/) at the repository root is the source of truth. Three
+API surfaces:
 
 - `paladin/data/v1` — object, tag, presign, multipart, batch, operation,
   storage bootstrap.
 - `paladin/admin/v1` — tenant, bucket, collection, quota, capability, API
   token, policy, audit, billing, tenant budget, event subscription,
   backend, MCP inspection, CEL, operation, system.
-- `paladin/iam/v1` — auth, system.
+- `paladin/iam/v1` — auth, users, user settings, health.
 
 Regenerate Go stubs with `task backend:generate`. The frontend regenerates its
 Connect-ES stubs from the same directory via `cd frontend && pnpm run
@@ -73,17 +74,16 @@ the RLS pool carries the tenant context, and the reaper/BYPASSRLS pool is
 deliberately separate so a background job cannot inherit a request's
 tenant scope.
 
-Three migrations — schema, roles + RLS, triggers — embedded in the binary
-and applied by `paladin migrate`. They are a baseline, not a history: the
-down migration on `001` drops the schema, so the supported path from an
-older database is to reprovision, not to migrate. `migrations/CONVENTIONS.md`
+Migrations are embedded in the binary and applied by `paladin migrate`:
+`001`–`003` are a baseline (schema, roles and RLS, triggers) that replaced the
+earlier history, and later files are forward-only changes on top of it. A
+database older than the baseline is reprovisioned, not migrated. `migrations/CONVENTIONS.md`
 documents the rules; [`docs/database.md`](docs/database.md) walks the schema
 itself.
 
 Queries are sqlc-generated where they can be; the store layer's
-hand-written SQL mapping is the largest single source of subtle bugs in
-the project, which is why the constitution requires integration coverage
-for it.
+hand-written SQL mapping has integration tests against real PostgreSQL
+(`tests/integration`).
 
 ## Local loop
 
@@ -140,3 +140,20 @@ module's `isolation_test.go` asserts this, and runs in
 
 If you are adding code that needs Postgres or S3, it belongs in
 `internal/`, not in the module.
+
+## Documents
+
+| Document | Covers |
+| --- | --- |
+| [architecture.md](docs/architecture.md) | planes, interceptor chain, source index |
+| [diagrams.md](docs/diagrams.md) | context, upload sequence, schema, deployment |
+| [API.md](docs/API.md) | RPC surface and HTTP mappings |
+| [security.md](docs/security.md) | credentials, authorization order, secrets, bootstrap admin |
+| [database.md](docs/database.md) · [db-roles.md](docs/db-roles.md) | schema, RLS, roles |
+| [cedar-authoring.md](docs/cedar-authoring.md) | writing policies |
+| [canonical-resource-names.md](docs/canonical-resource-names.md) | the three resource-name shapes |
+| [backend-registry.md](docs/backend-registry.md) | storage backends at runtime |
+| [configuration.md](docs/configuration.md) | the config loader |
+| [observability.md](docs/observability.md) | traces, metrics, logs, health |
+| [ops-housekeeping.md](docs/ops-housekeeping.md) | background jobs and their knobs |
+| [operations.md](docs/operations.md) | running, testing and building locally |
