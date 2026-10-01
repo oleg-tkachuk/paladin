@@ -53,20 +53,14 @@ for more than a moment. Concretely:
   job), (3) `ALTER … SET NOT NULL` after a `… ADD CONSTRAINT … CHECK (…)
   NOT VALID` + `VALIDATE CONSTRAINT` pair, which validates with a `SHARE
   UPDATE EXCLUSIVE` lock instead of a full-table `ACCESS EXCLUSIVE` scan.
-  Migration `005_object_keys_bucket_required.sql` already follows the
-  backfill-then-enforce shape; mirror it.
 - **Type changes / rewrites:** prefer add-new-column + backfill + swap over
   an in-place `ALTER COLUMN … TYPE` that rewrites the table.
 - For anything that is unavoidably a long table rewrite, run it **out of
   band** in a maintenance window (a one-off `paladin migrate`-style Job gated
   separately) rather than on the deploy hot path, and note it in the PR.
 
-## Historical note — 004 / 006
+## Before the baseline
 
-`004_schema_normalization.sql` and `006_v2_planes.sql` `ALTER objects`
-in-transaction without `CONCURRENTLY`. They predate this convention. They are
-**not** rewritten (immutability rule above) and are a non-issue in practice:
-both are long-applied in every existing database, so goose skips them, and on
-a fresh install the `objects` table is empty so the locks are instant. The
-convention above exists so no *future* migration reintroduces the pattern
-against a populated table.
+The migrations that altered `objects` in a transaction without `CONCURRENTLY`
+predate these rules and were folded into `001`–`003` by the consolidation
+above. Every file from `004` on is held to them.
