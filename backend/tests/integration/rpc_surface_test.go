@@ -222,7 +222,11 @@ func envOr(k, def string) string {
 func requireStack(t *testing.T, ps []plane) {
 	t.Helper()
 	for _, p := range ps {
-		resp, err := httpClient(2 * time.Second).Get(p.baseURL + "/readyz")
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, p.baseURL+"/readyz", nil)
+		if err != nil {
+			t.Fatalf("readyz request for %s: %v", p.pkgPrefix, err)
+		}
+		resp, err := httpClient(2 * time.Second).Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 			continue

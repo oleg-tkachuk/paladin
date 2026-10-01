@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -136,7 +137,7 @@ func TestEventSubscriptionRepoV2_Create_AcceptsNATSSinkKind(t *testing.T) {
 		`SELECT sink_kind FROM event_subscriptions WHERE id = $1`,
 		sub.SubscriptionID,
 	).Scan(&sinkKind); err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			t.Fatalf("row missing after Create — pointer-receiver "+
 				"regression? see TestEventSubscriptionRepoV2_Create_StampsGeneratedID. "+
 				"stamped id: %s", sub.SubscriptionID)

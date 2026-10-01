@@ -32,8 +32,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
-func startPostgres(t testing.TB) *pgxpool.Pool {
-	t.Helper()
+func startPostgres(tb testing.TB) *pgxpool.Pool {
+	tb.Helper()
 	ctx := context.Background()
 	ctr, err := tcpostgres.Run(ctx, "postgres:17-alpine",
 		tcpostgres.WithDatabase("paladin"),
@@ -44,34 +44,34 @@ func startPostgres(t testing.TB) *pgxpool.Pool {
 				WithOccurrence(2).WithStartupTimeout(90*time.Second)),
 	)
 	if err != nil {
-		t.Fatalf("start postgres: %v", err)
+		tb.Fatalf("start postgres: %v", err)
 	}
-	t.Cleanup(func() { _ = ctr.Terminate(ctx) })
+	tb.Cleanup(func() { _ = ctr.Terminate(ctx) })
 
 	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		t.Fatalf("dsn: %v", err)
+		tb.Fatalf("dsn: %v", err)
 	}
 	cc, err := pgx.ParseConfig(dsn)
 	if err != nil {
-		t.Fatalf("parse dsn: %v", err)
+		tb.Fatalf("parse dsn: %v", err)
 	}
 	sqlDB := stdlib.OpenDB(*cc)
 	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("goose dialect: %v", err)
+		tb.Fatalf("goose dialect: %v", err)
 	}
 	goose.SetBaseFS(migrations.FS)
 	goose.SetLogger(goose.NopLogger())
 	if err := goose.Up(sqlDB, "."); err != nil {
-		t.Fatalf("goose up: %v", err)
+		tb.Fatalf("goose up: %v", err)
 	}
 	_ = sqlDB.Close()
 
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		t.Fatalf("pool: %v", err)
+		tb.Fatalf("pool: %v", err)
 	}
-	t.Cleanup(pool.Close)
+	tb.Cleanup(pool.Close)
 	return pool
 }
 

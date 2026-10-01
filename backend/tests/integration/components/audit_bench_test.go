@@ -32,10 +32,10 @@ var benchAnchor = time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 // spread back across spanHours from benchAnchor so a time-range predicate is
 // selective. before/after JSON are left NULL — the bench isolates the
 // predicate path, not payload width.
-func seedAuditRows(b testing.TB, ctx context.Context, pool interface {
+func seedAuditRows(tb testing.TB, ctx context.Context, pool interface {
 	CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error)
 }, n int) {
-	b.Helper()
+	tb.Helper()
 	i := 0
 	src := pgx.CopyFromFunc(func() ([]any, error) {
 		if i >= n {
@@ -53,7 +53,7 @@ func seedAuditRows(b testing.TB, ctx context.Context, pool interface {
 	if _, err := pool.CopyFrom(ctx, pgx.Identifier{"audit_log"},
 		[]string{"id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name"},
 		src); err != nil {
-		b.Fatalf("copy audit rows: %v", err)
+		tb.Fatalf("copy audit rows: %v", err)
 	}
 }
 

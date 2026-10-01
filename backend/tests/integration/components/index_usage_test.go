@@ -267,10 +267,6 @@ func seedTenants(t *testing.T, ctx context.Context, pool *pgxpool.Pool, n int) u
 	return picked
 }
 
-// uuidMax is the largest UUID — the starting cursor for a descending
-// keyset walk, where uuid.Nil is the ascending one.
-var uuidMax = uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
-
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 // seedObjects bulk-inserts n objects under the fixture's Collection and returns

@@ -63,36 +63,38 @@ func celFilter(q string) string {
 	return "search.contains(" + celQuote(celpkg.SearchText(q)) + ")"
 }
 
-func subtestBackendSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
+func subtestBackendSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
+	return func(t *testing.T) {
+		repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
-	prefix := "srch-" + uuid.NewString()[:8]
-	for _, f := range searchFixtures {
-		mustExec(t, ctx, pool,
-			`INSERT INTO storage_backends (name, kind, display_name, region, endpoint)
-			 VALUES ($1, 's3-compatible', $2, $3, $4)`,
-			prefix+"-"+f.name, f.display, "EU-North-1", "https://S3.Example/"+f.name)
-	}
+		prefix := "srch-" + uuid.NewString()[:8]
+		for _, f := range searchFixtures {
+			mustExec(t, ctx, pool,
+				`INSERT INTO storage_backends (name, kind, display_name, region, endpoint)
+				 VALUES ($1, 's3-compatible', $2, $3, $4)`,
+				prefix+"-"+f.name, f.display, "EU-North-1", "https://S3.Example/"+f.name)
+		}
 
-	all, _, err := repo.List(ctx, 1000, "", "")
-	if err != nil {
-		t.Fatalf("list all: %v", err)
-	}
-	for _, q := range searchQueries {
-		t.Run(q, func(t *testing.T) {
-			filter := celFilter(q)
-			narrowed, _, err := repo.List(ctx, 1000, "", filter)
-			if err != nil {
-				t.Fatalf("list filtered: %v", err)
-			}
-			viaSQL := celBackends(t, filter, narrowed)
-			viaAll := celBackends(t, filter, all)
-			if len(viaSQL) != len(viaAll) {
-				t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
-					"narrowing, %d over every row — ListStorageBackends' search_like "+
-					"clause and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
-			}
-		})
+		all, _, err := repo.List(ctx, 1000, "", "")
+		if err != nil {
+			t.Fatalf("list all: %v", err)
+		}
+		for _, q := range searchQueries {
+			t.Run(q, func(t *testing.T) {
+				filter := celFilter(q)
+				narrowed, _, err := repo.List(ctx, 1000, "", filter)
+				if err != nil {
+					t.Fatalf("list filtered: %v", err)
+				}
+				viaSQL := celBackends(t, filter, narrowed)
+				viaAll := celBackends(t, filter, all)
+				if len(viaSQL) != len(viaAll) {
+					t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
+						"narrowing, %d over every row — ListStorageBackends' search_like "+
+						"clause and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
+				}
+			})
+		}
 	}
 }
 
@@ -117,49 +119,51 @@ func celBackends(t *testing.T, filter string, in []admindomain.StorageBackend) [
 	return out
 }
 
-func subtestCollectionSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	tenantID, _ := mkTenant(t, ctx, pool, "shared")
+func subtestCollectionSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
+	return func(t *testing.T) {
+		tenantID, _ := mkTenant(t, ctx, pool, "shared")
 
-	const backendID = "srch-coll-be"
-	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')
-		 ON CONFLICT (name) DO NOTHING`, backendID)
-	bucketID := uuid.New()
-	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (id, backend_id, name, display_name)
-		 SELECT $1, sb.id, 'srch-coll-bucket', 'b' FROM storage_backends sb WHERE sb.name = $2`,
-		bucketID, backendID)
-
-	for _, f := range searchFixtures {
+		const backendID = "srch-coll-be"
 		mustExec(t, ctx, pool,
-			`INSERT INTO collections (id, tenant_id, name, display_name, bucket_id)
-			 VALUES ($1, $2, $3, $4, $5)`,
-			uuid.New(), tenantID, f.name, f.display, bucketID)
-	}
+			`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')
+			 ON CONFLICT (name) DO NOTHING`, backendID)
+		bucketID := uuid.New()
+		mustExec(t, ctx, pool,
+			`INSERT INTO buckets (id, backend_id, name, display_name)
+			 SELECT $1, sb.id, 'srch-coll-bucket', 'b' FROM storage_backends sb WHERE sb.name = $2`,
+			bucketID, backendID)
 
-	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
-	listArgs := func(filter string) objectkey.ListCollectionsArgs {
-		return objectkey.ListCollectionsArgs{TenantID: tenantID, PageSize: 1000, Filter: filter}
-	}
-	all, _, err := repo.List(ctx, listArgs(""))
-	if err != nil {
-		t.Fatalf("list all: %v", err)
-	}
-	for _, q := range searchQueries {
-		t.Run(q, func(t *testing.T) {
-			filter := celFilter(q)
-			narrowed, _, err := repo.List(ctx, listArgs(filter))
-			if err != nil {
-				t.Fatalf("list filtered: %v", err)
-			}
-			viaSQL := celCollections(t, filter, narrowed)
-			viaAll := celCollections(t, filter, all)
-			if len(viaSQL) != len(viaAll) {
-				t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
-					"narrowing, %d over every row — ListCollections' search_like "+
-					"clause and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
-			}
-		})
+		for _, f := range searchFixtures {
+			mustExec(t, ctx, pool,
+				`INSERT INTO collections (id, tenant_id, name, display_name, bucket_id)
+				 VALUES ($1, $2, $3, $4, $5)`,
+				uuid.New(), tenantID, f.name, f.display, bucketID)
+		}
+
+		repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
+		listArgs := func(filter string) objectkey.ListCollectionsArgs {
+			return objectkey.ListCollectionsArgs{TenantID: tenantID, PageSize: 1000, Filter: filter}
+		}
+		all, _, err := repo.List(ctx, listArgs(""))
+		if err != nil {
+			t.Fatalf("list all: %v", err)
+		}
+		for _, q := range searchQueries {
+			t.Run(q, func(t *testing.T) {
+				filter := celFilter(q)
+				narrowed, _, err := repo.List(ctx, listArgs(filter))
+				if err != nil {
+					t.Fatalf("list filtered: %v", err)
+				}
+				viaSQL := celCollections(t, filter, narrowed)
+				viaAll := celCollections(t, filter, all)
+				if len(viaSQL) != len(viaAll) {
+					t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
+						"narrowing, %d over every row — ListCollections' search_like "+
+						"clause and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
+				}
+			})
+		}
 	}
 }
 
@@ -186,28 +190,29 @@ func celCollections(t *testing.T, filter string, in []objectkey.Collection) []ob
 // The bug the field exists to end, for each list: a match that sorts past the
 // page. Both had a TestPushdown_* case for `==` already; neither had one for a
 // search, which is the shape the console actually sends.
-func subtestBackendPastThePage(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-
-	prefix := "page-" + uuid.NewString()[:8]
-	for i := range 40 {
+func subtestBackendPastThePage(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
+	return func(t *testing.T) {
+		prefix := "page-" + uuid.NewString()[:8]
+		for i := range 40 {
+			mustExec(t, ctx, pool,
+				`INSERT INTO storage_backends (name, kind, display_name)
+				 VALUES ($1, 's3-compatible', '')`,
+				fmt.Sprintf("%s-aaa-%03d", prefix, i))
+		}
 		mustExec(t, ctx, pool,
 			`INSERT INTO storage_backends (name, kind, display_name)
-			 VALUES ($1, 's3-compatible', '')`,
-			fmt.Sprintf("%s-aaa-%03d", prefix, i))
-	}
-	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (name, kind, display_name)
-		 VALUES ($1, 's3-compatible', 'The Needle')`, prefix+"-zzz")
+			 VALUES ($1, 's3-compatible', 'The Needle')`, prefix+"-zzz")
 
-	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
-	got, _, err := repo.List(ctx, 5, "", `search.contains("needle")`)
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	if len(got) != 1 || got[0].BackendID != prefix+"-zzz" {
-		t.Errorf("first page of a filtered backend list = %d rows, want the one "+
-			"named %s-zzz — the filter selected from the page instead of from "+
-			"the table", len(got), prefix)
+		repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
+		got, _, err := repo.List(ctx, 5, "", `search.contains("needle")`)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(got) != 1 || got[0].BackendID != prefix+"-zzz" {
+			t.Errorf("first page of a filtered backend list = %d rows, want the one "+
+				"named %s-zzz — the filter selected from the page instead of from "+
+				"the table", len(got), prefix)
+		}
 	}
 }
 
@@ -227,10 +232,10 @@ func TestSearchPushdownContract(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 
-	t.Run("tenants", func(t *testing.T) { subtestTenantSearch(t, ctx, pool) })
-	t.Run("buckets", func(t *testing.T) { subtestBucketSearch(t, ctx, pool) })
-	t.Run("backends", func(t *testing.T) { subtestBackendSearch(t, ctx, pool) })
-	t.Run("collections", func(t *testing.T) { subtestCollectionSearch(t, ctx, pool) })
+	t.Run("tenants", subtestTenantSearch(ctx, pool))
+	t.Run("buckets", subtestBucketSearch(ctx, pool))
+	t.Run("backends", subtestBackendSearch(ctx, pool))
+	t.Run("collections", subtestCollectionSearch(ctx, pool))
 }
 
 // The other half: a match that sorts past the page, which only a SQL predicate
@@ -239,52 +244,54 @@ func TestSearchFindsAMatchPastThePage(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 
-	t.Run("buckets", func(t *testing.T) { subtestBucketPastThePage(t, ctx, pool) })
-	t.Run("backends", func(t *testing.T) { subtestBackendPastThePage(t, ctx, pool) })
+	t.Run("buckets", subtestBucketPastThePage(ctx, pool))
+	t.Run("backends", subtestBackendPastThePage(ctx, pool))
 }
 
-func subtestTenantSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
+func subtestTenantSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
+	return func(t *testing.T) {
+		repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 
-	prefix := "srch" + uuid.NewString()[:8]
-	for _, f := range searchFixtures {
-		// Tenant slugs are constrained; the fixture names are slug-safe apart
-		// from the separator probe pair, which is what it is for.
-		slug := prefix + "-" + strings.ReplaceAll(f.name, "_", "-")
-		// tenants_display_name_format requires 1..255 characters, so the
-		// shared fixtures' empty-display-name row cannot exist here. That is a
-		// real difference from buckets and backends, not a workaround: this
-		// table has no such state to get wrong, and substituting a placeholder
-		// keeps the row without pretending the empty case was covered.
-		display := f.display
-		if display == "" {
-			display = "no display"
+		prefix := "srch" + uuid.NewString()[:8]
+		for _, f := range searchFixtures {
+			// Tenant slugs are constrained; the fixture names are slug-safe apart
+			// from the separator probe pair, which is what it is for.
+			slug := prefix + "-" + strings.ReplaceAll(f.name, "_", "-")
+			// tenants_display_name_format requires 1..255 characters, so the
+			// shared fixtures' empty-display-name row cannot exist here. That is a
+			// real difference from buckets and backends, not a workaround: this
+			// table has no such state to get wrong, and substituting a placeholder
+			// keeps the row without pretending the empty case was covered.
+			display := f.display
+			if display == "" {
+				display = "no display"
+			}
+			mustExec(t, ctx, pool,
+				`INSERT INTO tenants (id, slug, display_name, storage_layout)
+				 VALUES ($1, $2, $3, 'shared')`,
+				uuid.New(), slug, display)
 		}
-		mustExec(t, ctx, pool,
-			`INSERT INTO tenants (id, slug, display_name, storage_layout)
-			 VALUES ($1, $2, $3, 'shared')`,
-			uuid.New(), slug, display)
-	}
 
-	all, _, err := repo.List(ctx, tenanth.ListTenantsArgs{PageSize: 1000})
-	if err != nil {
-		t.Fatalf("list all: %v", err)
-	}
-	for _, q := range searchQueries {
-		t.Run(q, func(t *testing.T) {
-			filter := celFilter(q)
-			narrowed, _, err := repo.List(ctx, tenanth.ListTenantsArgs{PageSize: 1000, Filter: filter})
-			if err != nil {
-				t.Fatalf("list filtered: %v", err)
-			}
-			viaSQL := celTenants(t, filter, narrowed)
-			viaAll := celTenants(t, filter, all)
-			if len(viaSQL) != len(viaAll) {
-				t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
-					"narrowing, %d over every row — ListTenants' search_like clause "+
-					"and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
-			}
-		})
+		all, _, err := repo.List(ctx, tenanth.ListTenantsArgs{PageSize: 1000})
+		if err != nil {
+			t.Fatalf("list all: %v", err)
+		}
+		for _, q := range searchQueries {
+			t.Run(q, func(t *testing.T) {
+				filter := celFilter(q)
+				narrowed, _, err := repo.List(ctx, tenanth.ListTenantsArgs{PageSize: 1000, Filter: filter})
+				if err != nil {
+					t.Fatalf("list filtered: %v", err)
+				}
+				viaSQL := celTenants(t, filter, narrowed)
+				viaAll := celTenants(t, filter, all)
+				if len(viaSQL) != len(viaAll) {
+					t.Errorf("pushdown changed the answer for %q: %d rows after SQL "+
+						"narrowing, %d over every row — ListTenants' search_like clause "+
+						"and cel.SearchText disagree", q, len(viaSQL), len(viaAll))
+				}
+			})
+		}
 	}
 }
 
