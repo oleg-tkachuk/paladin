@@ -75,7 +75,7 @@ Paladin is one Go binary. Each role below runs as its own Deployment
 | `worker` | background jobs: bucket provisioning, trash purge, lifecycle, migration between backends |
 | `dispatcher` | delivers events to webhooks and message brokers |
 | `ingest` | turns storage-side notifications into object updates; off by default |
-| `paladin-console` | the web UI, with a BFF in front of `api` and `admin`; its own chart and Deployment |
+| `console` | the web UI, with a BFF in front of `api` and `admin`; its own chart and Deployment |
 
 It needs PostgreSQL and an S3-compatible store — SeaweedFS, MinIO, Garage or
 AWS S3.
