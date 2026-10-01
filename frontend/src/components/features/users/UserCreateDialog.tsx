@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { type FailedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Input } from "@/components/ui/input";
 import {
   SelectContent,
@@ -39,6 +40,8 @@ interface Props {
   onClose: () => void;
   onCreated: () => void;
   tenants: Array<{ tenantId: string; slug: string; displayName: string }>;
+  /** Set when the tenant list failed to load: `tenants` is then unknown. */
+  tenantsFailed?: FailedRead | null;
 }
 
 export function UserCreateDialog({
@@ -46,6 +49,7 @@ export function UserCreateDialog({
   onClose,
   onCreated,
   tenants,
+  tenantsFailed = null,
 }: Props) {
   const { busy, createUser } = useUserAdmin();
   const [subject, setSubject] = useState("");
@@ -148,6 +152,17 @@ export function UserCreateDialog({
             )}
           </FormField>
         </FormRow>
+        {/* Creating in the operator's own tenant still works, so nothing is
+            held — but the select offering only that one is not the full list,
+            and should not read as if it were. */}
+        {tenantsFailed ? (
+          <ListLoadError
+            variant="inline"
+            what="Tenants"
+            reason={tenantsFailed.reason}
+            onRetry={tenantsFailed.retry}
+          />
+        ) : null}
         <FormRow>
           <FormField label="Tenant">
             {(control) => (

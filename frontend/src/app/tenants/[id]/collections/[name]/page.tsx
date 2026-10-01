@@ -33,6 +33,7 @@ import {
 
 import { collectionClient } from "@/lib/connect/client";
 import { useBuckets } from "@/hooks/useBuckets";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { CollectionSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { CompletionMode } from "@/gen/paladin/common/v1/resource_pb";
 import { T } from "@/lib/ui/typography";
@@ -64,7 +65,7 @@ function formatTimestamp(ts: { seconds: bigint } | undefined): string {
 export default function CollectionOverviewPage() {
   const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
-  const { buckets, fetchBuckets } = useBuckets();
+  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
 
   const [displayName, setDisplayName] = useState(collection.displayName);
   const [savingMeta, setSavingMeta] = useState(false);
@@ -221,6 +222,16 @@ export default function CollectionOverviewPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="collection-bucket-binding">Bind to bucket</Label>
+          {/* A failed read opened a select with nothing in it, and Bind
+              could never enable — as if there were no bucket to bind to. */}
+          {bucketsError ? (
+            <ListLoadError
+              variant="inline"
+              what="Buckets"
+              reason={bucketsError}
+              onRetry={() => void fetchBuckets()}
+            />
+          ) : null}
           <SelectRoot
             value={bucketSelection}
             onValueChange={setBucketSelection}
