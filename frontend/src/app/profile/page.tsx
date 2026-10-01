@@ -44,6 +44,7 @@ import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
 import { isAbortError } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { SETTINGS_NOT_APPLIED } from "./_constants";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
 // Tenant comes from the JWT, so the page always operates on the calling
@@ -255,11 +256,9 @@ export default function ProfilePage() {
         <CardHeader className="px-6">
           <CardTitle className="text-base">Preferences</CardTitle>
           <CardDescription>
-            Stored on the IAM plane via{" "}
-            <code className="rounded bg-muted px-1 font-mono text-foreground">
-              UserSettingsService.UpdateMine
-            </code>
-            .
+            {/* Nothing in the console reads these back (see BACKLOG); saying
+                so beats a Theme picker that changes nothing. */}
+            {SETTINGS_NOT_APPLIED}
           </CardDescription>
         </CardHeader>
         <Separator />
