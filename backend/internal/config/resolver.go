@@ -304,8 +304,10 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 		var getErr error
 		secret, getErr = client.CoreV1().Secrets(namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 		if getErr != nil && retryableSecretRead(ctx, getErr) {
+			// No secret name: the failure is the API's, not the secret's, and
+			// the caller's error names the config field once retries run out.
 			r.log.Warn("kubernetes API did not answer a secret read; retrying",
-				zap.String("secret", ref.Name), zap.Int("attempt", attempt), zap.Error(getErr))
+				zap.Int("attempt", attempt), zap.Error(getErr))
 		}
 		return getErr
 	})
