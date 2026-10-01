@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 /* Both dark palettes take the `dark:` variant. Light is the bare :root. */
-@custom-variant dark (&:is(.dark *, .violet *));
+@custom-variant dark (&:is(.dark *, .ember *));
 
 /* ─── shadcn/ui tokens (neutral, dark-default) ─────────────────────────── */
 @theme inline {
@@ -177,55 +177,55 @@
   --border-opacity: 0.09;
 }
 
-.violet {
-  /* ── "Violet" ─────────────────────────────────────────────────────────
-   * A second dark palette: a near-black indigo ground and one violet
-   * accent, with white text on solid primary. Status colours are the
-   * bright Tailwind 400 steps, so text on their solid fills is the ground
-   * colour rather than white. */
+.ember {
+  /* ── "Ember" ──────────────────────────────────────────────────────────
+   * A second dark palette: a warm plum-black ground, one orange accent with
+   * near-black text on it, and larger corners. Status fills carry dark text
+   * too, so every solid fill reads the same way. */
+  --radius: 0.8rem;
 
-  --background: #0d0d14;
-  --foreground: #e4e4f0;
-  --card: #13131e;
-  --card-foreground: #e4e4f0;
-  --popover: #13131e;
-  --popover-foreground: #e4e4f0;
+  --background: #17141c;
+  --foreground: #ece7f1;
+  --card: #1e1a24;
+  --card-foreground: #ece7f1;
+  --popover: #1e1a24;
+  --popover-foreground: #ece7f1;
 
-  --primary: #7c6fff;
-  --primary-foreground: #ffffff;
+  --primary: #ff7a3d;
+  --primary-foreground: #160f09;
 
-  --secondary: #1a1a2a;
-  --secondary-foreground: #e4e4f0;
-  --muted: #1a1a2a;
-  --muted-foreground: #8888aa;
-  --accent: #1a1a2a;
-  --accent-foreground: #e4e4f0;
+  --secondary: #262230;
+  --secondary-foreground: #ece7f1;
+  --muted: #262230;
+  --muted-foreground: #a49bad;
+  --accent: #262230;
+  --accent-foreground: #ece7f1;
 
-  --destructive: #f87171;
-  --destructive-foreground: #0d0d14;
+  --destructive: #ff5d6c;
+  --destructive-foreground: #160f09;
   --success: #34d399;
-  --warning: #fbbf24;
-  --warning-foreground: #0d0d14;
-  --info: #60a5fa;
+  --warning: #f5b14c;
+  --warning-foreground: #160f09;
+  --info: #59b6ea;
 
-  --border: #232334;
-  --input: #2e2e44;
-  --ring: #7c6fff;
+  --border: #322c3c;
+  --input: #322c3c;
+  --ring: #ff7a3d;
 
-  --chart-1: #7c6fff;
+  --chart-1: #ff7a3d;
   --chart-2: #34d399;
-  --chart-3: #fbbf24;
-  --chart-4: #f87171;
-  --chart-5: #60a5fa;
+  --chart-3: #f5b14c;
+  --chart-4: #ff5d6c;
+  --chart-5: #59b6ea;
 
-  --sidebar: #13131e;
-  --sidebar-foreground: #e4e4f0;
-  --sidebar-primary: #7c6fff;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1a2a;
-  --sidebar-accent-foreground: #e4e4f0;
-  --sidebar-border: #232334;
-  --sidebar-ring: #7c6fff;
+  --sidebar: #1e1a24;
+  --sidebar-foreground: #ece7f1;
+  --sidebar-primary: #ff7a3d;
+  --sidebar-primary-foreground: #160f09;
+  --sidebar-accent: #262230;
+  --sidebar-accent-foreground: #ece7f1;
+  --sidebar-border: #322c3c;
+  --sidebar-ring: #ff7a3d;
 }
 
 @layer base {
@@ -236,7 +236,7 @@
     color-scheme: light;
   }
   html.dark,
-  html.violet {
+  html.ember {
     color-scheme: dark;
   }
   body {

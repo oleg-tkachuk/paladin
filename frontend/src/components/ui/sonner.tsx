@@ -13,7 +13,7 @@ import {
 import { THEME_LIGHT } from "@/lib/theme";
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  // Sonner knows light and dark only; violet is a dark palette.
+  // Sonner knows light and dark only; ember is a dark palette.
   const { resolvedTheme } = useTheme();
 
   return (

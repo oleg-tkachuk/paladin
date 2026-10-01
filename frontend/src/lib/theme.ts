@@ -8,20 +8,20 @@ import { userSettingsClient } from "@/lib/connect/client";
 export const THEME_SYSTEM = "system";
 export const THEME_LIGHT = "light";
 export const THEME_DARK = "dark";
-export const THEME_VIOLET = "violet";
+export const THEME_EMBER = "ember";
 
 export type Theme =
   | typeof THEME_SYSTEM
   | typeof THEME_LIGHT
   | typeof THEME_DARK
-  | typeof THEME_VIOLET;
+  | typeof THEME_EMBER;
 
 // The palettes: each is a class on <html> that globals.css styles. "system"
 // is not one — it resolves to light or dark from the browser's preference.
 export const PALETTES: readonly Theme[] = [
   THEME_LIGHT,
   THEME_DARK,
-  THEME_VIOLET,
+  THEME_EMBER,
 ];
 
 // What the console shows before the user's setting has loaded, and on /login.
@@ -31,7 +31,7 @@ export const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
   { value: THEME_SYSTEM, label: "Match system" },
   { value: THEME_LIGHT, label: "Light" },
   { value: THEME_DARK, label: "Dark" },
-  { value: THEME_VIOLET, label: "Violet" },
+  { value: THEME_EMBER, label: "Ember" },
 ];
 
 export function isTheme(value: string): value is Theme {
