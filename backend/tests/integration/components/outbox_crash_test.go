@@ -16,67 +16,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
-	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
-
-// startPostgres boots a throwaway Postgres, applies the full goose schema,
-// and returns a live pool. The cleanup terminates the container.
-func startPostgres(tb testing.TB) *pgxpool.Pool {
-	tb.Helper()
-	ctx := context.Background()
-
-	ctr, err := tcpostgres.Run(ctx, "postgres:17-alpine",
-		tcpostgres.WithDatabase("paladin"),
-		tcpostgres.WithUsername("paladin"),
-		tcpostgres.WithPassword("paladin"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(90*time.Second)),
-	)
-	if err != nil {
-		tb.Fatalf("start postgres container: %v", err)
-	}
-	tb.Cleanup(func() { _ = ctr.Terminate(ctx) })
-
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		tb.Fatalf("connection string: %v", err)
-	}
-
-	// Apply migrations via the same goose + embedded FS the app uses.
-	cc, err := pgx.ParseConfig(dsn)
-	if err != nil {
-		tb.Fatalf("parse dsn: %v", err)
-	}
-	sqlDB := stdlib.OpenDB(*cc)
-	if err := goose.SetDialect("postgres"); err != nil {
-		tb.Fatalf("goose dialect: %v", err)
-	}
-	goose.SetBaseFS(migrations.FS)
-	goose.SetLogger(goose.NopLogger())
-	if err := goose.Up(sqlDB, "."); err != nil {
-		tb.Fatalf("goose up: %v", err)
-	}
-	_ = sqlDB.Close()
-
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		tb.Fatalf("open pool: %v", err)
-	}
-	tb.Cleanup(pool.Close)
-	return pool
-}
 
 // fixture seeds one tenant + backend + collection + an active (match-all)
 // subscription, so any object event for the tenant fans out exactly one
