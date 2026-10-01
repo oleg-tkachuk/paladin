@@ -20,8 +20,11 @@ emits, per `worker` label:
 - `paladin_worker_last_run_timestamp_seconds{worker}` — unix ts of the last tick.
 - `paladin_worker_interval_seconds{worker}` — configured interval (published at startup).
 
-These flow over OTLP like every other Paladin metric (ADR-0001). Locally (`otel.enabled: false`)
-they are no-ops, so these alerts only have data in a deployment with the OTLP pipeline wired.
+They leave the process like every other Paladin metric — pushed over OTLP or
+scraped from `otel.metrics_addr`, per `otel.metrics_exporter`
+([observability.md](../../backend/docs/observability.md)). With
+`otel.enabled: false` they are no-ops, so the alerts only have data where
+metrics are collected.
 
 ## Triage
 
@@ -68,8 +71,7 @@ they are no-ops, so these alerts only have data in a deployment with the OTLP pi
    DB-partitioned. Restore worker pods / DB connectivity.
 
 5. **`PaladinWorkerTicksAllFailing` — every tick errors.** The loop runs but the
-   work fails. Grep the worker's logs for the error it logs each tick (kept
-   intact through the `RunTicker` migration). Common causes: a missing/blocked
+   work fails. Grep the worker's logs for the error it logs each tick. Common causes: a missing/blocked
    migration, revoked DB grant, a downstream (S3 / NATS) outage, or a poison row.
    Fix the root cause; the next tick clears the alert.
 
