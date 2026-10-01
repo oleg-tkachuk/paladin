@@ -101,6 +101,12 @@ describe("BackgroundOpsDrawer cancel", () => {
 
     const cancel = await screen.findByRole("button", { name: /^cancel$/i });
     await userEvent.click(cancel);
+    // Stopping a batch part-way is not undone by restarting it, so the click
+    // asks first.
+    expect(h.cancel).not.toHaveBeenCalled();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Cancel operation" }),
+    );
 
     await waitFor(() => expect(h.cancel).toHaveBeenCalledTimes(1));
     expect(h.cancel).toHaveBeenCalledWith({ name: "operations/mig-1" });
@@ -127,6 +133,9 @@ describe("BackgroundOpsDrawer cancel", () => {
 
     await userEvent.click(
       await screen.findByRole("button", { name: /^cancel$/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Cancel operation" }),
     );
 
     await waitFor(() => expect(h.cancel).toHaveBeenCalledTimes(1));

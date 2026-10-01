@@ -16,6 +16,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { useTenant } from "../tenant-context";
 import { useBuckets } from "@/hooks/useBuckets";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { tenantClient } from "@/lib/connect/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,10 @@ export default function DefaultBindingPage() {
 
   const [selected, setSelected] = useState(-1); // index into buckets, -1 = none
   const [busy, setBusy] = useState(false);
+  // Clearing the route makes every bare-name create in this tenant fail from
+  // that moment — a client that names no bucket stops working. It was one
+  // click on an outline button beside Update.
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // A missing binding is a normal state, not an error — NotFound resolves to
   // null rather than throwing. Any other failure toasts and surfaces via the
@@ -191,12 +196,26 @@ export default function DefaultBindingPage() {
             {binding ? "Update" : "Set"}
           </Button>
           {binding && (
-            <Button variant="outline" onClick={handleClear} disabled={busy}>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmClear(true)}
+              disabled={busy}
+            >
               Clear
             </Button>
           )}
         </div>
       </Card>
+      <ConfirmModal
+        isOpen={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        onConfirm={handleClear}
+        type="danger"
+        title="Clear the default route?"
+        message="Creating a Collection or object without naming a bucket will be refused in this tenant until a route is set again."
+        confirmText="Clear route"
+        loading={busy}
+      />
     </div>
   );
 }

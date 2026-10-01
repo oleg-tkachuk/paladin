@@ -13,6 +13,7 @@ import { useState } from "react";
 
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Modal } from "@/components/ui/Modal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { useNotification } from "@/components/ui/Notification";
 import { useUserAdmin } from "@/hooks/useUserAdmin";
@@ -42,6 +43,9 @@ export function UserRowActions({
   const { busy, updateUser, deleteUser, resetPassword } = useUserAdmin();
   const { showNotification } = useNotification();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Resetting a password ends the current one at once, so it asks first, as
+  // Delete beside it always did. One click on the menu row used to do it.
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const label = user.displayName || user.subject;
 
@@ -122,7 +126,7 @@ export function UserRowActions({
               {user.disabled ? "Enable" : "Disable"}
             </span>
           </Dropdown.Item>
-          <Dropdown.Item onClick={doReset}>
+          <Dropdown.Item onClick={() => setConfirmReset(true)}>
             <span className="px-3 py-1.5 text-xs font-medium">
               Reset password
             </span>
@@ -135,6 +139,16 @@ export function UserRowActions({
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
+
+      <ConfirmModal
+        isOpen={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        onConfirm={doReset}
+        title="Reset password"
+        message={`${label}'s current password stops working now. The new one is shown once.`}
+        confirmText="Reset password"
+        loading={busy}
+      />
 
       <Modal
         isOpen={confirmDelete}
