@@ -505,7 +505,7 @@ function BudgetTile({
                         overCap
                           ? "bg-destructive"
                           : pct > 80
-                            ? "bg-amber-500"
+                            ? "bg-warning"
                             : "bg-chart-2",
                       )}
                       style={{ width: `${pct}%` }}

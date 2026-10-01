@@ -11,8 +11,8 @@ export default function GlobalError({
 }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in px-6">
-      <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-8">
-        <ExclamationTriangleIcon className="w-10 h-10 text-rose-500" />
+      <div className="w-20 h-20 rounded-3xl bg-destructive/10 border border-destructive/20 flex items-center justify-center mb-8">
+        <ExclamationTriangleIcon className="w-10 h-10 text-destructive" />
       </div>
       <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">
         Something went wrong

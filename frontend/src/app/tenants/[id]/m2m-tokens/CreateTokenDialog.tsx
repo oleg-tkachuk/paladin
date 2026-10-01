@@ -187,7 +187,7 @@ export function CreateTokenDialog({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircleIcon className="size-5 text-emerald-500" />
+              <CheckCircleIcon className="size-5 text-success" />
               Token created
             </DialogTitle>
             <DialogDescription>
@@ -196,7 +196,7 @@ export function CreateTokenDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+            <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
               <ExclamationTriangleIcon className="mr-1 inline-block size-4 align-text-bottom" />
               Save it in a secret manager (Vault, Doppler, a Kubernetes Secret)
               before closing.

@@ -206,7 +206,7 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
       <p
         className={cn(
           T.hint,
-          "rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2",
+          "rounded-md border border-warning/30 bg-warning/5 px-3 py-2",
         )}
       >
         Each tool calls one plane, and the plane checks the token&apos;s

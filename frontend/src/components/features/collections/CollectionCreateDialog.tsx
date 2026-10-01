@@ -271,15 +271,15 @@ export function CollectionCreateDialog({
           </FormField>
         </FormRow>
         {backendId && !bucketsFailed && bucketsForBackend.length === 0 ? (
-          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-            <p className="text-amber-900 dark:text-amber-200">
+          <div className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+            <p className="text-warning">
               Backend <span className={T.code}>{backendId}</span> has no bucket
               yet.
             </p>
             <Link
               href={bucketsHref}
               onClick={() => onOpenChange(false)}
-              className="inline-flex items-center gap-1 text-amber-700 hover:underline dark:text-amber-300"
+              className="inline-flex items-center gap-1 text-warning hover:underline"
             >
               Open Buckets →
             </Link>

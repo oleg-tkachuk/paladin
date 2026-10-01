@@ -267,7 +267,7 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
   if (inspect.alwaysDeny.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <p className="text-sm text-amber-500">
+        <p className="text-sm text-warning">
           The always-deny list is empty: every profile can expose credential,
           user and policy tools. The built-in list applies only while{" "}
           <span className={T.code}>mcp.always_deny</span> is left unset.

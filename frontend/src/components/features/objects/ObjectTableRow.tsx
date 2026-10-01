@@ -146,7 +146,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <DocumentIcon className="w-4 h-4" />
               {obj.contentType?.startsWith("image/") && (
-                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500 border border-[#0A0C10] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-[#0A0C10] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
               )}
             </div>
             <Tooltip
@@ -216,7 +216,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
               <div className="flex items-center gap-1 border-l border-white/10 pl-2 ml-1">
                 <button
                   onClick={() => onSaveInlineLabels(obj.objectId)}
-                  className="p-1 px-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 transition-all active:scale-90"
+                  className="p-1 px-1.5 rounded-lg bg-success text-white hover:bg-success transition-all active:scale-90"
                   title="Synchronize"
                 >
                   <CheckIcon className="w-3 h-3" />
@@ -384,7 +384,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                   }}
                 >
                   <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
-                    <ArrowDownTrayIcon className="w-4 h-4 text-emerald-400" />
+                    <ArrowDownTrayIcon className="w-4 h-4 text-success" />
                     Copy Download Link
                   </div>
                 </Dropdown.Item>

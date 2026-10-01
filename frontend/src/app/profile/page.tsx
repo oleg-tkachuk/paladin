@@ -401,7 +401,7 @@ export default function ProfilePage() {
                       those carry no updatedAt. */}
                   {settings?.updatedAt ? (
                     <>
-                      <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-emerald-500" />
+                      <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-success" />
                       Last synced {formatTimestampUTC(settings.updatedAt)}
                       {" · resourceVersion "}
                       <span className="font-mono">

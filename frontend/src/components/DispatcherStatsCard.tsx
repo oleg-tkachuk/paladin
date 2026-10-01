@@ -48,7 +48,7 @@ export function DispatcherStatsCard() {
         {data && (
           <Badge
             variant="outline"
-            className={data.available ? "text-emerald-500" : "text-amber-500"}
+            className={data.available ? "text-success" : "text-warning"}
           >
             {data.available ? "live" : "unavailable"}
           </Badge>
@@ -71,7 +71,7 @@ export function DispatcherStatsCard() {
               <Stat
                 label="Pending"
                 value={Number(data.pending)}
-                accent={data.pending > 0n ? "text-amber-500" : undefined}
+                accent={data.pending > 0n ? "text-warning" : undefined}
               />
               <Stat
                 label="Failed"
@@ -82,7 +82,7 @@ export function DispatcherStatsCard() {
                 label="Oldest"
                 text={humanizeSeconds(Number(data.oldestPendingSeconds))}
                 accent={
-                  data.oldestPendingSeconds > 60n ? "text-amber-500" : undefined
+                  data.oldestPendingSeconds > 60n ? "text-warning" : undefined
                 }
               />
             </div>
@@ -114,7 +114,7 @@ export function DispatcherStatsCard() {
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {s.pending > 0n && (
-                          <Badge variant="outline" className="text-amber-500">
+                          <Badge variant="outline" className="text-warning">
                             {Number(s.pending)} pending
                           </Badge>
                         )}

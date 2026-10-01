@@ -181,7 +181,7 @@ export function ObjectsFilterBar({
                       onDeleteView(view.name);
                     }}
                     onKeyDown={(e) => e.stopPropagation()}
-                    className="opacity-0 group-hover/view:opacity-100 focus-visible:opacity-100 p-1 hover:text-rose-500 transition-all"
+                    className="opacity-0 group-hover/view:opacity-100 focus-visible:opacity-100 p-1 hover:text-destructive transition-all"
                   >
                     <TrashIcon className="w-3 h-3" />
                   </button>
