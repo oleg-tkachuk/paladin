@@ -212,7 +212,13 @@ stack_use_built_image() {
     local var="${1:?tag variable}" info="${2:?info.env}" image="${3:?image}" version
     version=$(stack_built_version "$info") || return 1
     if ! docker image inspect "$image:$version" >/dev/null 2>&1; then
-        echo "!!! $image:$version is not in the local image store — the build that wrote $info did not load it" >&2
+        {
+            echo "!!! $image:$version is not in the local image store."
+            echo "    $info names that version, so the build ran — under another"
+            echo "    registry. The stack runs ${STACK_BUILT_IMAGE_PREFIX}*, which is what"
+            echo "    Taskfile.dev.yaml builds; the root Taskfile builds for ghcr.io."
+            echo "    Run it as: task -t Taskfile.dev.yaml <task>"
+        } >&2
         return 1
     fi
     export "$var=$version"
