@@ -1586,35 +1586,6 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
-### `collections-crud › deleting a Collection removes it` is flaky in CI
-
-- **Status:** Open — one attempt made and reverted 2026-09-10; the flake stands.
-- **Shape:** fails roughly three runs in ten, on commits that touch no
-  application code (twice on documentation/tooling-only commits). Locally it
-  passes, including the full suite at 121/121 and the spec repeated three times
-  over, so it does not reproduce on a warm laptop.
-- **What was tried, and why it was wrong.** The sibling spec
-  `event-subscriptions.spec.ts` carries a long comment diagnosing the same
-  symptom in its own delete flow: forcing a click on a Radix dropdown item or a
-  confirm dialog lands it mid-animation, and actionability is the right wait.
-  That rule was applied here — reasonable — and *also* extended to the Select
-  option in the create dialog, which is neither a dropdown item nor a dialog.
-  The next CI run failed `creating a Collection makes it appear in the list`
-  on its existence poll, the signature of a list that opened without a
-  selection landing. The Select change is reverted. The dropdown-item and
-  confirm changes stayed, and the delete flake still failed with them in place,
-  so the animation theory does not explain this one.
-- **What the next attempt should start from:** the failure artifacts CI already
-  uploads — `error-context.md` and `test-failed-1.png` under `test-results/` —
-  rather than a pattern that worked elsewhere. The last symptom was
-  `element(s) not found` after 29s on a row whose collection is seeded through
-  the API (`seedCollection`), not the UI, which points at the row never
-  rendering rather than at the click.
-- **Blockers:** none, beyond needing a CI failure to inspect: it does not
-  reproduce locally.
-
----
-
 ### CI runs again, and the workflows disagree with the local gate
 
 - **Status:** Deferred — the four failures found on 2026-09-10 are fixed; what

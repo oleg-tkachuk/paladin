@@ -14,6 +14,7 @@
 // useCollections when platform-admin cross-tenant mutation lands.
 
 import React, { useEffect, useMemo, useState } from "react";
+import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { useQuery } from "@tanstack/react-query";
 import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
@@ -167,7 +168,10 @@ export default function TenantCollectionsPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   // ── delete confirm
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // The row as it was when Delete was chosen. Its resourceVersion is the OCC
+  // guard; looking it up again at confirm read whatever the list held then —
+  // nothing, if a search had just changed the query — and sent an empty one.
+  const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
 
   const sorted = useMemo(() => {
     const arr = [...list];
@@ -198,20 +202,24 @@ export default function TenantCollectionsPage() {
       // OCC guard: DeleteCollection requires the version we last read, so a
       // concurrent rename/update turns this into a 409 instead of a silent
       // delete of something the user never saw.
-      const target = list.find((c) => c.collection === deleteTarget);
-      await deleteCollection(deleteTarget, target?.resourceVersion ?? "");
+      await deleteCollection(
+        deleteTarget.collection,
+        deleteTarget.resourceVersion,
+      );
       showNotification({
         type: "success",
         title: "Collection deleted",
-        message: deleteTarget,
+        message: deleteTarget.collection,
       });
       setDeleteTarget(null);
       void fetchList(search);
-    } catch {
+    } catch (err) {
+      // The server's reason: a collection that still holds objects is one,
+      // a stale version another. This used to say the first whatever happened.
       showNotification({
         type: "error",
         title: "Deletion failed",
-        message: "Collection must be empty before it can be removed.",
+        message: errorMessage(err, "Delete failed"),
       });
     }
   };
@@ -390,7 +398,7 @@ export default function TenantCollectionsPage() {
                         {isOwnTenant && (
                           <DropdownMenuItem
                             variant="destructive"
-                            onSelect={() => setDeleteTarget(ok.collection)}
+                            onSelect={() => setDeleteTarget(ok)}
                           >
                             <TrashIcon className="size-4" />
                             Delete Collection
@@ -427,8 +435,10 @@ export default function TenantCollectionsPage() {
             <AlertDialogTitle>Delete this Collection?</AlertDialogTitle>
             <AlertDialogDescription>
               Removing{" "}
-              <span className="font-mono text-foreground">{deleteTarget}</span>.
-              The Collection must be empty of all live objects before this can
+              <span className="font-mono text-foreground">
+                {deleteTarget?.collection}
+              </span>
+              . The Collection must be empty of all live objects before this can
               succeed.
             </AlertDialogDescription>
           </AlertDialogHeader>
