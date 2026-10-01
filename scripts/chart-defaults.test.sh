@@ -199,6 +199,15 @@ check "console: data URL from the default release" "$(console_env defaults PALAD
     "http://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
 check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,admin,worker,mcp,dispatcher"
 
+# Readiness asks the console process, not the role fan-out. /api/health/all
+# feeds the /health page and answers 200 whatever the roles say, so as a probe
+# it never measured the upstreams — only whether six fetches fit the kubelet's
+# 1s default. Under load they did not, the only console replica left the
+# Service, and every page was a bare 503 from the ingress.
+check "console: readiness probes the console itself" \
+    "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.containers[0].readinessProbe.httpGet.path' "$scratch/console-defaults.yaml")" \
+    "/api/health/live"
+
 console other-release --set backend.release=pic --set backend.namespace=platform
 check "console: release without the chart name is suffixed" "$(console_env other-release PALADIN_ADMIN_URL)" \
     "http://pic-paladin-core-admin.platform.svc.cluster.local:8090"

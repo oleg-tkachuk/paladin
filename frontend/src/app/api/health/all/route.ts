@@ -68,9 +68,10 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
   },
 ];
 
-// Per-role timeout. The kubelet probe timeout is 3s; fetching the
-// snapshot here adds a hop, so 5s gives a healthy probe time to land
-// without making the page hang on a wedged role.
+// Per-role timeout. Each role's own snapshot is bounded by its probe
+// budget; this adds a hop, so 5s lets a slow-but-healthy role answer
+// without making the page hang on a wedged one. Not a kubelet probe
+// target: the console's probes use /api/health/live.
 const TIMEOUT_MS = 5000;
 
 type Snapshot = {
