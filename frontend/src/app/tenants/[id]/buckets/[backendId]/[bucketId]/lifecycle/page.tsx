@@ -595,7 +595,7 @@ function RuleEditor({
         if (!o) onCancel();
       }}
     >
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="sm:max-w-140">
         <form onSubmit={onSubmit}>
           <DialogHeader>
             <DialogTitle>
@@ -646,7 +646,7 @@ function RuleEditor({
               <Label htmlFor="rule-match">Match (CEL)</Label>
               <Textarea
                 id="rule-match"
-                className="font-mono text-xs min-h-[80px]"
+                className="font-mono text-xs min-h-20"
                 // The placeholder is a worked example, so it has to be a
                 // valid expression: identifiers are bare (the Object schema
                 // declares size_bytes, not object.size_bytes) and CEL has no

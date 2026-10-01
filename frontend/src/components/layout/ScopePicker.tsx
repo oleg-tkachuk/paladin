@@ -228,23 +228,23 @@ export const ScopePicker: React.FC = () => {
                     >
                       {label}{" "}
                       {isCurrent && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-tiny text-muted-foreground">
                           (signed in)
                         </span>
                       )}
                       {switching === m.tenantId && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-tiny text-muted-foreground">
                           (switching…)
                         </span>
                       )}
                     </div>
-                    <div className="truncate font-mono text-[10px] text-muted-foreground">
+                    <div className="truncate font-mono text-tiny text-muted-foreground">
                       {m.tenantId}
                       {m.roles.length > 0 ? ` · ${m.roles.join(", ")}` : ""}
                     </div>
                   </div>
                   {m.disabled && (
-                    <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                    <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-tiny font-medium uppercase tracking-wide text-destructive">
                       Disabled
                     </span>
                   )}
@@ -265,11 +265,11 @@ export const ScopePicker: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm">
                         {tenant?.displayName?.trim() || "Untitled tenant"}{" "}
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-tiny text-muted-foreground">
                           (signed in)
                         </span>
                       </div>
-                      <div className="truncate font-mono text-[10px] text-muted-foreground">
+                      <div className="truncate font-mono text-tiny text-muted-foreground">
                         {tenantId}
                       </div>
                     </div>
@@ -291,11 +291,9 @@ export const ScopePicker: React.FC = () => {
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm">
                 Bucket owner{" "}
-                <span className="text-[10px] text-muted-foreground">
-                  (scope)
-                </span>
+                <span className="text-tiny text-muted-foreground">(scope)</span>
               </div>
-              <div className="truncate font-mono text-[10px] text-muted-foreground">
+              <div className="truncate font-mono text-tiny text-muted-foreground">
                 {scopedOwnerTenantId}
               </div>
             </div>
@@ -321,13 +319,13 @@ export const ScopePicker: React.FC = () => {
           type="button"
           aria-label={`Scope picker — backend ${backendId ?? "any"}, bucket ${bucketId ?? "any"}, tenant ${tenantLabel}`}
           className={cn(
-            "group inline-flex h-9 max-w-[420px] items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left transition-colors",
+            "group inline-flex h-9 max-w-105 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left transition-colors",
             "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             isPickerOpen && "ring-2 ring-ring",
           )}
         >
           <Avatar className="size-5 shrink-0 rounded-md">
-            <AvatarFallback className="rounded-md bg-primary text-[9px] font-semibold text-primary-foreground">
+            <AvatarFallback className="rounded-md bg-primary text-micro font-semibold text-primary-foreground">
               {tenantMonogram(tenant?.displayName ?? null)}
             </AvatarFallback>
           </Avatar>
@@ -346,14 +344,14 @@ export const ScopePicker: React.FC = () => {
             <span
               className={cn(
                 T.codeSmall,
-                "max-w-[120px] truncate",
+                "max-w-30 truncate",
                 !bucketId && "italic text-muted-foreground",
               )}
             >
               {bucketId ?? "any"}
             </span>
             <span className={cn(T.hint, "shrink-0")}>·</span>
-            <span className={cn(T.body, "max-w-[140px] truncate font-medium")}>
+            <span className={cn(T.body, "max-w-35 truncate font-medium")}>
               {tenantLabel}
             </span>
           </span>
@@ -361,7 +359,7 @@ export const ScopePicker: React.FC = () => {
           <span
             className={cn(
               T.body,
-              "min-w-0 max-w-[140px] truncate font-medium md:hidden",
+              "min-w-0 max-w-35 truncate font-medium md:hidden",
             )}
           >
             {tenantLabel}
@@ -437,7 +435,7 @@ export const ScopePicker: React.FC = () => {
                         {id}
                       </span>
                       {disabled && (
-                        <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                        <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-tiny font-medium uppercase tracking-wide text-destructive">
                           Disabled
                         </span>
                       )}
@@ -511,7 +509,7 @@ export const ScopePicker: React.FC = () => {
                       <div className="truncate font-mono text-sm">
                         {b.bucketId}
                       </div>
-                      <div className="truncate text-[10px] text-muted-foreground">
+                      <div className="truncate text-tiny text-muted-foreground">
                         {b.backendId}
                         {b.displayName ? ` · ${b.displayName}` : ""}
                         {b.ownerTenantId
@@ -551,7 +549,7 @@ export const ScopePicker: React.FC = () => {
             icon={BuildingOfficeIcon}
             avatar={
               <Avatar className="size-6 shrink-0 rounded-md">
-                <AvatarFallback className="rounded-md bg-primary text-[9px] font-semibold text-primary-foreground">
+                <AvatarFallback className="rounded-md bg-primary text-micro font-semibold text-primary-foreground">
                   {tenantMonogram(
                     scopedOwnerTenantId
                       ? null /* unknown name — show "?" for the bucket-owner scope */
@@ -723,7 +721,7 @@ function ScopeRow({
               <Icon className="size-3.5" />
             </div>
           )}
-          <span className="w-[60px] shrink-0 truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <span className="w-15 shrink-0 truncate text-tiny font-medium uppercase tracking-wider text-muted-foreground">
             {label}
           </span>
           <span

@@ -33,7 +33,7 @@ export function BulkEditModal({
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="max-w-lg bg-background rounded-[32px] border border-border shadow-2xl p-8 gap-6 overflow-hidden"
+        className="max-w-lg bg-background rounded-4xl border border-border shadow-2xl p-8 gap-6 overflow-hidden"
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">

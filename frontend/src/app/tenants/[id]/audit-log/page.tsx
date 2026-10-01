@@ -126,7 +126,7 @@ export default function TenantAuditLogPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-60">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -153,14 +153,14 @@ export default function TenantAuditLogPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px]">When</TableHead>
+              <TableHead className="w-45">When</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Actor</TableHead>
               <TableHead className="hidden lg:table-cell">Resource</TableHead>
-              <TableHead className="hidden xl:table-cell w-[180px]">
+              <TableHead className="hidden xl:table-cell w-45">
                 Request
               </TableHead>
-              <TableHead className="hidden 2xl:table-cell w-[140px]">
+              <TableHead className="hidden 2xl:table-cell w-35">
                 Capability
               </TableHead>
             </TableRow>

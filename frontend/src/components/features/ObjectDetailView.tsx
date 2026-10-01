@@ -217,7 +217,7 @@ export function ObjectDetailView({
             <TabsContent value="object" className="space-y-4">
               {/* Preview */}
               <Card className="overflow-hidden p-0">
-                <div className="flex min-h-[360px] items-center justify-center bg-muted">
+                <div className="flex min-h-90 items-center justify-center bg-muted">
                   {isImage && downloadUrl ? (
                     <Image
                       src={downloadUrl.url}

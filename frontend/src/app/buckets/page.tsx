@@ -176,7 +176,7 @@ export default function BucketsPage() {
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-60">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -187,7 +187,7 @@ export default function BucketsPage() {
           />
         </div>
         <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
-          <SelectTrigger aria-label="Filter by backend" className="w-[200px]">
+          <SelectTrigger aria-label="Filter by backend" className="w-50">
             <SelectValue placeholder="All backends" />
           </SelectTrigger>
           <SelectContent>
@@ -215,7 +215,7 @@ export default function BucketsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                className="w-[180px]"
+                className="w-45"
                 label="Backend"
                 column="backend"
                 current={sort}
@@ -237,7 +237,7 @@ export default function BucketsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="w-[140px]">Status</TableHead>
+              <TableHead className="w-35">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>

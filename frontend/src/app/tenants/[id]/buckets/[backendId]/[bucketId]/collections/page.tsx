@@ -148,7 +148,7 @@ export default function BucketCollectionsPage() {
               <TableHead className="hidden sm:table-cell">
                 Display name
               </TableHead>
-              <TableHead className="hidden md:table-cell w-[220px]">
+              <TableHead className="hidden md:table-cell w-55">
                 Resource version
               </TableHead>
             </TableRow>

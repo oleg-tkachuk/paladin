@@ -89,7 +89,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                     <div className="flex min-w-0 flex-1 flex-col">
                       <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
                       <main className="flex-1">
-                        <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                        <div className="mx-auto w-full max-w-400 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                           <AdminPlaneGate>{children}</AdminPlaneGate>
                         </div>
                       </main>

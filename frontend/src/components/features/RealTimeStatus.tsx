@@ -134,7 +134,7 @@ export function RealTimeStatus() {
         </span>
         <span
           className={cn(
-            "text-[11px] font-medium uppercase tracking-wide",
+            "text-caption font-medium uppercase tracking-wide",
             meta.text,
           )}
         >

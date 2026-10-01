@@ -229,7 +229,7 @@ export function UserCreateDialog({
                   <span className="block font-mono text-xs">
                     {role}
                     {ADMIN_AUDIENCE_ROLES.includes(role) ? (
-                      <span className="ml-1.5 font-sans text-[10px] text-muted-foreground">
+                      <span className="ml-1.5 font-sans text-tiny text-muted-foreground">
                         console
                       </span>
                     ) : null}

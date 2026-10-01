@@ -168,7 +168,7 @@ function ComponentRow({ c }: { c: Component }) {
           {c.critical && (
             <Badge
               variant="outline"
-              className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+              className="shrink-0 px-1.5 py-0 text-tiny font-normal"
             >
               required
             </Badge>
@@ -437,7 +437,7 @@ export default function HealthPage() {
       {!data && loading ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           {ROLE_ORDER.map((r) => (
-            <Skeleton key={r} className="h-[180px] rounded-xl" />
+            <Skeleton key={r} className="h-45 rounded-xl" />
           ))}
         </div>
       ) : orderedRoles.length === 0 ? (

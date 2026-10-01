@@ -23,7 +23,7 @@ export function SaveViewModal({
         className="fixed inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-sm bg-background rounded-[32px] border border-border shadow-2xl p-8 space-y-6 overflow-hidden">
+      <div className="relative w-full max-w-sm bg-background rounded-4xl border border-border shadow-2xl p-8 space-y-6 overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">
           <h3 className="text-xl font-bold text-foreground uppercase tracking-tight">

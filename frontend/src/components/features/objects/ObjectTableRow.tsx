@@ -164,7 +164,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <div>
                 <div
-                  className="font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-[200px]"
+                  className="font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-50"
                   title={obj.key}
                 >
                   {obj.key.split("/").pop()}

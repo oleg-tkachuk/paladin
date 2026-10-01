@@ -139,7 +139,7 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
                   setConfirming(false);
                 }}
               >
-                <SelectTrigger id="lock-mode" className="w-[180px]">
+                <SelectTrigger id="lock-mode" className="w-45">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

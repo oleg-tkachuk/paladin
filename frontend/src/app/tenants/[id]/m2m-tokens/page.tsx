@@ -213,16 +213,16 @@ export default function M2MTokensPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[140px]">Prefix</TableHead>
+              <TableHead className="w-35">Prefix</TableHead>
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Audience</TableHead>
               <TableHead className="hidden lg:table-cell">Rate (rpm)</TableHead>
-              <TableHead className="hidden xl:table-cell w-[140px]">
+              <TableHead className="hidden xl:table-cell w-35">
                 Usage (1m)
               </TableHead>
               <TableHead className="hidden lg:table-cell">Last used</TableHead>
               <TableHead className="hidden lg:table-cell">Expires</TableHead>
-              <TableHead className="w-[100px]">Status</TableHead>
+              <TableHead className="w-25">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>

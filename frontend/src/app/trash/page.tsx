@@ -177,7 +177,7 @@ export default function TrashPage() {
               <TableRow>
                 <TableHead>Tenant</TableHead>
                 <TableHead className="hidden md:table-cell">Trashed</TableHead>
-                <TableHead className="w-[200px] text-right">Actions</TableHead>
+                <TableHead className="w-50 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

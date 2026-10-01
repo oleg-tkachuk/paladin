@@ -124,7 +124,7 @@ export default function BucketPolicyPage() {
           value={policyText}
           onChange={(e) => setPolicyText(e.target.value)}
           placeholder="// permit ( principal, action, resource );"
-          className="min-h-[220px] font-mono text-xs leading-relaxed"
+          className="min-h-55 font-mono text-xs leading-relaxed"
           spellCheck={false}
         />
       )}

@@ -43,7 +43,7 @@ export function BulkActionsToolbar({
 
   return (
     <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[80] animate-bounce-in">
-      <div className="bg-background/80 backdrop-blur-3xl rounded-[32px] px-8 py-5 flex items-center gap-10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-border ring-1 ring-border relative overflow-hidden group/toolbar">
+      <div className="bg-background/80 backdrop-blur-3xl rounded-4xl px-8 py-5 flex items-center gap-10 shadow-[0_30px_60px_rgba(0,0,0,0.6)] border border-border ring-1 ring-border relative overflow-hidden group/toolbar">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
         <div className="flex items-center gap-4">

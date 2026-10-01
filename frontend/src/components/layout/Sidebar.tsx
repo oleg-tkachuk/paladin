@@ -212,7 +212,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           "hidden lg:flex shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
           "sticky top-0 h-screen self-start",
           "transition-[width] duration-200 ease-out",
-          collapsed ? "w-[68px]" : "w-64",
+          collapsed ? "w-17" : "w-64",
         )}
       >
         <SidebarBody
@@ -300,7 +300,7 @@ function SidebarBody({
               <div className="text-sm font-semibold tracking-tight">
                 Paladin
               </div>
-              <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="text-tiny font-medium uppercase tracking-wider text-muted-foreground">
                 Control Plane
               </div>
             </div>
@@ -337,7 +337,7 @@ function SidebarBody({
                       // gap is the only spacing concern that needs
                       // calling out — items inside a group keep their
                       // tight space-y-0.5.
-                      "px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
+                      "px-2 pb-1.5 text-tiny font-semibold uppercase tracking-wider text-muted-foreground",
                       groupIdx > 0 && "mt-7",
                     )}
                   >
@@ -426,7 +426,7 @@ function SidebarBody({
           {!collapsed && (
             <div className="min-w-0">
               <div className="truncate text-xs font-medium">{displayName}</div>
-              <div className="truncate text-[10px] text-muted-foreground">
+              <div className="truncate text-tiny text-muted-foreground">
                 {user?.roles?.[0] || (user ? "no role" : "not signed in")}
               </div>
             </div>

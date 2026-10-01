@@ -75,7 +75,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative min-w-55 flex-1">
           <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -100,7 +100,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
           </SelectContent>
         </SelectRoot>
         <SelectRoot value={profile} onValueChange={setProfile}>
-          <SelectTrigger aria-label="Profile" className="w-[200px]">
+          <SelectTrigger aria-label="Profile" className="w-50">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -330,12 +330,12 @@ export default function EventsPage() {
                     <TableCell>
                       <div className="flex flex-col gap-0.5 min-w-0">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className="text-tiny">
                             {summary.badge}
                           </Badge>
                         </div>
                         <span
-                          className={cn(T.codeSmall, "truncate max-w-[420px]")}
+                          className={cn(T.codeSmall, "truncate max-w-105")}
                           title={summary.detail}
                         >
                           {summary.detail}
@@ -345,7 +345,7 @@ export default function EventsPage() {
                     <TableCell className="hidden md:table-cell">
                       {sub.filter ? (
                         <span
-                          className={cn(T.code, "block truncate max-w-[260px]")}
+                          className={cn(T.code, "block truncate max-w-65")}
                           title={sub.filter}
                         >
                           {sub.filter}

@@ -56,7 +56,7 @@ export function ObjectInspector({
       {/* Inspector Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 z-[60] flex h-full w-full flex-col overflow-hidden border-l border-border bg-card text-card-foreground shadow-lg sm:w-[500px]",
+          "fixed top-0 right-0 z-[60] flex h-full w-full flex-col overflow-hidden border-l border-border bg-card text-card-foreground shadow-lg sm:w-125",
           "animate-slide-in-right",
         )}
       >

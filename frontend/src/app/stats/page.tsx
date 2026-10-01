@@ -329,7 +329,7 @@ function TenantRow({
   const label = tenant.slug || tenant.displayName || tenant.tenantId;
   return (
     <TableRow>
-      <TableCell className="max-w-[18rem]">
+      <TableCell className="max-w-72">
         <div className="truncate font-mono text-sm">{label}</div>
         {tenant.slug && tenant.displayName && (
           <div className={cn(T.hint, "truncate")}>{tenant.displayName}</div>
@@ -413,10 +413,10 @@ export default function StatsPage() {
 
       {isLoading && !data ? (
         <>
-          <Skeleton className="h-[92px] rounded-xl" />
+          <Skeleton className="h-23 rounded-xl" />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[200px] rounded-xl" />
+              <Skeleton key={i} className="h-50 rounded-xl" />
             ))}
           </div>
         </>
