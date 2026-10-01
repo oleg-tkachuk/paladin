@@ -24,45 +24,64 @@ without the rest of this system.
 
 ```mermaid
 flowchart TB
-    browser["Admin console<br/>(browser)"]
-    app["Application · SDK"]
-    agent["Agent<br/>(MCP client)"]
+    browser(["Browser"])
+    app(["Application · SDK"])
+    agent(["AI agent · MCP client"])
 
-    bff["Next.js BFF<br/>:3000"]
+    bff["<b>paladin-console</b><br/>Next.js BFF · :3000"]
 
-    subgraph planes ["Control plane — one binary, one Deployment per role"]
-        api["serve api<br/>:8080 data · :8085 iam"]
-        admin["serve admin<br/>:8090"]
-        mcp["serve mcp<br/>:8095"]
-        worker["serve worker"]
-        dispatcher["serve dispatcher"]
-        ingest["serve ingest<br/>(off by default)"]
+    subgraph core ["paladin-core · one binary, one Deployment per role"]
+        direction LR
+        mcp["<b>mcp</b><br/>:8095"]
+        api["<b>api</b><br/>:8080 data · :8085 iam"]
+        admin["<b>admin</b><br/>:8090"]
+        worker["<b>worker</b>"]
+        dispatcher["<b>dispatcher</b>"]
+        ingest["<b>ingest</b> · :8100<br/>off by default"]
     end
 
-    pg[("PostgreSQL<br/>row-level security")]
-    s3[("S3 backends")]
-    sinks["Event sinks<br/>HTTP · NATS · Kafka · RabbitMQ · SQS"]
+    pg[("<b>PostgreSQL</b><br/>row-level security")]
+    s3[("<b>S3 backends</b><br/>SeaweedFS · MinIO · Garage · AWS")]
+    sinks{{"<b>Event sinks</b><br/>HTTP · NATS/JetStream · Kafka<br/>RabbitMQ · SQS"}}
 
-    browser --> bff --> api & admin
+    browser --> bff
+    bff --> api & admin
     app --> api
-    agent --> mcp --> api & admin
-    app <-. "object bytes, presigned" .-> s3
+    agent --> mcp
+    mcp --> api & admin
+    app <== "object bytes over presigned URLs" ==> s3
 
-    api & admin & worker & dispatcher & ingest --> pg
+    core -- "every role except mcp (bridge mode)" --- pg
     api -- "HEAD · multipart · copy · delete" --> s3
-    admin -- "health probe" --> s3
     worker -- "buckets · purge · migration" --> s3
-    dispatcher --> sinks
-    s3 -. "storage events" .-> ingest
+    admin -- "ListBuckets probe" --> s3
+    dispatcher -- "outbox delivery" --> sinks
+    s3 -. "storage notifications" .-> ingest
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class browser,app,agent client
+    class bff ui
+    class api,admin,mcp,worker,dispatcher role
+    class ingest optional
+    class pg,s3 store
+    class sinks external
+    style core fill:#F8FAFC,stroke:#16A34A,stroke-width:1px
 ```
 
 Roles are processes, not modules: the Helm chart deploys one Deployment
 per `paladin serve <role>`, so a stuck worker cannot take the API plane with
 it, and each role gets its own resource envelope and network policy.
 
-`serve mcp` holds no data of its own: it exposes the api and admin RPCs as
-MCP tools and calls those planes over HTTP with the caller's credential, so
-every policy and quota check still happens there.
+`serve mcp` holds no data of its own: in its default bridge mode it exposes
+the api and admin RPCs as MCP tools and calls those planes over HTTP with the
+caller's credential, so every policy and quota check still happens there.
+With `--embedded` it hosts those handlers in-process instead, and then opens
+the database itself.
 
 ## How a request is authorised
 
@@ -78,8 +97,7 @@ Four mechanisms, applied in order, each answering a different question.
 2. **Policy — may this principal do this?** Cedar. Policies are data, not
    code: they live in the database per tenant, with the platform defaults
    in [`backend/policies/`](backend/policies/). The console can simulate a
-   decision before you save it, which is the only humane way to edit
-   authorisation rules.
+   decision against a policy before it is saved.
 
 3. **Scope — does this credential reach this resource?** CEL expressions
    narrow a credential to a bucket prefix, an operation set, an IP range.
@@ -120,21 +138,27 @@ api plane signs locally. What Paladin itself sends to S3:
 
 ```mermaid
 sequenceDiagram
+    autonumber
     participant C as Client
-    participant A as serve api
+    box rgb(220,252,231) paladin-core
+        participant A as api
+        participant I as ingest
+    end
     participant DB as PostgreSQL
     participant S3 as S3 backend
+
     C->>A: UploadObject(parent, key, content_type)
     A->>DB: insert object, state PENDING
     A-->>C: object + presigned PUT URL
-    C->>S3: PUT bytes
+    C->>S3: PUT bytes (presigned)
     alt completion_mode EXPLICIT
         C->>A: CompleteObject
         A->>S3: HeadObject
+        A->>DB: PENDING → AVAILABLE + outbox event, one transaction
     else completion_mode IMPLICIT
-        S3-->>A: storage event (via serve ingest)
+        S3-)I: storage notification
+        I->>DB: PENDING → AVAILABLE + outbox event, one transaction
     end
-    A->>DB: state ACTIVE
 ```
 
 Presigning is why backends carry two endpoints: the one the plane talks
@@ -154,18 +178,20 @@ drains the outbox to webhook and broker sinks. Delivery is at-least-once,
 and the dedup contract consumers need is written down in
 [`docs/event-delivery-dedup.md`](docs/event-delivery-dedup.md).
 
-The audit log uses the same pattern with its own table (ADR-0004), for
-the same reason: an audit record that can be lost on a crash is not an
-audit record.
+The audit log uses the same pattern with its own table (ADR-0004), so an
+audit record cannot be lost between the change and the write.
 
-`serve ingest` runs the other direction — storage-side notifications
-(webhook or JetStream) promote objects whose bytes arrived out of band.
+`serve ingest` runs the other direction: it receives storage-side
+notifications — over a webhook, NATS (core or JetStream), RabbitMQ or SQS —
+and marks objects whose bytes arrived out of band as active, writing to
+PostgreSQL directly.
 
 ## The admin console
 
-Next.js, with a BFF between the browser and the planes. The browser
-never holds a plane URL or an upstream credential; it talks to
-`/api/paladin`, and the BFF forwards over Connect. Both halves generate their
+Next.js, with a BFF between the browser and the planes. The browser never
+holds a plane URL or the refresh token, which stays in an httpOnly cookie; it
+calls `/api/rpc/{data,iam,admin}` with short-lived access tokens, and the BFF
+forwards over Connect. Both halves generate their
 clients from the same `proto/` directory, which is the main
 reason they share a repository — a wire change is a two-sided change and
 should be one commit.
@@ -183,7 +209,8 @@ frontend/     Next.js BFF + admin console — see frontend/README.md
 capability/   standalone Go module, no DB and no storage SDK
 docs/         ADRs, runbooks, configuration reference
 specs/        spec-driven-development artifacts per feature
-tasks/        cross-project Taskfiles
+proto/        the API contract the backend, console and SDKs generate from
+sdk/          the Go and Python SDKs
 BACKLOG.md    deferred work, with reasons
 ```
 
