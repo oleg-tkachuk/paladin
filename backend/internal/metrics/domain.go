@@ -23,6 +23,44 @@ import (
 // low-cardinality: outcomes are bounded enums and tenant_id is the finest
 // dimension, for the reason the api_token instruments already document —
 // per-object or per-capability labels blow the exporter.
+// Bucket boundaries for the duration histograms, in seconds.
+//
+// The SDK default (0, 5, 10, 25 … 10000) is sized for milliseconds. On a
+// histogram in seconds it puts every presign and nearly every storage call in
+// the first bucket, so a p95 read off it is an interpolation inside 0–5s — it
+// read 4.75s for presigns that take a few milliseconds.
+var (
+	// requestBucketsSeconds suits one call on a request path: a presign, a
+	// storage-backend operation. 1ms to 10s.
+	requestBucketsSeconds = []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+	// workerRunBucketsSeconds suits a background worker's tick, which ranges
+	// from an idle no-op to a sweep over every tenant. 10ms to 10 minutes.
+	workerRunBucketsSeconds = []float64{0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30, 60, 120, 300, 600}
+)
+
+// newPresignDuration and newStorageCallDuration build the two request-path
+// duration histograms. Constructors rather than inline calls so a test builds
+// them with the same boundaries init does.
+func newPresignDuration(m metric.Meter) (metric.Float64Histogram, error) {
+	return m.Float64Histogram(
+		"paladin_presign_duration_seconds",
+		metric.WithDescription("Presign wall-clock duration, including bucket resolution and the policy decision."),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(requestBucketsSeconds...),
+	)
+}
+
+func newStorageCallDuration(m metric.Meter) (metric.Float64Histogram, error) {
+	return m.Float64Histogram(
+		"paladin_storage_call_duration_seconds",
+		metric.WithDescription(
+			"Storage-backend call duration, measured across the whole SDK "+
+				"operation — retries included, because the caller waits for those too."),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(requestBucketsSeconds...),
+	)
+}
+
 var (
 	meterDomain = otel.Meter("github.com/oleg-tkachuk/paladin/internal/metrics/domain")
 
@@ -62,11 +100,7 @@ func init() {
 	); err != nil {
 		otel.Handle(err)
 	}
-	if presignSeconds, err = meterDomain.Float64Histogram(
-		"paladin_presign_duration_seconds",
-		metric.WithDescription("Presign wall-clock duration, including bucket resolution and the policy decision."),
-		metric.WithUnit("s"),
-	); err != nil {
+	if presignSeconds, err = newPresignDuration(meterDomain); err != nil {
 		otel.Handle(err)
 	}
 	if capabilityCharges, err = meterDomain.Int64Counter(
@@ -103,13 +137,7 @@ func init() {
 	); err != nil {
 		otel.Handle(err)
 	}
-	if storageSeconds, err = meterDomain.Float64Histogram(
-		"paladin_storage_call_duration_seconds",
-		metric.WithDescription(
-			"Storage-backend call duration, measured across the whole SDK "+
-				"operation — retries included, because the caller waits for those too."),
-		metric.WithUnit("s"),
-	); err != nil {
+	if storageSeconds, err = newStorageCallDuration(meterDomain); err != nil {
 		otel.Handle(err)
 	}
 	if quotaDecisions, err = meterDomain.Int64Counter(
