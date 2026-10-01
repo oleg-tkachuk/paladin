@@ -196,3 +196,15 @@ describe("EventsPage", () => {
     );
   });
 });
+
+// A failed list said "No event subscriptions".
+describe("EventsPage failed list", () => {
+  it("says the list could not be loaded, not that there are none", async () => {
+    h.list.mockRejectedValue(new Error("unavailable"));
+    render(<EventsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Event subscriptions could not be loaded/,
+    );
+    expect(screen.queryByText(/No event subscriptions/)).toBeNull();
+  });
+});

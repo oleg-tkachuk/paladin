@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { shortId } from "./_versions";
 import { VersionRow } from "./VersionRow";
 import { VersionDetailsDialog } from "./VersionDetailsDialog";
+import { ListLoadError } from "@/components/ui/ListLoadError";
+import { errorMessage } from "@/hooks/errorContract";
 
 interface ObjectVersionsTabProps {
   /** Active when the parent tab is "versions" — drives lazy fetch. */
@@ -113,6 +115,20 @@ export function ObjectVersionsTab({
           <Skeleton key={i} className="h-20 w-full" />
         ))}
       </div>
+    );
+  }
+
+  // ─── Failed ──────────────────────────────────────────────────────
+  // "No historical versions yet" for a failed read hides versions that exist.
+  if (versionsQuery.isError && !versionsQuery.data) {
+    return (
+      <Card className="p-12">
+        <ListLoadError
+          what="Versions"
+          reason={errorMessage(versionsQuery.error)}
+          onRetry={() => void versionsQuery.refetch()}
+        />
+      </Card>
     );
   }
 

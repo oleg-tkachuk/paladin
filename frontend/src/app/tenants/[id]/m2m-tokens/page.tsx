@@ -33,6 +33,7 @@ import { isRevoked, isExpired } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // Per-token sliding-window usage snapshot keyed by token.id; "never" ⇒
 // the token was never verified (GetUsage NotFound).
@@ -236,6 +237,17 @@ export default function M2MTokensPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : tokensQuery.isError && !tokensQuery.data ? (
+              // "No M2M tokens yet" for a failed list invites creating one that may exist.
+              <TableRow>
+                <TableCell colSpan={9} className="h-40 text-center">
+                  <ListLoadError
+                    what="M2M tokens"
+                    reason={errorMessage(tokensQuery.error)}
+                    onRetry={() => void tokensQuery.refetch()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : visibleTokens.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9} className="h-40 text-center">

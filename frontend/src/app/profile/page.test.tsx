@@ -29,7 +29,9 @@ const DEFAULTS = {
 };
 
 describe("ProfilePage sync footer", () => {
-  beforeEach(() => h.getMine.mockReset());
+  beforeEach(() => {
+    h.getMine.mockReset();
+  });
 
   it("does not report a sync time for settings that were never saved", async () => {
     h.getMine.mockResolvedValue(DEFAULTS);
@@ -56,7 +58,9 @@ describe("ProfilePage sync footer", () => {
 });
 
 describe("ProfilePage preferences", () => {
-  beforeEach(() => h.getMine.mockReset());
+  beforeEach(() => {
+    h.getMine.mockReset();
+  });
 
   // Theme, time zone and locale are stored and read by nothing in the
   // console; the card used to present them as if they took effect.
@@ -64,5 +68,23 @@ describe("ProfilePage preferences", () => {
     h.getMine.mockResolvedValue(DEFAULTS);
     render(<ProfilePage />);
     expect(await screen.findByText(SETTINGS_NOT_APPLIED)).toBeInTheDocument();
+  });
+});
+
+// A failed read showed the defaults and "not saved yet", with Save ready to
+// write those defaults over the real settings.
+describe("ProfilePage failed read", () => {
+  beforeEach(() => {
+    h.getMine.mockReset();
+  });
+
+  it("says the preferences could not be loaded, and offers no Save", async () => {
+    h.getMine.mockRejectedValue(new Error("unavailable"));
+    render(<ProfilePage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Preferences could not be loaded/,
+    );
+    expect(screen.queryByText("Defaults — not saved yet.")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
   });
 });

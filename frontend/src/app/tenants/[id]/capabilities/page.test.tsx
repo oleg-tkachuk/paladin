@@ -180,3 +180,20 @@ describe("CapabilitiesPage", () => {
     );
   });
 });
+
+// A failed browse said "No capabilities for this principal".
+describe("CapabilitiesPage failed list", () => {
+  it("says the list could not be loaded, not that there are none", async () => {
+    window.localStorage.setItem(
+      "paladin:capabilities:lastBrowse:t-1",
+      JSON.stringify({ subject: "agent-1" }),
+    );
+    h.list.mockRejectedValue(new Error("unavailable"));
+    render(<CapabilitiesPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Capabilities could not be loaded/,
+    );
+    expect(screen.queryByText(/No capabilities for this principal/)).toBeNull();
+    window.localStorage.clear();
+  });
+});
