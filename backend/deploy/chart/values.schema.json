@@ -163,6 +163,10 @@
         },
         "volumes": {
           "type": "array"
+        },
+        "revisionHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "type": "object"
@@ -391,6 +395,10 @@
             },
             "volumes": {
               "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "type": "object"
@@ -616,6 +624,10 @@
             },
             "volumes": {
               "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "type": "object"
@@ -841,6 +853,10 @@
             },
             "volumes": {
               "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "type": "object"
@@ -1066,6 +1082,10 @@
             },
             "volumes": {
               "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "type": "object"
@@ -1291,6 +1311,10 @@
             },
             "volumes": {
               "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "type": "object"
@@ -1516,6 +1540,10 @@
             },
             "volumes": {
               "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "type": "object"

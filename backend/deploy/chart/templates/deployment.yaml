@@ -25,6 +25,8 @@ spec:
   {{- if not (default $defaults.autoscaling.enabled (and $spec.autoscaling $spec.autoscaling.enabled)) }}
   replicas: {{ default $defaults.replicas $spec.replicas }}
   {{- end }}
+  {{- /* hasKey rather than default: 0 is a valid limit, and default reads it as unset. */}}
+  revisionHistoryLimit: {{ ternary $spec.revisionHistoryLimit $defaults.revisionHistoryLimit (hasKey $spec "revisionHistoryLimit") }}
   selector:
     matchLabels:
       {{- include "chart.roleSelectorLabels" (dict "ctx" $ "role" $role) | nindent 6 }}

@@ -86,6 +86,11 @@ securityContext:
 # Empty / unset role-level keys fall back to here.
 defaults:
   replicas: 1
+  # Old ReplicaSets kept per Deployment for `kubectl rollout undo`. Kubernetes
+  # keeps ten by default; with a release per merge that is ten idle
+  # ReplicaSets per role. GitOps rolls back by reverting the revision, so a
+  # few are enough.
+  revisionHistoryLimit: 3
   # Conservative defaults sized for the dev cluster. Tune in
   # values-{dev,staging,prod}.yaml overlays per role via
   # `deployments.<role>.resources`. requests.cpu is REQUIRED for
