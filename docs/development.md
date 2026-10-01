@@ -13,7 +13,7 @@ problem, read [SECURITY.md](../.github/SECURITY.md) instead.
 | --- | --- | --- |
 | Go | 1.27+ | the `go` directive in `backend/go.mod` and `capability/go.mod`; the toolchain auto-downloads |
 | Node | 26 | matches `frontend/deploy/Dockerfile`; CI runs the same |
-| pnpm | 12.7.0 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.7.0` |
+| pnpm | 12.8.2 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.8.2` |
 | Docker | recent | compose stacks, testcontainers-backed integration tests |
 | [Task](https://taskfile.dev) | 3.53+ | every entry point is a task target; CI pins 3.53.1 |
 
@@ -24,7 +24,7 @@ local check:
 ```bash
 brew install lefthook gitleaks            # hooks + secret scanning
 go install golang.org/x/tools/cmd/goimports@latest
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0   # GOLANGCI_LINT_VERSION in ci.yaml
 lefthook install                          # wire the hooks into .git/hooks
 ```
 
@@ -74,10 +74,9 @@ resolved graph, so `verify-capability` — and with it `verify-all` and CI
 — fails if your change pulls either in. The right fix is almost always to
 move the code into `backend/` instead.
 
-New behaviour needs a test. The project constitution is explicit that the
-middleware and store layers must be covered — that is where three-valued
-logic bugs hide, and there is a NULL-cursor regression in the history that
-lived for weeks to prove it.
+New behaviour needs a test, in the same commit. The middleware and store
+layers especially: that is where three-valued logic bugs hide, and there is a
+NULL-cursor regression in the history that lived for weeks to prove it.
 
 ## Commits
 
@@ -94,11 +93,12 @@ Two things follow from this that are easy to miss:
 - **The type drives releases.** Once CI passes on a push to `main`, it
   dispatches `.github/workflows/release.yaml`, where `semantic-release` reads
   the history and computes the next version from it. A `feat:` that should
-  have been a `fix:` publishes a minor release.
+  have been a `fix:` publishes a minor release. `fix`, `perf` and `security`
+  publish a patch; `docs`, `ci`, `chore`, `refactor`, `test`, `build` and
+  `style` publish nothing on their own.
 - **One scope per commit.** A commit that touches auth and the console and
-  the chart is three commits. This is a constitution principle, not a
-  preference — it is what makes `git log` a usable audit trail for a
-  system whose whole subject is authorisation.
+  the chart is three commits. It is what makes `git log` a usable audit
+  trail for a system whose whole subject is authorisation.
 
 ## BACKLOG.md
 
@@ -143,9 +143,10 @@ correction or a small feature needs none of this.
 - Branch from `main` and open the pull request against `main`. There is no
   other long-lived branch.
 - Make sure `task -t Taskfile.dev.yaml verify-all` passes before you push. CI
-  (`.github/workflows/ci.yaml`) runs exactly that task, plus actionlint and
-  zizmor over the workflows, so a red pipeline usually means a step was
-  skipped locally because the tool was not installed.
+  (`.github/workflows/ci.yaml`) runs the groups of that task a change can
+  reach, plus actionlint and zizmor over the workflows, so a red pipeline
+  usually means a step was skipped locally because the tool was not installed.
+  A change to documentation alone runs none of them.
 - Run `task -t Taskfile.dev.yaml verify-deep` before you ask for a merge. It
   needs Docker and takes about fifteen minutes, which is why it is not the
   pre-commit gate — but it is the only thing that runs the integration suites,
