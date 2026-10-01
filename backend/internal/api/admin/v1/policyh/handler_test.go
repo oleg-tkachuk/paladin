@@ -118,51 +118,65 @@ func TestValidatePolicy(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(allowEngine(), &fakeStore{})
-		_, _, err := h.ValidatePolicy(context.Background(), validPolicy)
+		_, err := h.ValidatePolicy(context.Background(), validPolicy)
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("authz denied → permission denied", func(t *testing.T) {
 		h := NewHandler(denyEngine(), &fakeStore{})
-		_, _, err := h.ValidatePolicy(authedCtx(tid), validPolicy)
+		_, err := h.ValidatePolicy(authedCtx(tid), validPolicy)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("engine error → internal", func(t *testing.T) {
 		h := NewHandler(errEngine(), &fakeStore{})
-		_, _, err := h.ValidatePolicy(authedCtx(tid), validPolicy)
+		_, err := h.ValidatePolicy(authedCtx(tid), validPolicy)
 		wantCode(t, err, connect.CodeInternal)
 	})
 
-	t.Run("valid policy compiles → (true, empty, nil)", func(t *testing.T) {
+	t.Run("valid policy → ok, no diagnostics", func(t *testing.T) {
 		h := NewHandler(allowEngine(), &fakeStore{})
-		ok, msg, err := h.ValidatePolicy(authedCtx(tid), validPolicy)
+		out, err := h.ValidatePolicy(authedCtx(tid), validPolicy)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if !ok || msg != "" {
-			t.Fatalf("valid policy: got ok=%v msg=%q, want true/empty", ok, msg)
+		if !out.OK || len(out.Diagnostics) != 0 {
+			t.Fatalf("valid policy: got %+v, want ok and no diagnostics", out)
 		}
 	})
 
-	t.Run("invalid policy → (false, parser-text, nil), not a protocol error", func(t *testing.T) {
+	t.Run("unparseable policy → not ok, one error, not a protocol error", func(t *testing.T) {
 		h := NewHandler(allowEngine(), &fakeStore{})
-		ok, msg, err := h.ValidatePolicy(authedCtx(tid), "this is not cedar")
+		out, err := h.ValidatePolicy(authedCtx(tid), "this is not cedar")
 		if err != nil {
-			t.Fatalf("parser failure must come back through the bool/string, not err: %v", err)
+			t.Fatalf("parser failure must come back as a diagnostic, not err: %v", err)
 		}
-		if ok {
-			t.Fatal("expected invalid=false")
+		if out.OK || len(out.Diagnostics) != 1 || out.Diagnostics[0].Severity != DiagnosticError {
+			t.Fatalf("got %+v, want ok=false and one error", out)
 		}
-		if msg == "" {
-			t.Fatal("expected non-empty parser error text")
+	})
+
+	// It compiles, so it would be stored — and denies at request time, because
+	// a Bucket has no tenant_id. The schema check is what says so.
+	t.Run("policy the schema rejects → ok, with a warning", func(t *testing.T) {
+		h := NewHandler(allowEngine(), &fakeStore{})
+		out, err := h.ValidatePolicy(authedCtx(tid), `permit (principal, action == Action::"ManageBucket", resource)
+when { principal.tenant_id == resource.tenant_id };`)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !out.OK || len(out.Diagnostics) != 1 || out.Diagnostics[0].Severity != DiagnosticWarning {
+			t.Fatalf("got %+v, want ok=true and one warning", out)
+		}
+		if !strings.Contains(out.Diagnostics[0].Message, "tenant_id") {
+			t.Errorf("warning %q does not name the attribute", out.Diagnostics[0].Message)
 		}
 	})
 
 	t.Run("gate uses InspectPolicy action with empty resource", func(t *testing.T) {
 		fe := allowEngine()
 		h := NewHandler(fe, &fakeStore{})
-		if _, _, err := h.ValidatePolicy(authedCtx(tid), validPolicy); err != nil {
+		if _, err := h.ValidatePolicy(authedCtx(tid), validPolicy); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if len(fe.calls) != 1 {
