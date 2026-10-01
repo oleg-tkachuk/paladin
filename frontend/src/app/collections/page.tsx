@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
+import { errorMessage } from "@/hooks/errorContract";
 import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
@@ -92,7 +94,10 @@ export default function CollectionsPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   // ── delete
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // The row as it was when Delete was chosen. Its resourceVersion is the OCC
+  // guard; looking it up again at confirm read whatever the list held then —
+  // nothing, if a search had just changed the query — and sent an empty one.
+  const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
 
   // The box contents used to go STRAIGHT into `filter`, which the server
   // compiles as CEL. Typing "logs" sent the expression `logs`, an undeclared
@@ -141,19 +146,23 @@ export default function CollectionsPage() {
       // OCC guard: DeleteCollection requires the version we last read, so a
       // concurrent rename/update turns this into a 409 instead of a silent
       // delete of something the user never saw.
-      const target = collections.find((c) => c.collection === deleteTarget);
-      await deleteCollection(deleteTarget, target?.resourceVersion ?? "");
+      await deleteCollection(
+        deleteTarget.collection,
+        deleteTarget.resourceVersion,
+      );
       showNotification({
         type: "success",
         title: "Collection deleted",
-        message: deleteTarget,
+        message: deleteTarget.collection,
       });
       setDeleteTarget(null);
-    } catch {
+    } catch (err) {
+      // The server's reason: a collection that still holds objects is one,
+      // a stale version another. This used to say the first whatever happened.
       showNotification({
         type: "error",
         title: "Deletion failed",
-        message: "Collection must be empty before it can be removed.",
+        message: errorMessage(err, "Delete failed"),
       });
     }
   };
@@ -320,7 +329,7 @@ export default function CollectionsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
-                          onSelect={() => setDeleteTarget(ok.collection)}
+                          onSelect={() => setDeleteTarget(ok)}
                         >
                           <TrashIcon className="size-4" />
                           Delete Collection
@@ -356,8 +365,10 @@ export default function CollectionsPage() {
             <AlertDialogTitle>Delete this Collection?</AlertDialogTitle>
             <AlertDialogDescription>
               Removing{" "}
-              <span className="font-mono text-foreground">{deleteTarget}</span>.
-              The Collection must be empty of all live objects before this can
+              <span className="font-mono text-foreground">
+                {deleteTarget?.collection}
+              </span>
+              . The Collection must be empty of all live objects before this can
               succeed.
             </AlertDialogDescription>
           </AlertDialogHeader>

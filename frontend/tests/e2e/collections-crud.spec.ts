@@ -1,12 +1,11 @@
 /**
- * Collections — the create dialog's binding requirement.
+ * Collections — creating, deleting, and the create dialog's binding requirement.
  *
- * Create and delete through the UI are NOT covered here. Both drive controls
- * inside a table that re-renders as its pages settle, and Playwright's
- * actionability wait never sees it hold still; forcing the clicks gets past
- * that but then the row lookup after the write is racy too. Rather than ship
- * two flaky tests, the gap is recorded in BACKLOG — the RPCs themselves are
- * covered by the Go integration suite.
+ * The delete test was flaky for weeks, read as a test-timing problem. It was
+ * the page: the delete looked the row's version up again at confirm, the search
+ * typed a moment earlier had just changed the list's query, the list was empty
+ * until it answered, and the delete went out with no version — a 400 the toast
+ * reported as "must be empty". The page now keeps the row it was given.
  *
  * A Collection binds a tenant's namespace to a (backend, bucket) pair, so
  * creating one provisions storage and deleting one removes the binding every
