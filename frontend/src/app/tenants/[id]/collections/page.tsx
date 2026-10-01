@@ -72,7 +72,7 @@ import { isAbortError } from "@/hooks/errorContract";
 import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
-import { SortHeader } from "@/components/ui/SortHeader";
+import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "name" | "displayName" | "bucket";
 
@@ -274,30 +274,26 @@ export default function TenantCollectionsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                <SortHeader
-                  label="Collection"
-                  column="name"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
-              <TableHead className="hidden sm:table-cell">
-                <SortHeader
-                  label="Display name"
-                  column="displayName"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
-              <TableHead className="hidden md:table-cell">
-                <SortHeader
-                  label="Bucket"
-                  column="bucket"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
+              <SortableHead
+                label="Collection"
+                column="name"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden sm:table-cell"
+                label="Display name"
+                column="displayName"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden md:table-cell"
+                label="Bucket"
+                column="bucket"
+                current={sort}
+                onSort={handleSort}
+              />
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>

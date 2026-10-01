@@ -81,7 +81,7 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
-import { SortHeader } from "@/components/ui/SortHeader";
+import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "backend" | "name" | "region";
 
@@ -269,33 +269,29 @@ export default function TenantBucketsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px]">
-                <SortHeader
-                  label="Backend"
-                  column="backend"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
-              <TableHead>
-                <SortHeader
-                  label="Bucket name"
-                  column="name"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
+              <SortableHead
+                className="w-[180px]"
+                label="Backend"
+                column="backend"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                label="Bucket name"
+                column="name"
+                current={sort}
+                onSort={handleSort}
+              />
               <TableHead className="hidden sm:table-cell">
                 Display name
               </TableHead>
-              <TableHead className="hidden md:table-cell">
-                <SortHeader
-                  label="Region"
-                  column="region"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
+              <SortableHead
+                className="hidden md:table-cell"
+                label="Region"
+                column="region"
+                current={sort}
+                onSort={handleSort}
+              />
               <TableHead className="w-[140px]">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>

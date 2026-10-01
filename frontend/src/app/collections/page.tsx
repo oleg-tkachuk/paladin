@@ -52,7 +52,7 @@ import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
-import { SortHeader } from "@/components/ui/SortHeader";
+import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "name" | "displayName" | "backendId";
 
@@ -199,30 +199,26 @@ export default function CollectionsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                <SortHeader
-                  label="Collection"
-                  column="name"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
-              <TableHead className="hidden sm:table-cell">
-                <SortHeader
-                  label="Display name"
-                  column="displayName"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
-              <TableHead className="hidden md:table-cell">
-                <SortHeader
-                  label="Backend"
-                  column="backendId"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
+              <SortableHead
+                label="Collection"
+                column="name"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden sm:table-cell"
+                label="Display name"
+                column="displayName"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden md:table-cell"
+                label="Backend"
+                column="backendId"
+                current={sort}
+                onSort={handleSort}
+              />
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
