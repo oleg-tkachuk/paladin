@@ -91,3 +91,46 @@ describe("TenantCollectionsPage delete", () => {
     );
   });
 });
+
+// How long the new search is watched while it has not answered.
+const IN_FLIGHT_WINDOW_MS = 500;
+
+// Each search emptied the table for a round trip, which also unmounted an
+// open row menu under the cursor; the end-to-end delete test caught the menu
+// detaching mid-click.
+describe("TenantCollectionsPage search", () => {
+  it("keeps the last result on screen while a new search loads", async () => {
+    const row = {
+      collection: "c1",
+      displayName: "",
+      bucket: "b1",
+      resourceVersion: "7",
+    };
+    h.listCollections.mockImplementation(({ filter }: { filter: string }) =>
+      filter
+        ? new Promise(() => {}) // the new search never answers here
+        : Promise.resolve({ collections: [row] }),
+    );
+    const user = userEvent.setup();
+    render(<TenantCollectionsPage />);
+    await screen.findByRole("button", { name: "Actions for c1" });
+
+    await user.type(screen.getByPlaceholderText(/Search by name/), "c");
+    await waitFor(() =>
+      expect(h.listCollections).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: expect.stringContaining("c") }),
+        expect.anything(),
+      ),
+    );
+    // The row must not leave the screen while the new search is in flight.
+    await expect(
+      waitFor(
+        () =>
+          expect(
+            screen.queryByRole("button", { name: "Actions for c1" }),
+          ).toBeNull(),
+        { timeout: IN_FLIGHT_WINDOW_MS },
+      ),
+    ).rejects.toThrow();
+  });
+});
