@@ -25,6 +25,9 @@ interface ConfirmModalProps {
   loading?: boolean;
 }
 
+// Colours are theme tokens, like every other dialog's: the fixed dark hex and
+// slate/rose/amber palette it used would not follow a theme change.
+//
 // Built on the Radix AlertDialog primitive so confirmation prompts get
 // the full dialog contract for free: role="alertdialog", aria wiring,
 // focus trap, Escape-to-cancel, scroll lock. The previous hand-rolled
@@ -49,14 +52,14 @@ export function ConfirmModal({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <AlertDialogContent className="max-w-sm bg-[#0A0C10] rounded-[2rem] border border-white/10 shadow-2xl p-8 gap-6">
+      <AlertDialogContent className="max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6">
         <div className="flex flex-col items-center text-center space-y-4">
           <div
             className={cn(
               "w-14 h-14 rounded-2xl flex items-center justify-center",
               isDanger
-                ? "bg-rose-500/10 text-rose-500"
-                : "bg-amber-500/10 text-amber-500",
+                ? "bg-destructive/10 text-destructive"
+                : "bg-warning/10 text-warning",
             )}
           >
             {isDanger ? (
@@ -66,10 +69,10 @@ export function ConfirmModal({
             )}
           </div>
           <div>
-            <AlertDialogTitle className="text-lg font-bold text-white">
+            <AlertDialogTitle className="text-lg font-bold text-popover-foreground">
               {title}
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-slate-400 mt-2 leading-relaxed">
+            <AlertDialogDescription className="text-sm text-muted-foreground mt-2 leading-relaxed">
               {message}
             </AlertDialogDescription>
           </div>
@@ -78,7 +81,7 @@ export function ConfirmModal({
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-semibold text-slate-300 hover:bg-white/10 transition-all disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-sm font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -86,10 +89,10 @@ export function ConfirmModal({
             onClick={handleConfirm}
             disabled={loading}
             className={cn(
-              "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-50",
+              "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50",
               isDanger
-                ? "bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/20"
-                : "bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/20",
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : "bg-warning text-warning-foreground hover:bg-warning/90",
             )}
           >
             {loading ? "Processing..." : confirmText}
