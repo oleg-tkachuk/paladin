@@ -20,11 +20,6 @@ type AuditPushdown struct {
 	ActorSubjectEq string
 	AtGTE          time.Time
 	AtLTE          time.Time
-
-	// Recognised counts how many top-level conjuncts the extractor
-	// translated. Useful for tests / benchmarks; not consumed by the
-	// SQL build path.
-	Recognised int
 }
 
 // ExtractAuditPushdown parses expr against AuditLogSchema and walks the
@@ -88,110 +83,99 @@ func walkAuditConjuncts(e celast.Expr, out *AuditPushdown) {
 			}
 			return
 		}
-		if recogniseAuditLeaf(c, out) {
-			out.Recognised++
-		}
+		recogniseAuditLeaf(c, out)
 	}
 }
 
 // recogniseAuditLeaf attempts to match a single CEL call expression
 // against one of the supported shapes and, on success, populates the
-// matching AuditPushdown field. Returns true when a translation
-// landed.
+// matching AuditPushdown field.
 //
 // First-match wins: each AuditPushdown field can only carry one
 // value; a second `action == "x"` after the first is discarded (the
 // in-memory CEL eval would reject the row anyway, since two distinct
 // equality predicates on the same field can't both be true).
-func recogniseAuditLeaf(c celast.CallExpr, out *AuditPushdown) bool {
+func recogniseAuditLeaf(c celast.CallExpr, out *AuditPushdown) {
 	switch c.FunctionName() {
 	case "_==_":
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, ok := identName(args[0])
 		if !ok {
-			return false
+			return
 		}
 		lit, ok := stringLiteral(args[1])
 		if !ok {
-			return false
+			return
 		}
 		switch field {
 		case "action":
 			if out.ActionEq == "" {
 				out.ActionEq = lit
-				return true
+				return
 			}
 		case "actor_subject":
 			if out.ActorSubjectEq == "" {
 				out.ActorSubjectEq = lit
-				return true
+				return
 			}
 		}
-		return false
 
 	case "startsWith":
 		// Receiver-call: target is the receiver. `action.startsWith("X")`
 		// → target = action, args = [literal "X"].
 		field, ok := identName(c.Target())
 		if !ok || field != "action" {
-			return false
+			return
 		}
 		args := c.Args()
 		if len(args) != 1 {
-			return false
+			return
 		}
 		lit, ok := stringLiteral(args[0])
 		if !ok {
-			return false
+			return
 		}
 		if out.ActionPrefix == "" {
 			out.ActionPrefix = lit
-			return true
 		}
-		return false
 
 	case "_>=_", "_>_":
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, ok := identName(args[0])
 		if !ok || field != "at" {
-			return false
+			return
 		}
 		ts, ok := timestampLiteral(args[1])
 		if !ok {
-			return false
+			return
 		}
 		if out.AtGTE.IsZero() {
 			out.AtGTE = ts
-			return true
 		}
-		return false
 
 	case "_<=_", "_<_":
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, ok := identName(args[0])
 		if !ok || field != "at" {
-			return false
+			return
 		}
 		ts, ok := timestampLiteral(args[1])
 		if !ok {
-			return false
+			return
 		}
 		if out.AtLTE.IsZero() {
 			out.AtLTE = ts
-			return true
 		}
-		return false
 	}
-	return false
 }
 
 func identName(e celast.Expr) (string, bool) {

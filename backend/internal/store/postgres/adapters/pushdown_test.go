@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -14,17 +15,17 @@ import (
 // reconsidered.
 
 func TestHintsNarrowsNothingOnBadInput(t *testing.T) {
-	if got := hints(cel.ObjectSchema, ""); got.Recognised != 0 {
+	if got := hints(cel.ObjectSchema, ""); !reflect.DeepEqual(got, cel.Pushdown{}) {
 		t.Errorf("hints(empty filter) = %+v, want a zero pushdown", got)
 	}
-	if got := hints(cel.ObjectSchema, `key == (((`); got.Recognised != 0 {
+	if got := hints(cel.ObjectSchema, `key == (((`); !reflect.DeepEqual(got, cel.Pushdown{}) {
 		t.Errorf("hints(unparseable) = %+v, want a zero pushdown", got)
 	}
 
 	// The point of the function: a filter the extractor understands must
 	// actually produce hints, or every List silently falls back to paging
 	// through the whole table in memory.
-	if got := hints(cel.ObjectSchema, `key == "a"`); got.Recognised == 0 {
+	if got := hints(cel.ObjectSchema, `key == "a"`); got.Eq["key"] != "a" {
 		t.Error("hints(key == \"a\") is empty — nothing would be pushed into SQL")
 	}
 }
