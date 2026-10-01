@@ -503,10 +503,9 @@ export interface SeededCapability {
  * only care that the row materialises in `/capabilities`.
  *
  * `opts.idempotencyKey` is the FR-008 hook: when set, the Issue
- * RPC is fired with that exact header value, exercising the
- * middleware's reflective replay path. Two calls with the same
- * key MUST return the same capability ID (the second call hits
- * the cached response).
+ * RPC is fired with that exact header value. A second call with the
+ * same key is refused with AlreadyExists — Issue's response carries a
+ * credential, which the idempotency cache does not store.
  */
 export async function seedCapability(opts: {
   tenantId: string;
