@@ -266,6 +266,21 @@ func TestCreateCollection(t *testing.T) {
 		wantCode(t, err, connect.CodeAlreadyExists)
 	})
 
+	// A bucket that is not registered, or was deleted after the caller listed
+	// it, is a missing resource. It reached the caller as a 500 carrying a
+	// NOT NULL violation on collections.bucket_id.
+	t.Run("unknown bucket → not found", func(t *testing.T) {
+		h := NewHandler(&fakeRepo{
+			createTxFn: func(context.Context, CreateCollectionArgs) (Collection, error) {
+				return Collection{}, fmt.Errorf("%w: aws-eu/gone", ErrBucketNotFound)
+			},
+		}, allowAll())
+		_, err := h.CreateCollection(authedCtx(tid), CreateCollectionArgs{
+			TenantID: tid, Collection: "k", BackendID: "aws-eu", BucketName: "gone",
+		})
+		wantCode(t, err, connect.CodeNotFound)
+	})
+
 	// An error the registry does not know still has to be a 500 — MapError's
 	// fallback, not something the change above quietly widened.
 	t.Run("unclassified failure → internal", func(t *testing.T) {

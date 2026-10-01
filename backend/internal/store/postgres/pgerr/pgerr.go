@@ -138,6 +138,17 @@ func Table(err error) string {
 	return pgErr.TableName
 }
 
+// Column returns the column a Postgres error names — set for NOT NULL
+// violations, where there is no constraint name to go by — or "" when err is
+// not a Postgres error or names none.
+func Column(err error) string {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return ""
+	}
+	return pgErr.ColumnName
+}
+
 // ConstraintIs reports whether err is a Postgres error raised by the named
 // constraint. Convenience for the common `Is(err, k) && Constraint(err) == n`.
 func ConstraintIs(err error, name string) bool {

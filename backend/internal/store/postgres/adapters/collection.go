@@ -87,6 +87,14 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 			return objectkey.Collection{}, fmt.Errorf("%w: %q",
 				objectkey.ErrCollectionExists, args.Collection)
 		}
+		// The bucket is resolved by name inside the INSERT, so one that is not
+		// registered — or was deleted after the caller listed it — leaves
+		// bucket_id NULL. That is a missing resource, not a server fault.
+		if pgerr.Is(err, pgerr.NotNullViolation) &&
+			pgerr.Column(err) == schema.CollectionsBucketIDColumn {
+			return objectkey.Collection{}, fmt.Errorf("%w: %s/%s",
+				objectkey.ErrBucketNotFound, args.BackendID, args.BucketName)
+		}
 		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
 	}
 	return r.getWith(ctx, q, args.TenantID, args.Collection)

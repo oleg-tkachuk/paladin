@@ -112,3 +112,24 @@ func TestTable(t *testing.T) {
 		t.Errorf("nil: Table = %q, want empty", got)
 	}
 }
+
+// A NOT NULL violation names no constraint, only the column; Column is how a
+// caller tells which value was missing.
+func TestColumn(t *testing.T) {
+	err := &pgconn.PgError{Code: "23502", TableName: "collections", ColumnName: "bucket_id"}
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"pg error", err, "bucket_id"},
+		{"wrapped", fmt.Errorf("create collection: %w", err), "bucket_id"},
+		{"non-pg error", errors.New("not a pg error"), ""},
+		{"nil", nil, ""},
+	}
+	for _, tc := range cases {
+		if got := Column(tc.err); got != tc.want {
+			t.Errorf("%s: Column = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

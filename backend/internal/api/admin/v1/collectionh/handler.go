@@ -647,6 +647,12 @@ var ErrCollectionHasObjects = errors.New(
 // "collections_tenant_id_name_key" (SQLSTATE 23505)` under CodeInternal.
 var ErrCollectionExists = errors.New("collection already exists in this tenant")
 
+// ErrBucketNotFound is returned when a Create names a (backend, bucket) pair
+// that is not registered — or was deleted between the caller listing it and
+// creating against it. It used to surface as a NOT NULL violation on
+// collections.bucket_id under CodeInternal.
+var ErrBucketNotFound = errors.New("bucket not found on this backend")
+
 // ErrVersionMismatch is returned when optimistic-concurrency control fails.
 // Repositories should surface it so handlers can map to CodeAborted.
 var ErrVersionMismatch = errors.New("resource_version mismatch")
@@ -662,6 +668,7 @@ func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
 	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition)
 	apiutil.RegisterError(ErrCollectionExists, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrBucketNotFound, connect.CodeNotFound)
 	// A stored Cedar policy that will not compile is a state of the data, not
 	// a fault of the server. Registered here rather than in the cedar package
 	// because apiutil's registry is the API layer's, and cedar sits below it.
