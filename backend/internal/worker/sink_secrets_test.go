@@ -149,7 +149,7 @@ func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 func TestDeliverKafka_SecretRefResolvedIntoPoolKey(t *testing.T) {
 	fake := &fakeKafka{}
 	pool := NewKafkaWriterPool(nil)
-	var keys []string
+	var keys []kafkaWriterKey
 	pool.newWriter = func([]string, string, *kafka.Transport) kafkaWriter { return fake }
 	secrets := &fakeSinkSecrets{values: map[string]string{"/kafka/pass": "pw-1"}}
 	d := &Dispatcher{Kafka: pool, Secrets: secrets}
@@ -163,7 +163,7 @@ func TestDeliverKafka_SecretRefResolvedIntoPoolKey(t *testing.T) {
 		t.Fatalf("deliverKafka: %v", err)
 	}
 	// The pool key for the RESOLVED password must equal the key computed for
-	// an inline config with the same plaintext — proving the hash covers the
+	// an inline config with the same plaintext — proving the key covers the
 	// resolved material rather than the ref.
 	resolved := cfg
 	resolved.SASLPassword = "pw-1"
@@ -172,7 +172,7 @@ func TestDeliverKafka_SecretRefResolvedIntoPoolKey(t *testing.T) {
 		keys = append(keys, k)
 	}
 	pool.mu.Unlock()
-	if len(keys) != 1 || keys[0] != kafkaWriterKey([]string{"b:9092"}, resolved) {
+	if len(keys) != 1 || keys[0] != newKafkaWriterKey([]string{"b:9092"}, resolved) {
 		t.Errorf("pool keys = %v, want the resolved-material key", keys)
 	}
 }
