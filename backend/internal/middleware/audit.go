@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
@@ -184,7 +185,7 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 		Action:        req.Spec().Procedure,
 		ResourceName:  preferCanonical(ctx, req.Any()),
 		RequestID:     req.Header().Get("X-Request-Id"),
-		SourceIP:      req.Header().Get("X-Forwarded-For"),
+		SourceIP:      sourceIP(ctx),
 		CapabilityID:  capabilityID(ctx),
 	}
 	if rpcErr != nil {
@@ -274,6 +275,17 @@ func resourceFromMessage(msg any) string {
 	}
 	if m, ok := msg.(withParent); ok && m.GetParent() != "" {
 		return m.GetParent()
+	}
+	return ""
+}
+
+// sourceIP is the client address the listener resolved from its trusted
+// proxies, or "" when there is none. Not the forwarding header itself: its
+// leftmost entry is whatever the caller wrote, which an audit trail must not
+// record as the source.
+func sourceIP(ctx context.Context) string {
+	if a, ok := clientip.FromContext(ctx); ok {
+		return a.String()
 	}
 	return ""
 }

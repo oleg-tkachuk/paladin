@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -74,9 +73,9 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 			usage := newTenantRecordingUsage()
 			c := capWithCaveats(capability.Caveats{MaxRequests: maxRequests, MaxBudgetAmount: maxBudget})
 			c.Subject = capability.Principal{TenantID: capTenant, Subject: "agent:a"}
-			i := &capabilityInterceptor{realIPHeader: "X-Forwarded-For", usage: usage}
+			i := &capabilityInterceptor{usage: usage}
 
-			if err := i.enforceCaveats(base, c, http.Header{}); err != nil {
+			if err := i.enforceCaveats(base, c); err != nil {
 				t.Fatalf("enforceCaveats: %v", err)
 			}
 			ctx := WithChargeStore(WithCapability(base, c), usage)

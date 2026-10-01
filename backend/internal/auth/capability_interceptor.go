@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
@@ -77,11 +78,9 @@ func WithCapability(ctx context.Context, c *capability.Capability) context.Conte
 // and rejects when over. When nil, MaxRequests is silently un-enforced
 // — the operator opted out by not wiring the store.
 //
-// realIPHeader names the proxy header that carries the client IP
-// for SourceIPCIDR enforcement (e.g. "X-Forwarded-For"). Empty means
-// "fall back to req.Header().Get('X-Real-Ip') or skip CIDR check
-// entirely". The chart's HTTPServer config already pins the
-// trusted-proxy header per plane; this value mirrors it.
+// SourceIPCIDR is checked against the client address the listener resolved
+// from its trusted proxies (clientip.Middleware), never against a forwarding
+// header directly: the leftmost entry of one is whatever the caller wrote.
 //
 // chargePerRequestAmount + chargePerRequestUnit form the auto-charge
 // stamped onto the context. The amount is denominated in the unit;
@@ -92,11 +91,10 @@ func CapabilityInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	realIPHeader string,
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
 ) connect.Interceptor {
-	return CapabilityInterceptorWithEvents(verifier, audience, usage, realIPHeader,
+	return CapabilityInterceptorWithEvents(verifier, audience, usage,
 		chargePerRequestAmount, chargePerRequestUnit, nil)
 }
 
@@ -109,7 +107,6 @@ func CapabilityInterceptorWithEvents(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	realIPHeader string,
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
@@ -117,14 +114,10 @@ func CapabilityInterceptorWithEvents(
 	if verifier == nil {
 		return passthroughInterceptor{}
 	}
-	if realIPHeader == "" {
-		realIPHeader = "X-Forwarded-For"
-	}
 	return &capabilityInterceptor{
 		verifier:               verifier,
 		audience:               audience,
 		usage:                  usage,
-		realIPHeader:           realIPHeader,
 		chargePerRequestAmount: chargePerRequestAmount,
 		chargePerRequestUnit:   chargePerRequestUnit,
 		emitter:                emitter,
@@ -145,12 +138,11 @@ func CapabilityEstablishingInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	realIPHeader string,
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 ) connect.Interceptor {
-	i := CapabilityInterceptorWithEvents(verifier, audience, usage, realIPHeader,
+	i := CapabilityInterceptorWithEvents(verifier, audience, usage,
 		chargePerRequestAmount, chargePerRequestUnit, emitter)
 	if ci, ok := i.(*capabilityInterceptor); ok {
 		ci.establishPrincipal = true
@@ -177,7 +169,6 @@ type capabilityInterceptor struct {
 	// JWT or API token stays additive, exactly as before.
 	establishPrincipal     bool
 	usage                  capability.UsageStore[pgx.Tx]
-	realIPHeader           string
 	chargePerRequestAmount float64
 	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
@@ -197,7 +188,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 			// silently would mask the misconfiguration.
 			return nil, connect.NewError(connect.CodePermissionDenied, err)
 		}
-		if err := i.enforceCaveats(ctx, cap, req.Header()); err != nil {
+		if err := i.enforceCaveats(ctx, cap); err != nil {
 			return nil, err
 		}
 		ctx = WithCapability(ctx, cap)
@@ -227,7 +218,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		if err != nil {
 			return connect.NewError(connect.CodePermissionDenied, err)
 		}
-		if err := i.enforceCaveats(ctx, cap, conn.RequestHeader()); err != nil {
+		if err := i.enforceCaveats(ctx, cap); err != nil {
 			return err
 		}
 		ctx = WithCapability(ctx, cap)
@@ -303,15 +294,14 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 func (i *capabilityInterceptor) enforceCaveats(
 	ctx context.Context,
 	cap *capability.Capability,
-	header HeaderGetter,
 ) error {
 	if len(cap.Caveats.SourceIPCIDR) > 0 {
-		clientIP := i.clientIP(header)
-		if clientIP == nil {
+		addr, ok := clientip.FromContext(ctx)
+		if !ok {
 			return connect.NewError(connect.CodePermissionDenied,
 				errors.New("capability: SourceIPCIDR set but client IP unknown"))
 		}
-		if !ipInAnyCIDR(clientIP, cap.Caveats.SourceIPCIDR) {
+		if !ipInAnyCIDR(net.IP(addr.AsSlice()), cap.Caveats.SourceIPCIDR) {
 			return connect.NewError(connect.CodePermissionDenied,
 				errors.New("capability: client IP not in SourceIPCIDR allow-list"))
 		}
@@ -344,39 +334,6 @@ func (i *capabilityInterceptor) enforceCaveats(
 // the request itself stays scoped to whoever the caller is.
 func ledgerContext(ctx context.Context, cap *capability.Capability) context.Context {
 	return WithActingTenant(ctx, cap.Subject.TenantID)
-}
-
-// HeaderGetter is the read-only header surface both connect.AnyRequest
-// and connect.StreamingHandlerConn expose. Local interface so
-// enforceCaveats accepts either without coupling to a specific
-// connect type.
-type HeaderGetter interface {
-	Get(key string) string
-}
-
-// clientIP extracts the caller's IP. Honours the configured proxy
-// header (X-Forwarded-For by default, leftmost client). Falls back
-// to X-Real-Ip. Returns nil when neither header is present —
-// SourceIPCIDR enforcement upstream rejects in that case.
-func (i *capabilityInterceptor) clientIP(header HeaderGetter) net.IP {
-	if v := header.Get(i.realIPHeader); v != "" {
-		// X-Forwarded-For format: "client, proxy1, proxy2". Leftmost
-		// non-empty entry is the client. Trim spaces; tolerate the
-		// "X-Real-Ip"-style single-value form too.
-		first := v
-		if idx := strings.IndexByte(v, ','); idx > 0 {
-			first = v[:idx]
-		}
-		if ip := net.ParseIP(strings.TrimSpace(first)); ip != nil {
-			return ip
-		}
-	}
-	if v := header.Get("X-Real-Ip"); v != "" {
-		if ip := net.ParseIP(strings.TrimSpace(v)); ip != nil {
-			return ip
-		}
-	}
-	return nil
 }
 
 // ipInAnyCIDR returns true when ip falls inside at least one CIDR

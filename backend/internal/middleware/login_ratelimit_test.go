@@ -1,8 +1,15 @@
 package middleware
 
 import (
+	"context"
+	"net/netip"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
 
 func newTestLimiter(perSubject, perIP int, window time.Duration, now time.Time) *LoginRateLimiter {
@@ -102,22 +109,25 @@ func TestLoginRateLimiterScopesPerTuple(t *testing.T) {
 	}
 }
 
-func TestFirstFwdedIP(t *testing.T) {
-	cases := map[string]string{
-		"":                    "",
-		"1.2.3.4":             "1.2.3.4",
-		"1.2.3.4, 5.6.7.8":    "1.2.3.4",
-		"  1.2.3.4 , 5.6.7.8": "1.2.3.4",
+// The per-IP key is the address the listener resolved, never a forwarding
+// header: its leftmost entry is the caller's choice, so a client could pick a
+// fresh bucket for every attempt.
+func TestLoginRateLimiterKeysOnTheResolvedAddress(t *testing.T) {
+	l := NewLoginRateLimiter(0, 0)
+	req := connect.NewRequest(&iamv1.LoginRequest{Subject: "alice"})
+	req.Header().Set("X-Forwarded-For", "192.0.2.66")
+
+	ctx := clientip.WithAddr(context.Background(), netip.MustParseAddr("198.51.100.7"))
+	if subject, ip := l.coords(ctx, req); subject != "alice" || ip != "198.51.100.7" {
+		t.Errorf("coords = (%q, %q), want alice and the resolved address", subject, ip)
 	}
-	for in, want := range cases {
-		if got := firstFwdedIP(in); got != want {
-			t.Errorf("firstFwdedIP(%q): got %q want %q", in, got, want)
-		}
+	if _, ip := l.coords(context.Background(), req); ip != "" {
+		t.Errorf("ip = %q with no resolved address, want empty — the header is not consulted", ip)
 	}
 }
 
 func TestLoginRateLimiterProcedureSelection(t *testing.T) {
-	l := NewLoginRateLimiter("", 0, 0)
+	l := NewLoginRateLimiter(0, 0)
 	for _, p := range []string{
 		"/paladin.iam.v1.AuthService/Login",
 		"/paladin.iam.v1.AuthService/RefreshToken",

@@ -167,13 +167,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			deps.Capability.Verifier,
 			capability.AudiencePlaneData,
 			deps.Capability.Usage,
-			cfg.API.Server.Data.RealIPHeader,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
 		)
 	} else {
-		capData = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")
+		capData = auth.CapabilityInterceptor(nil, "", nil, 0, "")
 	}
 
 	// APIToken interceptor — additive, parallel to capability and JWT.
@@ -324,7 +323,6 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			),
 			apiTokIAM,
 			middleware.NewLoginRateLimiter(
-				cfg.API.Server.IAM.RealIPHeader,
 				cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 				cfg.Auth.LoginRateLimitPerIPPerMinute,
 			),
