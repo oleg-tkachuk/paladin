@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
 import { render, screen } from "@/test/utils";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { CAPABILITIES_DOCS_URL } from "@/constants";
 
 const h = vi.hoisted(() => ({
   audit: vi.fn(),
@@ -69,5 +71,28 @@ describe("DashboardWidgets", () => {
     for (const text of EMPTY_STATES) {
       expect(screen.queryByText(text)).toBeNull();
     }
+  });
+
+  // It used to guess "capability subsystem may be disabled" for any failure.
+  it("says why the budget summary is unavailable and how to enable it", async () => {
+    h.audit.mockResolvedValue({ entries: [] });
+    h.ops.mockResolvedValue({ operations: [] });
+    h.budget.mockRejectedValue(
+      new ConnectError(
+        "capability subsystem disabled; tenant budget unavailable",
+        Code.Unavailable,
+      ),
+    );
+
+    render(<DashboardWidgets />);
+
+    expect(
+      await screen.findByText(
+        "Summary unavailable: capability subsystem disabled; tenant budget unavailable",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "How to enable capabilities" }),
+    ).toHaveAttribute("href", CAPABILITIES_DOCS_URL);
   });
 });
