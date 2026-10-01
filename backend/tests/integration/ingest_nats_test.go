@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -157,7 +158,7 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 	case err := <-workerErr:
 		// Worker.Run returns ctx.Err() on graceful shutdown; that's
 		// not a failure.
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("worker.Run: %v", err)
 		}
 	case <-time.After(2 * time.Second):

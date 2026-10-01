@@ -79,7 +79,11 @@ func TestSmokeStackReady(t *testing.T) {
 	probes := planeProbes()
 	if os.Getenv("PALADIN_SMOKE") != "1" {
 		probe := &http.Client{Timeout: 1 * time.Second}
-		resp, err := probe.Get(probes[0].url)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, probes[0].url, nil)
+		if err != nil {
+			t.Fatalf("readyz request: %v", err)
+		}
+		resp, err := probe.Do(req)
 		if err != nil {
 			t.Skipf("compose stack not reachable at %s (%v); "+
 				"bring it up and set PALADIN_SMOKE=1 to run this smoke test", probes[0].url, err)

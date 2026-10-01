@@ -32,8 +32,8 @@ import (
 
 // startPostgres boots a throwaway Postgres, applies the full goose schema,
 // and returns a live pool. The cleanup terminates the container.
-func startPostgres(t testing.TB) *pgxpool.Pool {
-	t.Helper()
+func startPostgres(tb testing.TB) *pgxpool.Pool {
+	tb.Helper()
 	ctx := context.Background()
 
 	ctr, err := tcpostgres.Run(ctx, "postgres:17-alpine",
@@ -45,36 +45,36 @@ func startPostgres(t testing.TB) *pgxpool.Pool {
 				WithOccurrence(2).WithStartupTimeout(90*time.Second)),
 	)
 	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
+		tb.Fatalf("start postgres container: %v", err)
 	}
-	t.Cleanup(func() { _ = ctr.Terminate(ctx) })
+	tb.Cleanup(func() { _ = ctr.Terminate(ctx) })
 
 	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		t.Fatalf("connection string: %v", err)
+		tb.Fatalf("connection string: %v", err)
 	}
 
 	// Apply migrations via the same goose + embedded FS the app uses.
 	cc, err := pgx.ParseConfig(dsn)
 	if err != nil {
-		t.Fatalf("parse dsn: %v", err)
+		tb.Fatalf("parse dsn: %v", err)
 	}
 	sqlDB := stdlib.OpenDB(*cc)
 	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("goose dialect: %v", err)
+		tb.Fatalf("goose dialect: %v", err)
 	}
 	goose.SetBaseFS(migrations.FS)
 	goose.SetLogger(goose.NopLogger())
 	if err := goose.Up(sqlDB, "."); err != nil {
-		t.Fatalf("goose up: %v", err)
+		tb.Fatalf("goose up: %v", err)
 	}
 	_ = sqlDB.Close()
 
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		t.Fatalf("open pool: %v", err)
+		tb.Fatalf("open pool: %v", err)
 	}
-	t.Cleanup(pool.Close)
+	tb.Cleanup(pool.Close)
 	return pool
 }
 
@@ -133,10 +133,10 @@ func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f 
 	return id
 }
 
-func mustExec(t testing.TB, ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) {
-	t.Helper()
+func mustExec(tb testing.TB, ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) {
+	tb.Helper()
 	if _, err := pool.Exec(ctx, sql, args...); err != nil {
-		t.Fatalf("exec %q: %v", sql, err)
+		tb.Fatalf("exec %q: %v", sql, err)
 	}
 }
 

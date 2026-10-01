@@ -50,20 +50,20 @@ func TestRLSTenantIsolation(t *testing.T) {
 	// asApp runs fn in a tx where current_user = paladin_app and paladin.tenant_id =
 	// tenantGUC. Always rolled back, so cases don't bleed into each other
 	// (and a WITH CHECK violation that aborts the tx is contained).
-	asApp := func(t *testing.T, tenantGUC string, fn func(t *testing.T, tx pgx.Tx)) {
+	asApp := func(t *testing.T, tenantGUC string, fn func(tx pgx.Tx)) {
 		t.Helper()
 		tx, err := pool.Begin(ctx)
 		if err != nil {
 			t.Fatalf("begin: %v", err)
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 		if _, err := tx.Exec(ctx, `SET LOCAL ROLE paladin_app`); err != nil {
 			t.Fatalf("set role: %v", err)
 		}
 		if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantGUC); err != nil {
 			t.Fatalf("set guc: %v", err)
 		}
-		fn(t, tx)
+		fn(tx)
 	}
 
 	objVisible := func(t *testing.T, tx pgx.Tx, id uuid.UUID) bool {
@@ -85,7 +85,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 
 	// ── read isolation: each tenant's GUC sees only its own rows ─────────
 	t.Run("GUC=A sees A's object, not B's", func(t *testing.T) {
-		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			if !objVisible(t, tx, objA) {
 				t.Error("A's object not visible under GUC=A")
 			}
@@ -99,7 +99,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	})
 
 	t.Run("GUC=B sees B's object, not A's", func(t *testing.T) {
-		asApp(t, fB.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, fB.tenantID.String(), func(tx pgx.Tx) {
 			if !objVisible(t, tx, objB) {
 				t.Error("B's object not visible under GUC=B")
 			}
@@ -111,7 +111,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 
 	// ── closed-by-default: unset / foreign GUC sees nothing ──────────────
 	t.Run("unset GUC sees zero rows", func(t *testing.T) {
-		asApp(t, "", func(t *testing.T, tx pgx.Tx) {
+		asApp(t, "", func(tx pgx.Tx) {
 			if n := totalObjects(t, tx); n != 0 {
 				t.Errorf("unset GUC saw %d rows, want 0 (closed-by-default)", n)
 			}
@@ -119,7 +119,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	})
 
 	t.Run("foreign-tenant GUC sees zero rows", func(t *testing.T) {
-		asApp(t, uuid.NewString(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, uuid.NewString(), func(tx pgx.Tx) {
 			if n := totalObjects(t, tx); n != 0 {
 				t.Errorf("foreign GUC saw %d rows, want 0", n)
 			}
@@ -128,7 +128,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 
 	// ── write isolation (WITH CHECK): can't stamp another tenant's row ───
 	t.Run("WITH CHECK rejects cross-tenant INSERT", func(t *testing.T) {
-		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			// A valid FK chain for tenant B exists (fB seeded it), so only
 			// the RLS WITH CHECK (tenant_id must equal the GUC) can reject
 			// this — proving the policy, not a constraint, is the gate.
@@ -147,7 +147,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	})
 
 	t.Run("WITH CHECK allows own-tenant INSERT", func(t *testing.T) {
-		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
 				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
 				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0)`,
@@ -171,7 +171,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	seedAudit(t, fB.tenantID)
 
 	t.Run("audit_log: cross-tenant SELECT is free", func(t *testing.T) {
-		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			var n int
 			if err := tx.QueryRow(ctx, `SELECT count(*) FROM audit_log`).Scan(&n); err != nil {
 				t.Fatalf("count audit_log: %v", err)
@@ -183,7 +183,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	})
 
 	t.Run("audit_log: INSERT stamping another tenant is rejected", func(t *testing.T) {
-		asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
 				`INSERT INTO audit_log (id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
 				 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`,

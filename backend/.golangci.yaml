@@ -1,6 +1,13 @@
 version: "2"
 run:
   timeout: 5m
+  # The suites behind these tags need Docker or a live stack to RUN, but not to
+  # lint. Left out, 31 findings sat in them unseen — two unused symbols among
+  # them, and a dozen helpers whose failures pointed at the wrong line.
+  build-tags:
+    - integration
+    - e2e
+    - conformance
   #modules-download-mode: readonly
 
 linters:

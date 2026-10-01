@@ -31,87 +31,88 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-func subtestBucketSearch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func subtestBucketSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
+	return func(t *testing.T) {
+		const backendID = "search-backend"
+		mustExec(t, ctx, pool,
+			`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
+		repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
 
-	const backendID = "search-backend"
-	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
-	repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
-
-	// Chosen to break the definition rather than to exercise it.
-	rows := []struct{ name, display string }{
-		{"prod-logs", "Prod Logs"},       // plain ASCII, mixed case
-		{"staging-logs", "STAGING LOGS"}, // all caps
-		{"quiet", ""},                    // NULL-ish display name
-		{"istanbul-tr", "İstanbul"},      // Go and Postgres fold this differently
-		{"uber-cache", "Über Cache"},     // non-ASCII, foldable in Unicode only
-		{"pct-bucket", "100% done"},      // LIKE metacharacter in the DATA
-		{"under-score", "a_b"},           // the other LIKE metacharacter
-		{"ab", "cd"},                     // for the separator-spanning probe
-	}
-	for _, r := range rows {
-		if err := repo.Create(ctx, admindomain.Bucket{
-			BackendID: backendID, BucketName: r.name, DisplayName: r.display,
-		}); err != nil {
-			t.Fatalf("create %s: %v", r.name, err)
+		// Chosen to break the definition rather than to exercise it.
+		rows := []struct{ name, display string }{
+			{"prod-logs", "Prod Logs"},       // plain ASCII, mixed case
+			{"staging-logs", "STAGING LOGS"}, // all caps
+			{"quiet", ""},                    // NULL-ish display name
+			{"istanbul-tr", "İstanbul"},      // Go and Postgres fold this differently
+			{"uber-cache", "Über Cache"},     // non-ASCII, foldable in Unicode only
+			{"pct-bucket", "100% done"},      // LIKE metacharacter in the DATA
+			{"under-score", "a_b"},           // the other LIKE metacharacter
+			{"ab", "cd"},                     // for the separator-spanning probe
 		}
-	}
-
-	all, _, err := repo.List(ctx, admindomain.ListBucketsArgs{
-		BackendID: backendID, PageSize: 1000,
-	})
-	if err != nil {
-		t.Fatalf("list all: %v", err)
-	}
-	if len(all) != len(rows) {
-		t.Fatalf("fixture: listed %d buckets, created %d", len(all), len(rows))
-	}
-
-	queries := []string{
-		"prod",     // lowercase query, mixed-case data
-		"PROD",     // uppercase query, lowercase data
-		"Logs",     // matches display name only
-		"quiet",    // matches bucket id only
-		"istanbul", // ASCII query over data Postgres and Go fold differently
-		"İstanbul", // non-ASCII query
-		"über",     // non-ASCII, lowercase
-		"ÜBER",     // non-ASCII, uppercase — ASCII folding does NOT match this
-		"100%",     // LIKE wildcard as data
-		"a_b",      // LIKE single-char wildcard as data
-		"b\nc",     // spans the separator: must match nothing
-		"",         // no filter at all
-		"nosuchthing",
-	}
-
-	for _, q := range queries {
-		t.Run(q, func(t *testing.T) {
-			filter := ""
-			if q != "" {
-				filter = "search.contains(" + celQuote(q) + ")"
+		for _, r := range rows {
+			if err := repo.Create(ctx, admindomain.Bucket{
+				BackendID: backendID, BucketName: r.name, DisplayName: r.display,
+			}); err != nil {
+				t.Fatalf("create %s: %v", r.name, err)
 			}
+		}
 
-			// SQL narrowing only.
-			narrowed, _, err := repo.List(ctx, admindomain.ListBucketsArgs{
-				BackendID: backendID, PageSize: 1000, Filter: filter,
-			})
-			if err != nil {
-				t.Fatalf("list filtered: %v", err)
-			}
-
-			// The authoritative pass, over each side.
-			viaSQL := celFilterBuckets(t, filter, narrowed)
-			viaAll := celFilterBuckets(t, filter, all)
-
-			if !sameBuckets(viaSQL, viaAll) {
-				t.Errorf("pushdown changed the answer for %q\n"+
-					"  after SQL narrowing: %v\n"+
-					"  over every row:      %v\n"+
-					"the SQL in ListBucketsV2 and cel.SearchText disagree — SQL "+
-					"dropped a row the filter accepts, which an operator sees as "+
-					"a bucket that does not exist",
-					q, bucketNames(viaSQL), bucketNames(viaAll))
-			}
+		all, _, err := repo.List(ctx, admindomain.ListBucketsArgs{
+			BackendID: backendID, PageSize: 1000,
 		})
+		if err != nil {
+			t.Fatalf("list all: %v", err)
+		}
+		if len(all) != len(rows) {
+			t.Fatalf("fixture: listed %d buckets, created %d", len(all), len(rows))
+		}
+
+		queries := []string{
+			"prod",     // lowercase query, mixed-case data
+			"PROD",     // uppercase query, lowercase data
+			"Logs",     // matches display name only
+			"quiet",    // matches bucket id only
+			"istanbul", // ASCII query over data Postgres and Go fold differently
+			"İstanbul", // non-ASCII query
+			"über",     // non-ASCII, lowercase
+			"ÜBER",     // non-ASCII, uppercase — ASCII folding does NOT match this
+			"100%",     // LIKE wildcard as data
+			"a_b",      // LIKE single-char wildcard as data
+			"b\nc",     // spans the separator: must match nothing
+			"",         // no filter at all
+			"nosuchthing",
+		}
+
+		for _, q := range queries {
+			t.Run(q, func(t *testing.T) {
+				filter := ""
+				if q != "" {
+					filter = "search.contains(" + celQuote(q) + ")"
+				}
+
+				// SQL narrowing only.
+				narrowed, _, err := repo.List(ctx, admindomain.ListBucketsArgs{
+					BackendID: backendID, PageSize: 1000, Filter: filter,
+				})
+				if err != nil {
+					t.Fatalf("list filtered: %v", err)
+				}
+
+				// The authoritative pass, over each side.
+				viaSQL := celFilterBuckets(t, filter, narrowed)
+				viaAll := celFilterBuckets(t, filter, all)
+
+				if !sameBuckets(viaSQL, viaAll) {
+					t.Errorf("pushdown changed the answer for %q\n"+
+						"  after SQL narrowing: %v\n"+
+						"  over every row:      %v\n"+
+						"the SQL in ListBucketsV2 and cel.SearchText disagree — SQL "+
+						"dropped a row the filter accepts, which an operator sees as "+
+						"a bucket that does not exist",
+						q, bucketNames(viaSQL), bucketNames(viaAll))
+				}
+			})
+		}
 	}
 }
 
@@ -189,38 +190,39 @@ func celQuote(s string) string {
 // asserts, and buckets had no such case. It is also the one the console change
 // depends on — a picker that sends a filter and reads one page is correct only
 // if SQL, not the CEL pass, did the narrowing.
-func subtestBucketPastThePage(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func subtestBucketPastThePage(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
+	return func(t *testing.T) {
+		const backendID = "search-page-backend"
+		mustExec(t, ctx, pool,
+			`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
+		repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
 
-	const backendID = "search-page-backend"
-	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
-	repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
-
-	// 60 rows, page size 10. The needle sorts last on purpose.
-	for i := 0; i < 59; i++ {
-		if err := repo.Create(ctx, admindomain.Bucket{
-			BackendID: backendID, BucketName: fmt.Sprintf("aaa-%03d", i),
-		}); err != nil {
-			t.Fatalf("create filler %d: %v", i, err)
+		// 60 rows, page size 10. The needle sorts last on purpose.
+		for i := 0; i < 59; i++ {
+			if err := repo.Create(ctx, admindomain.Bucket{
+				BackendID: backendID, BucketName: fmt.Sprintf("aaa-%03d", i),
+			}); err != nil {
+				t.Fatalf("create filler %d: %v", i, err)
+			}
 		}
-	}
-	if err := repo.Create(ctx, admindomain.Bucket{
-		BackendID: backendID, BucketName: "zzz-needle", DisplayName: "The Needle",
-	}); err != nil {
-		t.Fatalf("create needle: %v", err)
-	}
+		if err := repo.Create(ctx, admindomain.Bucket{
+			BackendID: backendID, BucketName: "zzz-needle", DisplayName: "The Needle",
+		}); err != nil {
+			t.Fatalf("create needle: %v", err)
+		}
 
-	got, _, err := repo.List(ctx, admindomain.ListBucketsArgs{
-		BackendID: backendID, PageSize: 10,
-		Filter: `search.contains("needle")`,
-	})
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	if len(got) != 1 || got[0].BucketName != "zzz-needle" {
-		t.Errorf("first page of a filtered list = %v, want [zzz-needle] — the "+
-			"filter did not reach SQL, so it selected from the page instead of "+
-			"from the table and the operator is told the bucket does not exist",
-			bucketNames(got))
+		got, _, err := repo.List(ctx, admindomain.ListBucketsArgs{
+			BackendID: backendID, PageSize: 10,
+			Filter: `search.contains("needle")`,
+		})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(got) != 1 || got[0].BucketName != "zzz-needle" {
+			t.Errorf("first page of a filtered list = %v, want [zzz-needle] — the "+
+				"filter did not reach SQL, so it selected from the page instead of "+
+				"from the table and the operator is told the bucket does not exist",
+				bucketNames(got))
+		}
 	}
 }

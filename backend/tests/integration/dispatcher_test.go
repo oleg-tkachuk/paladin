@@ -704,34 +704,6 @@ func TestDispatcher_ConcurrentRunnersUseSkipLocked(t *testing.T) {
 	}
 }
 
-// containsCI is a small substring helper so the orphan test's error
-// match isn't case-sensitive.
-func containsCI(haystack, needle string) bool {
-	if len(needle) == 0 {
-		return true
-	}
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		match := true
-		for j := 0; j < len(needle); j++ {
-			a, b := haystack[i+j], needle[j]
-			if a >= 'A' && a <= 'Z' {
-				a += 'a' - 'A'
-			}
-			if b >= 'A' && b <= 'Z' {
-				b += 'a' - 'A'
-			}
-			if a != b {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
-}
-
 // seedNATSSubscription mirrors seedSubscription but writes a nats-sink
 // row with the supplied URL + subject. Kept distinct so the HTTP path
 // helper stays narrow (its sink_config is HTTP-shaped).

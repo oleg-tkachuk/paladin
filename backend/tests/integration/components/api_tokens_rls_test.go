@@ -51,7 +51,7 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 
 	// asApp runs fn as paladin_app with paladin.tenant_id = tenantGUC (empty string =
 	// the pre-auth state). Always rolled back so cases don't bleed.
-	asApp := func(t *testing.T, tenantGUC string, fn func(t *testing.T, tx pgx.Tx)) {
+	asApp := func(t *testing.T, tenantGUC string, fn func(tx pgx.Tx)) {
 		t.Helper()
 		tx, err := pool.Begin(ctx)
 		if err != nil {
@@ -64,7 +64,7 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 		if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantGUC); err != nil {
 			t.Fatalf("set guc: %v", err)
 		}
-		fn(t, tx)
+		fn(tx)
 	}
 
 	countByDigest := func(t *testing.T, tx pgx.Tx, d []byte) int {
@@ -77,7 +77,7 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 	}
 
 	// (1) THE REGRESSION: pre-auth lookup with NO tenant GUC must see the row.
-	asApp(t, "", func(t *testing.T, tx pgx.Tx) {
+	asApp(t, "", func(tx pgx.Tx) {
 		if n := countByDigest(t, tx, digestA); n != 1 {
 			t.Fatalf("pre-auth digest lookup (empty GUC): got %d rows, want 1 — RLS is filtering the verify path", n)
 		}
@@ -85,7 +85,7 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 
 	// (2) A tenant with its own GUC set also reads its token (tenant_isolation
 	// OR the permissive read — either way visible).
-	asApp(t, fA.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+	asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 		if n := countByDigest(t, tx, digestA); n != 1 {
 			t.Fatalf("tenant-A lookup: got %d rows, want 1", n)
 		}
@@ -93,7 +93,7 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 
 	// (3) WRITES STAY ISOLATED: inserting a token for tenant A while scoped to
 	// tenant B must be rejected by tenant_isolation's WITH CHECK.
-	asApp(t, fB.tenantID.String(), func(t *testing.T, tx pgx.Tx) {
+	asApp(t, fB.tenantID.String(), func(tx pgx.Tx) {
 		_, err := tx.Exec(ctx, `INSERT INTO api_tokens
 			(id, tenant_id, name, prefix, token_hmac, scopes, audience, expires_at, created_by)
 			VALUES ($1, $2, 'evil', 'BBBBBBBB', $3, '{}'::text[], '{data}'::text[], now() + interval '1 year', 'test')`,
@@ -107,7 +107,7 @@ func TestAPITokensPreAuthLookup(t *testing.T) {
 	// (4) A write with NO tenant GUC (the verify path) cannot mutate rows —
 	// the UPDATE is tenant-filtered to zero rows. This is why TouchLastUsed
 	// sets the tenant GUC itself.
-	asApp(t, "", func(t *testing.T, tx pgx.Tx) {
+	asApp(t, "", func(tx pgx.Tx) {
 		tag, err := tx.Exec(ctx, `UPDATE api_tokens SET last_used_at = $1 WHERE id = $2`, time.Now(), tokA)
 		if err != nil {
 			t.Fatalf("update: %v", err)

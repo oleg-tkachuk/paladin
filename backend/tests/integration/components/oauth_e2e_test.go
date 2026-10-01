@@ -76,15 +76,12 @@ func TestOAuthFlowE2E(t *testing.T) {
 	challenge := oauth.ComputeS256Challenge(verifier)
 
 	// 1. /authorize — login + consent → 302 with code.
-	authResp, err := client.PostForm(srv.URL+"/oauth/authorize", url.Values{
+	authResp := postFormRaw(t, client, srv.URL+"/oauth/authorize", url.Values{
 		"client_id": {"claude-desktop"}, "redirect_uri": {"https://app.example.com/cb"},
 		"scope": {"paladin.read"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"},
 		"state": {"xyz"}, "action": {"allow"},
 		"username": {"svc@acme"}, "password": {password}, "tenant": {tenantID.String()},
 	})
-	if err != nil {
-		t.Fatalf("authorize: %v", err)
-	}
 	defer authResp.Body.Close()
 	if authResp.StatusCode != http.StatusFound {
 		t.Fatalf("authorize status = %d, want 302", authResp.StatusCode)
@@ -143,9 +140,17 @@ func postToken(t *testing.T, c *http.Client, base string, form url.Values) e2eTo
 	return out
 }
 
+// formContentType is what http.Client.PostForm sends.
+const formContentType = "application/x-www-form-urlencoded"
+
 func postFormRaw(t *testing.T, c *http.Client, url string, form url.Values) *http.Response {
 	t.Helper()
-	resp, err := c.PostForm(url, form)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("request %s: %v", url, err)
+	}
+	req.Header.Set("Content-Type", formContentType)
+	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatalf("post %s: %v", url, err)
 	}
