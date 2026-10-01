@@ -78,6 +78,8 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 COPY --link backend/cmd/ cmd/
 COPY --link backend/internal/ internal/
 COPY --link backend/migrations/ migrations/
+# policies/ embeds the Cedar schema and the default tenant policy (go:embed).
+COPY --link backend/policies/ policies/
 
 # No `go generate`: the sqlc bindings and mocks are committed, and the gates
 # fail when they drift from their sources — the image builds what was reviewed.

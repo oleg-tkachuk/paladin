@@ -101,12 +101,9 @@ Taskfile.yaml
 backend/Taskfile.yaml
 backend/tasks/
 
-# ── Trees the Dockerfile does not COPY ──────────────────────────────────
-# Real source, but the binary build never reaches them: policies/ ships
-# Cedar fixtures used by tests and docs. If a future Dockerfile starts to COPY one, drop
-# the matching line.
+# backend/policies/ used to be excluded here as test fixtures. The server now
+# embeds the Cedar schema and the default tenant policy from it.
 #
-# backend/tools.go used to be here. The tools stage now copies it, so that
-# `go install` resolves the generators from this module's own dependency
+# backend/tools.go used to be excluded too. The tools stage now copies it, so
+# that `go install` resolves the generators from this module's own dependency
 # graph instead of from a second set of version pins maintained by hand.
-backend/policies/
