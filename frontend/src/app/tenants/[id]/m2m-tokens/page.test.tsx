@@ -147,3 +147,16 @@ describe("M2MTokensPage", () => {
     );
   });
 });
+
+// A failed list fell through to "No M2M tokens yet. Create the first one";
+// the toast that said otherwise was gone in seconds.
+describe("M2MTokensPage failed list", () => {
+  it("says the list could not be loaded, not that there are none", async () => {
+    h.list.mockRejectedValue(new Error("unavailable"));
+    render(<M2MTokensPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /M2M tokens could not be loaded/,
+    );
+    expect(screen.queryByText(/No M2M tokens yet/)).toBeNull();
+  });
+});

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
 
 // Characterization net for the policies page. It orchestrates four admin
 // clients + three list hooks + live Cedar validation + a Tabs/TestSuite UI, so
@@ -13,11 +14,13 @@ const h = vi.hoisted(() => ({
   fetchCollections: vi.fn(),
   showNotification: vi.fn(),
   tenantsError: null as string | null,
+  tenants: [] as Array<{ tenantId: string; displayName: string }>,
+  getTenant: vi.fn(),
 }));
 
 vi.mock("@/hooks/useTenants", () => ({
   useTenants: () => ({
-    tenants: [],
+    tenants: h.tenants,
     fetchTenants: h.fetchTenants,
     loading: false,
     error: h.tenantsError,
@@ -45,7 +48,7 @@ vi.mock("@/lib/connect/client", () => ({
   bucketClient: { getBucket: vi.fn() },
   collectionClient: { getCollection: vi.fn() },
   policyClient: { getEffectivePolicy: vi.fn(), validatePolicy: vi.fn() },
-  tenantClient: { getTenant: vi.fn() },
+  tenantClient: { getTenant: h.getTenant },
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -107,5 +110,23 @@ describe("PoliciesPage", () => {
       /Tenants could not be loaded/,
     );
     h.tenantsError = null;
+  });
+});
+
+// A failed policy read left the editor holding whatever it had — the previous
+// target's text, or nothing — and Save wrote it over the target's real policy.
+describe("PoliciesPage failed policy read", () => {
+  it("says so, and will not save over a policy it could not read", async () => {
+    h.tenants = [{ tenantId: "acme", displayName: "Acme" }];
+    h.getTenant.mockRejectedValue(new Error("unavailable"));
+    const user = userEvent.setup();
+    render(<PoliciesPage />);
+    await user.click(screen.getByLabelText("Target"));
+    await user.click(screen.getByRole("option", { name: /Acme/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /The current policy could not be loaded/,
+    );
+    expect(screen.getByRole("button", { name: /^Save/ })).toBeDisabled();
+    h.tenants = [];
   });
 });

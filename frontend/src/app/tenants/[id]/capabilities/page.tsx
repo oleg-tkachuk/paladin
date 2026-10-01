@@ -44,6 +44,7 @@ import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { formatMoney } from "@/lib/format/money";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // Per-capability usage snapshot keyed by capability id; "never" ⇒ the
 // capability has no usage row yet (GetUsage NotFound).
@@ -396,6 +397,17 @@ export default function CapabilitiesPage() {
                       capabilities.
                     </p>
                   </div>
+                </TableCell>
+              </TableRow>
+            ) : browseQuery.isError && !browseQuery.data ? (
+              // "No capabilities for this principal" for a failed list hides live grants.
+              <TableRow>
+                <TableCell colSpan={7} className="h-40 text-center">
+                  <ListLoadError
+                    what="Capabilities"
+                    reason={errorMessage(browseQuery.error)}
+                    onRetry={() => void browseQuery.refetch()}
+                  />
                 </TableCell>
               </TableRow>
             ) : visibleItems.length === 0 ? (

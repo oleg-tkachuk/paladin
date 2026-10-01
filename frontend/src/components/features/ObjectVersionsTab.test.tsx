@@ -150,3 +150,21 @@ describe("ObjectVersionsTab", () => {
     ).toBeInTheDocument();
   });
 });
+
+// A failed read said "No historical versions yet".
+describe("ObjectVersionsTab failed read", () => {
+  it("says the versions could not be loaded, not that there are none", async () => {
+    h.list.mockRejectedValue(new Error("unavailable"));
+    render(
+      <ObjectVersionsTab
+        active
+        object={object}
+        onObjectChanged={h.onObjectChanged}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Versions could not be loaded/,
+    );
+    expect(screen.queryByText(/No historical versions yet/)).toBeNull();
+  });
+});

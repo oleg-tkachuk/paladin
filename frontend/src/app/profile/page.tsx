@@ -45,6 +45,7 @@ import { userSettingsClient } from "@/lib/connect/client";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 import { SETTINGS_NOT_APPLIED } from "./_constants";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
 // Tenant comes from the JWT, so the page always operates on the calling
@@ -263,7 +264,15 @@ export default function ProfilePage() {
         </CardHeader>
         <Separator />
         <CardContent className="space-y-5 px-6 py-5">
-          {loading ? (
+          {settingsQuery.isError && !settings ? (
+            // The form used to show the defaults and "not saved yet" here,
+            // and Save would have written them over the real settings.
+            <ListLoadError
+              what="Preferences"
+              reason={errorMessage(settingsQuery.error)}
+              onRetry={() => void settingsQuery.refetch()}
+            />
+          ) : loading ? (
             <div className="space-y-3">
               <Skeleton className="h-9 w-full" />
               <Skeleton className="h-9 w-full" />

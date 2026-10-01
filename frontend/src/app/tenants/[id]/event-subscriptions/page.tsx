@@ -39,6 +39,7 @@ import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { sinkSummary, truncate, type TestResult } from "./_form";
 import { TestResultDisplay } from "./_components";
 import { SubscriptionEditorDialog } from "./SubscriptionEditorDialog";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // ─── Page ─────────────────────────────────────────────────────────────
 export default function EventsPage() {
@@ -285,6 +286,17 @@ export default function EventsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : listQuery.isError && !listQuery.data ? (
+              // "No event subscriptions" for a failed list invites a duplicate.
+              <TableRow>
+                <TableCell colSpan={5} className="py-12 text-center">
+                  <ListLoadError
+                    what="Event subscriptions"
+                    reason={errorMessage(listQuery.error)}
+                    onRetry={() => void listQuery.refetch()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5}>

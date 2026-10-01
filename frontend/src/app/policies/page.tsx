@@ -277,6 +277,10 @@ export default function PoliciesPage() {
     },
   });
   const loadingPolicy = policyQuery.isFetching;
+  // The editor keeps whatever it held when the load fails, and Save writes
+  // it: without this, a failed read followed by Save would replace the
+  // target's real policy with the previous target's text, or with nothing.
+  const policyFailed = policyQuery.isError && !policyQuery.data;
   const loadPolicyForTarget = () => policyQuery.refetch();
 
   // Apply a freshly-loaded snapshot to the editor, or clear when no target is
@@ -514,6 +518,14 @@ export default function PoliciesPage() {
                 {target}
               </p>
             )}
+            {policyFailed && (
+              <ListLoadError
+                variant="inline"
+                what="The current policy"
+                reason={errorMessage(policyQuery.error)}
+                onRetry={() => void policyQuery.refetch()}
+              />
+            )}
           </div>
 
           <div className="flex items-end">
@@ -586,7 +598,7 @@ export default function PoliciesPage() {
                 <Button
                   size="sm"
                   onClick={handleSave}
-                  disabled={saving || !target || hasErrors}
+                  disabled={saving || !target || hasErrors || policyFailed}
                 >
                   {saving ? "Saving…" : "Save"}
                 </Button>

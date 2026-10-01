@@ -69,7 +69,7 @@ import { T } from "@/lib/ui/typography";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
-import { failedRead } from "@/components/ui/ListLoadError";
+import { ListLoadError, failedRead } from "@/components/ui/ListLoadError";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
 
@@ -304,6 +304,17 @@ export default function TenantCollectionsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : listQuery.isError && !listQuery.data ? (
+              // "No Collections yet" for a failed list invites a duplicate.
+              <TableRow>
+                <TableCell colSpan={4} className="h-48 text-center">
+                  <ListLoadError
+                    what="Collections"
+                    reason={errorMessage(listQuery.error)}
+                    onRetry={() => void listQuery.refetch()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : sorted.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="h-48 text-center">

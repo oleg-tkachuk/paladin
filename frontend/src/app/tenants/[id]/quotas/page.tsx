@@ -46,6 +46,7 @@ import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 import { formatCount } from "@/lib/format/locale";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 
 function bigIntFromInput(s: string): bigint {
   const n = s.trim();
@@ -226,6 +227,14 @@ export default function TenantQuotasPage() {
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-3 w-full" />
           </div>
+        ) : quotaQuery.isError && !quotaQuery.data ? (
+          // A failed read rendered an empty card, and Reset usage disabled
+          // as if no quota existed.
+          <ListLoadError
+            what="Quota"
+            reason={errorMessage(quotaQuery.error)}
+            onRetry={() => void quotaQuery.refetch()}
+          />
         ) : notFound ? (
           <div className="flex items-start gap-3 text-sm">
             <ScaleIcon className="mt-0.5 size-5 text-muted-foreground" />

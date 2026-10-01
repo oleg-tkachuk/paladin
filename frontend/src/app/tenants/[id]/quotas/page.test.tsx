@@ -61,3 +61,14 @@ describe("TenantQuotasPage reset", () => {
     );
   });
 });
+
+// A failed read left an empty card and Reset disabled, as if unconfigured.
+describe("TenantQuotasPage failed read", () => {
+  it("says the quota could not be loaded", async () => {
+    h.getQuota.mockRejectedValue(new Error("unavailable"));
+    render(<TenantQuotasPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Quota could not be loaded/,
+    );
+  });
+});
