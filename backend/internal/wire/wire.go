@@ -214,14 +214,20 @@ func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, _ config.Config) *b
 	return backendh.NewHandler(repos.BackendV2.(backendh.Repository), pe)
 }
 
-func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {
+func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *bucketh.Handler {
 	// storage.Provisioner passes straight through, nil included: bucketh
 	// answers a missing provisioner with Unavailable ("backend provisioning
 	// not wired") on all three of its paths.
 	// The concrete BucketRepoV2 satisfies bucketh.Repository (domain
 	// interface + ADR-0003 tx seam); Repos.BucketV2 is the pgx-free domain
 	// type, so assert to the wider local interface here.
-	return bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), storage.Provisioner, pe)
+	h := bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), storage.Provisioner, pe)
+	ids := make([]string, 0, len(cfg.Storage.Backends))
+	for id := range cfg.Storage.Backends {
+		ids = append(ids, id)
+	}
+	h.SetConfiguredBackends(ids)
+	return h
 }
 
 func ProvideQuotaHandler(repos Repos, pe *policy.Engine) *quotah.Handler {

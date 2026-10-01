@@ -262,6 +262,10 @@ func mintJWT(t *testing.T, secret, issuer, audience, tenantID, subject string,
 // the responses; negative subtests pin error semantics (slug
 // immutability, duplicate detection, missing-binding rejection).
 //
+// configuredBackendID is the backend the stack under test declares in
+// storage.backends (configs/compose.yaml and the chart's values).
+const configuredBackendID = "primary"
+
 // Single top-level test because the phases depend on each other —
 // running them as t.Run subtests of one parent ensures cleanup order
 // is right and gives clean output grouping.
@@ -269,6 +273,10 @@ func TestAdminAPI_E2E(t *testing.T) {
 	f := newFixture(t)
 
 	backendID := "e2e-" + f.nonce
+	// A bucket can only be created on a backend declared in storage.backends:
+	// the data plane builds its storage clients from the configuration, so the
+	// backend this run registers through the API can hold no bucket.
+	bucketBackendID := configuredBackendID
 	bucketID := "paladin-e2e-" + f.nonce
 	tenantSlug := "e2e-" + f.nonce
 	// Multi-segment per the schema baseline (001_initial_schema.sql). Every segment must satisfy the
@@ -321,7 +329,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 		}
 		_, _ = f.buckets.DeleteBucket(f.ctx,
 			connect.NewRequest(&pb.DeleteBucketRequest{
-				Name:             bucketResourceName(backendID, bucketID),
+				Name:             bucketResourceName(bucketBackendID, bucketID),
 				SkipVersionCheck: true,
 			}))
 		if rv := f.backendVersion(backendID); rv != "" {
@@ -381,7 +389,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 	t.Run("BucketService_CreateAndGet", func(t *testing.T) {
 		got, err := f.buckets.CreateBucket(f.ctx, connect.NewRequest(
 			&pb.CreateBucketRequest{
-				Parent:   "storageBackends/" + backendID,
+				Parent:   "storageBackends/" + bucketBackendID,
 				BucketId: bucketID,
 				Bucket: &pb.Bucket{
 					BucketId:    bucketID,
@@ -399,14 +407,14 @@ func TestAdminAPI_E2E(t *testing.T) {
 
 		read, err := f.buckets.GetBucket(f.ctx, connect.NewRequest(
 			&pb.GetBucketRequest{
-				Name: bucketResourceName(backendID, bucketID),
+				Name: bucketResourceName(bucketBackendID, bucketID),
 			}))
 		if err != nil {
 			t.Fatalf("GetBucket: %v", err)
 		}
-		if read.Msg.GetBackendId() != backendID {
+		if read.Msg.GetBackendId() != bucketBackendID {
 			t.Errorf("BackendId: got %q want %q",
-				read.Msg.GetBackendId(), backendID)
+				read.Msg.GetBackendId(), bucketBackendID)
 		}
 	})
 
@@ -418,7 +426,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 					Slug:        tenantSlug,
 					DisplayName: "E2E Tenant " + f.nonce,
 				},
-				DefaultBucket: bucketResourceName(backendID, bucketID),
+				DefaultBucket: bucketResourceName(bucketBackendID, bucketID),
 			}))
 		if err != nil {
 			t.Fatalf("CreateTenant: %v", err)
@@ -441,7 +449,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 		_, err := f.tenants.CreateTenant(f.ctx, connect.NewRequest(
 			&pb.CreateTenantRequest{
 				Tenant:        &pb.Tenant{Slug: "" /* missing */},
-				DefaultBucket: bucketResourceName(backendID, bucketID),
+				DefaultBucket: bucketResourceName(bucketBackendID, bucketID),
 			}))
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
@@ -453,7 +461,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 					Slug:        tenantSlug, // already taken
 					DisplayName: "Different " + f.nonce,
 				},
-				DefaultBucket: bucketResourceName(backendID, bucketID),
+				DefaultBucket: bucketResourceName(bucketBackendID, bucketID),
 			}))
 		assertCode(t, err, connect.CodeAlreadyExists)
 	})
@@ -466,7 +474,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 					DisplayName: "Mismatch " + f.nonce,
 				},
 				// Bucket name doesn't exist on this backend → FK fails.
-				DefaultBucket: bucketResourceName(backendID, "does-not-exist-"+f.nonce),
+				DefaultBucket: bucketResourceName(bucketBackendID, "does-not-exist-"+f.nonce),
 			}))
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
@@ -535,7 +543,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 				CollectionResource: &pb.Collection{
 					Collection:  collectionName,
 					DisplayName: "E2E OK " + f.nonce,
-					Bucket:      bucketResourceName(backendID, bucketID),
+					Bucket:      bucketResourceName(bucketBackendID, bucketID),
 				},
 			}))
 		if err != nil {
@@ -565,10 +573,10 @@ func TestAdminAPI_E2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetCollection: %v", err)
 		}
-		if read.Msg.GetBucket() != bucketResourceName(backendID, bucketID) {
+		if read.Msg.GetBucket() != bucketResourceName(bucketBackendID, bucketID) {
 			t.Errorf("Bucket: got %q want %q",
 				read.Msg.GetBucket(),
-				bucketResourceName(backendID, bucketID))
+				bucketResourceName(bucketBackendID, bucketID))
 		}
 
 		list, err := oks.ListCollections(f.ctx, connect.NewRequest(

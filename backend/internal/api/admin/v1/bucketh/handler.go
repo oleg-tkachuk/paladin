@@ -67,6 +67,11 @@ type Handler struct {
 
 	events EventProducer
 	log    *zap.Logger
+	// configured holds the backend ids declared in storage.backends. The
+	// data plane and the worker build storage clients from that list only, so
+	// a bucket on any other backend could be neither provisioned nor reached.
+	// nil (unset) refuses nothing; wiring always sets it.
+	configured map[string]bool
 }
 
 func NewHandler(r Repository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
@@ -74,6 +79,14 @@ func NewHandler(r Repository, p Provisioner, policyEngine cedar.Authorizer) *Han
 		panic("bucketh: policy authorizer is required")
 	}
 	return &Handler{repo: r, provisioner: p, policy: policyEngine, cel: celpkg.NewEvaluator(), log: zap.NewNop()}
+}
+
+// SetConfiguredBackends records the backend ids declared in storage.backends.
+func (h *Handler) SetConfiguredBackends(ids []string) {
+	h.configured = make(map[string]bool, len(ids))
+	for _, id := range ids {
+		h.configured[id] = true
+	}
 }
 
 // SetEventProducer attaches the optional outbox producer. nil is
@@ -185,6 +198,12 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	case !enabled:
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("backend %q is disabled", in.Bucket.BackendID))
+	}
+	if h.configured != nil && !h.configured[in.Bucket.BackendID] {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"backend %q is not declared in storage.backends; the data plane and the worker "+
+				"build their storage clients from the configuration only, so a bucket on it "+
+				"could not be provisioned or reached — declare the backend there first", in.Bucket.BackendID))
 	}
 	// Outbox model: the DB row is the source of truth. When the caller
 	// asked us to create the physical bucket too, we mark the row

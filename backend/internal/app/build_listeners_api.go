@@ -97,7 +97,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// a self-provision emits the same paladin.bucket.created / paladin.collection.created
 	// lifecycle events an admin create would. repos.BucketV2 doubles as the
 	// backend-existence checker (a tenant may not create backends).
-	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine)
+	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
 	bucketBootstrapH.SetEventProducer(apiDispatcher)
 	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
 	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
