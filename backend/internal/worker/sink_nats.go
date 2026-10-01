@@ -35,6 +35,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 )
 
 // NatsConnPool keeps one *nats.Conn per unique (url, credentials_ref)
@@ -109,8 +110,8 @@ func (p *NatsConnPool) get(url, credentialsRef string) (*nats.Conn, error) {
 	}
 	p.conns[key] = c
 	p.log.Info("nats: connection opened",
-		zap.String("url", url),
-		zap.String("connected_url", c.ConnectedUrl()),
+		logfield.URL("url", url),
+		logfield.URL("connected_url", c.ConnectedUrl()),
 	)
 	return c, nil
 }
@@ -125,7 +126,8 @@ func (p *NatsConnPool) Close() {
 		// The publish path is fire-and-forget today, so this is only
 		// non-trivial once async producer batching lands.
 		if err := c.Drain(); err != nil {
-			p.log.Warn("nats: drain failed", zap.String("key", k), zap.Error(err))
+			url, _, _ := strings.Cut(k, "\x00")
+			p.log.Warn("nats: drain failed", logfield.URL("url", url), zap.Error(err))
 		}
 		delete(p.conns, k)
 	}
@@ -140,7 +142,7 @@ func (p *NatsConnPool) Warmup(pairs []NatsTarget) {
 	for _, t := range pairs {
 		if _, err := p.get(t.URL, t.CredentialsRef); err != nil {
 			p.log.Warn("nats: pre-warm dial failed",
-				zap.String("url", t.URL),
+				logfield.URL("url", t.URL),
 				zap.Error(err),
 			)
 		}
