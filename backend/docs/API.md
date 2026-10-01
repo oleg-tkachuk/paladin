@@ -1,16 +1,7 @@
 # API — Paladin
 
-Everything here was checked against the tree it describes. The previous
-version of this file was not, and by the time it was rewritten every
-structural claim in it was false: it named a proto package that does not
-exist, one port where there are three, a handler directory that had been
-renamed, and an "admin key" auth scheme the server has never implemented. It
-also said nothing about the two headers without which no `Create` call
-succeeds — a gap that broke three of this project's OWN clients before it
-broke anyone else's.
-
-So: if you change the contract, change this file in the same commit. It is the
-first thing an integrator reads, and a wrong map is worse than no map.
+The RPC surface as the proto and the listeners define it. A change to the
+contract changes this file in the same commit.
 
 ## Three planes, three ports, three audiences
 
