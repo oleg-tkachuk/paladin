@@ -124,7 +124,15 @@ export default function ProfilePage() {
   // Seed the editable form whenever a new snapshot arrives — render-phase
   // adjust-on-change (not a set-state-in-effect hit). Identity is stable
   // between fetches via TanStack structural sharing.
-  const [seededFrom, setSeededFrom] = useState(settings);
+  //
+  // Starts at undefined, which no snapshot is (settings is null at worst), so
+  // the first render seeds too. It started at `settings`, which was fine while
+  // this page did the first read; once the shell read the same query, the
+  // snapshot was already there on mount, nothing seeded, and Save would have
+  // written empty fields over the saved ones.
+  const [seededFrom, setSeededFrom] = useState<typeof settings | undefined>(
+    undefined,
+  );
   if (settings !== seededFrom) {
     setSeededFrom(settings);
     setTimezone(settings?.timezone || "");

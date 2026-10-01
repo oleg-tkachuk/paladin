@@ -18,6 +18,9 @@ vi.mock("@/components/features/ChangePasswordCard", () => ({
   ChangePasswordCard: () => null,
 }));
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import { USER_SETTINGS_QUERY_KEY } from "@/lib/theme";
 import ProfilePage from "./page";
 import { SETTINGS_APPLIED_NOTE } from "./_constants";
 
@@ -120,5 +123,29 @@ describe("ProfilePage preference fields", () => {
     render(<ProfilePage />);
     await screen.findByLabelText("Timezone");
     expect(screen.queryByText(/Empty = server default/)).toBeNull();
+  });
+});
+
+// The shell reads the same settings query on sign-in, so by the time this page
+// mounts the snapshot is usually cached already. The form must show it.
+describe("ProfilePage with settings already loaded", () => {
+  it("shows the saved values", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    client.setQueryData(USER_SETTINGS_QUERY_KEY, {
+      ...DEFAULTS,
+      timezone: "Asia/Tokyo",
+      locale: "uk-UA",
+      theme: "light",
+      resourceVersion: "2",
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ProfilePage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByLabelText("Timezone")).toHaveValue("Asia/Tokyo");
+    expect(screen.getByLabelText("Locale")).toHaveValue("uk-UA");
   });
 });
