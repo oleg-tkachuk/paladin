@@ -56,6 +56,8 @@
 {{- $fromController := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.ingressController.namespace)) "podSelector" (dict "matchLabels" $np.ingressController.podLabels) }}
 {{- $fromMonitoring := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.monitoring.namespace)) }}
 {{- $fromUI := dict "podSelector" (dict "matchLabels" $np.ui.podLabels) }}
+{{/* The MCP bridge's listener, read from its config like the OTLP port. */}}
+{{- $mcpPort := splitList ":" .Values.config.mcp.http.addr | last | int }}
 {{- $fromMCP := dict "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/component" "mcp" "app.kubernetes.io/instance" .Release.Name)) }}
 ---
 # Baseline: default-deny both directions for every pod of this release.
@@ -155,6 +157,18 @@ spec:
               app.kubernetes.io/component: worker
       ports:
         - { protocol: TCP, port: 8090 }
+    {{- if .Values.deployments.mcp.enabled }}
+    # MCPInspectService (status, sessions) proxies the bridge's listener. The
+    # mcp policy admitted admin, but without this egress the call was refused
+    # at the admin pod and the console's /mcp page showed the server down.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: mcp
+      ports:
+        - { protocol: TCP, port: {{ $mcpPort }} }
+    {{- end }}
 {{- end }}
 {{- if .Values.deployments.worker.enabled }}
 ---
@@ -280,7 +294,7 @@ spec:
               app.kubernetes.io/instance: {{ .Release.Name }}
               app.kubernetes.io/component: admin
       ports:
-        - { protocol: TCP, port: 8095 }
+        - { protocol: TCP, port: {{ $mcpPort }} }
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}
