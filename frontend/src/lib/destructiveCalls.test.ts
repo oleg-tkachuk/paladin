@@ -27,7 +27,8 @@ const LOCAL =
 
 /** "file::callee" → how the console asks before the call. */
 const GUARDED: Record<string, string> = {
-  "app/buckets/page.tsx::deleteBucket": "AlertDialog on the page",
+  "components/features/buckets/BucketDeleteDialog.tsx::deleteBucket":
+    "it is the confirmation",
   "app/collections/page.tsx::deleteCollection": "AlertDialog on the page",
   "app/storage-backends/[backendId]/BackendActions.tsx::deleteBackend":
     "DeleteBackendDialog",
@@ -35,7 +36,6 @@ const GUARDED: Record<string, string> = {
     "RotateCredentialsDialog",
   "app/tenants/TenantDeleteDialog.tsx::deleteTenant":
     "the call is made from the dialog itself",
-  "app/tenants/[id]/buckets/page.tsx::deleteBucket": "AlertDialog on the page",
   "app/tenants/[id]/capabilities/RevokeCapabilityDialog.tsx::revoke":
     "the call is made from the dialog itself",
   "app/tenants/[id]/collections/[name]/objects/page.tsx::purgeObject":

@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-import { errorMessage } from "@/hooks/errorContract";
 import {
   ArchiveBoxIcon,
   ArrowPathIcon,
@@ -19,14 +18,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
 import { Bucket } from "@/gen/paladin/admin/v1/types_pb";
-import { useNotification } from "@/components/ui/Notification";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -41,16 +37,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   SelectRoot,
   SelectContent,
@@ -68,6 +54,8 @@ import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDi
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { SortableHead } from "@/components/ui/SortHeader";
+import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
+import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
 
 type SortColumn = "backend" | "name" | "region";
 
@@ -87,7 +75,6 @@ export default function BucketsPage() {
     error: backendsError,
     fetchBackends,
   } = useBackends();
-  const { showNotification } = useNotification();
 
   const backends = useMemo(
     () => backendRows.map((b) => b.backendId),
@@ -119,7 +106,6 @@ export default function BucketsPage() {
 
   // ─── delete ───────────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
-  const [deleteRemote, setDeleteRemote] = useState(false);
 
   // One place that knows how to ask, so the Refresh button and the error
   // retry cannot drift into fetching something other than what is on screen.
@@ -173,31 +159,6 @@ export default function BucketsPage() {
   const hasFilters = search.trim() !== "" || filterBackend !== ALL_BACKENDS;
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      await deleteBucket(
-        deleteTarget.backendId,
-        deleteTarget.bucketId,
-        deleteTarget.resourceVersion,
-        deleteRemote,
-      );
-      showNotification({
-        type: "success",
-        title: "Bucket deleted",
-        message: `${deleteTarget.bucketId}${deleteRemote ? " (incl. S3)" : ""}`,
-      });
-      setDeleteTarget(null);
-      setDeleteRemote(false);
-    } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Deletion failed",
-        message: errorMessage(err, "Failed to delete bucket."),
-      });
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -445,61 +406,11 @@ export default function BucketsPage() {
         createBucket={createBucket}
       />
 
-      {/* ─── Delete confirmation ─────────────────────────────────────────── */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => {
-          if (!o) {
-            setDeleteTarget(null);
-            setDeleteRemote(false);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this bucket?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Removing{" "}
-              <span className="font-mono text-foreground">
-                {deleteTarget?.bucketId}
-              </span>{" "}
-              from backend{" "}
-              <span className="font-mono text-foreground">
-                {deleteTarget?.backendId}
-              </span>
-              . Any Collection still bound to it must be removed first.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-            <Checkbox
-              checked={deleteRemote}
-              onCheckedChange={(v) => setDeleteRemote(v === true)}
-              id="delete-remote"
-              className="mt-0.5"
-            />
-            <div>
-              <Label
-                htmlFor="delete-remote"
-                className="cursor-pointer text-destructive"
-              >
-                Also delete the physical S3 bucket
-              </Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                The S3 bucket must already be empty for this to succeed.
-              </p>
-            </div>
-          </label>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete bucket
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <BucketDeleteDialog
+        target={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        deleteBucket={deleteBucket}
+      />
     </div>
   );
 }
@@ -510,47 +421,3 @@ export default function BucketsPage() {
 // "deletion_failed" → destructive pill so a stuck row stands out at a
 // glance. Old rows from before the migration default to "ready" — same
 // affordance.
-function ProvisionStateBadge({ state }: { state: string }) {
-  const s = state || "ready";
-  switch (s) {
-    case "ready":
-      return (
-        <Badge
-          variant="outline"
-          className={cn(T.code, "text-muted-foreground")}
-        >
-          ready
-        </Badge>
-      );
-    case "pending":
-      return (
-        <Badge variant="info" className={T.code}>
-          provisioning…
-        </Badge>
-      );
-    case "deleting":
-      return (
-        <Badge variant="warning" className={T.code}>
-          deleting…
-        </Badge>
-      );
-    case "failed":
-      return (
-        <Badge variant="destructive" className={T.code}>
-          failed
-        </Badge>
-      );
-    case "deletion_failed":
-      return (
-        <Badge variant="destructive" className={T.code}>
-          delete failed
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="outline" className={T.code}>
-          {s}
-        </Badge>
-      );
-  }
-}
