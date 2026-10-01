@@ -19,7 +19,9 @@ function page(ids: string[], nextPageToken = "") {
 }
 
 describe("useBuckets pagination", () => {
-  beforeEach(() => h.listBuckets.mockReset());
+  beforeEach(() => {
+    h.listBuckets.mockReset();
+  });
 
   // A bucket past the first page used to be invisible everywhere in the
   // console — the scope picker, the collection dialog's selector, the tables —

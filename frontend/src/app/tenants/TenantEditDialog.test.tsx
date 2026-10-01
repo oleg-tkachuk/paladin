@@ -30,7 +30,9 @@ function open(update = vi.fn()) {
 }
 
 describe("TenantEditDialog", () => {
-  beforeEach(() => h.showNotification.mockReset());
+  beforeEach(() => {
+    h.showNotification.mockReset();
+  });
 
   it("holds Save until something changed", () => {
     open();

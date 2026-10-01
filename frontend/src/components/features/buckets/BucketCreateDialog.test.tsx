@@ -28,7 +28,9 @@ const name = () => screen.getByLabelText(/Bucket name/);
 const submit = () => screen.getByRole("button", { name: "Create bucket" });
 
 describe("BucketCreateDialog", () => {
-  beforeEach(() => h.showNotification.mockReset());
+  beforeEach(() => {
+    h.showNotification.mockReset();
+  });
 
   // The API refuses a name S3 refuses; the form says so before submit.
   it("explains a name S3 refuses and holds Create", () => {
