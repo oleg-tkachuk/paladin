@@ -67,14 +67,19 @@
   /* Light palette: the "light" theme, and "system" on a light OS. The light
    * side of ember: a warm paper ground, a burnt-orange accent with white text
    * on it. Charts keep ember's sequence. Its larger corners are set on
-   * .light below, since :root is also what the dark palettes start from. */
+   * .light below, since :root is also what the dark palettes start from.
+   *
+   * The accent and the status colours are the scheme's own hues made darker,
+   * so that as text on the ground and the cards, and under white text, they
+   * reach 4.5:1 (themeContrast.test.ts); the scheme's values sat at 3.2–3.7.
+   * Text on a warning fill is white for the same reason. */
   --background: #f2ede6;
   --foreground: #1d1720;
   --card: #fbf9f5;
   --card-foreground: #1d1720;
   --popover: #fbf9f5;
   --popover-foreground: #1d1720;
-  --primary: #e2571b;
+  --primary: #b74616;
   --primary-foreground: #ffffff;
   --secondary: #f4efe8;
   --secondary-foreground: #1d1720;
@@ -82,15 +87,15 @@
   --muted-foreground: #5f5666;
   --accent: #f4efe8;
   --accent-foreground: #1d1720;
-  --destructive: #d63a4a;
+  --destructive: #ca2a3b;
   --destructive-foreground: #ffffff;
-  --success: #0f9d6b;
-  --warning: #c07d10;
-  --warning-foreground: #160f09;
-  --info: #2277c2;
+  --success: #0c7953;
+  --warning: #93600c;
+  --warning-foreground: #ffffff;
+  --info: #1f6db3;
   --border: #e2d9cd;
   --input: #e2d9cd;
-  --ring: #e2571b;
+  --ring: #b74616;
   --chart-1: #ff7a3d;
   --chart-2: #34d399;
   --chart-3: #f5b14c;
@@ -98,12 +103,12 @@
   --chart-5: #59b6ea;
   --sidebar: #fbf9f5;
   --sidebar-foreground: #1d1720;
-  --sidebar-primary: #e2571b;
+  --sidebar-primary: #b74616;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f4efe8;
   --sidebar-accent-foreground: #1d1720;
   --sidebar-border: #e2d9cd;
-  --sidebar-ring: #e2571b;
+  --sidebar-ring: #b74616;
 }
 
 .light {
