@@ -7,8 +7,9 @@ Paladin reasons about is a row.
 
 ## Schema baseline
 
-The schema ships as three ordered migrations rather than an accumulated
-history:
+The schema starts from three ordered migrations that replaced the earlier
+history; later changes are forward-only files on top of them
+([CONVENTIONS.md](../migrations/CONVENTIONS.md)).
 
 | File | Contents |
 |------|----------|
@@ -26,6 +27,26 @@ not supported — see [upgrading.md](../../docs/upgrading.md).
 
 Migrations run under [Goose](https://github.com/pressly/goose) as
 `paladin_migrate`, which holds DDL rights. The application role does not.
+
+### After the baseline
+
+| File | Change |
+|------|--------|
+| `004` | RLS on `capability_revocations` |
+| `005` | `tenant_budgets.max_budget_usd` NOT NULL |
+| `006` | drop the unused `multipart_parts` |
+| `007` | `object_locks` integrity fixes |
+| `008` | OCC version on `tenant_budgets` |
+| `009` | `tenant_rate_buckets`, the shared per-tenant rate limit |
+| `010` | `pending_multipart_aborts`, multipart sessions S3 still has to abort |
+| `011` | RLS on the tables `009` and `010` added |
+| `012` | `refresh_tokens.superseded_at` — rotated versus revoked for cause |
+| `013` | NOTIFY for the live audit stream |
+| `014`, `015` | RLS on four IAM tables, then reverted: it broke login |
+| `016`–`018` | the same RLS, one table group at a time: settings and bindings, `users`, `refresh_tokens` |
+| `019`, `020` | `refresh_tokens.parent_id`, `first_used_at` and their index — lost-rotation recovery |
+
+Each file's header comment says why it exists.
 
 ## Identity and naming
 
