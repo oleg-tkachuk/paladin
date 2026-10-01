@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 )
 
 // rabbitPublisher is the publish seam the RabbitMQ sink depends on. The
@@ -142,7 +143,7 @@ func (p *RabbitMQConnPool) get(key, url string, tlsCfg *tls.Config) (rabbitPubli
 	p.pubs[key] = pooledRabbitPub{pub: pub, url: url}
 	if p.log != nil {
 		p.log.Info("rabbitmq connection dialed",
-			zap.String("url", url), zap.Bool("client_tls", tlsCfg != nil))
+			logfield.URL("url", url), zap.Bool("client_tls", tlsCfg != nil))
 	}
 	return pub, nil
 }
@@ -175,7 +176,7 @@ func (p *RabbitMQConnPool) Warmup(urls []string) {
 	for _, url := range urls {
 		if _, err := p.get(rabbitConnKey(rabbitSinkConfig{URL: url}), url, nil); err != nil && p.log != nil {
 			p.log.Warn("rabbitmq: pre-warm dial failed",
-				zap.String("url", url), zap.Error(err))
+				logfield.URL("url", url), zap.Error(err))
 		}
 	}
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 )
 
 // NATSDriver subscribes to a NATS subject and routes received messages
@@ -91,10 +93,10 @@ func (d *NATSDriver) Run(ctx context.Context, deliver func(context.Context, Clou
 			d.log().Warn("nats disconnected", zap.Error(err))
 		}),
 		nats.ReconnectHandler(func(c *nats.Conn) {
-			d.log().Info("nats reconnected", zap.String("url", c.ConnectedUrl()))
+			d.log().Info("nats reconnected", logfield.URL("url", c.ConnectedUrl()))
 		}),
 		nats.ConnectHandler(func(c *nats.Conn) {
-			d.log().Info("nats connected", zap.String("url", c.ConnectedUrl()))
+			d.log().Info("nats connected", logfield.URL("url", c.ConnectedUrl()))
 		}),
 	}
 	if d.Token != "" {

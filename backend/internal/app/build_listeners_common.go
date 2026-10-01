@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 )
@@ -99,7 +100,7 @@ func BuildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.L
 		if err := v.Start(ctx); err != nil {
 			return nil, fmt.Errorf("jwks(%s): %w", audience, err)
 		}
-		l.Info("using jwks verifier", zap.String("audience", audience), zap.String("url", a.JWKSURL))
+		l.Info("using jwks verifier", zap.String("audience", audience), logfield.URL("url", a.JWKSURL))
 		return v, nil
 	}
 	return &auth.JWTVerifier{
