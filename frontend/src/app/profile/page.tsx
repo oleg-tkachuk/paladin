@@ -28,7 +28,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
-  Select,
   SelectContent,
   SelectItem,
   SelectRoot,
@@ -61,9 +60,8 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 // that own their own UI state to manage; surfacing it as a JSON editor
 // here would invite blob-shaped corruption from typos.
 
-// A small, well-known subset of IANA TZ ids. Operators who need a
-// timezone outside this list can type any IANA name into the input
-// (the field is editable text); the dropdown is just a quick-pick.
+// A small, well-known subset of IANA TZ ids, offered as suggestions on the
+// timezone field. Any IANA name can still be typed.
 const COMMON_TIMEZONES = [
   "UTC",
   "Europe/Kyiv",
@@ -76,8 +74,14 @@ const COMMON_TIMEZONES = [
   "Australia/Sydney",
 ];
 
-// Same approach for locales — a curated quick-pick + free-form text.
+// Same for locales: suggestions, and free-form BCP-47.
 const COMMON_LOCALES = ["en-US", "en-GB", "uk-UA", "de-DE", "fr-FR", "ja-JP"];
+
+// One width for every preference control, sized to its values rather than to
+// the card: the longest common IANA name fits, and the column lines up.
+const FIELD_WIDTH = "w-full sm:w-60";
+const TIMEZONE_SUGGESTIONS = "prof-tz-suggestions";
+const LOCALE_SUGGESTIONS = "prof-locale-suggestions";
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -283,7 +287,7 @@ export default function ProfilePage() {
                   Theme
                 </Label>
                 <SelectRoot value={theme} onValueChange={setTheme}>
-                  <SelectTrigger id="prof-theme" className="w-full sm:w-60">
+                  <SelectTrigger id="prof-theme" className={FIELD_WIDTH}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -306,31 +310,21 @@ export default function ProfilePage() {
                   Timezone
                 </Label>
                 <div className="space-y-1.5">
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Select
-                      aria-label="Common timezones"
-                      options={COMMON_TIMEZONES.map((tz) => ({
-                        value: tz,
-                        label: tz,
-                      }))}
-                      value={
-                        COMMON_TIMEZONES.includes(timezone) ? timezone : ""
-                      }
-                      onChange={setTimezone}
-                      placeholder="— pick —"
-                      className="w-full sm:w-60"
-                    />
-                    <Input
-                      id="prof-tz"
-                      placeholder={detectedTz || "Europe/Kyiv"}
-                      value={timezone}
-                      onChange={(e) => setTimezone(e.target.value)}
-                      className="font-mono text-xs"
-                    />
-                  </div>
+                  <Input
+                    id="prof-tz"
+                    list={TIMEZONE_SUGGESTIONS}
+                    placeholder={detectedTz || "Europe/Kyiv"}
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    className={cn(FIELD_WIDTH, "font-mono text-xs")}
+                  />
+                  <datalist id={TIMEZONE_SUGGESTIONS}>
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <option key={tz} value={tz} />
+                    ))}
+                  </datalist>
                   <p className={T.hint}>
-                    IANA name. Empty = server default. Detected from this
-                    browser:{" "}
+                    IANA name. Detected from this browser:{" "}
                     <button
                       type="button"
                       onClick={() => detectedTz && setTimezone(detectedTz)}
@@ -352,26 +346,19 @@ export default function ProfilePage() {
                   Locale
                 </Label>
                 <div className="space-y-1.5">
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Select
-                      aria-label="Common locales"
-                      options={COMMON_LOCALES.map((lo) => ({
-                        value: lo,
-                        label: lo,
-                      }))}
-                      value={COMMON_LOCALES.includes(locale) ? locale : ""}
-                      onChange={setLocale}
-                      placeholder="— pick —"
-                      className="w-full sm:w-60"
-                    />
-                    <Input
-                      id="prof-locale"
-                      placeholder={detectedLocale || "en-US"}
-                      value={locale}
-                      onChange={(e) => setLocale(e.target.value)}
-                      className="font-mono text-xs"
-                    />
-                  </div>
+                  <Input
+                    id="prof-locale"
+                    list={LOCALE_SUGGESTIONS}
+                    placeholder={detectedLocale || "en-US"}
+                    value={locale}
+                    onChange={(e) => setLocale(e.target.value)}
+                    className={cn(FIELD_WIDTH, "font-mono text-xs")}
+                  />
+                  <datalist id={LOCALE_SUGGESTIONS}>
+                    {COMMON_LOCALES.map((lo) => (
+                      <option key={lo} value={lo} />
+                    ))}
+                  </datalist>
                   <p className={T.hint}>
                     BCP-47 tag. Detected from this browser:{" "}
                     <button

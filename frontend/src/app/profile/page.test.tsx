@@ -88,3 +88,37 @@ describe("ProfilePage failed read", () => {
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
   });
 });
+
+// Each preference had a quick-pick select AND a full-width text input for the
+// same value, so "UTC" showed twice and the second copy spanned the card.
+describe("ProfilePage preference fields", () => {
+  beforeEach(() => {
+    h.getMine.mockReset();
+  });
+
+  it.each([
+    ["Timezone", "Europe/Kyiv"],
+    ["Locale", "uk-UA"],
+  ])("%s is one field, with suggestions", async (label, suggestion) => {
+    h.getMine.mockResolvedValue(DEFAULTS);
+    render(<ProfilePage />);
+    const field = await screen.findByLabelText(label);
+    expect(
+      screen.queryAllByLabelText(new RegExp(`^Common ${label}`, "i")),
+    ).toEqual([]);
+    const listId = field.getAttribute("list");
+    expect(listId).toBeTruthy();
+    const options = [
+      ...document.querySelectorAll(`datalist#${listId} option`),
+    ].map((o) => o.getAttribute("value"));
+    expect(options).toContain(suggestion);
+  });
+
+  // The server refuses an empty time zone; the hint used to promise a default.
+  it("does not offer an empty time zone", async () => {
+    h.getMine.mockResolvedValue(DEFAULTS);
+    render(<ProfilePage />);
+    await screen.findByLabelText("Timezone");
+    expect(screen.queryByText(/Empty = server default/)).toBeNull();
+  });
+});
