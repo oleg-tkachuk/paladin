@@ -64,43 +64,50 @@
 :root {
   --radius: 0.625rem;
 
-  /* Light palette: the "light" theme, and "system" on a light OS. */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.696 0.17 162.48);
-  --warning: oklch(0.769 0.188 70.08);
-  --warning-foreground: oklch(0.145 0 0);
-  --info: oklch(0.6 0.118 184.704);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Light palette: the "light" theme, and "system" on a light OS. The light
+   * side of ember: a warm paper ground, a burnt-orange accent with white text
+   * on it. Charts keep ember's sequence. Its larger corners are set on
+   * .light below, since :root is also what the dark palettes start from. */
+  --background: #f2ede6;
+  --foreground: #1d1720;
+  --card: #fbf9f5;
+  --card-foreground: #1d1720;
+  --popover: #fbf9f5;
+  --popover-foreground: #1d1720;
+  --primary: #e2571b;
+  --primary-foreground: #ffffff;
+  --secondary: #f4efe8;
+  --secondary-foreground: #1d1720;
+  --muted: #f4efe8;
+  --muted-foreground: #5f5666;
+  --accent: #f4efe8;
+  --accent-foreground: #1d1720;
+  --destructive: #d63a4a;
+  --destructive-foreground: #ffffff;
+  --success: #0f9d6b;
+  --warning: #c07d10;
+  --warning-foreground: #160f09;
+  --info: #2277c2;
+  --border: #e2d9cd;
+  --input: #e2d9cd;
+  --ring: #e2571b;
+  --chart-1: #ff7a3d;
+  --chart-2: #34d399;
+  --chart-3: #f5b14c;
+  --chart-4: #ff5d6c;
+  --chart-5: #59b6ea;
+  --sidebar: #fbf9f5;
+  --sidebar-foreground: #1d1720;
+  --sidebar-primary: #e2571b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4efe8;
+  --sidebar-accent-foreground: #1d1720;
+  --sidebar-border: #e2d9cd;
+  --sidebar-ring: #e2571b;
+}
+
+.light {
+  --radius: 0.8rem;
 }
 
 .dark {
