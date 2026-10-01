@@ -123,7 +123,9 @@ function rlsStats(overrides: Record<string, unknown> = {}) {
 }
 
 describe("StatsPage", () => {
-  beforeEach(() => h.getPlatformStats.mockReset());
+  beforeEach(() => {
+    h.getPlatformStats.mockReset();
+  });
 
   it("renders the inventory census and the per-tenant object table", async () => {
     h.getPlatformStats.mockResolvedValue(response());

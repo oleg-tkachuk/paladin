@@ -12,7 +12,9 @@ import { AuditEntryDetailDialog } from "./AuditEntryDetailDialog";
 const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
 
 describe("AuditEntryDetailDialog", () => {
-  beforeEach(() => h.get.mockReset());
+  beforeEach(() => {
+    h.get.mockReset();
+  });
 
   it("fetches the entry by id and renders decoded before/after snapshots", async () => {
     h.get.mockResolvedValue({

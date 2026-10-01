@@ -28,7 +28,9 @@ function dialog(deleteBucket = vi.fn().mockResolvedValue(undefined)) {
   return { deleteBucket, onClose };
 }
 
-beforeEach(() => h.showNotification.mockReset());
+beforeEach(() => {
+  h.showNotification.mockReset();
+});
 
 describe("BucketDeleteDialog", () => {
   it("deletes the record only, at the bucket's version, and closes", async () => {

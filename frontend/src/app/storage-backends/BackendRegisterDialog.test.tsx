@@ -28,7 +28,9 @@ const type = (label: RegExp, value: string) =>
 const submit = () => screen.getByRole("button", { name: "Register backend" });
 
 describe("BackendRegisterDialog", () => {
-  beforeEach(() => h.showNotification.mockReset());
+  beforeEach(() => {
+    h.showNotification.mockReset();
+  });
 
   it("explains a bad backend ID at the field", () => {
     open();

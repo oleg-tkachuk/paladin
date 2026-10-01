@@ -27,7 +27,9 @@ function page(ids: string[], nextPageToken = "") {
 }
 
 describe("useBackends pagination", () => {
-  beforeEach(() => h.listBackends.mockReset());
+  beforeEach(() => {
+    h.listBackends.mockReset();
+  });
 
   // A backend past the first page was invisible and unselectable everywhere it
   // is offered — the scope picker, the collection and bucket dialogs, the

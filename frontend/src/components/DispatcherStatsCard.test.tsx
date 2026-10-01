@@ -9,7 +9,9 @@ vi.mock("@/lib/connect/client", () => ({
 import { DispatcherStatsCard } from "./DispatcherStatsCard";
 
 describe("DispatcherStatsCard", () => {
-  beforeEach(() => h.stats.mockReset());
+  beforeEach(() => {
+    h.stats.mockReset();
+  });
 
   it("renders the rollup and only the subscriptions that are behind", async () => {
     h.stats.mockResolvedValue({
