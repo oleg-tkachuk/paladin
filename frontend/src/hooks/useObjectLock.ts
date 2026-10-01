@@ -58,9 +58,11 @@ export function useObjectLock(
     },
   });
 
+  // refetch is stable; query is a new object on every render.
+  const { refetch } = query;
   const refresh = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    await refetch();
+  }, [refetch]);
 
   const setRetention = useCallback(
     async ({
