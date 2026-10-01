@@ -156,6 +156,21 @@ IN_RELEASE_CALLS = [
 ]
 
 
+# Roles the console dials directly: /api/health/all reads each one's health
+# snapshot. Refused, the console's health page shows the role as down.
+UI_HEALTH_CALLS = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
+UI_LABELS = {"app.kubernetes.io/name": "paladin-console"}
+
+
+def admits_ui(doc: dict) -> bool:
+    for rule in doc["spec"].get("ingress") or []:
+        for peer in rule.get("from") or []:
+            labels = (peer.get("podSelector") or {}).get("matchLabels") or {}
+            if "namespaceSelector" not in peer and all(labels.get(k) == v for k, v in UI_LABELS.items()) and labels:
+                return True
+    return False
+
+
 def in_release_problems(policies: dict[str, dict]) -> list[str]:
     """A call the chart makes between its own roles must get through.
 
@@ -165,6 +180,9 @@ def in_release_problems(policies: dict[str, dict]) -> list[str]:
     for caller, callee, why in IN_RELEASE_CALLS:
         if callee in policies and caller in policies and not admits_role(policies[callee], caller):
             problems.append(f"role {callee!r} does not admit {caller!r} ({why})")
+    for role in UI_HEALTH_CALLS:
+        if role in policies and not admits_ui(policies[role]):
+            problems.append(f"role {role!r} does not admit the console (/api/health/all)")
     return problems
 
 

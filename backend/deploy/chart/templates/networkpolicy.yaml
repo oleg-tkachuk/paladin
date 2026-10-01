@@ -9,12 +9,13 @@
     admin      ← ingress-controller / UI / mcp     → common + storage + NATS
                                                      + adminBrokerPorts (Test)
                                                      + dispatcher/worker ops
-    worker     ← monitoring / admin (ops)          → common + storage
-    dispatcher ← monitoring (ops)                  → OPEN egress (customer
+    worker     ← monitoring / admin / UI (ops)     → common + storage
+    dispatcher ← monitoring / admin / UI (ops)     → OPEN egress (customer
                                                      sinks live anywhere)
     ingest     ← storage ns (webhook) / monitoring → common + NATS
+                 / UI (health)
     mcp        ← ingress-controller / monitoring   → common + api/admin pods
-                 / admin (sessions)
+                 / admin (sessions) / UI (health)
 
   "common" egress = DNS (kube-system:53), 443/6443 anywhere (K8s API for the
   secret resolver + https webhooks/JWKS), Postgres, and the OTLP collector on
@@ -174,6 +175,8 @@ spec:
     # Service port, which never selects anything on the pod.
     - from:
         - {{ $fromMonitoring | toJson }}
+        # The console's /api/health/all reads every role's health snapshot.
+        - {{ $fromUI | toJson }}
         # Admin proxies /system/rls-census.json for the console's /stats
         # page — the worker's pool is the BYPASSRLS one, so the
         # cross-tenant census of the RLS'd tables is computed there.
@@ -205,6 +208,8 @@ spec:
   ingress:
     - from:
         - {{ $fromMonitoring | toJson }}
+        # The console's /api/health/all reads every role's health snapshot.
+        - {{ $fromUI | toJson }}
         # Admin proxies /system/dispatcher-stats.json for the console.
         - podSelector:
             matchLabels:
@@ -239,6 +244,8 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: {{ $np.storage.namespace }}
         - {{ $fromMonitoring | toJson }}
+        # The console's /api/health/all reads every role's health snapshot.
+        - {{ $fromUI | toJson }}
       ports:
         - { protocol: TCP, port: 8100 }
   egress:
@@ -264,6 +271,8 @@ spec:
     - from:
         - {{ $fromController | toJson }}
         - {{ $fromMonitoring | toJson }}
+        # The console's /api/health/all reads every role's health snapshot.
+        - {{ $fromUI | toJson }}
         # MCPInspectService.ListSessions: the admin pod proxies the console's
         # sessions view to mcp.http.sessions_url, which the chart points here.
         - podSelector:
