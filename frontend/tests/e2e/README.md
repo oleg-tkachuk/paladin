@@ -29,6 +29,27 @@ pnpm run test:e2e
 There is nothing else to arrange: no cluster, no port-forward, no
 credential export.
 
+## Against a deployed cluster
+
+The same suite runs against a deployed release, which is where it catches
+what the compose stack cannot — a slower round trip that lands mid-test, a
+config the chart ships off.
+
+```bash
+KUBE_CONTEXT=orbstack ./scripts/e2e-cluster.sh            # whole suite
+KUBE_CONTEXT=orbstack ./scripts/e2e-cluster.sh tests/e2e/shell.spec.ts
+```
+
+The script reads the bootstrap admin's password from its Secret, uses the
+console and API ingress hosts (`BASE_HOST`, `API_HOST`, defaulting to
+`paladin.local` and `api.paladin.local`), and port-forwards the admin plane,
+which has no ingress route, unless `ADMIN_URL` names one. Every test signs in
+through the login form, so the target's login rate limits must be lifted, or
+the run stalls on `/login` within its first minute.
+
+Tests for a subsystem the target has switched off skip themselves and say so,
+rather than fail: `m2m-tokens.spec.ts` does when `api_token` is disabled.
+
 ## Storage
 
 SeaweedFS runs as a service inside `docker-compose.test.yaml`, with a
