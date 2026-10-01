@@ -191,7 +191,10 @@ the client reach storage by different names, and SigV4 covers the Host
 header, so mixing them up produces a signature failure rather than a
 connection error.
 
-Backends can be added, disabled and rotated at runtime.
+Backends can be disabled, put in maintenance and drained at runtime. A backend
+that will hold buckets has to be declared in the configuration; one registered
+only through the API can be probed but not used yet
+([backend-registry.md](backend/docs/backend-registry.md)).
 
 ## Events
 

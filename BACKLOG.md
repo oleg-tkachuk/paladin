@@ -1547,6 +1547,23 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
+### A backend created through the API cannot hold buckets
+
+- **Status:** Open.
+- **Reason:** `BackendService.CreateBackend` stores the backend with an
+  endpoint and a `credentials_secret_ref`, and the admin prober can reach it
+  (`internal/app/backend_prober.go` builds a client from that Secret). The
+  data plane and the worker get their clients from
+  `s3adapter.BackendRegistry`, which is built from `storage.backends` in the
+  config only. A bucket on a database-only backend fails provisioning, and
+  every storage call for it fails with `unknown storage backend`.
+- **Definition of Done:** the registry builds a client for a database-only
+  backend from its row and `credentials_secret_ref` (the way the prober
+  does), rebuilds it when the row changes, and a bucket on such a backend can
+  be provisioned, uploaded to and read, covered by a test; or `CreateBackend`
+  refuses ids the configuration does not declare.
+- **Blockers:** none.
+
 ### Per-tenant S3 bucket layout — Phase 3 (shared→dedicated copy job)
 
 - **Status:** Phases 1 + 2 SHIPPED 2026-07-02/03 per
