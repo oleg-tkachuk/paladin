@@ -22,6 +22,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useBackends } from "@/hooks/useBackends";
 import { useBuckets } from "@/hooks/useBuckets";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BackendActions } from "./BackendActions";
 
@@ -51,8 +52,18 @@ export default function StorageBackendDetailPage() {
   const params = useParams<{ backendId: string }>();
   const backendId = decodeURIComponent(params.backendId);
 
-  const { backends, loading: loadingBackends } = useBackends();
-  const { buckets, loading: loadingBuckets, fetchBuckets } = useBuckets();
+  const {
+    backends,
+    loading: loadingBackends,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends();
+  const {
+    buckets,
+    loading: loadingBuckets,
+    error: bucketsError,
+    fetchBuckets,
+  } = useBuckets();
 
   useEffect(() => {
     fetchBuckets();
@@ -131,6 +142,18 @@ export default function StorageBackendDetailPage() {
             </div>
           </CardContent>
         </Card>
+      ) : backendsError ? (
+        // The backend list failed, so this backend is unknown — saying "not
+        // found" sent the operator looking for a backend that may exist.
+        <Card>
+          <CardContent className="py-8">
+            <ListLoadError
+              what="Backends"
+              reason={backendsError}
+              onRetry={() => void fetchBackends()}
+            />
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -144,7 +167,7 @@ export default function StorageBackendDetailPage() {
         <h2 className="text-sm font-semibold tracking-tight">
           Buckets on this backend
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {bucketsHere.length}
+            {bucketsError ? "—" : bucketsHere.length}
           </span>
         </h2>
         <Button
@@ -178,6 +201,16 @@ export default function StorageBackendDetailPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : bucketsError ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-40 text-center">
+                  <ListLoadError
+                    what="Buckets"
+                    reason={bucketsError}
+                    onRetry={() => void fetchBuckets()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : bucketsHere.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="h-40 text-center">

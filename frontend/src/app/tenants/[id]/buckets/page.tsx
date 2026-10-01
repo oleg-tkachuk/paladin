@@ -80,6 +80,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
@@ -127,8 +128,14 @@ const ALL_BACKENDS = "__all__";
 
 export default function TenantBucketsPage() {
   const tenant = useTenant();
-  const { buckets, loading, fetchBuckets, createBucket, deleteBucket } =
-    useBuckets();
+  const {
+    buckets,
+    loading,
+    error: bucketsError,
+    fetchBuckets,
+    createBucket,
+    deleteBucket,
+  } = useBuckets();
   const {
     backends: backendRows,
     error: backendsError,
@@ -343,6 +350,16 @@ export default function TenantBucketsPage() {
                   </TableCell>
                 </TableRow>
               ))
+            ) : bucketsError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-48 text-center">
+                  <ListLoadError
+                    what="Buckets"
+                    reason={bucketsError}
+                    onRetry={() => void refetch()}
+                  />
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-48 text-center">

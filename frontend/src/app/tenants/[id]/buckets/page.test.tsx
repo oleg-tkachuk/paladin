@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 // notifications; useTableSort is a pure hook and stays real.
 const h = vi.hoisted(() => ({
   buckets: [] as Array<Record<string, unknown>>,
+  bucketsError: null as string | null,
   fetchBuckets: vi.fn(),
   createBucket: vi.fn(() => Promise.resolve()),
   deleteBucket: vi.fn(() => Promise.resolve()),
@@ -19,6 +20,7 @@ vi.mock("@/hooks/useBuckets", () => ({
   useBuckets: () => ({
     buckets: h.buckets,
     loading: false,
+    error: h.bucketsError,
     fetchBuckets: h.fetchBuckets,
     createBucket: h.createBucket,
     deleteBucket: h.deleteBucket,
@@ -48,6 +50,7 @@ const makeBucket = (name: string) => ({
 
 beforeEach(() => {
   h.buckets = [];
+  h.bucketsError = null;
   h.fetchBuckets.mockClear();
   h.createBucket.mockClear();
   h.deleteBucket.mockClear();
@@ -161,5 +164,22 @@ describe("TenantBucketsPage", () => {
         false,
       ),
     );
+  });
+
+  // A failed read rendered "No buckets owned by this tenant yet." with an
+  // offer to create one.
+  it("says the bucket list failed, not that the tenant owns none", async () => {
+    h.bucketsError = "unavailable: upstream";
+    render(<TenantBucketsPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Buckets could not be loaded/,
+    );
+    expect(
+      screen.queryByText("No buckets owned by this tenant yet."),
+    ).not.toBeInTheDocument();
+    h.fetchBuckets.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    // Retry asks for the same tenant-scoped list the page loaded.
+    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
   });
 });

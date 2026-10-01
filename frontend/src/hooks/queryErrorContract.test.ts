@@ -34,21 +34,11 @@ const ALLOWED: Record<string, string> = {
     "label only: a miss drops the backend name from the header; the bucket itself comes from its own query, which surfaces errors",
   "app/storage-backends/[backendId]/buckets/[bucketId]/page.tsx::useTenants":
     "label only: a miss shows the tenant id instead of its slug; the collections come from their own query, which surfaces errors",
-  "app/config/page.tsx::useTenants":
-    "waiting for the pages pass: a failed read still renders as empty here",
-  "app/config/page.tsx::useBackends":
-    "waiting for the pages pass: a failed read still renders as empty here",
   "app/policies/page.tsx::useTenants":
     "waiting for the pages pass: a failed read still renders as empty here",
   "app/policies/page.tsx::useBuckets":
     "waiting for the pages pass: a failed read still renders as empty here",
   "app/policies/page.tsx::useCollections":
-    "waiting for the pages pass: a failed read still renders as empty here",
-  "app/storage-backends/[backendId]/page.tsx::useBackends":
-    "waiting for the pages pass: a failed read still renders as empty here",
-  "app/storage-backends/[backendId]/page.tsx::useBuckets":
-    "waiting for the pages pass: a failed read still renders as empty here",
-  "app/tenants/[id]/buckets/page.tsx::useBuckets":
     "waiting for the pages pass: a failed read still renders as empty here",
   "app/tenants/[id]/collections/[name]/page.tsx::useBuckets":
     "waiting for the pages pass: a failed read still renders as empty here",

@@ -59,10 +59,26 @@ const DEV_TOKEN_MANAGER = process.env.NODE_ENV !== "production";
 // and the unchanged dev-token manager. When SystemService.GetConfig
 // finally lands, we add the YAML viewer back as a third card.
 
+// A count whose read failed. "0" and "no tenants yet" were what it showed,
+// which is a claim about the platform; the snapshot links to the list page,
+// where the failure has its own retry.
+const UNKNOWN_COUNT = "—";
+const COUNT_FAILED = "could not be loaded";
+
 export default function ConfigPage() {
   const { user } = useAuth();
-  const { tenants, loading: tenantsLoading, fetchTenants } = useTenants();
-  const { backends, loading: backendsLoading, fetchBackends } = useBackends();
+  const {
+    tenants,
+    loading: tenantsLoading,
+    error: tenantsError,
+    fetchTenants,
+  } = useTenants();
+  const {
+    backends,
+    loading: backendsLoading,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends();
   const {
     config: yamlBlob,
     path: configPath,
@@ -208,16 +224,20 @@ export default function ConfigPage() {
             primary={
               stillLoading ? (
                 <Skeleton className="h-5 w-10" />
+              ) : tenantsError ? (
+                UNKNOWN_COUNT
               ) : (
                 String(tenantCount)
               )
             }
             secondary={
-              tenantCount === 0
-                ? "no tenants yet"
-                : tenantCount === 1
-                  ? "1 workspace"
-                  : `${tenantCount} workspaces`
+              tenantsError
+                ? COUNT_FAILED
+                : tenantCount === 0
+                  ? "no tenants yet"
+                  : tenantCount === 1
+                    ? "1 workspace"
+                    : `${tenantCount} workspaces`
             }
             href="/tenants"
           />
@@ -227,16 +247,20 @@ export default function ConfigPage() {
             primary={
               stillLoading ? (
                 <Skeleton className="h-5 w-10" />
+              ) : backendsError ? (
+                UNKNOWN_COUNT
               ) : (
                 String(backendCount)
               )
             }
             secondary={
-              backendCount === 0
-                ? "none registered"
-                : backendCount === 1
-                  ? "1 storage backend"
-                  : `${backendCount} storage backends`
+              backendsError
+                ? COUNT_FAILED
+                : backendCount === 0
+                  ? "none registered"
+                  : backendCount === 1
+                    ? "1 storage backend"
+                    : `${backendCount} storage backends`
             }
             href="/buckets"
           />
