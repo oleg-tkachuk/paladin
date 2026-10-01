@@ -13,7 +13,7 @@
 // promise. Otherwise N parallel RPCs would cause N refreshes and the backend
 // would invalidate jti's faster than the UI could use them.
 
-import { AUDIENCES, type Audience } from "@/constants";
+import type { Audience } from "@/constants";
 
 type TokenEntry = {
   token: string;
@@ -132,5 +132,3 @@ export function peekAccessToken(audience: Audience): string | null {
   const entry = cache.get(audience);
   return isFresh(entry) ? entry.token : null;
 }
-
-export const AUDIENCE_VALUES = Object.values(AUDIENCES) as readonly Audience[];

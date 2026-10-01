@@ -26,7 +26,6 @@ import { ObjectTagService } from "@/gen/paladin/data/v1/object_tag_service_pb";
 import { BatchService } from "@/gen/paladin/data/v1/batch_service_pb";
 import { MultipartUploadService } from "@/gen/paladin/data/v1/multipart_service_pb";
 import { PresignService } from "@/gen/paladin/data/v1/presign_service_pb";
-import { OperationService as DataOperationService } from "@/gen/paladin/data/v1/operation_service_pb";
 
 // iam plane
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
@@ -72,13 +71,8 @@ export const multipartClient = createClient(
   dataTransport,
 );
 export const presignClient = createClient(PresignService, dataTransport);
-export const operationClient = createClient(
-  DataOperationService,
-  dataTransport,
-);
 
 // iam
-import { HealthService } from "@/gen/paladin/iam/v1/health_service_pb";
 
 export const authClient = createClient(AuthService, iamTransport);
 export const userClient = createClient(UserService, iamTransport);
@@ -86,7 +80,3 @@ export const userSettingsClient = createClient(
   UserSettingsService,
   iamTransport,
 );
-// GetVersion/GetHealth live on iam's HealthService — admin/v1 SystemService
-// is a different service (config, dispatcher and platform stats), reached
-// through adminSystemClient above.
-export const systemClient = createClient(HealthService, iamTransport);

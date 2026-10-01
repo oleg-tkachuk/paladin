@@ -13,9 +13,6 @@ export const API_LIMIT_DEFAULT = 20;
 /** Maximum page size accepted by the backend `*.List*` validators. */
 export const API_PAGE_SIZE_MAX = 500;
 
-/** Hierarchy separator used in collections / path display. */
-export const CATEGORY_SEPARATOR = "/";
-
 /** Prefix where the Next.js Connect-RPC bridge handles backend traffic. */
 export const RPC_API_PREFIX = "/api/rpc";
 

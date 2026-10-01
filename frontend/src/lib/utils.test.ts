@@ -1,12 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import {
-  cn,
-  formatUptime,
-  timestampToDate,
-  formatDate,
-  formatBytes,
-} from "./utils";
+import { cn, timestampToDate, formatDate, formatBytes } from "./utils";
 
 describe("cn", () => {
   it("joins truthy class values and drops falsy ones", () => {
@@ -16,24 +10,6 @@ describe("cn", () => {
   it("resolves conflicting tailwind utilities (last wins)", () => {
     expect(cn("p-2", "p-4")).toBe("p-4");
     expect(cn("text-sm", "text-lg")).toBe("text-lg");
-  });
-});
-
-describe("formatUptime", () => {
-  it("returns 0s for empty / Unknown / zeroed input", () => {
-    expect(formatUptime("")).toBe("0s");
-    expect(formatUptime("Unknown")).toBe("0s");
-    expect(formatUptime("0h0m0s")).toBe("0s");
-  });
-
-  it("parses Go-style h/m/s durations and floors fractional seconds", () => {
-    expect(formatUptime("1h2m3.4s")).toBe("1h 2m 3s");
-    expect(formatUptime("5m6s")).toBe("5m 6s");
-    expect(formatUptime("45s")).toBe("45s");
-  });
-
-  it("keeps a 0m segment once hours are present", () => {
-    expect(formatUptime("2h")).toBe("2h 0m");
   });
 });
 

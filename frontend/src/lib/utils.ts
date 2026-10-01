@@ -5,28 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatUptime(uptime: string): string {
-  if (!uptime || uptime === "Unknown") return "0s";
-
-  // Go-style duration strings: '1h2m3.4s' or '5m6s'
-  const hoursMatch = uptime.match(/(\d+)h/);
-  const minsMatch = uptime.match(/(\d+)m/);
-  const secsMatch = uptime.match(/(\d+(?:\.\d+)?)s/);
-
-  const h = hoursMatch ? parseInt(hoursMatch[1]) : 0;
-  const m = minsMatch ? parseInt(minsMatch[1]) : 0;
-  const s = secsMatch ? Math.floor(parseFloat(secsMatch[1])) : 0;
-
-  if (h === 0 && m === 0 && s === 0) return "0s";
-
-  let result = "";
-  if (h > 0) result += `${h}h `;
-  if (m > 0 || h > 0) result += `${m}m `;
-  if (s > 0 || (h === 0 && m === 0)) result += `${s}s`;
-
-  return result.trim();
-}
-
 /**
  * Converts a protobuf Timestamp (plain object) to a JS Date.
  */
