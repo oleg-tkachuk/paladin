@@ -1,38 +1,56 @@
 // Cedar schema for Paladin authorization model.
 //
-// Mirrors the Action constants in internal/policy/cedar/engine.go and the
-// entity attributes emitted by buildEntities. Update this file when those
-// change — there is no automated sync.
+// Describes what internal/policy/cedar/engine.go emits: the Action constants,
+// the entities built by buildEntities, and the context built by buildContext.
+// internal/policy/cedar/schema_test.go fails when the two disagree.
 //
 // Hierarchy:
 //   StorageBackend
 //   └── Bucket
-//        └── ObjectKey            ← parent is BOTH Bucket and Tenant
+//        └── Collection           ← parent is BOTH Bucket and Tenant
 //             └── Object
 //   Tenant
-//   └── ObjectKey
-//   └── User                       (resource-side; principal-User keyed by Subject)
-//   └── ApiKey
+//   └── Collection
+//   └── User                     (principal keyed by subject; resource keyed by tenant/user)
 //
 // Roles (canonical dot-form, mirrored in defaultpolicy.go):
-//   platform.admin    — cross-tenant superuser
-//   tenant.admin      — tenant-scoped admin
-//   bucket.admin      — bucket configuration
-//   compliance.officer — Object Lock / immutability
-//   secrets.rotator   — credential rotation only
-//   policy.author     — policy introspection
+//   platform.admin             — cross-tenant superuser
+//   platform.tenant-provisioner — creates tenants and their storage
+//   tenant.admin               — tenant-scoped admin
+//   bucket.admin               — bucket configuration
+//   compliance.officer         — Object Lock / immutability
+//   secrets.rotator            — credential rotation only
+//   policy.author              — policy introspection
 //
 // Action plane mapping:
-//   * Admin (control plane) — backends, buckets, tenants, object_keys, quotas,
-//     subscriptions, audit log, operations.
-//   * Data plane — object operations (Put/Get/Head/Delete/Restore/Update/Copy).
-//   * IAM (iam plane) — users, api keys.
+//   * Admin (control plane) — backends, buckets, tenants, collections, quotas,
+//     subscriptions, audit log, operations, billing.
+//   * Data plane — object operations, Object Lock, tenant storage bootstrap.
+//   * IAM (iam plane) — users, user settings, OAuth consent.
 //   * Inspection — policy validation / simulation / effective-policy lookup.
+
+// ─── Context ────────────────────────────────────────────────────────────────
+
+// Every request carries the same context; fields that do not apply to an
+// action are zero-valued.
+type RequestContext = {
+  size_bytes: Long,
+  content_type: String,
+  now: Long,
+  ip: String,
+  oauth_client_id: String,
+  oauth_scopes: Set<String>,
+};
 
 // ─── Entities ───────────────────────────────────────────────────────────────
 
+// scope_keys on a resource-side entity is the set of scope strings that admit
+// it (tenant:/backend:/bucket:/collection:). The built-in scope-enforcement
+// policy intersects principal.scopes with it.
+
 entity StorageBackend = {
   backend_id: String,
+  scope_keys: Set<String>,
 };
 
 entity Bucket in [StorageBackend] = {
@@ -40,146 +58,175 @@ entity Bucket in [StorageBackend] = {
   backend_id: String,
   owner_tenant_id: String,
   labels: Set<String>,
+  scope_keys: Set<String>,
 };
 
+// The UID is the slug when the tenant has one, the UUID otherwise. A Tenant
+// built only to anchor a principal from another tenant has no scope_keys.
 entity Tenant = {
   tenant_id: String,
+  slug: String,
   display_name: String,
   labels: Set<String>,
+  scope_keys?: Set<String>,
 };
 
-entity ObjectKey in [Tenant, Bucket] = {
-  object_key: String,
+entity Collection in [Tenant, Bucket] = {
+  collection: String,
   tenant_id: String,
   bucket_name: String,
   backend_id: String,
+  scope_keys: Set<String>,
 };
 
-entity Object in [ObjectKey] = {
+entity Object in [Collection] = {
   key: String,
   state: String,
   size_bytes: Long,
   content_type: String,
   tenant_id: String,
-  object_key: String,
+  collection: String,
   bucket_name: String,
   backend_id: String,
   tags: Set<String>,
-  // Runtime-only: the engine also populates `tag_values`, a dynamic
-  // Record of tag_name -> tag_value (String -> String), so a policy can test a
-  // tag's VALUE, not just its presence:
+  scope_keys: Set<String>,
+  // The engine also sets `tag_values`, a Record of tag name → tag value, so a
+  // policy can test a tag's value:
   //   resource.tag_values has "classified" && resource.tag_values["classified"] == "true"
-  // It is intentionally NOT declared as a typed attribute above because Cedar's
-  // schema language has no open-map type; it is available at authorization time
-  // but invisible to `cedar validate`. Use `has` before indexing — a missing
-  // key is an evaluation error otherwise.
+  // A Cedar record type is closed and the keys are the object's own tag
+  // names, so it cannot be declared here: it exists at authorization time
+  // and is invisible to schema validation. Use `has` before indexing — a
+  // missing key is an evaluation error, and Cedar denies on those.
 };
 
-// User serves both as the principal (keyed by Subject) and as a resource
-// for ManageUser / ReadUser / ResetPassword / GrantScopes (keyed by
-// tenant_id + user_id). Same type, different UID families — policies can
-// write `principal != resource` cleanly.
+// User is both the principal (UID = subject) and the resource of user and
+// user-settings actions (UID = tenant_id/user_id). The two carry the same
+// attributes; the ones that belong to the other family are zero-valued.
 entity User in [Tenant] = {
-  // Common (principal + resource)
   tenant_id: String,
-  // Principal-only
   subject: String,
+  // Principal side.
   tenant_slug: String,
   // Credential type behind the principal: "user" | "api_key" |
-  // "service_account" | "capability" (auth.PrincipalKind). Empty when the
-  // authorizing path does not carry it, so a comparison against a kind matches
-  // nothing rather than erroring. Lets a policy tell a machine from a person —
-  // the built-in delete permit turns on exactly that.
+  // "service_account" | "capability". Empty when the authorizing path does
+  // not carry it.
   kind: String,
   roles: Set<String>,
-  // Wire-form scopes from the JWT (e.g.
-  // "objects:read:tenant_id/object_key/key"). Empty for role-only principals.
-  // Use `principal.scopes.contains("…")` to gate fine-grained delegations.
+  // Wire-form scopes from the token. Empty for role-only principals.
   scopes: Set<String>,
-  // Resource-only (zero-valued on principal)
+  // Resource side.
   user_id: String,
-};
-
-entity ApiKey in [Tenant] = {
-  api_key_id: String,
-  tenant_id: String,
+  scope_keys?: Set<String>,
 };
 
 // ─── Actions ────────────────────────────────────────────────────────────────
 
 // Backend (admin plane).
-action "ManageBackend", "ReadBackend", "RotateBackendCredentials" appliesTo {
-  principal: [User, ApiKey],
+action "ManageBackend", "RotateBackendCredentials" appliesTo {
+  principal: [User],
   resource: [StorageBackend],
-  context: { now: Long, ip: String, audience: String }
+  context: RequestContext
+};
+
+// ListBackends has no backend to name, so it is checked against the Tenant.
+action "ReadBackend" appliesTo {
+  principal: [User],
+  resource: [StorageBackend, Tenant],
+  context: RequestContext
 };
 
 // Bucket (admin plane). Coarse Manage/Read + granular Configure* sub-actions.
-action "ManageBucket", "ReadBucket",
+action "ManageBucket",
        "ConfigureBucketPolicy", "ConfigureLifecycle", "ConfigureLock",
        "ConfigureVersioning", "ConfigureReplication" appliesTo {
-  principal: [User, ApiKey],
+  principal: [User],
   resource: [Bucket],
-  context: { now: Long, ip: String, audience: String }
+  context: RequestContext
 };
 
-// EnsureTenantStorage (DATA plane, aud=data). Self-service storage
-// provisioning: a tenant member — including an ApiKey principal — ensures its
-// own shared bucket + object-keys. The resource is the Bucket entity; the
-// handler pins the tenant to the caller's own, and the default-policy permit
-// gates on `principal in Tenant` membership (see defaultpolicy.go).
-action "EnsureTenantStorage" appliesTo {
-  principal: [User, ApiKey],
-  resource: [Bucket],
-  context: { now: Long, ip: String, audience: String }
+// ListBuckets is checked against the StorageBackend it names, or the Tenant
+// when it names none.
+action "ReadBucket" appliesTo {
+  principal: [User],
+  resource: [Bucket, StorageBackend, Tenant],
+  context: RequestContext
 };
 
-// Tenant (admin plane). Also the resource-shape for tenant-scoped admin
-// resources (Quota / AuditLog / EventSubscription / Operation) — those use
-// dedicated actions but evaluate against the Tenant entity carrying the
-// tenant_id attribute.
+// Collection (admin plane). ListCollections is checked against the Tenant.
+action "ManageCollection" appliesTo {
+  principal: [User],
+  resource: [Collection, Tenant],
+  context: RequestContext
+};
+
+action "BindCollectionToBucket" appliesTo {
+  principal: [User],
+  resource: [Collection],
+  context: RequestContext
+};
+
+// Tenant (admin plane). Also the resource for tenant-scoped records that have
+// no entity of their own: audit log, event subscriptions, operations, billing.
 action "ManageTenant", "ReadTenant",
-       "ManageQuota", "ReadQuota", "ResetQuotaUsage",
+       "ResetQuotaUsage",
        "ReadAuditLog", "ExportAuditLog",
        "ManageSubscription", "ReadSubscription", "TestSubscription",
        "ReadOperation", "CancelOperation",
-       "InspectPolicy" appliesTo {
-  principal: [User, ApiKey],
+       "ReadBilling" appliesTo {
+  principal: [User],
   resource: [Tenant],
-  context: { now: Long, ip: String, audience: String }
+  context: RequestContext
 };
 
-// ObjectKey (admin plane).
-action "ManageObjectKey", "BindObjectKeyToBucket" appliesTo {
-  principal: [User, ApiKey],
-  resource: [ObjectKey],
-  context: { now: Long, ip: String, audience: String }
+// A quota attaches to a tenant or to a bucket.
+action "ManageQuota", "ReadQuota" appliesTo {
+  principal: [User],
+  resource: [Tenant, Bucket],
+  context: RequestContext
 };
 
-// Data plane — write actions carry size_bytes / content_type so policies
-// can enforce per-upload caps.
-action "PutObject", "PresignPut" appliesTo {
-  principal: [User, ApiKey],
+// Policy inspection names a tenant or one of its collections.
+action "InspectPolicy" appliesTo {
+  principal: [User],
+  resource: [Tenant, Collection],
+  context: RequestContext
+};
+
+// EnsureTenantStorage (data plane). Self-service storage provisioning: a
+// tenant member ensures its own bucket and collections. The handler pins the
+// resource to the caller's tenant.
+action "EnsureTenantStorage" appliesTo {
+  principal: [User],
+  resource: [Tenant],
+  context: RequestContext
+};
+
+// OAuth consent (ADR-0009), checked at /oauth/authorize. context carries
+// oauth_client_id and oauth_scopes so a tenant can forbid specific clients.
+action "AuthorizeOAuth" appliesTo {
+  principal: [User],
+  resource: [Tenant],
+  context: RequestContext
+};
+
+// Data plane. Write actions fill size_bytes / content_type in the context so
+// policies can cap uploads.
+//
+// The actions on [Object, Collection] are also checked against the Collection
+// when no object key is known at authorization time: batch operations, list
+// and count, an upload whose key the server assigns. A policy that reads
+// resource.key for them must guard it with `resource has key`.
+action "PutObject", "GetObject",
+       "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
+  principal: [User],
+  resource: [Object, Collection],
+  context: RequestContext
+};
+
+action "PresignPut", "PresignGet", "HeadObject" appliesTo {
+  principal: [User],
   resource: [Object],
-  context: {
-    size_bytes: Long,
-    content_type: String,
-    now: Long,
-    ip: String,
-    audience: String,
-  }
-};
-
-action "GetObject", "PresignGet", "HeadObject" appliesTo {
-  principal: [User, ApiKey],
-  resource: [Object],
-  context: { now: Long, ip: String, audience: String }
-};
-
-action "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
-  principal: [User, ApiKey],
-  resource: [Object],
-  context: { now: Long, ip: String, audience: String }
+  context: RequestContext
 };
 
 // Object Lock (ADR-0013). Separate from UpdateObject because setting a
@@ -192,21 +239,35 @@ action "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
 // the other direction: a hold is reversible, so it can be delegated more
 // freely to whoever answers a legal request.
 action "SetObjectRetention", "SetObjectLegalHold", "ReadObjectLock" appliesTo {
-  principal: [User, ApiKey],
+  principal: [User],
   resource: [Object],
-  context: { now: Long, ip: String, audience: String }
+  context: RequestContext
 };
 
-// IAM — user + api key management. Resources span both target types so a
-// policy can pin "tenant.admin manages users in own tenant" with one rule.
-action "ManageUser", "ReadUser", "ResetPassword", "GrantScopes" appliesTo {
-  principal: [User, ApiKey],
+// IAM — user management. Listing is checked against the Tenant.
+action "ManageUser", "ResetPassword", "GrantScopes" appliesTo {
+  principal: [User],
   resource: [User],
-  context: { now: Long, ip: String, audience: String }
+  context: RequestContext
 };
 
-action "ManageApiKey", "ReadApiKey", "RotateApiKey", "MintScopedToken" appliesTo {
-  principal: [User, ApiKey],
-  resource: [ApiKey],
-  context: { now: Long, ip: String, audience: String }
+action "ReadUser" appliesTo {
+  principal: [User],
+  resource: [User, Tenant],
+  context: RequestContext
+};
+
+// IAM — user settings. The handler allows a user's own settings without a
+// Cedar call; Cedar gates reading or changing another user's. Listing a
+// tenant's settings is checked against the Tenant.
+action "ReadUserSettings" appliesTo {
+  principal: [User],
+  resource: [User, Tenant],
+  context: RequestContext
+};
+
+action "ManageUserSettings" appliesTo {
+  principal: [User],
+  resource: [User],
+  context: RequestContext
 };

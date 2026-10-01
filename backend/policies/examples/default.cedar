@@ -1,35 +1,28 @@
-// Default deny-by-default policy template applied to a freshly created tenant.
-//
-// Mirrors internal/api/admin/v1/tenanth/defaultpolicy.go — keep both in sync.
-// Substitute "placeholder" with the concrete tenant UUID at load time.
-//
-// Roles use dot-form (canonical, matching the JWT-issuer mint shape):
-//   platform.admin · tenant.admin · bucket.admin · compliance.officer ·
-//   secrets.rotator · policy.author
+// Default policy a tenant gets at creation when the caller supplies none
+// (tenanth.renderDefaultPolicy). Anything it does not permit is denied.
+// The Tenant UID below is the tenant's slug (e.g. "acme") — a human-readable
+// kebab-case handle. The tenant's UUID is also accessible via
+// principal.tenant_id for policies that prefer the UUID form.
+// Tenant members may read/write their own objects; admins may manage them.
 
-// ─── Data plane ─────────────────────────────────────────────────────────────
-
-// Members of the tenant may read their own objects.
 permit (
     principal in Tenant::"placeholder",
     action in [Action::"GetObject", Action::"PresignGet", Action::"HeadObject"],
     resource
 );
 
-// Members may write to their own buckets, subject to size and
-// content-type constraints below.
 permit (
     principal in Tenant::"placeholder",
     action in [Action::"PutObject", Action::"PresignPut"],
     resource
 ) when {
-    // Hard size cap: 5 GiB per object.
     context.size_bytes <= 5368709120 &&
-    // No executables.
-    // "resource has key" guard: a PresignPut with a server-generated key has no
-    // key at authz time (ObjectKey entity, no `key` attr); reading resource.key
-    // would raise an eval error → fail-closed deny. Skip the blocklist for
-    // keyless resources; it still applies when a client supplies a key.
+    // Guard resource.key: a PresignPut whose object key is server-generated has
+    // no key at authz time, making the resource a Collection entity with no key
+    // attribute. Reading resource.key then raises an evaluation error and Cedar
+    // fails closed (denies a legitimate upload). "resource has key" skips the
+    // filename blocklist for keyless resources; the block still applies when a
+    // client supplies a key.
     (!(resource has key) ||
      !(resource.key like "*.exe" ||
        resource.key like "*.dll" ||
@@ -37,7 +30,6 @@ permit (
        resource.key like "*.sh"))
 };
 
-// Mutating data-plane ops require a bucket admin.
 permit (
     principal in Tenant::"placeholder",
     action in [
@@ -48,16 +40,31 @@ permit (
     ],
     resource
 ) when {
-    principal.roles.contains("bucket.admin") ||
+    principal.roles.contains("collection:admin") ||
     principal.roles.contains("platform.admin")
 };
 
-// (EnsureTenantStorage self-service is a BUILT-IN permit — see engine.go
-// builtinPolicy — applied to every tenant uniformly, so it is intentionally
-// NOT seeded per-tenant here.)
+// (EnsureTenantStorage self-service is a BUILT-IN permit — see
+// cedar.builtinPolicy — so it applies to every tenant uniformly, including
+// existing ones whose stored policy predates it, without a per-tenant seed.)
 
-// ─── IAM ────────────────────────────────────────────────────────────────────
+// User settings — every authenticated user reads/writes their own settings
+// without further check. Cross-user access (admin viewing a teammate's
+// timezone) is platform-admin or tenant-admin only.
+permit (
+    principal,
+    action in [Action::"ReadUserSettings", Action::"ManageUserSettings"],
+    resource
+) when {
+    principal == resource ||
+    principal.roles.contains("platform.admin") ||
+    (principal.roles.contains("tenant.admin") &&
+     principal.tenant_id == resource.tenant_id)
+};
 
+// IAM: platform admins manage everything. Tenant admins manage users
+// WITHIN their own tenant — comparison via resource.tenant_id (the User
+// resource entity exposes it as a string).
 permit (
     principal,
     action in [
@@ -73,8 +80,10 @@ permit (
      principal.tenant_id == resource.tenant_id)
 };
 
-// ─── Tenant-scoped admin resources (Quota / AuditLog / EventSubscription) ──
-
+// Tenant-scoped admin resources (Quota, AuditLog, EventSubscription).
+// Same shape as IAM: platform-admin sees all; tenant-admin sees own.
+// Compliance roles (audit-readers) are configured by extending the
+// permits below in tenant-managed policy.
 permit (
     principal,
     action in [
@@ -90,14 +99,15 @@ permit (
     resource
 ) when {
     principal.roles.contains("platform.admin") ||
+    // A bucket quota's resource is the Bucket, which has no tenant_id.
     (principal.roles.contains("tenant.admin") &&
+     resource has tenant_id &&
      principal.tenant_id == resource.tenant_id)
 };
 
-// ─── Granular bucket sub-actions ────────────────────────────────────────────
-// ConfigureLock additionally allows compliance.officer (Object Lock is a
-// compliance concern). The rest stay tied to bucket-admin / platform-admin.
-
+// Granular bucket sub-actions. ConfigureLock is callable by a dedicated
+// compliance role; the rest stay tied to bucket-admin / platform-admin so
+// existing operators keep their old reach until they elect to specialise.
 permit (
     principal,
     action in [
@@ -111,7 +121,6 @@ permit (
     principal.roles.contains("platform.admin") ||
     principal.roles.contains("bucket.admin")
 };
-
 permit (
     principal,
     action == Action::"ConfigureLock",
@@ -122,9 +131,9 @@ permit (
     principal.roles.contains("compliance.officer")
 };
 
-// ─── Sensitive backend ops ─────────────────────────────────────────────────
-// Credential rotation isolated from the broader ManageBackend right.
-
+// Sensitive backend ops — credential rotation isolated from the broader
+// ManageBackend right so a "secrets.rotator" service-account can run
+// rotations without grant on backend CRUD.
 permit (
     principal,
     action == Action::"RotateBackendCredentials",
@@ -134,9 +143,8 @@ permit (
     principal.roles.contains("secrets.rotator")
 };
 
-// ─── Policy-engine introspection ───────────────────────────────────────────
-// Avoid open access — anonymous SimulateAuthz is an information leak.
-
+// Policy-engine introspection. Avoid open access — admin UIs use this
+// for access-preflight, but anonymous SimulateAuthz is an information leak.
 permit (
     principal,
     action == Action::"InspectPolicy",
@@ -147,12 +155,13 @@ permit (
     principal.roles.contains("policy.author")
 };
 
-// ─── Tenant record ──────────────────────────────────────────────────────────
-// Any member may read their own tenant's metadata (the UI resolves the
-// display name / slug for every signed-in user). Cross-tenant reads are
-// additionally platform-admin-gated in the handler; ManageTenant is
-// deliberately not granted here (tenant lifecycle is a platform concern).
-
+// The tenant record itself — any member may read their own tenant's
+// metadata (the UI resolves display name / slug for every signed-in
+// user, so this is a member-level need, not an admin one). Cross-tenant
+// reads are additionally platform-admin-gated in the handler before
+// Cedar runs. Tenant lifecycle (ManageTenant) is deliberately NOT
+// granted here — creating/renaming/deleting tenants stays a platform
+// concern.
 permit (
     principal,
     action == Action::"ReadTenant",
@@ -162,8 +171,9 @@ permit (
     principal.tenant_id == resource.tenant_id
 };
 
-// ─── Async operations ──────────────────────────────────────────────────────
-
+// Async operations — any tenant member sees / cancels operations they
+// (or someone in their tenant) spawned. Cross-tenant Read/Cancel for
+// platform-admin runs through the same permit, gated by tenant_id.
 permit (
     principal,
     action in [Action::"ReadOperation", Action::"CancelOperation"],
@@ -171,14 +181,4 @@ permit (
 ) when {
     principal.roles.contains("platform.admin") ||
     principal.tenant_id == resource.tenant_id
-};
-
-// ─── Belt-and-suspenders: never write outside the tenant's prefix ──────────
-
-forbid (
-    principal,
-    action,
-    resource
-) when {
-    !(resource in principal.parents)
 };

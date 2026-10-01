@@ -1547,6 +1547,26 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
+### Three handlers authorize a less specific resource than the request names
+
+- **Status:** Deferred.
+- **Reason:** Found while mapping each Cedar action to the resource type it is
+evaluated against (`policies/schema.cedarschema`); each is a handler-local
+reorder with its own test, out of scope for the schema fix.
+  - `objecth` `UpdateObject` builds the resource without `Key`/`ObjectID`, so
+  it is always checked against the Collection; a policy on `resource.key` or
+  `resource.tags` cannot apply to it.
+  - `objecth/upload_small.go` authorizes `PutObject` before defaulting an empty
+  key to the object id, so a keyless streaming upload is checked against the
+  Collection. The presign path defaults the key first, on purpose.
+  - `userh` `CreateUser` authorizes before rejecting an empty subject, so that
+  request is checked against the Tenant instead of returning InvalidArgument.
+- **Definition of Done:** each handler builds the resource from the object or
+user it acts on before calling Cedar, with a test asserting the resource type;
+the schema's `appliesTo` for `UpdateObject` drops `Collection` if no batch path
+still needs it.
+- **Blockers:** none.
+
 ### A backend created through the API cannot hold buckets
 
 - **Status:** Open.
