@@ -6,8 +6,9 @@ vi.mock("geist/font/mono", () => ({ GeistMono: { variable: "" } }));
 import { metadata } from "./layout";
 
 describe("root metadata", () => {
-  // The rename turned "PALADIN — Paladin" into the same word twice.
-  it("names the product once", () => {
-    expect(metadata.title).toBe("Paladin");
+  // ClientLayout writes the title per route. One here as well would come
+  // first in <head> and name every page "Paladin" again.
+  it("leaves the title to the route", () => {
+    expect(metadata.title).toBeUndefined();
   });
 });

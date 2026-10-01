@@ -16,6 +16,8 @@ import { ShellProvider } from "@/context/ShellContext";
 import { StatsProvider } from "@/context/StatsContext";
 import { RefreshProvider } from "@/context/RefreshContext";
 
+import { pageTitle } from "./crumbs";
+
 // Routes that DON'T require an authenticated session — these render
 // without the shell and bypass the AuthGate. Login is the canonical
 // entry point; add password-reset / accept-invite here when they ship.
@@ -45,8 +47,18 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   // it up. KeyboardHelp listens for ? and toggles itself.
   useGlobalShortcuts();
 
+  // Rendered here rather than as static metadata: every page is a client
+  // component, so the root layout's one title used to name all of them, and
+  // ten open tabs all read "Paladin". React hoists this into <head>.
+  const title = <title>{pageTitle(pathname)}</title>;
+
   if (STANDALONE_ROUTES.has(pathname)) {
-    return <>{children}</>;
+    return (
+      <>
+        {title}
+        {children}
+      </>
+    );
   }
 
   // Authed-only providers — fire RPCs (listTenants, getVersion, etc.) so
@@ -57,33 +69,36 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   // child read), but we keep the gate INSIDE the providers so the
   // mounted page tree gets the contexts it needs the moment auth lands.
   return (
-    <RefreshProvider>
-      <ActionsProvider>
-        <ScopeProvider>
-          <ShellProvider>
-            <StatsProvider>
-              <AuthGate publicRoutes={STANDALONE_ROUTES}>
-                <div className="flex min-h-screen w-full bg-background text-foreground">
-                  <CommandPalette />
-                  <KeyboardHelp />
-                  <Sidebar
-                    isOpen={isSidebarOpen}
-                    onClose={() => setSidebarOpen(false)}
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
-                    <main className="flex-1">
-                      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                        <AdminPlaneGate>{children}</AdminPlaneGate>
-                      </div>
-                    </main>
+    <>
+      {title}
+      <RefreshProvider>
+        <ActionsProvider>
+          <ScopeProvider>
+            <ShellProvider>
+              <StatsProvider>
+                <AuthGate publicRoutes={STANDALONE_ROUTES}>
+                  <div className="flex min-h-screen w-full bg-background text-foreground">
+                    <CommandPalette />
+                    <KeyboardHelp />
+                    <Sidebar
+                      isOpen={isSidebarOpen}
+                      onClose={() => setSidebarOpen(false)}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
+                      <main className="flex-1">
+                        <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                          <AdminPlaneGate>{children}</AdminPlaneGate>
+                        </div>
+                      </main>
+                    </div>
                   </div>
-                </div>
-              </AuthGate>
-            </StatsProvider>
-          </ShellProvider>
-        </ScopeProvider>
-      </ActionsProvider>
-    </RefreshProvider>
+                </AuthGate>
+              </StatsProvider>
+            </ShellProvider>
+          </ScopeProvider>
+        </ActionsProvider>
+      </RefreshProvider>
+    </>
   );
 }

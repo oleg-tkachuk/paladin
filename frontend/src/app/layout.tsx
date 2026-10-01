@@ -16,8 +16,9 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
+// No title here: ClientLayout writes one per route (see crumbs.ts), and a
+// second <title> from metadata would come first in <head> and win.
 export const metadata: Metadata = {
-  title: "Paladin",
   description: "Control plane for object storage",
 };
 
