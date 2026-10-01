@@ -2,10 +2,8 @@ package worker
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,7 +55,7 @@ type kafkaSinkConfig struct {
 // the dispatcher pod; Close() flushes + closes every writer at shutdown.
 type KafkaWriterPool struct {
 	mu      sync.Mutex
-	writers map[string]kafkaWriter
+	writers map[kafkaWriterKey]kafkaWriter
 	log     *zap.Logger
 	// newWriter builds a writer for the given brokers+topic, wiring `transport`
 	// (SASL / TLS) when non-nil. Overridable in tests.
@@ -68,7 +66,7 @@ type KafkaWriterPool struct {
 // WriteMessages per (brokers, topic, auth) key.
 func NewKafkaWriterPool(log *zap.Logger) *KafkaWriterPool {
 	return &KafkaWriterPool{
-		writers: map[string]kafkaWriter{},
+		writers: map[kafkaWriterKey]kafkaWriter{},
 		log:     log,
 		newWriter: func(brokers []string, topic string, transport *kafka.Transport) kafkaWriter {
 			w := &kafka.Writer{
@@ -92,7 +90,7 @@ func NewKafkaWriterPool(log *zap.Logger) *KafkaWriterPool {
 // get returns the cached writer for `key` (which encodes brokers, topic, AND
 // auth so distinct-credential sinks never share a connection), building one
 // via newWriter on first use.
-func (p *KafkaWriterPool) get(key string, brokers []string, topic string, transport *kafka.Transport) kafkaWriter {
+func (p *KafkaWriterPool) get(key kafkaWriterKey, brokers []string, topic string, transport *kafka.Transport) kafkaWriter {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if w, ok := p.writers[key]; ok {
@@ -163,14 +161,25 @@ func buildKafkaTransport(cfg kafkaSinkConfig) (*kafka.Transport, error) {
 
 // kafkaWriterKey namespaces the writer cache by brokers + topic + the full
 // auth material, so two sinks that share brokers/topic but differ in
-// credentials (or plaintext-vs-TLS) get separate writers. The credential
-// bytes are hashed (never logged) — the key is in-process only.
-func kafkaWriterKey(brokers []string, cfg kafkaSinkConfig) string {
-	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%s\x00%s\x00%s",
-		strings.Join(brokers, ","), cfg.Topic, cfg.SASLMechanism, cfg.SASLUsername,
-		cfg.SASLPassword, cfg.TLSEnabled, cfg.TLSClientCert, cfg.TLSClientKey, cfg.TLSCACert)
-	return hex.EncodeToString(h.Sum(nil))
+// credentials (or plaintext-vs-TLS) get separate writers. A comparable struct
+// rather than a digest: the key is in-process only, and the config it holds
+// is already in memory.
+type kafkaWriterKey struct {
+	// brokers is the normalised broker list; cfg.Brokers is cleared so two
+	// spellings of the same list share a writer.
+	brokers string
+	cfg     kafkaSinkConfig
+}
+
+func newKafkaWriterKey(brokers []string, cfg kafkaSinkConfig) kafkaWriterKey {
+	cfg.Brokers = ""
+	return kafkaWriterKey{brokers: strings.Join(brokers, ","), cfg: cfg}
+}
+
+// String prints brokers and topic only: the key carries credentials, and a
+// formatted key must not put them in a log line.
+func (k kafkaWriterKey) String() string {
+	return k.brokers + "/" + k.cfg.Topic
 }
 
 // Close flushes + closes every pooled writer. Safe to defer in the dispatcher
@@ -226,7 +235,7 @@ func (d *Dispatcher) deliverKafka(ctx context.Context, sub admindomain.EventSubs
 	if err != nil {
 		return 0, err
 	}
-	w := d.Kafka.get(kafkaWriterKey(brokers, cfg), brokers, cfg.Topic, transport)
+	w := d.Kafka.get(newKafkaWriterKey(brokers, cfg), brokers, cfg.Topic, transport)
 	if err := w.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(evt.TenantID),
 		Value: body,
@@ -251,19 +260,19 @@ type kafkaBatchItem struct {
 // so it never merges sinks that differ in credentials (it may under-batch two
 // refs that resolve equal — safe). Malformed rows return ok=false and take the
 // per-row deliver path, failing with the same error text as before batching.
-func kafkaGroupTarget(sub admindomain.EventSubscription) (key string, ok bool) {
+func kafkaGroupTarget(sub admindomain.EventSubscription) (key kafkaWriterKey, ok bool) {
 	if sub.SinkKind != "kafka" {
-		return "", false
+		return kafkaWriterKey{}, false
 	}
 	var cfg kafkaSinkConfig
 	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {
-		return "", false
+		return kafkaWriterKey{}, false
 	}
 	brokers := splitTrim(cfg.Brokers)
 	if len(brokers) == 0 || cfg.Topic == "" {
-		return "", false
+		return kafkaWriterKey{}, false
 	}
-	return kafkaWriterKey(brokers, cfg), true
+	return newKafkaWriterKey(brokers, cfg), true
 }
 
 // deliverKafkaBatch writes one group's rows to a single writer via one
@@ -299,7 +308,7 @@ func (d *Dispatcher) deliverKafkaBatch(ctx context.Context, items []kafkaBatchIt
 	if err != nil {
 		return failAll(err)
 	}
-	w := d.Kafka.get(kafkaWriterKey(brokers, cfg), brokers, cfg.Topic, transport)
+	w := d.Kafka.get(newKafkaWriterKey(brokers, cfg), brokers, cfg.Topic, transport)
 
 	msgs := make([]kafka.Message, 0, len(items))
 	rowByIdx := make([]uuid.UUID, 0, len(items))

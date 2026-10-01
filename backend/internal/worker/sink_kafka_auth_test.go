@@ -9,7 +9,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,15 +105,15 @@ func TestKafkaWriterKey_DistinctPerAuth(t *testing.T) {
 	plain256 := kafkaSinkConfig{Topic: "t", SASLMechanism: "scram-sha-256", SASLUsername: "u", SASLPassword: "p"}
 	diffPass := kafkaSinkConfig{Topic: "t", SASLMechanism: "scram-sha-256", SASLUsername: "u", SASLPassword: "OTHER"}
 
-	if kafkaWriterKey(brokers, base) == kafkaWriterKey(brokers, plain256) {
+	if newKafkaWriterKey(brokers, base) == newKafkaWriterKey(brokers, plain256) {
 		t.Error("plaintext and SASL sinks must not share a writer key")
 	}
-	if kafkaWriterKey(brokers, plain256) == kafkaWriterKey(brokers, diffPass) {
+	if newKafkaWriterKey(brokers, plain256) == newKafkaWriterKey(brokers, diffPass) {
 		t.Error("same user, different password → distinct writer key")
 	}
 	// Two equal-but-separate configs → identical key (writers are reused).
 	plain256Copy := kafkaSinkConfig{Topic: "t", SASLMechanism: "scram-sha-256", SASLUsername: "u", SASLPassword: "p"}
-	if kafkaWriterKey(brokers, plain256) != kafkaWriterKey(brokers, plain256Copy) {
+	if newKafkaWriterKey(brokers, plain256) != newKafkaWriterKey(brokers, plain256Copy) {
 		t.Error("identical config → identical key (writers are reused)")
 	}
 }
@@ -183,7 +185,29 @@ func TestKafkaWriterKey_CACertDistinguishes(t *testing.T) {
 	base := kafkaSinkConfig{Brokers: "b:9092", Topic: "t", TLSEnabled: true}
 	withCA := base
 	withCA.TLSCACert = "-----BEGIN CERTIFICATE-----\nAA\n-----END CERTIFICATE-----"
-	if kafkaWriterKey([]string{"b:9092"}, base) == kafkaWriterKey([]string{"b:9092"}, withCA) {
+	if newKafkaWriterKey([]string{"b:9092"}, base) == newKafkaWriterKey([]string{"b:9092"}, withCA) {
 		t.Error("pool key must differ when tls_ca_cert differs")
+	}
+}
+
+func TestKafkaWriterKey_BrokersSpellingSharesAWriter(t *testing.T) {
+	brokers := []string{"a:9092", "b:9092"}
+	spaced := kafkaSinkConfig{Brokers: "a:9092, b:9092", Topic: "t"}
+	tight := kafkaSinkConfig{Brokers: "a:9092,b:9092", Topic: "t"}
+	if newKafkaWriterKey(brokers, spaced) != newKafkaWriterKey(brokers, tight) {
+		t.Error("the same normalised broker list must share a writer")
+	}
+}
+
+func TestKafkaWriterKey_FormattingOmitsCredentials(t *testing.T) {
+	const secret = "s3cret-pass"
+	key := newKafkaWriterKey([]string{"b:9092"}, kafkaSinkConfig{
+		Topic: "t", SASLMechanism: "plain", SASLUsername: "u", SASLPassword: secret,
+		TLSClientKey: secret,
+	})
+	for _, verb := range []string{"%v", "%s", "%+v"} {
+		if got := fmt.Sprintf(verb, key); strings.Contains(got, secret) {
+			t.Errorf("%s prints the credential: %q", verb, got)
+		}
 	}
 }
