@@ -8,7 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { AuthGate } from "@/components/AuthGate";
-import { ThemeSync } from "@/components/ThemeSync";
+import { SettingsSync } from "@/components/SettingsSync";
 import { AdminPlaneGate } from "@/components/AdminPlaneGate";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { ActionsProvider } from "@/context/ActionsContext";
@@ -78,7 +78,6 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             <ShellProvider>
               <StatsProvider>
                 <AuthGate publicRoutes={STANDALONE_ROUTES}>
-                  <ThemeSync />
                   <div className="flex min-h-screen w-full bg-background text-foreground">
                     <CommandPalette />
                     <KeyboardHelp />
@@ -90,7 +89,9 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                       <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
                       <main className="flex-1">
                         <div className="mx-auto w-full max-w-400 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                          <AdminPlaneGate>{children}</AdminPlaneGate>
+                          <SettingsSync>
+                            <AdminPlaneGate>{children}</AdminPlaneGate>
+                          </SettingsSync>
                         </div>
                       </main>
                     </div>

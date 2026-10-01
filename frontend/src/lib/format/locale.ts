@@ -8,16 +8,51 @@
  *
  * en-GB: thousands grouped with commas, 24-hour time, and the month as a word,
  * so a date is not read day-first by one reader and month-first by another.
- * Times stay in the viewer's own time zone; only how they are written is fixed.
+ * A locale saved in the user's settings does not override it: comparable
+ * output across operators is the point.
+ *
+ * Times are in the time zone the user saved, or the browser's until they save
+ * one (setDisplayTimeZone).
  */
 export const DISPLAY_LOCALE = "en-GB";
 
 const COUNT = new Intl.NumberFormat(DISPLAY_LOCALE);
-const DATE_TIME = new Intl.DateTimeFormat(DISPLAY_LOCALE, {
-  dateStyle: "medium",
-  timeStyle: "medium",
-});
-const TIME = new Intl.DateTimeFormat(DISPLAY_LOCALE, { timeStyle: "medium" });
+
+function dateTimeFormats(timeZone: string | undefined) {
+  return {
+    dateTime: new Intl.DateTimeFormat(DISPLAY_LOCALE, {
+      dateStyle: "medium",
+      timeStyle: "medium",
+      timeZone,
+    }),
+    time: new Intl.DateTimeFormat(DISPLAY_LOCALE, {
+      timeStyle: "medium",
+      timeZone,
+    }),
+  };
+}
+
+let dates = dateTimeFormats(undefined);
+let datesZone: string | undefined;
+
+/**
+ * Writes times in `timeZone` (an IANA name) from now on; undefined returns to
+ * the browser's. A name this browser does not know is ignored rather than
+ * thrown on: the server validates against its own tz database, which can be
+ * newer. Returns whether the zone took effect.
+ */
+export function setDisplayTimeZone(timeZone: string | undefined): boolean {
+  if (timeZone === datesZone) return true;
+  try {
+    dates = dateTimeFormats(timeZone);
+    datesZone = timeZone;
+    return true;
+  } catch {
+    dates = dateTimeFormats(undefined);
+    datesZone = undefined;
+    return false;
+  }
+}
 
 /** A count: 1,234,567. */
 export function formatCount(n: number | bigint): string {
@@ -26,12 +61,12 @@ export function formatCount(n: number | bigint): string {
 
 /** A point in time, to the second: 1 Oct 2026, 16:18:33. */
 export function formatDateTime(d: Date): string {
-  return DATE_TIME.format(d);
+  return dates.dateTime.format(d);
 }
 
 /** A time of day, to the second: 16:18:33. */
 export function formatTime(d: Date): string {
-  return TIME.format(d);
+  return dates.time.format(d);
 }
 
 // Above this, a KPI tile writes 12.3k rather than 12,345, which would push the

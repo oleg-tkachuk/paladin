@@ -250,8 +250,8 @@ export default function ProfilePage() {
         <CardHeader className="px-6">
           <CardTitle className="text-base">Preferences</CardTitle>
           <CardDescription>
-            {/* The console applies the theme; time zone and locale are not
-                read back yet (see BACKLOG). */}
+            {/* Theme and time zone apply (SettingsSync); locale deliberately
+                does not (DISPLAY_LOCALE in lib/format/locale.ts). */}
             {SETTINGS_APPLIED_NOTE}
           </CardDescription>
         </CardHeader>
