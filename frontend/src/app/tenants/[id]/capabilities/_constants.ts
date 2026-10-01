@@ -42,17 +42,6 @@ export const PRINCIPAL_KIND_OPTIONS = [
   { value: String(PrincipalKind.SERVICE), label: "service" },
 ];
 
-export function formatTimestamp(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
-  }
-}
-
 export function isExpired(c: Capability): boolean {
   if (!c.expiresAt) return false;
   const ms = Number(c.expiresAt.seconds) * 1000;

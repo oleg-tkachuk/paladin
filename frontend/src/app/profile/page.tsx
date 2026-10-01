@@ -43,6 +43,7 @@ import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
 import { isAbortError } from "@/hooks/errorContract";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
 // Tenant comes from the JWT, so the page always operates on the calling
@@ -76,17 +77,6 @@ const COMMON_TIMEZONES = [
 
 // Same approach for locales — a curated quick-pick + free-form text.
 const COMMON_LOCALES = ["en-US", "en-GB", "uk-UA", "de-DE", "fr-FR", "ja-JP"];
-
-function formatTimestamp(ts: { seconds: bigint } | undefined): string {
-  if (!ts) return "—";
-  const ms = Number(ts.seconds) * 1000;
-  if (!ms) return "—";
-  try {
-    return new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
-  } catch {
-    return "—";
-  }
-}
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -404,7 +394,7 @@ export default function ProfilePage() {
                   {settings?.updatedAt ? (
                     <>
                       <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-emerald-500" />
-                      Last synced {formatTimestamp(settings.updatedAt)}
+                      Last synced {formatTimestampUTC(settings.updatedAt)}
                       {" · resourceVersion "}
                       <span className="font-mono">
                         {settings.resourceVersion || "—"}

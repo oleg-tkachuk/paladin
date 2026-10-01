@@ -29,9 +29,10 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { isAbortError } from "@/hooks/errorContract";
-import { formatTimestamp, isRevoked, isExpired } from "./_constants";
+import { isRevoked, isExpired } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // Per-token sliding-window usage snapshot keyed by token.id; "never" ⇒
 // the token was never verified (GetUsage NotFound).
@@ -364,7 +365,9 @@ export default function M2MTokensPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {t.lastUsedAt ? formatTimestamp(t.lastUsedAt) : "never"}
+                      {t.lastUsedAt
+                        ? formatTimestampUTC(t.lastUsedAt)
+                        : "never"}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -373,7 +376,7 @@ export default function M2MTokensPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {t.expiresAt ? formatTimestamp(t.expiresAt) : "never"}
+                      {t.expiresAt ? formatTimestampUTC(t.expiresAt) : "never"}
                     </TableCell>
                     <TableCell>
                       {revoked ? (

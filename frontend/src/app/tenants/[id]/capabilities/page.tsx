@@ -35,11 +35,7 @@ import { useTenant } from "../tenant-context";
 import { IssueCapabilityDialog } from "./IssueCapabilityDialog";
 import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
-import {
-  PRINCIPAL_KIND_OPTIONS,
-  formatTimestamp,
-  isExpired,
-} from "./_constants";
+import { PRINCIPAL_KIND_OPTIONS, isExpired } from "./_constants";
 import { capabilityClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -47,6 +43,7 @@ import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { formatMoney } from "@/lib/format/money";
 import { isAbortError } from "@/hooks/errorContract";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // Per-capability usage snapshot keyed by capability id; "never" ⇒ the
 // capability has no usage row yet (GetUsage NotFound).
@@ -490,7 +487,7 @@ export default function CapabilitiesPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {formatTimestamp(c.issuedAt)}
+                      {formatTimestampUTC(c.issuedAt)}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -499,7 +496,7 @@ export default function CapabilitiesPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {formatTimestamp(c.expiresAt)}
+                      {formatTimestampUTC(c.expiresAt)}
                     </TableCell>
                     <TableCell className={cn("hidden xl:table-cell", T.code)}>
                       {(() => {
