@@ -1,16 +1,39 @@
-# Operator runbook — housekeeping tuning
+# Background jobs and housekeeping
 
-Paladin ships four reaper workers that keep tables bounded:
+`serve worker` runs the jobs below. Each is a ticker named in the
+`paladin_worker_*` metrics (`worker` label) and leased, so several worker
+replicas do not run the same job at once. Keys are under `worker.jobs`;
+defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
+`0` does not start.
 
-| Worker             | Targets             | Knob                                  |
-|--------------------|---------------------|---------------------------------------|
-| AuditLogPurger     | `audit_log`         | `workers.housekeeping.audit_log_ttl`  |
-| OperationsReaper   | `operations`        | `workers.housekeeping.operations_ttl` |
-| RefreshTokenPurger | `refresh_tokens`    | `workers.refresh_token_reap.interval` |
-| ApiKeyExpirer      | `api_keys`          | `workers.api_key_reap.interval`       |
+| Job | What it does | Key | Default |
+|---|---|---|---|
+| `reconciler` | promotes `PENDING` objects whose bytes arrived; fails ones whose upload URL expired | `reconciler.interval`, `.min_object_age` | `30s`, `2h` |
+| `bucket_reconciler` | creates and deletes buckets on their backend, from the outbox | `reconciler.interval` | `30s` |
+| `multipart_reaper` | aborts multipart sessions older than the TTL | `housekeeping.multipart_ttl` | `72h` |
+| `multipart_abort_drainer` | retries aborts S3 refused (`pending_multipart_aborts`) | `purge_drain.interval` | `1m` |
+| `purge_drainer` | deletes the bytes of permanently deleted objects (`pending_purges`) | `purge_drain.interval` | `1m` |
+| `lifecycle` | applies per-bucket CEL expiration rules | `lifecycle.enabled`, `.interval` | `true`, `30m` |
+| `lifecycle_hard_delete` | after the cooling-off window, deletes the bytes and the row | `housekeeping.hard_delete_after` | `0` (off) |
+| `quota_reconciler` | recomputes quota usage from live objects; resets daily counters | `quota_reconcile.interval` | `15m` |
+| `audit_purger` | deletes `audit_log` rows older than the TTL | `housekeeping.audit_log_ttl` | `8760h` |
+| `operations_purger` | deletes terminal `operations` rows older than the TTL | `housekeeping.operations_ttl` | `336h` |
+| `partition_maintainer` | creates `audit_log` (monthly) and `idempotency_keys` (daily) partitions ahead; drops expired ones | `housekeeping.interval` | `1h` |
+| `idempotency_purger` | deletes expired idempotency keys | `housekeeping.interval` | `1h` |
+| `tenant_rate_bucket_sweeper` | drops elapsed per-tenant rate-limit windows | `housekeeping.interval` | `1h` |
+| `refresh_token_reaper` | deletes expired refresh tokens | `refresh_token_reap.interval` | `1h` |
+| `api_token_purger` | deletes API tokens expired for longer than the grace | `api_token.interval`, `.expired_for` | `1h`, `168h` |
+| `capability_purger` | deletes capabilities expired for longer than the grace | `capability.interval`, `.expired_for` | `1h`, `24h` |
+| `storage-migration` | runs operator-started tenant storage migrations | `operations.interval` | `5s` |
+| `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after` | `operations.stale_after` | `15m` |
+| `replication` | cross-backend replication; dry-run | `replication.enabled`, `.interval` | `false`, `5m` |
 
-This runbook covers picking the **TTLs** for the two TTL-driven reapers
-(`audit_log`, `operations`) so disk doesn't outgrow the budget.
+`housekeeping.interval` also paces the audit and operations purgers. Alerts on
+these metrics: [deploy/grafana](../../deploy/grafana/README.md); a stalled job:
+[runbooks/worker-stalled.md](../../docs/runbooks/worker-stalled.md).
+
+The rest of this page is sizing the two TTL-driven tables, `audit_log` and
+`operations`.
 
 ---
 
@@ -67,12 +90,13 @@ down:
 1. **Shorter TTL.** 90 days drops to ~1.47 TB.
 2. **Compress before-json/after-json** at the application layer
    (deferred — see BACKLOG: "Audit-log encryption at rest").
-3. **Partition by `at`** so old data drops via `DROP PARTITION` instead
-   of `DELETE` (deferred — see BACKLOG: "audit_log partitioning by `at`").
+3. **Partitions already drop whole**: a month older than the TTL goes with
+   `DROP PARTITION`, not `DELETE`.
 
-Until partitioning lands, the bounded reaper purges 10k rows per call in
-a loop until the day's batch is drained. WAL impact stays linear; vacuum
-catches up between ticks.
+`audit_log` is partitioned by month on `at`. `partition_maintainer` drops a
+month once all of it is older than `audit_log_ttl`, which costs nothing per
+row; `audit_purger` deletes the rows older than the TTL inside the current
+partitions in bounded batches.
 
 ---
 
@@ -112,15 +136,14 @@ day, average 3 KiB per row:
 1500 × 3000 × 30 × 1.3 ≈ 175 MiB
 ```
 
-Trivial. The reaper interval default (`6h`) is fine — you only need
-faster ticking when the steady-state rate spikes.
+Trivial. The default `housekeeping.interval` (`1h`) is fine.
 
 ---
 
 ## 4. Choosing the interval
 
-`workers.housekeeping.interval` is shared across the bounded reapers
-(`audit_log` + `operations`). Two regimes:
+`worker.jobs.housekeeping.interval` paces the bounded purgers (`audit_log`,
+`operations`). Two regimes:
 
 - **Low volume (< 100k rows/day per table):** `1h` is fine. WAL stays
   steady, vacuum has air.
@@ -128,9 +151,8 @@ faster ticking when the steady-state rate spikes.
   batch small enough that the bounded `LIMIT 10000` clauses drain in 1-3
   loop iterations. Reduces lock-window on each transaction.
 
-Beyond ~10M rows/day per table, **partition the table** (deferred BACKLOG
-work). Reaping by `DROP PARTITION` is constant-time regardless of row
-count and produces zero dead tuples.
+`audit_log` already partitions by month; `operations` does not, so at very
+high volume its purge stays a bounded `DELETE`.
 
 ---
 
@@ -175,10 +197,11 @@ investigate.
 Set the TTL knob to `0`:
 
 ```yaml
-workers:
-  housekeeping:
-    audit_log_ttl: 0       # KEEP audit_log forever (compliance preference)
-    operations_ttl: 0      # KEEP operations forever (debugging preference)
+worker:
+  jobs:
+    housekeeping:
+      audit_log_ttl: 0       # keep audit_log forever; partitions are still created ahead
+      operations_ttl: 0      # keep operations forever
 ```
 
 **Don't disable both for production.** Disable selectively:
@@ -192,18 +215,3 @@ When `OperationsTTL <= 0`, the worker exits cleanly at startup (no
 ticking, no DB load).
 
 ---
-
-## 7. Migration path to partitioning
-
-Both `audit_log` and `idempotency_keys` are tracked in BACKLOG for
-RANGE partitioning by their respective time columns. The migration is
-non-trivial:
-
-1. Stand up the partitioned table alongside the existing one.
-2. Detach-and-reattach existing data into appropriate partitions
-   (downtime ≈ minutes per ~10M rows on commodity hardware).
-3. Swap reads/writes to the partitioned table.
-4. `DROP TABLE` the original.
-
-When that lands, `housekeeping.audit_log_ttl` becomes "drop partitions
-older than this" — the loop-bounded `DELETE` goes away.
