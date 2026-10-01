@@ -117,7 +117,6 @@ auth:
 
 security:
   reject_tenant_mismatch: false
-  log_sensitive: false
 
 # Bootstrap on first boot. Running `paladin bootstrap` once with this
 # config provisions a `platform/admin` user + the primary storage

@@ -214,7 +214,8 @@ security: {
   // always password-gated regardless of the flag. See types.go.Security
   // for the longer rationale.
   reject_tenant_mismatch: bool | *true
-  log_sensitive:          bool | *false
+  // Retired: never read. Accepted so existing configs load; Load warns on true.
+  log_sensitive: bool | *false
   // RLS is not configurable — see types.go.Security. The runtime
   // always installs the BeforeAcquire hook because migration 023
   // makes RLS unavoidable at the DB layer.

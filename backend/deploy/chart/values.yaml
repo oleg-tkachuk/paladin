@@ -743,7 +743,6 @@ config:
     # flag that used to live here was dead code and was removed in
     # the post-2026-05 security audit.
     reject_tenant_mismatch: true
-    log_sensitive: false
     # RLS is not a knob — the runtime unconditionally installs the
     # BeforeAcquire hook that stamps paladin.tenant_id GUC. Migration
     # 023 makes RLS unavoidable at the DB layer (per-table policies

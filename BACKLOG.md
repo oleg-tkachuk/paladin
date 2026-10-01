@@ -1107,18 +1107,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Configuration
 
-### `security.log_sensitive` is declared and read by nothing
-
-- **Status:** Deferred.
-- **Reason:** The key is in the CUE schema, every config file and the chart,
-described as "log secret values (debugging only)", but no code reads it: no
-secret is ever logged on its account, and setting it to `true` changes
-nothing. An operator reading the key would believe the opposite.
-- **Definition of Done:** the key is removed from the schema, the configs and
-the chart in one release (the loader refuses unknown keys, so the chart and the
-binary ship together), and `docs/configuration.md` stops listing it.
-- **Blockers:** none.
-
 ### MCP `allow_write` was a dead knob that read as a security control
 
 - **Status:** Deferred (schema entry removed; the question it raises is open).

@@ -156,10 +156,16 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("failed to parse limits.max_part_size (%s): %w", cfg.Limits.MaxPartSizeRaw, err)
 	}
 
+	if cfg.Security.LogSensitive {
+		log.Warn(retiredLogSensitiveWarning)
+	}
 	log.Info("config loaded", zap.Any("config", cfg.Obfuscated()))
 
 	return cfg, nil
 }
+
+// retiredLogSensitiveWarning is logged when security.log_sensitive is true.
+const retiredLogSensitiveWarning = "security.log_sensitive is retired and has no effect: no secret is ever logged; remove it from the config"
 
 func (c *Config) Validate() error {
 	// Validate required fields

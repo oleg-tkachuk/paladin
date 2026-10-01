@@ -160,7 +160,6 @@ auth:
 # ─── Security ───────────────────────────────────────────────────────────────
 security:
   reject_tenant_mismatch: true          # 403 when JWT tenant != header tenant
-  log_sensitive: false                  # log secret values (debugging only)
   # RLS isn't a knob — runtime always installs the BeforeAcquire
   # hook. Migration 023 enables per-table policies unconditionally
   # and paladin_app is NOBYPASSRLS, so disabling the hook would break
