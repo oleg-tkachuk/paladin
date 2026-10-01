@@ -15,7 +15,7 @@
 // the audit_log; tracked in BACKLOG.
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { tenantClient } from "@/lib/connect/client";
@@ -76,12 +76,27 @@ export function useTenantResolve(id: string): {
   // changing `id` (which would also reset the URL canonicaliser).
   const [retryNonce, setRetryNonce] = useState(0);
   const retry = useCallback(() => setRetryNonce((n) => n + 1), []);
+  // The tenant last resolved, and the retry it was resolved under. The URL
+  // canonicaliser below swaps a UUID for the slug, which reaches this hook as
+  // a new id for the same tenant; refetching then reset to loading, and the
+  // layout's skeleton unmounted every page under it — typed input, open
+  // dialogs and all.
+  const resolved = useRef<{ tenant: ResolvedTenant; nonce: number } | null>(
+    null,
+  );
 
   useEffect(() => {
+    const prev = resolved.current;
+    if (
+      prev &&
+      prev.nonce === retryNonce &&
+      (prev.tenant.slug === id || prev.tenant.tenantId === id)
+    ) {
+      return;
+    }
     let cancelled = false;
     // Synchronously reset to loading on id/retry change so the
     // skeleton renders immediately while the new tenant is fetched.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({
       tenant: null,
       loading: true,
@@ -108,6 +123,7 @@ export function useTenantResolve(id: string): {
           displayName: res.displayName || slug,
           storageLayout: res.storageLayout || "shared",
         };
+        resolved.current = { tenant, nonce: retryNonce };
         setState({
           tenant,
           loading: false,
