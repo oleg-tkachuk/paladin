@@ -167,6 +167,24 @@ tls:
     issuerName: letsencrypt-prod
   existingSecret: ""
 
+# ─── NetworkPolicy ─────────────────────────────────────────────────────────
+# Default-deny for the console's pods, then ingress from the ingress
+# controller and egress to DNS and the backend release (backend.release /
+# backend.namespace). On by default: inert on a CNI that does not enforce
+# policies, and on one that does, the namespaces below must be this
+# cluster's — a wrong one cuts the console off.
+networkPolicies:
+  enabled: true
+  # Ingress controller pods allowed to reach the console.
+  ingressController:
+    namespace: networking
+    podLabels:
+      app.kubernetes.io/name: traefik
+  dnsPort: 53
+  # Further egress rules, as NetworkPolicyEgressRule entries — for a
+  # backend.urls entry outside the backend release.
+  extraEgress: []
+
 # ─── Resources ─────────────────────────────────────────────────────────────
 # Sized for Next.js standalone SSR on the dev cluster. Tune in
 # values-{staging,prod}.yaml overlays. requests.cpu is REQUIRED for

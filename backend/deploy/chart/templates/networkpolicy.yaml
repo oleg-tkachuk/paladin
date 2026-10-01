@@ -1,8 +1,7 @@
 {{/*
   Per-role NetworkPolicies — default-deny ingress+egress for every pod this
   chart owns, then explicit allows per role. Gated on
-  networkPolicies.enabled (off by default: needs an enforcing CNI; inert
-  but harmless otherwise). See the values block for the flow matrix
+  networkPolicies.enabled (on by default; inert without an enforcing CNI). See the values block for the flow matrix
   rationale; the short version:
 
     api        ← ingress-controller / UI / mcp     → common + storage

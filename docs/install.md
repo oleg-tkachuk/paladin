@@ -164,6 +164,34 @@ backend Ingress routes `/paladin.iam.v1.*` to the IAM plane and everything else
 to the data plane. The admin plane gets no public route: reach it through the
 console, or expose it behind your own controls.
 
+## Network policies
+
+Both charts ship NetworkPolicies, on by default: every pod is denied in both
+directions, then allowed the flows it needs. Without a CNI that enforces
+policies (Calico, Cilium, kube-router) they change nothing. With one, each peer
+must be named where it actually runs, or its traffic is dropped:
+
+| Value (both charts unless noted) | Default | The peer |
+|---|---|---|
+| `networkPolicies.ingressController.namespace` / `.podLabels` | `networking`, `app.kubernetes.io/name: traefik` | the ingress controller |
+| `networkPolicies.monitoring.namespace` (backend) | `monitoring` | the metrics scraper |
+| `networkPolicies.postgres.namespace` / `.port` (backend) | `database`, `5432` | PostgreSQL |
+| `networkPolicies.storage.namespace` (backend) | `storage` | the object store |
+| `networkPolicies.nats.namespace` / `.port` (backend) | `nats`, `4222` | NATS, when ingest uses it |
+
+With the Caddy ingress controller from the section above:
+
+```yaml
+# paladin-core.yaml and paladin-console.yaml
+networkPolicies:
+  ingressController:
+    namespace: caddy-system   # where you installed it
+    podLabels:
+      app.kubernetes.io/name: caddy-ingress-controller
+```
+
+`networkPolicies.enabled: false` turns them off.
+
 Another controller needs `ingress.className`, its own syntax for
 `ingress.iam.path` (the IAM route has to match every path starting with
 `/paladin.iam.v1.` — Kubernetes' `Prefix` type does not, as it compares whole

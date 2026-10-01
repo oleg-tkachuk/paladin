@@ -32,48 +32,6 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## Deploy cutover: rename to `paladin`
 
-### NetworkPolicies ship disabled in every environment
-
-- **Status:** Open — but the reason narrowed. The chart's own gap is fixed;
-what remains is the decision to turn them on.
-- **Reason:** `templates/networkpolicy.yaml` carries a per-role default-deny
-set with a documented flow matrix, gated on `networkPolicies.enabled`. That
-flag is `false` in `values.yaml` and no overlay turns it on — `values-prod.yaml`
-renders **zero** NetworkPolicy resources. `git log -S networkPolicies` shows
-one commit, the one that introduced them: never enabled and rolled back, just
-never enabled.
-- **What was found and fixed (2026-09-29):** enabling them as they shipped
-would have broken every upgrade. The baseline selects on the chart's
-name+instance labels, which the migrate and bootstrap Job pods carry; the
-per-role policies select on `component`, which for them is `migrate` /
-`bootstrap` and matched none. Both Jobs sat under default-deny with no allow.
-Because the policies land in the main sync phase and the Jobs are
-pre-install/pre-upgrade hooks, a FIRST install would have worked — no policy
-exists yet — and every upgrade after it would have failed at the migrate hook,
-unable to reach Postgres. The Jobs now get an egress policy in the hook phase
-at weight -10. `scripts/chart-netpol.py` compared only Deployments, which is
-why the gate written to catch exactly this did not; it reads pod-template
-labels now and covers Jobs.
-- **Found and fixed (2026-10-01), for clusters that observe Paladin:** the
-OTLP egress was fixed at 4317, the gRPC port, while the chart's default
-exporter speaks OTLP/HTTP to 4318, so every span would have been dropped. And
-with `metrics_exporter: prometheus`, api and admin serve `/metrics` on a
-listener of their own (`metrics_addr`, 9095) that no ingress rule admitted, so
-both would have read as down to the scraper. Both ports are now derived from
-`config.otel`, and `scripts/chart-netpol.py` renders the observed shape with
-non-default ports to catch either regression.
-- **Definition of Done:** `networkPolicies.enabled: true` in at least the prod
-overlay, every workload rendering a policy, and the `CKV2_K8S_6` skip deleted
-from `.checkov.yaml`.
-- **Blockers:** an operator, and one fact this repository cannot supply. The
-local OrbStack cluster enforces **ingress only** — a `deny-all-egress` policy
-there changes nothing, verified directly — so the egress half of the matrix
-cannot be exercised here at all, and the Job fix above is proven by render and
-by the gate rather than by traffic. Whether the target cluster's CNI enforces
-egress, and whether the matrix is complete for the live topology, are answers
-only that cluster has. Enabling per-namespace with the dispatcher's open
-egress verified first is still the cheap order.
-
 ### The `paladin` name collides — decide qualify-vs-rename before publishing
 
 - **Status:** Open, not blocking. Registries checked 2026-08-21. Owner
@@ -194,29 +152,6 @@ egress verified first is still the cheap order.
 - **Blockers:** No streaming RPC in the current proto surface. Land
   the first one (likely a `WatchEvents` for the agentic event bus)
   before this becomes load-bearing.
-
-### NetworkPolicies per role
-
-- **Status:** SHIPPED (2026-07-02) — only enforcement verification on an
-  NP-capable cluster remains.
-- **Shipped:** `templates/networkpolicy.yaml` behind
-  `networkPolicies.enabled` (default off). Default-deny ingress+egress
-  scoped to the chart's own pods (`chart.selectorLabels`), then per-role
-  allows keyed off `app.kubernetes.io/component`: ingress-controller/UI/mcp
-  → api (8080/8085) + admin (8090), monitoring → ops ports, storage-ns →
-  ingest webhook (8100); egress common (DNS, 443/6443 for the K8s API +
-  https, Postgres, OTLP 4317) plus per-role storage/NATS, admin gets a
-  configurable `adminBrokerPorts` list for the synchronous TestSubscription,
-  and the dispatcher gets OPEN egress by design (customer sinks live on
-  arbitrary endpoints — the blast-radius win of the split is that only it
-  needs that). External namespaces/selectors are values-configurable.
-- **Verified (2026-07-02):** enforcement semantics confirmed on kind+calico
-  (the lab's orbstack CNI doesn't enforce NP): with the chart's rendered
-  policies applied, an unlabeled pod → api:8080 is DENIED (default-deny
-  ingress), a UI-labeled pod → api:8080 is ALLOWED (per-role allow),
-  api-pod egress to an arbitrary intra-ns pod is DENIED (default-deny
-  egress), and api-pod DNS egress works. Entry complete — delete on next
-  touch if nothing new accrues.
 
 ### Release stream for the `capability/` module
 
