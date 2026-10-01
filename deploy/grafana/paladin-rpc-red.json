@@ -9,35 +9,51 @@
       "pluginName": "Prometheus"
     }
   ],
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "description": "RED (Rate / Errors / Duration) for every Paladin Connect RPC, sourced from the otelconnect rpc.server.* metrics activated by ADR-0001. See README.md for metric-name / datasource assumptions.",
   "editable": true,
   "graphTooltip": 1,
-  "tags": ["paladin", "rpc", "red"],
+  "tags": [
+    "paladin",
+    "rpc",
+    "red"
+  ],
   "templating": {
     "list": [
       {
         "name": "datasource",
         "type": "datasource",
         "query": "prometheus",
-        "current": { "text": "Prometheus", "value": "${DS_PROMETHEUS}" },
+        "current": {
+          "text": "Prometheus",
+          "value": "${DS_PROMETHEUS}"
+        },
         "hide": 0
       },
       {
         "name": "service",
         "type": "query",
         "datasource": "${datasource}",
-        "query": "label_values(rpc_server_duration_milliseconds_count, rpc_service)",
+        "query": "label_values(rpc_server_call_duration_seconds_count, rpc_method)",
         "refresh": 2,
         "includeAll": true,
         "multi": true,
-        "current": { "text": "All", "value": "$__all" }
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "regex": "/^([^/]+)\\//"
       }
     ]
   },
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timezone": "",
-  "title": "Paladin — RPC RED",
+  "title": "Paladin \u2014 RPC RED",
   "schemaVersion": 39,
   "version": 1,
   "panels": [
@@ -45,12 +61,22 @@
       "title": "Request rate (req/s) by service",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "sum by (rpc_service) (rate(rpc_server_duration_milliseconds_count{rpc_service=~\"$service\"}[$__rate_interval]))",
+          "expr": "sum by (rpc_service) (label_replace(rate(rpc_server_call_duration_seconds_count{rpc_method=~\"($service)/.*\"}[$__rate_interval]), \"rpc_service\", \"$1\", \"rpc_method\", \"([^/]+)/.*\"))",
           "legendFormat": "{{rpc_service}}"
         }
       ]
@@ -59,51 +85,83 @@
       "title": "Error rate (% of requests with a Connect error code)",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "sum by (rpc_service) (rate(rpc_server_duration_milliseconds_count{rpc_service=~\"$service\", rpc_connect_rpc_error_code!=\"\"}[$__rate_interval])) / clamp_min(sum by (rpc_service) (rate(rpc_server_duration_milliseconds_count{rpc_service=~\"$service\"}[$__rate_interval])), 1e-9)",
+          "expr": "sum by (rpc_service) (label_replace(rate(rpc_server_call_duration_seconds_count{rpc_method=~\"($service)/.*\", error_type!=\"\"}[$__rate_interval]), \"rpc_service\", \"$1\", \"rpc_method\", \"([^/]+)/.*\")) / clamp_min(sum by (rpc_service) (label_replace(rate(rpc_server_call_duration_seconds_count{rpc_method=~\"($service)/.*\"}[$__rate_interval]), \"rpc_service\", \"$1\", \"rpc_method\", \"([^/]+)/.*\")), 1e-9)",
           "legendFormat": "{{rpc_service}}"
         }
       ]
     },
     {
-      "title": "Latency p50 / p95 / p99 (all services, ms)",
+      "title": "Latency p50 / p95 / p99 (all services, s)",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{rpc_service=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{rpc_method=~\"($service)/.*\"}[$__rate_interval])))",
           "legendFormat": "p50"
         },
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{rpc_service=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{rpc_method=~\"($service)/.*\"}[$__rate_interval])))",
           "legendFormat": "p95"
         },
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{rpc_service=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_call_duration_seconds_bucket{rpc_method=~\"($service)/.*\"}[$__rate_interval])))",
           "legendFormat": "p99"
         }
       ]
     },
     {
-      "title": "p99 latency by method (ms)",
+      "title": "p99 latency by method (s)",
       "type": "timeseries",
       "datasource": "${datasource}",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "histogram_quantile(0.99, sum by (le, rpc_service, rpc_method) (rate(rpc_server_duration_milliseconds_bucket{rpc_service=~\"$service\"}[$__rate_interval])))",
-          "legendFormat": "{{rpc_service}}/{{rpc_method}}"
+          "expr": "histogram_quantile(0.99, sum by (le, rpc_method) (rate(rpc_server_call_duration_seconds_bucket{rpc_method=~\"($service)/.*\"}[$__rate_interval])))",
+          "legendFormat": "{{rpc_method}}"
         }
       ]
     }
