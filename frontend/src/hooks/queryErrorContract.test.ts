@@ -34,12 +34,6 @@ const ALLOWED: Record<string, string> = {
     "label only: a miss drops the backend name from the header; the bucket itself comes from its own query, which surfaces errors",
   "app/storage-backends/[backendId]/buckets/[bucketId]/page.tsx::useTenants":
     "label only: a miss shows the tenant id instead of its slug; the collections come from their own query, which surfaces errors",
-  "components/layout/ScopePicker.tsx::useMemberships":
-    "waiting for the ScopePicker pass: a failed read reads as 'no backends configured', 'no buckets' or a single tenant",
-  "components/layout/ScopePicker.tsx::useBuckets":
-    "waiting for the ScopePicker pass: a failed read reads as 'no backends configured', 'no buckets' or a single tenant",
-  "components/layout/ScopePicker.tsx::useBackends":
-    "waiting for the ScopePicker pass: a failed read reads as 'no backends configured', 'no buckets' or a single tenant",
 };
 
 const SRC = join(__dirname, "..");

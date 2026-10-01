@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArchiveBoxIcon,
+  ArrowPathIcon,
   BuildingOfficeIcon,
   CheckIcon,
   ChevronUpDownIcon,
@@ -86,6 +87,7 @@ export const ScopePicker: React.FC = () => {
   const {
     memberships,
     loading: membershipsLoading,
+    error: membershipsError,
     load: loadMemberships,
   } = useMemberships();
   const { showNotification } = useNotification();
@@ -122,13 +124,22 @@ export const ScopePicker: React.FC = () => {
     [tenantId, switching, switchTenant, showNotification, setPickerOpen],
   );
 
-  const { buckets, fetchBuckets, loading: bucketsLoading } = useBuckets();
+  const {
+    buckets,
+    fetchBuckets,
+    loading: bucketsLoading,
+    error: bucketsError,
+  } = useBuckets();
   // Both lists are for choosing with, and nothing chooses until the picker is
   // open — but they used to load on mount, on every page, for every operator
   // who never touched the picker. That was two of the ~6 chrome RPCs a page
   // paid for before rendering anything of its own. Loaded on open, like the
   // tenant memberships above.
-  const { backends: backendRows, fetchBackends } = useBackends(false);
+  const {
+    backends: backendRows,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends(false);
   useEffect(() => {
     if (isPickerOpen && adminPlane) void fetchBackends();
   }, [isPickerOpen, adminPlane, fetchBackends]);
@@ -371,9 +382,13 @@ export const ScopePicker: React.FC = () => {
             icon={ServerStackIcon}
             primary={backendId ?? "Any backend"}
             secondary={
-              backends.length === 0
-                ? "no backends configured"
-                : `${backends.length} configured`
+              !adminPlane
+                ? NOT_YOUR_ROLE
+                : backendsError
+                  ? LIST_FAILED
+                  : backends.length === 0
+                    ? "no backends configured"
+                    : `${backends.length} configured`
             }
             muted={!backendId}
             searchPlaceholder="Search backends…"
@@ -432,6 +447,11 @@ export const ScopePicker: React.FC = () => {
               }),
             ]}
             footerItems={[
+              ...retryItem(
+                backendsError,
+                "backends",
+                () => void fetchBackends(),
+              ),
               {
                 key: "manage",
                 label: "Inspect server config…",
@@ -447,13 +467,17 @@ export const ScopePicker: React.FC = () => {
             icon={ArchiveBoxIcon}
             primary={bucketId ?? "Any bucket"}
             secondary={
-              visibleBuckets.length === 0
-                ? backendId
-                  ? `no buckets in ${backendId}`
-                  : "no buckets visible"
-                : `${visibleBuckets.length} visible${
-                    backendId ? ` in ${backendId}` : ""
-                  }`
+              !adminPlane
+                ? NOT_YOUR_ROLE
+                : bucketsError
+                  ? LIST_FAILED
+                  : visibleBuckets.length === 0
+                    ? backendId
+                      ? `no buckets in ${backendId}`
+                      : "no buckets visible"
+                    : `${visibleBuckets.length} visible${
+                        backendId ? ` in ${backendId}` : ""
+                      }`
             }
             muted={!bucketId}
             loading={bucketsLoading && visibleBuckets.length === 0}
@@ -500,6 +524,11 @@ export const ScopePicker: React.FC = () => {
               })),
             ]}
             footerItems={[
+              ...retryItem(
+                bucketsError,
+                "buckets",
+                () => void fetchBuckets(backendId || undefined),
+              ),
               {
                 key: "manage",
                 label: "Manage buckets…",
@@ -543,9 +572,11 @@ export const ScopePicker: React.FC = () => {
                 ? tenantMismatch
                   ? `signed in as ${tenant?.displayName ?? tenantId?.slice(0, 8)}…`
                   : "scoped via bucket"
-                : tenantId
-                  ? `${tenantId.slice(0, 8)}…${tenantId.slice(-4)}`
-                  : "no tenant"
+                : membershipsError
+                  ? "tenant list could not be loaded"
+                  : tenantId
+                    ? `${tenantId.slice(0, 8)}…${tenantId.slice(-4)}`
+                    : "no tenant"
             }
             muted={!tenantId && !scopedOwnerTenantId}
             loading={membershipsLoading && memberships.length === 0}
@@ -554,6 +585,11 @@ export const ScopePicker: React.FC = () => {
             groupHeading="Switch tenant"
             items={tenantItems}
             footerItems={[
+              ...retryItem(
+                membershipsError,
+                "tenants",
+                () => void loadMemberships(),
+              ),
               {
                 key: "manage",
                 label: "Manage tenants…",
@@ -593,6 +629,31 @@ interface ScopeRowItem {
   isActive: boolean;
   onSelect: () => void;
   render: () => React.ReactNode;
+}
+
+// What a row says when its list is not a fact about the platform. A failed
+// read and a list the role may not ask for both leave the list empty, and both
+// used to read "no backends configured" / "no buckets visible" / a single
+// tenant — claims the picker could not make.
+const LIST_FAILED = "could not be loaded";
+const NOT_YOUR_ROLE = "not available to your role";
+
+// A Retry entry for a row whose list failed; nothing when it did not.
+function retryItem(
+  error: string | null,
+  what: string,
+  retry: () => void,
+): ScopeRowFooterItem[] {
+  return error
+    ? [
+        {
+          key: "retry",
+          label: `Retry loading ${what}`,
+          icon: ArrowPathIcon,
+          onSelect: retry,
+        },
+      ]
+    : [];
 }
 
 interface ScopeRowFooterItem {
