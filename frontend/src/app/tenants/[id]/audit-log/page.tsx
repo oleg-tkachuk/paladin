@@ -15,6 +15,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import {
   ArrowPathIcon,
   ClipboardDocumentListIcon,
@@ -281,13 +282,14 @@ export default function TenantAuditLogPage() {
                     </TableCell>
                     <TableCell className="hidden 2xl:table-cell">
                       {e.capabilityId ? (
-                        <Link
-                          href={`/capabilities?id=${e.capabilityId}`}
-                          className={cn(T.code, "text-primary hover:underline")}
-                          title={e.capabilityId}
-                        >
-                          {e.capabilityId.slice(0, 8)}…
-                        </Link>
+                        // Copyable, not a link: this went to /capabilities,
+                        // a page that does not exist, and the tenant's
+                        // capability page cannot open one capability by id.
+                        <IdentifierCopy
+                          value={e.capabilityId}
+                          label="Capability ID"
+                          className={T.code}
+                        />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
