@@ -340,116 +340,122 @@ export default function TenantBudgetPage() {
 
       {/* Set form */}
       <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <h3 className="text-base font-medium">Update budget</h3>
-            <p className="text-sm text-muted-foreground">
-              Set a new cap. Capabilities issued under this tenant see the new
-              limit on their next charge attempt.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="max-budget">Max budget</Label>
-              <Input
-                id="max-budget"
-                type="number"
-                step="0.01"
-                min={0}
-                placeholder="0 = unlimited"
-                value={maxBudget}
-                onChange={(e) => {
-                  setEdited(true);
-                  setMaxBudget(e.target.value);
-                }}
-              />
-              <p className={T.hint}>
-                0 keeps the counter accumulating without rejecting.
+        <form onSubmit={handleSubmit}>
+          {/* Locked until the first snapshot lands. A value typed before it
+              marked the form edited, which kept the snapshot — and its
+              version — from seeding, so Apply sent version "0" and the
+              server refused it as a conflict. */}
+          <fieldset disabled={initialising} className="space-y-4">
+            <div>
+              <h3 className="text-base font-medium">Update budget</h3>
+              <p className="text-sm text-muted-foreground">
+                Set a new cap. Capabilities issued under this tenant see the new
+                limit on their next charge attempt.
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="unit-code">Currency / Unit</Label>
-              <Select
-                id="unit-code"
-                options={ALLOWED_UNIT_CODES.map((u) => ({
-                  value: u,
-                  label: u,
-                }))}
-                value={unitCode}
-                onChange={(v) => {
-                  setEdited(true);
-                  setUnitCode(v);
-                }}
-                className="w-full"
-              />
-              <p className={T.hint}>
-                ISO 4217 fiat or UNIT for non-currency metering.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Period</Label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={resetSpend}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="max-budget">Max budget</Label>
+                <Input
+                  id="max-budget"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  placeholder="0 = unlimited"
+                  value={maxBudget}
                   onChange={(e) => {
                     setEdited(true);
-                    setResetSpend(e.target.checked);
+                    setMaxBudget(e.target.value);
                   }}
-                  className="size-4 accent-primary"
                 />
-                <span>
-                  Reset spend (roll the period — typical at billing close).
-                </span>
-              </label>
-              <p className={T.hint}>
-                Off: change the cap mid-cycle without affecting accumulated
-                spend.
-              </p>
+                <p className={T.hint}>
+                  0 keeps the counter accumulating without rejecting.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="unit-code">Currency / Unit</Label>
+                <Select
+                  id="unit-code"
+                  options={ALLOWED_UNIT_CODES.map((u) => ({
+                    value: u,
+                    label: u,
+                  }))}
+                  value={unitCode}
+                  onChange={(v) => {
+                    setEdited(true);
+                    setUnitCode(v);
+                  }}
+                  className="w-full"
+                />
+                <p className={T.hint}>
+                  ISO 4217 fiat or UNIT for non-currency metering.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Period</Label>
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={resetSpend}
+                    onChange={(e) => {
+                      setEdited(true);
+                      setResetSpend(e.target.checked);
+                    }}
+                    className="size-4 accent-primary"
+                  />
+                  <span>
+                    Reset spend (roll the period — typical at billing close).
+                  </span>
+                </label>
+                <p className={T.hint}>
+                  Off: change the cap mid-cycle without affecting accumulated
+                  spend.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="period-end">Period close</Label>
+                <Input
+                  id="period-end"
+                  type="date"
+                  value={periodEnd}
+                  onChange={(e) => {
+                    setEdited(true);
+                    setPeriodEnd(e.target.value);
+                  }}
+                  className="w-full"
+                />
+                <p className={T.hint}>
+                  Optional. Pins when the billing window closes; blank leaves
+                  the server default.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="period-end">Period close</Label>
-              <Input
-                id="period-end"
-                type="date"
-                value={periodEnd}
-                onChange={(e) => {
-                  setEdited(true);
-                  setPeriodEnd(e.target.value);
-                }}
-                className="w-full"
-              />
-              <p className={T.hint}>
-                Optional. Pins when the billing window closes; blank leaves the
-                server default.
-              </p>
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                disabled={
+                  submitting ||
+                  initialising ||
+                  budgetQuery.isError ||
+                  !maxBudget.trim()
+                }
+              >
+                {submitting ? (
+                  "Updating…"
+                ) : (
+                  <>
+                    <CheckCircleIcon className="size-4" />
+                    {notFound ? "Create budget" : "Apply changes"}
+                  </>
+                )}
+              </Button>
             </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button
-              type="submit"
-              disabled={
-                submitting ||
-                initialising ||
-                budgetQuery.isError ||
-                !maxBudget.trim()
-              }
-            >
-              {submitting ? (
-                "Updating…"
-              ) : (
-                <>
-                  <CheckCircleIcon className="size-4" />
-                  {notFound ? "Create budget" : "Apply changes"}
-                </>
-              )}
-            </Button>
-          </div>
+          </fieldset>
         </form>
       </Card>
     </div>
