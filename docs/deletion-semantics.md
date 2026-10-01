@@ -52,7 +52,7 @@ nothing asks again. Two entries deserve attention before you run it:
 
 - `api_tokens` — every integration authenticating as that tenant stops working
   at once.
-- `event_subscriptions` — subscribers simply stop receiving events. Nothing
+- `event_subscriptions` — subscribers stop receiving events. Nothing
   errors on their side; the deliveries just stop.
 
 ## Storage backend

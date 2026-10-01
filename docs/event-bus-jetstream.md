@@ -22,8 +22,8 @@ A single stream carries every Paladin event:
 | Retention | limits (age/size caps; not interest — consumers come and go) |
 | Duplicate window | ≥ the outbox's max redelivery span (e.g. `2m`) |
 
-It is provisioned declaratively by gitops (a one-shot idempotent `nats stream
-add` Job alongside the NATS app), not by Paladin at boot — Paladin only *publishes*.
+It is provisioned outside Paladin (for example by a one-shot, idempotent
+`nats stream add` Job next to NATS), not by Paladin at boot — Paladin only *publishes*.
 
 ## Producing (a Paladin subscription → the bus)
 

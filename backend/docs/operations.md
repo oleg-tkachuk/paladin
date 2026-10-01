@@ -1,158 +1,88 @@
 # Operations
 
-## Running Locally
+Running, building and testing the backend from this directory. The whole stack
+from the repository root is in [docs/task.md](../../docs/task.md); installing
+on Kubernetes is in [docs/install.md](../../docs/install.md).
 
-### Prerequisites
+## Prerequisites
 
-- Go 1.27+ (the `go` directive in `backend/go.mod`)
-- Task (`brew install go-task/tap/go-task`)
-- Docker + Docker Compose
-- A running PostgreSQL instance (or use the provided compose file)
-- A running SeaweedFS instance (or MinIO)
+- Go at the version of the `go` directive in `go.mod`
+- Task 3.53+
+- Docker with Compose v2 — the compose stack and the integration tests
+  (testcontainers) both need it
 
-### Start with Docker Compose
+## Run locally
 
-```bash
-cd deploy/
-docker-compose up -d
-```
-
-Compose services:
-
-- PostgreSQL with custom config (`postgres-custom.conf`)
-- SeaweedFS S3-compatible storage (configured via `seaweedfs-s3.json`)
-
-### Local Config
-
-Use `configs/local.yaml` for local development:
+The compose stack runs every plane, PostgreSQL, SeaweedFS and the console:
 
 ```bash
-./server --config configs/local.yaml
+task stack:up      # from the repository root
 ```
 
-### Run Migrations
+Its definition is [`deploy/docker-compose.yaml`](../deploy/docker-compose.yaml),
+with `postgres-custom.conf`, `seaweedfs-s3.json` and
+`seaweedfs-notification.toml` beside it.
 
-Migrations use Goose. From the project root:
+To run one role from a build against your own PostgreSQL and S3:
 
 ```bash
-go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "DSN_HERE" up
+task build
+./bin/server --config configs/local.yaml serve api
 ```
 
-In a cluster this is the chart's `migrate` job, which runs before the
-deployments are patched — there is no Task target for it.
+`--config` defaults to `/app/configs/config.yaml`, the path the chart mounts
+its ConfigMap at. `configs/config.yaml` is the annotated reference for every
+key; [configuration.md](configuration.md) explains the loader.
 
-### Build and Run
+## Migrations
+
+The `migrate` subcommand applies `migrations/` with goose, as the DDL role. In
+a cluster the chart runs it as a `pre-install,pre-upgrade` hook Job, so new pods
+never start against an unmigrated schema. Rules for new migrations:
+[CONVENTIONS.md](../migrations/CONVENTIONS.md).
+
+## Tests
 
 ```bash
-# From the repository root: build + push image and Helm chart to registry.local
-task -t Taskfile.local.yaml backend:deploy
-
-# Or build into the local Docker store + helm install to OrbStack (no registry)
-task -t Taskfile.local.yaml backend:deploy-local
-
-# Run the binary directly
-./server --config configs/local.yaml
+task test              # unit tests
+task test:integration  # Postgres-backed suites; starts containers itself
+task test:all          # lint + unit + integration + security
 ```
 
-### Run Tests
+Test tiers and where each suite lives: [tests/README.md](../tests/README.md).
+
+## Generated code
 
 ```bash
-# Unit tests
-task test
-
-# Integration tests (require running DB and S3)
-task test:integration
+task generate          # mocks and sqlc bindings
+task codegen:check     # fail when committed generated output is stale
 ```
 
-## Docker Build
+The protobuf stubs are generated into `sdk/go`
+(`task -t Taskfile.dev.yaml go-sdk-gen:proto` from the root). sqlc runs at the
+version `go.mod` pins.
 
-**Source:** `deploy/Dockerfile`
+## Image
 
-Multi-stage build:
-
-1. Builder stage — compiles the Go binary
-2. Final stage — minimal image, copies binary + config
+[`deploy/Dockerfile`](../deploy/Dockerfile) builds from the repository root (it
+copies `capability/` and `sdk/go/`) into a distroless `nonroot` image with the
+binary at `/app/bin/paladin-core`. No config is baked in.
 
 ```bash
-docker build -f deploy/Dockerfile -t paladin-core:dev .
+docker build -f backend/deploy/Dockerfile -t paladin-core:dev .   # from the root
 ```
 
-Default runtime config path inside the image: `/app/configs/config.yaml`
+## Kubernetes
 
-## Taskfile Commands
-
-Available tasks (from `Taskfile.yaml`):
+The chart ([`deploy/chart/`](../deploy/chart/)) creates one Deployment and one
+Service per enabled role, each running `paladin-core serve <role>`, plus the
+migrate and bootstrap Jobs. Liveness, readiness and startup probes are set per
+role in `deployments.<role>` in `values.yaml`.
 
 ```bash
-task --list
+task deploy        # verify the chart, publish image and chart to the registry
+task deploy-local  # build and helm-install into the local cluster, no registry
 ```
 
-Common tasks include:
-
-- `task deploy` — build + push image and Helm chart; needs `GLOBAL_REGISTRY`
-  and `IMAGE_NAMESPACE`, which `Taskfile.local.yaml` at the root sets
-- `task deploy-local` — build into the local Docker store + helm install (no
-  registry); same two variables
-- `task test` — run unit tests
-- `task lint` — run golangci-lint
-- `task generate` — regenerate mocks and sqlc bindings; the proto Go stubs
-  are generated in `sdk/go` (`task -t Taskfile.dev.yaml go-sdk-gen:proto`)
-- `task codegen:sqlc` — regenerate sqlc query files
-
-## Kubernetes Deployment
-
-In Kubernetes, the service is deployed with:
-
-- A `Deployment` running the compiled binary
-- A `ConfigMap` mounting the YAML config to `/app/configs/config.yaml`
-- `Secret` objects referenced in the config for DB password and S3 credentials
-- Two `Services`: one for HTTP (`:8080`), one for Connect (`:9090`)
-- Liveness probe: `GET /health/livez`
-- Readiness probe: `GET /health/readyz`
-- Startup probe: `GET /health/startupz`
-
-For Helm chart details, refer to [`deploy/chart/`](../deploy/chart/).
-
-## Source Index
-
-| File | Description |
-|---|---|
-| `cmd/server/main.go` | Binary entry point — calls `Execute()` |
-| `cmd/server/root.go` | Cobra root command — flag parsing, app initialization, signal handling |
-| `cmd/server/wire.go` | Wire provider declarations |
-| `cmd/server/wire_gen.go` | Wire-generated dependency injection graph |
-| `internal/config/types.go` | All config struct definitions |
-| `internal/config/config.go` | Config loader (YAML → struct) |
-| `internal/config/resolver.go` | Kubernetes secret resolver |
-| `internal/config/schema.cue` | CUE schema for config validation |
-| `internal/api/connect/server.go` | Connect server implementation |
-| `internal/api/connect/tenant_types.go` | Connect tenant RPC message mappers |
-| `internal/api/connect/validation.go` | Connect request validation logic |
-| `internal/api/http/router.go` | Gin HTTP router setup |
-| `internal/api/http/adapter.go` | OpenAPI → domain service adapter (all HTTP handler implementations) |
-| `internal/middleware/http_stack.go` | HTTP middleware chain setup |
-| `internal/middleware/connect_chain.go` | Connect interceptor chain setup |
-| `internal/middleware/auth.go` | HTTP tenant enforcement middleware |
-| `internal/middleware/ratelimit.go` | Per-tenant token bucket rate limiter |
-| `internal/middleware/audit_log.go` | HTTP audit logging middleware |
-| `internal/middleware/security_headers.go` | Security response headers |
-| `internal/middleware/request_size_limit.go` | Request body size enforcement |
-| `internal/service/object_service.go` | Core object lifecycle service |
-| `internal/service/object_tag_service.go` | ObjectTag management service |
-| `internal/service/health.go` | Health & dependency check service |
-| `internal/service/system_service.go` | Admin config endpoint service |
-| `internal/service/policy.go` | Upload policy enforcement |
-| `internal/store/` | PostgreSQL repositories (sqlc-generated queries + wrappers) |
-| `internal/storage/` | S3 client adapter |
-| `internal/worker/reaper.go` | Background reaper goroutine |
-| `internal/metrics/metrics.go` | Prometheus metric definitions |
-| `internal/metrics/otel.go` | OpenTelemetry instrument definitions |
-| `migrations/001_init.sql` | Initial schema: objects, multipart_uploads, multipart_parts |
-| `migrations/003_harden_objects.sql` | RLS policies, triggers, CHECK constraints |
-| `migrations/004_v1_1_0_refactor.sql` | Status expansion, idempotency_keys table |
-| `migrations/007_audit_logs.sql` | audit_logs table |
-| `migrations/010_object_tag_support.sql` | object_object_tags table, object_tag/subpath columns |
-| `proto/paladin.proto` | Connect service and message definitions |
-| `configs/config.yaml` | Default config (local environment) |
-| `deploy/Dockerfile` | Multi-stage Docker build |
-| `deploy/docker-compose.yaml` | Local development stack |
+Both need `GLOBAL_REGISTRY` and `IMAGE_NAMESPACE`; the root
+`Taskfile.local.yaml` sets them.
