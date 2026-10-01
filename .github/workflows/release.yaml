@@ -2,9 +2,15 @@ name: Release
 
 # Dispatched by ci.yaml once the checks on a push to main have passed.
 #
-# A release is a tag, its notes, and both components published to GHCR at that
-# tag: a multi-arch image and a Helm chart each. Nothing is published when no
-# tag was due.
+# A release is a tag, both components published to GHCR at that tag (a
+# multi-arch image and a Helm chart each), and the GitHub release that
+# announces them. The announcement comes last and only when every component
+# published: a release whose charts are missing is not announced. Nothing is
+# published when no tag was due.
+#
+# If a component fails to publish, the tag exists with no release beside it.
+# Re-run the failed jobs: both pushes are idempotent, and the announcement
+# follows once they succeed.
 #
 # workflow_run is the obvious trigger and is refused by zizmor's
 # dangerous-triggers audit. A plain `push` trigger would not help: GitHub
@@ -45,14 +51,14 @@ concurrency:
 
 jobs:
   release:
-    name: Compute the tag and publish the release
+    name: Compute and push the tag
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
-      contents: write # semantic-release pushes the tag; gh creates the release
+      contents: write # semantic-release pushes the tag
     outputs:
-      # Empty when no release was due; publish below keys off it.
-      tag: ${{ steps.notes.outputs.tag }}
+      # Empty when no release was due; publish and announce key off it.
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       # No persist-credentials: false — semantic-release pushes the tag it
       # creates, so this is the one checkout here that needs its credentials.
@@ -105,10 +111,8 @@ jobs:
       # due and there is nothing to publish. "New" is against the list taken
       # above — see scripts/new-release-tag.sh for why a tag on HEAD is not
       # enough.
-      - name: Publish the release for the tag it just pushed
-        id: notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Read the tag it just pushed
+        id: tag
         run: |
           set -euo pipefail
 
@@ -118,10 +122,6 @@ jobs:
             printf '%s\n' "no new tag from this run — no release was due"
             exit 0
           fi
-
-          # Notes for people, built from merged pull requests and shaped by
-          # .github/release.yml.
-          gh release create "$tag" --generate-notes --verify-tag
           printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
 
   # One job per component. The chart is gated and pushed through the same task
@@ -255,3 +255,24 @@ jobs:
           printf '%s' "$TOKEN" | helm registry login "$REGISTRY" --username "$ACTOR" --password-stdin
           task --yes "${COMPONENT}:release:chart:push" \
             GLOBAL_REGISTRY="$REGISTRY" IMAGE_NAMESPACE="$IMAGE_NAMESPACE" APP_VERSION="$VERSION"
+
+  # The GitHub release, once every component's image and chart is in GHCR.
+  # `needs` alone would skip this when publish fails; the explicit result
+  # check also keeps it from running if publish was skipped or cancelled.
+  announce:
+    name: Publish the release
+    needs: [release, publish]
+    if: needs.release.outputs.tag != '' && needs.publish.result == 'success'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # gh creates the release
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      # Notes for people, built from merged pull requests and shaped by
+      # .github/release.yml. No checkout: gh works against the repository.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
