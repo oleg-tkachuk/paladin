@@ -24,24 +24,24 @@ export function SaveViewModal({
         onClick={onClose}
       />
       <div className="relative w-full max-w-sm bg-[#0A0C10] rounded-[32px] border border-white/10 shadow-2xl p-8 space-y-6 overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500" />
+        <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">
           <h3 className="text-xl font-bold text-white uppercase tracking-tight">
             Save View Configuration
           </h3>
-          <p className="text-xs text-slate-500 font-medium">
+          <p className="text-xs text-muted-foreground font-medium">
             Create a bookmark for these specific filters.
           </p>
         </div>
 
         <div className="space-y-4">
-          <label className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+          <label className="text-xs font-semibold text-primary uppercase tracking-wider">
             View Name
           </label>
           <input
             autoFocus
             type="text"
-            className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:border-indigo-500/50 outline-none transition-all"
+            className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-white text-sm focus:border-primary/50 outline-none transition-all"
             placeholder="e.g. Production Assets"
             value={viewName}
             onChange={(e) => onViewNameChange(e.target.value)}
@@ -52,13 +52,13 @@ export function SaveViewModal({
         <div className="flex gap-4 pt-2">
           <button
             onClick={onSave}
-            className="flex-1 py-3.5 rounded-2xl bg-indigo-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-indigo-500 transition-all active:scale-95"
+            className="flex-1 py-3.5 rounded-2xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-primary transition-all active:scale-95"
           >
             Save View
           </button>
           <button
             onClick={onClose}
-            className="px-6 py-3.5 rounded-2xl bg-white/5 text-slate-500 hover:text-white text-xs font-bold uppercase tracking-wider transition-all"
+            className="px-6 py-3.5 rounded-2xl bg-white/5 text-muted-foreground hover:text-white text-xs font-bold uppercase tracking-wider transition-all"
           >
             Abort
           </button>

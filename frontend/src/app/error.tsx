@@ -17,17 +17,17 @@ export default function GlobalError({
       <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">
         Something went wrong
       </h1>
-      <p className="text-sm text-slate-400 text-center max-w-md mb-2">
+      <p className="text-sm text-muted-foreground text-center max-w-md mb-2">
         {error.message || "An unexpected error occurred."}
       </p>
       {error.digest && (
-        <p className="text-xs font-mono text-slate-600 mb-8">
+        <p className="text-xs font-mono text-muted-foreground mb-8">
           Digest: {error.digest}
         </p>
       )}
       <button
         onClick={reset}
-        className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
+        className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary text-primary-foreground text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95"
       >
         Try Again
       </button>

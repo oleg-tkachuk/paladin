@@ -586,26 +586,26 @@ export function CommandPalette() {
 
       {/* Palette Container */}
       <div className="relative w-full max-w-2xl bg-[#0A0C10]/95 rounded-[32px] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 animate-bounce-in">
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50" />
+        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
         <div className="p-6 border-b border-white/5 flex items-center gap-4">
           <div className="relative">
             {isSearching ? (
-              <div className="w-6 h-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-primary/20 border-t-indigo-500 rounded-full animate-spin" />
             ) : (
-              <MagnifyingGlassIcon className="w-6 h-6 text-indigo-400" />
+              <MagnifyingGlassIcon className="w-6 h-6 text-primary" />
             )}
           </div>
           <input
             autoFocus
             type="text"
             placeholder="Type to search objects, run actions, or navigate..."
-            className="bg-transparent border-none focus:ring-0 text-white placeholder-slate-600 w-full text-xl font-medium outline-none"
+            className="bg-transparent border-none focus:ring-0 text-white placeholder-muted-foreground w-full text-xl font-medium outline-none"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <div className="flex items-center gap-2">
-            <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-muted-foreground uppercase tracking-wider">
               ESC
             </span>
           </div>
@@ -640,20 +640,20 @@ export function CommandPalette() {
                 }}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative ${
                   index === selectedIndex
-                    ? "bg-indigo-500/10 border-indigo-500/30 shadow-lg"
+                    ? "bg-primary/10 border-primary/30 shadow-lg"
                     : "bg-transparent border-transparent hover:bg-white/[0.02]"
                 }`}
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 {index === selectedIndex && (
-                  <div className="absolute left-0 w-1 h-6 bg-indigo-500 rounded-r-full" />
+                  <div className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />
                 )}
                 <div className="flex items-center gap-4 text-left">
                   <div
                     className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
                       index === selectedIndex
-                        ? "bg-indigo-500/20 text-indigo-400"
-                        : "bg-white/5 text-slate-500 group-hover:bg-white/10"
+                        ? "bg-primary/20 text-primary"
+                        : "bg-white/5 text-muted-foreground group-hover:bg-white/10"
                     }`}
                   >
                     <result.icon className="w-6 h-6" />
@@ -663,13 +663,13 @@ export function CommandPalette() {
                       className={`text-sm font-bold truncate ${
                         index === selectedIndex
                           ? "text-white"
-                          : "text-slate-300"
+                          : "text-foreground"
                       }`}
                     >
                       {result.title}
                     </div>
                     {result.subtitle && (
-                      <div className="text-xs text-slate-500 truncate mt-0.5 font-medium uppercase tracking-wider">
+                      <div className="text-xs text-muted-foreground truncate mt-0.5 font-medium uppercase tracking-wider">
                         {result.subtitle}
                       </div>
                     )}
@@ -682,7 +682,7 @@ export function CommandPalette() {
                       {result.shortcut.split(" ").map((s) => (
                         <span
                           key={s}
-                          className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-slate-600"
+                          className="px-2 py-1 rounded bg-white/5 border border-white/10 text-xs font-mono text-muted-foreground"
                         >
                           {s}
                         </span>
@@ -690,7 +690,7 @@ export function CommandPalette() {
                     </div>
                   )}
                   {index === selectedIndex && (
-                    <ArrowRightIcon className="w-4 h-4 text-indigo-500 animate-slide-right" />
+                    <ArrowRightIcon className="w-4 h-4 text-primary animate-slide-right" />
                   )}
                 </div>
               </button>
@@ -698,7 +698,7 @@ export function CommandPalette() {
           ) : query !== "" && !isSearching ? (
             <div className="py-20 text-center space-y-4">
               <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center mx-auto border border-dashed border-white/10">
-                <MagnifyingGlassIcon className="w-8 h-8 text-slate-700" />
+                <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground" />
               </div>
               <div>
                 {/*
@@ -708,12 +708,12 @@ export function CommandPalette() {
                   bucket does not exist while the plane that holds it is
                   simply unreachable.
                 */}
-                <p className="text-sm font-bold text-slate-400">
+                <p className="text-sm font-bold text-muted-foreground">
                   {failedSources.length > 0
                     ? "No matches among the sources that answered"
                     : `No matches found for \u201c${query}\u201d`}
                 </p>
-                <p className="text-xs text-slate-600 uppercase tracking-wider mt-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
                   {failedSources.length > 0
                     ? "The banner above names which"
                     : "Try searching for something else"}
@@ -723,16 +723,16 @@ export function CommandPalette() {
           ) : null}
         </div>
 
-        <div className="p-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between text-xs font-bold text-slate-600 uppercase tracking-wider">
+        <div className="p-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider">
           <div className="flex gap-6">
             <span className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-muted-foreground">
                 ↑↓
               </kbd>
               Navigate
             </span>
             <span className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-muted-foreground">
                 Enter
               </kbd>
               Select
@@ -743,11 +743,11 @@ export function CommandPalette() {
                 the topbar build-info pill. Empty scope = global; a
                 tenant in scope reads as "tenant: <slug>" so the
                 operator sees why scoped jumps appear up top. */}
-            <span className="text-indigo-500/40">
+            <span className="text-primary/40">
               {scopedTenantSlug ? (
                 <>
                   Scope:{" "}
-                  <span className="text-indigo-300/70 font-mono normal-case tracking-normal">
+                  <span className="text-primary/70 font-mono normal-case tracking-normal">
                     {scopedTenantSlug}
                   </span>
                 </>
