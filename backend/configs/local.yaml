@@ -89,7 +89,6 @@ auth:
 
 security:
   reject_tenant_mismatch: false
-  log_sensitive: false
 
 middleware:
   timeouts:

@@ -353,7 +353,10 @@ type Security struct {
 	// never actually getting that behaviour — Login was always
 	// password-gated.
 	RejectTenantMismatch bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
-	LogSensitive         bool `yaml:"log_sensitive" json:"log_sensitive"`
+	// LogSensitive is retired: it was never read, and no secret is logged
+	// whatever it says. Accepted so existing configs load; Load warns when
+	// it is set to true.
+	LogSensitive bool `yaml:"log_sensitive" json:"log_sensitive"`
 
 	// RLS is intentionally not configurable here. Migration 023
 	// enables per-table policies unconditionally; the runtime always

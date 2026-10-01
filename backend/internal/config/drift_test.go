@@ -339,6 +339,7 @@ func TestGoBlocksAreDeclaredInSchema(t *testing.T) {
 // an opt-in feature that is off by default should not need a new entry, while
 // a knob added anywhere else should.
 var unsetKnobAllowlist = map[string]string{
+	"security.log_sensitive": "retired; accepted so old configs load, read by nothing, warned about when true",
 	// Supplied at deploy time, never in a committed values file.
 	"auth.signing_key_secret":                    "secret ref; the env overlay or external-secrets fills it",
 	"api_token.hmac_key":                         "secret; per-deploy",

@@ -118,7 +118,6 @@ config:
           public: true
 
   security:
-    log_sensitive: false
 
   storage:
     backends:
