@@ -8,6 +8,7 @@ import {
   toAccessTokenDTO,
   type AccessTokenDTO,
 } from "@/lib/auth/bff";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * POST /api/auth/exchange
@@ -100,10 +101,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       err instanceof ConnectError && err.code === Code.PermissionDenied;
     return NextResponse.json(
       {
-        error:
-          (err instanceof ConnectError
-            ? err.rawMessage
-            : (err as Error).message) || "exchange failed",
+        error: errorMessage(err) || "exchange failed",
       },
       { status: refused ? 403 : 401 },
     );

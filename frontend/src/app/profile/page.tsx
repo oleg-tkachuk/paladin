@@ -10,7 +10,7 @@ import {
   PaintBrushIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
+import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
@@ -103,14 +103,14 @@ export default function ProfilePage() {
         if (isAbortError(err)) throw err;
         // First-time users may not have a row yet; the backend creates an
         // empty default on UpdateMine, so a NotFound here is fine → null.
-        if (err instanceof ConnectError && /not.*found/i.test(err.rawMessage)) {
+        // Decided on the code, not by matching the message text.
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
           return null;
         }
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError ? err.rawMessage : "Failed to load",
+          message: errorMessage(err, "Failed to load"),
         });
         throw err;
       }
@@ -163,7 +163,7 @@ export default function ProfilePage() {
         message: "Preferences synchronized to the control plane.",
       });
     } catch (err) {
-      const msg = err instanceof ConnectError ? err.rawMessage : "Save failed";
+      const msg = errorMessage(err, "Save failed");
       showNotification({
         type: "error",
         title: "Save failed",

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 
 import {
   AlertDialog,
@@ -18,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * Revoke-capability confirmation, extracted from the capabilities page. Owns
@@ -59,8 +59,7 @@ export function RevokeCapabilityDialog({
       onRevoked();
       onClose();
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Revoke failed";
+      const msg = errorMessage(err, "Revoke failed");
       showNotification({ type: "error", title: "Revoke failed", message: msg });
     }
   };

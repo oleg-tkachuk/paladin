@@ -15,12 +15,12 @@
  */
 
 import { useCallback, useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
 import { userClient } from "@/lib/connect/client";
 import { useBumpRefresh } from "@/context/RefreshContext";
+import { errorMessage } from "@/hooks/errorContract";
 
 /** Resource name for a user: "users/{subject}" or, when tenant-scoped,
  *  "tenants/{tenant}/users/{subject}". The server accepts the name the
@@ -31,7 +31,7 @@ export interface UserAdminResult {
 }
 
 function toMessage(e: unknown): string {
-  return e instanceof ConnectError ? e.rawMessage : "Unexpected error.";
+  return errorMessage(e, "Unexpected error.");
 }
 
 export function useUserAdmin() {

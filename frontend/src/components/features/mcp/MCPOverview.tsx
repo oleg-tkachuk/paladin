@@ -5,7 +5,6 @@ import {
   ExclamationTriangleIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { planeTone, useMcpLive } from "./mcp-status";
+import { errorMessage } from "@/hooks/errorContract";
 
 function Tile({
   label,
@@ -48,7 +48,7 @@ export function MCPOverview({
   const { status, sessions } = useMcpLive();
   const s = status.data;
   const reason = status.error
-    ? ConnectError.from(status.error).rawMessage
+    ? errorMessage(status.error)
     : s && !s.reachable
       ? s.error || "no answer"
       : null;

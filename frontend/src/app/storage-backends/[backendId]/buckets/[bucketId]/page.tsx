@@ -47,6 +47,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketDetailPage() {
   const params = useParams<{ backendId: string; bucketId: string }>();
@@ -85,9 +86,7 @@ export default function BucketDetailPage() {
   );
   const loadingCollections = collectionsQuery.isFetching;
   const okError = collectionsQuery.error
-    ? collectionsQuery.error instanceof ConnectError
-      ? collectionsQuery.error.rawMessage
-      : "Failed to load"
+    ? errorMessage(collectionsQuery.error, "Failed to load")
     : null;
   const reloadCollections = () => collectionsQuery.refetch();
 
@@ -110,9 +109,7 @@ export default function BucketDetailPage() {
     bucketQuery.error.code === Code.NotFound;
   const bucketError =
     bucketQuery.error && !bucketNotFound
-      ? bucketQuery.error instanceof ConnectError
-        ? bucketQuery.error.rawMessage
-        : "Failed to load bucket."
+      ? errorMessage(bucketQuery.error, "Failed to load bucket.")
       : null;
 
   // useTenants has no auto-fetch; kick it on mount (unflagged cross-module).

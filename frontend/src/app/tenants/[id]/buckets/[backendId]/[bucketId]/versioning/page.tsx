@@ -7,8 +7,6 @@
 
 import { useState } from "react";
 
-import { ConnectError } from "@connectrpc/connect";
-
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { Label } from "@/components/ui/label";
@@ -18,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { bucketClient } from "@/lib/connect/client";
 
 import { useBucket } from "../bucket-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketVersioningPage() {
   const { bucket, setBucket } = useBucket();
@@ -48,10 +47,7 @@ export default function BucketVersioningPage() {
       showNotification({
         type: "error",
         title: "Save failed",
-        message:
-          e instanceof ConnectError
-            ? e.rawMessage
-            : "Failed to update versioning",
+        message: errorMessage(e, "Failed to update versioning"),
       });
     } finally {
       setSaving(false);

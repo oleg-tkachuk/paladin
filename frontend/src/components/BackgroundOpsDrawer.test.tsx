@@ -139,7 +139,8 @@ describe("BackgroundOpsDrawer cancel", () => {
     );
 
     await waitFor(() => expect(h.cancel).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/cancel failed/i)).toBeInTheDocument();
+    // The thrown error's own message, not a generic "Cancel failed".
+    expect(await screen.findByText(/boom/)).toBeInTheDocument();
   });
 });
 

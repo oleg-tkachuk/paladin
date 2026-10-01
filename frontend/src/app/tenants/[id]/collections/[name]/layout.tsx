@@ -31,6 +31,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../../tenant-context";
 import { CollectionProvider } from "./collection-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 const collectionResourceName = (tenantId: string, collection: string) =>
   `tenants/${tenantId}/collections/${collection}`;
@@ -71,9 +72,7 @@ export default function CollectionDetailLayout({
     collectionQuery.error.code === Code.NotFound;
   const error =
     collectionQuery.error && !notFoundFlag
-      ? collectionQuery.error instanceof ConnectError
-        ? collectionQuery.error.rawMessage
-        : "Failed to load object key."
+      ? errorMessage(collectionQuery.error, "Failed to load object key.")
       : null;
   const refetch = async () => {
     await collectionQuery.refetch();

@@ -29,7 +29,6 @@ import {
   TrashIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
 import { z } from "zod";
 
 import { safeParseJson } from "@/lib/parseJson";
@@ -50,6 +49,7 @@ import { useScope } from "@/context/ScopeContext";
 import { policyClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 // ─── types ────────────────────────────────────────────────────────────────
 
@@ -228,8 +228,7 @@ export function TestSuite({
           ranAt: Date.now(),
         };
       } catch (err) {
-        const msg =
-          err instanceof ConnectError ? err.rawMessage : "Simulate failed";
+        const msg = errorMessage(err, "Simulate failed");
         showNotification({
           type: "error",
           title: `"${tc.name}" failed`,

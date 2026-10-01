@@ -2,7 +2,6 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +20,7 @@ import {
 import { mcpInspectClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 // /mcp — the MCP server as an operator sees it: is it up, who is connected,
 // and what an agent on each transport can do. The configuration (profiles,
@@ -83,11 +83,7 @@ export default function MCPInspectPage() {
         // used to read as "no profiles" and "the deny list was switched off".
         <ListLoadError
           what="the MCP configuration"
-          reason={
-            inspectQuery.error instanceof ConnectError
-              ? inspectQuery.error.rawMessage
-              : "the request failed"
-          }
+          reason={errorMessage(inspectQuery.error, "the request failed")}
           onRetry={refresh}
         />
       ) : (

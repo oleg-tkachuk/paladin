@@ -28,7 +28,7 @@ import { apiTokenClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { isRevoked, isExpired } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
@@ -136,10 +136,7 @@ export default function M2MTokensPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to list M2M tokens",
+          message: errorMessage(err, "Failed to list M2M tokens"),
         });
         throw err;
       }

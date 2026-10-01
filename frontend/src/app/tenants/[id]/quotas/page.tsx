@@ -42,7 +42,7 @@ import { quotaClient } from "@/lib/connect/client";
 import { QuotaSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 import { formatCount } from "@/lib/format/locale";
@@ -105,10 +105,7 @@ export default function TenantQuotasPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to load quota",
+          message: errorMessage(err, "Failed to load quota"),
         });
         throw err;
       }
@@ -172,8 +169,7 @@ export default function TenantQuotasPage() {
       await fetchQuota();
       showNotification({ type: "success", title: "Quota updated" });
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Update failed";
+      const msg = errorMessage(err, "Update failed");
       showNotification({ type: "error", title: "Update failed", message: msg });
     } finally {
       setSubmitting(false);
@@ -191,7 +187,7 @@ export default function TenantQuotasPage() {
       showNotification({ type: "success", title: "Usage counter reset" });
       void fetchQuota();
     } catch (err) {
-      const msg = err instanceof ConnectError ? err.rawMessage : "Reset failed";
+      const msg = errorMessage(err, "Reset failed");
       showNotification({ type: "error", title: "Reset failed", message: msg });
     } finally {
       setResetting(false);

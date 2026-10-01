@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -20,6 +19,7 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { bucketNameError } from "@/lib/bucketName";
 import { type FailedRead, ListLoadError } from "@/components/ui/ListLoadError";
+import { errorMessage } from "@/hooks/errorContract";
 
 interface BucketCreateDialogProps {
   open: boolean;
@@ -90,13 +90,7 @@ export function BucketCreateDialog({
       setRegion("");
       onOpenChange(false);
     } catch (err) {
-      setSubmitError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : err instanceof Error
-            ? err.message
-            : "Failed to create bucket.",
-      );
+      setSubmitError(errorMessage(err, "Failed to create bucket."));
     } finally {
       setSubmitting(false);
     }

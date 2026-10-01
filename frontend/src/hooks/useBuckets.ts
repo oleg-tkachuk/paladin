@@ -2,13 +2,13 @@
 
 import { useCallback, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { ConnectError } from "@connectrpc/connect";
 
 import { bucketClient } from "@/lib/connect/client";
 import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 import { BucketSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 // Ceiling on how many pages one fetchBuckets call will follow. At the maximum
 // page size this is 10k buckets — far past any console list that stays usable,
@@ -114,11 +114,7 @@ export function useBuckets() {
       } catch (err) {
         // Query contract (state-only): surface via `error`, never throw.
         if (mine === seq.current) {
-          setError(
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to fetch buckets",
-          );
+          setError(errorMessage(err, "Failed to fetch buckets"));
         }
         return { buckets: [], nextPageToken: "" };
       } finally {

@@ -91,6 +91,7 @@ const QUICK_LINKS: Array<{
 import { formatMoney } from "@/lib/format/money";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { formatCount } from "@/lib/format/locale";
+import { errorMessage } from "@/hooks/errorContract";
 
 // IdentityCard renders the tenant's three identity fields in priority
 // order — display name as the heading (mutable, human-friendly), slug
@@ -269,11 +270,7 @@ export default function TenantOverviewPage() {
         setAuditEntries(res.entries);
       } catch (err) {
         if (cancelled) return;
-        setAuditError(
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to load audit log",
-        );
+        setAuditError(errorMessage(err, "Failed to load audit log"));
         setAuditEntries([]);
       }
     })();

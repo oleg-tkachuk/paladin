@@ -11,6 +11,7 @@ import { TenantSchema } from "@/gen/paladin/admin/v1/types_pb";
 import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * useTenants — wrapper around admin/v1.TenantService.
@@ -58,11 +59,7 @@ export function useTenants() {
       } catch (err) {
         // Query contract (state-only): surface via `error`, never throw.
         // Callers read `error`; awaiting callers get an empty page.
-        setError(
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to fetch tenants",
-        );
+        setError(errorMessage(err, "Failed to fetch tenants"));
         return { tenants: [], nextPageToken: "" };
       } finally {
         setLoading(false);

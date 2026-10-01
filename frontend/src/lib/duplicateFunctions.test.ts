@@ -28,10 +28,6 @@ const ALLOWED: Record<string, string> = {
     "the platform and tenant bucket tables are still two components",
   "app/tenants/[id]/buckets/page.tsx#ProvisionStateBadge":
     "the platform and tenant bucket tables are still two components",
-  "app/storage-backends/[backendId]/BackendActions.tsx#errText":
-    "transport's describe() is module-private; export it next",
-  "lib/connect/transport.ts#describe":
-    "transport's describe() is module-private; export it next",
 };
 
 function sources(dir: string): string[] {

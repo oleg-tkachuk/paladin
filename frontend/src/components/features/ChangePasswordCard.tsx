@@ -14,7 +14,6 @@
  */
 
 import { useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 
 import { authClient } from "@/lib/connect/client";
 import {
@@ -28,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
+import { errorMessage } from "@/hooks/errorContract";
 
 /** Mirrors `buf.validate` on ChangePasswordRequest.new_password. */
 const MIN_PASSWORD_LENGTH = 12;
@@ -68,10 +68,7 @@ export function ChangePasswordCard() {
       showNotification({
         type: "error",
         title: "Could not change password",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Unexpected error. Try again.",
+        message: errorMessage(err, "Unexpected error. Try again."),
       });
     } finally {
       setBusy(false);

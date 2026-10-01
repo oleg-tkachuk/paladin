@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 
 import { objectClient, multipartClient } from "@/lib/connect/client";
 import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
@@ -9,6 +8,7 @@ import { PresignTransport } from "@/gen/paladin/data/v1/object_service_pb";
 import { useAuth } from "@/context/AuthContext";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * useUpload — three-step PUT-presign flow:
@@ -299,10 +299,7 @@ export function useUpload() {
           message: file.name,
         });
       } catch (err: unknown) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : (err as Error).message || "Upload failed";
+        const msg = errorMessage(err, "Upload failed");
         update(id, { status: "error", error: msg });
         showNotification({
           type: "error",

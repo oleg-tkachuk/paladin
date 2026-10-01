@@ -17,7 +17,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
   EllipsisHorizontalIcon,
@@ -67,7 +66,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
@@ -152,10 +151,7 @@ export default function TenantCollectionsPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to fetch collections",
+          message: errorMessage(err, "Failed to fetch collections"),
         });
         throw err;
       }

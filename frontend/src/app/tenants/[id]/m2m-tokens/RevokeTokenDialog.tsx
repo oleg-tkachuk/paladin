@@ -1,7 +1,5 @@
 "use client";
 
-import { ConnectError } from "@connectrpc/connect";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +13,7 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { apiTokenClient } from "@/lib/connect/client";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * Revoke-confirmation for an M2M token, extracted from the page. Owns the
@@ -44,8 +43,7 @@ export function RevokeTokenDialog({
       onClose();
       onRevoked();
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Revoke failed";
+      const msg = errorMessage(err, "Revoke failed");
       showNotification({
         type: "error",
         title: "Revoke failed",

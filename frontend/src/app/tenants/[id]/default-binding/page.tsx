@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 /** Renders a bucket reference as backend / bucket, falling back to the raw
  *  resource name when it does not parse. */
@@ -72,10 +72,7 @@ export default function DefaultBindingPage() {
         showNotification({
           type: "error",
           title: "Failed to load default binding",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to load default binding",
+          message: errorMessage(err, "Failed to load default binding"),
         });
         throw err;
       }
@@ -111,7 +108,7 @@ export default function DefaultBindingPage() {
       showNotification({
         type: "error",
         title: "Failed to set default binding",
-        message: e instanceof ConnectError ? e.rawMessage : "",
+        message: errorMessage(e, ""),
       });
     } finally {
       setBusy(false);
@@ -129,7 +126,7 @@ export default function DefaultBindingPage() {
       showNotification({
         type: "error",
         title: "Failed to clear default binding",
-        message: e instanceof ConnectError ? e.rawMessage : "",
+        message: errorMessage(e, ""),
       });
     } finally {
       setBusy(false);

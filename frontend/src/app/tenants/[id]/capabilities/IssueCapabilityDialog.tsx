@@ -6,7 +6,6 @@ import {
   ClipboardDocumentIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
 
 import {
   Dialog,
@@ -45,6 +44,7 @@ import {
   AUDIENCE_CHOICES,
   PRINCIPAL_KIND_OPTIONS,
 } from "./_constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 interface IssueCapabilityDialogProps {
   open: boolean;
@@ -216,9 +216,7 @@ export function IssueCapabilityDialog({
         message: "Copy the token now — it can't be shown again.",
       });
     } catch (err) {
-      setSubmitError(
-        err instanceof ConnectError ? err.rawMessage : "Issue failed",
-      );
+      setSubmitError(errorMessage(err, "Issue failed"));
     } finally {
       setIssuing(false);
     }

@@ -12,7 +12,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 import { ArrowPathIcon, ServerStackIcon } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../../../../tenant-context";
 import { useBucket } from "../bucket-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketCollectionsPage() {
   const tenant = useTenant();
@@ -65,10 +65,7 @@ export default function BucketCollectionsPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to fetch collections";
+        const msg = errorMessage(err, "Failed to fetch collections");
         showNotification({ type: "error", title: "Load failed", message: msg });
       })
       .finally(() => {
@@ -127,10 +124,7 @@ export default function BucketCollectionsPage() {
               })
               .then((res) => setList(res.collections))
               .catch((err) => {
-                const msg =
-                  err instanceof ConnectError
-                    ? err.rawMessage
-                    : "Failed to fetch collections";
+                const msg = errorMessage(err, "Failed to fetch collections");
                 showNotification({
                   type: "error",
                   title: "Load failed",

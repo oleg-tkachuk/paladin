@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 import { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -32,6 +31,7 @@ import type {
   TopEntry,
 } from "@/gen/paladin/admin/v1/billing_service_pb";
 import { formatCompactCount } from "@/lib/format/locale";
+import { errorMessage } from "@/hooks/errorContract";
 
 // /billing — per-tenant capability spend dashboard. Reads the
 // charges ledger (migration 027) via BillingService:
@@ -237,8 +237,7 @@ export default function BillingPage() {
       setTimeseries(ts);
       setLoadError(null);
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Failed to load billing";
+      const msg = errorMessage(err, "Failed to load billing");
       setLoadError(msg);
       showNotification({ type: "error", title: "Load failed", message: msg });
     } finally {

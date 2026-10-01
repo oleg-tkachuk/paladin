@@ -19,7 +19,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowRightIcon,
   BoltIcon,
@@ -51,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { CAPABILITIES_DOCS_URL } from "@/constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 export function DashboardWidgets() {
   return (
@@ -288,7 +288,7 @@ function BudgetAlertsWidget() {
           // deployment. Saying it "may be disabled" was a guess shown even
           // when the cause was something else.
           <div className="space-y-1 py-2 text-center text-xs text-muted-foreground">
-            <p>Summary unavailable: {ConnectError.from(error).rawMessage}</p>
+            <p>Summary unavailable: {errorMessage(error)}</p>
             <a
               href={CAPABILITIES_DOCS_URL}
               target="_blank"

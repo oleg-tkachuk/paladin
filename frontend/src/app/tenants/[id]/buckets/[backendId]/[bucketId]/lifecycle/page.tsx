@@ -81,6 +81,7 @@ import { useCELValidation } from "@/hooks/useCELValidation";
 import { CELIndicator } from "@/components/ui/CELIndicator";
 
 import { useBucket } from "../bucket-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 // ─── duration helpers ────────────────────────────────────────────────────────
 //
@@ -284,10 +285,7 @@ export default function BucketLifecyclePage() {
           });
           return false;
         }
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to save lifecycle rules.";
+        const msg = errorMessage(err, "Failed to save lifecycle rules.");
         showNotification({ type: "error", title: "Save failed", message: msg });
         return false;
       } finally {

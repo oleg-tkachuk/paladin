@@ -35,6 +35,7 @@ import {
   type TestResult,
 } from "./_form";
 import { Field, ToggleRow, TestResultDisplay } from "./_components";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * Create/edit dialog for an event subscription, extracted from the page. Owns
@@ -163,9 +164,7 @@ export function SubscriptionEditorDialog({
         onStale();
         return;
       }
-      setSaveError(
-        err instanceof ConnectError ? err.rawMessage : "Save failed",
-      );
+      setSaveError(errorMessage(err, "Save failed"));
     } finally {
       setSaving(false);
     }

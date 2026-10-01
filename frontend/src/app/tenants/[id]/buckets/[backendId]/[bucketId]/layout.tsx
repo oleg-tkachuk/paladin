@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 
 import { useTenant } from "../../../tenant-context";
 import { BucketProvider } from "./bucket-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 const bucketResourceName = (backendId: string, bucketId: string) =>
   `storageBackends/${backendId}/buckets/${bucketId}`;
@@ -65,9 +66,7 @@ export default function BucketDetailLayout({
     bucketQuery.error.code === Code.NotFound;
   const error =
     bucketQuery.error && !notFoundFlag
-      ? bucketQuery.error instanceof ConnectError
-        ? bucketQuery.error.rawMessage
-        : "Failed to load bucket."
+      ? errorMessage(bucketQuery.error, "Failed to load bucket.")
       : null;
   const refetch = async () => {
     await bucketQuery.refetch();

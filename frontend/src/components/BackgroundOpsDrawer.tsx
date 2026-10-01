@@ -17,7 +17,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -66,6 +65,7 @@ import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 const POLL_OPEN_MS = 2_000;
 
@@ -259,9 +259,7 @@ function OpRow({
     try {
       await onCancel(op.name);
     } catch (err) {
-      setCancelErr(
-        err instanceof ConnectError ? err.rawMessage : "Cancel failed",
-      );
+      setCancelErr(errorMessage(err, "Cancel failed"));
     } finally {
       setCanceling(false);
     }

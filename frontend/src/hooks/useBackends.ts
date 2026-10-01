@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema, FieldMaskSchema } from "@bufbuild/protobuf/wkt";
-import { ConnectError } from "@connectrpc/connect";
 
 import { backendClient } from "@/lib/connect/client";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
@@ -18,6 +17,7 @@ import {
 import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { useBumpRefresh, useRefreshSignal } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 // Ceiling on how many pages one fetch will follow — a backstop against paging
 // forever if a token ever fails to terminate, not a limit anyone should reach.
@@ -142,11 +142,7 @@ export function useBackends(autoFetch: boolean = true) {
       return acc;
     } catch (err) {
       // Query contract (state-only): surface via `error`, never throw.
-      setError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to fetch backends",
-      );
+      setError(errorMessage(err, "Failed to fetch backends"));
       return [];
     } finally {
       setLoading(false);

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 import { SparklesIcon } from "@heroicons/react/24/outline";
 
 import {
@@ -28,6 +27,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
+import { errorMessage } from "@/hooks/errorContract";
 
 // SLUG_RE mirrors backend/internal/api/apiutil/slug.go ValidateTenantSlug.
 const SLUG_RE = /^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$/;
@@ -183,13 +183,7 @@ export function TenantCreateDialog({
       onOpenChange(false);
     } catch (err) {
       console.error(err);
-      setSubmitError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : err instanceof Error
-            ? err.message
-            : String(err),
-      );
+      setSubmitError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }

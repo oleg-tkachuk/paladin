@@ -52,6 +52,6 @@ describe("CreateTokenDialog", () => {
     fireEvent.submit(
       screen.getByRole("button", { name: "Create token" }).closest("form")!,
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent("Create failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
 });
