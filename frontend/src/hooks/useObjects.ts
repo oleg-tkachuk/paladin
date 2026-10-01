@@ -122,9 +122,14 @@ export function useObjects(options: UseObjectsOptions = {}) {
     ? (query.data?.pages.at(-1)?.page?.nextPageToken ?? undefined)
     : undefined;
 
+  // query is a new object on every render; its refetch is stable. Depending
+  // on query gave refresh a new identity per render, and the objects page
+  // re-registers its palette actions whenever refresh changes — which updates
+  // the actions context and renders the page again: an endless loop.
+  const { refetch } = query;
   const refresh = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    await refetch();
+  }, [refetch]);
   const loadMore = query.hasNextPage
     ? () => {
         void query.fetchNextPage();

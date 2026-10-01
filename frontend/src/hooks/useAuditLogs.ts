@@ -54,12 +54,15 @@ export function useAuditLogs(
 
   const entries = query.data?.pages.flatMap((p) => p.entries) ?? [];
 
+  // refetch is stable; query is a new object on every render.
+  const { refetch } = query;
   const refresh = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    await refetch();
+  }, [refetch]);
+  const { hasNextPage, fetchNextPage } = query;
   const loadMore = useCallback(async () => {
-    if (query.hasNextPage) await query.fetchNextPage();
-  }, [query]);
+    if (hasNextPage) await fetchNextPage();
+  }, [hasNextPage, fetchNextPage]);
 
   return {
     entries,

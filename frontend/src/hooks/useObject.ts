@@ -94,9 +94,11 @@ export function useObject(
   const object = query.data?.object ?? null;
   const downloadUrl = query.data?.downloadUrl ?? null;
 
+  // refetch is stable; query is a new object on every render.
+  const { refetch } = query;
   const refresh = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    await refetch();
+  }, [refetch]);
 
   // Mutators: run the RPC, refetch this object, bump the shared signal so
   // list views refetch too, then toast. The previous hand-rolled loading
