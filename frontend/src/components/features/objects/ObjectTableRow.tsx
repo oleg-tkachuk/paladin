@@ -146,7 +146,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <DocumentIcon className="w-4 h-4" />
               {obj.contentType?.startsWith("image/") && (
-                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-background shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-background shadow-[0_0_8px_color-mix(in_oklab,var(--color-success)_50%,transparent)]" />
               )}
             </div>
             <Tooltip
