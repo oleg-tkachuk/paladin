@@ -1,12 +1,12 @@
 # Paladin console
 
-Next.js admin console for the Paladin, plus the BFF that
-sits between the browser and the control plane's Connect-RPC services.
+Next.js admin console for Paladin, plus the BFF that sits between the browser
+and the control plane's Connect-RPC services.
 
 The browser never talks to a plane directly. Requests go to the BFF at
-`/api/paladin`, which holds the upstream URLs, attaches credentials, and
-forwards over Connect. That is why the plane addresses are server-side
-configuration and not `NEXT_PUBLIC_*` values.
+`/api/rpc/{data,iam,admin}`, which holds the upstream URLs and forwards over
+Connect. That is why the plane addresses are server-side configuration and not
+`NEXT_PUBLIC_*` values.
 
 ## Running it
 
@@ -30,27 +30,24 @@ The BFF reaches its upstreams through `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and
 at a locally running backend by setting them in your shell. `configs/config.yaml`
 used to carry those URLs and no longer does — nothing read them from there.
 
-## Authentication in development
+## Authentication
 
-The console sends whatever bearer sits in `localStorage.paladin_token`, which you
-set through its own `/config` page. There is no browser-side OIDC flow and no
-`disableAuth` switch in the code — the dev config's `oidc` block described a
-design that never landed and has been removed.
+Sign in at `/login` with a Paladin user — on a fresh stack, `admin` and the
+bootstrap password. The BFF keeps the refresh token in an httpOnly cookie and
+hands the browser short-lived access tokens, one per plane, held in memory
+(`src/lib/auth/tokenStore.ts`); `/api/auth/me` rotates the refresh token once
+it is five minutes old (`src/lib/auth/rotation.ts`).
 
-`configs/config.yaml`'s `auth.devToken` has one reader left,
-`scripts/dev-bootstrap.sh`, which greps it for a JWT to seed a local stack with.
-**It ships empty on purpose** — this repository is public, so a committed token
-is a token everyone holds.
-
-Mint one for your stack and paste it into the console's `/config` page:
+`configs/config.yaml`'s `auth.devToken` is read only by
+`scripts/dev-bootstrap.sh`, which uses it to seed a local stack. It ships
+empty: this repository is public. To fill it for your stack:
 
 ```bash
-task backend:auth:mint-token
+task backend:auth:mint-token   # from the repository root
 ```
 
-Roles in a token must use the dotted form (`platform.admin`). The
-hyphenated spelling parses fine and then fails every Cedar policy check,
-which looks exactly like a permissions bug.
+Roles in a token use the dotted form (`platform.admin`). The hyphenated
+spelling parses and then fails every Cedar policy check.
 
 ## Layout
 
@@ -58,13 +55,13 @@ which looks exactly like a permissions bug.
 frontend/
 ├── src/
 │   ├── app/              routes — one directory per console surface
-│   │   ├── api/          the BFF: /api/paladin RPC proxy, auth, health
+│   │   ├── api/          the BFF: /api/rpc proxy, auth, health, audit stream
 │   │   ├── tenants/      tenants and everything scoped under one
-│   │   ├── buckets/      buckets, objects, object keys, trash, upload
+│   │   ├── buckets/  collections/  upload/  trash/
 │   │   ├── policies/     Cedar policy editing and simulation
 │   │   ├── mcp/          MCP upstream inspection
 │   │   ├── audit/  billing/  stats/  ops/  health/
-│   │   └── storage-backends/  users/  oauth/  login/  config/
+│   │   └── storage-backends/  users/  profile/  oauth/  login/  config/
 │   ├── components/       shared UI (shadcn/ui + Tailwind)
 │   ├── gen/              GENERATED Connect-ES stubs — do not hand-edit
 │   ├── lib/              client helpers, auth plumbing, formatting
