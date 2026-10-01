@@ -135,6 +135,39 @@ def egress_reaches_otlp(doc: dict) -> bool:
     return False
 
 
+def admits_role(doc: dict, role: str) -> bool:
+    """Whether a policy admits pods of another role of this release."""
+    for rule in doc["spec"].get("ingress") or []:
+        for peer in rule.get("from") or []:
+            labels = (peer.get("podSelector") or {}).get("matchLabels") or {}
+            if labels.get("app.kubernetes.io/component") == role and "namespaceSelector" not in peer:
+                return True
+    return False
+
+
+# Calls one role makes to another inside the release, as the chart's own
+# config wires them: (caller, callee, what makes the call).
+IN_RELEASE_CALLS = [
+    ("admin", "worker", "SystemService.GetPlatformStats"),
+    ("admin", "dispatcher", "SystemService.GetDispatcherStats"),
+    ("admin", "mcp", "MCPInspectService.ListSessions via mcp.http.sessions_url"),
+    ("mcp", "api", "the MCP bridge"),
+    ("mcp", "admin", "the MCP bridge"),
+]
+
+
+def in_release_problems(policies: dict[str, dict]) -> list[str]:
+    """A call the chart makes between its own roles must get through.
+
+    Refused, each of these is a console page that renders empty rather than
+    an error: RLS-style silence, at the network layer."""
+    problems: list[str] = []
+    for caller, callee, why in IN_RELEASE_CALLS:
+        if callee in policies and caller in policies and not admits_role(policies[callee], caller):
+            problems.append(f"role {callee!r} does not admit {caller!r} ({why})")
+    return problems
+
+
 def observability_problems(chart: Path) -> list[str]:
     """With metrics pulled and traces pushed, both must still get through.
 
@@ -205,6 +238,7 @@ def main() -> int:
             problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
 
     problems += observability_problems(root / "backend/deploy/chart")
+    problems += in_release_problems({component(p): p for p in policies if component(p)})
 
     if problems:
         print("!!! backend: the rendered NetworkPolicies break what they promise", file=sys.stderr)
