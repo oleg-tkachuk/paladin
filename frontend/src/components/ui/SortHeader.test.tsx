@@ -9,36 +9,48 @@ vi.mock("@heroicons/react/24/outline", () => ({
   ArrowDownIcon: () => <svg data-testid="desc" />,
 }));
 
-import { SortHeader } from "./SortHeader";
+import { SortableHead } from "./SortHeader";
 import type { SortState } from "@/hooks/useTableSort";
 
 type Col = "name" | "size";
 
-function header(current: SortState<Col>, onSort = vi.fn()) {
+function head(current: SortState<Col>, onSort = vi.fn()) {
   render(
-    <SortHeader<Col>
-      label="Name"
-      column="name"
-      current={current}
-      onSort={onSort}
-    />,
+    <table>
+      <thead>
+        <tr>
+          <SortableHead<Col>
+            label="Name"
+            column="name"
+            current={current}
+            onSort={onSort}
+          />
+        </tr>
+      </thead>
+    </table>,
   );
   return onSort;
 }
 
-describe("SortHeader", () => {
+describe("SortableHead", () => {
+  // aria-sort is read from the header cell; without it a screen reader could
+  // not tell which column the table was sorted on, or which way.
   it.each([
-    ["unsorted", { column: null, direction: null }],
-    ["unsorted", { column: "size", direction: "asc" }],
-    ["asc", { column: "name", direction: "asc" }],
-    ["desc", { column: "name", direction: "desc" }],
-  ] as const)("draws %s for %o", (icon, current) => {
-    header(current);
+    ["unsorted", "none", { column: null, direction: null }],
+    ["unsorted", "none", { column: "size", direction: "asc" }],
+    ["asc", "ascending", { column: "name", direction: "asc" }],
+    ["desc", "descending", { column: "name", direction: "desc" }],
+  ] as const)("draws %s and says %s for %o", (icon, ariaSort, current) => {
+    head(current);
     expect(screen.getByTestId(icon)).toBeInTheDocument();
+    expect(screen.getByRole("columnheader")).toHaveAttribute(
+      "aria-sort",
+      ariaSort,
+    );
   });
 
   it("hands its column back on click", async () => {
-    const onSort = header({ column: null, direction: null });
+    const onSort = head({ column: null, direction: null });
     await userEvent.click(screen.getByRole("button", { name: "Name" }));
     expect(onSort).toHaveBeenCalledWith("name");
   });

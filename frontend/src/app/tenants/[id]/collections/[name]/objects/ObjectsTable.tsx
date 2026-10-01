@@ -26,7 +26,7 @@ import {
 import { ObjectTableRow } from "@/components/features/objects/ObjectTableRow";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 
-import { SortHeader } from "@/components/ui/SortHeader";
+import { SortableHead } from "@/components/ui/SortHeader";
 import type { SortState } from "./_view";
 
 // Per-row callbacks forwarded verbatim to ObjectTableRow. Derived from its own
@@ -107,65 +107,56 @@ export function ObjectsTable({
               />
             </TableHead>
             {visibleColumns.has("key") && (
-              <TableHead>
-                <SortHeader
-                  label="Name / ID"
-                  column="key"
-                  current={sort}
-                  onSort={onSort}
-                />
-              </TableHead>
+              <SortableHead
+                label="Name / ID"
+                column="key"
+                current={sort}
+                onSort={onSort}
+              />
             )}
             {visibleColumns.has("object_tag") && (
-              <TableHead>
-                <SortHeader
-                  label="Object Tags"
-                  column="object_tag"
-                  current={sort}
-                  onSort={onSort}
-                />
-              </TableHead>
+              <SortableHead
+                label="Object Tags"
+                column="object_tag"
+                current={sort}
+                onSort={onSort}
+              />
             )}
             {visibleColumns.has("mime") && (
-              <TableHead className="hidden lg:table-cell">
-                <SortHeader
-                  label="MIME"
-                  column="content_type"
-                  current={sort}
-                  onSort={onSort}
-                />
-              </TableHead>
+              <SortableHead
+                className="hidden lg:table-cell"
+                label="MIME"
+                column="content_type"
+                current={sort}
+                onSort={onSort}
+              />
             )}
             {visibleColumns.has("size") && (
-              <TableHead className="hidden md:table-cell text-right">
-                <SortHeader
-                  label="Size"
-                  column="size_bytes"
-                  current={sort}
-                  onSort={onSort}
-                  align="end"
-                />
-              </TableHead>
+              <SortableHead
+                className="hidden md:table-cell text-right"
+                label="Size"
+                column="size_bytes"
+                current={sort}
+                onSort={onSort}
+                align="end"
+              />
             )}
             {visibleColumns.has("status") && (
-              <TableHead>
-                <SortHeader
-                  label="State"
-                  column="status"
-                  current={sort}
-                  onSort={onSort}
-                />
-              </TableHead>
+              <SortableHead
+                label="State"
+                column="status"
+                current={sort}
+                onSort={onSort}
+              />
             )}
             {visibleColumns.has("created") && (
-              <TableHead className="hidden sm:table-cell">
-                <div className="flex items-center gap-1">
-                  <SortHeader
-                    label="Created"
-                    column="created_at"
-                    current={sort}
-                    onSort={onSort}
-                  />
+              <SortableHead
+                className="hidden sm:table-cell"
+                label="Created"
+                column="created_at"
+                current={sort}
+                onSort={onSort}
+                after={
                   <button
                     type="button"
                     onClick={onToggleRelativeTime}
@@ -174,8 +165,8 @@ export function ObjectsTable({
                   >
                     <ClockIcon className="size-3" />
                   </button>
-                </div>
-              </TableHead>
+                }
+              />
             )}
             {visibleColumns.has("actions") && (
               <TableHead className="text-right">

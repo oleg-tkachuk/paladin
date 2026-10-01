@@ -44,7 +44,7 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { SortHeader } from "@/components/ui/SortHeader";
+import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "slug" | "displayName";
 
@@ -158,22 +158,19 @@ export default function TenantsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[220px]">
-                <SortHeader
-                  label="Slug"
-                  column="slug"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
-              <TableHead>
-                <SortHeader
-                  label="Display name"
-                  column="displayName"
-                  current={sort}
-                  onSort={handleSort}
-                />
-              </TableHead>
+              <SortableHead
+                className="w-[220px]"
+                label="Slug"
+                column="slug"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                label="Display name"
+                column="displayName"
+                current={sort}
+                onSort={handleSort}
+              />
               <TableHead className="hidden md:table-cell">
                 Storage (backend/bucket)
               </TableHead>
