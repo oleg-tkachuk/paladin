@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -29,6 +28,7 @@ import {
   REGISTRABLE_STORAGE_KINDS,
   STORAGE_KIND_LABELS,
 } from "@/lib/storageKind";
+import { errorMessage } from "@/hooks/errorContract";
 
 // backend_id format mirrors the `backend_id` CHECK on the buckets table
 // and the existing `storage.backends.id` config keys (kebab-case, 3..63
@@ -103,13 +103,7 @@ export function BackendRegisterDialog({
       });
       close(false);
     } catch (err) {
-      setSubmitError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : err instanceof Error
-            ? err.message
-            : String(err),
-      );
+      setSubmitError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }

@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatMoney, ALLOWED_UNIT_CODES } from "@/lib/format/money";
 import { Select } from "@/components/ui/Select";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
@@ -82,10 +82,7 @@ export default function TenantBudgetPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to load tenant budget",
+          message: errorMessage(err, "Failed to load tenant budget"),
         });
         throw err;
       }
@@ -202,8 +199,7 @@ export default function TenantBudgetPage() {
         });
         return;
       }
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Update failed";
+      const msg = errorMessage(err, "Update failed");
       showNotification({ type: "error", title: "Update failed", message: msg });
     } finally {
       setSubmitting(false);
@@ -333,9 +329,7 @@ export default function TenantBudgetPage() {
             <div>
               <p className="font-medium">Budget unavailable.</p>
               <p className="text-muted-foreground">
-                {budgetQuery.error instanceof ConnectError
-                  ? budgetQuery.error.rawMessage
-                  : String(budgetQuery.error)}
+                {errorMessage(budgetQuery.error)}
               </p>
             </div>
           </div>

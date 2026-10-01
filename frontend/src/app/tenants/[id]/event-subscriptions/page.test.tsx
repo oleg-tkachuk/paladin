@@ -135,7 +135,7 @@ describe("EventsPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Create subscription" }),
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
     expect(screen.getByLabelText(/^URL/)).toHaveValue(
       "https://example.com/hook",
     );

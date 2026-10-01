@@ -12,13 +12,13 @@
 // than rendering a misleading all-zeroes rollup.
 
 import { useQuery } from "@tanstack/react-query";
-import { ConnectError } from "@connectrpc/connect";
 
 import { adminSystemClient } from "@/lib/connect/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 function humanizeSeconds(s: number): string {
   if (s <= 0) return "—";
@@ -57,9 +57,7 @@ export function DispatcherStatsCard() {
       <CardContent className="space-y-4">
         {error ? (
           <p className="text-sm text-destructive">
-            {error instanceof ConnectError
-              ? error.rawMessage
-              : "Failed to load dispatcher stats"}
+            {errorMessage(error, "Failed to load dispatcher stats")}
           </p>
         ) : isLoading && !data ? (
           <p className="text-sm text-muted-foreground">Loading…</p>

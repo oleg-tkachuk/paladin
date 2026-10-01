@@ -42,7 +42,7 @@ import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { formatMoney } from "@/lib/format/money";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // Per-capability usage snapshot keyed by capability id; "never" ⇒ the
@@ -206,10 +206,7 @@ export default function CapabilitiesPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to list capabilities",
+          message: errorMessage(err, "Failed to list capabilities"),
         });
         throw err;
       }

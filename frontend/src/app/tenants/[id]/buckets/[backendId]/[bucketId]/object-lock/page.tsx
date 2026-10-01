@@ -9,8 +9,6 @@
 
 import { useState } from "react";
 
-import { ConnectError } from "@connectrpc/connect";
-
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +27,7 @@ import { bucketClient } from "@/lib/connect/client";
 import { ObjectLockMode } from "@/gen/paladin/admin/v1/types_pb";
 
 import { useBucket } from "../bucket-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 const DAY_SECONDS = 86_400;
 
@@ -94,10 +93,7 @@ export default function BucketObjectLockPage() {
       showNotification({
         type: "error",
         title: "Save failed",
-        message:
-          e instanceof ConnectError
-            ? e.rawMessage
-            : "Failed to update object lock",
+        message: errorMessage(e, "Failed to update object lock"),
       });
     } finally {
       setSaving(false);

@@ -8,7 +8,6 @@
 // to. The filter is a CEL expression (same grammar as the list filter).
 
 import { useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
 
 import { auditClient } from "@/lib/connect/client";
 import { useNotification } from "@/components/ui/Notification";
@@ -23,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { errorMessage } from "@/hooks/errorContract";
 
 export function ExportAuditLogDialog({
   open,
@@ -86,12 +86,7 @@ function ExportForm({
       showNotification({
         type: "error",
         title: "Could not start export",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : err instanceof Error
-              ? err.message
-              : String(err),
+        message: errorMessage(err),
       });
     } finally {
       setBusy(false);

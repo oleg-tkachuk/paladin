@@ -2,8 +2,6 @@
 
 import React, { useState } from "react";
 
-import { ConnectError } from "@connectrpc/connect";
-
 import { Input } from "@/components/ui/input";
 import {
   FormDialog,
@@ -13,6 +11,7 @@ import {
 import { IdentityField } from "@/components/IdentityField";
 import { useNotification } from "@/components/ui/Notification";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
+import { errorMessage } from "@/hooks/errorContract";
 
 type UpdateTenantFn = (
   tenantId: string,
@@ -76,11 +75,7 @@ export function TenantEditDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setSubmitError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to update the display name.",
-      );
+      setSubmitError(errorMessage(err, "Failed to update the display name."));
     } finally {
       setSubmitting(false);
     }

@@ -15,7 +15,6 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
   ArchiveBoxIcon,
@@ -53,6 +52,7 @@ import type {
   TenantObjectStats,
 } from "@/gen/paladin/admin/v1/system_service_pb";
 import { formatCount, formatTime } from "@/lib/format/locale";
+import { errorMessage } from "@/hooks/errorContract";
 
 // Poll cadence. Slower than /health's 15s: this is inventory, which moves
 // on operator actions and bulk uploads rather than second-to-second, and
@@ -406,9 +406,7 @@ export default function StatsPage() {
       {error && (
         <Card>
           <CardContent className="py-4 text-sm text-destructive">
-            {error instanceof ConnectError
-              ? error.rawMessage
-              : "Failed to load platform statistics"}
+            {errorMessage(error, "Failed to load platform statistics")}
           </CardContent>
         </Card>
       )}

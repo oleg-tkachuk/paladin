@@ -15,7 +15,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ConnectError } from "@connectrpc/connect";
 import {
   BoltIcon,
   KeyIcon,
@@ -51,12 +50,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-function errText(err: unknown): string {
-  if (err instanceof ConnectError) return err.rawMessage;
-  if (err instanceof Error) return err.message;
-  return String(err);
-}
+import { errorMessage } from "@/hooks/errorContract";
 
 export function BackendActions({ backend }: { backend: StorageBackend }) {
   const router = useRouter();
@@ -94,7 +88,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
       showNotification({
         type: "error",
         title: "Probe failed",
-        message: errText(err),
+        message: errorMessage(err),
       });
     } finally {
       setTesting(false);
@@ -158,7 +152,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
             setEditOpen(false);
           } catch (err) {
             // Shown in the dialog, which stays open to correct and retry.
-            throw new Error(errText(err));
+            throw new Error(errorMessage(err));
           }
         }}
       />
@@ -178,7 +172,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
             });
             setRotateOpen(false);
           } catch (err) {
-            throw new Error(errText(err));
+            throw new Error(errorMessage(err));
           }
         }}
       />
@@ -200,7 +194,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
             showNotification({
               type: "error",
               title: "Could not delete backend",
-              message: errText(err),
+              message: errorMessage(err),
             });
           }
         }}

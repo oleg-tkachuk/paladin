@@ -9,7 +9,6 @@ import {
   PlayIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -46,7 +45,7 @@ import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { TestSuite } from "./_TestSuite";
 
 // Curated Cedar policy starters surfaced via the "Load template"
@@ -271,10 +270,7 @@ export default function PoliciesPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to load policy",
+          message: errorMessage(err, "Failed to load policy"),
         });
         throw err;
       }
@@ -322,10 +318,7 @@ export default function PoliciesPage() {
       setMerged(res.mergedCedarPolicy);
       setLayers(res.layers);
     } catch (err) {
-      const msg =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to fetch effective policy";
+      const msg = errorMessage(err, "Failed to fetch effective policy");
       showNotification({
         type: "error",
         title: "Effective policy failed",
@@ -349,8 +342,7 @@ export default function PoliciesPage() {
         });
       }
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Validate failed";
+      const msg = errorMessage(err, "Validate failed");
       showNotification({
         type: "error",
         title: "Validate failed",
@@ -435,7 +427,7 @@ export default function PoliciesPage() {
         message: target,
       });
     } catch (err) {
-      const msg = err instanceof ConnectError ? err.rawMessage : "Save failed";
+      const msg = errorMessage(err, "Save failed");
       showNotification({
         type: "error",
         title: "Save failed",

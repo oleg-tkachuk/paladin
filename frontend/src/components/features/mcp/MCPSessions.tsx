@@ -1,7 +1,5 @@
 "use client";
 
-import { ConnectError } from "@connectrpc/connect";
-
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { RelativeTime } from "@/components/RelativeTime";
@@ -16,6 +14,7 @@ import {
 import { T } from "@/lib/ui/typography";
 
 import { useMcpLive } from "./mcp-status";
+import { errorMessage } from "@/hooks/errorContract";
 
 /** Characters of a session id shown; enough to tell rows apart. */
 const SESSION_ID_SHOWN = 8;
@@ -31,7 +30,7 @@ const SESSION_ID_SHOWN = 8;
 export function MCPSessions() {
   const { status, sessions } = useMcpLive();
   const unreachable = status.error
-    ? ConnectError.from(status.error).rawMessage
+    ? errorMessage(status.error)
     : status.data && !status.data.reachable
       ? status.data.error || "the MCP server could not be reached"
       : null;

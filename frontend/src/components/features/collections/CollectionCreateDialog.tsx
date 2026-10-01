@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +25,7 @@ import {
   ListLoadError,
 } from "@/components/ui/ListLoadError";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 interface CollectionCreateDialogProps {
   open: boolean;
@@ -131,13 +131,7 @@ export function CollectionCreateDialog({
       onOpenChange(false);
       onCreated?.();
     } catch (err) {
-      setSubmitError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : err instanceof Error
-            ? err.message
-            : "Failed to create the Collection.",
-      );
+      setSubmitError(errorMessage(err, "Failed to create the Collection."));
     } finally {
       setSubmitting(false);
     }

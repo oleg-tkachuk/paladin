@@ -21,7 +21,6 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ConnectError } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
   ArrowUturnLeftIcon,
@@ -57,6 +56,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { RelativeTime } from "@/components/RelativeTime";
 import { IdentityField } from "@/components/IdentityField";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 export default function TrashPage() {
   // `error` is the hook's query-error state (set by fetchTenants on failure);
@@ -97,12 +97,7 @@ export default function TrashPage() {
       showNotification({
         type: "error",
         title: "Restore failed",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : err instanceof Error
-              ? err.message
-              : String(err),
+        message: errorMessage(err),
       });
     } finally {
       setBusyId(null);
@@ -126,12 +121,7 @@ export default function TrashPage() {
       showNotification({
         type: "error",
         title: "Purge failed",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : err instanceof Error
-              ? err.message
-              : String(err),
+        message: errorMessage(err),
       });
     } finally {
       setBusyId(null);

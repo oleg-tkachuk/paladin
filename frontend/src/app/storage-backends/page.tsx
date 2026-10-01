@@ -13,7 +13,6 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
   CloudIcon,
@@ -46,6 +45,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
+import { errorMessage } from "@/hooks/errorContract";
 
 // Vendor/implementation behind `kind` (`kind` is too coarse — every
 // self-hosted S3 is S3_COMPATIBLE). The server carries an explicit `provider`
@@ -143,12 +143,7 @@ export default function StorageBackendsPage() {
       showNotification({
         type: "error",
         title: "Could not change backend state",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : err instanceof Error
-              ? err.message
-              : String(err),
+        message: errorMessage(err),
       });
     } finally {
       setTogglingId(null);
@@ -177,12 +172,7 @@ export default function StorageBackendsPage() {
       showNotification({
         type: "error",
         title: "Could not change drain state",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : err instanceof Error
-              ? err.message
-              : String(err),
+        message: errorMessage(err),
       });
     } finally {
       setDrainingId(null);
@@ -210,12 +200,7 @@ export default function StorageBackendsPage() {
       showNotification({
         type: "error",
         title: "Could not change maintenance flag",
-        message:
-          err instanceof ConnectError
-            ? err.rawMessage
-            : err instanceof Error
-              ? err.message
-              : String(err),
+        message: errorMessage(err),
       });
     } finally {
       setMaintainingId(null);

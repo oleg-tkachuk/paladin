@@ -8,7 +8,6 @@
 // the sanitized before/after state diffs the table doesn't show.
 
 import { useQuery } from "@tanstack/react-query";
-import { ConnectError } from "@connectrpc/connect";
 
 import { auditClient } from "@/lib/connect/client";
 import {
@@ -24,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { errorMessage } from "@/hooks/errorContract";
 
 // Decode a bytes state-snapshot to a display string. The backend stores
 // sanitized JSON; pretty-print it when it parses, else show the raw text.
@@ -73,9 +73,7 @@ export function AuditEntryDetailDialog({
           </div>
         ) : error ? (
           <p className="text-sm text-destructive">
-            {error instanceof ConnectError
-              ? error.rawMessage
-              : "Failed to load"}
+            {errorMessage(error, "Failed to load")}
           </p>
         ) : data ? (
           <div className="max-h-[70vh] space-y-3 overflow-y-auto text-xs">

@@ -35,7 +35,7 @@ import { eventSubscriptionClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { EventSubscription } from "@/gen/paladin/admin/v1/types_pb";
-import { isAbortError } from "@/hooks/errorContract";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { sinkSummary, truncate, type TestResult } from "./_form";
 import { TestResultDisplay } from "./_components";
 import { SubscriptionEditorDialog } from "./SubscriptionEditorDialog";
@@ -81,10 +81,7 @@ export default function EventsPage() {
         showNotification({
           type: "error",
           title: "Load failed",
-          message:
-            err instanceof ConnectError
-              ? err.rawMessage
-              : "Failed to list event subscriptions",
+          message: errorMessage(err, "Failed to list event subscriptions"),
         });
         throw err;
       }
@@ -157,8 +154,7 @@ export default function EventsPage() {
           return next;
         });
       } catch (err) {
-        const msg =
-          err instanceof ConnectError ? err.rawMessage : "Test failed";
+        const msg = errorMessage(err, "Test failed");
         showNotification({ type: "error", title: "Test failed", message: msg });
       } finally {
         setPendingTest((prev) => {
@@ -208,8 +204,7 @@ export default function EventsPage() {
         await fetchList();
         return;
       }
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Toggle failed";
+      const msg = errorMessage(err, "Toggle failed");
       showNotification({ type: "error", title: "Toggle failed", message: msg });
     }
   };
@@ -246,8 +241,7 @@ export default function EventsPage() {
         setDeleteTarget(null);
         return;
       }
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Delete failed";
+      const msg = errorMessage(err, "Delete failed");
       showNotification({ type: "error", title: "Delete failed", message: msg });
     } finally {
       setDeleting(false);

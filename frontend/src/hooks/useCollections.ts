@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
-import { ConnectError } from "@connectrpc/connect";
 
 import { collectionClient } from "@/lib/connect/client";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
@@ -11,6 +10,7 @@ import { CollectionSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { useAuth } from "@/context/AuthContext";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 // Ceiling on how many pages one exhaustive fetch will follow — a backstop, not
 // a limit anyone should reach.
@@ -79,11 +79,7 @@ export function useCollections() {
         };
       } catch (err) {
         // Query contract (state-only): surface via `error`, never throw.
-        setError(
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to fetch collections",
-        );
+        setError(errorMessage(err, "Failed to fetch collections"));
         return { collections: [], nextPageToken: "" };
       } finally {
         setLoading(false);
@@ -122,11 +118,7 @@ export function useCollections() {
       setCollections(acc);
       return { collections: acc, nextPageToken: token };
     } catch (err) {
-      setError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to fetch collections",
-      );
+      setError(errorMessage(err, "Failed to fetch collections"));
       return { collections: [], nextPageToken: "" };
     } finally {
       setLoading(false);

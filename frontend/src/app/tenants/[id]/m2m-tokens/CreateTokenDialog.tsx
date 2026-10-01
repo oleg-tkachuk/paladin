@@ -6,7 +6,6 @@ import {
   ClipboardDocumentIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
 
 import {
   Dialog,
@@ -39,6 +38,7 @@ import {
   parseScopes,
   isValidScope,
 } from "./_constants";
+import { errorMessage } from "@/hooks/errorContract";
 
 /**
  * Create-M2M-token dialog, extracted from the page. Owns the whole create form
@@ -138,9 +138,7 @@ export function CreateTokenDialog({
         message: "Copy the secret now — it can't be shown again.",
       });
     } catch (err) {
-      setSubmitError(
-        err instanceof ConnectError ? err.rawMessage : "Create failed",
-      );
+      setSubmitError(errorMessage(err, "Create failed"));
     } finally {
       setCreating(false);
     }

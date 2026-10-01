@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
-import { ConnectError } from "@connectrpc/connect";
 import { LinkIcon } from "@heroicons/react/24/outline";
 
 import { Card } from "@/components/ui/Card";
@@ -40,6 +39,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useCollection } from "./collection-context";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { errorMessage } from "@/hooks/errorContract";
 
 function completionModeLabel(m: CompletionMode): string {
   switch (m) {
@@ -103,8 +103,7 @@ export default function CollectionOverviewPage() {
         message: updated.displayName || updated.collection,
       });
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Update failed";
+      const msg = errorMessage(err, "Update failed");
       showNotification({ type: "error", title: "Update failed", message: msg });
     } finally {
       setSavingMeta(false);
@@ -127,7 +126,7 @@ export default function CollectionOverviewPage() {
         message: bucketSelection,
       });
     } catch (err) {
-      const msg = err instanceof ConnectError ? err.rawMessage : "Bind failed";
+      const msg = errorMessage(err, "Bind failed");
       showNotification({ type: "error", title: "Bind failed", message: msg });
     } finally {
       setBinding(false);

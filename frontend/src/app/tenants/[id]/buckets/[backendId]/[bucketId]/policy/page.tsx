@@ -7,7 +7,6 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -24,6 +23,7 @@ import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb"
 import { cn } from "@/lib/utils";
 
 import { useBucket } from "../bucket-context";
+import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketPolicyPage() {
   const { bucket, setBucket } = useBucket();
@@ -61,8 +61,7 @@ export default function BucketPolicyPage() {
         });
       }
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Validate failed";
+      const msg = errorMessage(err, "Validate failed");
       showNotification({
         type: "error",
         title: "Validate failed",
@@ -88,7 +87,7 @@ export default function BucketPolicyPage() {
         message: bucket.bucketId,
       });
     } catch (err) {
-      const msg = err instanceof ConnectError ? err.rawMessage : "Save failed";
+      const msg = errorMessage(err, "Save failed");
       showNotification({ type: "error", title: "Save failed", message: msg });
     } finally {
       setSaving(false);
