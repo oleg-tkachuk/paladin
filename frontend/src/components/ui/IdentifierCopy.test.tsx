@@ -39,4 +39,15 @@ describe("IdentifierCopy", () => {
     await userEvent.click(screen.getByText("key/path.txt"));
     expect(writeText).toHaveBeenCalledWith("key/path.txt");
   });
+
+  // It was a clickable div: no focus, no key press, so a keyboard could not
+  // copy the identifier at all.
+  it("copies from the keyboard", async () => {
+    render(<IdentifierCopy value="cap_01" label="Capability ID" />);
+    const button = screen.getByRole("button", { name: /Capability ID/ });
+    await userEvent.tab();
+    expect(button).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(writeText).toHaveBeenCalledWith("cap_01");
+  });
 });

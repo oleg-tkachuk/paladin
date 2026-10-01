@@ -40,6 +40,7 @@ export function IdentifierCopy({
   if (iconOnly) {
     return (
       <button
+        type="button"
         onClick={handleCopy}
         className={cn(
           "p-2 rounded-xl transition-all active:scale-95 group/copy",
@@ -60,21 +61,27 @@ export function IdentifierCopy({
   }
 
   return (
-    <div
+    // A button, not a clickable div: a div cannot be reached or pressed from
+    // the keyboard, so the identifier could only be copied with a mouse.
+    <button
+      type="button"
       onClick={handleCopy}
+      title={`Copy ${label}`}
       className={cn(
-        "group/copy relative flex items-center justify-between p-4 rounded-2xl bg-black/40 border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer overflow-hidden",
+        "group/copy relative flex w-full items-center justify-between p-4 text-left rounded-2xl bg-black/40 border border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer overflow-hidden",
         className,
       )}
     >
-      <div className="absolute inset-0 bg-indigo-500/[0.02] opacity-0 group-hover/copy:opacity-100 transition-opacity" />
-      <div className="space-y-1 min-w-0 pr-10">
-        <span className="text-xs font-semibold text-indigo-400/60 uppercase tracking-wider">
+      <span className="absolute inset-0 bg-indigo-500/[0.02] opacity-0 group-hover/copy:opacity-100 transition-opacity" />
+      <span className="block space-y-1 min-w-0 pr-10">
+        <span className="block text-xs font-semibold text-indigo-400/60 uppercase tracking-wider">
           {label}
         </span>
-        <p className="text-xs text-white font-mono truncate">{value}</p>
-      </div>
-      <div
+        <span className="block text-xs text-white font-mono truncate">
+          {value}
+        </span>
+      </span>
+      <span
         className={cn(
           "p-2 rounded-lg transition-all",
           copied
@@ -87,7 +94,7 @@ export function IdentifierCopy({
         ) : (
           <ClipboardIcon className="w-4 h-4" />
         )}
-      </div>
-    </div>
+      </span>
+    </button>
   );
 }

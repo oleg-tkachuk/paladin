@@ -164,20 +164,24 @@ export function ObjectsFilterBar({
               </div>
             )}
             {savedViews.map((view) => (
-              <Dropdown.Item key={view.name} className="group/view p-0">
+              <Dropdown.Item
+                key={view.name}
+                className="group/view p-0"
+                // On the item, which takes Enter and Space; a click handler on
+                // an inner div applied the view for a mouse only.
+                onClick={() => onApplyView(view)}
+              >
                 <div className="w-full flex items-center justify-between gap-3 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:bg-white/5 transition-all rounded-xl">
-                  <div
-                    className="flex-1 cursor-pointer"
-                    onClick={() => onApplyView(view)}
-                  >
-                    {view.name}
-                  </div>
+                  <div className="flex-1 cursor-pointer">{view.name}</div>
                   <button
+                    type="button"
+                    aria-label={`Delete view ${view.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteView(view.name);
                     }}
-                    className="opacity-0 group-hover/view:opacity-100 p-1 hover:text-rose-500 transition-all"
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="opacity-0 group-hover/view:opacity-100 focus-visible:opacity-100 p-1 hover:text-rose-500 transition-all"
                   >
                     <TrashIcon className="w-3 h-3" />
                   </button>

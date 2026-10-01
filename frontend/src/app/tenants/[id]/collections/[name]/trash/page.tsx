@@ -340,6 +340,7 @@ export default function CollectionTrashPage() {
                             className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             disabled={!!busyId}
                             onClick={() => setConfirmDelete(obj.objectId)}
+                            aria-label={`Purge ${obj.key} from storage`}
                           >
                             <TrashIcon className="size-4" />
                           </Button>

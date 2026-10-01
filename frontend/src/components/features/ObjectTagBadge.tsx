@@ -4,30 +4,21 @@ import { cn } from "@/lib/utils";
 
 interface ObjectTagBadgeProps {
   objectTag: string;
-  clickable?: boolean;
   linked?: boolean;
-  onClick?: (objectTag: string) => void;
   className?: string;
 }
 
 export const ObjectTagBadge: React.FC<ObjectTagBadgeProps> = ({
   objectTag,
-  clickable,
   linked = false,
-  onClick,
   className,
 }) => {
-  const handleClick = () => {
-    if (clickable && onClick) {
-      onClick(objectTag);
-    }
-  };
-
-  const isInteractive = clickable || linked;
+  // No caller made the badge clickable; the click handler it carried could
+  // never run, and a span is not reachable from the keyboard anyway.
+  const isInteractive = linked;
 
   const badge = (
     <span
-      onClick={handleClick}
       className={cn(
         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all duration-200",
         "bg-indigo-500/10 border-indigo-500/20 text-indigo-300",
