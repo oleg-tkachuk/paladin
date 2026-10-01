@@ -67,6 +67,23 @@ check_e2e "the Python SDK only"   false '["sdk","repo"]'
 check_e2e "repository config"     false '["repo"]'
 check_e2e "documentation only"    false '[]'
 
+# verify-deep runs for backend code, and for capability, the Go SDK and the
+# contract only because those reach the backend group.
+check_deep() {
+    local name=$1 want=$2 groups=$3 got
+    got="$(printf '%s' "$groups" | "$script" --needs-deep)"
+    if [ "$got" != "$want" ]; then
+        printf 'FAIL deep %s\n  want %s\n  got  %s\n' "$name" "$want" "$got"
+        failed=1
+    fi
+}
+check_deep "a backend change"     true  '["backend","repo"]'
+check_deep "capability"           true  "$(printf '%s\n' capability/token.go | "$script")"
+check_deep "everything"           true  "$all"
+check_deep "a console change"     false '["frontend","repo"]'
+check_deep "the Python SDK only"  false '["sdk","repo"]'
+check_deep "documentation only"   false '[]'
+
 # CodeQL skips the same documentation-only changes through paths-ignore, a
 # glob list that cannot share INERT's regex. Every path this file treats as
 # documentation must be ignored there, and no code path may be.

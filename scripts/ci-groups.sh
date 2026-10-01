@@ -30,10 +30,23 @@ fi
 # whether the Playwright suite should run. It drives the console against the
 # backend, so a change either of them reaches is one it can break.
 readonly E2E_GROUPS='["backend","frontend"]'
-if [ "${1:-}" = "--needs-e2e" ]; then
-    jq -r --argjson e2e "$E2E_GROUPS" 'any(.[]; . as $g | $e2e | index($g) != null)'
+# --needs-deep: the same question for verify-deep — the Postgres-backed
+# integration suites and the stack gate. Backend code only: capability, the Go
+# SDK and the contract reach it through the backend group already.
+readonly DEEP_GROUPS='["backend"]'
+needs() {
+    jq -r --argjson want "$1" 'any(.[]; . as $g | $want | index($g) != null)'
+}
+case "${1:-}" in
+--needs-e2e)
+    needs "$E2E_GROUPS"
     exit 0
-fi
+    ;;
+--needs-deep)
+    needs "$DEEP_GROUPS"
+    exit 0
+    ;;
+esac
 
 relevant="$(grep -vE "$INERT" | grep -v '^$' || true)"
 if [ -z "$relevant" ]; then

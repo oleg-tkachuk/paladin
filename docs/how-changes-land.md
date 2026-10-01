@@ -31,6 +31,7 @@ stream; see [releasing.md](releasing.md).
 `ci.yaml` pushes no image and deploys nothing. Images and charts are published
 only by `release.yaml`, for a release tag. Its End-to-end job runs `verify-e2e`
 — Playwright against a stack built from the change — when the change reaches
-the console or the backend, and the `All checks passed` check that `main`
-requires waits for it. `verify-deep` needs Docker and runs locally before a
-merge; [task.md](task.md#working-on-the-code) lists it.
+the console or the backend, and its Deep job runs `verify-deep` — the
+Postgres-backed integration suites and the stack gate — when the change reaches
+the backend. The `All checks passed` check that `main` requires waits for both;
+[task.md](task.md#working-on-the-code) lists them for running locally.
