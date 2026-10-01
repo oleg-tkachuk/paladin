@@ -151,9 +151,14 @@ test.describe("Tenant budget", () => {
       resourceVersion: "0",
     });
     await gotoSettled(page, budgetURL(tenant.tenantId));
-    await expect(
-      page.getByRole("button", { name: /Apply changes/ }),
-    ).toBeVisible({ timeout: 15_000 });
+    // Wait for the loaded value, not for the button: "Apply changes" shows
+    // (disabled) before the budget arrives, and a form that loads only after
+    // the second write below holds the NEW version — its write then lands
+    // legitimately, and the test was passing only by accident before the form
+    // was locked until load.
+    await expect(page.locator("#max-budget")).toHaveValue("100", {
+      timeout: 15_000,
+    });
 
     // A second operator raises the cap while this form sits open.
     await setTenantBudget({
