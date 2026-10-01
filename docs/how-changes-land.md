@@ -10,7 +10,11 @@ change can reach — `verify-backend`, `verify-capability`, `verify-sdk`,
 `verify-frontend` and `verify-repo`, one job each — and audits the workflows
 with actionlint and zizmor. [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
 decides which groups a set of paths reaches; a console-only change does not
-run the backend's tests. Run by hand, it runs every group.
+run the backend's tests. Run by hand, it runs every group. A final `All checks
+passed` job is the one check branch protection requires, so a group that was
+skipped does not block a merge and a group that failed does.
+[`codeql.yaml`](../.github/workflows/codeql.yaml) runs CodeQL on the Go,
+TypeScript, Python and workflow code.
 
 A green push to `main` dispatches
 [`release.yaml`](../.github/workflows/release.yaml). semantic-release computes
