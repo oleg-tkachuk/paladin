@@ -1669,20 +1669,30 @@ finding moving from "packages you import" to "your code is affected".
 
 ### Cluster e2e: a login sometimes lands back on `/login?next=%2F`
 
-- **Status:** Open — seen once, not reproduced.
-- **Shape:** the full suite against the local cluster (4.2.13, Playwright's
-  default worker count) failed four unrelated specs at `loginAsAdmin`: the form
-  was submitted, the browser reached `/`, and the AuthGate sent it back to
-  `/login?next=%2F`. The same four specs passed on an immediate rerun of just
-  their files. Every worker signs in as the same `admin` subject at once.
-- **Reason:** one occurrence with no artifacts kept; the rerun overwrote
-  `test-results/`.
-- **Definition of Done:** the cause is known — a session the BFF drops when the
-  same subject signs in concurrently, a refresh racing the first request, or
-  something else — and either fixed or the fixture made to wait for it, with
-  the full suite passing three runs in a row on the default worker count.
-- **Blockers:** needs a failing run with its `error-context.md` and the BFF's
-  logs from the same minute.
+- **Status:** Open — seen in two full runs (4 specs on 4.2.13, 1 on 4.2.17),
+  never on a rerun of the same files.
+- **Shape:** `loginAsAdmin` submits the form, the browser reaches `/`, and the
+  AuthGate sends it back to `/login?next=%2F`. In the 4.2.17 run the console
+  logged `[BFF /me] … [unauthenticated] refresh token rejected` in that window:
+  IAM refused a superseded refresh token outside the supersession grace, which
+  is the reuse-detection path (`authh.RefreshToken`, `onRefreshReuse`), and
+  that revokes the family.
+- **Likely mechanism, not yet proven:** `/api/auth/me` is the route that
+  rotates the chain. If the browser drops its response, for example because
+  the next navigation starts while it is in flight (the fixtures navigate as
+  soon as the URL leaves `/login`), IAM has rotated but the new cookie never
+  lands. The next `/me` inside the grace is told it lost a race and writes no
+  cookie; the first one after the grace replays the superseded token and the
+  session is killed. A person who navigates while a page is still loading
+  could hit the same thing.
+- **Reason:** changing how rotation survives a lost response is an auth
+  design decision (a successor the loser can recover, or a longer grace), not
+  a test fix; and it needs a reproduction first.
+- **Definition of Done:** a reproduction (abort `/api/auth/me` mid-flight in a
+  Playwright test, then navigate after the grace) that fails today; a fix that
+  keeps reuse detection for genuine replays; the full suite passing three runs
+  in a row on the default worker count.
+- **Blockers:** the decision on how a lost rotation is recovered.
 
 ### `collections-crud › deleting a Collection removes it` is flaky in CI
 
