@@ -97,8 +97,10 @@ export function ObjectSpecsPanel({
           </SpecRow>
 
           <SpecRow label="Collection">
+            {/* A Collection lives under its tenant; /collections/<name> is no
+                page, and the link led to a 404. */}
             <Link
-              href={`/collections/${object.collection}`}
+              href={`/tenants/${encodeURIComponent(object.tenantId)}/collections/${encodeURIComponent(object.collection)}`}
               className="break-all font-mono text-xs text-primary hover:underline"
             >
               {object.collection}
