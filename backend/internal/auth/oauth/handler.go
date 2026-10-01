@@ -170,7 +170,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	p.RedirectURI = registered
 	// PKCE is mandatory (S256). Errors past this point redirect to the client.
 	if p.CodeChallenge == "" || p.CodeChallengeMethod != PKCEMethodS256 {
-		h.redirectError(w, r, p, "invalid_request", "code_challenge with method=S256 is required")
+		h.redirectError(w, r, registered, p.State, "invalid_request", "code_challenge with method=S256 is required")
 		return
 	}
 
@@ -191,7 +191,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// POST: the decision.
 	if r.PostForm.Get("action") != "allow" {
-		h.redirectError(w, r, p, "access_denied", "the user denied the request")
+		h.redirectError(w, r, registered, p.State, "access_denied", "the user denied the request")
 		return
 	}
 	subject := r.PostForm.Get("username")
@@ -211,7 +211,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	scopes := splitScopes(p.Scope)
 	if !scopesSubset(scopes, client.AllowedScopes) {
-		h.redirectError(w, r, p, "invalid_scope", "requested scope exceeds client grant")
+		h.redirectError(w, r, registered, p.State, "invalid_scope", "requested scope exceeds client grant")
 		return
 	}
 
@@ -226,7 +226,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 			cedar.RequestContext{Now: h.now(), OAuthClientID: client.ClientID, OAuthScopes: scopes},
 		)
 		if aerr != nil || dec != cedar.DecisionAllow {
-			h.redirectError(w, r, p, "access_denied", "authorization denied by policy")
+			h.redirectError(w, r, registered, p.State, "access_denied", "authorization denied by policy")
 			return
 		}
 	}
@@ -235,7 +235,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	code, err := GenerateCode()
 	if err != nil {
-		h.redirectError(w, r, p, "server_error", "could not issue code")
+		h.redirectError(w, r, registered, p.State, "server_error", "could not issue code")
 		return
 	}
 	ttl := h.cfg.AuthorizationCodeTTL
@@ -254,11 +254,11 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		Audience:        audience,
 		ExpiresAt:       h.now().Add(ttl),
 	}); err != nil {
-		h.redirectError(w, r, p, "server_error", "could not persist code")
+		h.redirectError(w, r, registered, p.State, "server_error", "could not persist code")
 		return
 	}
 
-	redirectWithCode(w, r, p.RedirectURI, code, p.State)
+	redirectWithCode(w, r, registered, code, p.State)
 }
 
 // authenticate resolves the resource owner by subject (tenant-disambiguated)
@@ -669,31 +669,36 @@ func scopesSubset(want, allowed []string) bool {
 	return true
 }
 
-func redirectWithCode(w http.ResponseWriter, r *http.Request, redirectURI, code, state string) {
-	u, _ := url.Parse(redirectURI)
-	q := u.Query()
-	q.Set("code", code)
-	if state != "" {
-		q.Set("state", state)
+// redirectTo is base — always the client's registered redirect URI, never a
+// value from the request — followed by params as its query. Appended after
+// "?" (or "&" when base already has a query), nothing in params can move the
+// redirect to another host; state is the caller's own value and goes there.
+func redirectTo(base string, params url.Values) string {
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
 	}
-	u.RawQuery = q.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	return base + sep + params.Encode()
 }
 
-func (h *Handler) redirectError(w http.ResponseWriter, r *http.Request, p authorizeParams, errCode, desc string) {
-	u, err := url.Parse(p.RedirectURI)
-	if err != nil || p.RedirectURI == "" {
+func redirectWithCode(w http.ResponseWriter, r *http.Request, registered, code, state string) {
+	params := url.Values{"code": {code}}
+	if state != "" {
+		params.Set("state", state)
+	}
+	http.Redirect(w, r, redirectTo(registered, params), http.StatusFound)
+}
+
+func (h *Handler) redirectError(w http.ResponseWriter, r *http.Request, registered, state, errCode, desc string) {
+	if registered == "" {
 		h.jsonError(w, http.StatusBadRequest, errCode, desc)
 		return
 	}
-	q := u.Query()
-	q.Set("error", errCode)
-	q.Set("error_description", desc)
-	if p.State != "" {
-		q.Set("state", p.State)
+	params := url.Values{"error": {errCode}, "error_description": {desc}}
+	if state != "" {
+		params.Set("state", state)
 	}
-	u.RawQuery = q.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	http.Redirect(w, r, redirectTo(registered, params), http.StatusFound)
 }
 
 func (h *Handler) jsonError(w http.ResponseWriter, status int, errCode, desc string) {
