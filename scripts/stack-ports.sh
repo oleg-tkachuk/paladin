@@ -175,3 +175,51 @@ stack_pull_thirdparty() {
     } >&2
     return 1
 }
+
+# ─── which images the stack runs ─────────────────────────────────────────────
+# The compose file runs the two images this repository builds by
+# ${PALADIN_CORE_TAG:-latest} and ${PALADIN_CONSOLE_TAG:-latest}. A gate exports
+# the version its own image build just stamped, so the stack runs that image and
+# not whatever `:latest` is lying around. The image build tags the version only
+# — `:latest` is a push-time option of the release library — so a gate that
+# relied on `:latest` failed outright the day no stale one was left to find.
+readonly STACK_CORE_TAG_VAR=PALADIN_CORE_TAG
+readonly STACK_CONSOLE_TAG_VAR=PALADIN_CONSOLE_TAG
+# The build writes APP_VERSION here (release library, `version` step).
+readonly STACK_CORE_INFO=backend/deploy/info.env
+readonly STACK_CONSOLE_INFO=frontend/deploy/info.env
+readonly STACK_VERSION_KEY=APP_VERSION
+
+# stack_built_version <info.env> — the version the last image build stamped.
+stack_built_version() {
+    local info="${1:?info.env}" version
+    if [ ! -f "$info" ]; then
+        echo "!!! $info not found — build the image first (task <component>:release:image:build)" >&2
+        return 1
+    fi
+    version=$(sed -n "s/^${STACK_VERSION_KEY}=//p" "$info")
+    if [ -z "$version" ]; then
+        echo "!!! $info carries no ${STACK_VERSION_KEY}" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
+# stack_use_built_image <tag variable> <info.env> <image> — export the built
+# version into the variable the compose file reads, after checking the image
+# under that tag is in the local store.
+stack_use_built_image() {
+    local var="${1:?tag variable}" info="${2:?info.env}" image="${3:?image}" version
+    version=$(stack_built_version "$info") || return 1
+    if ! docker image inspect "$image:$version" >/dev/null 2>&1; then
+        {
+            echo "!!! $image:$version is not in the local image store."
+            echo "    $info names that version, so the build ran — under another"
+            echo "    registry. The stack runs ${STACK_BUILT_IMAGE_PREFIX}*, which is what"
+            echo "    Taskfile.dev.yaml builds; the root Taskfile builds for ghcr.io."
+            echo "    Run it as: task -t Taskfile.dev.yaml <task>"
+        } >&2
+        return 1
+    fi
+    export "$var=$version"
+}

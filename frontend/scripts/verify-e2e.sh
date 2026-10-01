@@ -5,15 +5,16 @@
 #
 # The suite has always been runnable (`pnpm run test:e2e`), and that is exactly
 # the problem this closes. Playwright's webServer brings the compose stack up
-# but rebuilds nothing, and the stack runs `:latest` — so the result describes
-# whichever images happen to be lying around. That is not hypothetical: on
+# but rebuilds nothing, and the stack runs `:latest` unless told otherwise — so
+# the result describes whichever images happen to be lying around. That is not hypothetical: on
 # 2026-08-30 a "108 passed" run was read as verifying a commit whose console
 # image had been built four minutes BEFORE it, and on 2026-09-01
 # `paladin-console:latest` was two days and three commits stale while a newer
 # console image sat beside it under a version tag. A green run against the
 # wrong image is worse than no run, because it is believed.
 #
-# So the task builds both images and this script refuses to start if the ports
+# So the task builds both images, this script points the stack at the versions
+# that build stamped (stack_use_built_image), and refuses to start if the ports
 # are taken — the same discipline `verify-deep` got, sharing the same
 # preflight so the two cannot drift apart.
 #
@@ -76,9 +77,12 @@ stack_export_urls
 # reason.
 stack_pull_thirdparty "$root/frontend/tests/e2e/docker-compose.test.yaml"
 
+stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${STACK_BUILT_IMAGE_PREFIX}paladin-core" || exit 1
+stack_use_built_image "$STACK_CONSOLE_TAG_VAR" "$STACK_CONSOLE_INFO" "${STACK_BUILT_IMAGE_PREFIX}paladin-console" || exit 1
+
 echo ">>> [e2e] images under test"
-for image in registry.local/paladin/paladin-core:latest \
-    registry.local/paladin/paladin-console:latest; do
+for image in "${STACK_BUILT_IMAGE_PREFIX}paladin-core:${PALADIN_CORE_TAG}" \
+    "${STACK_BUILT_IMAGE_PREFIX}paladin-console:${PALADIN_CONSOLE_TAG}"; do
     # Printed, not merely built, because "which image did this run actually
     # test" is the question every stale-image incident here turned on. The
     # revision label is stamped from the build's git commit.

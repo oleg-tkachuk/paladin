@@ -147,10 +147,17 @@ phase_dev_bootstrap() {
     # The tenant does not exist at mint time and does not need to: the claim is
     # read from the token, and step 1 of the script is what creates the row.
     local dev_tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b
-    JWT=$(JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
-        JWT_AUD=paladin-admin JWT_ROLES=platform.admin JWT_SUB=verify-deep \
-        JWT_TENANT="$dev_tenant" JWT_TENANT_SLUG=ui-dev \
-        bash backend/scripts/auth-mint-jwt.sh)
+    #
+    # Minted by the shared auth task: the bash minter this called was removed
+    # with the move to it, and this phase failed on the missing file from then.
+    # The variables go on the command line because an include's own vars do not
+    # override ones the task declares, and command-line vars do.
+    local claims
+    claims=$(jq -nc --arg t "$dev_tenant" \
+        '{roles: ["platform.admin"], tenant: $t, tenant_slug: "ui-dev"}')
+    JWT=$(task -s -t "$root/Taskfile.dev.yaml" backend:auth:mint-token \
+        JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
+        JWT_AUD=paladin-admin JWT_SUB=verify-deep JWT_CLAIMS="$claims")
     export JWT
     export TENANT_ID="$dev_tenant"
     # BUCKET_ID matches the bucket compose actually created in MinIO
@@ -178,8 +185,9 @@ require_free_ports "task backend:test:stack" || exit 1
 # skipped. compose still pulls in postgres, migrate, promote-app-role,
 # bootstrap and minio as declared dependencies.
 stack_pull_thirdparty frontend/tests/e2e/docker-compose.test.yaml
+stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${STACK_BUILT_IMAGE_PREFIX}paladin-core" || exit 1
 
-echo ">>> [stack] booting api + admin"
+echo ">>> [stack] booting api + admin (paladin-core:${PALADIN_CORE_TAG})"
 "${compose[@]}" up --wait api admin
 
 # Matches backend/configs/compose.yaml (auth.signing_key / auth.issuer).
