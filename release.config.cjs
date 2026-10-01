@@ -7,12 +7,25 @@
 // by .github/release.yml — so no @semantic-release/github here, which would
 // create the same release first and make that step collide with it.
 //
-// Plain `conventionalcommits` preset, no custom releaseRules: feat is a minor,
-// fix/perf/revert are a patch, a `!` or `BREAKING CHANGE:` footer is a major,
-// and docs/style/refactor/test/build/ci/chore release nothing on their own.
+// `conventionalcommits` preset: feat is a minor, fix/perf/revert are a patch,
+// a `!` or `BREAKING CHANGE:` footer is a major, and
+// docs/style/refactor/test/build/ci/chore release nothing on their own.
+//
+// One rule on top: `security` is a patch. The preset knows no such type, so a
+// security fix released nothing and stayed out of every image until an
+// unrelated fix came along. scripts/release-rules.test.mjs pins this.
 module.exports = {
   branches: ["main"],
   tagFormat: "v${version}",
   repositoryUrl: "https://github.com/oleg-tkachuk/paladin.git",
-  plugins: [["@semantic-release/commit-analyzer", { preset: "conventionalcommits" }]],
+  plugins: [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        preset: "conventionalcommits",
+        // Added to the preset's rules, which still decide every other type.
+        releaseRules: [{ type: "security", release: "patch" }],
+      },
+    ],
+  ],
 };

@@ -24,11 +24,10 @@ types (see [`release.config.cjs`](../release.config.cjs)), and the workflow
 publishes an image and a chart for each component at that tag. The GitHub
 release is created last, and only when every image and chart was pushed; if a
 push fails, the tag stays without a release until the failed jobs are re-run.
-`feat` is a
-minor release, `fix` and `perf` a patch, a breaking change (`!` or a
-`BREAKING CHANGE:` footer) a major. Any other type — `docs`, `style`,
-`refactor`, `test`, `build`, `ci`, `chore`, `security` — releases nothing on
-its own.
+`feat` is a minor release, `fix`, `perf` and `security` a patch, a breaking
+change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
+`style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
+own.
 
 ## The SDKs: `api/vX.Y.Z`
 
