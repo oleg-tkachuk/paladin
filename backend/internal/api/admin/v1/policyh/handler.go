@@ -216,20 +216,31 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	// pair guessed where one layer ended; a tenant policy that happened to
 	// contain the marker text would have been mis-attributed.
 	merged := layers.Tenant
-	if layers.Collection != "" {
+	for _, layer := range []struct{ marker, text string }{
+		{"// --- bucket-scoped ---", layers.Bucket},
+		{"// --- collection-scoped ---", layers.Collection},
+	} {
+		if layer.text == "" {
+			continue
+		}
 		if merged != "" {
 			merged += "\n"
 		}
-		merged += "// --- collection-scoped ---\n" + layers.Collection
+		merged += layer.marker + "\n" + layer.text
 	}
 	out := &EffectivePolicyOutput{MergedCedarPolicy: merged}
-	// Stable layer attribution: tenant first, then collection. We do not
-	// surface bucket-layer policy until BucketRepository.GetPolicy is wired
-	// to PostgresStore (slice 7).
+	// Stable layer attribution, in the order the engine joins them: tenant,
+	// the bucket the collection is bound to, the collection.
 	out.Layers = append(out.Layers, PolicyLayer{
 		Source:      fmt.Sprintf("tenants/%s", tenantID),
 		CedarPolicy: layers.Tenant,
 	})
+	if layers.BucketName != "" {
+		out.Layers = append(out.Layers, PolicyLayer{
+			Source:      layers.BucketName,
+			CedarPolicy: layers.Bucket,
+		})
+	}
 	if collection != "" {
 		out.Layers = append(out.Layers, PolicyLayer{
 			Source:      fmt.Sprintf("tenants/%s/collections/%s", tenantID, collection),

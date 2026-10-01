@@ -1,7 +1,8 @@
 "use client";
 
-// Bucket-level Cedar policy editor — overlay layered on top of the
-// tenant inherited policy. Mirrors the Collection Policy tab almost
+// Bucket-level Cedar policy editor. The engine compiles this layer, after the
+// tenant's and before the collection's, into every request on a collection
+// bound to this bucket. Mirrors the Collection Policy tab almost
 // verbatim; the only differences are which client + RPC and which
 // resource the editor maps to.
 

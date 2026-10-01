@@ -33,13 +33,24 @@ import (
 // texts let the engine degrade exactly the layer that is broken.
 //
 // Order is fixed and meaningful: Tenant is inherited by every collection,
-// Collection applies to one. Neither includes the built-in layer, which is a
-// constant in the engine and belongs to no tenant.
+// Bucket by every collection bound to that bucket, Collection applies to one.
+// None includes the built-in layer, which is a constant in the engine and
+// belongs to no tenant.
 type Layers struct {
 	// Tenant is tenants.inherited_cedar_policy — platform-authored (written by
 	// UpdateTenant under platform.admin, or a policy-only edit by
 	// platform.tenant-provisioner). Empty is normal.
 	Tenant string
+	// Bucket is buckets.cedar_policy for the bucket the requested collection is
+	// bound to. It applies to every request scoped to a collection in that
+	// bucket, from any tenant. Requests on the bucket itself (ManageBucket,
+	// Configure*) have no collection and do not load it, so a bucket policy
+	// can never lock its own repair (SetBucketPolicy) away.
+	Bucket string
+	// BucketName names the bucket Bucket came from, as
+	// storageBackends/<backend>/buckets/<bucket>. Empty when no collection is
+	// in scope.
+	BucketName string
 	// Collection is collections.cedar_policy for the requested collection.
 	// Empty when the scope is the tenant itself, or the collection has none.
 	Collection string
@@ -61,6 +72,10 @@ type Store interface {
 type ChangeEvent struct {
 	TenantID   uuid.UUID
 	Collection string // empty = tenant-level change (invalidate all collections)
+	// AllScopes is a data change that may affect any scope: a bucket policy,
+	// which every tenant with a collection in that bucket inherits. Consumers
+	// drop their entire compiled cache. Payload NotifyAllScopes.
+	AllScopes bool
 	// ResyncAll is a control event, not a data change: the watcher lost and
 	// re-established its LISTEN connection, so an unknown set of notifications
 	// was missed in the gap. Consumers must drop their ENTIRE compiled cache
@@ -101,19 +116,29 @@ const (
 	watchBackoffMax     = 5 * time.Second
 )
 
+// NotifyAllScopes is the policy_changed payload for a change that can affect
+// every scope (migration 021_bucket_policy_changed_notify.sql).
+const NotifyAllScopes = "*"
+
 func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collection string) (Layers, []byte, string, error) {
 	const q = `
         SELECT
             COALESCE(t.inherited_cedar_policy, '') AS tpolicy,
-            COALESCE(b.cedar_policy, '')           AS bpolicy,
+            COALESCE(k.cedar_policy, '')           AS kpolicy,
+            COALESCE('storageBackends/' || sb.name || '/buckets/' || k.name, '') AS kname,
+            COALESCE(c.cedar_policy, '')           AS cpolicy,
             COALESCE(t.slug, '')                   AS slug
         FROM tenants t
-        LEFT JOIN collections b
-               ON b.tenant_id = t.id AND b.name = $2
+        LEFT JOIN collections c
+               ON c.tenant_id = t.id AND c.name = $2
+        LEFT JOIN buckets k
+               ON k.id = c.bucket_id
+        LEFT JOIN storage_backends sb
+               ON sb.id = k.backend_id
         WHERE t.id = $1
     `
-	var tPol, bPol, slug string
-	if err := s.pool.QueryRow(ctx, q, tenantID, collection).Scan(&tPol, &bPol, &slug); err != nil {
+	var tPol, kPol, kName, cPol, slug string
+	if err := s.pool.QueryRow(ctx, q, tenantID, collection).Scan(&tPol, &kPol, &kName, &cPol, &slug); err != nil {
 		// Unknown tenant → no policy. Cedar's deny-by-default semantics
 		// will then map the call to PermissionDenied at the engine layer
 		// instead of leaking a SQL error as a 500 to the client.
@@ -123,10 +148,10 @@ func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, collectio
 		}
 		return Layers{}, nil, "", fmt.Errorf("policy fetch: %w", err)
 	}
-	// Hashed over both layers with a separator, so a change that moves text
-	// from one layer to the other still invalidates the cache.
-	sum := sha256.Sum256([]byte(tPol + "\x00" + bPol))
-	return Layers{Tenant: tPol, Collection: bPol}, sum[:], slug, nil
+	// Hashed over every layer with a separator, so a change that moves text
+	// from one layer to another still invalidates the cache.
+	sum := sha256.Sum256([]byte(tPol + "\x00" + kPol + "\x00" + cPol))
+	return Layers{Tenant: tPol, Bucket: kPol, BucketName: kName, Collection: cPol}, sum[:], slug, nil
 }
 
 func (s *PostgresStore) Watch(ctx context.Context) (<-chan ChangeEvent, error) {
@@ -231,6 +256,9 @@ func (s *PostgresStore) relisten(ctx context.Context) *pgxpool.Conn {
 }
 
 func parseNotifyPayload(p string) ChangeEvent {
+	if p == NotifyAllScopes {
+		return ChangeEvent{AllScopes: true}
+	}
 	for i := 0; i < len(p); i++ {
 		if p[i] == ':' {
 			id, _ := uuid.Parse(p[:i])

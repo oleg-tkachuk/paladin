@@ -289,7 +289,7 @@ type cacheKey struct {
 type compiledPolicy struct {
 	hash      []byte
 	policySet *cedar.PolicySet
-	// degraded names the tenant-authored layers ("tenant", "collection") that
+	// degraded names the tenant-authored layers (layerTenant, layerBucket, layerCollection) that
 	// did not parse and were replaced by a freeze. Empty in the normal case.
 	// Kept so a reader can tell a scope that denies from a scope that cannot
 	// answer.
@@ -339,10 +339,14 @@ func (e *Engine) Start(ctx context.Context) error {
 					// every scope re-fetches on next use (bounded staleness
 					// ends now instead of at the TTL).
 					e.m.watchResyncs.Add(1)
-					e.compiled.Range(func(k, _ any) bool {
-						e.compiled.Delete(k)
-						return true
-					})
+					e.flushCompiled()
+					continue
+				}
+				if ev.AllScopes {
+					// A bucket policy changed. Every collection bound to that
+					// bucket, in any tenant, compiled it in, and the engine
+					// does not know which those are.
+					e.flushCompiled()
 					continue
 				}
 				if ev.Collection == "" {
@@ -362,6 +366,14 @@ func (e *Engine) Start(ctx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+// flushCompiled drops every compiled policy; each scope re-fetches on use.
+func (e *Engine) flushCompiled() {
+	e.compiled.Range(func(k, _ any) bool {
+		e.compiled.Delete(k)
+		return true
+	})
 }
 
 // IsAuthorized evaluates the applicable policies for (principal, action, resource).
@@ -591,7 +603,7 @@ func isResourceVar(n any) bool {
 	return ok && name == "resource"
 }
 
-// builtinPolicy is concatenated with every fetched tenant/collection
+// builtinPolicy is concatenated with every fetched tenant/bucket/collection
 // policy before compile. It carries the platform-admin escape hatch:
 // any principal whose `roles` set contains "platform.admin" gets ALLOW
 // on every action and resource. Without this, cross-tenant RPCs whose
@@ -829,26 +841,53 @@ var ErrPolicyUnparseable = errors.New("cedar: stored policy does not compile")
 // the alternative, which was an entity nobody could ever remove.
 func (e *Engine) degradeUnparseableLayers(l Layers, tenantID uuid.UUID, collection string) (string, []string) {
 	var degraded []string
-	tenant, collectionText := l.Tenant, l.Collection
+	tenant, bucketText, collectionText := l.Tenant, l.Bucket, l.Collection
 
 	if tenant != "" && layerParses(tenant) != nil {
 		tenant = freezeExcept(ActionManageTenant)
-		degraded = append(degraded, "tenant")
+		degraded = append(degraded, layerTenant)
+	}
+	// The bucket's repair, SetBucketPolicy, is checked against the Bucket with
+	// no collection in scope, so it never loads this layer: the freeze can
+	// name ConfigureBucketPolicy and still cannot block it.
+	if bucketText != "" && layerParses(bucketText) != nil {
+		bucketText = freezeExcept(ActionConfigureBucketPolicy)
+		degraded = append(degraded, layerBucket)
 	}
 	if collectionText != "" && layerParses(collectionText) != nil {
 		collectionText = freezeExcept(ActionManageCollection)
-		degraded = append(degraded, "collection")
+		degraded = append(degraded, layerCollection)
 	}
 
 	text := tenant
-	if collectionText != "" {
+	for _, layer := range []struct{ marker, text string }{
+		{bucketLayerMarker, bucketText},
+		{collectionLayerMarker, collectionText},
+	} {
+		if layer.text == "" {
+			continue
+		}
 		if text != "" {
 			text += "\n"
 		}
-		text += "// --- collection-scoped ---\n" + collectionText
+		text += layer.marker + "\n" + layer.text
 	}
 	return text, degraded
 }
+
+// Layer names, as compiledPolicy.degraded and the warning log report them.
+const (
+	layerTenant     = "tenant"
+	layerBucket     = "bucket"
+	layerCollection = "collection"
+)
+
+// Comment lines that open each layer in the joined policy text, so a reader
+// of a compiled set can tell where one layer's rules start.
+const (
+	bucketLayerMarker     = "// --- bucket-scoped ---"
+	collectionLayerMarker = "// --- collection-scoped ---"
+)
 
 // layerParses reports whether one tenant-authored layer compiles on its own.
 // Cedar statements are self-contained, so a layer that parses alone parses in

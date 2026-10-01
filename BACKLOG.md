@@ -1547,18 +1547,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
-### A bucket's Cedar policy is stored and never evaluated
-
-- **Status:** Deferred.
-- **Reason:** `BucketService.SetBucketPolicy` and the console's bucket policy
-page write `buckets.cedar_policy`, but `cedar.PostgresStore.Fetch` reads only
-the tenant and collection layers, and `GetEffectivePolicy` shows only those
-two. A bucket policy has no effect and nothing says so.
-- **Definition of Done:** either the engine compiles the bucket layer for
-requests whose bucket is known (cache key, `policy_changed` trigger on
-`buckets`, effective-policy view, tests) or the RPC and page are removed.
-- **Blockers:** the choice between the two.
-
 ### `context.ip` is declared and never filled
 
 - **Status:** Deferred.
