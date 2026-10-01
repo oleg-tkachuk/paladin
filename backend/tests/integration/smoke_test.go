@@ -44,9 +44,9 @@ type probe struct {
 // one, or nothing.
 func planeProbes() []probe {
 	return []probe{
-		{"data", readyzURL("PALADIN_E2E_DATA_URL", defaultDataURL)},
-		{"iam", readyzURL("PALADIN_E2E_IAM_URL", defaultIAMURL)},
-		{"admin", readyzURL("PALADIN_E2E_ADMIN_URL", defaultAdminURL)},
+		{"data", readyzURL(envDataURL, defaultDataURL)},
+		{"iam", readyzURL(envIAMURL, defaultIAMURL)},
+		{"admin", readyzURL(envAdminURL, defaultAdminURL)},
 	}
 }
 

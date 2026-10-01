@@ -54,6 +54,14 @@ const (
 	defaultAdminURL = "http://127.0.0.1:8090"
 )
 
+// The variables that override them — the names scripts/stack-ports.sh exports
+// and the Playwright fixtures read.
+const (
+	envDataURL  = "PALADIN_E2E_DATA_URL"
+	envIAMURL   = "PALADIN_E2E_IAM_URL"
+	envAdminURL = "PALADIN_E2E_ADMIN_URL"
+)
+
 // plane maps a protobuf package to the listener that serves it and the
 // audience its tokens must carry.
 type plane struct {
@@ -62,33 +70,17 @@ type plane struct {
 	audience  string
 }
 
-// planes resolves each plane's base URL.
-//
-// PALADIN_E2E_*_URL is the canonical name — the one the compose file's port
-// overrides feed, the Playwright fixtures read and the smoke test reads.
-// PALADIN_RPC_*_URL is this suite's own older spelling, kept as a deprecated
-// alias for one release.
-//
-// The divergence was not free: a run on overridden ports exported only the
-// canonical set, this suite kept its 127.0.0.1:8090 default, and that address
-// was a kubectl port-forward to a dev CLUSTER on the machine in question — so
-// it spent a minute reporting authz failures about a deployment it was never
-// pointed at. A suite silently testing the wrong target is the same species of
-// bug as a suite silently skipping.
+// planes resolves each plane's base URL from PALADIN_E2E_*_URL, the one set of
+// names every suite reads. This suite once had its own, PALADIN_RPC_*_URL, and
+// the divergence was not free: a run on overridden ports exported only the
+// other set, this suite kept its 127.0.0.1:8090 default, and that address was a
+// kubectl port-forward to a dev CLUSTER — so it spent a minute reporting authz
+// failures about a deployment it was never pointed at.
 func planes() []plane {
-	base := func(canonical, deprecated, def string) string {
-		if v := os.Getenv(canonical); v != "" {
-			return v
-		}
-		if v := os.Getenv(deprecated); v != "" {
-			return v
-		}
-		return def
-	}
 	return []plane{
-		{"paladin.admin.v1.", base("PALADIN_E2E_ADMIN_URL", "PALADIN_RPC_ADMIN_URL", defaultAdminURL), "paladin-admin"},
-		{"paladin.data.v1.", base("PALADIN_E2E_DATA_URL", "PALADIN_RPC_DATA_URL", defaultDataURL), "paladin-data"},
-		{"paladin.iam.v1.", base("PALADIN_E2E_IAM_URL", "PALADIN_RPC_IAM_URL", defaultIAMURL), "paladin-iam"},
+		{"paladin.admin.v1.", envOr(envAdminURL, defaultAdminURL), "paladin-admin"},
+		{"paladin.data.v1.", envOr(envDataURL, defaultDataURL), "paladin-data"},
+		{"paladin.iam.v1.", envOr(envIAMURL, defaultIAMURL), "paladin-iam"},
 	}
 }
 
@@ -239,8 +231,8 @@ func requireStack(t *testing.T, ps []plane) {
 			t.Fatalf("%s plane unreachable at %s: %v", p.pkgPrefix, p.baseURL, err)
 		}
 		t.Skipf("stack not reachable at %s (%v); bring one up, or set "+
-			"PALADIN_RPC_ADMIN_URL / _DATA_URL / _IAM_URL at a deployed one",
-			p.baseURL, err)
+			"%s / %s / %s at a deployed one",
+			p.baseURL, err, envAdminURL, envDataURL, envIAMURL)
 	}
 }
 
@@ -471,5 +463,32 @@ func TestRPCSurface_LoginEchoesAudience(t *testing.T) {
 				t.Errorf("tokens.audience = %q, want %q", out.Tokens.Audience, tc.want)
 			}
 		})
+	}
+}
+
+// The suite's old names for the plane addresses are no longer read: setting
+// one would leave the suite on its default while the operator believed it was
+// pointed elsewhere — the failure the shared names were introduced to end.
+func TestPlanes_ReadOnlyTheSharedNames(t *testing.T) {
+	for _, retired := range []string{"PALADIN_RPC_ADMIN_URL", "PALADIN_RPC_DATA_URL", "PALADIN_RPC_IAM_URL"} {
+		t.Setenv(retired, "http://retired.invalid")
+	}
+	t.Setenv(envAdminURL, "")
+	t.Setenv(envDataURL, "http://data.example:1")
+	t.Setenv(envIAMURL, "")
+
+	got := map[string]string{}
+	for _, p := range planes() {
+		got[p.pkgPrefix] = p.baseURL
+	}
+	want := map[string]string{
+		"paladin.admin.v1.": defaultAdminURL,
+		"paladin.data.v1.":  "http://data.example:1",
+		"paladin.iam.v1.":   defaultIAMURL,
+	}
+	for pkg, url := range want {
+		if got[pkg] != url {
+			t.Errorf("%s base = %q, want %q", pkg, got[pkg], url)
+		}
 	}
 }

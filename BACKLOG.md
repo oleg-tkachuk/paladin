@@ -1679,30 +1679,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
-### Drop the deprecated plane-address aliases
-
-- **Status:** Narrowed 2026-09-01 — the unification is DONE; only the removal
-  of the old names is left.
-- **What landed:** every suite now reads `PALADIN_E2E_{DATA,IAM,ADMIN}_URL`,
-  the set the compose file's port overrides already feed.
-  `scripts/stack-ports.sh` exports only that set, deliberately — if a suite
-  still depended on an alias the gate would fail and name it rather than
-  working by accident, and `task verify-deep` is green, which is the proof.
-- **Why it mattered:** three names for the same three addresses meant setting
-  one left the others on their defaults. That cost a real run: the RPC-surface
-  gate kept its `127.0.0.1:8090` default, which on that machine was a kubectl
-  port-forward to the dev CLUSTER, and reported a minute of authz failures
-  about a deployment nobody had pointed it at. The bare `PALADIN_ADMIN_URL` was
-  worse than merely redundant — it is also the console BFF's own runtime
-  variable (`frontend/deploy/chart/templates/deployment.yaml`), so a test
-  suite and a production config were sharing a name for different things.
-- **Definition of Done:** delete the `PALADIN_RPC_{DATA,IAM,ADMIN}_URL` and
-  `PALADIN_ADMIN_URL` fallbacks from `tests/integration/rpc_surface_test.go` and
-  `tests/e2e/admin_api_test.go`. They exist only so an operator with the old
-  names in a shell profile is not broken by this change.
-- **Blockers:** none. Trigger: the next release, or the first time someone
-  reads the fallback and wonders which name is real.
-
 ### Playwright e2e suite wired into CI
 
 - **Status:** Workflow AUTHORED (2026-07-02), storage reworked into the
