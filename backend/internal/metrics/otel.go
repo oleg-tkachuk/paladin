@@ -45,6 +45,17 @@ func RecordResourceNameShape(ctx context.Context, shape string) {
 //
 // All flow over the same OTLP pipeline as every other Paladin metric (otel: false
 // locally → no-op).
+// newWorkerRunDuration builds the tick-duration histogram; see
+// newPresignDuration for why it is a constructor.
+func newWorkerRunDuration(m metric.Meter) (metric.Float64Histogram, error) {
+	return m.Float64Histogram(
+		"paladin_worker_run_duration_seconds",
+		metric.WithDescription("Background-worker tick wall-clock duration, by worker"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(workerRunBucketsSeconds...),
+	)
+}
+
 var (
 	workerRunsTotal     metric.Int64Counter
 	workerRunDuration   metric.Float64Histogram
@@ -60,11 +71,7 @@ func init() {
 	); err != nil {
 		otel.Handle(err)
 	}
-	if workerRunDuration, err = meter.Float64Histogram(
-		"paladin_worker_run_duration_seconds",
-		metric.WithDescription("Background-worker tick wall-clock duration, by worker"),
-		metric.WithUnit("s"),
-	); err != nil {
+	if workerRunDuration, err = newWorkerRunDuration(meter); err != nil {
 		otel.Handle(err)
 	}
 	if workerLastRunGauge, err = meter.Float64Gauge(

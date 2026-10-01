@@ -53,7 +53,7 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	if presignIssued, err = meterDomain.Int64Counter("paladin_presign_total"); err != nil {
 		t.Fatalf("counter: %v", err)
 	}
-	if presignSeconds, err = meterDomain.Float64Histogram("paladin_presign_duration_seconds"); err != nil {
+	if presignSeconds, err = newPresignDuration(meterDomain); err != nil {
 		t.Fatalf("histogram: %v", err)
 	}
 	if capabilityCharges, err = meterDomain.Int64Counter("paladin_capability_charges_total"); err != nil {
@@ -68,7 +68,7 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	if storageCalls, err = meterDomain.Int64Counter("paladin_storage_calls_total"); err != nil {
 		t.Fatalf("counter: %v", err)
 	}
-	if storageSeconds, err = meterDomain.Float64Histogram("paladin_storage_call_duration_seconds"); err != nil {
+	if storageSeconds, err = newStorageCallDuration(meterDomain); err != nil {
 		t.Fatalf("histogram: %v", err)
 	}
 	if quotaDecisions, err = meterDomain.Int64Counter("paladin_quota_decisions_total"); err != nil {
