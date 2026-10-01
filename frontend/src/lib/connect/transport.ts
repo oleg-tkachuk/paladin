@@ -152,7 +152,7 @@ const loggingInterceptor: Interceptor = (next) => async (req) => {
  *
  * The earlier dev-token branch (a single fixed JWT injected via
  * <meta name="paladin-dev-token"> from the YAML config) was a stopgap before
- * Login was wired. It's been removed because the dev token is minted
+ * Login was wired. It was removed because the dev token was then minted
  * with audience "paladin-api" — not one of the three plane audiences — so
  * once login worked it started poisoning the per-plane caches and every
  * data/admin RPC failed with `[unauthenticated] jwt: audience mismatch`.
