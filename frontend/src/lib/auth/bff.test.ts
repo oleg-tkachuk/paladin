@@ -26,8 +26,10 @@ vi.mock("@connectrpc/connect", () => ({
 }));
 
 const cookieJarGet = vi.fn();
+const incomingHeaders = vi.fn(async () => new Headers());
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: cookieJarGet }),
+  headers: () => incomingHeaders(),
 }));
 
 type Bff = typeof import("./bff");
@@ -87,6 +89,7 @@ describe("iamAuthClient", () => {
 
     expect(createGrpcWebTransport).toHaveBeenCalledWith({
       baseUrl: "http://iam.test:8085",
+      interceptors: [expect.any(Function)],
     });
   });
 
@@ -98,6 +101,7 @@ describe("iamAuthClient", () => {
 
     expect(createGrpcWebTransport).toHaveBeenCalledWith({
       baseUrl: "http://paladin-core:8085",
+      interceptors: [expect.any(Function)],
     });
   });
 
@@ -332,5 +336,50 @@ describe("toAccessTokenDTO", () => {
     expect(bff.toAccessTokenDTO(AUDIENCES.iam, "tok", 0).expiresAt).toBe(
       Date.now(),
     );
+  });
+});
+
+describe("forwardClientChain", () => {
+  // The IAM plane keys the login rate limiter and the audit source on the
+  // client address it resolves from this header. Without it every login from
+  // the console came from the console pod, and shared one bucket.
+  async function send(incoming: Headers, preset?: string) {
+    incomingHeaders.mockResolvedValueOnce(incoming);
+    const bff = await loadBff();
+    const header = new Headers(preset ? { "X-Forwarded-For": preset } : {});
+    const next = vi.fn(async () => ({}));
+    await bff.forwardClientChain(next as never)({ header } as never);
+    return header.get("X-Forwarded-For");
+  }
+
+  it("copies the browser request's chain onto the IAM call", async () => {
+    expect(
+      await send(new Headers({ "x-forwarded-for": "198.51.100.7, 10.0.0.2" })),
+    ).toBe("198.51.100.7, 10.0.0.2");
+  });
+
+  it("adds nothing when the browser request had none", async () => {
+    expect(await send(new Headers())).toBeNull();
+  });
+
+  it("leaves a header the caller set alone", async () => {
+    expect(
+      await send(
+        new Headers({ "x-forwarded-for": "198.51.100.7" }),
+        "203.0.113.1",
+      ),
+    ).toBe("203.0.113.1");
+  });
+
+  it("goes out without one outside a request", async () => {
+    incomingHeaders.mockRejectedValueOnce(
+      new Error("headers() outside a request scope"),
+    );
+    const bff = await loadBff();
+    const header = new Headers();
+    await bff.forwardClientChain((async () => ({})) as never)({
+      header,
+    } as never);
+    expect(header.get("X-Forwarded-For")).toBeNull();
   });
 });

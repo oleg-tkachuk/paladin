@@ -3,11 +3,12 @@ package middleware
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 )
 
 // LoginRateLimiter is a Connect interceptor that throttles credential-
@@ -34,7 +35,6 @@ type LoginRateLimiter struct {
 	PerIPMax      int
 	Window        time.Duration
 	procedures    map[string]struct{}
-	realIPHeader  string
 	maxKeys       int
 
 	mu        sync.Mutex
@@ -48,11 +48,11 @@ type LoginRateLimiter struct {
 // default (10 and 60 respectively) so callers that don't tune them get the
 // safe defaults, while a deployment that needs to relax them (e.g. an e2e
 // stack logging in repeatedly as one account) can pass a high value.
-// realIPHeader names the header the ingress writes the client IP into (it MUST
-// overwrite, not append — otherwise a client can spoof the per-IP key);
-// empty falls back to the first X-Forwarded-For hop. procedures lists the
-// RPC paths to throttle; empty defaults to Login + RefreshToken.
-func NewLoginRateLimiter(realIPHeader string, perSubjectMax, perIPMax int, procedures ...string) *LoginRateLimiter {
+// The per-IP key is the client address the listener resolved from its trusted
+// proxies (clientip.Middleware); a forwarding header's leftmost entry is the
+// caller's to choose and would let it pick its own bucket. procedures lists
+// the RPC paths to throttle; empty defaults to Login + RefreshToken.
+func NewLoginRateLimiter(perSubjectMax, perIPMax int, procedures ...string) *LoginRateLimiter {
 	if perSubjectMax <= 0 {
 		perSubjectMax = 10
 	}
@@ -74,7 +74,6 @@ func NewLoginRateLimiter(realIPHeader string, perSubjectMax, perIPMax int, proce
 		PerIPMax:      perIPMax,
 		Window:        1 * time.Minute,
 		procedures:    procSet,
-		realIPHeader:  realIPHeader,
 		maxKeys:       100_000,
 		buckets:       map[string][]time.Time{},
 		now:           time.Now,
@@ -86,7 +85,7 @@ func (l *LoginRateLimiter) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if _, throttled := l.procedures[req.Spec().Procedure]; !throttled {
 			return next(ctx, req)
 		}
-		subject, ip := l.coords(req)
+		subject, ip := l.coords(ctx, req)
 		if !l.admit(subject, ip) {
 			return nil, connect.NewError(connect.CodeResourceExhausted,
 				errors.New("too many attempts; try again later"))
@@ -104,31 +103,19 @@ func (l *LoginRateLimiter) WrapStreamingHandler(next connect.StreamingHandlerFun
 }
 
 // coords extracts (subject, ip). Subject from the proto body; IP from the
-// configured real-IP header (first hop), or X-Forwarded-For if unset. Both
-// empty when absent — the limiter still throttles unidentified clients
-// under the shared "ip=" bucket.
-func (l *LoginRateLimiter) coords(req connect.AnyRequest) (string, string) {
+// resolved client address. Both empty when absent — the limiter still
+// throttles unidentified clients under the shared "ip=" bucket.
+func (l *LoginRateLimiter) coords(ctx context.Context, req connect.AnyRequest) (string, string) {
 	type subjectGetter interface{ GetSubject() string }
 	subject := ""
 	if m, ok := req.Any().(subjectGetter); ok {
 		subject = m.GetSubject()
 	}
-	header := l.realIPHeader
-	if header == "" {
-		header = "X-Forwarded-For"
+	ip := ""
+	if a, ok := clientip.FromContext(ctx); ok {
+		ip = a.String()
 	}
-	ip := firstFwdedIP(req.Header().Get(header))
 	return subject, ip
-}
-
-func firstFwdedIP(h string) string {
-	if h == "" {
-		return ""
-	}
-	if i := strings.IndexByte(h, ','); i >= 0 {
-		return strings.TrimSpace(h[:i])
-	}
-	return strings.TrimSpace(h)
 }
 
 // admit checks both layers atomically. Returns true only when both

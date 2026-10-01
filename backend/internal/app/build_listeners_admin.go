@@ -134,13 +134,12 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			deps.Capability.Verifier,
 			capability.AudiencePlaneAdmin,
 			deps.Capability.Usage,
-			cfg.Admin.Server.RealIPHeader,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
 		)
 	} else {
-		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")
+		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0, "")
 	}
 	if deps.APIToken != nil {
 		// Admin plane: a token carrying ROLES establishes the principal, so a
