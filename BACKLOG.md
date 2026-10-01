@@ -1578,22 +1578,16 @@ an attribute an entity lacks passes, then denies at request time.
 `policies.Validate`, with a test for an unguarded read.
 - **Blockers:** none.
 
-### Two handlers authorize a less specific resource than the request names
+### A streaming upload authorizes before its key is assigned
 
 - **Status:** Deferred.
 - **Reason:** Found while mapping each Cedar action to the resource type it is
-evaluated against (`policies/schema.cedarschema`); each is a handler-local
-reorder with its own test, out of scope for the schema fix.
-  - `objecth` `UpdateObject` builds the resource without `Key`/`ObjectID`, so
-  it is always checked against the Collection; a policy on `resource.key` or
-  `resource.tags` cannot apply to it.
-  - `objecth/upload_small.go` authorizes `PutObject` before defaulting an empty
-  key to the object id, so a keyless streaming upload is checked against the
-  Collection. The presign path defaults the key first, on purpose.
-- **Definition of Done:** each handler builds the resource from the object it
-acts on before calling Cedar, with a test asserting the resource type;
-the schema's `appliesTo` for `UpdateObject` drops `Collection` if no batch path
-still needs it.
+evaluated against (`policies/schema.cedarschema`).
+`objecth/upload_small.go` authorizes `PutObject` before defaulting an empty
+key to the object id, so a keyless streaming upload is checked against the
+Collection. The presign path defaults the key first, on purpose.
+- **Definition of Done:** the handler defaults the key before calling Cedar,
+with a test asserting the resource type.
 - **Blockers:** none.
 
 ### A backend created through the API cannot hold buckets
