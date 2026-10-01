@@ -1,9 +1,13 @@
-import { createClient, type Client } from "@connectrpc/connect";
+import {
+  createClient,
+  type Client,
+  type Interceptor,
+} from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
 
-import { AUDIENCES, type Audience } from "@/constants";
+import { AUDIENCES, FORWARDED_FOR_HEADER, type Audience } from "@/constants";
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { refreshCookieName } from "./cookies";
 
@@ -27,9 +31,31 @@ const IAM_BACKEND_URL =
 
 let iamClientCache: Client<typeof AuthService> | null = null;
 
+/**
+ * Copies the browser request's X-Forwarded-For onto every IAM call, so the
+ * plane resolves the client's address rather than this pod's: the login rate
+ * limiter keys on it and the audit trail records it. Outside a request (no
+ * headers to read) the call goes out without one.
+ */
+export const forwardClientChain: Interceptor = (next) => async (req) => {
+  let chain: string | null = null;
+  try {
+    chain = (await headers()).get(FORWARDED_FOR_HEADER);
+  } catch {
+    chain = null;
+  }
+  if (chain && !req.header.has(FORWARDED_FOR_HEADER)) {
+    req.header.set(FORWARDED_FOR_HEADER, chain);
+  }
+  return next(req);
+};
+
 export function iamAuthClient(): Client<typeof AuthService> {
   if (iamClientCache) return iamClientCache;
-  const transport = createGrpcWebTransport({ baseUrl: IAM_BACKEND_URL });
+  const transport = createGrpcWebTransport({
+    baseUrl: IAM_BACKEND_URL,
+    interceptors: [forwardClientChain],
+  });
   iamClientCache = createClient(AuthService, transport);
   return iamClientCache;
 }

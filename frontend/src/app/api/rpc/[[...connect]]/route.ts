@@ -9,7 +9,12 @@ import { anyRegistry } from "@/lib/connect/any-registry";
 // connect-es v2 doesn't re-export it; import directly from protobuf codegenv1.
 import type { DescService } from "@bufbuild/protobuf";
 
-import { RPC_API_PREFIX, RPC_PLANE_PREFIXES, type Plane } from "@/constants";
+import {
+  RPC_API_PREFIX,
+  RPC_PLANE_PREFIXES,
+  type Plane,
+  FORWARDED_FOR_HEADER,
+} from "@/constants";
 import { planeTransport } from "@/lib/server/upstream";
 import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
 
@@ -97,9 +102,6 @@ const authKey = createContextKey<string | null>(null, { description: "auth" });
  * Build one router + internal transport per plane. Done lazily (per cold
  * start) so dev hot-reload picks up env changes without restart hassles.
  */
-/** The proxy chain header the planes read the client address from. */
-const FORWARDED_FOR_HEADER = "X-Forwarded-For";
-
 function buildPlaneRouter(plane: Plane) {
   const internalTransport = planeTransport(plane);
 

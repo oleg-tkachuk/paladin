@@ -65,3 +65,10 @@ export const STORAGE_KEYS = {
   /** Saved filter views on /objects. */
   savedViews: "paladin_saved_views",
 } as const;
+
+/**
+ * The proxy chain header the planes resolve the client address from (Cedar's
+ * context.ip, the login rate limiter, the audit source). The BFF forwards the
+ * browser request's value unchanged on every call it makes to a plane.
+ */
+export const FORWARDED_FOR_HEADER = "X-Forwarded-For";
