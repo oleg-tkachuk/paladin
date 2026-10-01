@@ -30,7 +30,9 @@ const { tenants, loading, error, fetchTenants } = useTenants();
 useEffect(() => {
   void fetchTenants();
 }, [fetchTenants]);
-// render: error ? <Banner msg={error} /> : <Table rows={tenants} />
+// render the failure, never the empty state, when the list did not load:
+//   error ? <ListLoadError what="Tenants" reason={error} onRetry={fetchTenants} />
+//         : <Table rows={tenants} />
 
 // MUTATION — await in try/catch, surface via errorMessage():
 import { errorMessage } from "@/hooks/errorContract";
@@ -50,8 +52,15 @@ try {
 it pulls `ConnectError.rawMessage` (or `Error.message`) so callers don't
 re-implement it.
 
-`errorContract.test.ts` pins the caller-facing half — `errorMessage`'s
-unwrap/fallback behavior. The hook-behavior half (a query sets `error` and
-resolves without throwing; a mutation rejects and leaves `error` untouched) is
-a `renderHook` test and rides the RTL/jsdom wave that `vitest.config.ts`
-defers; until then it's enforced by the hook code, `tsc`, and lint.
+Two gates keep the contract from drifting, both reading the source rather
+than trusting review:
+
+- `queryErrorContract.test.ts` — every call site that takes a list from one
+  of these hooks also takes its `error`, or is listed with the reason its
+  emptiness claims nothing.
+- `src/lib/queryErrorsRead.test.ts` — every `useQuery` outside the hooks has
+  its `error` read somewhere in the same file, so a failed read is rendered
+  (`ListLoadError`) instead of falling through to "no items yet".
+
+`errorContract.test.ts` pins `errorMessage`'s unwrap and fallback; the hooks'
+own `*.test.tsx` files exercise the behaviour with `renderHook`.
