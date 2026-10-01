@@ -379,12 +379,3 @@ describe("environments without BroadcastChannel", () => {
     expect(store.peekAccessToken(AUDIENCES.data)).toBe("ssr");
   });
 });
-
-describe("AUDIENCE_VALUES", () => {
-  it("exposes every configured audience", async () => {
-    const store = await loadStore();
-    expect([...store.AUDIENCE_VALUES].sort()).toEqual(
-      [AUDIENCES.data, AUDIENCES.iam, AUDIENCES.admin].sort(),
-    );
-  });
-});

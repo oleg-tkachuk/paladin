@@ -13,8 +13,6 @@ import { DISPLAY_LOCALE } from "./locale";
 
 export const ALLOWED_UNIT_CODES = ["USD", "EUR", "UAH", "GBP", "UNIT"] as const;
 
-export type UnitCode = (typeof ALLOWED_UNIT_CODES)[number];
-
 // isISOCurrency returns true when the unit_code is an ISO 4217
 // currency the frontend knows how to format. UNIT and unknowns
 // return false (caller should render plain "X.XX <code>").
