@@ -1,11 +1,31 @@
 -- name: InsertRefreshToken :exec
-INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6);
+-- parent_id is the token this one was rotated from, NULL for a login.
+INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at, parent_id)
+VALUES ($1, $2, $3, $4, $5, $6, sqlc.narg(parent_id));
 
 -- name: GetRefreshToken :one
-SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
+       parent_id, first_used_at
 FROM refresh_tokens
 WHERE id = $1;
+
+-- name: MarkRefreshTokenUsed :exec
+-- Record the first presentation. Once set, this token is no longer a lost
+-- successor its parent's holder may recover.
+UPDATE refresh_tokens
+SET first_used_at = now()
+WHERE id = $1 AND first_used_at IS NULL;
+
+-- name: GetUnusedRefreshSuccessor :one
+-- The successor a rotation of $1 minted and nobody has presented yet: what a
+-- client that lost the rotation response never received. A revoked successor
+-- (its family killed) is not offered.
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
+       parent_id, first_used_at
+FROM refresh_tokens
+WHERE parent_id = $1 AND first_used_at IS NULL AND revoked = FALSE
+ORDER BY issued_at DESC
+LIMIT 1;
 
 -- name: RevokeRefreshToken :exec
 -- Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is

@@ -152,3 +152,23 @@ func TestRefreshDecoderRejectsAccessToken(t *testing.T) {
 		t.Fatal("expected audience mismatch")
 	}
 }
+
+// Re-issuing a stored refresh token must sign the row's own expiry, not a new
+// lifetime: a recovered lost rotation would otherwise outlive the token it
+// stands for.
+func TestMintRefreshSignsAGivenExpiry(t *testing.T) {
+	iss := newTestIssuer(t)
+	userID := uuid.Must(uuid.NewV7())
+	want := time.Now().Add(37 * time.Minute).Truncate(time.Second)
+
+	_, exp, err := iss.MintRefresh(RefreshClaims{
+		Subject: userID.String(), UserID: userID,
+		TokenID: uuid.Must(uuid.NewV7()), ExpiresAt: want,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exp.Equal(want) {
+		t.Errorf("expiry = %v, want %v", exp, want)
+	}
+}

@@ -33,6 +33,10 @@ func (f *fakeRefreshRepo) RevokeForUser(context.Context, uuid.UUID) (int64, erro
 func (f *fakeRefreshRepo) RevokeFamilyOf(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
+func (f *fakeRefreshRepo) MarkUsed(context.Context, uuid.UUID) error { return nil }
+func (f *fakeRefreshRepo) UnusedSuccessor(context.Context, uuid.UUID) (authstore.RefreshToken, error) {
+	return authstore.RefreshToken{}, authstore.ErrNotFound
+}
 func (f *fakeRefreshRepo) PurgeExpired(_ context.Context, before time.Time) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

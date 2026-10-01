@@ -138,6 +138,10 @@ type RefreshClaims struct {
 	// JTI returned by the caller-supplied generator; the IAM store records
 	// this so it can revoke individual refresh tokens.
 	TokenID uuid.UUID
+	// ExpiresAt, when set, is the expiry to sign instead of now + TTL. Set
+	// when re-issuing a token that already exists in the store, so the new
+	// string expires with the row it stands for.
+	ExpiresAt time.Time
 }
 
 // MintRefresh returns a signed refresh token bound to paladin-iam audience.
@@ -147,6 +151,9 @@ func (i *Issuer) MintRefresh(c RefreshClaims) (string, time.Time, error) {
 	}
 	now := i.cfg.Now()
 	exp := now.Add(i.cfg.RefreshTokenTTL)
+	if !c.ExpiresAt.IsZero() {
+		exp = c.ExpiresAt
+	}
 	claims := map[string]any{
 		"iss":     i.cfg.Issuer,
 		"sub":     c.Subject,

@@ -102,6 +102,15 @@ type RefreshTokenRepository interface {
 	// caller that needs to ask WHY it was revoked.
 	GetAny(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+
+	// MarkUsed records the token's first presentation; later calls change
+	// nothing. A used successor is never handed to its parent's holder.
+	MarkUsed(ctx context.Context, jti uuid.UUID) error
+	// UnusedSuccessor returns the live, never-presented token a rotation of
+	// parent minted, or ErrNotFound. That is the token a client which lost the
+	// rotation response never received.
+	UnusedSuccessor(ctx context.Context, parent uuid.UUID) (RefreshToken, error)
+
 	// RevokeFamilyOf ends a whole session: every token sharing the family of
 	// the given jti (ADR-0009). Reuse detection and logout both use it.
 	//
@@ -128,6 +137,12 @@ type RefreshToken struct {
 	// tell "the holder traded this in three seconds ago" from "this token was
 	// killed for cause", which the Revoked boolean alone cannot express.
 	SupersededAt *time.Time
+	// ParentID is the token this one was rotated from; uuid.Nil for a login.
+	ParentID uuid.UUID
+	// FirstUsedAt is when this token was first presented; nil until then. A
+	// rotated token still unused is what a lost rotation response leaves
+	// behind, and the only kind its parent's holder may recover.
+	FirstUsedAt *time.Time
 }
 
 // ─── Common errors ──────────────────────────────────────────────────────────

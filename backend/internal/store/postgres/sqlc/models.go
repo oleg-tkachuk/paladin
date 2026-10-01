@@ -657,6 +657,10 @@ type RefreshToken struct {
 	Revoked   bool               `json:"revoked"`
 	// Set only when this token was rotated for a successor. NULL for tokens revoked for cause (logout, reuse detection), which must never be tolerated.
 	SupersededAt pgtype.Timestamptz `json:"superseded_at"`
+	// The token this one was rotated from; NULL for a login. Lets a lost rotation be recovered.
+	ParentID pgtype.UUID `json:"parent_id"`
+	// When this token was first presented. An unused successor is what a lost rotation response leaves behind.
+	FirstUsedAt pgtype.Timestamptz `json:"first_used_at"`
 }
 
 type ReplicationState struct {

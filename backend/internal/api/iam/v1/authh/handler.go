@@ -196,7 +196,7 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		return nil, err
 	}
 
-	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil)
+	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil, uuid.Nil)
 	if err != nil {
 		metrics.RecordLoginAttempt(ctx, "error")
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -260,9 +260,19 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		// was superseded moments ago, which is not theft but a sibling that
 		// rotated first — see errRotatedBySibling.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
-			if any, gerr := h.refresh.GetAny(ctx, jti); gerr == nil && h.withinSupersessionGrace(any) {
+			any, gerr := h.refresh.GetAny(ctx, jti)
+			if gerr == nil && h.withinSupersessionGrace(any) {
 				h.onRefreshRaceLost(ctx, jti, userID)
 				return nil, errRotatedBySibling
+			}
+			// Past the grace, but the successor was never presented: the
+			// holder lost the rotation response rather than replaying a token
+			// someone moved on from. Hand the successor back.
+			if gerr == nil {
+				out, rerr := h.recoverLostRotation(ctx, any, in.RequestedAudience)
+				if rerr != nil || out != nil {
+					return out, rerr
+				}
 			}
 			h.onRefreshReuse(ctx, jti, userID, tenantID)
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
@@ -275,20 +285,14 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	if h.now().After(stored.ExpiresAt) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token expired"))
 	}
+	// Presenting a token is what makes it no longer a lost successor its
+	// parent's holder may collect — see recoverLostRotation.
+	if err := h.refresh.MarkUsed(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 
-	u, err := h.users.GetByID(ctx, userID)
+	u, audience, err := h.eligibleFor(ctx, userID, tenantID, in.RequestedAudience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("user no longer exists"))
-	}
-	if u.Disabled || u.TenantID != tenantID {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("user no longer eligible"))
-	}
-
-	audience := in.RequestedAudience
-	if audience == "" {
-		audience = auth.AudienceData
-	}
-	if err := h.assertAudienceAllowed(u, audience); err != nil {
 		return nil, err
 	}
 
@@ -309,7 +313,7 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID)
+	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID, jti)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -379,7 +383,13 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 			// Only supersession qualifies. A token revoked for cause — logout,
 			// or reuse detection killing the family — has superseded_at NULL
 			// and is refused here exactly as before.
-			if tok, gerr := h.refresh.GetAny(ctx, jti); gerr == nil && h.withinSupersessionGrace(tok) {
+			//
+			// A token whose successor was never presented is tolerated for
+			// longer, for the same reason RefreshToken recovers it: the holder
+			// lost the rotation response. Refusing it here would fail every
+			// plane's exchange on the page load that is about to recover it.
+			if tok, gerr := h.refresh.GetAny(ctx, jti); gerr == nil &&
+				(h.withinSupersessionGrace(tok) || h.lostRotationRecoverable(ctx, tok)) {
 				stored, err = tok, nil
 			} else {
 				h.onRefreshReplayed(ctx, jti, userID, tenantID)
@@ -396,6 +406,11 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 	if h.now().After(stored.ExpiresAt) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token expired"))
 	}
+	if !stored.Revoked {
+		if err := h.refresh.MarkUsed(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
 
 	u, err := h.users.GetByID(ctx, userID)
 	if err != nil {
@@ -410,21 +425,9 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 	}
 
 	// Mint access only — refresh chain stays intact.
-	var slug string
-	if h.tenantSlug != nil && u.TenantID != uuid.Nil {
-		slug, _ = h.tenantSlug(ctx, u.TenantID)
-	}
-	access, accessExp, err := h.issuer.MintAccess(issuer.AccessClaims{
-		Subject:    u.UserID.String(),
-		TenantID:   u.TenantID,
-		TenantSlug: slug,
-		Audience:   in.TargetAudience,
-		Roles:      u.Roles,
-		Scopes:     u.Scopes,
-		Kind:       auth.PrincipalKindUser,
-	})
+	access, accessExp, err := h.mintAccess(ctx, u, in.TargetAudience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("mint access: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &ExchangeAudienceOutput{
 		AccessToken:     access,
@@ -639,7 +642,7 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 		return nil, err
 	}
 
-	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil)
+	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil, uuid.Nil)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -847,10 +850,140 @@ func checkLoginRow(u authstore.User, password string) (authstore.User, error) {
 	return u, nil
 }
 
+// mintAccess mints a user access token for audience. Tenant slug lookup
+// failure is non-fatal: the token still binds the tenant by UUID, and Cedar
+// policies fall back to UUID-keyed Tenant UIDs.
+func (h *Handler) mintAccess(ctx context.Context, u authstore.User, audience string) (string, time.Time, error) {
+	var slug string
+	if h.tenantSlug != nil && u.TenantID != uuid.Nil {
+		slug, _ = h.tenantSlug(ctx, u.TenantID)
+	}
+	access, exp, err := h.issuer.MintAccess(issuer.AccessClaims{
+		Subject:    u.UserID.String(),
+		TenantID:   u.TenantID,
+		TenantSlug: slug,
+		Audience:   audience,
+		Roles:      u.Roles,
+		Scopes:     u.Scopes,
+		Kind:       auth.PrincipalKindUser,
+	})
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("mint access: %w", err)
+	}
+	return access, exp, nil
+}
+
+// eligibleFor loads the token's user, refuses one that is gone, disabled or
+// moved tenant, and resolves the requested audience (data when empty) against
+// what that user may hold.
+func (h *Handler) eligibleFor(ctx context.Context, userID, tenantID uuid.UUID, requested string) (authstore.User, string, error) {
+	u, err := h.users.GetByID(ctx, userID)
+	if err != nil {
+		return authstore.User{}, "", connect.NewError(connect.CodeUnauthenticated, errors.New("user no longer exists"))
+	}
+	if u.Disabled || u.TenantID != tenantID {
+		return authstore.User{}, "", connect.NewError(connect.CodePermissionDenied, errors.New("user no longer eligible"))
+	}
+	audience := requested
+	if audience == "" {
+		audience = auth.AudienceData
+	}
+	if err := h.assertAudienceAllowed(u, audience); err != nil {
+		return authstore.User{}, "", err
+	}
+	return u, audience, nil
+}
+
+// lostRotationRecoveryWindow bounds how long after a rotation the holder of
+// the superseded token may still collect the successor it never received.
+//
+// The grace window (supersessionGrace) covers two requests racing one
+// rotation. This covers the response that never arrived: the client — a
+// browser that navigated away while /api/auth/me was in flight — still holds
+// the superseded token, and without recovery its next presentation after the
+// grace was a replay to reuse detection, which revoked the family.
+//
+// Any recovery widens what a stolen predecessor is worth, so it is bounded
+// twice: by this window, and by the successor never having been presented. A
+// thief replaying an old token arrives after the holder moved on, and the
+// holder moving on is exactly what marks the successor used; that replay
+// still meets reuse detection. Ten minutes outlasts the console's rotation
+// schedule (one rotation per five minutes of session age) with room for a
+// slow page load.
+const lostRotationRecoveryWindow = 10 * time.Minute
+
+// lostRotationRecoverable reports whether parent was superseded by rotation
+// within the recovery window and its successor has never been presented.
+func (h *Handler) lostRotationRecoverable(ctx context.Context, parent authstore.RefreshToken) bool {
+	_, ok, err := h.unusedSuccessorOf(ctx, parent)
+	return err == nil && ok
+}
+
+func (h *Handler) unusedSuccessorOf(ctx context.Context, parent authstore.RefreshToken) (authstore.RefreshToken, bool, error) {
+	// superseded_at is cleared when a family is killed (logout, reuse
+	// detection), so a deliberately ended session never qualifies.
+	if parent.SupersededAt == nil || h.now().Sub(*parent.SupersededAt) > lostRotationRecoveryWindow {
+		return authstore.RefreshToken{}, false, nil
+	}
+	succ, err := h.refresh.UnusedSuccessor(auth.WithActingTenant(ctx, parent.TenantID), parent.JTI)
+	if errors.Is(err, authstore.ErrNotFound) {
+		return authstore.RefreshToken{}, false, nil
+	}
+	if err != nil {
+		return authstore.RefreshToken{}, false, err
+	}
+	if h.now().After(succ.ExpiresAt) {
+		return authstore.RefreshToken{}, false, nil
+	}
+	return succ, true, nil
+}
+
+// recoverLostRotation re-issues parent's unused successor to parent's holder:
+// the same jti, signed again with the row's own expiry, so the store and
+// reuse detection still see one token. It returns nil, nil when parent does
+// not qualify, leaving the caller to treat the presentation as a replay.
+func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.RefreshToken, requestedAudience string) (*RefreshOutput, error) {
+	succ, ok, err := h.unusedSuccessorOf(ctx, parent)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	u, audience, err := h.eligibleFor(ctx, succ.UserID, succ.TenantID, requestedAudience)
+	if err != nil {
+		return nil, err
+	}
+	access, accessExp, err := h.mintAccess(ctx, u, audience)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	refresh, refreshExp, err := h.issuer.MintRefresh(issuer.RefreshClaims{
+		Subject:   u.UserID.String(),
+		TenantID:  u.TenantID,
+		UserID:    u.UserID,
+		TokenID:   succ.JTI,
+		ExpiresAt: succ.ExpiresAt,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("mint refresh: %w", err))
+	}
+	logger.FromContext(ctx).Info("re-issued a rotation whose response was lost",
+		zap.String("user_id", u.UserID.String()),
+		zap.String("jti", succ.JTI.String()))
+	return &RefreshOutput{
+		AccessToken:      access,
+		RefreshToken:     refresh,
+		AccessExpiresAt:  accessExp,
+		RefreshExpiresAt: refreshExp,
+		Audience:         audience,
+	}, nil
+}
+
 // mintPair issues an access+refresh pair. familyID groups the refresh chain:
 // pass uuid.Nil for a fresh login (a new family is generated) or the previous
 // token's family on rotation so the chain stays linked for reuse-detection.
-func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience string, familyID uuid.UUID) (
+func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience string, familyID, parentID uuid.UUID) (
 	access string, refresh string, accessExp, refreshExp time.Time, err error,
 ) {
 	if familyID == uuid.Nil {
@@ -861,21 +994,9 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 	// and Cedar policies fall back to UUID-keyed Tenant UIDs. Logging the
 	// failure is the caller's responsibility (the minting RPC has access
 	// to a logger; this helper does not).
-	var slug string
-	if h.tenantSlug != nil && u.TenantID != uuid.Nil {
-		slug, _ = h.tenantSlug(ctx, u.TenantID)
-	}
-	access, accessExp, err = h.issuer.MintAccess(issuer.AccessClaims{
-		Subject:    u.UserID.String(),
-		TenantID:   u.TenantID,
-		TenantSlug: slug,
-		Audience:   audience,
-		Roles:      u.Roles,
-		Scopes:     u.Scopes,
-		Kind:       auth.PrincipalKindUser,
-	})
+	access, accessExp, err = h.mintAccess(ctx, u, audience)
 	if err != nil {
-		return "", "", time.Time{}, time.Time{}, fmt.Errorf("mint access: %w", err)
+		return "", "", time.Time{}, time.Time{}, err
 	}
 
 	tokenID := uuid.Must(uuid.NewV7())
@@ -895,6 +1016,7 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 		TenantID:  u.TenantID,
 		IssuedAt:  h.now(),
 		ExpiresAt: refreshExp,
+		ParentID:  parentID,
 	}); err != nil {
 		return "", "", time.Time{}, time.Time{}, fmt.Errorf("persist refresh: %w", err)
 	}

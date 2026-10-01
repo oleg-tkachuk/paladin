@@ -28,6 +28,7 @@ func (r *RefreshTokenRepo) Insert(ctx context.Context, t authstore.RefreshToken)
 		pgUUID(t.FamilyID),
 		pgTS(t.IssuedAt),
 		pgTS(t.ExpiresAt),
+		pgUUIDOptional(t.ParentID),
 	)
 }
 
@@ -58,6 +59,13 @@ func refreshTokenFromSQLC(row sqlc.RefreshToken) authstore.RefreshToken {
 	if row.SupersededAt.Valid {
 		at := timeFrom(row.SupersededAt)
 		out.SupersededAt = &at
+	}
+	if row.ParentID.Valid {
+		out.ParentID = uuidFrom(row.ParentID)
+	}
+	if row.FirstUsedAt.Valid {
+		at := timeFrom(row.FirstUsedAt)
+		out.FirstUsedAt = &at
 	}
 	return out
 }
@@ -96,6 +104,21 @@ func (r *RefreshTokenRepo) GetAny(ctx context.Context, jti uuid.UUID) (authstore
 
 func (r *RefreshTokenRepo) RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
 	return r.q.RevokeRefreshTokensForUser(ctx, pgUUID(userID))
+}
+
+func (r *RefreshTokenRepo) MarkUsed(ctx context.Context, jti uuid.UUID) error {
+	return r.q.MarkRefreshTokenUsed(ctx, pgUUID(jti))
+}
+
+func (r *RefreshTokenRepo) UnusedSuccessor(ctx context.Context, parent uuid.UUID) (authstore.RefreshToken, error) {
+	row, err := r.q.GetUnusedRefreshSuccessor(ctx, pgUUID(parent))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return authstore.RefreshToken{}, authstore.ErrNotFound
+		}
+		return authstore.RefreshToken{}, err
+	}
+	return refreshTokenFromSQLC(row), nil
 }
 
 func (r *RefreshTokenRepo) RevokeFamilyOf(ctx context.Context, jti uuid.UUID) (int64, error) {
