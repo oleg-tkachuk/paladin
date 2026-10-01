@@ -90,6 +90,7 @@ const QUICK_LINKS: Array<{
 // emits "0 units / 1,000 units" for that case.
 import { formatMoney } from "@/lib/format/money";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { formatCount } from "@/lib/format/locale";
 
 // IdentityCard renders the tenant's three identity fields in priority
 // order — display name as the heading (mutable, human-friendly), slug
@@ -421,7 +422,7 @@ function CountTile({
               {value === null ? (
                 <Skeleton className="h-7 w-12" />
               ) : (
-                value.toLocaleString()
+                formatCount(value)
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-2">

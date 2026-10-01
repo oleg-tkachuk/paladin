@@ -24,6 +24,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { formatDateTime } from "@/lib/format/locale";
 
 interface ObjectTableRowProps {
   obj: Object$;
@@ -310,7 +311,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
           {obj.createdAt
             ? useRelativeTime
               ? formatDate(timestampToDate(obj.createdAt))
-              : timestampToDate(obj.createdAt).toLocaleString()
+              : formatDateTime(timestampToDate(obj.createdAt))
             : "N/A"}
         </td>
       )}

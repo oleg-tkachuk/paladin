@@ -45,6 +45,7 @@ import { T } from "@/lib/ui/typography";
 import { isAbortError } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
+import { formatCount } from "@/lib/format/locale";
 
 function bigIntFromInput(s: string): bigint {
   const n = s.trim();
@@ -252,7 +253,7 @@ export default function TenantQuotasPage() {
               label="Object count"
               cap={quota.maxObjectCount}
               used={usage?.objectCount ?? 0n}
-              fmt={(n) => n.toLocaleString()}
+              fmt={formatCount}
             />
             <UsageRow
               label="Bytes today"
@@ -264,7 +265,7 @@ export default function TenantQuotasPage() {
               label="Objects today"
               cap={quota.maxObjectsPerDay}
               used={usage?.objectsToday ?? 0n}
-              fmt={(n) => n.toLocaleString()}
+              fmt={formatCount}
             />
           </div>
         ) : null}

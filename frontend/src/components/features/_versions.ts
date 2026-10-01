@@ -1,11 +1,12 @@
 // Pure formatting helpers shared by the object version row, details dialog,
 // and the tab's restore copy. No React. Extracted from ObjectVersionsTab.
 import type { ObjectVersion } from "@/gen/paladin/data/v1/object_service_pb";
+import { formatDateTime } from "@/lib/format/locale";
 
 export function formatTimestampSeconds(seconds: bigint | undefined): string {
   if (!seconds) return "—";
   try {
-    return new Date(Number(seconds) * 1000).toLocaleString();
+    return formatDateTime(new Date(Number(seconds) * 1000));
   } catch {
     return "—";
   }

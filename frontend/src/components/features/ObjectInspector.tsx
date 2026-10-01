@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { formatDateTime } from "@/lib/format/locale";
 
 interface ObjectInspectorProps {
   collection: string | null;
@@ -166,9 +167,11 @@ export function ObjectInspector({
                   <dt className="text-muted-foreground">Expiration</dt>
                   <dd className="font-mono text-xs">
                     {object.presignExpiresAt?.seconds
-                      ? new Date(
-                          Number(object.presignExpiresAt.seconds) * 1000,
-                        ).toLocaleString()
+                      ? formatDateTime(
+                          new Date(
+                            Number(object.presignExpiresAt.seconds) * 1000,
+                          ),
+                        )
                       : "Never"}
                   </dd>
                 </dl>

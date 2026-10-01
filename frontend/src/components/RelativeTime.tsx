@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from "react";
 
 import { timestampToDate } from "@/lib/utils";
+import { DISPLAY_LOCALE, formatDateTime } from "@/lib/format/locale";
 
 type TimestampInput =
   | Date
@@ -52,7 +53,7 @@ const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
 // Module-level: locale config never changes, and constructing
 // Intl.RelativeTimeFormat reads locale data — too costly to repeat on
 // every render of every table row.
-const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+const RTF = new Intl.RelativeTimeFormat(DISPLAY_LOCALE, { numeric: "auto" });
 
 function relativeFormat(d: Date, now: Date): string {
   const diffSecondsRaw = (d.getTime() - now.getTime()) / 1000;
@@ -117,7 +118,7 @@ export function RelativeTime({
     );
   }
   const iso = d.toISOString();
-  const human = absolute ? d.toLocaleString() : relativeFormat(d, new Date());
+  const human = absolute ? formatDateTime(d) : relativeFormat(d, new Date());
   return (
     <time dateTime={iso} title={iso} className={className}>
       {human}

@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { formatTime } from "@/lib/format/locale";
 
 // ─── Types — mirror backend/internal/health.Snapshot wire format ────────────
 //
@@ -340,7 +341,7 @@ export default function HealthPage() {
   const uiVersion = process.env.NEXT_PUBLIC_UI_VERSION || "local";
   const uiCommit =
     (process.env.NEXT_PUBLIC_UI_COMMIT || "").slice(0, 10) || "—";
-  const lastSyncLabel = lastSync ? lastSync.toLocaleTimeString() : "—";
+  const lastSyncLabel = lastSync ? formatTime(lastSync) : "—";
 
   return (
     <div className="space-y-4">

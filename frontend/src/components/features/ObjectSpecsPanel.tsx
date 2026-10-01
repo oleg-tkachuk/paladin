@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { T } from "@/lib/ui/typography";
+import { formatDateTime } from "@/lib/format/locale";
 
 // SpecRow renders one fact in the Specs sidebar — label above value, value
 // gets full sidebar width to wrap into. The row's flex layout keeps the value
@@ -33,7 +34,7 @@ function SpecRow({
 function formatExpiresAt(seconds: bigint | undefined): string {
   if (!seconds) return "Never";
   try {
-    return new Date(Number(seconds) * 1000).toLocaleString();
+    return formatDateTime(new Date(Number(seconds) * 1000));
   } catch {
     return "—";
   }
