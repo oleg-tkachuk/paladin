@@ -1193,46 +1193,6 @@ finding moving from "packages you import" to "your code is affected".
   the bucket/tenant RPCs to verify the flow (the lab's ListBuckets/GetTenant are
   currently failing — an environment condition, not a UI regression).
 
-### Migrate `middleware.ts` → `proxy.ts` (Next 16 convention)
-
-- **Status:** Blocked (on a Next.js version that wires `proxy` into the
-  standalone manifest).
-- **Reason:** Next 16 renamed the edge-`middleware` convention to `proxy`;
-  the build prints a deprecation warning for `src/middleware.ts`. We
-  deliberately keep `middleware.ts` — on the pinned **16.2.6**, a `proxy.ts`
-  compiles (`ƒ Proxy (Middleware)`) but takes the Node-runtime path
-  (`runDependingOnPageType` → `onServer`, vs edge `onEdgeServer`) and is NOT
-  written into `middleware-manifest.json`, so the standalone runtime never
-  executes it — silently disabling the auth/CSRF route gate. The deprecation
-  warning is cosmetic; `middleware.ts` still works (verified in the deployed
-  stack). Switching now would be a silent security regression, so it's parked.
-- **Definition of Done:**
-  - On a future Next upgrade, rename `src/middleware.ts` → `src/proxy.ts` and
-    `export function middleware` → `export function proxy` (config export
-    unchanged).
-  - Re-test the manifest: a `output: standalone` build must write the proxy
-    function into `middleware-manifest.json` AND the standalone server must
-    execute it (confirm the /login redirect + CSRF Origin gate still fire).
-  - Delete this entry once the warning is gone and the gate is verified.
-- **Blockers:** a Next.js release that makes the `output: standalone` server
-  execute a `proxy` function (recheck at each upgrade — see the rationale block
-  atop `frontend/src/middleware.ts`).
-- **Recheck log:**
-  - **2026-07-21 — 16.2.10 (latest stable): STILL BLOCKED.** Bumped
-    `next` + `eslint-config-next` 16.2.6 → 16.2.10, renamed to `proxy.ts` /
-    `export function proxy`, ran an `output: standalone` build. A control build
-    of the same tree under `middleware.ts` populated the manifest
-    (`middleware: ["/"]`, `sortedMiddleware: ["/"]`, real matcher regexp);
-    the `proxy.ts` build left it empty (`middleware: {}`, `sortedMiddleware:
-    []`, `functions: {}`) — same version, same build, only the convention
-    changed. New datum: `proxy` is now **Node-runtime-only by design** — adding
-    `export const runtime = "edge"` hard-errors the build (`Route segment
-    config is not allowed in Proxy file … Proxy always runs on Node.js
-    runtime`), so the edge path that middleware relies on is not reachable from
-    `proxy`. The fix must come from Next running the Node-runtime proxy in the
-    standalone server, not from a config workaround on our side. Reverted the
-    bump + rename; `middleware.ts` stays.
-
 ### Remaining bucket sub-tab: Replication
 
 - **Status:** Deferred (Versioning DONE; Replication blocked on the worker)

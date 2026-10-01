@@ -11,6 +11,7 @@
  *   - post-login bounce back to ?next= target
  *   - default landing on no `next` param (loop prevention)
  *   - invalid credentials stay on /login with error visible
+ *   - a cross-origin POST to /api is refused by the proxy (CSRF)
  *
  * No `beforeEach` here — every scenario opens a fresh
  * BrowserContext so cookies / localStorage from one scenario
@@ -18,6 +19,14 @@
  */
 import { test, expect } from "@playwright/test";
 import { SEEDED_ADMIN } from "./fixtures/credentials";
+
+// Any state-changing /api route will do; logout is reachable without a
+// session, so the proxy's verdict is the only thing that can refuse it.
+const UNSAFE_API_ROUTE = "/api/auth/logout";
+// RFC 2606 reserves .invalid, so this can never be the console's own host.
+const FOREIGN_ORIGIN = "https://csrf.invalid";
+const CSRF_STATUS = 403;
+const CSRF_MESSAGE = "cross-origin request rejected";
 
 test.describe("US1 — Login + AuthGate", () => {
   test("deep-link redirect: navigating to /tenants without a session bounces to /login?next=%2Ftenants", async ({
@@ -117,5 +126,27 @@ test.describe("US1 — Login + AuthGate", () => {
     } finally {
       await context.close();
     }
+  });
+
+  // The client-side AuthGate redirects too, so the deep-link test above
+  // passes even when the server-side proxy never runs. This one does not:
+  // only src/proxy.ts refuses a foreign Origin, and Next has shipped a
+  // standalone build that compiled the proxy without executing it.
+  test("cross-origin POST to /api is refused by the proxy", async ({
+    request,
+    baseURL,
+  }) => {
+    const foreign = await request.post(UNSAFE_API_ROUTE, {
+      headers: { Origin: FOREIGN_ORIGIN },
+    });
+    expect(foreign.status()).toBe(CSRF_STATUS);
+    expect((await foreign.json()).message).toBe(CSRF_MESSAGE);
+
+    // Same request from our own origin passes the gate: the refusal above
+    // is about the Origin, not about the route.
+    const own = await request.post(UNSAFE_API_ROUTE, {
+      headers: { Origin: new URL(baseURL!).origin },
+    });
+    expect(own.status()).not.toBe(CSRF_STATUS);
   });
 });

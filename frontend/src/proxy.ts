@@ -4,16 +4,13 @@ import { AUDIENCES } from "@/constants";
 import { refreshCookieName } from "@/lib/auth/cookies";
 
 /**
- * Edge middleware — first line of route protection.
+ * Proxy — first line of route protection.
  *
- * MUST stay named `middleware.ts` with `export function middleware`. The
- * Next.js 16 `proxy.ts` / `export function proxy` convention is detected
- * and compiled (build prints "ƒ Proxy (Middleware)") but as of 16.2.6 it
- * is NOT written into `middleware-manifest.json`, so the standalone
- * runtime never executes it — the gate silently does nothing. The
- * `middleware` convention populates the manifest correctly; the
- * deprecation warning it prints is cosmetic. Re-test the manifest before
- * switching to `proxy` on any future Next upgrade.
+ * Next 16.2.x compiled a `proxy.ts` without writing it into
+ * `middleware-manifest.json`, so the standalone server never ran it and
+ * the gate silently did nothing. On 16.3.7 the standalone server executes
+ * it; `tests/e2e/auth.spec.ts` pins that by expecting the CSRF refusal
+ * below, which nothing else in the stack produces.
  *
  * Treats the presence of the iam refresh-token cookie as a coarse "logged-in"
  * signal: if it's missing, redirect to /login with the original path as
