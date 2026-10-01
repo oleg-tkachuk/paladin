@@ -408,8 +408,8 @@ export default function BillingPage() {
                           pctOfBudget >= 90
                             ? "bg-destructive"
                             : pctOfBudget >= 70
-                              ? "bg-amber-500"
-                              : "bg-emerald-500",
+                              ? "bg-warning"
+                              : "bg-success",
                         )}
                         style={{ width: `${pctOfBudget}%` }}
                       />

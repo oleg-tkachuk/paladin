@@ -109,9 +109,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
       {testResult && (
         <Badge
           variant="outline"
-          className={
-            testResult.reachable ? "text-emerald-500" : "text-destructive"
-          }
+          className={testResult.reachable ? "text-success" : "text-destructive"}
         >
           {testResult.reachable
             ? `reachable · ${testResult.latencyMs}ms`

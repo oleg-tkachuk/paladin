@@ -625,7 +625,7 @@ export function CommandPalette() {
           {failedSources.length > 0 && (
             <div
               role="status"
-              className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+              className="mb-2 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning"
             >
               Incomplete — {failedSources.join(", ")} did not respond.
             </div>

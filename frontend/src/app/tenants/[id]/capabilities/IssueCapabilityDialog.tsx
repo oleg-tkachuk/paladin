@@ -248,7 +248,7 @@ export function IssueCapabilityDialog({
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircleIcon className="size-5 text-emerald-500" />
+              <CheckCircleIcon className="size-5 text-success" />
               Capability issued
             </DialogTitle>
             <DialogDescription>
@@ -257,7 +257,7 @@ export function IssueCapabilityDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+            <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
               <ExclamationTriangleIcon className="mr-1 inline-block size-4 align-text-bottom" />
               Hand it over a secure channel: anyone holding it can act under its
               caveats until it expires.

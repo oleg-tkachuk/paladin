@@ -70,8 +70,8 @@ function pctOf(used: bigint, cap: bigint): number {
 
 function progressColour(pct: number): string {
   if (pct >= 90) return "bg-destructive";
-  if (pct >= 70) return "bg-amber-500";
-  return "bg-emerald-500";
+  if (pct >= 70) return "bg-warning";
+  return "bg-success";
 }
 
 export default function TenantQuotasPage() {

@@ -343,7 +343,7 @@ function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
               over
                 ? "text-destructive font-semibold"
                 : pct >= 90
-                  ? "text-amber-600 dark:text-amber-400"
+                  ? "text-warning"
                   : "text-muted-foreground",
             )}
           >
@@ -356,11 +356,7 @@ function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
           <div
             className={cn(
               "h-full rounded-full",
-              over
-                ? "bg-destructive"
-                : pct >= 90
-                  ? "bg-amber-500"
-                  : "bg-chart-2",
+              over ? "bg-destructive" : pct >= 90 ? "bg-warning" : "bg-chart-2",
             )}
             style={{ width: `${Math.min(100, pct)}%` }}
           />

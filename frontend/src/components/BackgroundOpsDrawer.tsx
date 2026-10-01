@@ -167,7 +167,7 @@ export function BackgroundOpsDrawer() {
             <Tile
               label="In progress"
               value={summary.inProgress}
-              accent="text-amber-500"
+              accent="text-warning"
             />
             <Tile
               label="Failed"
@@ -177,7 +177,7 @@ export function BackgroundOpsDrawer() {
             <Tile
               label="Recent done"
               value={summary.done}
-              accent="text-emerald-500"
+              accent="text-success"
             />
           </div>
           {loading && summary.ops.length === 0 ? (
@@ -275,8 +275,8 @@ function OpRow({
   const tint = failed
     ? "text-destructive"
     : succeeded
-      ? "text-emerald-500"
-      : "text-amber-500";
+      ? "text-success"
+      : "text-warning";
 
   return (
     <li className="rounded-md border border-border bg-background/40 p-2.5 text-xs">

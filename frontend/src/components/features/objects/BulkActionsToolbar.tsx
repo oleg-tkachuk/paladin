@@ -33,8 +33,8 @@ export function BulkActionsToolbar({
       id: "archive",
       label: "Delete",
       icon: TrashIcon,
-      color: "text-rose-400",
-      hover: "hover:bg-rose-600 hover:text-white hover:border-rose-500",
+      color: "text-destructive",
+      hover: "hover:bg-destructive hover:text-white hover:border-destructive",
       onClick: onBulkDelete,
     },
   ];

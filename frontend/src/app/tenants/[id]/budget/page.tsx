@@ -55,8 +55,8 @@ function progressColour(spent: number, max: number): string {
   if (max <= 0) return "bg-primary/40";
   const pct = (spent / max) * 100;
   if (pct >= 90) return "bg-destructive";
-  if (pct >= 70) return "bg-amber-500";
-  return "bg-emerald-500";
+  if (pct >= 70) return "bg-warning";
+  return "bg-success";
 }
 
 export default function TenantBudgetPage() {

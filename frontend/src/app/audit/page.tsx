@@ -134,8 +134,8 @@ export default function AuditPage() {
               <span
                 className={cn(
                   "size-2 rounded-full",
-                  live && connected && "bg-emerald-500 animate-pulse",
-                  live && !connected && "bg-amber-500",
+                  live && connected && "bg-success animate-pulse",
+                  live && !connected && "bg-warning",
                   !live && "bg-muted-foreground/40",
                 )}
               />

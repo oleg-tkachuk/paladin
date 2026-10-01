@@ -47,7 +47,7 @@ export function MCPSessions() {
   if (rows.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <p className={unreachable ? "text-sm text-amber-500" : T.helper}>
+        <p className={unreachable ? "text-sm text-warning" : T.helper}>
           {unreachable
             ? `The MCP server could not be reached, so whether anyone is connected is unknown: ${unreachable}`
             : "No agent is connected. A session appears here when one initializes over streamable HTTP."}

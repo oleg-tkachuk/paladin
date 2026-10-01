@@ -69,11 +69,11 @@ function Prerequisite({
   onLeave: () => void;
 }) {
   return (
-    <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-      <p className="text-amber-900 dark:text-amber-200">{children}</p>
+    <div className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+      <p className="text-warning">{children}</p>
       <Link
         href={href}
-        className="inline-flex items-center gap-1 text-amber-700 hover:underline dark:text-amber-300"
+        className="inline-flex items-center gap-1 text-warning hover:underline"
         onClick={onLeave}
       >
         {action} →
@@ -214,7 +214,7 @@ export function TenantCreateDialog({
             hint="Used in URLs and Cedar policies. Cannot be changed later."
             aside={
               slug && !slugError ? (
-                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="text-[11px] font-medium text-success">
                   valid
                 </span>
               ) : null

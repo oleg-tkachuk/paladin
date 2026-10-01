@@ -620,7 +620,7 @@ export default function PoliciesPage() {
             )}
             <CedarIndicator state={cedarState} />
             {diagnostics !== null && diagnostics.length === 0 && (
-              <div className="flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm text-emerald-700 dark:text-emerald-400">
+              <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-sm text-success">
                 <CheckCircleIcon className="size-4" />
                 Policy parses cleanly.
               </div>
@@ -748,7 +748,7 @@ function DiagnosticRow({ diag }: { diag: PolicyDiagnostic }) {
         "flex items-start gap-2 rounded-md border p-2 text-sm",
         isError
           ? "border-destructive/40 bg-destructive/10 text-destructive"
-          : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+          : "border-warning/40 bg-warning/10 text-warning",
       )}
     >
       <Icon className="mt-0.5 size-4 shrink-0" />
