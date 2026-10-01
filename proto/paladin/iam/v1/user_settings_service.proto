@@ -55,7 +55,7 @@ message UserSettings {
   string tenant_id = 3;
   string timezone = 4;  // IANA tz database name, e.g. "Europe/Kyiv".
   string locale = 5;    // BCP-47, e.g. "uk-UA".
-  string theme = 6;     // "light" | "dark" | "system".
+  string theme = 6;     // "light" | "dark" | "violet" | "system".
   // Free-form UI state. Server treats as opaque; bounded at 16 KiB on write.
   google.protobuf.Struct preferences = 7;
   string resource_version = 8 [(google.api.field_behavior) = OUTPUT_ONLY];

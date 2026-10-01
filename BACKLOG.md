@@ -1152,21 +1152,18 @@ finding moving from "packages you import" to "your code is affected".
 
 ## UI / Admin Console
 
-### The console does not apply the user's theme, time zone or locale
+### The console does not apply the user's time zone or locale
 
 - **Status:** Deferred.
-- **Reason:** `/profile` saves all three through `UserSettingsService`, and
-  nothing reads them back: the root layout hard-codes the `dark` class, dates
-  are written in `DISPLAY_LOCALE` (`lib/format/locale.ts`) in the browser's time
-  zone. The light palette under `:root` exists, but about 350 hard-coded colour
-  classes (`bg-[#0A0C10]`, `text-slate-*`, `bg-white/5`, …) would render
-  dark-on-light without a pass over them first. The card now says the settings
-  are not applied (`SETTINGS_NOT_APPLIED`).
+- **Reason:** `/profile` saves both through `UserSettingsService`, and nothing
+  reads them back: dates are written in `DISPLAY_LOCALE`
+  (`lib/format/locale.ts`) in the browser's time zone. The theme is applied
+  (`ThemeSync`); the card says the other two are not (`SETTINGS_APPLIED_NOTE`).
 - **Definition of Done:** time zone passed as `timeZone` to the formatters in
-  `lib/format`; theme toggling the `dark` class, after the hard-coded colours
-  become tokens; a decision on whether an explicit locale overrides
-  `DISPLAY_LOCALE`; `SETTINGS_NOT_APPLIED` and its test removed.
-- **Blockers:** the colour pass, for theme.
+  `lib/format`; a decision on whether an explicit locale overrides
+  `DISPLAY_LOCALE`; `SETTINGS_APPLIED_NOTE` reduced to nothing and removed with
+  its test.
+- **Blockers:** none.
 
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY
 

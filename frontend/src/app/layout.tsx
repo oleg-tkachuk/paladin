@@ -10,6 +10,7 @@ import { GeistMono } from "geist/font/mono";
 
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { NotificationProvider } from "@/components/ui/Notification";
 import { AuthProvider } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -30,7 +31,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} dark`}
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
       suppressHydrationWarning
     >
       <body className="bg-background text-foreground font-sans min-h-screen selection:bg-primary/30">
@@ -43,16 +44,18 @@ export default function RootLayout({
             useEffect-driven list/version fetches throw before there's a
             session — visible as red toasts on the login page.
         */}
-        <QueryProvider>
-          <TooltipProvider delayDuration={150}>
-            <NotificationProvider>
-              <AuthProvider>
-                <ClientLayout>{children}</ClientLayout>
-                <Toaster richColors position="bottom-right" />
-              </AuthProvider>
-            </NotificationProvider>
-          </TooltipProvider>
-        </QueryProvider>
+        <ThemeProvider>
+          <QueryProvider>
+            <TooltipProvider delayDuration={150}>
+              <NotificationProvider>
+                <AuthProvider>
+                  <ClientLayout>{children}</ClientLayout>
+                  <Toaster richColors position="bottom-right" />
+                </AuthProvider>
+              </NotificationProvider>
+            </TooltipProvider>
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

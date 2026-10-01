@@ -8,6 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { AuthGate } from "@/components/AuthGate";
+import { ThemeSync } from "@/components/ThemeSync";
 import { AdminPlaneGate } from "@/components/AdminPlaneGate";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { ActionsProvider } from "@/context/ActionsContext";
@@ -77,6 +78,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             <ShellProvider>
               <StatsProvider>
                 <AuthGate publicRoutes={STANDALONE_ROUTES}>
+                  <ThemeSync />
                   <div className="flex min-h-screen w-full bg-background text-foreground">
                     <CommandPalette />
                     <KeyboardHelp />

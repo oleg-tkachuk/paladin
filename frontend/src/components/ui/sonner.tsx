@@ -10,12 +10,15 @@ import {
   Loader2Icon,
 } from "lucide-react";
 
+import { THEME_LIGHT } from "@/lib/theme";
+
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  // Sonner knows light and dark only; violet is a dark palette.
+  const { resolvedTheme } = useTheme();
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={resolvedTheme === THEME_LIGHT ? "light" : "dark"}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

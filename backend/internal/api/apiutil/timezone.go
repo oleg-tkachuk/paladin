@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -48,13 +50,25 @@ func ValidateLocale(s string) error {
 	return nil
 }
 
+// Themes the web client understands. ThemeSystem follows the browser's
+// light/dark preference; ThemeViolet is a second dark palette.
+// migrations/022_user_settings_theme_violet.sql holds the same set as a CHECK
+// constraint, and TestThemesMatchMigrationCheck keeps the two equal.
+const (
+	ThemeSystem = "system"
+	ThemeLight  = "light"
+	ThemeDark   = "dark"
+	ThemeViolet = "violet"
+)
+
+// Themes lists every accepted theme.
+var Themes = []string{ThemeSystem, ThemeLight, ThemeDark, ThemeViolet}
+
 // ValidateTheme bounds the theme universe to the values understood by the
 // web client. Storing arbitrary strings here would break the UI silently.
 func ValidateTheme(s string) error {
-	switch s {
-	case "light", "dark", "system":
+	if slices.Contains(Themes, s) {
 		return nil
-	default:
-		return fmt.Errorf("theme %q must be one of: light, dark, system", s)
 	}
+	return fmt.Errorf("theme %q must be one of: %s", s, strings.Join(Themes, ", "))
 }

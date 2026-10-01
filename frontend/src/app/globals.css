@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* Both dark palettes take the `dark:` variant. Light is the bare :root. */
+@custom-variant dark (&:is(.dark *, .violet *));
 
 /* ─── shadcn/ui tokens (neutral, dark-default) ─────────────────────────── */
 @theme inline {
@@ -55,7 +56,7 @@
 :root {
   --radius: 0.625rem;
 
-  /* Light mode (rarely used — dark is default) */
+  /* Light palette: the "light" theme, and "system" on a light OS. */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -168,11 +169,66 @@
   --border-opacity: 0.09;
 }
 
+.violet {
+  /* ── "Violet" ─────────────────────────────────────────────────────────
+   * A second dark palette: a near-black indigo ground and one violet
+   * accent, with white text on solid primary. Status colours are the
+   * bright Tailwind 400 steps, so text on their solid fills is the ground
+   * colour rather than white. */
+
+  --background: #0d0d14;
+  --foreground: #e4e4f0;
+  --card: #13131e;
+  --card-foreground: #e4e4f0;
+  --popover: #13131e;
+  --popover-foreground: #e4e4f0;
+
+  --primary: #7c6fff;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1a1a2a;
+  --secondary-foreground: #e4e4f0;
+  --muted: #1a1a2a;
+  --muted-foreground: #8888aa;
+  --accent: #1a1a2a;
+  --accent-foreground: #e4e4f0;
+
+  --destructive: #f87171;
+  --destructive-foreground: #0d0d14;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --warning-foreground: #0d0d14;
+  --info: #60a5fa;
+
+  --border: #232334;
+  --input: #2e2e44;
+  --ring: #7c6fff;
+
+  --chart-1: #7c6fff;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #f87171;
+  --chart-5: #60a5fa;
+
+  --sidebar: #13131e;
+  --sidebar-foreground: #e4e4f0;
+  --sidebar-primary: #7c6fff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1a1a2a;
+  --sidebar-accent-foreground: #e4e4f0;
+  --sidebar-border: #232334;
+  --sidebar-ring: #7c6fff;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   html {
+    color-scheme: light;
+  }
+  html.dark,
+  html.violet {
     color-scheme: dark;
   }
   body {
