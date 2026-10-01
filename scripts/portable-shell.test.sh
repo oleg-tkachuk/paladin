@@ -21,7 +21,9 @@ readonly RULES=(
 )
 
 failed=0
-scripts=$(git ls-files '*.sh' | grep -v '^\.task/')
+# This file is excluded: its rules spell the very patterns they refuse.
+readonly SELF=scripts/portable-shell.test.sh
+scripts=$(git ls-files '*.sh' | grep -v '^\.task/' | grep -vxF "$SELF")
 for rule in "${RULES[@]}"; do
     pattern="${rule%|*}"
     why="${rule##*|}"
