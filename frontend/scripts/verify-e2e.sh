@@ -128,7 +128,7 @@ echo "      HEAD                                     rev=$(git describe --always
 export CI=true
 
 echo ">>> [e2e] Playwright"
-log=$(mktemp -t paladin-e2e-pw)
+log=$(mktemp "${TMPDIR:-/tmp}/paladin-e2e-pw.XXXXXX")
 cd frontend
 pnpm run test:e2e 2>&1 | tee "$log"
 
