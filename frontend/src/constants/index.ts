@@ -56,12 +56,6 @@ export const DEFAULT_OBJECT_KEY = "default";
  * origin (use the `paladin_` prefix consistently).
  */
 export const STORAGE_KEYS = {
-  /**
-   * Legacy single-audience token slot. Reserved for the /config dev override —
-   * if set, it's used for ALL audiences as a bypass until real Login lands.
-   * Real per-audience tokens live in memory (tokenStore), not localStorage.
-   */
-  authToken: "paladin_token",
   /** Active backend ID for soft-scope filters (set in TenantSwitcher). */
   scopeBackend: "paladin_scope_backend",
   /** Active bucket name for soft-scope filters. */
