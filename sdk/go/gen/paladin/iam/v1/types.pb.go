@@ -275,11 +275,11 @@ const file_paladin_iam_v1_types_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
 	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12C\n" +
-	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastLoginAt\"\xa4\x02\n" +
-	"\tTokenPair\x12&\n" +
-	"\faccess_token\x18\x01 \x01(\tB\x03\xe0A\x03R\vaccessToken\x12>\n" +
-	"\x19access_expires_in_seconds\x18\x02 \x01(\x05B\x03\xe0A\x03R\x16accessExpiresInSeconds\x12(\n" +
-	"\rrefresh_token\x18\x03 \x01(\tB\x03\xe0A\x03R\frefreshToken\x12@\n" +
+	"\rlast_login_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastLoginAt\"\xaa\x02\n" +
+	"\tTokenPair\x12)\n" +
+	"\faccess_token\x18\x01 \x01(\tB\x06\xe0A\x03\x80\x01\x01R\vaccessToken\x12>\n" +
+	"\x19access_expires_in_seconds\x18\x02 \x01(\x05B\x03\xe0A\x03R\x16accessExpiresInSeconds\x12+\n" +
+	"\rrefresh_token\x18\x03 \x01(\tB\x06\xe0A\x03\x80\x01\x01R\frefreshToken\x12@\n" +
 	"\x1arefresh_expires_in_seconds\x18\x04 \x01(\x05B\x03\xe0A\x03R\x17refreshExpiresInSeconds\x12\"\n" +
 	"\n" +
 	"token_type\x18\x05 \x01(\tB\x03\xe0A\x03R\ttokenType\x12\x1f\n" +

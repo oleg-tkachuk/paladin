@@ -1069,22 +1069,24 @@ var File_paladin_iam_v1_auth_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\n" +
-	"!paladin/iam/v1/auth_service.proto\x12\x0epaladin.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1apaladin/iam/v1/types.proto\"\xa1\x01\n" +
+	"!paladin/iam/v1/auth_service.proto\x12\x0epaladin.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1apaladin/iam/v1/types.proto\"\xab\x01\n" +
 	"\fLoginRequest\x12!\n" +
-	"\asubject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\x12#\n" +
-	"\rupstream_code\x18\x03 \x01(\tR\fupstreamCode\x12-\n" +
+	"\asubject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12\x1f\n" +
+	"\bpassword\x18\x02 \x01(\tB\x03\x80\x01\x01R\bpassword\x12(\n" +
+	"\rupstream_code\x18\x03 \x01(\tB\x03\x80\x01\x01R\fupstreamCode\x12-\n" +
 	"\x12requested_audience\x18\x04 \x01(\tR\x11requestedAudience\"l\n" +
 	"\rLoginResponse\x121\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\x12(\n" +
-	"\x04user\x18\x02 \x01(\v2\x14.paladin.iam.v1.UserR\x04user\"r\n" +
-	"\x13RefreshTokenRequest\x12,\n" +
-	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\x12-\n" +
+	"\x04user\x18\x02 \x01(\v2\x14.paladin.iam.v1.UserR\x04user\"u\n" +
+	"\x13RefreshTokenRequest\x12/\n" +
+	"\rrefresh_token\x18\x01 \x01(\tB\n" +
+	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\frefreshToken\x12-\n" +
 	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"I\n" +
 	"\x14RefreshTokenResponse\x121\n" +
-	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\".\n" +
-	"\rRevokeRequest\x12\x1d\n" +
-	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
+	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\"1\n" +
+	"\rRevokeRequest\x12 \n" +
+	"\x05token\x18\x01 \x01(\tB\n" +
+	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\x05token\"\x10\n" +
 	"\x0eRevokeResponse\"9\n" +
 	"\rWhoAmIRequest\x12(\n" +
 	"\x10route_page_token\x18\x01 \x01(\tR\x0eroutePageToken\"\x83\x02\n" +
@@ -1103,16 +1105,19 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\n" +
 	"bare_alias\x18\x03 \x01(\tR\tbareAlias\x12\x18\n" +
 	"\abackend\x18\x04 \x01(\tR\abackend\x12\x16\n" +
-	"\x06bucket\x18\x05 \x01(\tR\x06bucket\"o\n" +
-	"\x15ChangePasswordRequest\x12*\n" +
-	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\voldPassword\x12*\n" +
-	"\fnew_password\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\fR\vnewPassword\"\x18\n" +
-	"\x16ChangePasswordResponse\"y\n" +
-	"\x17ExchangeAudienceRequest\x12,\n" +
-	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\x120\n" +
-	"\x0ftarget_audience\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0etargetAudience\"\x97\x01\n" +
-	"\x18ExchangeAudienceResponse\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
+	"\x06bucket\x18\x05 \x01(\tR\x06bucket\"u\n" +
+	"\x15ChangePasswordRequest\x12-\n" +
+	"\fold_password\x18\x01 \x01(\tB\n" +
+	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\voldPassword\x12-\n" +
+	"\fnew_password\x18\x02 \x01(\tB\n" +
+	"\xbaH\x04r\x02\x10\f\x80\x01\x01R\vnewPassword\"\x18\n" +
+	"\x16ChangePasswordResponse\"|\n" +
+	"\x17ExchangeAudienceRequest\x12/\n" +
+	"\rrefresh_token\x18\x01 \x01(\tB\n" +
+	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\frefreshToken\x120\n" +
+	"\x0ftarget_audience\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0etargetAudience\"\x9c\x01\n" +
+	"\x18ExchangeAudienceResponse\x12&\n" +
+	"\faccess_token\x18\x01 \x01(\tB\x03\x80\x01\x01R\vaccessToken\x129\n" +
 	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12\x1d\n" +
 	"\n" +
 	"token_type\x18\x03 \x01(\tR\ttokenType\"N\n" +

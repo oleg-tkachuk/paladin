@@ -62,9 +62,9 @@ message LoginRequest {
   // For local IdP: subject is username/email. For federated IdP this RPC
   // accepts an upstream authorization code instead (see auth_method).
   string subject = 1 [(buf.validate.field).string.min_len = 1];
-  string password = 2;
+  string password = 2 [debug_redact = true];
   // Optional upstream IdP code (OIDC authorization-code flow).
-  string upstream_code = 3;
+  string upstream_code = 3 [debug_redact = true];
   // Audience the caller wants the access token for. Server-side ACL still
   // applies — caller cannot escalate beyond their roles.
   string requested_audience = 4; // default: "paladin-data"
@@ -76,7 +76,7 @@ message LoginResponse {
 }
 
 message RefreshTokenRequest {
-  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1, debug_redact = true];
   // Audience the caller wants on the new access token. Empty defaults to
   // `paladin-data` server-side; SPAs that pin a refresh chain to a particular
   // plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
@@ -89,7 +89,7 @@ message RefreshTokenResponse {
 
 message RevokeRequest {
   // Either an access or refresh token; server identifies which.
-  string token = 1 [(buf.validate.field).string.min_len = 1];
+  string token = 1 [(buf.validate.field).string.min_len = 1, debug_redact = true];
 }
 
 message RevokeResponse {}
@@ -149,15 +149,15 @@ message CollectionRoute {
 }
 
 message ChangePasswordRequest {
-  string old_password = 1 [(buf.validate.field).string.min_len = 1];
-  string new_password = 2 [(buf.validate.field).string.min_len = 12];
+  string old_password = 1 [(buf.validate.field).string.min_len = 1, debug_redact = true];
+  string new_password = 2 [(buf.validate.field).string.min_len = 12, debug_redact = true];
 }
 
 message ChangePasswordResponse {}
 
 message ExchangeAudienceRequest {
   // Refresh token from the active session. Validated but NOT consumed.
-  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1, debug_redact = true];
   // Target audience: "paladin-data" | "paladin-admin" | "paladin-iam".
   string target_audience = 2 [(buf.validate.field).string.min_len = 1];
 }
@@ -165,7 +165,7 @@ message ExchangeAudienceRequest {
 message ExchangeAudienceResponse {
   // Short-lived access token bound to target_audience. No refresh token
   // is issued — the caller's existing refresh chain is unchanged.
-  string access_token = 1;
+  string access_token = 1 [debug_redact = true];
   int32 access_expires_in_seconds = 2;
   // Always "Bearer" today; reserved for future scoped-token kinds.
   string token_type = 3;

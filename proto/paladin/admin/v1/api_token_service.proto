@@ -129,7 +129,7 @@ message APITokenServiceCreateResponse {
   APIToken api_token = 1;
   // The full `paladin_pat_…` plaintext. Returned exactly once. Store it
   // securely on the consuming side; it cannot be recovered.
-  string token = 2;
+  string token = 2 [debug_redact = true];
 }
 
 message APITokenServiceRevokeRequest {

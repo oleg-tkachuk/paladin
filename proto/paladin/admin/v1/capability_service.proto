@@ -132,7 +132,7 @@ message CapabilityServiceIssueRequest {
 message CapabilityServiceIssueResponse {
   Capability capability = 1;
   // Compact JWT — return to the caller exactly once; never persisted.
-  string token = 2;
+  string token = 2 [debug_redact = true];
 }
 
 message CapabilityServiceDelegateRequest {

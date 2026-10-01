@@ -2825,29 +2825,29 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12,\n" +
 	"\x12signing_secret_ref\x18\x02 \x01(\tR\x10signingSecretRef\x12!\n" +
 	"\fmax_attempts\x18\x03 \x01(\x05R\vmaxAttempts\x12\x16\n" +
-	"\x06format\x18\x04 \x01(\tR\x06format\"\xbb\x02\n" +
+	"\x06format\x18\x04 \x01(\tR\x06format\"\xc5\x02\n" +
 	"\tKafkaSink\x12\x18\n" +
 	"\abrokers\x18\x01 \x01(\tR\abrokers\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12%\n" +
 	"\x0esasl_mechanism\x18\x03 \x01(\tR\rsaslMechanism\x12#\n" +
-	"\rsasl_username\x18\x04 \x01(\tR\fsaslUsername\x12#\n" +
-	"\rsasl_password\x18\x05 \x01(\tR\fsaslPassword\x12\x1f\n" +
+	"\rsasl_username\x18\x04 \x01(\tR\fsaslUsername\x12(\n" +
+	"\rsasl_password\x18\x05 \x01(\tB\x03\x80\x01\x01R\fsaslPassword\x12\x1f\n" +
 	"\vtls_enabled\x18\x06 \x01(\bR\n" +
 	"tlsEnabled\x12&\n" +
-	"\x0ftls_client_cert\x18\a \x01(\tR\rtlsClientCert\x12$\n" +
-	"\x0etls_client_key\x18\b \x01(\tR\ftlsClientKey\x12\x1e\n" +
+	"\x0ftls_client_cert\x18\a \x01(\tR\rtlsClientCert\x12)\n" +
+	"\x0etls_client_key\x18\b \x01(\tB\x03\x80\x01\x01R\ftlsClientKey\x12\x1e\n" +
 	"\vtls_ca_cert\x18\t \x01(\tR\ttlsCaCert\"Y\n" +
 	"\aSqsSink\x12\x1b\n" +
 	"\tqueue_url\x18\x01 \x01(\tR\bqueueUrl\x12\x16\n" +
 	"\x06region\x18\x02 \x01(\tR\x06region\x12\x19\n" +
-	"\brole_arn\x18\x03 \x01(\tR\aroleArn\"\xcb\x01\n" +
-	"\fRabbitMqSink\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1a\n" +
+	"\brole_arn\x18\x03 \x01(\tR\aroleArn\"\xd5\x01\n" +
+	"\fRabbitMqSink\x12\x15\n" +
+	"\x03url\x18\x01 \x01(\tB\x03\x80\x01\x01R\x03url\x12\x1a\n" +
 	"\bexchange\x18\x02 \x01(\tR\bexchange\x12\x1f\n" +
 	"\vrouting_key\x18\x03 \x01(\tR\n" +
 	"routingKey\x12&\n" +
-	"\x0ftls_client_cert\x18\x04 \x01(\tR\rtlsClientCert\x12$\n" +
-	"\x0etls_client_key\x18\x05 \x01(\tR\ftlsClientKey\x12\x1e\n" +
+	"\x0ftls_client_cert\x18\x04 \x01(\tR\rtlsClientCert\x12)\n" +
+	"\x0etls_client_key\x18\x05 \x01(\tB\x03\x80\x01\x01R\ftlsClientKey\x12\x1e\n" +
 	"\vtls_ca_cert\x18\x06 \x01(\tR\ttlsCaCert\"}\n" +
 	"\bNatsSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x18\n" +
