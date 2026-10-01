@@ -35,3 +35,13 @@ the console or the backend, and its Deep job runs `verify-deep` — the
 Postgres-backed integration suites and the stack gate — when the change reaches
 the backend. The `All checks passed` check that `main` requires waits for both;
 [task.md](task.md#working-on-the-code) lists them for running locally.
+
+Every check `ci.yaml` runs has a local task. The verify groups, `verify-e2e` and
+`verify-deep` are those tasks; its Workflow syntax and Workflow audit jobs
+(actionlint, zizmor) are `task -t Taskfile.dev.yaml verify:workflows`, at the
+versions `ci.yaml` pins. Three things have no local form, by their nature:
+CodeQL ([`codeql.yaml`](../.github/workflows/codeql.yaml)), which is GitHub's
+own analysis and reports to the repository's code-scanning alerts; and the two
+publishing workflows, [`release.yaml`](../.github/workflows/release.yaml) and
+[`sdk.yaml`](../.github/workflows/sdk.yaml), which push images, charts and tags
+and run only from `main` or a tag.
