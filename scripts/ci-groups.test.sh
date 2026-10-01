@@ -49,6 +49,24 @@ if [ "$got_all" != "$all" ]; then
 fi
 check "docs next to code"         '["frontend","repo"]' README.md frontend/src/app/page.tsx
 
+# The Playwright job runs for a change the console or the backend reaches, and
+# for nothing else: it is the slowest job here, and it is the only one that
+# exercises the two together.
+check_e2e() {
+    local name=$1 want=$2 groups=$3 got
+    got="$(printf '%s' "$groups" | "$script" --needs-e2e)"
+    if [ "$got" != "$want" ]; then
+        printf 'FAIL e2e %s\n  want %s\n  got  %s\n' "$name" "$want" "$got"
+        failed=1
+    fi
+}
+check_e2e "a console change"      true  '["frontend","repo"]'
+check_e2e "a backend change"      true  '["backend","capability","repo"]'
+check_e2e "everything"            true  "$all"
+check_e2e "the Python SDK only"   false '["sdk","repo"]'
+check_e2e "repository config"     false '["repo"]'
+check_e2e "documentation only"    false '[]'
+
 # CodeQL skips the same documentation-only changes through paths-ignore, a
 # glob list that cannot share INERT's regex. Every path this file treats as
 # documentation must be ignored there, and no code path may be.

@@ -50,10 +50,23 @@ compose_project=${PALADIN_E2E_PROJECT:-paladin-e2e}
 # double run surfaced it, because the next run's own pre-emptive cleanup hid the
 # leak.
 compose_file="$root/frontend/tests/e2e/docker-compose.test.yaml"
+# On a failed run, the stack's own logs go out before it is torn down: in CI
+# the stack is gone by the time a later step could ask for them, and they are
+# usually what explains a failure the browser only saw as a timeout.
+readonly STACK_LOG_TAIL=200
 cleanup() {
     docker compose -p "$compose_project" -f "$compose_file" down -v >/dev/null 2>&1 || true
 }
-trap cleanup EXIT
+on_exit() {
+    local status=$?
+    if [ "$status" -ne 0 ]; then
+        echo ">>> [e2e] failed — the stack's last ${STACK_LOG_TAIL} log lines:" >&2
+        docker compose -p "$compose_project" -f "$compose_file" logs --no-color \
+            --tail "$STACK_LOG_TAIL" >&2 || true
+    fi
+    cleanup
+}
+trap on_exit EXIT
 cleanup
 
 # The UI port matters here and does not for the backend gate: this is the only

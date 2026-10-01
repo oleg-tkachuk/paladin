@@ -3,10 +3,11 @@ name: CI
 # The whole pipeline: the repository's own fast gate, an audit of these
 # workflows, and — on a green push to main — a dispatch to release.yaml.
 #
-# Deliberately minimal. CI builds no image and pushes no chart; release.yaml
-# publishes both for each release tag. The slower gates that need
-# Docker — `verify-deep` (Postgres-backed suites) and `verify-e2e`
-# (Playwright against a built stack) — are run locally before a merge.
+# Deliberately minimal. CI pushes no image and no chart; release.yaml publishes
+# both for each release tag. `verify-e2e` — Playwright against a stack built
+# from the change — runs here for a change the console or the backend reaches:
+# while it ran only locally, console bugs piled up behind a suite nobody ran.
+# `verify-deep` (the Postgres-backed suites) stays local.
 
 on:
   push:
@@ -77,6 +78,7 @@ jobs:
     outputs:
       relevant: ${{ steps.filter.outputs.relevant }}
       groups: ${{ steps.filter.outputs.groups }}
+      e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,6 +122,9 @@ jobs:
 
           printf '%s\n' "groups: $groups"
           printf '%s\n' "groups=$groups" >>"$GITHUB_OUTPUT"
+          e2e="$(printf '%s' "$groups" | ./scripts/ci-groups.sh --needs-e2e)"
+          printf '%s\n' "end-to-end: $e2e"
+          printf '%s\n' "e2e=$e2e" >>"$GITHUB_OUTPUT"
           if [ "$groups" = "[]" ]; then
             printf '%s\n' "relevant=false" >>"$GITHUB_OUTPUT"
             printf '%s\n' "documentation only — the checks below will report as skipped"
@@ -290,6 +295,78 @@ jobs:
           GROUP: ${{ matrix.group }}
         run: task --yes -t Taskfile.dev.yaml "verify-${GROUP}"
 
+  # The Playwright suite against a stack built from this change, through the
+  # same task a developer runs: `verify-e2e` builds both images, boots the
+  # compose stack and fails on a test that needed a retry to pass. Only for a
+  # change the console or the backend reaches (ci-groups.sh --needs-e2e).
+  e2e:
+    name: End-to-end
+    needs: [changes]
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The image version is derived from git describe.
+          fetch-depth: 0
+
+      - name: Set up Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # scripts/stack-ports.sh derives the images to pre-pull from the compose
+      # file through yq.
+      - name: Set up yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      # Version comes from frontend/package.json "packageManager".
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: frontend/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: task verify-e2e
+        run: task --yes -t Taskfile.dev.yaml verify-e2e
+
+      # The stack's logs are printed by verify-e2e itself before it tears the
+      # stack down; these are the browser's side.
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            frontend/tests/e2e/test-results/
+            frontend/test-results/
+          retention-days: 7
+
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,
   # `needs:` naming a job that exists, and shellcheck over every `run:` block.
@@ -361,7 +438,7 @@ jobs:
   # change, which is a pass; a failure or a cancellation anywhere is not.
   checks:
     name: All checks passed
-    needs: [changes, test, syntax, audit]
+    needs: [changes, test, e2e, syntax, audit]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -385,7 +462,7 @@ jobs:
 
   dispatch-release:
     name: Dispatch release
-    needs: [changes, test, syntax, audit]
+    needs: [changes, test, e2e, syntax, audit]
     # Not for a documentation-only push: its code is byte-identical to the
     # commit before it, so a release would rebuild and republish the same
     # images under a new version. Its commits are not lost — semantic-release
