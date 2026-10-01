@@ -116,13 +116,14 @@ modules through `replace` directives, which `go install …@version` refuses.
 `configs/config.yaml` is the base; `configs/local.yaml` and
 `configs/compose.yaml` are overlays. Keys are validated three ways: a CUE
 schema, a strict unknown-key check that fails on typos rather than
-ignoring them, and `Config.Validate()` for cross-field invariants.
+ignoring them, and `Config.Validate()` for cross-field invariants
+([docs/configuration.md](docs/configuration.md)).
 
-Environment overrides use the `PALADIN_` prefix with `_` → `.` translation,
-so only single-word path segments are reachable that way —
-`PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT` works, a multi-word key like
-`login_rate_limit_per_subject_per_minute` does not and must be set in a
-file.
+Environment overrides use the `PALADIN_` prefix. The name is resolved against
+the schema, so keys with underscores of their own work too:
+`PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT` sets
+`storage.backends.primary.public_endpoint`. Extra files can be layered over
+`--config` with `PALADIN_CONFIG_OVERLAYS`.
 
 Committed credentials are development defaults and are rejected outside
 an allow-listed disposable `app.env`; see `internal/config/weak_secrets.go`.

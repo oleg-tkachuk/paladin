@@ -22,7 +22,7 @@ In order, later wins:
 
    Note the asymmetry: the base path is a flag, only the overlay chain is
    an environment variable. There is no `PALADIN_CONFIG_PATH`.
-3. **Environment variables** — `PALADIN_`-prefixed, `_` translated to `.`.
+3. **Environment variables** — `PALADIN_`-prefixed, resolved against the schema.
 4. **CUE defaults** — the schema fills anything still unset.
 
 The files that ship in the repository:
@@ -34,20 +34,17 @@ The files that ship in the repository:
 | `backend/configs/compose.yaml` | overlay for the compose stacks, dev-loop and e2e |
 | `backend/deploy/chart/values-*.yaml` | Helm renders these into a ConfigMap |
 
-## Environment overrides have a hard limit
+## Environment overrides
 
-The env provider lowercases the name, strips `PALADIN_`, and replaces **every**
-underscore with a dot. So the path segment must itself be a single word:
+The variable name is matched against the schema rather than transliterated
+(`EnvKeyMapper` in `backend/internal/config/strict.go`): split on `_`, then
+take the longest known field name at each step. Keys with underscores of their
+own are therefore reachable:
 
 ```bash
-PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT=http://minio:9000   # → storage.backends.primary.endpoint ✓
-PALADIN_AUTH_SIGNING_KEY=…                                    # → auth.signing.key ✗ — no such key
+PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT=https://s3.example.com   # → storage.backends.primary.public_endpoint
+PALADIN_AUTH_SIGNING_KEY=…                                                # → auth.signing_key
 ```
-
-Multi-word keys — `login_rate_limit_per_subject_per_minute`,
-`shutdown_timeout`, `min_part_size` — are **not reachable** by environment
-variable and must be set in a file. This trips people up regularly; if an
-override appears to do nothing, this is usually why.
 
 ## Secrets
 
@@ -115,14 +112,15 @@ comment. What each top-level block owns:
 | `api` | the data (`:8080`) and iam (`:8085`) listeners |
 | `admin` | the admin listener (`:8090`) |
 | `datastores` | Postgres DSN and the separate migrate / reaper credentials |
-| `limits` | request and object size ceilings, part sizes |
+| `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
 | `auth` | JWT signing, token TTLs, login rate limiting |
-| `security` | transport and header policy |
+| `security` | `reject_tenant_mismatch`, `log_sensitive` |
 | `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
 | `middleware` | interceptor defaults shared by every plane |
 | `worker` | job intervals, leases, reaper batch sizes |
 | `dispatcher` | outbox drain loop and sink behaviour |
-| `storage` | backends, routing, presign, SSE, per-backend auth mode |
+| `storage` | backends, routing, SSE, per-backend auth mode |
+| `ingest` | the storage-notification receiver: driver, webhook, dedup |
 | `cedar` | policy engine sources and evaluation |
 | `mcp` | the MCP server and its upstreams |
 | `capability` | issuer, signing key, verification, budgets |
@@ -150,20 +148,12 @@ the plane does. Leaving `public_endpoint` empty reuses `endpoint`.
 
 ## Frontend configuration
 
-The console reads `frontend/configs/config.yaml` server-side at boot,
-validated with zod (`frontend/src/config.ts`). It is a separate mechanism
-from the backend's — no `PALADIN_` env translation, no overlay chain — and
-the loader tries `/app/configs/config.yaml` then `configs/config.yaml`.
+The console's BFF takes its upstreams from environment variables the chart
+sets: `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and `PALADIN_ADMIN_URL`, plus
+`PALADIN_HEALTH_SNAPSHOT_TOKEN` (the backend's `runtime.health_snapshot_token`)
+and `PALADIN_BFF_MAX_CONNECTIONS`.
 
-The keys that matter:
-
-| Key | Meaning |
-| --- | --- |
-| `paladin.upstreamUrl` | where the BFF forwards data-plane RPCs |
-| `paladin.baseUrl` | the browser-facing path, `/api/paladin` |
-| `oidc.*` | the identity provider; `disableAuth: true` is dev-only |
-| `auth.devToken` | dev-only fallback Bearer. Ships empty — see `frontend/README.md` |
-
-The Helm chart passes plane URLs through separately as `PALADIN_DATA_URL`,
-`PALADIN_IAM_URL` and `PALADIN_ADMIN_URL`, which is what the BFF actually reads
-at request time.
+`frontend/configs/config.yaml`, read at boot from `/app/configs/config.yaml`
+or `configs/config.yaml` and validated with zod (`frontend/src/config.ts`),
+carries only build metadata (`runtimeConfig.public.uiMetadata`). It has no
+overlay chain and no `PALADIN_` translation.
