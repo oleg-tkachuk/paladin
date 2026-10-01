@@ -90,4 +90,28 @@ for bad in "$scratch/none.env" "$scratch/missing.env"; do
     fi
 done
 
+# The built images come from the repository the build used: the compose file
+# must read it from the variable the library exports, with the library's own
+# default, and the pull must leave those services alone — it cannot pull an
+# image that was only ever built here.
+prefix_var=$(bash -c "source '$lib'; echo \$STACK_IMAGE_PREFIX_VAR")
+prefix_default=$(bash -c "source '$lib'; echo \$STACK_DEFAULT_IMAGE_PREFIX")
+for image in paladin-core paladin-console; do
+    if ! grep -q "image: \${${prefix_var}:-${prefix_default}}/${image}:" "$compose"; then
+        echo "!!! $compose does not run $image from \${${prefix_var}:-${prefix_default}}" >&2
+        exit 1
+    fi
+done
+pulled=$(bash -c "source '$lib'; stack_thirdparty_services '$compose'" | sort | tr '\n' ' ')
+for built in api admin migrate bootstrap; do
+    if [[ " $pulled" == *" $built "* ]]; then
+        echo "!!! the pull list includes $built, which runs a built image: $pulled" >&2
+        exit 1
+    fi
+done
+if [[ " $pulled" != *" postgres "* ]]; then
+    echo "!!! the pull list misses postgres: $pulled" >&2
+    exit 1
+fi
+
 echo "stack ports agree: $(tr '\n' ' ' <<<"$declared")"

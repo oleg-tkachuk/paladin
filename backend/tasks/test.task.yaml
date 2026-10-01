@@ -7,6 +7,13 @@ version: "3"
 
 silent: true
 
+vars:
+  # The repository :release:image:build tags into — the release library's
+  # _REL_IMAGE without the name, by the same expression. The stack gates get it
+  # as PALADIN_IMAGE_PREFIX, so they run what that build produced whichever
+  # Taskfile set the registry.
+  STACK_IMAGE_PREFIX: '{{.GLOBAL_REGISTRY | default .REGISTRY | default "localhost:5000"}}{{if .IMAGE_NAMESPACE}}/{{.IMAGE_NAMESPACE}}{{end}}'
+
 # Test task surface. The previous file wrapped `go test` in
 # `eval "$(minikube docker-env)"` which had no effect on go test —
 # Minikube's docker env affects `docker` invocations, not the Go
@@ -19,6 +26,7 @@ tasks:
 
   rpc-surface:
     desc: "Run the whole-contract RPC gate against a live stack (brings one up)"
+    env: { PALADIN_IMAGE_PREFIX: "{{.STACK_IMAGE_PREFIX}}" }
     cmds:
       # One phase of the stack gate, not a second boot sequence. The version
       # that used to live here inlined its own `compose up` and had neither of
@@ -75,6 +83,7 @@ tasks:
 
   stack:
     desc: "Boot the compose stack once and run every gate that needs it (RPC surface + Go e2e + dev-bootstrap)"
+    env: { PALADIN_IMAGE_PREFIX: "{{.STACK_IMAGE_PREFIX}}" }
     cmds:
       # The image, not the working tree, is what the stack runs. `pnpm run
       # test:e2e` does not rebuild anything and neither does compose, so a

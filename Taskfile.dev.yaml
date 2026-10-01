@@ -20,8 +20,8 @@ silent: true
 
 vars:
   # The local image names, not a publish target: verify-e2e builds both images
-  # and the e2e compose file, verify-e2e.sh and stack-ports.sh run them as
-  # registry.local/paladin/<component>. Nothing here pushes.
+  # as registry.local/paladin/<component> and passes that prefix to the stack
+  # (PALADIN_IMAGE_PREFIX). Nothing here pushes.
   GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
   IMAGE_NAMESPACE: '{{.IMAGE_NAMESPACE | default "paladin"}}'
   # Kube context every kubectl/helm task targets. Defaults to the local
@@ -308,6 +308,7 @@ tasks:
 
   verify-e2e:
     desc: "Playwright against a stack built from this branch (needs Docker, ~10 min)"
+    env: { PALADIN_IMAGE_PREFIX: "{{.GLOBAL_REGISTRY}}/{{.IMAGE_NAMESPACE}}" }
     # Separate from verify-deep on purpose: this one needs the console image and
     # a browser; verify-deep boots the API and admin planes and never opens one.
     # Both images, because the stack runs the versions this build stamps and

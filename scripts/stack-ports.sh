@@ -134,20 +134,36 @@ require_free_ports() {
 #
 # The criterion is the image prefix: services running an image this repository
 # BUILDS cannot be pulled, and everything else must be. api/admin/ui/migrate/
-# bootstrap are the former and drop out on their own.
-readonly STACK_BUILT_IMAGE_PREFIX="registry.local/paladin/"
+# bootstrap are the former and drop out on their own. The compose file names
+# that prefix through ${PALADIN_IMAGE_PREFIX:-…}, so it is matched as written.
+readonly STACK_IMAGE_PREFIX_VAR=PALADIN_IMAGE_PREFIX
+readonly STACK_BUILT_IMAGE_REF="\${${STACK_IMAGE_PREFIX_VAR}"
+
+# The repository the built images are in. The task that builds them passes
+# its own GLOBAL_REGISTRY/IMAGE_NAMESPACE here, so the stack runs whatever that
+# build produced; the default is what Taskfile.dev.yaml builds. Exported: the
+# compose file reads the same variable.
+readonly STACK_DEFAULT_IMAGE_PREFIX=registry.local/paladin
+: "${PALADIN_IMAGE_PREFIX:=$STACK_DEFAULT_IMAGE_PREFIX}"
+export PALADIN_IMAGE_PREFIX
+
+# stack_thirdparty_services <compose file> — the services that pull a remote
+# image, one per line.
+stack_thirdparty_services() {
+    # yq warns on stderr about merge-anchor semantics; the anchor-using
+    # services are all locally built, so it cannot change this answer.
+    yq -r ".services | to_entries | .[]
+           | select((.value.image // \"\")
+               | contains(\"${STACK_BUILT_IMAGE_REF}\") | not)
+           | .key" "${1:?compose file}" 2>/dev/null
+}
 
 stack_pull_thirdparty() {
     local compose_file="${1:?compose file}"
     local services=()
-    # yq warns on stderr about merge-anchor semantics; the anchor-using
-    # services are all locally built, so it cannot change this answer.
     while IFS= read -r svc; do
         [ -n "$svc" ] && services+=("$svc")
-    done < <(yq -r ".services | to_entries | .[]
-                   | select((.value.image // \"\")
-                       | test(\"^${STACK_BUILT_IMAGE_PREFIX}\") | not)
-                   | .key" "$compose_file" 2>/dev/null)
+    done < <(stack_thirdparty_services "$compose_file")
 
     # An empty list would make this a no-op that reports success, which is
     # exactly the failure it exists to prevent.
@@ -214,10 +230,9 @@ stack_use_built_image() {
     if ! docker image inspect "$image:$version" >/dev/null 2>&1; then
         {
             echo "!!! $image:$version is not in the local image store."
-            echo "    $info names that version, so the build ran — under another"
-            echo "    registry. The stack runs ${STACK_BUILT_IMAGE_PREFIX}*, which is what"
-            echo "    Taskfile.dev.yaml builds; the root Taskfile builds for ghcr.io."
-            echo "    Run it as: task -t Taskfile.dev.yaml <task>"
+            echo "    $info names that version, so the build ran — into another"
+            echo "    repository than $STACK_IMAGE_PREFIX_VAR=$PALADIN_IMAGE_PREFIX. The task"
+            echo "    that builds the image passes its own; run the gate through it."
         } >&2
         return 1
     fi
