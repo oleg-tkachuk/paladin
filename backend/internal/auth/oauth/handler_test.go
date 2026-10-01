@@ -104,6 +104,10 @@ func (m *memRefresh) RevokeFamilyOf(context.Context, uuid.UUID) (int64, error) {
 	m.familyRevoked++
 	return 1, nil
 }
+func (m *memRefresh) MarkUsed(context.Context, uuid.UUID) error { return nil }
+func (m *memRefresh) UnusedSuccessor(context.Context, uuid.UUID) (authstore.RefreshToken, error) {
+	return authstore.RefreshToken{}, authstore.ErrNotFound
+}
 func (m *memRefresh) PurgeExpired(context.Context, time.Time) (int64, error) { return 0, nil }
 
 // memAudit records audit entries for the reuse-detection test.

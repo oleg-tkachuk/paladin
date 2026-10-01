@@ -142,6 +142,10 @@ func (f *fakeRefresh) RevokeFamilyOf(context.Context, uuid.UUID) (int64, error) 
 	f.revokeFamilies++
 	return 0, nil
 }
+func (f *fakeRefresh) MarkUsed(context.Context, uuid.UUID) error { return nil }
+func (f *fakeRefresh) UnusedSuccessor(context.Context, uuid.UUID) (authstore.RefreshToken, error) {
+	return authstore.RefreshToken{}, authstore.ErrNotFound
+}
 func (f *fakeRefresh) PurgeExpired(context.Context, time.Time) (int64, error) { return 0, nil }
 
 // stubDecoder implements RefreshTokenDecoder.

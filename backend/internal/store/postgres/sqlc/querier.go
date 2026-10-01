@@ -257,6 +257,10 @@ type Querier interface {
 	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error)
 	// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (GetTenantQuotaRow, error)
+	// The successor a rotation of $1 minted and nobody has presented yet: what a
+	// client that lost the rotation response never received. A revoked successor
+	// (its family killed) is not offered.
+	GetUnusedRefreshSuccessor(ctx context.Context, parentID pgtype.UUID) (RefreshToken, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
 	// User-settings queries. Lazy 1:1 with users — a missing row at read time
@@ -294,7 +298,8 @@ type Querier interface {
 	// See ADR-0017 and migrations/001_initial_schema.sql: storage_path is
 	// denormalised here because the object row is gone before the purge runs.
 	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error
-	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
+	// parent_id is the token this one was rotated from, NULL for a login.
+	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
@@ -490,6 +495,9 @@ type Querier interface {
 	// retried on the next tick after the configured backoff.
 	MarkBucketProvisionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error)
 	MarkBucketProvisionReady(ctx context.Context, name string, name_2 string) (int64, error)
+	// Record the first presentation. Once set, this token is no longer a lost
+	// successor its parent's holder may recover.
+	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
 	MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// All collections of a tenant, for the transactional rebind.

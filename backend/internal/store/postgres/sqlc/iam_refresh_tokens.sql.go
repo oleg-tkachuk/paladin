@@ -12,7 +12,8 @@ import (
 )
 
 const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
+       parent_id, first_used_at
 FROM refresh_tokens
 WHERE id = $1
 `
@@ -29,16 +30,49 @@ func (q *Queries) GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshT
 		&i.ExpiresAt,
 		&i.Revoked,
 		&i.SupersededAt,
+		&i.ParentID,
+		&i.FirstUsedAt,
+	)
+	return i, err
+}
+
+const getUnusedRefreshSuccessor = `-- name: GetUnusedRefreshSuccessor :one
+SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
+       parent_id, first_used_at
+FROM refresh_tokens
+WHERE parent_id = $1 AND first_used_at IS NULL AND revoked = FALSE
+ORDER BY issued_at DESC
+LIMIT 1
+`
+
+// The successor a rotation of $1 minted and nobody has presented yet: what a
+// client that lost the rotation response never received. A revoked successor
+// (its family killed) is not offered.
+func (q *Queries) GetUnusedRefreshSuccessor(ctx context.Context, parentID pgtype.UUID) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, getUnusedRefreshSuccessor, parentID)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.FamilyID,
+		&i.IssuedAt,
+		&i.ExpiresAt,
+		&i.Revoked,
+		&i.SupersededAt,
+		&i.ParentID,
+		&i.FirstUsedAt,
 	)
 	return i, err
 }
 
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
-INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at, parent_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
-func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error {
+// parent_id is the token this one was rotated from, NULL for a login.
+func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, insertRefreshToken,
 		iD,
 		userID,
@@ -46,7 +80,21 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID
 		familyID,
 		issuedAt,
 		expiresAt,
+		parentID,
 	)
+	return err
+}
+
+const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :exec
+UPDATE refresh_tokens
+SET first_used_at = now()
+WHERE id = $1 AND first_used_at IS NULL
+`
+
+// Record the first presentation. Once set, this token is no longer a lost
+// successor its parent's holder may recover.
+func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markRefreshTokenUsed, id)
 	return err
 }
 
