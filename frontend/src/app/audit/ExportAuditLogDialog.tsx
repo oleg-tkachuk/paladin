@@ -104,7 +104,7 @@ function ExportForm({
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             An object name inside the Paladin bucket, or an EventSubscription
             resource name to fan out to.
           </p>
@@ -117,7 +117,7 @@ function ExportForm({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Blank exports everything. Same grammar as the list filter.
           </p>
         </div>

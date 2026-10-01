@@ -142,7 +142,7 @@ function IdentityCard({
               <span className="text-muted-foreground italic">(unnamed)</span>
             )}
           </CardTitle>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="text-tiny uppercase tracking-wider text-muted-foreground">
             Tenant
           </span>
         </div>
@@ -550,7 +550,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
             {method}
           </span>
           {prefix && (
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">
+            <span className="text-tiny uppercase tracking-wider text-muted-foreground truncate">
               {prefix}
             </span>
           )}

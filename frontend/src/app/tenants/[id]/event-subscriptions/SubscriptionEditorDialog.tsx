@@ -633,7 +633,7 @@ export function SubscriptionEditorDialog({
         >
           <Textarea
             id="sub-filter"
-            className={cn(T.code, "min-h-[80px]")}
+            className={cn(T.code, "min-h-20")}
             value={form.filter}
             onChange={(e) => setForm((p) => ({ ...p, filter: e.target.value }))}
             placeholder=""

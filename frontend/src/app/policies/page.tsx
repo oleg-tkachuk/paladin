@@ -614,7 +614,7 @@ export default function PoliciesPage() {
                     : "Pick a target above to load its policy."
                 }
                 disabled={!target}
-                className="min-h-[280px] font-mono text-xs leading-relaxed"
+                className="min-h-70 font-mono text-xs leading-relaxed"
                 spellCheck={false}
               />
             )}
@@ -690,7 +690,7 @@ export default function PoliciesPage() {
                 <pre
                   className={cn(
                     T.codeSmall,
-                    "mt-1 max-h-[320px] overflow-auto rounded-md border bg-muted/30 p-3 leading-relaxed",
+                    "mt-1 max-h-80 overflow-auto rounded-md border bg-muted/30 p-3 leading-relaxed",
                   )}
                 >
                   {merged}

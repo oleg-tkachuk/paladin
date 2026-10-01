@@ -214,7 +214,7 @@ export function TenantCreateDialog({
             hint="Used in URLs and Cedar policies. Cannot be changed later."
             aside={
               slug && !slugError ? (
-                <span className="text-[11px] font-medium text-success">
+                <span className="text-caption font-medium text-success">
                   valid
                 </span>
               ) : null

@@ -2,7 +2,7 @@
 //
 // Distilled from the /health page rebalance (commit "fix(health):
 // correct worker Service port + larger fonts + expandable errors").
-// The previous codebase mixed text-xs / text-[10px] / text-[9px] in
+// The previous codebase mixed text-xs / text-tiny / text-micro in
 // the same row, which read as cramped and inconsistent. This module
 // pins the small set of text styles that show up across every page so
 // pages can compose without re-deriving the same Tailwind soup.
@@ -33,7 +33,7 @@ export const typography = {
   label: "text-xs uppercase tracking-wider text-muted-foreground font-medium",
 
   // Smaller variant when space is tight (e.g. inside a Badge).
-  labelTight: "text-[10px] uppercase tracking-wider text-muted-foreground",
+  labelTight: "text-tiny uppercase tracking-wider text-muted-foreground",
 
   // ─── Values ────────────────────────────────────────────────────────
   // Headline values shown under a label — counts, numbers, version

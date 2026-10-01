@@ -121,7 +121,7 @@ export default function StorageBackendDetailPage() {
                   </span>
                 )}
               </CardTitle>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-tiny uppercase tracking-wider text-muted-foreground">
                 Storage backend
               </span>
             </div>
@@ -186,7 +186,7 @@ export default function StorageBackendDetailPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[260px]">Bucket</TableHead>
+              <TableHead className="w-65">Bucket</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead className="hidden md:table-cell">Region</TableHead>
               <TableHead className="hidden md:table-cell">State</TableHead>
@@ -293,7 +293,7 @@ function Row({
       <span
         className={cn(
           mono && T.code,
-          truncate && "truncate text-muted-foreground text-[11px]",
+          truncate && "truncate text-muted-foreground text-caption",
         )}
         title={truncate ? v : undefined}
       >

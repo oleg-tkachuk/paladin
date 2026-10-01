@@ -290,7 +290,7 @@ export default function ConfigPage() {
               <Skeleton className="h-4 w-2/3" />
             </div>
           ) : (
-            <ScrollArea className="paladin-scroll h-[520px] w-full">
+            <ScrollArea className="paladin-scroll h-130 w-full">
               <pre className="px-6 py-5 font-mono text-xs leading-relaxed text-foreground/90">
                 {yamlBlob}
               </pre>

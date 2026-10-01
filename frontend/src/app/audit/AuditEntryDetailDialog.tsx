@@ -151,7 +151,7 @@ function Snapshot({ label, json }: { label: string; json: string }) {
   return (
     <div className="space-y-1">
       <p className="uppercase tracking-wider text-muted-foreground">{label}</p>
-      <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed">
+      <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted/40 p-2 font-mono text-caption leading-relaxed">
         {json}
       </pre>
     </div>

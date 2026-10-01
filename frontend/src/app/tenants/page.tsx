@@ -131,7 +131,7 @@ export default function TenantsPage() {
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-60">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -159,7 +159,7 @@ export default function TenantsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                className="w-[220px]"
+                className="w-55"
                 label="Slug"
                 column="slug"
                 current={sort}
@@ -175,7 +175,7 @@ export default function TenantsPage() {
                 Storage (backend/bucket)
               </TableHead>
               <TableHead className="hidden md:table-cell">Labels</TableHead>
-              <TableHead className="hidden lg:table-cell w-[280px]">
+              <TableHead className="hidden lg:table-cell w-70">
                 Tenant ID
               </TableHead>
               <TableHead className="w-12 text-right">
@@ -299,7 +299,7 @@ export default function TenantsPage() {
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span
-                        className="font-mono text-[11px] text-muted-foreground"
+                        className="font-mono text-caption text-muted-foreground"
                         title={tenant.tenantId}
                       >
                         {tenant.tenantId.slice(0, 8)}…

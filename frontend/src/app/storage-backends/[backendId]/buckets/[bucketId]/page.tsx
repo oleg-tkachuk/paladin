@@ -224,7 +224,7 @@ export default function BucketDetailPage() {
                 <ArchiveBoxIcon className="size-5 text-chart-4" />
                 {bucket.displayName || bucketId}
               </CardTitle>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-tiny uppercase tracking-wider text-muted-foreground">
                 Bucket
               </span>
             </div>
@@ -287,7 +287,7 @@ export default function BucketDetailPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-60">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -354,11 +354,9 @@ export default function BucketDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[260px]">Folder</TableHead>
+                    <TableHead className="w-65">Folder</TableHead>
                     <TableHead>Display name</TableHead>
-                    <TableHead className="w-[180px] text-right">
-                      Browse
-                    </TableHead>
+                    <TableHead className="w-45 text-right">Browse</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

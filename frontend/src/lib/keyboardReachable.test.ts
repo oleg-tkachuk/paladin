@@ -11,7 +11,10 @@ import { describe, expect, it } from "vitest";
 //    fix: copying an identifier and applying a saved view were mouse-only.
 // 2. A button whose only content is an icon, with no aria-label or title,
 //    announces as "button". Measured before the fix: purging an object from
-//    the trash and deleting a saved view.
+//    the trash and deleting a saved view. Links and Radix triggers and close
+//    buttons are held to the same rule, and so is a button whose content is
+//    an expression that can only produce icons (`{busy ? <Spin/> : <XIcon/>}`),
+//    which used to count as a name because it was an expression.
 
 const SRC = join(__dirname, "..");
 const GENERATED = "gen";
@@ -26,7 +29,12 @@ const CONTROLS = new Set([
   "label",
   "summary",
 ]);
-const BUTTONS = new Set(["button", "Button"]);
+// Controls a screen reader announces by their content: buttons, links, and
+// Radix triggers and close buttons. An `asChild` one hands its role to the
+// child, which is checked itself.
+const NAMED_BY_CONTENT = /^(button|Button|a|Link|[A-Z]\w*(Trigger|Close))$/;
+// A component that renders an icon and nothing else.
+const ICON_TAG = /(Icon|^svg)$/;
 const NAMING_ATTRS = new Set(["aria-label", "aria-labelledby", "title"]);
 
 // "<file under src>#<onClick source>" → the keyboard path that exists anyway.
@@ -64,26 +72,57 @@ function onlyStopsPropagation(handler: string): boolean {
   return /^\(?\w+\)? => (\{ )?\w+\.stopPropagation\(\);?( \})?$/.test(handler);
 }
 
+/** Whether an expression inside a control can render a name. */
+function exprNames(e: ts.Expression, sf: ts.SourceFile): boolean {
+  if (ts.isParenthesizedExpression(e)) return exprNames(e.expression, sf);
+  if (ts.isConditionalExpression(e))
+    return exprNames(e.whenTrue, sf) || exprNames(e.whenFalse, sf);
+  if (
+    ts.isBinaryExpression(e) &&
+    e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+  )
+    return exprNames(e.right, sf);
+  if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e))
+    return elementNames(e, sf);
+  if (
+    e.kind === ts.SyntaxKind.NullKeyword ||
+    e.kind === ts.SyntaxKind.FalseKeyword ||
+    (ts.isIdentifier(e) && e.text === "undefined")
+  )
+    return false;
+  // A string, a variable, a call: it may well be text.
+  return true;
+}
+
+/** Whether a JSX element inside a control can render a name. */
+function elementNames(
+  el: ts.JsxElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): boolean {
+  const opening = ts.isJsxElement(el) ? el.openingElement : el;
+  if (ICON_TAG.test(opening.tagName.getText(sf))) return false;
+  const attrs = opening.attributes.properties;
+  if (attrs.some((a) => NAMING_ATTRS.has(attrName(a, sf)))) return true;
+  // Any other component may render text of its own.
+  if (ts.isJsxSelfClosingElement(el)) return true;
+  return hasContent(el, sf);
+}
+
 /**
- * Whether anything under a button can give it a name: text, an expression
- * (a label from a variable), or props spread from the caller.
+ * Whether anything under a control can give it a name: text, an expression
+ * that can render text, or props spread from the caller.
  */
-function hasContent(node: ts.Node): boolean {
-  let found = false;
-  const visit = (n: ts.Node) => {
-    if (found) return;
-    if (
-      (ts.isJsxText(n) && n.text.trim() !== "") ||
-      (ts.isJsxExpression(n) && n.expression && !ts.isJsxAttribute(n.parent)) ||
-      ts.isJsxSpreadAttribute(n)
-    ) {
-      found = true;
-      return;
-    }
-    ts.forEachChild(n, visit);
-  };
-  ts.forEachChild(node, visit);
-  return found;
+function hasContent(node: ts.JsxElement, sf: ts.SourceFile): boolean {
+  if (node.openingElement.attributes.properties.some(ts.isJsxSpreadAttribute))
+    return true;
+  return node.children.some((c) => {
+    if (ts.isJsxText(c)) return c.text.trim() !== "";
+    if (ts.isJsxExpression(c))
+      return !!c.expression && exprNames(c.expression, sf);
+    if (ts.isJsxElement(c) || ts.isJsxSelfClosingElement(c))
+      return elementNames(c, sf);
+    return ts.isJsxFragment(c);
+  });
 }
 
 function findings() {
@@ -129,9 +168,13 @@ function findings() {
           const key = `${rel}#${handler}`;
           if (!onlyStopsPropagation(handler)) clickOnly.push(key);
         }
-        if (ts.isJsxElement(node) && BUTTONS.has(tag)) {
+        if (
+          ts.isJsxElement(node) &&
+          NAMED_BY_CONTENT.test(tag) &&
+          !names.includes("asChild")
+        ) {
           const named =
-            names.some((n) => NAMING_ATTRS.has(n)) || hasContent(node);
+            names.some((n) => NAMING_ATTRS.has(n)) || hasContent(node, sf);
           if (!named) unnamed.push(at(node));
         }
       }

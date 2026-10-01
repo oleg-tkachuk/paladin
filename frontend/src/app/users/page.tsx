@@ -105,7 +105,7 @@ export default function UsersPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-60">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -130,12 +130,12 @@ export default function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[260px]">User</TableHead>
+              <TableHead className="w-65">User</TableHead>
               <TableHead>Tenant</TableHead>
               <TableHead>Roles</TableHead>
               <TableHead className="hidden md:table-cell">Last login</TableHead>
-              <TableHead className="w-[80px]">State</TableHead>
-              <TableHead className="w-[120px] text-right">Actions</TableHead>
+              <TableHead className="w-20">State</TableHead>
+              <TableHead className="w-30 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -193,7 +193,7 @@ export default function UsersPage() {
                               </span>
                             )}
                           </p>
-                          <p className="truncate font-mono text-[11px] text-muted-foreground">
+                          <p className="truncate font-mono text-caption text-muted-foreground">
                             {u.subject}
                           </p>
                         </div>
@@ -208,7 +208,7 @@ export default function UsersPage() {
                           {tenant.slug}
                         </Link>
                       ) : (
-                        <span className="font-mono text-[10px] text-muted-foreground">
+                        <span className="font-mono text-tiny text-muted-foreground">
                           {u.tenantId.slice(0, 8)}…
                         </span>
                       )}

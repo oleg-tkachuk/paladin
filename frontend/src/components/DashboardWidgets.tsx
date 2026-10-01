@@ -90,7 +90,7 @@ function RecentActivityWidget() {
           <CardTitle className="text-sm">Recent activity</CardTitle>
           <Link
             href="/audit"
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground"
           >
             See all <ArrowRightIcon className="size-3" />
           </Link>
@@ -132,7 +132,7 @@ function RecentActivityWidget() {
                       tenantId={e.actorTenantId}
                     />
                   </span>
-                  <span className="ml-auto whitespace-nowrap text-[10px] text-muted-foreground">
+                  <span className="ml-auto whitespace-nowrap text-tiny text-muted-foreground">
                     <RelativeTime ts={e.at} />
                   </span>
                 </li>
@@ -211,7 +211,7 @@ function FailedOpsWidget() {
             {ops.map((o) => (
               <li key={o.name} className="text-xs">
                 <p className="font-medium">{o.type || o.name}</p>
-                <p className="truncate font-mono text-[10px] text-destructive">
+                <p className="truncate font-mono text-tiny text-destructive">
                   {opError(o)}
                 </p>
               </li>
@@ -311,7 +311,7 @@ function BudgetAlertsWidget() {
         )}
         <Link
           href="/billing"
-          className="mt-3 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          className="mt-3 inline-flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground"
         >
           Open billing <ArrowRightIcon className="size-3" />
         </Link>
@@ -361,7 +361,7 @@ function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
             style={{ width: `${Math.min(100, pct)}%` }}
           />
         </div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
+        <p className="mt-0.5 text-tiny text-muted-foreground">
           {formatMoney(spent, unit)} / {formatMoney(cap, unit)}
         </p>
       </Link>

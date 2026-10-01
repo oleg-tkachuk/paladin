@@ -296,7 +296,7 @@ export default function StorageBackendsPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-60">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -393,7 +393,7 @@ export default function StorageBackendsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[40px]">
+              <TableHead className="w-10">
                 <Checkbox
                   aria-label="Select all backends"
                   checked={
@@ -409,13 +409,13 @@ export default function StorageBackendsPage() {
                   }
                 />
               </TableHead>
-              <TableHead className="w-[220px]">Backend ID</TableHead>
+              <TableHead className="w-55">Backend ID</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead className="hidden md:table-cell">Kind</TableHead>
               <TableHead className="hidden md:table-cell">Type</TableHead>
               <TableHead className="hidden md:table-cell">Region</TableHead>
               <TableHead className="hidden lg:table-cell">Endpoint</TableHead>
-              <TableHead className="w-[160px] text-right">Status</TableHead>
+              <TableHead className="w-40 text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -479,7 +479,7 @@ export default function StorageBackendsPage() {
                 const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}`;
                 return (
                   <TableRow key={b.backendId} className="group">
-                    <TableCell className="w-[40px]">
+                    <TableCell className="w-10">
                       <Checkbox
                         aria-label={`Select ${b.backendId}`}
                         checked={selected.has(b.backendId)}
@@ -547,7 +547,7 @@ export default function StorageBackendsPage() {
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span
-                        className="font-mono text-[11px] text-muted-foreground truncate"
+                        className="font-mono text-caption text-muted-foreground truncate"
                         title={b.endpoint}
                       >
                         {b.endpoint || "—"}

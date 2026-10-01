@@ -366,13 +366,13 @@ export default function CapabilitiesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[280px]">ID</TableHead>
+              <TableHead className="w-70">ID</TableHead>
               <TableHead>Caveats</TableHead>
               <TableHead className="hidden md:table-cell">Audience</TableHead>
               <TableHead className="hidden lg:table-cell">Issued</TableHead>
               <TableHead className="hidden lg:table-cell">Expires</TableHead>
               <TableHead className="hidden xl:table-cell">Usage</TableHead>
-              <TableHead className="w-[100px]">Status</TableHead>
+              <TableHead className="w-25">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -436,7 +436,7 @@ export default function CapabilitiesPage() {
                   <TableRow key={c.id} className="group">
                     <TableCell>
                       <span
-                        className="block max-w-[260px] truncate font-mono text-xs"
+                        className="block max-w-65 truncate font-mono text-xs"
                         title={c.id}
                       >
                         {c.id}
@@ -445,7 +445,7 @@ export default function CapabilitiesPage() {
                         <span
                           className={cn(
                             T.codeSmall,
-                            "block max-w-[260px] truncate text-muted-foreground",
+                            "block max-w-65 truncate text-muted-foreground",
                           )}
                           title={`parent: ${c.parentId}`}
                         >

@@ -91,7 +91,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
       >
         <MagnifyingGlassIcon className="size-4 shrink-0" />
         <span className="truncate">Search anything…</span>
-        <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
+        <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-tiny font-medium text-muted-foreground sm:inline-flex">
           ⌘K
         </kbd>
       </button>
@@ -126,7 +126,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
                   {displayName}
                 </span>
                 {user?.subject && user.subject !== displayName ? (
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  <span className="truncate font-mono text-caption text-muted-foreground">
                     {user.subject}
                   </span>
                 ) : null}
