@@ -51,6 +51,12 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
+          # The modules live in subdirectories, so setup-go finds no go.sum at
+          # the root to key its cache on unless told where they are.
+          cache-dependency-path: |
+            backend/go.sum
+            capability/go.sum
+            sdk/go/go.sum
 
       - name: Initialise CodeQL
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
