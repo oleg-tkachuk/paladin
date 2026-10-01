@@ -27,8 +27,19 @@
 # no cluster at all, and the two track together anyway — OrbStack's VM disk is
 # a sparse file on this volume, and the node reported 11.0Gi available at the
 # same moment df did.
+#
+# `df -Pk`, the POSIX form, because the gate runs on macOS and on Linux CI
+# runners alike. It was `df -g`, which GNU df does not have: on Linux the
+# command failed, and under `set -o pipefail` that ended the gate with exit 1
+# and not a word of output.
+readonly STACK_KIB_PER_GIB=1048576
 stack_free_gib() {
-    df -g / 2>/dev/null | awk 'NR==2 {print $4}'
+    df -Pk / 2>/dev/null | stack_df_free_gib
+}
+
+# stack_df_free_gib — whole GiB available, from `df -Pk` output on stdin.
+stack_df_free_gib() {
+    awk -v per="$STACK_KIB_PER_GIB" 'NR==2 {print int($4 / per)}'
 }
 
 # Make room if there is not enough, and say so either way.

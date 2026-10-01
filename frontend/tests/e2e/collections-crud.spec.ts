@@ -130,7 +130,7 @@ test.describe("Collections CRUD", () => {
   }) => {
     await loginAsAdmin(page);
     const tenantId = await seedAdminTenantID();
-    await seedPhysicalBucket();
+    const physical = await seedPhysicalBucket();
 
     await gotoSettled(page, collectionsURL(tenantId));
     await openCreateDialog(page);
@@ -152,10 +152,14 @@ test.describe("Collections CRUD", () => {
       dialog.getByRole("combobox", { name: /^Backend/ }),
       /^primary$/,
     );
+    // The seeded bucket, not the first one listed: other specs register
+    // buckets with no storage behind them, and a Collection bound to one of
+    // those cannot be provisioned. Picking `/./` failed whenever one of them
+    // sorted first.
     await pickOption(
       page,
       dialog.getByRole("combobox", { name: /^Bucket/ }),
-      /./,
+      new RegExp(`^${physical.bucketId}(\\s|$)`),
     );
 
     const submit = dialog.getByRole("button", { name: /^Create Collection$/ });

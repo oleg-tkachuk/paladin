@@ -26,6 +26,15 @@ if [ "${1:-}" = "--all" ]; then
     exit 0
 fi
 
+# --needs-e2e: given the groups (the JSON array this script prints) on stdin,
+# whether the Playwright suite should run. It drives the console against the
+# backend, so a change either of them reaches is one it can break.
+readonly E2E_GROUPS='["backend","frontend"]'
+if [ "${1:-}" = "--needs-e2e" ]; then
+    jq -r --argjson e2e "$E2E_GROUPS" 'any(.[]; . as $g | $e2e | index($g) != null)'
+    exit 0
+fi
+
 relevant="$(grep -vE "$INERT" | grep -v '^$' || true)"
 if [ -z "$relevant" ]; then
     printf '%s\n' '[]'

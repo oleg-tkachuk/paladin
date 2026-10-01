@@ -84,7 +84,7 @@ phase_rpc_surface() {
 phase_e2e_go() {
     echo ">>> [stack] Go admin e2e"
     local log
-    log=$(mktemp -t paladin-e2e-go)
+    log=$(mktemp "${TMPDIR:-/tmp}/paladin-e2e-go.XXXXXX")
     (cd backend && go test -tags=e2e -count=1 -timeout=10m -v ./tests/e2e/...) | tee "$log"
     if grep -q -- '--- SKIP' "$log"; then
         echo "!!! the admin e2e suite SKIPPED — a skip here is a silent pass" >&2
@@ -112,7 +112,7 @@ phase_e2e_go() {
 phase_conformance() {
     echo ">>> [stack] S3 conformance (MinIO)"
     local log
-    log=$(mktemp -t paladin-conformance)
+    log=$(mktemp "${TMPDIR:-/tmp}/paladin-conformance.XXXXXX")
     (cd backend && PALADIN_CONFORMANCE_ENDPOINT="$stack_s3_url" \
         PALADIN_CONFORMANCE_PROVIDER=minio \
         PALADIN_CONFORMANCE_ACCESS_KEY=paladin-e2e-access \
@@ -217,7 +217,7 @@ stack_export_urls
 # a warning and exits 0, so a rename would turn this step back into the silence
 # it was written to end.
 echo ">>> [stack] readiness (data / iam / admin)"
-smoke_log=$(mktemp -t paladin-smoke)
+smoke_log=$(mktemp "${TMPDIR:-/tmp}/paladin-smoke.XXXXXX")
 (cd backend && PALADIN_SMOKE=1 go test -tags=integration -count=1 \
     -timeout=2m -v -run TestSmokeStackReady ./tests/integration/...) | tee "$smoke_log"
 if ! grep -q -- '--- PASS: TestSmokeStackReady' "$smoke_log"; then

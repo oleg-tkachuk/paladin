@@ -28,7 +28,9 @@ are pushed to GHCR at that version, and the GitHub release with generated
 notes is created once all of them are. The SDK and API-contract tags follow their own
 stream; see [releasing.md](releasing.md).
 
-`ci.yaml` builds no image and deploys nothing. Images and charts are published
-only by `release.yaml`, for a release tag. `verify-deep` and `verify-e2e` need
-Docker, so they run locally before a merge; [task.md](task.md#working-on-the-code)
-lists them.
+`ci.yaml` pushes no image and deploys nothing. Images and charts are published
+only by `release.yaml`, for a release tag. Its End-to-end job runs `verify-e2e`
+— Playwright against a stack built from the change — when the change reaches
+the console or the backend, and the `All checks passed` check that `main`
+requires waits for it. `verify-deep` needs Docker and runs locally before a
+merge; [task.md](task.md#working-on-the-code) lists it.
