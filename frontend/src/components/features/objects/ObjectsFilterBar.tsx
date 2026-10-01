@@ -94,7 +94,7 @@ export function ObjectsFilterBar({
   const onRecursiveChange = (value: boolean) =>
     onFilterChange({ recursive: value });
   return (
-    <div className="flex flex-wrap items-center gap-4 bg-surface/30 border border-border rounded-2xl p-4">
+    <div className="flex flex-wrap items-center gap-4 bg-card/30 border border-border rounded-2xl p-4">
       <div className="flex-1 min-w-60 relative group">
         <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
         <input

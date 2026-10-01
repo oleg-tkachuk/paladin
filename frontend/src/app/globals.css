@@ -162,19 +162,6 @@
   --sidebar-accent-foreground: oklch(0.955 0.006 230);
   --sidebar-border: oklch(1 0 0 / 6%);
   --sidebar-ring: oklch(0.74 0.1 194 / 55%);
-
-  /* Bridge tokens for legacy `rgb(var(--color-bg) / <a>)` callsites, retuned
-   * to the slate ground so unmigrated pages stay consistent with the theme. */
-  --color-bg: 26 30 34;
-  --color-bg-deep: 15 18 21;
-  --color-surface: 35 40 45;
-  --color-surface-light: 55 62 68;
-  --color-text: 244 247 248;
-  --color-text-secondary: 150 161 168;
-  --color-success-rgb: 52 197 156;
-  --color-danger: 233 108 108;
-  --color-border-rgb: 255 255 255;
-  --border-opacity: 0.09;
 }
 
 .ember {
@@ -246,23 +233,6 @@
       "calt" 1,
       "cv11" 1,
       "ss01" 1;
-  }
-
-  /* Aliases bridging legacy class names to theme tokens. */
-  .text-text {
-    color: var(--foreground);
-  }
-  .text-text-secondary {
-    color: var(--muted-foreground);
-  }
-  .bg-surface {
-    background-color: var(--card);
-  }
-  .bg-surface-light {
-    background-color: var(--secondary);
-  }
-  .bg-background-deep {
-    background-color: var(--background);
   }
 
   .tabular-nums {

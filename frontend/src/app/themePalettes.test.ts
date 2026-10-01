@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -8,7 +8,9 @@ import { PALETTES, THEME_LIGHT } from "@/lib/theme";
 // A palette that leaves out a token the @theme block reads falls back to the
 // light :root value under it, and nothing says so: one light card on a dark
 // page. And a dark palette the `dark:` variant does not name gets the light
-// variant of every `dark:` class.
+// variant of every `dark:` class. The reverse matters too: a property no
+// stylesheet or component reads is a colour somebody will tune for nothing —
+// ten "bridge" tokens sat in .dark for that long, unread.
 
 const CSS = readFileSync(join(__dirname, "globals.css"), "utf8");
 
@@ -26,6 +28,25 @@ function tokensRead(): string[] {
   return [
     ...theme.matchAll(/--color-[a-z0-9-]+:\s*var\((--[a-z0-9-]+)\)/g),
   ].map((m) => m[1]);
+}
+
+const SRC = join(__dirname, "..");
+
+/** Every custom property read through var() in the stylesheet or the source. */
+function propertiesReadAnywhere(): Set<string> {
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return e.name === "gen" ? [] : files(p);
+      return /\.(css|tsx?)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)
+        ? [p]
+        : [];
+    });
+  const read = new Set<string>();
+  for (const f of files(SRC))
+    for (const m of readFileSync(f, "utf8").matchAll(/var\((--[a-z0-9-]+)/g))
+      read.add(m[1]);
+  return read;
 }
 
 function defines(body: string, token: string): boolean {
@@ -48,6 +69,14 @@ describe("theme palettes", () => {
     const body = block(selector);
     expect(body, `no ${selector} block`).not.toBe("");
     expect(read.filter((t) => !defines(body, t))).toEqual([]);
+  });
+
+  it.each(selectors)("%s defines nothing that nothing reads", (selector) => {
+    const readAnywhere = propertiesReadAnywhere();
+    const defined = [...block(selector).matchAll(/(--[a-z0-9-]+)\s*:/g)].map(
+      (m) => m[1],
+    );
+    expect(defined.filter((p) => !readAnywhere.has(p))).toEqual([]);
   });
 
   it("the dark variant covers every dark palette", () => {
