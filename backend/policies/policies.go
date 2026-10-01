@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/cedar-policy/cedar-go"
 	xast "github.com/cedar-policy/cedar-go/x/exp/ast"
@@ -37,8 +38,13 @@ var DefaultTenantPolicy string
 // replaced with the tenant's slug, or its UUID when it has none.
 const TenantPlaceholder = "placeholder"
 
-// Resolve parses Schema and resolves its type references.
-func Resolve() (*resolved.Schema, error) {
+// Resolve parses Schema and resolves its type references. The result is
+// computed once; Schema is embedded and does not change.
+func Resolve() (*resolved.Schema, error) { return resolveOnce() }
+
+var resolveOnce = sync.OnceValues(resolve)
+
+func resolve() (*resolved.Schema, error) {
 	var s schema.Schema
 	if err := s.UnmarshalCedar(Schema); err != nil {
 		return nil, fmt.Errorf("parse schema: %w", err)
@@ -50,24 +56,42 @@ func Resolve() (*resolved.Schema, error) {
 	return r, nil
 }
 
-// Validate type-checks every policy in text against Schema in strict mode,
-// the mode that reports an attribute read that can raise an evaluation
-// error. name labels the errors.
-func Validate(name string, text []byte) error {
+// ErrUnparseable marks policy text Cedar cannot parse, as distinct from text
+// that parses and does not type-check.
+var ErrUnparseable = errors.New("policy does not parse")
+
+// Check type-checks every policy in text against Schema in strict mode, the
+// mode that reports an attribute read that can raise an evaluation error. It
+// returns one finding per policy that does not type-check, and an error
+// wrapping ErrUnparseable when the text does not parse. name labels both.
+func Check(name string, text []byte) ([]string, error) {
 	r, err := Resolve()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ps, err := cedar.NewPolicySetFromBytes(name, text)
 	if err != nil {
-		return fmt.Errorf("%s: parse: %w", name, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrUnparseable, name, err)
 	}
 	v := validate.New(r, validate.WithStrict())
-	var errs []error
+	var findings []string
 	for id, p := range ps.All() {
 		if err := v.Policy(string(id), (*xast.Policy)(p.AST())); err != nil {
-			errs = append(errs, fmt.Errorf("%s %s: %w", name, id, err))
+			findings = append(findings, fmt.Sprintf("%s %s: %v", name, id, err))
 		}
+	}
+	return findings, nil
+}
+
+// Validate is Check with every finding returned as one error.
+func Validate(name string, text []byte) error {
+	findings, err := Check(name, text)
+	if err != nil {
+		return err
+	}
+	errs := make([]error, len(findings))
+	for i, f := range findings {
+		errs[i] = errors.New(f)
 	}
 	return errors.Join(errs...)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/policies"
 )
 
 // Handler offers Cedar inspection helpers — validation, dry-run authz, and
@@ -58,18 +59,53 @@ func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, coll
 	return nil
 }
 
-// ValidatePolicy parses the Cedar policy text. Returns (valid, parser-error-text)
-// for compile failures. A protocol error is returned only when the caller
-// is unauthorized — once past authz, parser issues come back through the
-// (bool, string) result.
-func (h *Handler) ValidatePolicy(ctx context.Context, text string) (bool, string, error) {
+// Diagnostic severities, as PolicyDiagnostic.severity spells them.
+const (
+	DiagnosticError   = "error"
+	DiagnosticWarning = "warning"
+)
+
+// Diagnostic is one finding about a policy.
+type Diagnostic struct {
+	Severity string
+	Message  string
+}
+
+// ValidateOutput is ValidatePolicy's result. OK is false only when the text
+// does not compile.
+type ValidateOutput struct {
+	OK          bool
+	Diagnostics []Diagnostic
+}
+
+// validateName labels schema findings; the console shows them under the
+// editor, so there is no file to name.
+const validateName = "policy"
+
+// ValidatePolicy compiles the Cedar policy text and type-checks it against
+// policies/schema.cedarschema. A compile failure is an error and OK=false.
+// A schema finding — an action that does not exist, an attribute the entity
+// lacks, a read that needs `has` — is a warning: the text still compiles and
+// would be stored, but the read it names fails at request time and the engine
+// denies. Warnings rather than errors because the schema cannot declare
+// everything the engine provides (Object.tag_values). A protocol error is
+// returned only when the caller is unauthorized.
+func (h *Handler) ValidatePolicy(ctx context.Context, text string) (*ValidateOutput, error) {
 	if err := h.authorizeInspect(ctx, uuid.Nil, ""); err != nil {
-		return false, "", err
+		return nil, err
 	}
 	if err := cedar.Validate(text); err != nil {
-		return false, err.Error(), nil
+		return &ValidateOutput{Diagnostics: []Diagnostic{{Severity: DiagnosticError, Message: err.Error()}}}, nil
 	}
-	return true, "", nil
+	findings, err := policies.Check(validateName, []byte(text))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("schema check: %w", err))
+	}
+	out := &ValidateOutput{OK: true}
+	for _, f := range findings {
+		out.Diagnostics = append(out.Diagnostics, Diagnostic{Severity: DiagnosticWarning, Message: f})
+	}
+	return out, nil
 }
 
 // ─── SimulateAuthz ──────────────────────────────────────────────────────────

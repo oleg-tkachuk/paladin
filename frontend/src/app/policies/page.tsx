@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { validateNotice } from "@/lib/policyValidation";
 
 import {
   bucketClient,
@@ -338,13 +339,8 @@ export default function PoliciesPage() {
     try {
       const res = await policyClient.validate({ cedarPolicy: policyText });
       setDiagnostics(res.diagnostics);
-      if (res.ok) {
-        showNotification({
-          type: "success",
-          title: "Policy is valid",
-          message: "No diagnostics returned by the Cedar parser.",
-        });
-      }
+      const notice = validateNotice(res);
+      if (notice) showNotification(notice);
     } catch (err) {
       const msg = errorMessage(err, "Validate failed");
       showNotification({

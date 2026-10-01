@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"errors"
 	"io/fs"
 	"path"
 	"testing"
@@ -48,5 +49,21 @@ func TestExamplePoliciesValidate(t *testing.T) {
 		if err := Validate(f, text); err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+func TestCheckSeparatesUnparseableFromFindings(t *testing.T) {
+	if _, err := Check("bad", []byte(`permit (`)); !errors.Is(err, ErrUnparseable) {
+		t.Fatalf("err = %v, want ErrUnparseable", err)
+	}
+	two := `permit (principal, action == Action::"ReadTenant", resource) when { principal.parents == principal.parents };
+permit (principal, action == Action::"PutObject", resource) when { resource.key like "*.exe" };
+permit (principal, action == Action::"ReadTenant", resource);`
+	findings, err := Check("two", []byte(two))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("findings = %q, want one per policy that does not type-check", findings)
 	}
 }

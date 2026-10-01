@@ -52,7 +52,7 @@ var preAuthnAllowlist = map[string]struct{}{
 	"SwitchTenant":      {}, // self-scoped: gated by the caller's own membership row (must have a non-disabled users row in the target)
 	"GetMine":           {}, // self-service: caller reads their own user_settings
 	"UpdateMine":        {}, // self-service: caller writes their own user_settings
-	"ValidatePolicy":    {}, // gated, but intentionally syntactic-only
+	"ValidatePolicy":    {}, // gated; checks text against the schema, reads no tenant data
 }
 
 // shimMethodCallRE matches `s.H.<MethodName>(` — the only way a shim

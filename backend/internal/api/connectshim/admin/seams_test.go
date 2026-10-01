@@ -190,8 +190,8 @@ func (failingPolicy) GetEffectivePolicy(context.Context, string, uuid.UUID) (*po
 func (failingPolicy) SimulateAuthz(context.Context, policyh.SimulateAuthzInput) (*policyh.SimulateAuthzOutput, error) {
 	return nil, errBoom
 }
-func (failingPolicy) ValidatePolicy(context.Context, string) (bool, string, error) {
-	return false, "", errBoom
+func (failingPolicy) ValidatePolicy(context.Context, string) (*policyh.ValidateOutput, error) {
+	return nil, errBoom
 }
 
 type failingQuota struct{}

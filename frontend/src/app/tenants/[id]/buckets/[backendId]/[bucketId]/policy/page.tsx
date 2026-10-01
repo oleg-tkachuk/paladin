@@ -21,6 +21,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { bucketClient, policyClient } from "@/lib/connect/client";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { cn } from "@/lib/utils";
+import { validateNotice } from "@/lib/policyValidation";
 
 import { useBucket } from "../bucket-context";
 import { errorMessage } from "@/hooks/errorContract";
@@ -53,13 +54,8 @@ export default function BucketPolicyPage() {
     try {
       const res = await policyClient.validate({ cedarPolicy: policyText });
       setDiagnostics(res.diagnostics);
-      if (res.ok) {
-        showNotification({
-          type: "success",
-          title: "Policy is valid",
-          message: "No diagnostics returned.",
-        });
-      }
+      const notice = validateNotice(res);
+      if (notice) showNotification(notice);
     } catch (err) {
       const msg = errorMessage(err, "Validate failed");
       showNotification({

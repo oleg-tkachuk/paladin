@@ -179,6 +179,39 @@ func TestSimulateAuthz_ForwardsThePrincipalTenant(t *testing.T) {
 	}
 }
 
+type validatingPolicy struct {
+	failingPolicy
+	out *policyh.ValidateOutput
+}
+
+func (v validatingPolicy) ValidatePolicy(context.Context, string) (*policyh.ValidateOutput, error) {
+	return v.out, nil
+}
+
+// A policy that compiles but does not type-check is ok with warnings; the
+// console blocks saving on errors only, so the severity has to survive.
+func TestValidate_ForwardsEveryDiagnosticWithItsSeverity(t *testing.T) {
+	srv := &PolicyServer{H: validatingPolicy{out: &policyh.ValidateOutput{
+		OK: true,
+		Diagnostics: []policyh.Diagnostic{
+			{Severity: policyh.DiagnosticWarning, Message: "first"},
+			{Severity: policyh.DiagnosticWarning, Message: "second"},
+		},
+	}}}
+	res, err := srv.Validate(context.Background(), connect.NewRequest(&pb.ValidateRequest{CedarPolicy: "x"}))
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if !res.Msg.GetOk() || len(res.Msg.GetDiagnostics()) != 2 {
+		t.Fatalf("got ok=%v diagnostics=%v, want ok and both warnings", res.Msg.GetOk(), res.Msg.GetDiagnostics())
+	}
+	for _, d := range res.Msg.GetDiagnostics() {
+		if d.GetSeverity() != policyh.DiagnosticWarning {
+			t.Errorf("severity = %q, want %q", d.GetSeverity(), policyh.DiagnosticWarning)
+		}
+	}
+}
+
 type recordingQuota struct {
 	failingQuota
 	bucketScope [2]string

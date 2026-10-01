@@ -1568,16 +1568,6 @@ handler sets it, so a policy on `context.ip` compares against "".
 passes it to every authorization call, with a test; or the key is removed.
 - **Blockers:** which header is trusted behind the ingress.
 
-### `PolicyService.Validate` parses but does not type-check
-
-- **Status:** Deferred.
-- **Reason:** it calls `cedar.Validate`, which only compiles. A policy reading
-an attribute an entity lacks passes, then denies at request time.
-`policies.Validate` type-checks against the schema and is used only in tests.
-- **Definition of Done:** the RPC returns schema diagnostics from
-`policies.Validate`, with a test for an unguarded read.
-- **Blockers:** none.
-
 ### A backend created through the API cannot hold buckets
 
 - **Status:** Open.

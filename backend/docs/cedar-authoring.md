@@ -235,8 +235,11 @@ inside a policy; compare against `resource.scope_keys` instead.
 
 1. Start from [`default.cedar`](../policies/examples/default.cedar) or another
    file in [`policies/examples/`](../policies/examples/).
-2. `PolicyService.Validate` parses the text (requires `InspectPolicy`). It
-   does not type-check against the schema; `policies.Validate` in Go does.
+2. `PolicyService.Validate` (requires `InspectPolicy`) compiles the text and
+   type-checks it against the schema. A compile failure is an error. A schema
+   finding — an unknown action, an attribute the entity lacks, a read that
+   needs `has` — is a warning: the policy can still be saved, because the
+   schema cannot declare `tag_values`.
 3. `PolicyService.SimulateAuthz` evaluates a request against a policy without
    storing it; `PolicyService.GetEffectivePolicy` returns the merged layers for
    a tenant or collection.
