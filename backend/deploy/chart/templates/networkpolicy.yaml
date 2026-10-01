@@ -14,6 +14,7 @@
                                                      sinks live anywhere)
     ingest     ← storage ns (webhook) / monitoring → common + NATS
     mcp        ← ingress-controller / monitoring   → common + api/admin pods
+                 / admin (sessions)
 
   "common" egress = DNS (kube-system:53), 443/6443 anywhere (K8s API for the
   secret resolver + https webhooks/JWKS), Postgres, and the OTLP collector on
@@ -263,6 +264,12 @@ spec:
     - from:
         - {{ $fromController | toJson }}
         - {{ $fromMonitoring | toJson }}
+        # MCPInspectService.ListSessions: the admin pod proxies the console's
+        # sessions view to mcp.http.sessions_url, which the chart points here.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: admin
       ports:
         - { protocol: TCP, port: 8095 }
   egress:
