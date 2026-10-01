@@ -1,5 +1,5 @@
 // Package resolve centralises collection / tenant resource-name parsing for
-// the connectshim edge. Phase 2 of backend/docs/canonical-resource-names.md:
+// the connectshim edge (ADR-0014; backend/docs/canonical-resource-names.md):
 // clients may send any of three name shapes, and every handler that needs the
 // (tenant, collection) tuple goes through one resolver instead of each
 // re-implementing the anchor-on-prefix parse.

@@ -5,7 +5,7 @@
 // API contract (C-shape `tenants/{tid}/collections/{ok}`) is unchanged
 // — connectshim resolvers still accept it.
 //
-// See backend/docs/canonical-resource-names.md for the broader plan.
+// See backend/docs/canonical-resource-names.md for how the shapes resolve.
 package collectionh
 
 import (
