@@ -49,6 +49,27 @@ if [ "$got_all" != "$all" ]; then
 fi
 check "docs next to code"         '["frontend","repo"]' README.md frontend/src/app/page.tsx
 
+# CodeQL skips the same documentation-only changes through paths-ignore, a
+# glob list that cannot share INERT's regex. Every path this file treats as
+# documentation must be ignored there, and no code path may be.
+command -v yq >/dev/null 2>&1 || { echo "!!! yq is not installed" >&2; exit 1; }
+codeql_ignore="$(yq -r 'explode(.) | .on.push."paths-ignore"[]' "$root/.github/workflows/codeql.yaml")"
+python3 - "$codeql_ignore" <<'PY' || failed=1
+import sys
+from pathlib import PurePath
+globs = sys.argv[1].split()
+docs = ["README.md", "docs/install.md", "backend/README.md", "docs/diagram.svg",
+        "backend/docs/cedar-authoring.md", ".gitignore", "LICENSE", "NOTICE", "frontend/public/logo.png"]
+code = ["backend/internal/mcp/bridge.go", "frontend/src/app/page.tsx", "proto/paladin/admin/v1/tenant_service.proto",
+        "deploy/grafana/paladin-alerts.yaml", ".github/workflows/codeql.yaml", "Taskfile.dev.yaml"]
+ignored = lambda p: any(PurePath(p).full_match(g) for g in globs)
+bad = [f"not ignored by CodeQL: {p}" for p in docs if not ignored(p)]
+bad += [f"ignored by CodeQL: {p}" for p in code if ignored(p)]
+for line in bad:
+    print("FAIL codeql paths-ignore", line)
+sys.exit(1 if bad else 0)
+PY
+
 if [ "$failed" -ne 0 ]; then
     exit 1
 fi

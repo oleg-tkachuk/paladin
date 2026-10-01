@@ -16,11 +16,16 @@ skipped does not block a merge and a group that failed does.
 [`codeql.yaml`](../.github/workflows/codeql.yaml) runs CodeQL on the Go,
 TypeScript, Python and workflow code.
 
-A green push to `main` dispatches
+A change that touches only documentation (Markdown, `docs/`, images, the
+licence files) runs no verify group and no CodeQL analysis, and does not
+dispatch a release. Its commits count towards the next release a code change
+triggers.
+
+Any other green push to `main` dispatches
 [`release.yaml`](../.github/workflows/release.yaml). semantic-release computes
-the next tag from the commits since the last one, and a GitHub release with
-generated notes is created for it. Both images and both charts are then pushed
-to GHCR at that version. The SDK and API-contract tags follow their own
+the next tag from the commits since the last one; both images and both charts
+are pushed to GHCR at that version, and the GitHub release with generated
+notes is created once all of them are. The SDK and API-contract tags follow their own
 stream; see [releasing.md](releasing.md).
 
 `ci.yaml` builds no image and deploys nothing. Images and charts are published

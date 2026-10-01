@@ -373,17 +373,16 @@ jobs:
   dispatch-release:
     name: Dispatch release
     needs: [changes, test, syntax, audit]
-    # always(), because a documentation-only push skips the jobs above and a
-    # plain `needs` would skip this with them — and then no release is ever
-    # dispatched for a push that only edits prose. semantic-release decides
-    # whether anything is due; this only has to let it look.
+    # Not for a documentation-only push: its code is byte-identical to the
+    # commit before it, so a release would rebuild and republish the same
+    # images under a new version. Its commits are not lost — semantic-release
+    # counts them in the next release a code change dispatches.
     #
-    # Releasing from a push whose checks were skipped is not a hole: the code
-    # is byte-identical to the commit before it, which was checked. What would
-    # be a hole is dispatching after a failure, so both failure and cancelled
-    # stop it.
+    # always(), because a skipped `test` (a change no group reaches) would
+    # otherwise skip this with it. A failure or cancellation stops it.
     if: >-
       always() &&
+      needs.changes.outputs.relevant == 'true' &&
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
