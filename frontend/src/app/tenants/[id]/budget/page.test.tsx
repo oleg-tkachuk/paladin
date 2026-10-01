@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { fireEvent, render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -89,6 +89,32 @@ describe("TenantBudgetPage OCC", () => {
 
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("7");
+  });
+
+  // A refetch during an edit kept the operator's values but moved the version
+  // forward, so their stale edit passed the OCC check and overwrote a change
+  // made in the meantime. The cluster e2e caught it when a refetch landed
+  // between the other write and Apply.
+  it("sends the version the form was filled from, not the latest read", async () => {
+    h.get.mockResolvedValue({ budget });
+    render(<BudgetPage />);
+    const field = await screen.findByLabelText(/max budget/i);
+    await waitFor(() => expect(field).toHaveValue(100));
+    fireEvent.change(field, { target: { value: "999" } });
+
+    // Another operator's write lands; a refresh reads it mid-edit.
+    h.get.mockResolvedValue({
+      budget: { ...budget, maxBudgetAmount: 300, resourceVersion: "8" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    await waitFor(() => expect(h.get).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply changes/i }),
+    );
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
+    expect(h.set.mock.calls[0][0].resourceVersion).toBe("7");
+    expect(h.set.mock.calls[0][0].maxBudgetAmount).toBe(999);
   });
 
   it('sends "0" when no budget exists yet — the create case', async () => {
