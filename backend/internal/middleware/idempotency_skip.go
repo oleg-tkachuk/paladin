@@ -27,9 +27,15 @@ import (
 // and a third-party integrator reading "send Idempotency-Key on mutations"
 // would have reached it first.
 //
-// Delegate and Issue are deliberately NOT here: a capability token is minted
-// against an explicit scope the caller names, and collapsing a double-submit
-// onto one capability is exactly what an idempotency key is for.
+// Delegate and Issue are deliberately NOT here: a capability is minted against
+// an explicit scope the caller names, and collapsing a double-submit onto one
+// capability is exactly what an idempotency key is for. What the cache does not
+// keep is the token itself. Any response field marked debug_redact is cleared
+// before the response is stored, and a repeated key whose response type
+// carries one is answered with AlreadyExists rather than replayed: the token
+// was delivered once, to the first call, and was never written to
+// idempotency_keys. The same holds for APITokenService/Create and for
+// UserService/ResetPassword's generated password.
 var CredentialMintingProcedures = map[string]bool{
 	paladiniamv1connect.AuthServiceLoginProcedure:            true,
 	paladiniamv1connect.AuthServiceRefreshTokenProcedure:     true,

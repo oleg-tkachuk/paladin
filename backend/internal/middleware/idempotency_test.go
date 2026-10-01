@@ -360,7 +360,8 @@ func TestCredentialMintersAreSkipped(t *testing.T) {
 	}
 	// Capability issuance is deliberately absent: a capability is minted
 	// against a scope the caller names, so collapsing a double-submit onto one
-	// capability is what the key is FOR.
+	// capability is what the key is FOR. Its token is not cached; see
+	// TestCredentialResponsesAreStoredRedacted.
 	if CredentialMintingProcedures["/paladin.admin.v1.CapabilityService/Issue"] {
 		t.Error("CapabilityService/Issue must stay memoizable")
 	}
