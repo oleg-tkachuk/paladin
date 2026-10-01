@@ -297,7 +297,7 @@ jobs:
 
   # The Playwright suite against a stack built from this change, through the
   # same task a developer runs: `verify-e2e` builds both images, boots the
-  # compose stack and fails on a test that needed a retry to pass. Only for a
+  # compose stack and names any test that passed only on its retry. Only for a
   # change the console or the backend reaches (ci-groups.sh --needs-e2e).
   e2e:
     name: End-to-end

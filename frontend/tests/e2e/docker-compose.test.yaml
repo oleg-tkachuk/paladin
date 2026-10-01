@@ -138,8 +138,15 @@ services:
     # MINIO_ROOT_USER. A NAMED identity, not SeaweedFS' "anonymous" one, which
     # would grant these actions to unsigned requests — an unsigned GET must
     # stay a 403, or the suite would stop proving that the backend signs.
+    #
+    # Small volumes, and as many as the tmpfs holds. The defaults are 8 volumes
+    # of 30720MB; each collection grows several at once, so the bucket's own
+    # collection found none left and every upload answered 500 ("No writable
+    # volumes and no free volumes left"). -volume.max=0 sizes the limit from
+    # free space over -master.volumeSizeLimitMB.
     command: >-
       server -dir=/data -ip.bind=0.0.0.0
+      -master.volumeSizeLimitMB=64 -volume.max=0
       -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
     volumes:
       - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
