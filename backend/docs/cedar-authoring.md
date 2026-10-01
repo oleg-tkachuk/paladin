@@ -29,7 +29,7 @@ a deny into an allow. Guard optional reads with `has`.
 
 ## 2. Policy layers
 
-Three layers are concatenated and compiled together:
+Four layers are concatenated, in this order, and compiled together:
 
 1. **Built-in** (`builtinPolicy` in `internal/policy/cedar/engine.go`), the
    same for every tenant:
@@ -45,19 +45,25 @@ Three layers are concatenated and compiled together:
 2. **Tenant** — `tenants.inherited_cedar_policy`. A tenant created without one
    gets [`policies/examples/default.cedar`](../policies/examples/default.cedar),
    with `placeholder` replaced by the tenant's slug (its UUID when it has none).
-3. **Collection** — set with `CollectionService.SetCollectionPolicy`; applies
+3. **Bucket** — set with `BucketService.SetBucketPolicy`; applies to every
+   request scoped to a collection bound to that bucket, from any tenant. It
+   does not apply to requests on the bucket itself (`ManageBucket`,
+   `Configure*`), so a bucket policy cannot block its own repair.
+4. **Collection** — set with `CollectionService.SetCollectionPolicy`; applies
    to requests on that collection.
 
 A `forbid` in any layer wins over every `permit`, so a tenant can narrow the
 built-in grants but not widen past its own `forbid`s.
 
-`BucketService.SetBucketPolicy` stores a policy on the bucket, but the engine
-does not read it: buckets are not a layer (see BACKLOG.md).
+A stored layer that does not parse is replaced by a `forbid` on everything
+except that layer's own repair (`ManageTenant`, `ConfigureBucketPolicy`,
+`ManageCollection`), and the scope is reported as degraded in the log.
 
 Compiled policies are cached per (tenant, collection). The cache is
-invalidated through Postgres `LISTEN policy_changed`; `cedar.policy_cache_ttl`
-(default `30s`) bounds how long a missed notification can leave a stale
-policy in use.
+invalidated through Postgres `LISTEN policy_changed`: a tenant or collection
+change evicts that scope, a bucket change evicts every scope.
+`cedar.policy_cache_ttl` (default `30s`) bounds how long a missed
+notification can leave a stale policy in use.
 
 ## 3. Roles
 

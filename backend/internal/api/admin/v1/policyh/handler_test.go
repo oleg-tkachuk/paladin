@@ -379,6 +379,27 @@ func TestGetEffectivePolicy(t *testing.T) {
 			t.Fatalf("collection layer source: %q", out.Layers[1].Source)
 		}
 	})
+
+	// The bucket layer sits between them, named by the bucket, and the merged
+	// text carries it in the same order the engine compiles it.
+	t.Run("collection in a bucket with a policy → tenant, bucket, collection", func(t *testing.T) {
+		const bucket = "storageBackends/primary/buckets/shared"
+		fs := &fakeStore{fetchFn: func(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
+			return cedar.Layers{Tenant: "tenant-rule", Bucket: "bucket-rule", BucketName: bucket, Collection: "obj-rule"}, nil, "", nil
+		}}
+		h := NewHandler(allowEngine(), fs)
+		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String()+"/collections/logs", tid)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(out.Layers) != 3 || out.Layers[1].Source != bucket || out.Layers[1].CedarPolicy != "bucket-rule" {
+			t.Fatalf("layers = %+v, want the bucket's in the middle", out.Layers)
+		}
+		b, c := strings.Index(out.MergedCedarPolicy, "bucket-rule"), strings.Index(out.MergedCedarPolicy, "obj-rule")
+		if b < 0 || c < b {
+			t.Fatalf("merged text out of order:\n%s", out.MergedCedarPolicy)
+		}
+	})
 }
 
 func TestParseSimulateResource(t *testing.T) {
