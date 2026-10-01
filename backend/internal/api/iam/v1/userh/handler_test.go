@@ -115,6 +115,25 @@ func TestCreateUser_SubjectRequired(t *testing.T) {
 	}
 }
 
+// Input is checked before Cedar. With an empty subject the request names no
+// user, so authorizing it first evaluated ManageUser against the Tenant and a
+// denying policy answered PermissionDenied for what is a malformed request.
+func TestCreateUser_InvalidInputIsRejectedBeforeAuthorization(t *testing.T) {
+	caller := uuid.New()
+	for name, in := range map[string]CreateUserInput{
+		"no subject":  {TenantID: caller, Subject: "", InitialPassword: "pw"},
+		"no password": {TenantID: caller, Subject: "u1", InitialPassword: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := NewHandler(&fakeUserRepo{}, denyAuthorizer{})
+			_, err := h.CreateUser(ctxAs(caller, apiutil.RolePlatformAdmin), in)
+			if code(err) != connect.CodeInvalidArgument {
+				t.Fatalf("code = %v, want InvalidArgument", code(err))
+			}
+		})
+	}
+}
+
 func TestCreateUser_PasswordRequired(t *testing.T) {
 	caller := uuid.New()
 	h := NewHandler(&fakeUserRepo{}, allowAuthorizer{})

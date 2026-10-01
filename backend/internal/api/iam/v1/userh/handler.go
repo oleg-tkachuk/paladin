@@ -109,15 +109,17 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 		return nil, connect.NewError(connect.CodePermissionDenied,
 			errors.New("cannot create user in foreign tenant"))
 	}
-	if err := h.authorize(ctx, cedar.ActionManageUser,
-		authstore.User{TenantID: in.TenantID, Subject: in.Subject}); err != nil {
-		return nil, err
-	}
+	// Input first: without a subject the request names no user, and Cedar
+	// would be asked about the Tenant instead.
 	if in.Subject == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("subject required"))
 	}
 	if in.InitialPassword == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("initial_password required"))
+	}
+	if err := h.authorize(ctx, cedar.ActionManageUser,
+		authstore.User{TenantID: in.TenantID, Subject: in.Subject}); err != nil {
+		return nil, err
 	}
 	hash, err := auth.HashPassword(in.InitialPassword)
 	if err != nil {
