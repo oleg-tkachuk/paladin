@@ -60,3 +60,16 @@ describe("ConfigPage snapshot", () => {
     expect(screen.getByText("none registered")).toBeInTheDocument();
   });
 });
+
+// The page offered to store a bearer token "sent on every RPC". Nothing read
+// it: the session is a BFF cookie. A field that does nothing while claiming
+// otherwise is worse than none, and it parked a raw token in localStorage.
+describe("ConfigPage token override", () => {
+  it("offers no bearer-token field", () => {
+    render(<ConfigPage />);
+    expect(
+      screen.queryByText("Developer bearer token"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Bearer token")).not.toBeInTheDocument();
+  });
+});

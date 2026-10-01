@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
@@ -9,7 +9,6 @@ import {
   ClipboardDocumentIcon,
   CommandLineIcon,
   ExclamationTriangleIcon,
-  KeyIcon,
   ServerStackIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
@@ -22,12 +21,9 @@ import { useConfig } from "@/hooks/useConfig";
 import { useTenants } from "@/hooks/useTenants";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { STORAGE_KEYS } from "@/constants";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -39,15 +35,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-const TOKEN_STORAGE_KEY = STORAGE_KEYS.authToken;
-
-// The manual bearer-token override is a debug-only affordance. Gated to
-// non-production builds so a prod operator can never paste a raw JWT into
-// localStorage (a latent privilege-escalation slot). NODE_ENV is inlined
-// at build time, so the card and its localStorage reads are tree-shaken
-// out of the production bundle entirely.
-const DEV_TOKEN_MANAGER = process.env.NODE_ENV !== "production";
-
 // /config used to render the raw control-plane YAML, but admin/v1.
 // SystemService.GetConfig hasn't landed yet — useConfig is a stub
 // returning null, which the previous version of this page surfaced
@@ -55,9 +42,9 @@ const DEV_TOKEN_MANAGER = process.env.NODE_ENV !== "production";
 //
 // Replace it with what's already live: a cluster snapshot pulled from
 // existing admin RPCs (TenantService.ListTenants,
-// BackendService.ListBackends), the signed-in identity from the JWT,
-// and the unchanged dev-token manager. When SystemService.GetConfig
-// finally lands, we add the YAML viewer back as a third card.
+// BackendService.ListBackends) and the signed-in identity from the JWT.
+// When SystemService.GetConfig finally lands, we add the YAML viewer back
+// as a third card.
 
 // A count whose read failed. "0" and "no tenants yet" were what it showed,
 // which is a claim about the platform; the snapshot links to the list page,
@@ -104,39 +91,6 @@ export default function ConfigPage() {
       type: ok ? "success" : "error",
       title: ok ? "Copied" : "Copy failed",
       message: ok ? "YAML copied to clipboard." : "Clipboard unavailable.",
-    });
-  };
-
-  // ── dev-token manager (non-production builds only) ──────────────────
-  const [token, setToken] = useState<string>(() => {
-    if (!DEV_TOKEN_MANAGER || typeof window === "undefined") return "";
-    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
-  });
-  const [savedVersion, setSavedVersion] = useState(0);
-
-  const hasStoredToken =
-    typeof window !== "undefined" &&
-    !!localStorage.getItem(TOKEN_STORAGE_KEY) &&
-    savedVersion >= 0;
-
-  const saveToken = () => {
-    const trimmed = token.trim();
-    if (!trimmed) {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      setSavedVersion((v) => v + 1);
-      showNotification({
-        type: "info",
-        title: "Token cleared",
-        message: "Bearer token removed from browser storage.",
-      });
-      return;
-    }
-    localStorage.setItem(TOKEN_STORAGE_KEY, trimmed);
-    setSavedVersion((v) => v + 1);
-    showNotification({
-      type: "success",
-      title: "Token saved",
-      message: "Future RPCs will carry this Authorization header.",
     });
   };
 
@@ -266,59 +220,6 @@ export default function ConfigPage() {
           />
         </CardContent>
       </Card>
-
-      {/* ─── Bearer token manager (dev builds only) ───────────────── */}
-      {DEV_TOKEN_MANAGER && (
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-3 px-6">
-            <div className="flex size-9 items-center justify-center rounded-md bg-chart-3/15 text-chart-3 ring-1 ring-chart-3/30">
-              <KeyIcon className="size-5" />
-            </div>
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <CardTitle className="text-base">
-                Developer bearer token
-              </CardTitle>
-              <CardDescription>
-                Stored locally as{" "}
-                <code className="rounded bg-muted px-1 font-mono text-foreground">
-                  paladin_token
-                </code>{" "}
-                and sent as{" "}
-                <code className="rounded bg-muted px-1 font-mono text-foreground">
-                  Authorization: Bearer …
-                </code>{" "}
-                on every RPC. The signed-in session normally supplies this for
-                you — only set it manually for debug flows.
-              </CardDescription>
-            </div>
-            <Badge
-              variant={hasStoredToken ? "success" : "warning"}
-              className="font-normal"
-            >
-              {hasStoredToken ? "Stored" : "Not set"}
-            </Badge>
-          </CardHeader>
-          <Separator />
-          <CardContent className="px-6">
-            <Label htmlFor="paladin-token" className="sr-only">
-              Bearer token
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="paladin-token"
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="eyJhbGciOi…"
-                className="flex-1 font-mono text-xs"
-              />
-              <Button onClick={saveToken} variant="outline">
-                {token.trim() ? "Save" : "Clear"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ─── Raw config (admin/v1.SystemService.GetConfig) ───────── */}
       <Card>
