@@ -122,6 +122,12 @@ describe("DefaultBindingPage", () => {
     h.clear.mockResolvedValue({});
     render(<DefaultBindingPage />);
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
+    // Every bare-name create in the tenant fails once the route is gone, so
+    // Clear asks first.
+    expect(h.clear).not.toHaveBeenCalled();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Clear route" }),
+    );
     await waitFor(() =>
       expect(h.clear).toHaveBeenCalledWith({ name: "tenants/acme" }),
     );

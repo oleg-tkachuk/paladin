@@ -32,6 +32,7 @@ import {
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -178,6 +179,10 @@ export default function TenantQuotasPage() {
     }
   };
 
+  // Zeroing today's counters lets the tenant spend its daily allowance again,
+  // and the usage it had is not kept anywhere. It was one click.
+  const [confirmReset, setConfirmReset] = useState(false);
+
   const handleResetUsage = async () => {
     setResetting(true);
     try {
@@ -312,7 +317,7 @@ export default function TenantQuotasPage() {
               variant="outline"
               size="sm"
               disabled={resetting || !quota}
-              onClick={() => void handleResetUsage()}
+              onClick={() => setConfirmReset(true)}
             >
               {resetting ? "Resetting…" : "Reset daily counters"}
             </Button>
@@ -337,6 +342,15 @@ export default function TenantQuotasPage() {
           </div>
         </form>
       </Card>
+      <ConfirmModal
+        isOpen={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        onConfirm={handleResetUsage}
+        title="Reset today's counters?"
+        message="The tenant can use its full daily allowance again. Today's usage so far is discarded."
+        confirmText="Reset counters"
+        loading={resetting}
+      />
     </div>
   );
 }

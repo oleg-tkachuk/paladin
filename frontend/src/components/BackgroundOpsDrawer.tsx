@@ -53,6 +53,7 @@ function opProgress(o: Operation): OpProgress | null {
   return progressFromMetadata(o.metadata);
 }
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
   Sheet,
   SheetContent,
@@ -248,6 +249,10 @@ function OpRow({
   // without coupling to the drawer's shared error banner.
   const [canceling, setCanceling] = useState(false);
   const [cancelErr, setCancelErr] = useState<string | null>(null);
+  // A batch stopped part-way is not undone by starting it again: the objects
+  // it already moved or deleted stay moved or deleted. One click on a small
+  // button in a drawer used to do that.
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const handleCancel = useCallback(async () => {
     setCanceling(true);
     setCancelErr(null);
@@ -328,12 +333,22 @@ function OpRow({
             size="sm"
             className="h-6 shrink-0 px-2 text-[10px]"
             disabled={canceling}
-            onClick={handleCancel}
+            onClick={() => setConfirmCancel(true)}
           >
             {canceling ? "Canceling…" : "Cancel"}
           </Button>
         )}
       </div>
+      <ConfirmModal
+        isOpen={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={handleCancel}
+        title="Cancel this operation?"
+        message={`${op.type || op.name} stops where it is. What it has already done is not undone.`}
+        confirmText="Cancel operation"
+        cancelText="Keep running"
+        loading={canceling}
+      />
     </li>
   );
 }
