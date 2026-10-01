@@ -1065,6 +1065,22 @@ finding moving from "packages you import" to "your code is affected".
 
 ## UI / Admin Console
 
+### Option: Inter and IBM Plex Mono as the console's typefaces
+
+- **Status:** Deferred (an option, decided against for now — Geist stays).
+- **Reason:** the ember palette was designed alongside Inter for text and IBM
+  Plex Mono for identifiers and figures; the console sets both in Geist and
+  Geist Mono. The colours carried over without the type, which is a choice,
+  not an oversight. Recorded so the option is not re-discovered as a gap.
+- **Definition of Done (if taken up):** both faces self-hosted from npm
+  packages (`@fontsource-variable/inter`, `@fontsource/ibm-plex-mono`) rather
+  than `next/font/google`, which fetches at build time and would break the
+  air-gapped build `src/app/layout.tsx` is written to keep; exposed under the
+  existing `--font-sans` / `--font-mono` variables so no component changes;
+  tabular figures checked in the tables that align counts; per theme or for
+  all, decided when it is taken up.
+- **Blockers:** none — a product decision.
+
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY
 
 - **Status:** Deferred (correct at current scale; revisit on fleet growth).
