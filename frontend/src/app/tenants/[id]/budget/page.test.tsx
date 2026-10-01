@@ -250,3 +250,36 @@ describe("TenantBudgetPage unavailable", () => {
     }
   });
 });
+
+// A cap typed before the budget had loaded marked the form edited, which kept
+// the loaded budget — and its version — from seeding the form; Apply then sent
+// version "0" and the server refused it as a conflict.
+describe("TenantBudgetPage before the budget loads", () => {
+  beforeEach(() => {
+    h.get.mockReset();
+    h.set.mockReset();
+    h.notify.mockReset();
+    h.set.mockResolvedValue({});
+  });
+
+  it("takes no input until the budget arrives, then sends its version", async () => {
+    let answer!: (v: unknown) => void;
+    h.get.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    render(<BudgetPage />);
+
+    const cap = screen.getByLabelText(/max budget/i);
+    expect(cap).toBeDisabled();
+
+    answer({ budget });
+    await waitFor(() => expect(cap).toBeEnabled());
+    expect(cap).toHaveValue(budget.maxBudgetAmount);
+
+    await userEvent.clear(cap);
+    await userEvent.type(cap, "500");
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply changes/i }),
+    );
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
+    expect(h.set.mock.calls[0][0].resourceVersion).toBe(budget.resourceVersion);
+  });
+});

@@ -21,6 +21,7 @@
  * the Idempotency-Key value — the UI form's auto-injected
  * UUID is opaque to the test.
  */
+import { Code } from "@connectrpc/connect";
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
@@ -59,22 +60,20 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     });
   });
 
-  test("double-submit with the same Idempotency-Key collapses (FR-008)", async ({
+  test("double-submit with the same Idempotency-Key issues one capability (FR-008)", async ({
     page,
     makeTenant,
   }) => {
-    // This is the single most important test in the suite. It
-    // verifies the middleware reflective-replay layer
-    // (backend/internal/middleware/idempotency.go,
-    // reconstructResponse) does its job: two Issue calls with
-    // the same key MUST return the same capability ID.
+    // Two Issue calls with one key must not issue two capabilities. Driven
+    // through Connect directly, not a UI double-click: a submit button that
+    // disables on the first click would pass without the second request ever
+    // reaching the server.
     //
-    // Per /speckit-analyze's C2 finding, a UI-only double-click
-    // would silently pass if the submit button disables on
-    // first click (the second click no-ops, only one network
-    // request fires, idempotency layer is never exercised).
-    // Driving via direct Connect-RPC with a pinned key bypasses
-    // that hazard — both calls reach the server.
+    // The second call is REFUSED rather than replayed. Issue's response
+    // carries the capability token, and the idempotency cache does not store
+    // a credential, so it cannot hand the same response back; it answers
+    // AlreadyExists, and the caller uses a new key to issue another
+    // (backend/internal/middleware/idempotency.go, refuseCredentialReplay).
 
     await loginAsAdmin(page);
     const tenant = await makeTenant();
@@ -86,24 +85,15 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
       subjectPrefix: "e2e-twin",
       idempotencyKey: sharedKey,
     });
-    const second = await seedCapability({
+    const second = seedCapability({
       tenantId: tenant.tenantId,
       subjectPrefix: "e2e-twin",
       idempotencyKey: sharedKey,
     });
+    await expect(second).rejects.toMatchObject({ code: Code.AlreadyExists });
 
-    // The middleware MUST return the same capability ID for both
-    // calls — replay path. Platform-admin tokens are tenant-less, so
-    // this exercises the subject-scoped idempotency fallback
-    // (backend/internal/middleware/idempotency.go): without it the
-    // second Issue creates a NEW capability (different ID + subject,
-    // since the uniqueSlug runs twice).
-    expect(second.id).toEqual(first.id);
-    // Belt-and-braces in the UI: browsing the (single) collapsed
-    // subject shows exactly one row. The replayed second response
-    // carries the first's subject, so first.subject is the right
-    // browse key. exact:true matches the ID cell only — not the
-    // "Actions for capability <id>" sr-only label.
+    // And the UI shows the one capability. exact:true matches the ID cell
+    // only — not the "Actions for capability <id>" sr-only label.
     await gotoSettled(
       page,
       `/tenants/${encodeURIComponent(tenant.slug)}/capabilities`,
