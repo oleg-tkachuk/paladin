@@ -16,8 +16,6 @@ type ObjectPushdown struct {
 	StateEq     string // state == "<literal>"
 	KeyPrefix   string // key.startsWith("<literal>")
 	KeyContains string // key.contains("<literal>")
-
-	Recognised int
 }
 
 // ExtractObjectPushdown parses expr against ObjectSchema and walks the
@@ -54,63 +52,56 @@ func walkObjectConjuncts(e celast.Expr, out *ObjectPushdown) {
 		}
 		return
 	}
-	if recogniseObjectLeaf(c, out) {
-		out.Recognised++
-	}
+	recogniseObjectLeaf(c, out)
 }
 
-func recogniseObjectLeaf(c celast.CallExpr, out *ObjectPushdown) bool {
+func recogniseObjectLeaf(c celast.CallExpr, out *ObjectPushdown) {
 	switch c.FunctionName() {
 	case "_==_":
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, ok := identName(args[0])
 		if !ok {
-			return false
+			return
 		}
 		lit, ok := stringLiteral(args[1])
 		if !ok {
-			return false
+			return
 		}
 		if field == "state" && out.StateEq == "" {
 			out.StateEq = lit
-			return true
 		}
-		return false
 
 	case "startsWith":
 		field, ok := identName(c.Target())
 		if !ok || field != "key" {
-			return false
+			return
 		}
 		args := c.Args()
 		if len(args) != 1 {
-			return false
+			return
 		}
 		lit, ok := stringLiteral(args[0])
 		if !ok || out.KeyPrefix != "" {
-			return false
+			return
 		}
 		out.KeyPrefix = lit
-		return true
 
 	case "contains":
 		field, ok := identName(c.Target())
 		if !ok || field != "key" {
-			return false
+			return
 		}
 		args := c.Args()
 		if len(args) != 1 {
-			return false
+			return
 		}
 		lit, ok := stringLiteral(args[0])
 		if !ok || out.KeyContains != "" {
-			return false
+			return
 		}
 		out.KeyContains = lit
-		return true
 	}
-	return false
 }

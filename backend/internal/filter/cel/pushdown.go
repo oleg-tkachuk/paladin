@@ -45,10 +45,6 @@ type Pushdown struct {
 	// query rounds differently.
 	TimeGTE map[string]time.Time
 	TimeLTE map[string]time.Time
-
-	// Recognised counts the conjuncts that produced a predicate. Zero means
-	// the caller may skip the pushdown entirely.
-	Recognised int
 }
 
 // ExtractPushdown parses expr against schema and walks the top-level `&&`
@@ -79,9 +75,7 @@ func (p *Pushdown) walk(e celast.Expr, schema *Schema) {
 		return
 	}
 	if e.Kind() == celast.IdentKind {
-		if p.recogniseIdent(e, schema) {
-			p.Recognised++
-		}
+		p.recogniseIdent(e, schema)
 		return
 	}
 	if e.Kind() != celast.CallKind {
@@ -94,67 +88,64 @@ func (p *Pushdown) walk(e celast.Expr, schema *Schema) {
 		}
 		return
 	}
-	if p.recognise(c, schema) {
-		p.Recognised++
-	}
+	p.recognise(c, schema)
 }
 
-func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) bool {
+func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) {
 	switch c.FunctionName() {
 	case "_==_":
 		// CEL does not normalise operand order, so `state == "X"` and
 		// `"X" == state` are different ASTs for the same predicate.
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, lit, ok := identAndLiteral(args[0], args[1])
 		if !ok {
-			return false
+			return
 		}
 		switch fieldType(schema, field) {
 		case typeString:
 			s, ok := lit.(string)
 			if !ok {
-				return false
+				return
 			}
-			return p.setEq(field, s)
+			p.setEq(field, s)
 		case typeBool:
 			b, ok := lit.(bool)
 			if !ok {
-				return false
+				return
 			}
-			return p.setBool(field, b)
+			p.setBool(field, b)
 		default:
-			return false
 		}
 
 	case "_!=_":
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, lit, ok := identAndLiteral(args[0], args[1])
 		if !ok || fieldType(schema, field) != typeString {
-			return false
+			return
 		}
 		v, ok := lit.(string)
 		if !ok {
-			return false
+			return
 		}
-		return p.setIn(&p.Neq, field, v)
+		p.setIn(&p.Neq, field, v)
 
 	case "!_":
 		// `!disabled` is how a filter author writes `disabled == false`.
 		args := c.Args()
 		if len(args) != 1 {
-			return false
+			return
 		}
 		field, ok := identName(args[0])
 		if !ok || fieldType(schema, field) != typeBool {
-			return false
+			return
 		}
-		return p.setBool(field, false)
+		p.setBool(field, false)
 
 	case "_>=_", "_>_", "_<=_", "_<_":
 		// Timestamp ranges. Either operand order: `created_at >= t` and
@@ -162,53 +153,54 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) bool {
 		// flips the comparison rather than being rejected.
 		args := c.Args()
 		if len(args) != 2 {
-			return false
+			return
 		}
 		field, ts, flipped, ok := identAndTimestamp(args[0], args[1])
 		if !ok || fieldType(schema, field) != typeTimestamp {
-			return false
+			return
 		}
 		lower := strings.HasPrefix(c.FunctionName(), "_>")
 		if flipped {
 			lower = !lower
 		}
 		if lower {
-			return setTime(&p.TimeGTE, field, ts)
+			setTime(&p.TimeGTE, field, ts)
+			return
 		}
-		return setTime(&p.TimeLTE, field, ts)
+		setTime(&p.TimeLTE, field, ts)
 
 	case "startsWith", "contains":
 		field, ok := identName(c.Target())
 		if !ok || fieldType(schema, field) != typeString {
-			return false
+			return
 		}
 		args := c.Args()
 		if len(args) != 1 {
-			return false
+			return
 		}
 		lit, ok := stringLiteral(args[0])
 		if !ok {
-			return false
+			return
 		}
 		if c.FunctionName() == "startsWith" {
-			return p.setIn(&p.Prefix, field, lit)
+			p.setIn(&p.Prefix, field, lit)
+			return
 		}
-		return p.setIn(&p.Contains, field, lit)
+		p.setIn(&p.Contains, field, lit)
 	}
-	return false
 }
 
 // A bare identifier is a predicate too: `enabled` means `enabled == true`.
 // Only reachable through the `&&` walk, where the operand is a leaf.
-func (p *Pushdown) recogniseIdent(e celast.Expr, schema *Schema) bool {
+func (p *Pushdown) recogniseIdent(e celast.Expr, schema *Schema) {
 	field, ok := identName(e)
 	if !ok || fieldType(schema, field) != typeBool {
-		return false
+		return
 	}
-	return p.setBool(field, true)
+	p.setBool(field, true)
 }
 
-func (p *Pushdown) setEq(field, lit string) bool {
+func (p *Pushdown) setEq(field, lit string) {
 	if p.Eq == nil {
 		p.Eq = map[string]string{}
 	}
@@ -216,32 +208,29 @@ func (p *Pushdown) setEq(field, lit string) bool {
 	// place keeps the pushdown a subset of the predicate, which is all the
 	// contract requires.
 	if _, seen := p.Eq[field]; seen {
-		return false
+		return
 	}
 	p.Eq[field] = lit
-	return true
 }
 
-func (p *Pushdown) setBool(field string, v bool) bool {
+func (p *Pushdown) setBool(field string, v bool) {
 	if p.BoolEq == nil {
 		p.BoolEq = map[string]bool{}
 	}
 	if _, seen := p.BoolEq[field]; seen {
-		return false
+		return
 	}
 	p.BoolEq[field] = v
-	return true
 }
 
-func (p *Pushdown) setIn(m *map[string]string, field, lit string) bool {
+func (p *Pushdown) setIn(m *map[string]string, field, lit string) {
 	if *m == nil {
 		*m = map[string]string{}
 	}
 	if _, seen := (*m)[field]; seen {
-		return false
+		return
 	}
 	(*m)[field] = lit
-	return true
 }
 
 // StringHint returns the SQL narrowing hints for one text column: an exact
@@ -255,15 +244,14 @@ func (p *Pushdown) setIn(m *map[string]string, field, lit string) bool {
 // side is dropped rather than merged: `a >= X && a >= Y` is expressible as the
 // tighter of the two, but silently choosing it makes the pushdown's answer
 // depend on conjunct order, and the in-memory pass applies both anyway.
-func setTime(m *map[string]time.Time, field string, ts time.Time) bool {
+func setTime(m *map[string]time.Time, field string, ts time.Time) {
 	if *m == nil {
 		*m = map[string]time.Time{}
 	}
 	if _, dup := (*m)[field]; dup {
-		return false
+		return
 	}
 	(*m)[field] = ts
-	return true
 }
 
 // TimeHint returns the inclusive bounds pushed down for a timestamp field.

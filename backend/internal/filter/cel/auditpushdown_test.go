@@ -21,8 +21,7 @@ func TestExtractAuditPushdown(t *testing.T) {
 			name: "action equality",
 			expr: `action == "/paladin.admin.v1.TenantService/CreateTenant"`,
 			want: AuditPushdown{
-				ActionEq:   "/paladin.admin.v1.TenantService/CreateTenant",
-				Recognised: 1,
+				ActionEq: "/paladin.admin.v1.TenantService/CreateTenant",
 			},
 		},
 		{
@@ -30,7 +29,6 @@ func TestExtractAuditPushdown(t *testing.T) {
 			expr: `action.startsWith("/paladin.admin.v1.")`,
 			want: AuditPushdown{
 				ActionPrefix: "/paladin.admin.v1.",
-				Recognised:   1,
 			},
 		},
 		{
@@ -38,16 +36,14 @@ func TestExtractAuditPushdown(t *testing.T) {
 			expr: `actor_subject == "alice@example.com"`,
 			want: AuditPushdown{
 				ActorSubjectEq: "alice@example.com",
-				Recognised:     1,
 			},
 		},
 		{
 			name: "time range gte and lte",
 			expr: `at >= timestamp("2026-05-01T12:00:00Z") && at <= timestamp("2026-05-02T12:00:00Z")`,
 			want: AuditPushdown{
-				AtGTE:      t0,
-				AtLTE:      t0.Add(24 * time.Hour),
-				Recognised: 2,
+				AtGTE: t0,
+				AtLTE: t0.Add(24 * time.Hour),
 			},
 		},
 		{
@@ -57,7 +53,6 @@ func TestExtractAuditPushdown(t *testing.T) {
 				ActionPrefix:   "/paladin.admin.v1.",
 				ActorSubjectEq: "ops",
 				AtGTE:          t0,
-				Recognised:     3,
 			},
 		},
 		{
@@ -66,8 +61,7 @@ func TestExtractAuditPushdown(t *testing.T) {
 			// silently skipped (in-memory CEL still enforces it).
 			expr: `action == "x" && resource_name == "y"`,
 			want: AuditPushdown{
-				ActionEq:   "x",
-				Recognised: 1,
+				ActionEq: "x",
 			},
 		},
 		{
@@ -83,16 +77,14 @@ func TestExtractAuditPushdown(t *testing.T) {
 			// in-memory CEL eval drops the boundary row.
 			expr: `at > timestamp("2026-05-01T12:00:00Z")`,
 			want: AuditPushdown{
-				AtGTE:      t0,
-				Recognised: 1,
+				AtGTE: t0,
 			},
 		},
 		{
 			name: "second equality on same field discarded",
 			expr: `action == "x" && action == "y"`,
 			want: AuditPushdown{
-				ActionEq:   "x",
-				Recognised: 1,
+				ActionEq: "x",
 			},
 		},
 	}
@@ -106,8 +98,7 @@ func TestExtractAuditPushdown(t *testing.T) {
 				got.ActionPrefix != tc.want.ActionPrefix ||
 				got.ActorSubjectEq != tc.want.ActorSubjectEq ||
 				!got.AtGTE.Equal(tc.want.AtGTE) ||
-				!got.AtLTE.Equal(tc.want.AtLTE) ||
-				got.Recognised != tc.want.Recognised {
+				!got.AtLTE.Equal(tc.want.AtLTE) {
 				t.Errorf("pushdown mismatch:\n got: %+v\nwant: %+v", got, tc.want)
 			}
 		})

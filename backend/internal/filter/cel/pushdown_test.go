@@ -24,8 +24,8 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `provider == "s3" && display_name.startsWith("prod")`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				if p.Recognised != 2 {
-					t.Fatalf("recognised %d, want 2", p.Recognised)
+				if predicates(p) != 2 {
+					t.Fatalf("recognised %d, want 2", predicates(p))
 				}
 				eq, like := p.StringHint("provider")
 				if eq == nil || *eq != "s3" {
@@ -104,8 +104,8 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `state == "FAILED" || state == "CANCELLED"`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				if p.Recognised != 0 {
-					t.Errorf("pushed %d predicates out of an OR", p.Recognised)
+				if predicates(p) != 0 {
+					t.Errorf("pushed %d predicates out of an OR", predicates(p))
 				}
 				if eq, _ := p.StringHint("state"); eq != nil {
 					t.Errorf("state eq = %q — one arm of an OR is not a filter", *eq)
@@ -145,7 +145,7 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `nonexistent == "x"`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				if p.Recognised != 0 {
+				if predicates(p) != 0 {
 					t.Errorf("recognised an undeclared field")
 				}
 			},
@@ -156,8 +156,8 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `enabled == "yes" && provider == true`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				if p.Recognised != 0 {
-					t.Errorf("recognised %d type-mismatched predicates", p.Recognised)
+				if predicates(p) != 0 {
+					t.Errorf("recognised %d type-mismatched predicates", predicates(p))
 				}
 			},
 		},
@@ -179,8 +179,8 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `slug.startsWith("acme") && labels["tier"] == "gold"`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				if p.Recognised != 1 {
-					t.Errorf("recognised %d, want only the slug prefix", p.Recognised)
+				if predicates(p) != 1 {
+					t.Errorf("recognised %d, want only the slug prefix", predicates(p))
 				}
 			},
 		},
@@ -206,8 +206,8 @@ func TestExtractPushdownRejectsGarbageWithoutPanicking(t *testing.T) {
 	if err == nil {
 		t.Error("a parse error went unreported")
 	}
-	if p.Recognised != 0 {
-		t.Errorf("pushed %d predicates out of an unparsable filter", p.Recognised)
+	if predicates(p) != 0 {
+		t.Errorf("pushed %d predicates out of an unparsable filter", predicates(p))
 	}
 }
 
@@ -240,8 +240,8 @@ func TestPushdownRecognisesTimestampBounds(t *testing.T) {
 	if lte == nil || !lte.Equal(mustTime(t, "2026-06-30T23:59:59Z")) {
 		t.Errorf("lte = %v", lte)
 	}
-	if pd.Recognised != 2 {
-		t.Errorf("Recognised = %d, want 2", pd.Recognised)
+	if predicates(pd) != 2 {
+		t.Errorf("predicates = %d, want 2", predicates(pd))
 	}
 }
 
@@ -289,8 +289,8 @@ func TestPushdownIgnoresTimestampBoundsOnNonTimestampFields(t *testing.T) {
 	if gte, lte := pd.TimeHint("display_name"); gte != nil || lte != nil {
 		t.Errorf("pushed a range over a string field: %v / %v", gte, lte)
 	}
-	if pd.Recognised != 0 {
-		t.Errorf("Recognised = %d, want 0", pd.Recognised)
+	if predicates(pd) != 0 {
+		t.Errorf("predicates = %d, want 0", predicates(pd))
 	}
 }
 
@@ -308,8 +308,8 @@ func TestPushdownKeepsTheFirstOfDuplicateBounds(t *testing.T) {
 	if gte == nil || !gte.Equal(mustTime(t, "2026-01-01T00:00:00Z")) {
 		t.Errorf("gte = %v, want the first bound", gte)
 	}
-	if pd.Recognised != 1 {
-		t.Errorf("Recognised = %d, want 1 — the duplicate is not a second predicate", pd.Recognised)
+	if predicates(pd) != 1 {
+		t.Errorf("predicates = %d, want 1 — the duplicate is not a second predicate", predicates(pd))
 	}
 }
 
@@ -382,4 +382,11 @@ func TestPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// predicates counts what a pushdown would put into SQL: every field it holds a
+// predicate or a bound for.
+func predicates(p Pushdown) int {
+	return len(p.Eq) + len(p.Neq) + len(p.BoolEq) + len(p.Prefix) +
+		len(p.Contains) + len(p.TimeGTE) + len(p.TimeLTE)
 }
