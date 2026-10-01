@@ -5,7 +5,7 @@
 // naming a bucket) lands. Backed by TenantService.{Get,Set,Clear}
 // TenantDefaultBinding.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   bucketResourceName,
   parseBucketResourceName,
@@ -15,6 +15,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { useTenant } from "../tenant-context";
 import { useBuckets } from "@/hooks/useBuckets";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { tenantClient } from "@/lib/connect/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export default function DefaultBindingPage() {
   const { tenantId, slug } = useTenant();
   const name = `tenants/${slug}`;
   const { showNotification } = useNotification();
-  const { buckets, fetchBuckets } = useBuckets();
+  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
 
   const [selected, setSelected] = useState(-1); // index into buckets, -1 = none
   const [busy, setBusy] = useState(false);
@@ -77,9 +78,14 @@ export default function DefaultBindingPage() {
   });
   const binding = bindingQuery.data ?? null;
 
+  // Tenant-owned buckets only. One place, so Retry asks for the same list.
+  const loadBuckets = useCallback(
+    () => fetchBuckets(undefined, "", "", tenantId),
+    [fetchBuckets, tenantId],
+  );
   useEffect(() => {
-    fetchBuckets(undefined, "", "", tenantId); // tenant-owned buckets only
-  }, [fetchBuckets, tenantId]);
+    void loadBuckets();
+  }, [loadBuckets]);
 
   const handleSet = async () => {
     const b = buckets[selected];
@@ -154,6 +160,16 @@ export default function DefaultBindingPage() {
           </p>
         )}
 
+        {/* A failed read left the select holding only "Select a bucket…" and
+            Set disabled, which read as a tenant that owns no buckets. */}
+        {bucketsError ? (
+          <ListLoadError
+            variant="inline"
+            what="Buckets"
+            reason={bucketsError}
+            onRetry={() => void loadBuckets()}
+          />
+        ) : null}
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">Bucket</span>

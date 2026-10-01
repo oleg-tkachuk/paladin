@@ -18,6 +18,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useUpload, UploadTask } from "@/hooks/useUpload";
 import { useCollections } from "@/hooks/useCollections";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { formatBytes, cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -147,7 +148,11 @@ export default function UploadPage() {
   const { queue, uploadFile, clearQueue } = useUpload();
   const router = useRouter();
   // The picker wants the whole set, not page one — see fetchAllCollections.
-  const { collections, fetchAllCollections } = useCollections();
+  const {
+    collections,
+    error: collectionsError,
+    fetchAllCollections,
+  } = useCollections();
   const [selectedCollection, setSelectedCollection] = useState<string>("");
   // Sentinel routed through SelectRoot.onValueChange to mean "the user
   // clicked the footer affordance, not an actual Collection row". We
@@ -254,7 +259,18 @@ export default function UploadPage() {
                 </CardDescription>
               </div>
             </CardHeader>
-            <CardContent className="px-5">
+            <CardContent className="space-y-2 px-5">
+              {/* A failed read left only "New Collection" in the picker and the
+                  dropzone locked — which nudged the operator to create a
+                  Collection that may already exist. */}
+              {collectionsError ? (
+                <ListLoadError
+                  variant="inline"
+                  what="Collections"
+                  reason={collectionsError}
+                  onRetry={() => void fetchAllCollections()}
+                />
+              ) : null}
               <SelectRoot
                 value={selectedCollection}
                 onValueChange={handleCollectionChange}

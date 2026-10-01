@@ -29,7 +29,7 @@ import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
-import { ListLoadError } from "@/components/ui/ListLoadError";
+import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 export default function UsersPage() {
-  const { tenants, fetchTenants } = useTenants();
+  const { tenants, error: tenantsError, fetchTenants } = useTenants();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   // The generated password is returned once and never again, so it is held
@@ -270,6 +270,7 @@ export default function UsersPage() {
           slug: t.slug,
           displayName: t.displayName,
         }))}
+        tenantsFailed={failedRead(tenantsError, fetchTenants)}
       />
       <PasswordResetResult
         target={resetTarget}

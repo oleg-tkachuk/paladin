@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   fetchBuckets: vi.fn(),
   fetchCollections: vi.fn(),
   showNotification: vi.fn(),
+  tenantsError: null as string | null,
 }));
 
 vi.mock("@/hooks/useTenants", () => ({
@@ -19,6 +20,7 @@ vi.mock("@/hooks/useTenants", () => ({
     tenants: [],
     fetchTenants: h.fetchTenants,
     loading: false,
+    error: h.tenantsError,
   }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
@@ -94,5 +96,16 @@ describe("PoliciesPage", () => {
     ).toBeDisabled();
     // The editor tab is the default — its policy <textarea> is present.
     expect(screen.getAllByRole("textbox").length).toBeGreaterThan(0);
+  });
+
+  // The target select read a failed tenant list as "No tenants available"
+  // and stayed disabled: nothing to attach a policy to.
+  it("says the scope's list failed rather than that it has no targets", () => {
+    h.tenantsError = "unavailable: upstream";
+    render(<PoliciesPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Tenants could not be loaded/,
+    );
+    h.tenantsError = null;
   });
 });

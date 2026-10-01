@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   fetchBuckets: vi.fn(),
   showNotification: vi.fn(),
   buckets: [] as Array<{ backendId: string; bucketId: string }>,
+  bucketsError: null as string | null,
 }));
 
 vi.mock("@/lib/connect/client", () => ({
@@ -27,7 +28,11 @@ vi.mock("../tenant-context", () => ({
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
-  useBuckets: () => ({ buckets: h.buckets, fetchBuckets: h.fetchBuckets }),
+  useBuckets: () => ({
+    buckets: h.buckets,
+    error: h.bucketsError,
+    fetchBuckets: h.fetchBuckets,
+  }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -42,6 +47,7 @@ beforeEach(() => {
   h.set.mockReset();
   h.clear.mockReset();
   h.fetchBuckets.mockReset();
+  h.bucketsError = null;
   h.showNotification.mockReset();
   h.buckets = [
     { backendId: "primary", bucketId: "paladin-a" },
@@ -122,5 +128,19 @@ describe("DefaultBindingPage", () => {
     expect(
       await screen.findByText(/bare-name creation will be rejected/i),
     ).toBeInTheDocument();
+  });
+
+  // A failed read left only "Select a bucket…" and a disabled Set: a tenant
+  // that seemed to own no buckets.
+  it("says the bucket list failed, and retries the same tenant-scoped list", async () => {
+    h.get.mockRejectedValue(notFound());
+    h.bucketsError = "unavailable: upstream";
+    render(<DefaultBindingPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Buckets could not be loaded/,
+    );
+    h.fetchBuckets.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
   });
 });

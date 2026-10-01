@@ -97,4 +97,29 @@ describe("UserCreateDialog", () => {
     show();
     expect(screen.getByText(/Grants nothing yet/)).toBeInTheDocument();
   });
+
+  // On a failed tenant read the select offered only the operator's own
+  // tenant, which read as there being no other tenant to put a user in.
+  // Creating in the own tenant still works, so it is disclosed, not blocked.
+  it("discloses a failed tenant list without holding the own-tenant create", async () => {
+    const retry = vi.fn();
+    render(
+      <UserCreateDialog
+        isOpen
+        onClose={vi.fn()}
+        onCreated={vi.fn()}
+        tenants={[]}
+        tenantsFailed={{ reason: "unavailable: upstream", retry }}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Tenants could not be loaded/,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledOnce();
+
+    fill();
+    submitForm();
+    await waitFor(() => expect(h.createUser).toHaveBeenCalledTimes(1));
+  });
 });

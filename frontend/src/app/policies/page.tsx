@@ -41,6 +41,7 @@ import {
 import { useTenants } from "@/hooks/useTenants";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useCollections } from "@/hooks/useCollections";
+import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
@@ -159,12 +160,23 @@ export default function PoliciesPage() {
   const [scope, setScope] = useState<Scope>("tenant");
   const [target, setTarget] = useState<string>(""); // resource name
 
-  const { tenants, fetchTenants, loading: tenantsLoading } = useTenants();
-  const { buckets, fetchBuckets, loading: bucketsLoading } = useBuckets();
+  const {
+    tenants,
+    fetchTenants,
+    loading: tenantsLoading,
+    error: tenantsError,
+  } = useTenants();
+  const {
+    buckets,
+    fetchBuckets,
+    loading: bucketsLoading,
+    error: bucketsError,
+  } = useBuckets();
   const {
     collections,
     fetchAllCollections,
     loading: collectionsLoading,
+    error: collectionsError,
   } = useCollections();
 
   useEffect(() => {
@@ -434,6 +446,16 @@ export default function PoliciesPage() {
     }
   }, [scope, target, resourceVersion, policyText, showNotification]);
 
+  // The scope's list failed to load. Its select said "No buckets available"
+  // and stayed disabled, which reads as nothing to attach a policy to.
+  const targetFailed =
+    scope === "tenant"
+      ? failedRead(tenantsError, fetchTenants)
+      : scope === "bucket"
+        ? failedRead(bucketsError, fetchBuckets)
+        : failedRead(collectionsError, fetchAllCollections);
+  const targetLabel = SCOPES.find((s) => s.value === scope)?.label ?? scope;
+
   const targetLoading =
     (scope === "tenant" && tenantsLoading) ||
     (scope === "bucket" && bucketsLoading) ||
@@ -472,6 +494,14 @@ export default function PoliciesPage() {
 
           <div className="space-y-1.5">
             <Label>Target</Label>
+            {targetFailed ? (
+              <ListLoadError
+                variant="inline"
+                what={`${targetLabel}s`}
+                reason={targetFailed.reason}
+                onRetry={targetFailed.retry}
+              />
+            ) : null}
             <Select
               aria-label="Target"
               options={targetOptions}
