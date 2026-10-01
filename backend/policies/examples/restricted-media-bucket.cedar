@@ -5,8 +5,8 @@
 // "placeholder" with the tenant UUID at load time.
 
 // Writes constrained by size, content type, and a required `category` tag.
-// An upload whose key the server assigns is checked against the Collection,
-// which has neither tags nor key; `has` keeps those reads from erroring.
+// A batch copy into the collection is checked against the Collection, which
+// has neither tags nor key; `has` keeps those reads from erroring.
 permit (
     principal in Tenant::"placeholder",
     action in [Action::"PutObject", Action::"PresignPut"],

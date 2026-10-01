@@ -115,13 +115,22 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		return nil, MapResolveErr(err)
 	}
 
+	// The key is settled before Cedar runs, as on the presign path: an empty
+	// key becomes the object id, and the policy sees the object that will be
+	// written rather than the Collection.
+	objectID := uuid.Must(uuid.NewV7())
+	key := init.Key
+	if key == "" {
+		key = objectID.String()
+	}
+
 	// Authorize with the declared size as a context attribute — Cedar policy
 	// can reject oversized uploads at the start rather than after N chunks.
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipalFor(principal, tenantID),
 		cedar.ActionPutObject,
 		&cedar.Resource{
-			TenantID: tenantID, Collection: init.Collection, Key: init.Key,
+			TenantID: tenantID, Collection: init.Collection, Key: key,
 			BackendID: backendID, BucketName: bucket,
 			ContentType: init.ContentType, SizeBytes: init.SizeHint, Tags: init.Tags,
 		},
@@ -138,11 +147,6 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 
 	// Pre-allocate the PENDING row — on success the stream writer gives us
 	// authoritative values and the SM promotes it.
-	objectID := uuid.Must(uuid.NewV7())
-	key := init.Key
-	if key == "" {
-		key = objectID.String()
-	}
 	ttl := h.presign.DefaultTTL
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID: tenantID, Collection: init.Collection, Key: key,
