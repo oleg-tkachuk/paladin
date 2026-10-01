@@ -250,6 +250,7 @@ tasks:
       - task: verify:new-release-tag
       - task: verify:go-module-paths
       - task: verify:image-uid
+      - task: verify:image-sources
       - task: verify:admin-audience-roles
       - task: verify:private-refs
       - task: verify:checkov
@@ -404,6 +405,11 @@ tasks:
     desc: "Fail when an image's UID/GID differs from what its chart runs it as"
     cmds:
       - ./scripts/image-uid.test.sh
+
+  verify:image-sources:
+    desc: "Fail when the backend image does not copy a directory the server imports"
+    cmds:
+      - ./scripts/image-sources.test.sh
 
   verify:frontend-gen:
     desc: "Fail when the console's Connect-ES stubs are stale against proto/"
