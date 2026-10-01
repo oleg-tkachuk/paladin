@@ -1117,6 +1117,9 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 			"kind":   cedartypes.String(p.Kind),
 			"roles":  cedartypes.NewSet(rolesSet...),
 			"scopes": cedartypes.NewSet(scopesSet...),
+			// Resource-side attribute, zero-valued here: the schema declares
+			// one User shape for both families.
+			"user_id": cedartypes.String(""),
 		}),
 	}
 
@@ -1228,6 +1231,13 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 				"subject":    cedartypes.String(r.TargetSubject),
 				"tenant_id":  cedartypes.String(r.TenantID.String()),
 				"scope_keys": scopeKeys,
+				// Principal-side attributes, zero-valued here: the schema
+				// declares one User shape for both families, so a policy
+				// reading resource.roles gets an empty set, not an error.
+				"tenant_slug": cedartypes.String(""),
+				"kind":        cedartypes.String(""),
+				"roles":       cedartypes.NewSet(),
+				"scopes":      cedartypes.NewSet(),
 			}),
 		}
 	}

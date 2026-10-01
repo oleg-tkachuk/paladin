@@ -1,226 +1,174 @@
-# Cedar policy authoring guide
+# Cedar policy authoring
 
-Paladin authorizes every RPC against a tenant-scoped Cedar policy. This guide
-walks operators through the policy surface — entities, actions, attributes,
-context — and shows the patterns that come up in real deployments.
+Paladin authorizes every RPC with [Cedar](https://www.cedarpolicy.com). This
+page covers what a policy can refer to and how a policy reaches the engine.
 
-The canonical schema is [`policies/schema.cedarschema`](../policies/schema.cedarschema).
-This doc explains the **why**; the schema is the **what**.
-
----
-
-## 1. Mental model
-
-A Cedar decision answers: **may `principal` perform `action` on `resource`,
-under `context`?** Paladin fills the four slots like this:
-
-| Slot       | Source                                                      |
-|------------|-------------------------------------------------------------|
-| principal  | The authenticated `User` (JWT subject + tenant + roles + scopes). |
-| action     | One of ~30 named actions (see §3).                          |
-| resource   | The thing being acted on — Object, Bucket, Tenant, …        |
-| context    | Per-request attributes — size, content type, time, IP.      |
-
-Every handler builds these from the request and calls `engine.IsAuthorized`.
-A `permit` rule must match AND no `forbid` rule may match — otherwise the
-RPC returns `PermissionDenied`.
-
-**Default is deny.** A tenant with an empty `inherited_cedar_policy` cannot
-do anything. The default policy seeded at tenant creation
-([defaultpolicy.go](../internal/api/admin/v1/tenanth/defaultpolicy.go)) gives
-tenant members read/write on their own objects and admins full reach.
+The reference is [`policies/schema.cedarschema`](../policies/schema.cedarschema).
+`internal/policy/cedar/schema_test.go` checks it against what the engine
+emits — actions, entities, request context — and validates the built-in
+policy, the default tenant policy and the examples against it.
 
 ---
 
-## 2. The six default roles
+## 1. Request
 
-Roles are dot-form strings carried in the JWT `roles` claim. The defaults
-that ship in the example policies:
+| Slot      | Value |
+|-----------|-------|
+| principal | Always a `User`, keyed by the token subject. API tokens and capabilities are `User`s too; `principal.kind` tells them apart. |
+| action    | One of 46 actions (§3). |
+| resource  | The most specific entity the request names: `Object`, `Collection`, `Bucket`, `StorageBackend`, `User` or `Tenant`. |
+| context   | The same record for every action (§5). |
 
-- `platform.admin` — cross-tenant operator. Full reach.
-- `tenant.admin` — full reach **within** their tenant. Cedar enforces
-  isolation via `principal.tenant_id == resource.tenant_id`.
-- `iam.admin` — manages users and api-keys (subset of tenant-admin).
-- `bucket.admin` — bucket lifecycle, versioning, replication.
-- `compliance.officer` — narrow: ConfigureLock only (object-lock for
-  regulatory holds).
-- `secrets.rotator` — narrow: RotateBackendCredentials only (so a
-  rotation service can run without ManageBackend rights).
-- `policy.author` — InspectPolicy / SimulateAuthz (admin-UI roles).
+Handlers call `Engine.IsAuthorized`. A request is allowed when at least one
+`permit` matches and no `forbid` does.
 
-Custom roles work the same way — pick a dot-form name, mint tokens with
-that role, write a permit referencing it. There's no role registry —
-strings are compared verbatim by Cedar.
+A policy that raises an evaluation error — reading an attribute the entity
+does not have, for example — is skipped by Cedar. The engine then denies the
+whole request and counts it, because a skipped `forbid` could otherwise turn
+a deny into an allow. Guard optional reads with `has`.
 
----
+## 2. Policy layers
 
-## 3. Action reference
+Three layers are concatenated and compiled together:
 
-Actions are grouped by the resource type they apply to. **Always specify
-the action by name** — Cedar has no wildcards by design.
+1. **Built-in** (`builtinPolicy` in `internal/policy/cedar/engine.go`), the
+   same for every tenant:
+   - `platform.admin` may do anything;
+   - any principal may consent to an OAuth client (`AuthorizeOAuth`);
+   - a member may read its own tenant (`ReadTenant`) and ensure its own
+     storage (`EnsureTenantStorage`);
+   - a machine principal (`kind` is `api_key`, `service_account` or
+     `capability`) may delete and restore objects in its own tenant;
+   - `platform.tenant-provisioner` may create tenants and their storage;
+   - a principal with a non-empty scope set is confined to resources those
+     scopes admit (a `forbid`).
+2. **Tenant** — `tenants.inherited_cedar_policy`. A tenant created without one
+   gets [`policies/examples/default.cedar`](../policies/examples/default.cedar),
+   with `placeholder` replaced by the tenant's slug (its UUID when it has none).
+3. **Collection** — set with `CollectionService.SetCollectionPolicy`; applies
+   to requests on that collection.
 
-### Object (data plane)
+A `forbid` in any layer wins over every `permit`, so a tenant can narrow the
+built-in grants but not widen past its own `forbid`s.
 
-```
-PutObject       PresignPut       GetObject       PresignGet
-HeadObject      DeleteObject     RestoreObject   UpdateObject
-CopyObject
-```
+`BucketService.SetBucketPolicy` stores a policy on the bucket, but the engine
+does not read it: buckets are not a layer (see BACKLOG.md).
 
-Each of these takes an `Object` resource and exposes context attributes
-`size_bytes`, `content_type`, `now`, `ip` for matching.
+Compiled policies are cached per (tenant, collection). The cache is
+invalidated through Postgres `LISTEN policy_changed`; `cedar.policy_cache_ttl`
+(default `30s`) bounds how long a missed notification can leave a stale
+policy in use.
 
-### Collection / Bucket (admin plane)
+## 3. Roles
 
-```
-ManageCollection      BindCollectionToBucket
-ManageBucket          ReadBucket
-ConfigureBucketPolicy ConfigureLifecycle      ConfigureLock
-ConfigureVersioning   ConfigureReplication
-```
+Roles are strings in the token's `roles` claim, compared verbatim. There is no
+role registry; a new role is a string a policy checks. The shipped policies
+use:
 
-`ConfigureLock` is split out so a `compliance.officer` can hold-only
-without granting ConfigureReplication (data-residency risk).
+| Role | Granted by | Reach |
+|------|------------|-------|
+| `platform.admin` | built-in | everything |
+| `platform.tenant-provisioner` | built-in | create tenants, their buckets and collections |
+| `tenant.admin` | default policy | users, quotas, audit, subscriptions, operations in its own tenant |
+| `bucket.admin` | default policy | bucket configuration |
+| `compliance.officer` | default policy | `ConfigureLock` |
+| `secrets.rotator` | default policy | `RotateBackendCredentials` |
+| `policy.author` | default policy | `InspectPolicy` |
+| `collection:admin` | default policy | delete and restore objects |
 
-### Tenant / IAM
+`iam.admin` is checked in Go by the IAM handlers, not by Cedar.
 
-```
-ManageTenant     ReadTenant
-ManageUser       ReadUser           ResetPassword     GrantScopes
-ManageApiKey     ReadApiKey         RotateApiKey      MintScopedToken
-ManageQuota      ReadQuota          ResetQuotaUsage
-ReadAuditLog     ExportAuditLog
-ManageSubscription ReadSubscription TestSubscription
-ReadOperation    CancelOperation
-ReadUserSettings ManageUserSettings
-```
+## 4. Actions and resources
 
-### Backend / introspection
+Each action applies to the resource types listed. An action on several types
+is checked against the most specific one the request names — for example,
+`ListCollections` checks `ManageCollection` against the `Tenant`.
 
-```
-ManageBackend          ReadBackend
-RotateBackendCredentials
-InspectPolicy
-```
+| Actions | Resource |
+|---------|----------|
+| `PutObject` `GetObject` `DeleteObject` `RestoreObject` `UpdateObject` `CopyObject` | `Object`, `Collection` |
+| `PresignPut` `PresignGet` `HeadObject` | `Object` |
+| `SetObjectRetention` `SetObjectLegalHold` `ReadObjectLock` | `Object` |
+| `ManageCollection` | `Collection`, `Tenant` |
+| `BindCollectionToBucket` | `Collection` |
+| `ManageBucket` `ConfigureBucketPolicy` `ConfigureLifecycle` `ConfigureLock` `ConfigureVersioning` `ConfigureReplication` | `Bucket` |
+| `ReadBucket` | `Bucket`, `StorageBackend`, `Tenant` |
+| `ManageBackend` `RotateBackendCredentials` | `StorageBackend` |
+| `ReadBackend` | `StorageBackend`, `Tenant` |
+| `ManageQuota` `ReadQuota` | `Tenant`, `Bucket` |
+| `ManageTenant` `ReadTenant` `ResetQuotaUsage` `ReadAuditLog` `ExportAuditLog` `ManageSubscription` `ReadSubscription` `TestSubscription` `ReadOperation` `CancelOperation` `ReadBilling` `EnsureTenantStorage` `AuthorizeOAuth` | `Tenant` |
+| `InspectPolicy` | `Tenant`, `Collection` |
+| `ManageUser` `ResetPassword` `GrantScopes` `ManageUserSettings` | `User` |
+| `ReadUser` `ReadUserSettings` | `User`, `Tenant` |
 
-`InspectPolicy` gates `ValidatePolicy` / `SimulateAuthz` /
-`GetEffectivePolicy` — these leak schema and policy text, so they aren't
-open to any authenticated principal.
+An object action reaches Cedar on the `Collection` when no key is known at
+authorization time: batch operations, listing, counting, an upload whose key
+the server assigns. `ConfigureLock` (the bucket's default lock) is separate
+from `SetObjectRetention` (one object's lock), so each can be granted alone.
 
----
+## 5. Attributes
 
-## 4. Resource attributes
+### Resource entities
 
-Every resource entity exposes attributes that policies can match on. The
-ones that come up often:
+| Entity | Attributes |
+|--------|------------|
+| `Tenant` | `tenant_id`, `slug`, `display_name`, `labels`, `scope_keys`? |
+| `StorageBackend` | `backend_id`, `scope_keys` |
+| `Bucket` | `bucket_name`, `backend_id`, `owner_tenant_id` (empty for a shared bucket), `labels`, `scope_keys` |
+| `Collection` | `collection`, `tenant_id`, `bucket_name`, `backend_id`, `scope_keys` |
+| `Object` | `key`, `state`, `size_bytes`, `content_type`, `tenant_id`, `collection`, `bucket_name`, `backend_id`, `tags`, `tag_values`, `scope_keys` |
+| `User` | `tenant_id`, `subject`, `tenant_slug`, `kind`, `roles`, `scopes`, `user_id`, `scope_keys`? |
 
-### `Tenant`
+`?` marks an attribute that is not always present; test it with `has`.
 
-- `tenant_id: String` — UUID form, always present.
-- `slug: String` — kebab-case handle (e.g. `acme`). The Tenant entity's
-  Cedar UID is keyed on the slug when set, so operators read
-  `Tenant::"acme"` instead of `Tenant::"550e8400-…"`.
-- `display_name`, `labels` — present, currently zero-valued in v1
-  (placeholder for future labels-based policies).
+- `Bucket` has no `tenant_id`. A rule shared by tenant and bucket actions
+  must guard `resource has tenant_id`.
+- `Object.tags` is the set of tag names. `tag_values` maps name to value; the
+  schema cannot declare it, so validation does not see it. Index it only after
+  `has`: `resource.tag_values has "class" && resource.tag_values["class"] == "pii"`.
+- `scope_keys` is the set of scope strings that admit the resource:
+  `tenant:<uuid>`, `backend:<id>`, `bucket:<name>`,
+  `collection:<bucket>/<collection>`. The built-in scope `forbid` intersects it
+  with `principal.scopes`.
+- The principal and a `User` resource share one type. The principal's
+  `user_id` is empty; a resource user's `tenant_slug`, `kind`, `roles` and
+  `scopes` are empty.
 
-### `Object`
+### Hierarchy
 
-- `key: String` — S3 key.
-- `state: String` — `PENDING` | `AVAILABLE` | `FAILED` | `DELETED`.
-- `size_bytes: Long`, `content_type: String`.
-- `tenant_id`, `collection`, `bucket_name`, `backend_id` — anchor strings.
-- `tags: Set<String>` — set of tag keys (values not exposed; intentional
-  to keep policies portable across tenants).
+`Collection` is in its `Tenant` and, when the bucket is known, its `Bucket`;
+`Object` is in its `Collection`; `Bucket` is in its `StorageBackend`. The
+principal is in the resource's `Tenant` only when the token's tenant UUID
+equals the resource's, so `principal in Tenant::"acme"` means the caller
+belongs to `acme`.
 
-### `User` (principal AND resource side)
+### Entity UIDs
 
-The principal-User and resource-User share a type but use different UID
-families so policies can write `principal != resource`.
+`Tenant::"<slug>"` (UUID when the tenant has no slug). `Collection::"<tenant
+uuid>/<collection>"`, or with `cedar.canonical_collection_euid: true` and the
+bucket known, `Collection::"storageBackends/<b>/buckets/<bucket>/tenants/<tenant
+uuid>/collections/<collection>"` ([ADR-0014](../../docs/adr/0014-canonical-resource-names.md)).
 
-Principal side:
-- `subject: String` — JWT sub.
-- `tenant_id: String`, `tenant_slug: String`.
-- `roles: Set<String>`, `scopes: Set<String>`.
+Write conditions on attributes and parents, not on resource UID literals
+(`resource == Collection::"…"`): the literal depends on that flag and on
+whether the bucket was resolved.
 
-Resource side (the user being managed):
-- `user_id: String`, `subject: String`, `tenant_id: String`.
+## 6. Context
 
-### `ApiKey`
+| Key | Type | Set for |
+|-----|------|---------|
+| `size_bytes` | Long | uploads: the declared size |
+| `content_type` | String | uploads |
+| `now` | Long | every request: Unix seconds |
+| `ip` | String | nothing yet: always empty |
+| `oauth_client_id` | String | `AuthorizeOAuth` |
+| `oauth_scopes` | Set&lt;String&gt; | `AuthorizeOAuth` |
 
-- `api_key_id: String`, `tenant_id: String`.
+Keys that do not apply are zero-valued, never absent.
 
-### `Bucket`
+## 7. Patterns
 
-- `bucket_name`, `backend_id`, `owner_tenant_id` (empty = shared).
-- `labels: Set<String>`.
-
-### Resource identifiers (EUIDs) — prefer attributes over literals
-
-Each resource is a Cedar entity with a UID. Today the Collection UID is
-`Collection::"{tenant_uuid}/{collection}"` and the Tenant UID is
-`Tenant::"{slug}"`. Under [ADR-0014](../../docs/adr/0014-canonical-resource-names.md)
-the Collection UID is migrating to the **canonical A-shape** name:
-
-```
-Collection::"storageBackends/{backend}/buckets/{bucket}/tenants/{tid}/objectKeys/{ok}"
-```
-
-**Do not hardcode a resource EUID literal** (`resource == Collection::"…"`).
-It ties the policy to one identifier form and will break across the canonical
-migration; it is also brittle (object keys are multi-segment and tenant-scoped).
-Gate on **attributes and parents** instead — they are stable across UID changes:
-
-```cedar
-// Good — attribute / parent conditions (survive the EUID migration):
-permit (principal in Tenant::"acme", action in [Action::"GetObject"], resource)
-when { resource.collection == "invoices" && resource.tenant_id == principal.tenant_id };
-
-// Avoid — a hardcoded resource UID literal:
-permit (principal, action, resource == Collection::"…/objectKeys/invoices");
-```
-
-The default template and every policy Paladin ships use unconstrained `resource` +
-attribute conditions, so the canonical-EUID switch is transparent to them.
-
----
-
-## 5. Context attributes
-
-Cedar `context` is the per-request slot:
-
-- `size_bytes: Long` — for size caps.
-- `content_type: String` — for MIME-type allowlists.
-- `now: Long` — Unix seconds; gate by time-of-day or maintenance windows.
-- `ip: String` — source IP (when the data plane is behind a trusted proxy).
-
-```cedar
-permit (principal, action == Action::"PutObject", resource)
-when {
-  context.size_bytes <= 5368709120 &&         // ≤ 5 GiB
-  !(resource.key like "*.exe")
-};
-```
-
----
-
-## 6. Patterns
-
-### Self vs. cross-user
-
-```cedar
-permit (
-    principal,
-    action in [Action::"ReadUserSettings", Action::"ManageUserSettings"],
-    resource
-) when {
-    principal == resource ||
-    principal.roles.contains("platform.admin") ||
-    (principal.roles.contains("tenant.admin") &&
-     principal.tenant_id == resource.tenant_id)
-};
-```
-
-### Tenant isolation for tenant-admins
+### Tenant admin within its own tenant
 
 ```cedar
 permit (
@@ -228,99 +176,70 @@ permit (
     action in [Action::"ManageUser", Action::"ReadUser"],
     resource
 ) when {
-    principal.roles.contains("platform.admin") ||
-    (principal.roles.contains("tenant.admin") &&
-     principal.tenant_id == resource.tenant_id)
+    principal.roles.contains("tenant.admin") &&
+    principal.tenant_id == resource.tenant_id
 };
 ```
 
-The `tenant_id == resource.tenant_id` check is the load-bearing piece —
-without it, a tenant.admin in tenant A could manage users in tenant B.
+Without the `tenant_id` comparison, a tenant admin in one tenant would manage
+users in every tenant.
 
-### Time-bounded permit (maintenance window)
+### Upload limits
 
 ```cedar
-permit (principal, action == Action::"ManageBackend", resource)
+forbid (principal, action in [Action::"PutObject", Action::"PresignPut"], resource)
 when {
-  principal.roles.contains("platform.admin") &&
-  context.now >= 1700000000 &&
-  context.now <= 1700003600
+    context.size_bytes > 5368709120 ||
+    (resource has key && resource.key like "*.exe")
 };
 ```
 
-### Scope-gated delegation
-
-When a service mints a scoped token (`MintScopedToken`), the resulting
-JWT carries a `scopes` claim. Cedar exposes it as `principal.scopes`:
+### Maintenance window
 
 ```cedar
-permit (principal, action == Action::"GetObject", resource)
-when {
-  principal.scopes.contains("objects:read:" +
-                            resource.tenant_id + "/" +
-                            resource.collection + "/*")
-};
+forbid (principal, action == Action::"ManageBackend", resource)
+unless { context.now >= 1767225600 && context.now < 1767229200 };
 ```
 
-Mind the prefix shape — wire-form scopes are
-`<resource>:<verb>:<tenant_id>/<collection>/<key>`. Wildcards on the key
-slot are matched verbatim by Cedar's `like`-free `String.contains` — this
-is intentional (Cedar refuses regex by design).
-
-### Forbid trumps permit
+### Hold on a tag
 
 ```cedar
 forbid (principal, action == Action::"DeleteObject", resource)
-when {
-  resource.tags.contains("legal-hold")
-};
+when { resource has tags && resource.tags.contains("legal-hold") };
 ```
 
-A single matching `forbid` denies regardless of how many `permit`s match.
-Use this for hard guards that must not be subject to permit-bloat
-("operator stacks N permits trying to grant DeleteObject; forbid catches
-the regression").
+### Narrowing a scoped token
 
----
+Scope confinement is built in (§2); a tenant policy does not need to repeat
+it. To refuse scoped tokens an action outright:
 
-## 7. Common mistakes
+```cedar
+forbid (principal, action == Action::"ExportAuditLog", resource)
+when { !principal.scopes.isEmpty() };
+```
 
-- **String comparison on roles by mistake.** `principal.roles == "x"` is
-  a type error — `roles` is `Set<String>`. Use
-  `principal.roles.contains("x")`.
+Cedar has no string concatenation, so a scope string cannot be assembled
+inside a policy; compare against `resource.scope_keys` instead.
 
-- **Forgetting the tenant guard.** `permit (principal, action ==
-  Action::"ReadUser", resource)` with no when-clause grants cross-tenant.
-  Add `principal.tenant_id == resource.tenant_id`.
+## 8. Common mistakes
 
-- **Using the UUID when the slug is configured.** If your tenant has a
-  slug, the Tenant UID is `Tenant::"acme"`. `Tenant::"550e8400-…"` won't
-  match. Read the slug first via `GetTenant` if unsure.
+- `principal.roles == "x"` — `roles` is a set; use `.contains("x")`.
+- Reading `resource.key`, `resource.tags` or `resource.tenant_id` on an action
+  that also applies to an entity without them (§4, §5) without `has`.
+- `Tenant::"<uuid>"` for a tenant that has a slug — the UID is the slug.
+- `principal == resource` to mean "the caller's own user" — the two UIDs never
+  match; compare `principal.subject == resource.subject`.
+- An empty tenant policy: everything outside the built-in grants is denied.
 
-- **Quoting Cedar identifiers.** Action names need quotes
-  (`Action::"PutObject"`). Entity types do not (`User in [Tenant]`).
+## 9. Workflow
 
-- **Empty default policy.** A tenant with no policy is deny-all. The
-  default seeded at tenant creation is the floor — start there, narrow
-  later.
-
-- **Hardcoding a resource EUID literal.** `resource == Collection::"…"` ties
-  the policy to one identifier form and breaks across the canonical-name
-  migration (ADR-0014). Gate on attributes/parents instead — see §4.
-
----
-
-## 8. Authoring workflow
-
-1. Read the schema: `policies/schema.cedarschema`.
-2. Copy an example: `policies/examples/default.cedar`.
-3. Edit the policy text. Run validation client-side via `ValidatePolicy`
-   RPC (gated by `InspectPolicy`).
-4. Simulate before committing via `SimulateAuthz` — it returns the
-   decision + the matching rules without persisting anything.
-5. Commit via `UpdateTenant` (tenant-inherited policy) or
-   `UpdateCollection` (per-objectKey overlay).
-
-The engine compiles policies on first use and caches the result for 30
-seconds; an update is observed by all workers within ~30s of the write
-landing in `tenants.inherited_cedar_policy`.
+1. Start from [`default.cedar`](../policies/examples/default.cedar) or another
+   file in [`policies/examples/`](../policies/examples/).
+2. `PolicyService.Validate` parses the text (requires `InspectPolicy`). It
+   does not type-check against the schema; `policies.Validate` in Go does.
+3. `PolicyService.SimulateAuthz` evaluates a request against a policy without
+   storing it; `PolicyService.GetEffectivePolicy` returns the merged layers for
+   a tenant or collection.
+4. Store it with `TenantService.SetInheritedPolicy` or
+   `CollectionService.SetCollectionPolicy`.
+5. Running replicas pick it up on the `policy_changed` notification.

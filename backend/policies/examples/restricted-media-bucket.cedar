@@ -5,6 +5,8 @@
 // "placeholder" with the tenant UUID at load time.
 
 // Writes constrained by size, content type, and a required `category` tag.
+// An upload whose key the server assigns is checked against the Collection,
+// which has neither tags nor key; `has` keeps those reads from erroring.
 permit (
     principal in Tenant::"placeholder",
     action in [Action::"PutObject", Action::"PresignPut"],
@@ -12,7 +14,7 @@ permit (
 ) when {
     context.size_bytes <= 52428800 &&
     (context.content_type like "image/*" || context.content_type like "video/*") &&
-    resource.tags.contains("category")
+    resource has tags && resource.tags.contains("category")
 };
 
 // Read available anytime for tenant members.
@@ -28,5 +30,6 @@ forbid (
     action in [Action::"PutObject", Action::"PresignPut"],
     resource
 ) when {
-    resource.key like "*.svg" || context.content_type == "image/svg+xml"
+    (resource has key && resource.key like "*.svg") ||
+    context.content_type == "image/svg+xml"
 };

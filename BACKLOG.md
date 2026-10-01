@@ -1547,6 +1547,57 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
+### A bucket's Cedar policy is stored and never evaluated
+
+- **Status:** Deferred.
+- **Reason:** `BucketService.SetBucketPolicy` and the console's bucket policy
+page write `buckets.cedar_policy`, but `cedar.PostgresStore.Fetch` reads only
+the tenant and collection layers, and `GetEffectivePolicy` shows only those
+two. A bucket policy has no effect and nothing says so.
+- **Definition of Done:** either the engine compiles the bucket layer for
+requests whose bucket is known (cache key, `policy_changed` trigger on
+`buckets`, effective-policy view, tests) or the RPC and page are removed.
+- **Blockers:** the choice between the two.
+
+### `context.ip` is declared and never filled
+
+- **Status:** Deferred.
+- **Reason:** `cedar.RequestContext.IP` is in the schema and the docs, but no
+handler sets it, so a policy on `context.ip` compares against "".
+- **Definition of Done:** the interceptor that resolves the client address
+passes it to every authorization call, with a test; or the key is removed.
+- **Blockers:** which header is trusted behind the ingress.
+
+### `PolicyService.Validate` parses but does not type-check
+
+- **Status:** Deferred.
+- **Reason:** it calls `cedar.Validate`, which only compiles. A policy reading
+an attribute an entity lacks passes, then denies at request time.
+`policies.Validate` type-checks against the schema and is used only in tests.
+- **Definition of Done:** the RPC returns schema diagnostics from
+`policies.Validate`, with a test for an unguarded read.
+- **Blockers:** none.
+
+### Three handlers authorize a less specific resource than the request names
+
+- **Status:** Deferred.
+- **Reason:** Found while mapping each Cedar action to the resource type it is
+evaluated against (`policies/schema.cedarschema`); each is a handler-local
+reorder with its own test, out of scope for the schema fix.
+  - `objecth` `UpdateObject` builds the resource without `Key`/`ObjectID`, so
+  it is always checked against the Collection; a policy on `resource.key` or
+  `resource.tags` cannot apply to it.
+  - `objecth/upload_small.go` authorizes `PutObject` before defaulting an empty
+  key to the object id, so a keyless streaming upload is checked against the
+  Collection. The presign path defaults the key first, on purpose.
+  - `userh` `CreateUser` authorizes before rejecting an empty subject, so that
+  request is checked against the Tenant instead of returning InvalidArgument.
+- **Definition of Done:** each handler builds the resource from the object or
+user it acts on before calling Cedar, with a test asserting the resource type;
+the schema's `appliesTo` for `UpdateObject` drops `Collection` if no batch path
+still needs it.
+- **Blockers:** none.
+
 ### A backend created through the API cannot hold buckets
 
 - **Status:** Open.

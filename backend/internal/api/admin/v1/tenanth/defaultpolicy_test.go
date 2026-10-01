@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/policies"
 )
 
 func TestRenderDefaultPolicy(t *testing.T) {
@@ -16,7 +17,7 @@ func TestRenderDefaultPolicy(t *testing.T) {
 
 	t.Run("substitutes the slug as the Tenant UID", func(t *testing.T) {
 		got := renderDefaultPolicy(tid, "acme")
-		if strings.Contains(got, "placeholder") {
+		if strings.Contains(got, policies.TenantPlaceholder) {
 			t.Error("rendered policy still contains the literal placeholder")
 		}
 		if !strings.Contains(got, `Tenant::"acme"`) {
@@ -31,7 +32,7 @@ func TestRenderDefaultPolicy(t *testing.T) {
 
 	t.Run("falls back to the UUID when slug is empty", func(t *testing.T) {
 		got := renderDefaultPolicy(tid, "")
-		if strings.Contains(got, "placeholder") {
+		if strings.Contains(got, policies.TenantPlaceholder) {
 			t.Error("rendered policy still contains the literal placeholder")
 		}
 		if !strings.Contains(got, `Tenant::"`+tid.String()+`"`) {
@@ -160,5 +161,14 @@ func TestBuiltinPolicy_EnsureTenantStorage(t *testing.T) {
 	// tenant-level op, so a bucket-only scope doesn't cover it (scope forbid).
 	if got := authz(tid, []string{"bucket:acme-documents"}, tid); got != cedar.DecisionDeny {
 		t.Errorf("same-tenant ApiKey scoped only to a bucket = %v, want Deny", got)
+	}
+}
+
+// The template is what every new tenant gets. A read the schema does not
+// declare — an attribute an entity lacks, an unguarded resource.key on a
+// Collection — is an evaluation error at request time, and the engine denies.
+func TestDefaultPolicyValidatesAgainstTheSchema(t *testing.T) {
+	if err := policies.Validate("default", []byte(renderDefaultPolicy(uuid.New(), "acme"))); err != nil {
+		t.Error(err)
 	}
 }
