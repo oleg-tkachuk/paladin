@@ -2,30 +2,27 @@ package config
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // Redacted is the placeholder used in Obfuscated() for sensitive fields.
 const Redacted = "***"
 
 const (
-	defaultK8sAPIBaseURL = "https://kubernetes.default.svc"
-	k8sTokenPath         = "/var/run/secrets/kubernetes.io/serviceaccount/token" // #nosec G101
-	k8sNamespacePath     = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	k8sCACertPath        = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-	defaultHTTPTimeout   = 5 * time.Second
+	k8sTokenPath       = "/var/run/secrets/kubernetes.io/serviceaccount/token" // #nosec G101
+	k8sNamespacePath   = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	defaultHTTPTimeout = 5 * time.Second
 )
 
 // Resolver resolves secret references in the configuration.
@@ -33,39 +30,44 @@ type Resolver interface {
 	ResolveConfig(ctx context.Context, cfg *Config) error
 }
 
-// K8sSecretResolver resolves Kubernetes secrets by reading the projected token
-// and calling the Kubernetes API.
+// K8sSecretResolver resolves Kubernetes secrets through client-go, with the
+// pod's ServiceAccount.
 type K8sSecretResolver struct {
-	log        *zap.Logger
-	client     *http.Client
-	apiBaseURL string
-	tokenPath  string
-	nsPath     string
+	log       *zap.Logger
+	tokenPath string
+	nsPath    string
+
+	// The clientset is built on first use: the resolver is constructed out of
+	// cluster too (local runs, tests), where there is no in-cluster config.
+	clientOnce sync.Once
+	client     kubernetes.Interface
+	clientErr  error
 }
 
 // NewK8sSecretResolver creates a new K8s Secret resolver.
-// It configures TLS using the projected cluster CA.
 func NewK8sSecretResolver(log *zap.Logger) *K8sSecretResolver {
-	caCertPool := x509.NewCertPool()
-	caCert, err := os.ReadFile(k8sCACertPath)
-	if err == nil {
-		caCertPool.AppendCertsFromPEM(caCert)
-	}
-
 	return &K8sSecretResolver{
-		client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs: caCertPool,
-				},
-			},
-			Timeout: defaultHTTPTimeout,
-		},
-		apiBaseURL: defaultK8sAPIBaseURL,
-		tokenPath:  k8sTokenPath,
-		nsPath:     k8sNamespacePath,
-		log:        log,
+		tokenPath: k8sTokenPath,
+		nsPath:    k8sNamespacePath,
+		log:       log,
 	}
+}
+
+// clientset returns the in-cluster clientset, building it once.
+func (r *K8sSecretResolver) clientset() (kubernetes.Interface, error) {
+	r.clientOnce.Do(func() {
+		if r.client != nil {
+			return
+		}
+		cfg, err := rest.InClusterConfig()
+		if err != nil {
+			r.clientErr = fmt.Errorf("in-cluster kubernetes config: %w", err)
+			return
+		}
+		cfg.Timeout = defaultHTTPTimeout
+		r.client, r.clientErr = kubernetes.NewForConfig(cfg)
+	})
+	return r.client, r.clientErr
 }
 
 // ResolveConfig walks through the configuration and resolves any secrets in-place.
@@ -247,65 +249,22 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 		namespace = string(nsBytes)
 	}
 
-	tokenBytes, err := os.ReadFile(r.tokenPath)
+	client, err := r.clientset()
 	if err != nil {
-		return "", fmt.Errorf("failed to read service account token (are you in cluster?): %w", err)
+		return "", err
 	}
-
-	url := fmt.Sprintf("%s/api/v1/namespaces/%s/secrets/%s", r.apiBaseURL, namespace, ref.Name)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+string(tokenBytes))
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := r.client.Do(req)
-	if err != nil {
+	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	switch {
+	case apierrors.IsForbidden(err):
+		return "", fmt.Errorf("access denied reading secret %s (ensure RBAC allows get secrets)", ref.Name)
+	case apierrors.IsNotFound(err):
+		return "", fmt.Errorf("secret %s not found in namespace %s", ref.Name, namespace)
+	case err != nil:
 		return "", fmt.Errorf("failed to fetch secret: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			r.log.Error("failed to close response body", zap.Error(err))
-		}
-	}()
 
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusForbidden {
-			return "", fmt.Errorf("access denied reading secret %s (ensure RBAC allows get secrets)", ref.Name)
-		}
-		if resp.StatusCode == http.StatusNotFound {
-			return "", fmt.Errorf("secret %s not found in namespace %s", ref.Name, namespace)
-		}
-
-		return "", fmt.Errorf("kubernetes API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read secret payload: %w", err)
-	}
-
-	var secretResp struct {
-		Data       map[string]string `json:"data"`
-		StringData map[string]string `json:"stringData"`
-	}
-	if err := json.Unmarshal(body, &secretResp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal secret payload: %w", err)
-	}
-
-	if val, ok := secretResp.StringData[key]; ok {
-		return val, nil
-	}
-
-	if b64Val, ok := secretResp.Data[key]; ok {
-		decoded, err := base64.StdEncoding.DecodeString(b64Val)
-		if err != nil {
-			return "", fmt.Errorf("secret key %s contains invalid base64 data: %w", key, err)
-		}
-
-		return string(decoded), nil
+	if val, ok := secret.Data[key]; ok {
+		return string(val), nil
 	}
 
 	return "", fmt.Errorf("key %q not found in secret", key)
