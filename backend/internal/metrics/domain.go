@@ -3,6 +3,8 @@ package metrics
 import (
 	"context"
 
+	"connectrpc.com/connect"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -54,7 +56,7 @@ func init() {
 	if presignIssued, err = meterDomain.Int64Counter(
 		"paladin_presign_total",
 		metric.WithDescription(
-			"Presign requests by operation (get|put|part) and outcome. Paladin never "+
+			"Presign requests by operation (get|put|post|part) and outcome. Paladin never "+
 				"proxies bytes, so this is the closest thing to a throughput signal "+
 				"the control plane has."),
 	); err != nil {
@@ -140,8 +142,31 @@ func init() {
 	}
 }
 
-// RecordPresign counts one presign and its latency. op is get|put|part;
-// outcome is ok, or the failure class the caller mapped it to.
+// The op label of paladin_presign_total: which kind of URL was signed.
+const (
+	PresignOpGet  = "get"
+	PresignOpPut  = "put"
+	PresignOpPost = "post" // a browser form upload, the POST policy transport
+	PresignOpPart = "part"
+)
+
+// PresignOutcomeOK is the outcome label of a presign that produced a URL.
+const PresignOutcomeOK = "ok"
+
+// PresignOutcome maps a presign's error to its outcome label: ok, or the
+// Connect code of the failure. The code is the right granularity: it separates
+// "denied by policy" from "no such object" from "budget exhausted" — three
+// different operational problems — without admitting the unbounded set of
+// error strings.
+func PresignOutcome(err error) string {
+	if err == nil {
+		return PresignOutcomeOK
+	}
+	return connect.CodeOf(err).String()
+}
+
+// RecordPresign counts one presign and its latency. op is one of the
+// PresignOp* constants; outcome is PresignOutcome of the call's error.
 func RecordPresign(ctx context.Context, op, outcome string, seconds float64) {
 	if presignIssued == nil {
 		return

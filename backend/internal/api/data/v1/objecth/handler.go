@@ -28,6 +28,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
@@ -560,7 +561,20 @@ type UploadObjectOutput struct {
 // UploadObject is the fully-wired business logic. The Connect adapter is
 // a thin shim that decodes protobuf into UploadObjectInput, calls this,
 // and encodes UploadObjectOutput back.
-func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*UploadObjectOutput, error) {
+func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *UploadObjectOutput, err error) {
+	// Counted like PresignService's presigns, because this is the same
+	// transfer by another RPC: the client gets a URL and moves the bytes
+	// itself. It was counted only there, so the metric saw a sliver of the
+	// uploads and a panel on it read as an idle store.
+	start := time.Now()
+	presignOp := metrics.PresignOpPut
+	if in.TransportPOST {
+		presignOp = metrics.PresignOpPost
+	}
+	defer func() {
+		metrics.RecordPresign(ctx, presignOp, metrics.PresignOutcome(err), time.Since(start).Seconds())
+	}()
+
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
@@ -1148,7 +1162,13 @@ type DownloadObjectOutput struct {
 
 // DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
 // object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
-func (h *Handler) DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
+func (h *Handler) DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (_ *DownloadObjectOutput, err error) {
+	// See UploadObject: a download URL is a presign whichever RPC mints it.
+	start := time.Now()
+	defer func() {
+		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
+	}()
+
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
