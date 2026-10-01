@@ -30,6 +30,17 @@ func TestToolFilter_BuiltinProfiles(t *testing.T) {
 		{"agent_safe", "paladin_create_collection", false},
 		{"agent_safe", "paladin_set_quota", false},
 
+		// An agent may read its own tenant's budget and platform operations;
+		// spend across tenants and billing detail stay with the admin profile.
+		{"agent_safe", "paladin_get_tenant_budget", true},
+		{"agent_safe", "paladin_list_platform_operations", true},
+		{"agent_safe", "paladin_budget_summary", false},
+		{"agent_safe", "paladin_billing_summary", false},
+		{"agent_safe", "paladin_billing_timeseries", false},
+		{"read_only", "paladin_budget_summary", false},
+		{"admin", "paladin_budget_summary", true},
+		{"admin", "paladin_billing_timeseries", true},
+
 		// admin allows everything except always_deny.
 		{"admin", "paladin_create_collection", true},
 		{"admin", "paladin_set_quota", true},

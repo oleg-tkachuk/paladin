@@ -24,6 +24,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	adminv1connect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -52,6 +53,9 @@ type Clients struct {
 	EventSub adminv1connect.EventSubscriptionServiceClient
 	CEL      adminv1connect.CELServiceClient
 	System   adminv1connect.SystemServiceClient
+	Budget   adminv1connect.TenantBudgetServiceClient
+	Billing  adminv1connect.BillingServiceClient
+	PlatOp   adminv1connect.PlatformOperationServiceClient
 
 	Object        datav1connect.ObjectServiceClient
 	Multipart     datav1connect.MultipartUploadServiceClient
@@ -144,6 +148,9 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		EventSub: adminv1connect.NewEventSubscriptionServiceClient(httpc, adminURL, authInjector),
 		CEL:      adminv1connect.NewCELServiceClient(httpc, adminURL, authInjector),
 		System:   adminv1connect.NewSystemServiceClient(httpc, adminURL, authInjector),
+		Budget:   adminv1connect.NewTenantBudgetServiceClient(httpc, adminURL, authInjector),
+		Billing:  adminv1connect.NewBillingServiceClient(httpc, adminURL, authInjector),
+		PlatOp:   adminv1connect.NewPlatformOperationServiceClient(httpc, adminURL, authInjector),
 
 		Object:        datav1connect.NewObjectServiceClient(httpc, dataURL, authInjector),
 		Multipart:     datav1connect.NewMultipartUploadServiceClient(httpc, dataURL, authInjector),
@@ -321,6 +328,58 @@ type listChildrenArgs struct {
 
 type listOperationsArgs struct {
 	PageSize int32 `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
+}
+
+type listPlatformOperationsArgs struct {
+	PageSize  int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
+	PageToken string `json:"page_token,omitempty" jsonschema:"cursor from a previous response's page.next_page_token"`
+	Filter    string `json:"filter,omitempty" jsonschema:"optional CEL filter over Operation"`
+}
+
+type tenantIDArgs struct {
+	TenantID string `json:"tenant_id" jsonschema:"tenant UUID"`
+}
+
+type budgetSummaryArgs struct {
+	ThresholdPct    float64 `json:"threshold_pct,omitempty" jsonschema:"only tenants at or above this percentage of their budget, 0-100; 0 lists all"`
+	UnlimitedOnly   bool    `json:"unlimited_only,omitempty" jsonschema:"only tenants with no budget cap"`
+	ExcludeInactive bool    `json:"exclude_inactive,omitempty" jsonschema:"leave out suspended and deleted tenants"`
+	Limit           int32   `json:"limit,omitempty" jsonschema:"maximum rows, up to 500; 0 is the server default"`
+}
+
+type billingPeriodArgs struct {
+	TenantID    string `json:"tenant_id" jsonschema:"tenant UUID"`
+	PeriodStart string `json:"period_start,omitempty" jsonschema:"RFC 3339 start of the period; empty is the server default"`
+	PeriodEnd   string `json:"period_end,omitempty" jsonschema:"RFC 3339 end of the period; empty is now"`
+}
+
+type billingTimeSeriesArgs struct {
+	billingPeriodArgs
+	Granularity string `json:"granularity,omitempty" jsonschema:"bucket width: hour, day or week; empty is the server default"`
+}
+
+// optionalTimestamp parses an RFC 3339 tool argument. Empty means "let the
+// server choose", which is how the RPC reads an absent timestamp.
+func optionalTimestamp(field, v string) (*timestamppb.Timestamp, error) {
+	if v == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return nil, fmt.Errorf("%s: want an RFC 3339 timestamp: %w", field, err)
+	}
+	return timestamppb.New(t), nil
+}
+
+// period parses both ends of a billing period.
+func (a billingPeriodArgs) period() (start, end *timestamppb.Timestamp, err error) {
+	if start, err = optionalTimestamp("period_start", a.PeriodStart); err != nil {
+		return nil, nil, err
+	}
+	if end, err = optionalTimestamp("period_end", a.PeriodEnd); err != nil {
+		return nil, nil, err
+	}
+	return start, end, nil
 }
 
 // ─── Read-only tool registration ────────────────────────────────────────────
@@ -591,6 +650,70 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Read the platform's effective runtime configuration (admin-profile only; not exposed to agent_safe).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.System.GetConfig(ctx, connect.NewRequest(&adminv1.GetConfigRequest{})))
+	})
+
+	// Budget, billing and platform operations — read-only.
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_get_tenant_budget",
+		Description: "Read a tenant's capability budget: the cap, what has been spent this period, and the unit.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in tenantIDArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Budget.Get(ctx, connect.NewRequest(&adminv1.TenantBudgetServiceGetRequest{TenantId: in.TenantID})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_budget_summary",
+		Description: "Summarise capability budgets across tenants, optionally only those near or over their cap (admin profile only).",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in budgetSummaryArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Budget.Summarize(ctx, connect.NewRequest(&adminv1.TenantBudgetServiceSummarizeRequest{
+			ThresholdPct:    in.ThresholdPct,
+			UnlimitedOnly:   in.UnlimitedOnly,
+			ExcludeInactive: in.ExcludeInactive,
+			Limit:           in.Limit,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_billing_summary",
+		Description: "A tenant's charges over a period, totalled by operation (admin profile only).",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in billingPeriodArgs) (*mcpsdk.CallToolResult, any, error) {
+		start, end, err := in.period()
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(c.Billing.GetTenantSummary(ctx, connect.NewRequest(&adminv1.GetTenantSummaryRequest{
+			TenantId: in.TenantID, PeriodStart: start, PeriodEnd: end,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_billing_timeseries",
+		Description: "A tenant's charges over a period, bucketed by hour, day or week (admin profile only).",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in billingTimeSeriesArgs) (*mcpsdk.CallToolResult, any, error) {
+		start, end, err := in.period()
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(c.Billing.GetTenantTimeSeries(ctx, connect.NewRequest(&adminv1.GetTenantTimeSeriesRequest{
+			TenantId: in.TenantID, PeriodStart: start, PeriodEnd: end, Granularity: in.Granularity,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_list_platform_operations",
+		Description: "List platform-wide long-running operations — bucket provisioning, migrations between backends.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listPlatformOperationsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.PlatOp.ListOperations(ctx, connect.NewRequest(&adminv1.ListOperationsRequest{
+			Page:   &commonv1.PageRequest{PageSize: in.PageSize, PageToken: in.PageToken},
+			Filter: in.Filter,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_get_platform_operation",
+		Description: "Read one platform-wide long-running operation: state, progress and result.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.PlatOp.GetOperation(ctx, connect.NewRequest(&adminv1.GetOperationRequest{Name: in.Name})))
 	})
 }
 
