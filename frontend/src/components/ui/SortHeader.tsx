@@ -1,16 +1,16 @@
-// Sortable column header for the Collection objects table, extracted from the
-// page. Presentational — the active column + direction come in via props and
-// clicks delegate back to the page's sort handler.
+// A sortable column header: the label, and an arrow saying whether the column
+// is the one sorted on and in which direction. Presentational — the sort state
+// comes in through props and a click hands the column back to the page.
 import {
   ArrowsUpDownIcon,
   ArrowDownIcon,
   ArrowUpIcon,
 } from "@heroicons/react/24/outline";
 
+import type { SortState } from "@/hooks/useTableSort";
 import { cn } from "@/lib/utils";
-import type { SortState } from "./_view";
 
-export function SortHeader({
+export function SortHeader<C extends string>({
   label,
   column,
   current,
@@ -18,9 +18,10 @@ export function SortHeader({
   align = "start",
 }: {
   label: string;
-  column: string;
-  current: SortState;
-  onSort: (c: string) => void;
+  column: C;
+  current: SortState<C>;
+  onSort: (c: C) => void;
+  /** "end" for a right-aligned (numeric) column. */
   align?: "start" | "end";
 }) {
   const active = current.column === column && current.direction !== null;

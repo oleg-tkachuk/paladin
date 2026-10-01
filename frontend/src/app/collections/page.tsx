@@ -1,13 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useTableSort, type SortState } from "@/hooks/useTableSort";
+import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
   ArrowPathIcon,
-  ArrowsUpDownIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
   EllipsisHorizontalIcon,
   MagnifyingGlassIcon,
   PlusIcon,
@@ -55,42 +52,9 @@ import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
+import { SortHeader } from "@/components/ui/SortHeader";
 
 type SortColumn = "name" | "displayName" | "backendId";
-
-function SortHeader({
-  label,
-  column,
-  current,
-  onSort,
-}: {
-  label: string;
-  column: SortColumn;
-  current: SortState<SortColumn>;
-  onSort: (c: SortColumn) => void;
-}) {
-  const active = current.column === column && current.direction !== null;
-  const Icon = !active
-    ? ArrowsUpDownIcon
-    : current.direction === "asc"
-      ? ArrowUpIcon
-      : ArrowDownIcon;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(column)}
-      className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider transition-colors",
-        active
-          ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {label}
-      <Icon className="size-3.5 opacity-70" />
-    </button>
-  );
-}
 
 export default function CollectionsPage() {
   const {

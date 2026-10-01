@@ -26,7 +26,7 @@ import {
 import { ObjectTableRow } from "@/components/features/objects/ObjectTableRow";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 
-import { SortHeader } from "./_table";
+import { SortHeader } from "@/components/ui/SortHeader";
 import type { SortState } from "./_view";
 
 // Per-row callbacks forwarded verbatim to ObjectTableRow. Derived from its own

@@ -20,14 +20,6 @@ const MIN_BODY_CHARS = 100;
 // "<file under src>#<function>" → why the copy is still there. An entry that
 // no longer names a copy fails, so the list only shrinks.
 const ALLOWED: Record<string, string> = {
-  "app/buckets/page.tsx#SortHeader": "sort headers: one shared component next",
-  "app/tenants/[id]/buckets/page.tsx#SortHeader":
-    "sort headers: one shared component next",
-  "app/tenants/page.tsx#SortHeader": "sort headers: one shared component next",
-  "app/collections/page.tsx#SortHeader":
-    "sort headers: one shared component next",
-  "app/tenants/[id]/collections/page.tsx#SortHeader":
-    "sort headers: one shared component next",
   "app/buckets/page.tsx#handleDelete":
     "the platform and tenant bucket tables are still two components",
   "app/tenants/[id]/buckets/page.tsx#handleDelete":

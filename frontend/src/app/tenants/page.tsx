@@ -1,14 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useTableSort, type SortState } from "@/hooks/useTableSort";
+import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
   ArrowPathIcon,
   ArrowRightIcon,
-  ArrowsUpDownIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
   BuildingOfficeIcon,
   EllipsisHorizontalIcon,
   MagnifyingGlassIcon,
@@ -47,6 +44,7 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { SortHeader } from "@/components/ui/SortHeader";
 
 type SortColumn = "slug" | "displayName";
 
@@ -59,44 +57,6 @@ function parseDefaultBucket(
 ): { backend: string; bucket: string } | null {
   const m = /^storageBackends\/([^/]+)\/buckets\/(.+)$/.exec(name);
   return m ? { backend: m[1], bucket: m[2] } : null;
-}
-
-function SortHeader({
-  label,
-  column,
-  current,
-  onSort,
-  className,
-}: {
-  label: string;
-  column: SortColumn;
-  current: SortState<SortColumn>;
-  onSort: (c: SortColumn) => void;
-  className?: string;
-}) {
-  const active = current.column === column && current.direction !== null;
-  const Icon = !active
-    ? ArrowsUpDownIcon
-    : current.direction === "asc"
-      ? ArrowUpIcon
-      : ArrowDownIcon;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(column)}
-      className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider transition-colors",
-        active
-          ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground",
-        className,
-      )}
-    >
-      {label}
-      <Icon className="size-3.5 opacity-70" />
-    </button>
-  );
 }
 
 export default function TenantsPage() {
