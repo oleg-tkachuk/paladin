@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Check the backend chart's NetworkPolicies against the guarantees they claim.
+"""Check both charts' NetworkPolicies against the guarantees they claim.
 
-`networkPolicies.enabled` is false in every values file we ship — it needs an
-enforcing CNI — so these 266 lines of template were rendered by nothing: not
-`helm lint`, not the render gate, not chart-values.test.sh. A template error in
-them would have reached the first cluster that turned them on.
+`networkPolicies.enabled` was false in every values file for months, so these
+templates were rendered by nothing, and a template error in them would have
+reached the first cluster that turned them on. They are on by default now;
+this gate renders every values file of both charts and requires a policy over
+every workload, and keeps the role-level checks below.
 
 Rendering is the cheap half. The half worth asserting is the one that fails
 catastrophically and silently: the baseline policy denies both directions for
@@ -29,9 +30,8 @@ from pathlib import Path
 # any NetworkPolicy is looked at.
 REQUIRED_VALUES = "ci/required-values.yaml"
 
-# Off by default and not enabled by any values file, so the gate sets them
-# itself — together with every role, since a role that is off renders no policy
-# and would otherwise leave a hole in what this checks.
+# The gate enables them itself, together with every role, since a role that is
+# off renders no policy and would otherwise leave a hole in what this checks.
 ROLES = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
 
 # Observability as a cluster that pulls metrics runs it. The two values the
@@ -241,6 +241,97 @@ def observability_problems(chart: Path) -> list[str]:
     return problems
 
 
+CHARTS = ("backend/deploy/chart", "frontend/deploy/chart")
+CONSOLE_CHART = "frontend/deploy/chart"
+BACKEND_CHART = "backend/deploy/chart"
+
+
+def helm_docs(chart: Path, values: list[Path]) -> list[dict]:
+    """Render `chart` with exactly these values files, as YAML documents."""
+    cmd = ["helm", "template", "netpoltest", str(chart)]
+    for v in values:
+        cmd += ["-f", str(v)]
+    out = subprocess.run(cmd, capture_output=True, text=True)
+    if out.returncode != 0:
+        print(f"!!! {chart} does not render with {[v.name for v in values]}", file=sys.stderr)
+        print("      " + out.stderr.strip().replace("\n", "\n      "), file=sys.stderr)
+        sys.exit(1)
+    asjson = subprocess.run(["yq", "ea", "-o=json", "-I=0", "[.]", "-"],
+                            input=out.stdout, capture_output=True, text=True, check=True)
+    return [d for d in json.loads(asjson.stdout) if d]
+
+
+def pod_labels(doc: dict) -> dict:
+    return ((doc.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {}
+
+
+def selects(policy: dict, labels: dict) -> bool:
+    want = (policy["spec"].get("podSelector") or {}).get("matchLabels") or {}
+    return all(labels.get(k) == v for k, v in want.items())
+
+
+def every_workload_problems(root: Path) -> list[str]:
+    """Under the values we ship, every Deployment sits under a NetworkPolicy.
+
+    Policies are on by default, so a values file that renders a workload with
+    none has either turned them off or added a workload no policy names."""
+    problems = []
+    for rel in CHARTS:
+        chart = root / rel
+        required = chart / REQUIRED_VALUES
+        for values in sorted(chart.glob("values*.yaml")):
+            files = [chart / "values.yaml"] + ([required] if required.exists() else [])
+            if values.name != "values.yaml":
+                files.append(values)
+            docs = helm_docs(chart, files)
+            policies = [d for d in docs if d.get("kind") == "NetworkPolicy"]
+            for d in docs:
+                if d.get("kind") == "Deployment" and not any(selects(p, pod_labels(d)) for p in policies):
+                    problems.append(f"{rel} {values.name}: Deployment {d['metadata']['name']} "
+                                    f"is under no NetworkPolicy")
+    return problems
+
+
+def console_problems(root: Path) -> list[str]:
+    """The console's own policy, and the label contract with the backend's.
+
+    The backend admits the console by networkPolicies.ui.podLabels; the console
+    chart decides its pod labels. If the two drift, every RPC from the console
+    is dropped at the backend's default-deny, with nothing saying why."""
+    problems = []
+    docs = helm_docs(root / CONSOLE_CHART, [root / CONSOLE_CHART / "values.yaml"])
+    deployments = [d for d in docs if d.get("kind") == "Deployment"]
+    policies = [d for d in docs if d.get("kind") == "NetworkPolicy"]
+    if len(deployments) != 1 or len(policies) != 1:
+        return [f"console: expected one Deployment and one NetworkPolicy, "
+                f"rendered {len(deployments)} and {len(policies)}"]
+    pod, policy = pod_labels(deployments[0]), policies[0]
+    if not selects(policy, pod):
+        problems.append("console: its NetworkPolicy does not select its own pods")
+    if set(policy["spec"].get("policyTypes") or []) != {"Ingress", "Egress"}:
+        problems.append("console: its policy does not cover both directions")
+    if not egress_has_dns(policy):
+        problems.append("console: no DNS egress — it cannot resolve the planes")
+    backend_release = subprocess.run(
+        ["yq", ".backend.release", str(root / CONSOLE_CHART / "values.yaml")],
+        capture_output=True, text=True, check=True).stdout.strip()
+    reaches_backend = any(
+        ((to.get("podSelector") or {}).get("matchLabels") or {}).get("app.kubernetes.io/instance") == backend_release
+        for rule in policy["spec"].get("egress") or [] for to in rule.get("to") or [])
+    if not reaches_backend:
+        problems.append(f"console: no egress to the backend release {backend_release!r}")
+    port = deployments[0]["spec"]["template"]["spec"]["containers"][0]["ports"][0]["containerPort"]
+    if not any(port in {p.get("port") for p in rule.get("ports") or []}
+               for rule in policy["spec"].get("ingress") or []):
+        problems.append(f"console: nothing may reach its port {port}")
+    ui_labels = json.loads(subprocess.run(
+        ["yq", "-o=json", ".networkPolicies.ui.podLabels", str(root / BACKEND_CHART / "values.yaml")],
+        capture_output=True, text=True, check=True).stdout)
+    if any(pod.get(k) != v for k, v in ui_labels.items()):
+        problems.append(f"backend admits the console as {ui_labels}, but its pods carry {pod}")
+    return problems
+
+
 def main() -> int:
     root = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"],
                                capture_output=True, text=True, check=True).stdout.strip())
@@ -291,14 +382,17 @@ def main() -> int:
 
     problems += observability_problems(root / "backend/deploy/chart")
     problems += in_release_problems({component(p): p for p in policies if component(p)})
+    problems += console_problems(root)
+    problems += every_workload_problems(root)
 
     if problems:
-        print("!!! backend: the rendered NetworkPolicies break what they promise", file=sys.stderr)
+        print("!!! the rendered NetworkPolicies break what they promise", file=sys.stderr)
         for problem in problems:
             print(f"      {problem}", file=sys.stderr)
         return 1
     print(f"backend: {len(policies)} NetworkPolicies render; "
-          f"{len(covered)} roles covered, baseline denies both directions")
+          f"{len(covered)} roles covered, baseline denies both directions; "
+          f"console covered; every shipped values file puts each Deployment under a policy")
     return 0
 
 

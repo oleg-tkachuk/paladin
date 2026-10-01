@@ -1,0 +1,56 @@
+{{/*
+  The console's NetworkPolicy: default-deny both ways, then the flows it has.
+
+    console ← the ingress controller, on the http port
+    console → DNS, and the backend release's pods (planes and the ops ports
+              the health page polls)
+
+  The backend chart's own policies admit the console by its pod labels
+  (networkPolicies.ui.podLabels there). A plane reached through an explicit
+  backend.urls entry outside that release needs networkPolicies.extraEgress.
+*/}}
+{{- if .Values.networkPolicies.enabled }}
+{{- $np := .Values.networkPolicies }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.ingressController.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.ingressController.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: {{ $np.dnsPort }}
+        - protocol: TCP
+          port: {{ $np.dnsPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.backend.namespace | default .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Values.backend.release }}
+    {{- with $np.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

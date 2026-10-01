@@ -1378,17 +1378,18 @@ rbac:
 
 # ─── NetworkPolicies (per role) ───────────────────────────────────────────────
 # Default-deny ingress+egress scoped to THIS chart's pods, with explicit
-# per-role allows. Off by default: enforcement needs a CNI that implements
-# NetworkPolicy (Calico / Cilium / kube-router); on clusters without one the
-# objects apply but are inert, so enabling is always safe — just possibly
-# meaningless. Note on probes: kubelet health checks originate from the node
-# and bypass policy enforcement in mainstream CNIs, so liveness/readiness keep
+# per-role allows. On by default. Enforcement needs a CNI that implements
+# NetworkPolicy (Calico / Cilium / kube-router); without one the objects apply
+# but are inert. On one that does, the namespaces below must be this
+# cluster's: a peer that lives elsewhere is cut off, and nothing in the chart
+# says why. Note on probes: kubelet health checks originate from the node and
+# bypass policy enforcement in mainstream CNIs, so liveness/readiness keep
 # working under default-deny.
 #
 # The namespace selectors below match the standard `kubernetes.io/metadata.name`
 # label; adjust per environment if your dependencies live elsewhere.
 networkPolicies:
-  enabled: false
+  enabled: true
   # Ingress controller pods allowed to reach api / admin / mcp.
   ingressController:
     namespace: networking

@@ -54,21 +54,9 @@ skip-check:
   # nothing in this repository consumes an image-level HEALTHCHECK either.
   - CKV_DOCKER_2
 
-  # The one rule here that is NOT noise. The chart ships a full per-role
-  # policy set — 10K of template with a flow matrix — behind
-  # `networkPolicies.enabled`, and no values file we ship turns it on, prod
-  # included. So every pod really does run without a NetworkPolicy, and
-  # checkov is right.
-  #
-  # Skipped rather than left red because the fix is an operator decision, not
-  # a chart edit: enabling it against a CNI that does not enforce changes
-  # nothing, and against one that does, a flow the matrix missed drops traffic
-  # in production. Tracked in BACKLOG.md under "NetworkPolicies ship disabled
-  # in every environment" — delete this skip when that entry goes.
-  - CKV2_K8S_6
 
-# No baseline file. CKV2_K8S_6 is a graph check, which checkov's baseline
-# mechanism does not capture — a generated baseline came back empty every
+# No baseline file. Graph checks such as CKV2_K8S_6 are not captured by
+# checkov's baseline mechanism — a generated baseline came back empty every
 # time, while `baseline:` in this config made checkov refuse to start until
 # the file existed. Add one through `task -t Taskfile.dev.yaml
 # checkov:baseline` if a per-resource acceptance is ever actually needed.
