@@ -102,8 +102,8 @@ is checked against the most specific one the request names — for example,
 | `ReadUser` `ReadUserSettings` | `User`, `Tenant` |
 
 An object action reaches Cedar on the `Collection` when no key is known at
-authorization time: batch operations, listing, counting, an upload whose key
-the server assigns. `ConfigureLock` (the bucket's default lock) is separate
+authorization time: batch operations (a batch copy checks `PutObject` on the
+destination collection), listing, counting. `ConfigureLock` (the bucket's default lock) is separate
 from `SetObjectRetention` (one object's lock), so each can be granted alone.
 
 ## 5. Attributes

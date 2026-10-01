@@ -213,8 +213,8 @@ action "AuthorizeOAuth" appliesTo {
 // policies can cap uploads.
 //
 // The actions on [Object, Collection] are also checked against the Collection
-// when no object key is known at authorization time: batch operations, list
-// and count, an upload whose key the server assigns. A policy that reads
+// when no object key is known at authorization time: batch operations (a batch
+// copy checks PutObject on the destination), list and count. A policy that reads
 // resource.key for them must guard it with `resource has key`.
 action "PutObject", "GetObject",
        "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
