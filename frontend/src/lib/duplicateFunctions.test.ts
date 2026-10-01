@@ -19,16 +19,7 @@ const MIN_BODY_CHARS = 100;
 
 // "<file under src>#<function>" → why the copy is still there. An entry that
 // no longer names a copy fails, so the list only shrinks.
-const ALLOWED: Record<string, string> = {
-  "app/buckets/page.tsx#handleDelete":
-    "the platform and tenant bucket tables are still two components",
-  "app/tenants/[id]/buckets/page.tsx#handleDelete":
-    "the platform and tenant bucket tables are still two components",
-  "app/buckets/page.tsx#ProvisionStateBadge":
-    "the platform and tenant bucket tables are still two components",
-  "app/tenants/[id]/buckets/page.tsx#ProvisionStateBadge":
-    "the platform and tenant bucket tables are still two components",
-};
+const ALLOWED: Record<string, string> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
