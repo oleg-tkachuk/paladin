@@ -36,14 +36,33 @@ closed with a pointer here.
   `backend/internal/config/weak_secrets.go`. A report that a default
   credential is publicly readable is not a finding; a report that the gate
   can be evaded is.
-- **`oidc.disableAuth: true` in the local overlays.** Local-development
-  parity, guarded the same way.
-- **The admin console's `/config` page accepting a pasted token.** That is
-  its purpose in a development build.
 - Missing security headers, cookie flags or TLS settings on a stack
   brought up by `task stack:up`. The compose stack is a development
   convenience and is not hardened; report these against the Helm charts,
   which are the deployment path we intend people to use.
+
+## Controls a report should know about
+
+- **Client address.** Each listener resolves the client from `real_ip_header`
+  only when the TCP peer is in `trusted_proxies`, walking the chain from the
+  right; the leftmost entry a client writes is never taken. That address is
+  Cedar's `context.ip`, the `SourceIPCIDR` check of a capability, the login
+  rate limiter's key and the audit source. The chart trusts the private
+  ranges by default, so a client inside them can name its own address; that
+  is a configuration choice documented in
+  [configuration.md](configuration.md#client-address-behind-proxies), not a
+  finding.
+- **Credentials at rest.** Fields that carry a credential are marked
+  `debug_redact` in the protos. They are cleared before a request is written
+  to the audit log, before a response is stored for idempotent replay, and a
+  repeated idempotency key for a credential-bearing response is answered with
+  `AlreadyExists` rather than replayed. Broker URLs are logged with their
+  password masked. A credential that still reaches storage or a log is in
+  scope.
+- **Policy layers.** Built-in, tenant, bucket and collection policies are
+  joined in that order; a `forbid` in any layer wins. A layer that does not
+  parse freezes its scope except for its own repair. See
+  [cedar-authoring.md](../backend/docs/cedar-authoring.md).
 
 ## Where to start
 

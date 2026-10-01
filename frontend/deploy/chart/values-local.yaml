@@ -9,9 +9,6 @@
 #   - image.pullPolicy: Always (local registry rebuilds same tag)
 #   - cert-manager off, reuse cluster-wide `traefik-tls` Secret
 #   - Traefik hosts pointing at *.paladin.local
-#   - oidc.disableAuth: true; the fallback-Bearer devToken is left empty and
-#     supplied at install time (see the auth block below), localStorage.
-#     paladin_token used in prod path.
 
 image:
   # The dev loop builds and pushes to the in-cluster registry, so the local
