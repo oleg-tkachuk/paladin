@@ -61,7 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { ListLoadError } from "@/components/ui/ListLoadError";
+import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
@@ -121,7 +121,11 @@ export default function BucketsPage() {
     createBucket,
     deleteBucket,
   } = useBuckets();
-  const { backends: backendRows } = useBackends();
+  const {
+    backends: backendRows,
+    error: backendsError,
+    fetchBackends,
+  } = useBackends();
   const { showNotification } = useNotification();
 
   const backends = useMemo(
@@ -480,6 +484,7 @@ export default function BucketsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
+        backendsFailed={failedRead(backendsError, fetchBackends)}
         createBucket={createBucket}
       />
 

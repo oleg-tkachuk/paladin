@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/form-dialog";
 import { useBackends } from "@/hooks/useBackends";
 import { useBuckets } from "@/hooks/useBuckets";
+import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useNotification } from "@/components/ui/Notification";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -100,8 +101,12 @@ export function TenantCreateDialog({
   // (name derived server-side), so only the backend is picked — no bucket.
   const dedicated = layout === "dedicated";
 
-  const { backends } = useBackends(open);
-  const { buckets, fetchBuckets } = useBuckets();
+  const { backends, error: backendsError, fetchBackends } = useBackends(open);
+  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
+  // A failed read leaves its list empty, which every check below would read as
+  // "none registered" and answer by sending the operator off to create one.
+  const backendsFailed = failedRead(backendsError, fetchBackends);
+  const bucketsFailed = failedRead(bucketsError, fetchBuckets);
   useEffect(() => {
     if (open) void fetchBuckets();
   }, [open, fetchBuckets]);
@@ -129,15 +134,19 @@ export function TenantCreateDialog({
     ? "Enter a slug to continue."
     : slugError
       ? "Fix the slug to continue."
-      : backends.length === 0
-        ? "Register a storage backend first."
-        : !backendId
-          ? "Pick a storage backend."
-          : !dedicated && !bucketId
-            ? "Pick a bucket to continue."
-            : idError
-              ? "Fix the tenant ID, or clear it."
-              : null;
+      : backendsFailed
+        ? "Backends could not be loaded."
+        : backends.length === 0
+          ? "Register a storage backend first."
+          : !backendId
+            ? "Pick a storage backend."
+            : !dedicated && bucketsFailed
+              ? "Buckets could not be loaded."
+              : !dedicated && !bucketId
+                ? "Pick a bucket to continue."
+                : idError
+                  ? "Fix the tenant ID, or clear it."
+                  : null;
 
   const reset = () => {
     setSlug("");
@@ -241,7 +250,7 @@ export function TenantCreateDialog({
       </FormSection>
 
       <FormSection title="Storage">
-        {backends.length === 0 ? (
+        {!backendsFailed && backends.length === 0 ? (
           <Prerequisite
             href="/storage-backends"
             action="Open Storage Backends"
@@ -279,61 +288,80 @@ export function TenantCreateDialog({
         </FormField>
         <FormRow>
           <FormField label="Backend" required>
-            {(control) => (
-              <SelectRoot value={backendId} onValueChange={setBackendId}>
-                <SelectTrigger {...control}>
-                  <SelectValue
-                    placeholder={
-                      backends.length === 0
-                        ? "No backends registered"
-                        : "Pick backend"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {backends.map((b) => (
-                    <SelectItem key={b.backendId} value={b.backendId}>
-                      {b.displayName
-                        ? `${b.displayName} (${b.backendId})`
-                        : b.backendId}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </SelectRoot>
-            )}
-          </FormField>
-          {!dedicated ? (
-            <FormField label="Bucket" required>
-              {(control) => (
-                <SelectRoot
-                  value={bucketId}
-                  onValueChange={setBucketId}
-                  disabled={!backendId || bucketsForBackend.length === 0}
-                >
+            {(control) =>
+              backendsFailed ? (
+                <ListLoadError
+                  variant="inline"
+                  what="Backends"
+                  reason={backendsFailed.reason}
+                  onRetry={backendsFailed.retry}
+                />
+              ) : (
+                <SelectRoot value={backendId} onValueChange={setBackendId}>
                   <SelectTrigger {...control}>
                     <SelectValue
                       placeholder={
-                        !backendId
-                          ? "Pick backend first"
-                          : bucketsForBackend.length === 0
-                            ? "No buckets on this backend"
-                            : "Pick bucket"
+                        backends.length === 0
+                          ? "No backends registered"
+                          : "Pick backend"
                       }
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {bucketsForBackend.map((b) => (
-                      <SelectItem key={b.bucketId} value={b.bucketId}>
-                        {b.bucketId}
+                    {backends.map((b) => (
+                      <SelectItem key={b.backendId} value={b.backendId}>
+                        {b.displayName
+                          ? `${b.displayName} (${b.backendId})`
+                          : b.backendId}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </SelectRoot>
-              )}
+              )
+            }
+          </FormField>
+          {!dedicated ? (
+            <FormField label="Bucket" required>
+              {(control) =>
+                bucketsFailed ? (
+                  <ListLoadError
+                    variant="inline"
+                    what="Buckets"
+                    reason={bucketsFailed.reason}
+                    onRetry={bucketsFailed.retry}
+                  />
+                ) : (
+                  <SelectRoot
+                    value={bucketId}
+                    onValueChange={setBucketId}
+                    disabled={!backendId || bucketsForBackend.length === 0}
+                  >
+                    <SelectTrigger {...control}>
+                      <SelectValue
+                        placeholder={
+                          !backendId
+                            ? "Pick backend first"
+                            : bucketsForBackend.length === 0
+                              ? "No buckets on this backend"
+                              : "Pick bucket"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bucketsForBackend.map((b) => (
+                        <SelectItem key={b.bucketId} value={b.bucketId}>
+                          {b.bucketId}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectRoot>
+                )
+              }
             </FormField>
           ) : null}
         </FormRow>
         {!dedicated &&
+        !bucketsFailed &&
         backendId &&
         backends.length > 0 &&
         bucketsForBackend.length === 0 ? (
