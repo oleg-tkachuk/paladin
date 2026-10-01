@@ -18,6 +18,9 @@ vi.mock("@/components/features/ChangePasswordCard", () => ({
   ChangePasswordCard: () => null,
 }));
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import { USER_SETTINGS_QUERY_KEY } from "@/lib/theme";
 import ProfilePage from "./page";
 import { SETTINGS_APPLIED_NOTE } from "./_constants";
 
@@ -86,5 +89,63 @@ describe("ProfilePage failed read", () => {
     );
     expect(screen.queryByText("Defaults — not saved yet.")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
+  });
+});
+
+// Each preference had a quick-pick select AND a full-width text input for the
+// same value, so "UTC" showed twice and the second copy spanned the card.
+describe("ProfilePage preference fields", () => {
+  beforeEach(() => {
+    h.getMine.mockReset();
+  });
+
+  it.each([
+    ["Timezone", "Europe/Kyiv"],
+    ["Locale", "uk-UA"],
+  ])("%s is one field, with suggestions", async (label, suggestion) => {
+    h.getMine.mockResolvedValue(DEFAULTS);
+    render(<ProfilePage />);
+    const field = await screen.findByLabelText(label);
+    expect(
+      screen.queryAllByLabelText(new RegExp(`^Common ${label}`, "i")),
+    ).toEqual([]);
+    const listId = field.getAttribute("list");
+    expect(listId).toBeTruthy();
+    const options = [
+      ...document.querySelectorAll(`datalist#${listId} option`),
+    ].map((o) => o.getAttribute("value"));
+    expect(options).toContain(suggestion);
+  });
+
+  // The server refuses an empty time zone; the hint used to promise a default.
+  it("does not offer an empty time zone", async () => {
+    h.getMine.mockResolvedValue(DEFAULTS);
+    render(<ProfilePage />);
+    await screen.findByLabelText("Timezone");
+    expect(screen.queryByText(/Empty = server default/)).toBeNull();
+  });
+});
+
+// The shell reads the same settings query on sign-in, so by the time this page
+// mounts the snapshot is usually cached already. The form must show it.
+describe("ProfilePage with settings already loaded", () => {
+  it("shows the saved values", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    client.setQueryData(USER_SETTINGS_QUERY_KEY, {
+      ...DEFAULTS,
+      timezone: "Asia/Tokyo",
+      locale: "uk-UA",
+      theme: "light",
+      resourceVersion: "2",
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ProfilePage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByLabelText("Timezone")).toHaveValue("Asia/Tokyo");
+    expect(screen.getByLabelText("Locale")).toHaveValue("uk-UA");
   });
 });
