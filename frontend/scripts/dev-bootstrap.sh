@@ -3,9 +3,10 @@
 # expects to find on a fresh Paladin backend, plus a fully permissive Cedar
 # policy so the dev tenant can do everything in its bucket.
 #
-# The dev JWT in configs/config.yaml carries:
+# The dev JWT (`task backend:auth:mint-token`) carries:
+#   aud    = paladin-admin
 #   tenant = 3a823fd4-0b3d-4ce2-a280-93b8d75cc07b
-#   roles  = ["platform-admin"]
+#   roles  = ["platform.admin"]
 #
 # After running, the UI can immediately list tenants/buckets/collections
 # and exercise the full object lifecycle without any manual setup.

@@ -88,7 +88,9 @@ includes:
     # command line, so a literal here would ignore `JWT_AUD=… task …`.
     vars:
       JWT_ISS: '{{.JWT_ISS | default "paladin-dev"}}'
-      JWT_AUD: '{{.JWT_AUD | default "paladin-api"}}'
+      # The admin plane: scripts/dev-bootstrap.sh, the token's one reader,
+      # provisions through it. No plane accepts any audience but its own.
+      JWT_AUD: '{{.JWT_AUD | default "paladin-admin"}}'
       JWT_TTL_SECONDS: '{{.JWT_TTL_SECONDS | default "6048000"}}'
       # platform.admin in dot form — the hyphen form is a different role
       # and gets no cross-tenant access. The tenant claim is what the
