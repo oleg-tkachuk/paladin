@@ -175,10 +175,15 @@ resources:
     cpu: 500m
     memory: 512Mi
 
-# Liveness hits a trivial process-alive route (no backend/DB calls) so a
-# backend outage can't restart-storm the UI. Readiness uses the
-# dependency-aware aggregator so the pod is pulled from the LB when its
-# upstreams are down, without being killed.
+# Both probes hit the trivial process-alive route (no backend/DB calls).
+# Liveness: a backend outage must not restart-storm the UI. Readiness: the
+# console is ready when it can serve, and it can serve during a backend
+# outage — that is when an operator needs it to say what is down. Readiness
+# once pointed at /api/health/all, which feeds the /health page and answers
+# 200 whatever the roles report, so it never reflected the upstreams; it only
+# timed six fetches against the kubelet's 1s default, and under load the one
+# replica dropped out of the Service and the ingress answered 503 for every
+# page.
 livenessProbe:
   httpGet:
     path: /api/health/live
@@ -188,7 +193,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /api/health/all
+    path: /api/health/live
     port: 3000
   initialDelaySeconds: 15
   periodSeconds: 15
