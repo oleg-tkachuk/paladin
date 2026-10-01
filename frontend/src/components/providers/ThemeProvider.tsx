@@ -8,7 +8,7 @@ import { DEFAULT_THEME, PALETTES } from "@/lib/theme";
 /**
  * Puts the active palette's class on <html> before first paint, from the
  * last theme this browser used, so a reload does not flash the default.
- * ThemeSync then applies the theme saved in the user's settings.
+ * SettingsSync then applies the theme saved in the user's settings.
  *
  * color-scheme is left to globals.css: next-themes only writes it for
  * "light" and "dark", and would leave a stale value under "ember".

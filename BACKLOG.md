@@ -1152,19 +1152,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ## UI / Admin Console
 
-### The console does not apply the user's time zone or locale
-
-- **Status:** Deferred.
-- **Reason:** `/profile` saves both through `UserSettingsService`, and nothing
-  reads them back: dates are written in `DISPLAY_LOCALE`
-  (`lib/format/locale.ts`) in the browser's time zone. The theme is applied
-  (`ThemeSync`); the card says the other two are not (`SETTINGS_APPLIED_NOTE`).
-- **Definition of Done:** time zone passed as `timeZone` to the formatters in
-  `lib/format`; a decision on whether an explicit locale overrides
-  `DISPLAY_LOCALE`; `SETTINGS_APPLIED_NOTE` reduced to nothing and removed with
-  its test.
-- **Blockers:** none.
-
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY
 
 - **Status:** Deferred (correct at current scale; revisit on fleet growth).
