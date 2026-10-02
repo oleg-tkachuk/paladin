@@ -18,8 +18,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sync"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
