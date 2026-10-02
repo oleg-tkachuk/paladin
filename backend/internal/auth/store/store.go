@@ -9,6 +9,8 @@ import (
 	"errors"
 	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -166,7 +168,7 @@ var (
 // reaches MapError), which is why both coexist. ErrTokenRevoked is handled
 // inline (reuse-detection) and intentionally not registered.
 func init() {
-	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
-	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrSubjectTaken, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
+	apiutil.RegisterError(ErrSubjectTaken, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SUBJECT_TAKEN)
 }

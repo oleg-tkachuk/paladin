@@ -185,6 +185,41 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTL
 client of your own; `WithTLS` with `WithHTTPClient` is `ErrTLSAndHTTP`.
 These connections are made directly: a proxy from the environment would
 make the TLS connection itself, without the files.
+||||||| parent of 24044e2c (feat(sdk): give go callers typed errors with the server's reason)
+### Errors
+
+Every failed call through a client from `New` or `Connect` returns an
+`*Error` that wraps the `*connect.Error` — `connect.CodeOf` and
+`errors.As(err, &connectErr)` work as before — and matches the kind of
+failure with `errors.Is`. Match on these, not on codes or messages:
+
+| Kind | Code | Means |
+| --- | --- | --- |
+| `ErrNotFound` | `NotFound` | |
+| `ErrAlreadyExists` | `AlreadyExists` | |
+| `ErrPermissionDenied` | `PermissionDenied` | |
+| `ErrFailedPrecondition` | `FailedPrecondition` | |
+| `ErrVersionConflict` | `Aborted` | The resource changed since it was read: read it again and retry the change. |
+| `ErrResourceExhausted` | `ResourceExhausted` | `RetryAfter` is how long the server asked to wait. |
+| `ErrUnauthenticated` | `Unauthenticated` | |
+| `ErrContractSkew` | `Unimplemented` | The server does not implement the call: it is older than the SDK. The message names the procedure, the server's release (`HeaderServerVersion`) and the SDK's. |
+
+`*Error` also carries the `Procedure`, the server's `Reason`
+(`commonv1.ErrorReason`, from the `google.rpc.ErrorInfo` in domain
+`ErrorDomain`), `ServerVersion`, `SDKVersion`, and the decoded `Details`.
+`Reason(err)` returns the reason of any error, `ERROR_REASON_UNSPECIFIED`
+when there is none — or one newer than this SDK, which a caller treats as
+the kind alone.
+
+```go
+_, err := p.Admin.Collection.DeleteCollection(ctx, req)
+switch {
+case paladin.Reason(err) == commonv1.ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY:
+	// empty it first
+case errors.Is(err, paladin.ErrNotFound):
+	// already gone
+}
+```
 
 ### Header names
 

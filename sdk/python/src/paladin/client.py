@@ -31,6 +31,8 @@ from connectrpc.interceptor import Interceptor, InterceptorSync
 from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
+from paladin.errors import convert, relayed
+
 REQ = TypeVar("REQ")
 RES = TypeVar("RES")
 
@@ -106,13 +108,17 @@ def current_idempotency_key() -> str | None:
     return _idempotency_key.get() or None
 
 
+def sdk_version() -> str:
+    """This package's installed version; ``devel`` for a source tree."""
+    try:
+        return metadata.version(_DISTRIBUTION)
+    except metadata.PackageNotFoundError:
+        return _DEVEL_VERSION
+
+
 def user_agent() -> str:
     """``paladin-sdk-python/<version>``, the version being the API contract's."""
-    try:
-        version = metadata.version(_DISTRIBUTION)
-    except metadata.PackageNotFoundError:
-        version = _DEVEL_VERSION
-    return f"{_USER_AGENT_PRODUCT}/{version}"
+    return f"{_USER_AGENT_PRODUCT}/{sdk_version()}"
 
 
 @dataclass(frozen=True)
@@ -127,9 +133,8 @@ class Retry:
     shorter than a ``Retry-After`` the server sent; a retry that could not
     start before the call's timeout is not made. Streams are never retried.
 
-    Each attempt runs inside its own ``connectrpc.client.ResponseMetadata``
-    to read that header, so a ``ResponseMetadata`` around a retried call sees
-    nothing.
+    A ``connectrpc.client.ResponseMetadata`` around a retried call sees the
+    last attempt's headers.
     """
 
     attempts: int
@@ -215,7 +220,11 @@ class Client:
 
     def interceptors(self) -> list[InterceptorSync]:
         """Interceptors for a generated ``…ClientSync``."""
-        result: list[InterceptorSync] = [_HeadersSync(self._headers), _IdempotencySync()]
+        result: list[InterceptorSync] = [
+            _ErrorsSync(),
+            _HeadersSync(self._headers),
+            _IdempotencySync(),
+        ]
         if self._token_source is not None:
             result.append(_TokensSync(self._token_source, self._audience))
         if self._retry is not None:
@@ -224,7 +233,11 @@ class Client:
 
     def async_interceptors(self) -> list[Interceptor]:
         """Interceptors for a generated async ``…Client``."""
-        result: list[Interceptor] = [_HeadersAsync(self._headers), _IdempotencyAsync()]
+        result: list[Interceptor] = [
+            _ErrorsAsync(),
+            _HeadersAsync(self._headers),
+            _IdempotencyAsync(),
+        ]
         if self._token_source is not None:
             result.append(_TokensAsync(self._token_source, self._audience))
         if self._retry is not None:
@@ -415,7 +428,7 @@ class _RetrySync:
     ) -> RES:
         for ceiling in self._retry.delays():
             try:
-                with ResponseMetadata() as meta:
+                with relayed() as meta:
                     return call_next(request, ctx)
             except ConnectError as err:
                 if not _retryable(self._retry, err, ctx):
@@ -439,7 +452,7 @@ class _RetryAsync:
     ) -> RES:
         for ceiling in self._retry.delays():
             try:
-                with ResponseMetadata() as meta:
+                with relayed() as meta:
                     return await call_next(request, ctx)
             except ConnectError as err:
                 if not _retryable(self._retry, err, ctx):
@@ -449,3 +462,46 @@ class _RetryAsync:
                     raise
             await asyncio.sleep(wait)
         return await call_next(request, ctx)
+
+
+def _procedure(ctx: RequestContext) -> str:
+    method = ctx.method()
+    return f"/{method.service_name}/{method.name}"
+
+
+def _typed(err: ConnectError, ctx: RequestContext, meta: Any) -> ConnectError:
+    return convert(err, _procedure(ctx), meta.headers(), sdk_version(), parse_retry_after)
+
+
+class _ErrorsSync:
+    """Outermost: every failure reaches the caller as a ``PaladinError``,
+    while the interceptors inside see the ``ConnectError`` they act on."""
+
+    def intercept_unary_sync(
+        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+    ) -> RES:
+        with relayed() as meta:
+            try:
+                return call_next(request, ctx)
+            except ConnectError as err:
+                typed = _typed(err, ctx, meta)
+                if typed is err:
+                    raise
+                raise typed from err
+
+
+class _ErrorsAsync:
+    async def intercept_unary(
+        self,
+        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        request: REQ,
+        ctx: RequestContext,
+    ) -> RES:
+        with relayed() as meta:
+            try:
+                return await call_next(request, ctx)
+            except ConnectError as err:
+                typed = _typed(err, ctx, meta)
+                if typed is err:
+                    raise
+                raise typed from err

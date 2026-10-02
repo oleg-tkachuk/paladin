@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -31,10 +33,10 @@ var (
 // mapper (ADR-0002) so admin handlers route through apiutil.MapError for a
 // consistent code instead of a per-handler if/else.
 func init() {
-	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
-	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrConflict, connect.CodeFailedPrecondition)
-	apiutil.RegisterError(ErrAlreadyExists, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
+	apiutil.RegisterError(ErrConflict, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_CONFLICT)
+	apiutil.RegisterError(ErrAlreadyExists, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_ALREADY_EXISTS)
 }
 
 // ─── Storage backend repository ─────────────────────────────────────────────

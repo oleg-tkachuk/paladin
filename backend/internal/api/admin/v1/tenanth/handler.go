@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1072,13 +1074,13 @@ var ErrTenantHasChildren = errors.New(
 // mapper (ADR-0002). Each maps consistently to one code across every RPC,
 // so the per-handler if/else ladders collapse to apiutil.MapError(err).
 func init() {
-	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
-	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists)
-	apiutil.RegisterError(ErrTenantIDConflict, connect.CodeAlreadyExists)
-	apiutil.RegisterError(ErrDisplayNameConflict, connect.CodeAlreadyExists)
-	apiutil.RegisterError(ErrAlreadyDeleted, connect.CodeFailedPrecondition)
-	apiutil.RegisterError(ErrNotTrashed, connect.CodeFailedPrecondition)
-	apiutil.RegisterError(ErrDefaultBindingBucketMissing, connect.CodeInvalidArgument)
-	apiutil.RegisterError(ErrTenantHasChildren, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
+	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
+	apiutil.RegisterError(ErrTenantIDConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_TENANT_ID_TAKEN)
+	apiutil.RegisterError(ErrDisplayNameConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_DISPLAY_NAME_TAKEN)
+	apiutil.RegisterError(ErrAlreadyDeleted, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED)
+	apiutil.RegisterError(ErrNotTrashed, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_TRASHED)
+	apiutil.RegisterError(ErrDefaultBindingBucketMissing, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_DEFAULT_BINDING_BUCKET_MISSING)
+	apiutil.RegisterError(ErrTenantHasChildren, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_HAS_CHILDREN)
 }

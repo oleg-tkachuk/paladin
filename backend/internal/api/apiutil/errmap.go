@@ -2,9 +2,14 @@ package apiutil
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"connectrpc.com/connect"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // Canonical domain error sentinels. Store / domain layers wrap these
@@ -23,15 +28,22 @@ var (
 	ErrUnauthenticated    = errors.New("unauthenticated")
 )
 
-// canonical maps each sentinel to its Connect code.
-var canonical = map[error]connect.Code{
-	ErrNotFound:           connect.CodeNotFound,
-	ErrConflict:           connect.CodeAborted,
-	ErrAlreadyExists:      connect.CodeAlreadyExists,
-	ErrInvalidArgument:    connect.CodeInvalidArgument,
-	ErrPermissionDenied:   connect.CodePermissionDenied,
-	ErrFailedPrecondition: connect.CodeFailedPrecondition,
-	ErrUnauthenticated:    connect.CodeUnauthenticated,
+// mapping is what a sentinel becomes on the wire: its Connect code, and the
+// reason in the google.rpc.ErrorInfo attached to it.
+type mapping struct {
+	code   connect.Code
+	reason commonv1.ErrorReason
+}
+
+// canonical maps each sentinel to its code and reason.
+var canonical = map[error]mapping{
+	ErrNotFound:           {connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND},
+	ErrConflict:           {connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT},
+	ErrAlreadyExists:      {connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_ALREADY_EXISTS},
+	ErrInvalidArgument:    {connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT},
+	ErrPermissionDenied:   {connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_PERMISSION_DENIED},
+	ErrFailedPrecondition: {connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION},
+	ErrUnauthenticated:    {connect.CodeUnauthenticated, commonv1.ErrorReason_ERROR_REASON_UNAUTHENTICATED},
 }
 
 // registry holds package-local sentinels registered at init time. A
@@ -40,15 +52,20 @@ var canonical = map[error]connect.Code{
 // on — every handler package (which would cycle).
 var (
 	registryMu sync.RWMutex
-	registry   = map[error]connect.Code{}
+	registry   = map[error]mapping{}
 )
 
 // RegisterError records that `sentinel` (matched via errors.Is) maps to
-// `code`. Call from a package init(). Idempotent; last write wins.
-func RegisterError(sentinel error, code connect.Code) {
+// `code`, with `reason` in its ErrorInfo. Call from a package init().
+// Idempotent; last write wins.
+func RegisterError(sentinel error, code connect.Code, reason commonv1.ErrorReason) {
+	if reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
+		// At init: a sentinel without a reason fails every test of its package.
+		panic(fmt.Sprintf("apiutil: %v registered with no reason", sentinel))
+	}
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	registry[sentinel] = code
+	registry[sentinel] = mapping{code, reason}
 }
 
 // MapError converts a domain error into a *connect.Error with the right
@@ -60,7 +77,8 @@ func RegisterError(sentinel error, code connect.Code) {
 //   - default → CodeInternal
 //
 // The original error is preserved as the connect.Error message/cause so
-// no context is lost.
+// no context is lost. A mapped error carries a google.rpc.ErrorInfo with
+// the sentinel's reason, so a client need not match on the message.
 func MapError(err error) error {
 	if err == nil {
 		return nil
@@ -68,17 +86,26 @@ func MapError(err error) error {
 	if connErr := new(connect.Error); errors.As(err, &connErr) {
 		return err
 	}
-	for sentinel, code := range canonical {
+	for sentinel, m := range canonical {
 		if errors.Is(err, sentinel) {
-			return connect.NewError(code, err)
+			return withReason(connect.NewError(m.code, err), m.reason)
 		}
 	}
 	registryMu.RLock()
 	defer registryMu.RUnlock()
-	for sentinel, code := range registry {
+	for sentinel, m := range registry {
 		if errors.Is(err, sentinel) {
-			return connect.NewError(code, err)
+			return withReason(connect.NewError(m.code, err), m.reason)
 		}
 	}
 	return connect.NewError(connect.CodeInternal, err)
+}
+
+// withReason attaches the ErrorInfo for reason to e.
+func withReason(e *connect.Error, reason commonv1.ErrorReason) *connect.Error {
+	detail, err := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
+	if err == nil { // only a message that cannot be marshalled fails, and this one can
+		e.AddDetail(detail)
+	}
+	return e
 }

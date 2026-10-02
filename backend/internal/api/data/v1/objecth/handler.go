@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1926,8 +1928,8 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // code instead of a hand-written per-handler if/else. errors.Is-based
 // matching, so the existing local checks keep working unchanged.
 func init() {
-	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition)
-	apiutil.RegisterError(ErrBackendReadOnly, connect.CodeFailedPrecondition)
-	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
+	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_DISABLED)
+	apiutil.RegisterError(ErrBackendReadOnly, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_READ_ONLY)
+	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_OBJECT_VERSION_NOT_FOUND)
 }

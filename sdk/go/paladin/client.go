@@ -38,6 +38,9 @@ const (
 	HeaderUserAgent = "User-Agent"
 	// HeaderRetryAfter is how the server asks a client to wait, in seconds.
 	HeaderRetryAfter = "Retry-After"
+	// HeaderServerVersion is the server's release on every response, an
+	// error included, so a client can name both sides of a contract skew.
+	HeaderServerVersion = "X-Paladin-Version"
 
 	bearerScheme = "Bearer"
 )
@@ -185,7 +188,9 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	if cfg.headers.Get(HeaderUserAgent) == "" {
 		cfg.headers.Set(HeaderUserAgent, userAgent())
 	}
-	interceptors := []connect.Interceptor{&headerInterceptor{headers: cfg.headers}}
+	// Outermost: every failure reaches the caller as an *Error, while the
+	// interceptors inside see the Connect error they act on.
+	interceptors := []connect.Interceptor{errorInterceptor{}, &headerInterceptor{headers: cfg.headers}}
 	if cfg.tokens != nil {
 		interceptors = append(interceptors, cfg.tokens)
 	}

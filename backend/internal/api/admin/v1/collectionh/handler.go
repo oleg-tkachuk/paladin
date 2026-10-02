@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -665,12 +667,12 @@ func mapVersionErr(err error) error {
 // mapper (ADR-0002). mapVersionErr now delegates to apiutil.MapError; the
 // registry — not a per-handler if/else — decides the code.
 func init() {
-	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition)
-	apiutil.RegisterError(ErrCollectionExists, connect.CodeAlreadyExists)
-	apiutil.RegisterError(ErrBucketNotFound, connect.CodeNotFound)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
+	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY)
+	apiutil.RegisterError(ErrCollectionExists, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_COLLECTION_EXISTS)
+	apiutil.RegisterError(ErrBucketNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_BUCKET_NOT_FOUND)
 	// A stored Cedar policy that will not compile is a state of the data, not
 	// a fault of the server. Registered here rather than in the cedar package
 	// because apiutil's registry is the API layer's, and cedar sits below it.
-	apiutil.RegisterError(cedar.ErrPolicyUnparseable, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(cedar.ErrPolicyUnparseable, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_POLICY_UNPARSEABLE)
 }
