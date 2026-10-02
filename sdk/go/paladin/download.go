@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -248,4 +249,58 @@ func DownloadURI(ctx context.Context, data *DataPlane, uri string, opts Download
 		return nil, err
 	}
 	return Download(ctx, data, object.GetName(), opts)
+}
+
+// DefaultBulkConcurrency is how many objects DownloadMany opens at once when
+// asked for no other number.
+const DefaultBulkConcurrency = 8
+
+// DownloadMany downloads names, concurrency at a time (DefaultBulkConcurrency
+// when it is not positive), handing each one's reader to fn as it opens. fn
+// runs concurrently with itself, reads the reader and need not close it. It
+// returns the names that failed — to open, or in fn — with their errors,
+// and nil when none did: one bad object does not stop the rest. A cancelled
+// ctx stops opening more.
+func DownloadMany(ctx context.Context, data *DataPlane, names []string, concurrency int,
+	fn func(name string, r *ObjectReader) error,
+) map[string]error {
+	if concurrency <= 0 {
+		concurrency = DefaultBulkConcurrency
+	}
+	var (
+		mu       sync.Mutex
+		failures map[string]error
+		wg       sync.WaitGroup
+	)
+	fail := func(name string, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if failures == nil {
+			failures = map[string]error{}
+		}
+		failures[name] = err
+	}
+	slots := make(chan struct{}, concurrency)
+	for _, name := range names {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+			fail(name, ctx.Err())
+			continue
+		}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			r, err := Download(ctx, data, name, DownloadOptions{})
+			if err != nil {
+				fail(name, err)
+				return
+			}
+			defer func() { _ = r.Close() }()
+			if err := fn(name, r); err != nil {
+				fail(name, err)
+			}
+		})
+	}
+	wg.Wait()
+	return failures
 }

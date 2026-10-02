@@ -13,15 +13,23 @@ import hashlib
 import io
 import threading
 import time
-from collections.abc import Callable, Iterable, Iterator
-from contextlib import AbstractContextManager, contextmanager
-from typing import Any
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    asynccontextmanager,
+    contextmanager,
+)
+from typing import TYPE_CHECKING, Any
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import pyqwest
 
 from paladin.observe import Hooks, TransferEvent, report_transfer
 from paladin.tls import TLS
+
+if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
+    from typing_extensions import Self
 
 DEFAULT_TRANSFER_CONNECT_TIMEOUT = 10.0
 """Seconds to open a connection to storage."""
@@ -123,8 +131,9 @@ class Transfer:
     ``tls`` makes the connections to storage with a CA bundle and a client
     certificate that may rotate on disk (see ``TLS``).
 
-    ``transport`` replaces the ``pyqwest.SyncHTTPTransport`` built here — for a
-    proxy or TLS settings. Build it with ``follow_redirects=False``: a
+    ``transport`` and ``async_transport`` replace the ``pyqwest`` transports
+    built here, for the sync and the async workflows — for a proxy or other
+    settings. Build it with ``follow_redirects=False``: a
     transport that follows them cannot be stopped from here.
 
     Safe to share between threads, and meant to be shared: its connection
@@ -144,6 +153,7 @@ class Transfer:
         otel: bool = False,
         tracer_provider: Any = None,
         transport: Any = None,
+        async_transport: Any = None,
     ) -> None:
         if split_horizon is not None and rewrite is not None:
             raise ValueError("give split_horizon or rewrite, not both")
@@ -153,21 +163,28 @@ class Transfer:
         self.hooks = hooks
         if tls is not None and transport is not None:
             raise ValueError("tls builds the transport; give one or the other")
+        settings: dict[str, Any] = {
+            "connect_timeout": connect_timeout,
+            "read_timeout": read_timeout,
+            "pool_max_idle_per_host": pool_max_idle_per_host,
+            "follow_redirects": False,
+            "enable_otel": otel,
+            "tracer_provider": tracer_provider,
+        }
         if transport is None:
-            settings: dict[str, Any] = {
-                "connect_timeout": connect_timeout,
-                "read_timeout": read_timeout,
-                "pool_max_idle_per_host": pool_max_idle_per_host,
-                "follow_redirects": False,
-                "enable_otel": otel,
-                "tracer_provider": tracer_provider,
-            }
             transport = (
                 tls.sync_transport(**settings)
                 if tls is not None
                 else pyqwest.SyncHTTPTransport(**settings)
             )
+        if async_transport is None:
+            async_transport = (
+                tls.async_transport(**settings)
+                if tls is not None
+                else pyqwest.HTTPTransport(**settings)
+            )
         self._client = pyqwest.SyncClient(transport)
+        self._async_client = pyqwest.Client(async_transport)
 
     def _target(self, url: str) -> tuple[str, str]:
         """The URL to send to, and the Host header it was signed for."""
@@ -201,6 +218,31 @@ class Transfer:
             self.ended(method, target, 0, started, err)
             raise
 
+    @asynccontextmanager
+    async def astream(
+        self,
+        method: str,
+        signed: Any,
+        headers: dict[str, str] | None = None,
+        content: bytes | AsyncIterable[bytes] | None = None,
+    ) -> AsyncIterator[Any]:
+        """``stream`` for the async workflows."""
+        method = signed.method or method
+        url, host = self._target(signed.url)
+        sent = dict(headers or {})
+        sent[_HEADER_HOST] = host
+        sent.update(signed.required_headers)
+        started = time.monotonic()
+        target = urlsplit(url).netloc
+        try:
+            async with self._async_client.stream(method, url, sent, content) as resp:
+                if not _STATUS_OK <= resp.status < _STATUS_REDIRECT:
+                    raise TransferError(method, target, resp.status, await _aexcerpt(resp))
+                yield resp
+        except Exception as err:
+            self.ended(method, target, 0, started, err)
+            raise
+
     def host_of(self, signed: Any) -> str:
         """The host a request for ``signed`` goes to, after any rewrite."""
         return urlsplit(self._target(signed.url)[0]).netloc
@@ -226,6 +268,15 @@ def _split_horizon(signed_origin: str, internal_origin: str) -> Callable[[str], 
     return rewrite
 
 
+async def _aexcerpt(resp: Any) -> str:
+    got = bytearray()
+    async for chunk in resp.content:
+        got += chunk
+        if len(got) >= ERROR_BODY_LIMIT:
+            break
+    return bytes(got[:ERROR_BODY_LIMIT]).decode(errors="replace")
+
+
 def _excerpt(resp: Any) -> str:
     got = bytearray()
     for chunk in resp.content:
@@ -248,37 +299,13 @@ def default_transfer() -> Transfer:
         return _default
 
 
-class ObjectReader(io.RawIOBase):
-    """An object's content, streamed. A file-like object: ``read``,
-    ``readinto``, iteration over ``chunks()``; close it, or use it in a
-    ``with`` block.
+class _Check:
+    """What a whole read must match: the object's recorded size and, when the
+    server recorded one this environment can compute, its checksum. Fed the
+    content as it is read; ``finish`` raises ``IntegrityError`` on a mismatch."""
 
-    Reading a whole object verifies it at the end: the read that reaches the
-    end raises ``IntegrityError`` when the size or the recorded checksum does
-    not match. A range is not verified — the checksum covers the whole object.
-    """
-
-    def __init__(
-        self,
-        exchange: AbstractContextManager[Any],
-        resp: Any,
-        obj: Any,
-        *,
-        verify: bool,
-        ended: Callable[[int, BaseException | None], None] | None = None,
-    ) -> None:
-        super().__init__()
-        self._ended = ended
-        self._reported = False
-        self._cm = exchange
-        self.object = obj
-        self.content_type: str = resp.headers.get("content-type") or obj.content_type
-        length = resp.headers.get("content-length")
-        self.content_length: int | None = int(length) if length is not None else None
-        self._chunks = iter(resp.content)
-        self._pending = b""
-        self._offset = 0
-        self._read = 0
+    def __init__(self, obj: Any, *, verify: bool) -> None:
+        self.read = 0
         self._want_size: int | None = None
         self._digest: Any = None
         self._want_digest = b""
@@ -303,39 +330,15 @@ class ObjectReader(io.RawIOBase):
             return
         self._digest, self._want_digest, self._algorithm = digest, want, obj.checksum.algorithm
 
-    def readable(self) -> bool:
-        return True
-
-    def readinto(self, buffer: Any) -> int:
-        while self._offset >= len(self._pending):
-            try:
-                self._pending, self._offset = bytes(next(self._chunks)), 0
-            except StopIteration:
-                try:
-                    self._verify()
-                except IntegrityError as err:
-                    self._end(err)
-                    raise
-                self._end(None)
-                return 0
-        n = min(len(buffer), len(self._pending) - self._offset)
+    def update(self, piece: bytes) -> None:
         # bytes, not a view: google_crc32c accepts nothing else.
-        piece = self._pending[self._offset : self._offset + n]
-        self._offset += n
-        buffer[:n] = piece
         if self._digest is not None:
             self._digest.update(piece)
-        self._read += n
-        return n
+        self.read += len(piece)
 
-    def chunks(self) -> Iterator[bytes]:
-        """The content in the pieces storage sent, verified like ``read``."""
-        while chunk := self.read(io.DEFAULT_BUFFER_SIZE):
-            yield chunk
-
-    def _verify(self) -> None:
-        if self._want_size is not None and self._read != self._want_size:
-            raise IntegrityError(_INTEGRITY_SIZE, str(self._want_size), str(self._read))
+    def finish(self) -> None:
+        if self._want_size is not None and self.read != self._want_size:
+            raise IntegrityError(_INTEGRITY_SIZE, str(self._want_size), str(self.read))
         if self._digest is not None:
             got = self._digest.digest()
             if got != self._want_digest:
@@ -345,16 +348,142 @@ class ObjectReader(io.RawIOBase):
                     base64.b64encode(got).decode(),
                 )
 
-    def _end(self, error: BaseException | None) -> None:
-        if not self._reported and self._ended is not None:
-            self._reported = True
-            self._ended(self._read, error)
+
+class _Report:
+    """Reports a download once: at the end of the content, or at close."""
+
+    def __init__(self, ended: Callable[[int, BaseException | None], None] | None) -> None:
+        self._ended = ended
+        self._done = False
+
+    def __call__(self, moved: int, error: BaseException | None) -> None:
+        if not self._done and self._ended is not None:
+            self._done = True
+            self._ended(moved, error)
+
+
+class ObjectReader(io.RawIOBase):
+    """An object's content, streamed. A file-like object: ``read``,
+    ``readinto``, iteration over ``chunks()``; close it, or use it in a
+    ``with`` block.
+
+    Reading a whole object verifies it at the end: the read that reaches the
+    end raises ``IntegrityError`` when the size or the recorded checksum does
+    not match. A range is not verified — the checksum covers the whole object.
+    """
+
+    def __init__(
+        self,
+        exchange: AbstractContextManager[Any],
+        resp: Any,
+        obj: Any,
+        *,
+        verify: bool,
+        ended: Callable[[int, BaseException | None], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._report = _Report(ended)
+        self._cm = exchange
+        self.object = obj
+        self.content_type: str = resp.headers.get("content-type") or obj.content_type
+        length = resp.headers.get("content-length")
+        self.content_length: int | None = int(length) if length is not None else None
+        self._chunks = iter(resp.content)
+        self._pending = b""
+        self._offset = 0
+        self._check = _Check(obj, verify=verify)
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Any) -> int:
+        while self._offset >= len(self._pending):
+            try:
+                self._pending, self._offset = bytes(next(self._chunks)), 0
+            except StopIteration:
+                try:
+                    self._check.finish()
+                except IntegrityError as err:
+                    self._report(self._check.read, err)
+                    raise
+                self._report(self._check.read, None)
+                return 0
+        n = min(len(buffer), len(self._pending) - self._offset)
+        piece = self._pending[self._offset : self._offset + n]
+        self._offset += n
+        buffer[:n] = piece
+        self._check.update(piece)
+        return n
+
+    def chunks(self) -> Iterator[bytes]:
+        """The content in the pieces storage sent, verified like ``read``."""
+        while chunk := self.read(io.DEFAULT_BUFFER_SIZE):
+            yield chunk
 
     def close(self) -> None:
         if not self.closed:
-            self._end(None)
+            self._report(self._check.read, None)
             self._cm.__exit__(None, None, None)
         super().close()
+
+
+class AsyncObjectReader:
+    """``ObjectReader`` for asyncio: ``await read()``, ``async for`` over
+    ``chunks()``, ``await aclose()`` or ``async with``. Verified the same way."""
+
+    def __init__(
+        self,
+        exchange: AbstractAsyncContextManager[Any],
+        resp: Any,
+        obj: Any,
+        *,
+        verify: bool,
+        ended: Callable[[int, BaseException | None], None] | None = None,
+    ) -> None:
+        self._report = _Report(ended)
+        self._cm = exchange
+        self.object = obj
+        self.content_type: str = resp.headers.get("content-type") or obj.content_type
+        length = resp.headers.get("content-length")
+        self.content_length: int | None = int(length) if length is not None else None
+        self._chunks = aiter(resp.content)
+        self._check = _Check(obj, verify=verify)
+        self._closed = False
+
+    async def chunks(self) -> AsyncIterator[bytes]:
+        """The content in the pieces storage sent; the last is verified."""
+        while True:
+            try:
+                piece = bytes(await anext(self._chunks))
+            except StopAsyncIteration:
+                try:
+                    self._check.finish()
+                except IntegrityError as err:
+                    self._report(self._check.read, err)
+                    raise
+                self._report(self._check.read, None)
+                return
+            self._check.update(piece)
+            yield piece
+
+    async def read(self) -> bytes:
+        """The rest of the content, verified."""
+        got = bytearray()
+        async for piece in self.chunks():
+            got += piece
+        return bytes(got)
+
+    async def aclose(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._report(self._check.read, None)
+            await self._cm.__aexit__(None, None, None)
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
 
 
 def range_header(offset: int, length: int) -> str:
