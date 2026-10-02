@@ -1663,6 +1663,20 @@ the code. Not fixed in the documentation change that recorded them.
   corrected.
 - **Blockers:** none.
 
+### An unknown update_mask path is ignored, and the console spells masks by hand
+
+- **Status:** Open — silent drift.
+- **Reason:** most Update RPCs read the mask with `slices.Contains` and skip any
+  path they do not know (e.g. `connectshim/admin/tenant_server.go`; only
+  `usersettingsh` rejects one), so a misspelled or renamed field is a no-op
+  that returns success. The console builds those masks from string literals in
+  ten places (`create(FieldMaskSchema, { paths: [...] })`), which `tsc` cannot
+  check, so a proto rename leaves the console "saving" without effect.
+- **Definition of Done:** every Update RPC rejects an unknown mask path with
+  InvalidArgument, with a test each; the console derives mask paths from the
+  generated message schemas rather than literals.
+- **Blockers:** none.
+
 ### The dispatcher holds row locks across sink I/O
 
 - **Status:** Deferred.
