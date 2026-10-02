@@ -197,3 +197,7 @@ pnpm exec playwright show-trace test-results/<failed-test-dir>/trace.zip
 
 For the full troubleshooting table + SDD context, see
 [`specs/001-frontend-playwright-e2e/quickstart.md`](../../../specs/001-frontend-playwright-e2e/quickstart.md).
+
+`task -t Taskfile.dev.yaml verify-e2e` runs the whole suite. With
+`PALADIN_E2E_SHARD=1/2` it runs one slice, in Playwright's `--shard` form;
+CI runs both slices on separate runners, each against its own stack.

@@ -127,10 +127,18 @@ echo "      HEAD                                     rev=$(git describe --always
 # workers, same retries, same no-reuse of a running stack on every machine.
 export CI=true
 
-echo ">>> [e2e] Playwright"
+# A slice of the suite, in Playwright's own --shard form ("1/2"). CI runs one
+# slice per runner, so the suite's minutes split across them; unset, this runs
+# everything. Each slice boots its own stack and runs the environment setup.
+shard_args=()
+if [ -n "${PALADIN_E2E_SHARD:-}" ]; then
+    shard_args=(--shard "$PALADIN_E2E_SHARD")
+fi
+
+echo ">>> [e2e] Playwright${PALADIN_E2E_SHARD:+ (shard $PALADIN_E2E_SHARD)}"
 log=$(mktemp "${TMPDIR:-/tmp}/paladin-e2e-pw.XXXXXX")
 cd frontend
-pnpm run test:e2e 2>&1 | tee "$log"
+pnpm run test:e2e ${shard_args[@]+"${shard_args[@]}"} 2>&1 | tee "$log"
 
 if grep -qE '^ +[0-9]+ flaky' "$log"; then
     echo
