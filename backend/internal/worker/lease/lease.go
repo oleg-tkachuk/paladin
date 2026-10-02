@@ -5,8 +5,14 @@
 // only when the connection drops; a stuck-but-alive process holds the
 // lock indefinitely. This package forces the leader to prove liveness by
 // renewing `expires_at`, and surfaces a fence token (`generation`) that
-// callers thread through every write they perform — see migrations/
-// 015_worker_leases.sql for the table shape and rationale.
+// increases with every change of holder.
+//
+// What the lease guarantees is one runner at a time while processes keep
+// their deadlines. It does not fence a process that is paused past its lease
+// (a stop-the-world pause, a frozen VM) and resumes mid-write: no job threads
+// `generation` into its writes today. Correctness under that overlap comes
+// from each job's own writes — SKIP LOCKED claims, and updates that match the
+// state they read — not from the lease.
 //
 // Why not coordination.k8s.io/Lease: workers operate on Postgres state,
 // not k8s state. Using a Lease in kube-apiserver couples worker mode to
@@ -23,9 +29,8 @@
 //	    Logger:        log.Named("lease.reaper"),
 //	})
 //	err := l.Run(ctx, func(workCtx context.Context, gen int64) error {
-//	    // Run the worker. workCtx is cancelled if renewal stalls;
-//	    // pass `gen` into UPDATEs as a fence-token check.
-//	    return reaper.Run(workCtx, gen)
+//	    // Run the worker. workCtx is cancelled if renewal stalls.
+//	    return reaper.Run(workCtx)
 //	})
 package lease
 
