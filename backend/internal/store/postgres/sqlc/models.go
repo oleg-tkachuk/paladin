@@ -377,6 +377,18 @@ type CapabilityRecord struct {
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 }
 
+type CapabilityReservation struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	Amount       pgtype.Numeric     `json:"amount"`
+	UnitCode     string             `json:"unit_code"`
+	Op           string             `json:"op"`
+	ActorSubject string             `json:"actor_subject"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type CapabilityRevocation struct {
 	ID        pgtype.UUID        `json:"id"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
@@ -392,6 +404,7 @@ type CapabilityUsage struct {
 	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
 	UnitCode     string             `json:"unit_code"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ReservedUsd  pgtype.Numeric     `json:"reserved_usd"`
 }
 
 type Charge struct {
@@ -739,6 +752,7 @@ type TenantBudget struct {
 	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	ResourceVersion int64              `json:"resource_version"`
+	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
 }
 
 type TenantDefaultBinding struct {

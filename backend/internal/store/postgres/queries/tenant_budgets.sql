@@ -35,7 +35,7 @@ WHERE tenant_budgets.resource_version = sqlc.arg('expected_version')::bigint
 RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version;
 
 -- name: GetTenantBudget :one
-SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version
+SELECT tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
 FROM tenant_budgets
 WHERE tenant_id = $1;
 
@@ -52,7 +52,8 @@ SET spent_usd  = tenant_budgets.spent_usd + sqlc.arg('amount_usd')::numeric,
     updated_at = now()
 WHERE
     tenant_budgets.max_budget_usd = 0
-    OR tenant_budgets.spent_usd + sqlc.arg('amount_usd')::numeric <= tenant_budgets.max_budget_usd
+    OR tenant_budgets.spent_usd + tenant_budgets.reserved_usd + sqlc.arg('amount_usd')::numeric
+       <= tenant_budgets.max_budget_usd
 RETURNING spent_usd;
 
 -- name: RefundTenantBudget :exec

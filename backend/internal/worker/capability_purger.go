@@ -65,6 +65,21 @@ func (p *CapabilityPurger) Run(ctx context.Context) error {
 		}
 		var tickErr error
 		if p.Usage != nil {
+			// Expired reservations first: their holds keep counting against
+			// every ceiling until released, and the orphan sweep below may
+			// drop the usage rows they would be released from.
+			for {
+				n, err := p.Usage.ReleaseExpired(ctx)
+				if err != nil {
+					p.log().Warn("failed to release expired capability reservations", zap.Error(err))
+					tickErr = err
+					break
+				}
+				if n == 0 {
+					break
+				}
+				p.log().Info("released expired capability reservations", zap.Int64("reservations", n))
+			}
 			// Loop until 0 — bounded SQL keeps each statement
 			// short, but a backlog (operator just ran a mass
 			// revoke) needs more than one batch to drain.

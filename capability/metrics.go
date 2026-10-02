@@ -32,6 +32,7 @@ var (
 	capChargeDecisions metric.Int64Counter     // allow/deny per attempt
 	capRequestBumps    metric.Int64Counter     // allow/deny per attempt
 	capRefundAmount    metric.Float64Counter   // total refunded
+	capReservations    metric.Int64Counter     // allow/deny per reservation
 	capCurrentSpend    metric.Float64Histogram // distribution of post-charge spend
 )
 
@@ -54,6 +55,10 @@ func initMetrics() {
 		capRefundAmount, _ = meter.Float64Counter(
 			"paladin.capability.refund.amount",
 			metric.WithDescription("Cumulative amount refunded from recorded charges."),
+		)
+		capReservations, _ = meter.Int64Counter(
+			"paladin.capability.reservation.decisions",
+			metric.WithDescription("Reservation attempts bucketed by outcome: allowed / cap_exceeded / tenant_exceeded."),
 		)
 		capCurrentSpend, _ = meter.Float64Histogram(
 			"paladin.capability.charge.current_spend",
@@ -80,7 +85,11 @@ func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, unit string, a
 	if outcome != "allowed" {
 		return
 	}
-	amountAttrs := metric.WithAttributes(tenantAttrs(tenantID, attribute.String("unit_code", unit))...)
+	var amountOpts []attribute.KeyValue
+	if unit != "" {
+		amountOpts = append(amountOpts, attribute.String("unit_code", unit))
+	}
+	amountAttrs := metric.WithAttributes(tenantAttrs(tenantID, amountOpts...)...)
 	if capChargeAmount != nil {
 		capChargeAmount.Add(ctx, amount, amountAttrs)
 	}
@@ -108,4 +117,14 @@ func recordRefund(ctx context.Context, amount float64) {
 		return
 	}
 	capRefundAmount.Add(ctx, amount)
+}
+
+// recordReservation is called once per Reserve regardless of outcome.
+func recordReservation(ctx context.Context, tenantID uuid.UUID, outcome string) {
+	initMetrics()
+	if capReservations == nil {
+		return
+	}
+	capReservations.Add(ctx, 1, metric.WithAttributes(
+		tenantAttrs(tenantID, attribute.String("outcome", outcome))...))
 }

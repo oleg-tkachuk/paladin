@@ -221,8 +221,30 @@ usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID})         
 
 A refund returns spend to every counter the charge took it from, and never
 more than the charge: `Amount: 0` refunds what is left, so a retried full
-refund is a no-op. Charge-then-refund is also how you settle a cost you only
-learn afterwards — charge the estimate, refund the difference.
+refund is a no-op.
+
+## Reserve before a cost is known
+
+An LLM call is priced by the tokens it ends up using. Hold an estimate first,
+then settle the actual cost:
+
+```go
+r, err := usage.Reserve(ctx, capability.ReserveRequest{
+    CapabilityID: cap.ID, TenantID: tenantID,
+    Amount: 0.50, MaxBudget: cap.Caveats.MaxBudgetAmount, UnitCode: "USD",
+    TTL: 2 * time.Minute,
+})
+// … the call runs …
+receipt, err := usage.Settle(ctx, capability.SettleRequest{
+    ReservationID: r.ID, Amount: actualCost, MaxBudget: cap.Caveats.MaxBudgetAmount,
+}, nil)
+```
+
+A hold counts against every ceiling — the capability's, each ancestor's, the
+tenant's — exactly as spend does, so two callers cannot both hold the last
+budget. `Settle` charges the actual cost in place of the hold; above the hold,
+the excess must fit, or the hold stays for you to settle lower or `Release`.
+A hold never settled lapses after its TTL: run `ReleaseExpired` on a timer.
 
 The trailing `nil` is an optional in-transaction callback. If your store has
 transactions, pass a function and the module threads **your** handle back so
@@ -246,7 +268,10 @@ records.Revoke(ctx, capability.RevokeArgs{
 })
 ```
 
-Idempotent. Revoking a capability revokes everything delegated from it, with or
+Idempotent. Verifiers that cache revocation answers learn of it within the
+cache TTL, or at once if you call `CachedRevocationChecker.Clear` when a
+revocation is announced (Paladin listens on a Postgres channel for that).
+Revoking a capability revokes everything delegated from it, with or
 without the flag: `IsRevoked` answers for the whole chain. `CascadeChildren`
 also writes a revocation entry per descendant, so the audit trail names each
 capability that was stopped.

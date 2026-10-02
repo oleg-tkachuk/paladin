@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
@@ -732,6 +733,100 @@ func RefundLastCharge(ctx context.Context, amount float64) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	return nil
+}
+
+// ReserveCapability holds amount against the request's capability, its
+// ancestors and its tenant before a cost is known — an LLM call priced by
+// the tokens it ends up using. Settle the hold with SettleReservation once
+// the actual cost is known, or ReleaseReservation if the work is abandoned;
+// a hold never settled lapses on its own after ttl (0 = the module default).
+//
+// Returns uuid.Nil and no error when there is nothing to hold against: no
+// capability on the context, or no store wired.
+func ReserveCapability(ctx context.Context, amount float64, ttl time.Duration) (uuid.UUID, error) {
+	cap, ok := CapabilityFromContext(ctx)
+	if !ok {
+		return uuid.Nil, nil
+	}
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore[pgx.Tx])
+	if !ok || store == nil {
+		return uuid.Nil, nil
+	}
+	unit := cap.Caveats.UnitCode
+	if unit == "" {
+		unit = capability.DefaultUnitCode
+	}
+	r, err := store.Reserve(ledgerContext(ctx, cap), capability.ReserveRequest{
+		CapabilityID: cap.ID,
+		TenantID:     cap.Subject.TenantID,
+		Amount:       amount,
+		MaxBudget:    cap.Caveats.MaxBudgetAmount,
+		UnitCode:     unit,
+		TTL:          ttl,
+		Op:           readLastOp(ctx),
+		Actor:        cap.Subject.Subject,
+	})
+	if err != nil {
+		return uuid.Nil, chargeError(err)
+	}
+	return r.ID, nil
+}
+
+// SettleReservation charges the actual cost in place of a hold made by
+// ReserveCapability. A cost above the hold must fit the ceilings; if it
+// does not, the hold stays and the call returns ResourceExhausted.
+func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount float64) error {
+	cap, ok := CapabilityFromContext(ctx)
+	if !ok || reservationID == uuid.Nil {
+		return nil
+	}
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore[pgx.Tx])
+	if !ok || store == nil {
+		return nil
+	}
+	receipt, err := store.Settle(ledgerContext(ctx, cap), capability.SettleRequest{
+		ReservationID: reservationID,
+		Amount:        amount,
+		MaxBudget:     cap.Caveats.MaxBudgetAmount,
+	}, nil)
+	if err != nil {
+		if errors.Is(err, capability.ErrReservationNotFound) {
+			return connect.NewError(connect.CodeFailedPrecondition, err)
+		}
+		return chargeError(err)
+	}
+	stampLastCharge(ctx, receipt.ChargeID)
+	return nil
+}
+
+// ReleaseReservation drops a hold made by ReserveCapability without
+// charging. Idempotent.
+func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
+	cap, ok := CapabilityFromContext(ctx)
+	if !ok || reservationID == uuid.Nil {
+		return nil
+	}
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore[pgx.Tx])
+	if !ok || store == nil {
+		return nil
+	}
+	if err := store.Release(ledgerContext(ctx, cap), reservationID); err != nil {
+		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	return nil
+}
+
+// chargeError maps a metering rejection to its transport status: both
+// exhaustion sentinels are ResourceExhausted, an invalid amount is the
+// caller's mistake, anything else is the store being unavailable.
+func chargeError(err error) error {
+	switch {
+	case errors.Is(err, capability.ErrBudgetExceeded), errors.Is(err, capability.ErrTenantBudgetExceeded):
+		return connect.NewError(connect.CodeResourceExhausted, err)
+	case errors.Is(err, capability.ErrInvalidAmount):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewError(connect.CodeUnavailable, err)
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any
