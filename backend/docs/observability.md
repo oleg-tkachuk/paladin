@@ -65,6 +65,16 @@ also carry `trace_id`, `span_id`, `request_id` and `tenant_id`
 refusal — is logged once with `rpc`, `code`, `took_ms` and `request_id`
 (`middleware.LogOutcome`); successful calls are left to tracing.
 
+### `TLS handshake error ... client sent an HTTP request to an HTTPS server`
+
+One line per plain-HTTP request made to a listener serving TLS; the address
+is the client's. From a cluster address it is a misconfigured peer. From
+`127.0.0.1` it is almost always `kubectl port-forward`: forwarded connections
+reach the pod from loopback, so a `curl http://localhost:<port>` against a
+forward to a TLS listener logs exactly this, and the client sees a bare 400.
+Use `https://`, or the plain metrics or ops listener. A connection that opens
+and sends nothing logs `EOF` instead.
+
 ## Health
 
 Every role serves, on its own listener:
