@@ -185,3 +185,28 @@ func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
 		t.Errorf("expected only idOld deleted, got %+v", sd.deleted)
 	}
 }
+
+// The rule everyone writes first — expire under a prefix — failed to
+// evaluate on every object while the projection lacked `key`, so it expired
+// nothing and logged a warning per object.
+func TestExpirerMatchesByKeyAndUpdatedAt(t *testing.T) {
+	eval := cel.NewEvaluator()
+	now := time.Now()
+	rules := []admindomain.LifecycleRule{{
+		ID:         "logs",
+		Enabled:    true,
+		Match:      `key.startsWith("logs/") && updated_at < timestamp("2100-01-01T00:00:00Z")`,
+		Expiration: &admindomain.LifecycleExpiration{After: 1 * time.Hour},
+	}}
+	expirers := buildExpirers(rules, now, eval, zap.NewNop())
+	if len(expirers) != 1 {
+		t.Fatalf("expected 1 expirer, got %d", len(expirers))
+	}
+	old := now.Add(-2 * time.Hour)
+	if ok, err := expirers[0].matches(LifecycleObjectRow{Key: "logs/a", CreatedAt: old, UpdatedAt: old}); err != nil || !ok {
+		t.Errorf("logs/ row past cutoff should match: ok=%v err=%v", ok, err)
+	}
+	if ok, err := expirers[0].matches(LifecycleObjectRow{Key: "data/a", CreatedAt: old, UpdatedAt: old}); err != nil || ok {
+		t.Errorf("data/ row should not match: ok=%v err=%v", ok, err)
+	}
+}

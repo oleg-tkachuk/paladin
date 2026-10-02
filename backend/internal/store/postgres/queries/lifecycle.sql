@@ -59,8 +59,10 @@ ORDER BY c.tenant_id, c.name;
 -- Streams a window of AVAILABLE-only objects under (tenant, collection)
 -- newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 -- Lifecycle worker walks via repeated calls until empty page.
-SELECT o.id, o.state, o.content_type, o.size_bytes,
-       o.metadata, o.tags, o.created_at, o.committed_at
+-- Every column cel.ObjectVars projects, so a rule's match sees what a
+-- ListObjects filter sees.
+SELECT o.id, o.path, o.state, o.content_type, o.size_bytes, o.external_ref,
+       o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at
 FROM objects o
 WHERE o.tenant_id = $1
   AND o.collection_id = (SELECT c.id FROM collections c

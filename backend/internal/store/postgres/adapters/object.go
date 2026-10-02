@@ -240,14 +240,8 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
 		o := objectFromSQLC(row.Object, row.CollectionName)
-		if args.CompiledCEL != nil {
-			ok, evalErr := cel.Match(args.CompiledCEL, celVars(o))
-			if evalErr != nil {
-				return nil, "", fmt.Errorf("cel eval: %w", evalErr)
-			}
-			if !ok {
-				continue
-			}
+		if args.CompiledCEL != nil && !rowMatches(args.CompiledCEL, o) {
+			continue
 		}
 		out = append(out, o)
 	}
@@ -319,11 +313,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		}
 		for _, row := range rows {
 			o := objectFromSQLC(row.Object, row.CollectionName)
-			ok, evalErr := cel.Match(args.CompiledCEL, celVars(o))
-			if evalErr != nil {
-				return 0, false, fmt.Errorf("cel eval: %w", evalErr)
-			}
-			if ok {
+			if rowMatches(args.CompiledCEL, o) {
 				matched++
 			}
 			scanned++
@@ -673,8 +663,6 @@ func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 	}
 }
 
-// celVars surfaces a flat map of attributes CEL programs can reference. Keep
-// the list stable — changes ripple out to every user-defined filter.
 // likeEscape returns s with the LIKE metacharacters (%, _, \) escaped by a
 // backslash — Postgres' default LIKE escape — so the pattern matches s
 // literally. ok is false for an empty s, which narrows nothing.
@@ -750,14 +738,30 @@ func objectListHints(filter string) objectHints {
 	return h
 }
 
+// celVars is the object as a filter sees it — cel.ObjectVars, shared with the
+// lifecycle worker so a rule and a listing filter can never disagree.
 func celVars(o objecth.Object) map[string]any {
-	return map[string]any{
-		"key":          o.Key,
-		"content_type": o.ContentType,
-		"size_bytes":   o.SizeBytes,
-		"state":        string(o.State),
-		"external_ref": o.ExternalRef,
-		"tags":         o.Tags,
-		"metadata":     o.Metadata,
-	}
+	return cel.ObjectVars(cel.ObjectRow{
+		Key:         o.Key,
+		State:       string(o.State),
+		ContentType: o.ContentType,
+		SizeBytes:   o.SizeBytes,
+		Tags:        o.Tags,
+		Metadata:    o.Metadata,
+		ExternalRef: o.ExternalRef,
+		CreatedAt:   o.CreatedAt,
+		UpdatedAt:   o.UpdatedAt,
+		CommittedAt: o.CommittedAt,
+	})
+}
+
+// rowMatches evaluates a filter against one object. An evaluation error is a
+// non-match, not a failed request: the expression was type-checked when it
+// was compiled, so what remains is a value this object does not have — a tag
+// key it lacks, a committed_at it has not got yet. Failing the whole page on
+// that made `tags["env"] == "prod"` unusable on any collection where one
+// object was untagged. The lifecycle worker has always treated it this way.
+func rowMatches(prog cel.Program, o objecth.Object) bool {
+	ok, err := cel.Match(prog, celVars(o))
+	return err == nil && ok
 }
