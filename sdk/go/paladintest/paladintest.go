@@ -7,10 +7,12 @@
 //	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{Parent: srv.Collection().String(), …}, paladin.UploadOptions{})
 //
 // It serves ObjectService (upload, complete, get, lookup, list, download,
-// delete) and MultipartUploadService, ListParts included; every other RPC of every plane answers
+// delete), MultipartUploadService, ListParts included, and
+// StorageBootstrapService; every other RPC of every plane answers
 // Unimplemented, as a server that lacks it does. Like the server it records
 // the checksum an upload completes with, so Download verifies what it
-// reads, and answers Range requests.
+// reads, and answers Range requests. Requests lists the RPCs it received,
+// with their headers.
 package paladintest
 
 import (
@@ -58,14 +60,27 @@ const (
 type Server struct {
 	paladindatav1connect.UnimplementedObjectServiceHandler
 	paladindatav1connect.UnimplementedMultipartUploadServiceHandler
+	paladindatav1connect.UnimplementedStorageBootstrapServiceHandler
 
 	// URL is the server's base URL, for every plane.
 	URL    string
 	tenant string
 
-	mu      sync.Mutex
-	objects map[string]*object // by name
-	uploads map[string]*multipart
+	mu       sync.Mutex
+	objects  map[string]*object // by name
+	uploads  map[string]*multipart
+	buckets  map[string]bool // "backend/bucket"
+	bound    map[string]bool // collections EnsureTenantStorage created
+	requests []Request
+}
+
+// Request is one RPC the fake received.
+type Request struct {
+	// Procedure is the RPC, /paladin.data.v1.ObjectService/GetObject.
+	Procedure string
+	// Header is what the client sent: credentials, the idempotency key, the
+	// User-Agent.
+	Header http.Header
 }
 
 type object struct {
@@ -95,10 +110,21 @@ func Start() (*Server, func()) {
 		tenant:  uuid.NewString(),
 		objects: map[string]*object{},
 		uploads: map[string]*multipart{},
+		buckets: map[string]bool{},
+		bound:   map[string]bool{},
 	}
+	record := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			s.mu.Lock()
+			s.requests = append(s.requests, Request{Procedure: req.Spec().Procedure, Header: req.Header().Clone()})
+			s.mu.Unlock()
+			return next(ctx, req)
+		}
+	}))
 	mux := http.NewServeMux()
-	mux.Handle(paladindatav1connect.NewObjectServiceHandler(s))
-	mux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(s))
+	mux.Handle(paladindatav1connect.NewObjectServiceHandler(s, record))
+	mux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(s, record))
+	mux.Handle(paladindatav1connect.NewStorageBootstrapServiceHandler(s, record))
 	mux.Handle(storagePath, http.HandlerFunc(s.storage))
 	srv := httptest.NewServer(mux)
 	s.URL = srv.URL
@@ -134,6 +160,18 @@ func (s *Server) Put(collection paladin.CollectionName, key, contentType string,
 	o := s.newObject(collection.String(), key, contentType)
 	s.commit(o, body, "")
 	return o.msg
+}
+
+// Requests returns the RPCs the fake has received, oldest first; an RPC it
+// does not serve is not among them.
+func (s *Server) Requests() []Request {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Request, len(s.requests))
+	for i, r := range s.requests {
+		out[i] = Request{Procedure: r.Procedure, Header: r.Header.Clone()}
+	}
+	return out
 }
 
 // Content returns what an object holds, and whether it exists.
@@ -217,10 +255,15 @@ func (s *Server) CompleteObject(_ context.Context, req *connect.Request[datav1.C
 	if !ok {
 		return nil, notFound(req.Msg.GetName())
 	}
+	// As the server: completing a completed object returns it.
+	if o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_AVAILABLE {
+		return connect.NewResponse(o.msg), nil
+	}
 	if o.put == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("nothing was uploaded"))
 	}
-	if req.Msg.GetEtag() != etagOf(o.put) {
+	// The ETag is optional; one that is given must be the content's.
+	if etag := req.Msg.GetEtag(); etag != "" && etag != etagOf(o.put) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the ETag is not the uploaded content's"))
 	}
 	s.commit(o, o.put, req.Msg.GetChecksumValue())
@@ -376,6 +419,40 @@ func (s *Server) AbortMultipartUpload(_ context.Context, req *connect.Request[da
 		delete(s.uploads, req.Msg.GetUploadId())
 	}
 	return connect.NewResponse(&datav1.AbortMultipartUploadResponse{}), nil
+}
+
+// ─── StorageBootstrapService ────────────────────────────────────────────────
+
+// Bounds of a bucket name, as the contract sets them.
+const (
+	minBucketLen = 3
+	maxBucketLen = 63
+)
+
+// EnsureTenantStorage records the bucket and the collections, and reports
+// which this call created. Any backend id is taken to exist. Every collection
+// already works for objects, bootstrapped or not.
+func (s *Server) EnsureTenantStorage(_ context.Context, req *connect.Request[datav1.EnsureTenantStorageRequest]) (*connect.Response[datav1.EnsureTenantStorageResponse], error) {
+	backend, bucket := req.Msg.GetBackendId(), req.Msg.GetBucket()
+	if backend == "" || len(bucket) < minBucketLen || len(bucket) > maxBucketLen {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a backend id and a bucket of 3 to 63 characters are required"))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	resp := &datav1.EnsureTenantStorageResponse{}
+	if key := backend + "/" + bucket; !s.buckets[key] {
+		s.buckets[key] = true
+		resp.BucketCreated = true
+	}
+	for _, c := range req.Msg.GetCollections() {
+		if s.bound[c] {
+			resp.CollectionsExisting = append(resp.CollectionsExisting, c)
+			continue
+		}
+		s.bound[c] = true
+		resp.CollectionsCreated = append(resp.CollectionsCreated, c)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // ─── Storage ────────────────────────────────────────────────────────────────
