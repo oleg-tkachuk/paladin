@@ -83,7 +83,7 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgt
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = $2
@@ -119,6 +119,7 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
+		&i.Object.Taint,
 		&i.CollectionName,
 	)
 	return i, err
@@ -153,7 +154,7 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[])
@@ -198,6 +199,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.Object.Taint,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -348,7 +350,7 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, $1::text AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, $1::text AS collection_name
 FROM objects o
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
@@ -438,6 +440,7 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.Object.Taint,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -502,7 +505,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
@@ -542,6 +545,7 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
+		&i.Object.Taint,
 		&i.CollectionName,
 	)
 	return i, err
@@ -560,6 +564,25 @@ func (q *Queries) ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, n
 	var state ObjectState
 	err := row.Scan(&state)
 	return state, err
+}
+
+const objectTaintAtPath = `-- name: ObjectTaintAtPath :one
+SELECT o.taint
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND c.name = $2
+  AND o.path = $3
+  AND o.state <> 'DELETED'
+`
+
+// The taint of the live object at a path, for the capability read gate. No
+// row means no live object, which the handler reports on its own.
+func (q *Queries) ObjectTaintAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) ([]string, error) {
+	row := q.db.QueryRow(ctx, objectTaintAtPath, tenantID, name, path)
+	var taint []string
+	err := row.Scan(&taint)
+	return taint, err
 }
 
 const resolveCollectionID = `-- name: ResolveCollectionID :one
@@ -593,7 +616,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pg
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
@@ -639,6 +662,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.Object.Taint,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -649,6 +673,24 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 		return nil, err
 	}
 	return items, nil
+}
+
+const setObjectTaint = `-- name: SetObjectTaint :one
+UPDATE objects
+SET taint            = $3::text[],
+    resource_version = resource_version + 1,
+    updated_at       = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING taint
+`
+
+// Replaces an object's taint signals. An empty array clears it. Bumps the
+// resource version: whether a capability may read the object just changed.
+func (q *Queries) SetObjectTaint(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, taint []string) ([]string, error) {
+	row := q.db.QueryRow(ctx, setObjectTaint, tenantID, iD, taint)
+	var taint_2 []string
+	err := row.Scan(&taint_2)
+	return taint_2, err
 }
 
 const tryLockObjectPath = `-- name: TryLockObjectPath :one

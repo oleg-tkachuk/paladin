@@ -128,6 +128,15 @@ service ObjectService {
   rpc GetObjectLock(GetObjectLockRequest) returns (ObjectLockState) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // SetObjectTaint replaces the taint signals on an object; an empty list
+  // clears them. A capability without allow_tainted_read is refused any read
+  // of a tainted object. Gated by its own Cedar action, SetObjectTaint:
+  // clearing a flag re-opens content to agents, which write access to a
+  // collection should not imply.
+  rpc SetObjectTaint(SetObjectTaintRequest) returns (Object) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 // ─── Versioning ─────────────────────────────────────────────────────────────
@@ -306,6 +315,19 @@ message SetObjectRetentionRequest {
 message SetObjectLegalHoldRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   bool legal_hold = 2;
+}
+
+message SetObjectTaintRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  repeated TaintSignal signals = 2 [(buf.validate.field).repeated = {
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
 }
 
 message GetObjectLockRequest {

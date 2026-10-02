@@ -255,3 +255,24 @@ SELECT o.state
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1 AND c.name = $2 AND o.path = $3;
+
+-- name: SetObjectTaint :one
+-- Replaces an object's taint signals. An empty array clears it. Bumps the
+-- resource version: whether a capability may read the object just changed.
+UPDATE objects
+SET taint            = sqlc.arg('taint')::text[],
+    resource_version = resource_version + 1,
+    updated_at       = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING taint;
+
+-- name: ObjectTaintAtPath :one
+-- The taint of the live object at a path, for the capability read gate. No
+-- row means no live object, which the handler reports on its own.
+SELECT o.taint
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND c.name = $2
+  AND o.path = $3
+  AND o.state <> 'DELETED';

@@ -262,6 +262,14 @@ class SetObjectLegalHoldRequest(_message.Message):
     legal_hold: bool
     def __init__(self, name: _Optional[str] = ..., legal_hold: _Optional[bool] = ...) -> None: ...
 
+class SetObjectTaintRequest(_message.Message):
+    __slots__ = ("name", "signals")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    SIGNALS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    signals: _containers.RepeatedScalarFieldContainer[_types_pb2.TaintSignal]
+    def __init__(self, name: _Optional[str] = ..., signals: _Optional[_Iterable[_Union[_types_pb2.TaintSignal, str]]] = ...) -> None: ...
+
 class GetObjectLockRequest(_message.Message):
     __slots__ = ("name",)
     NAME_FIELD_NUMBER: _ClassVar[int]
