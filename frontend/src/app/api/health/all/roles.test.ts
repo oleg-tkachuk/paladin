@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// A live session; session.test.ts covers the refusal.
+vi.mock("@/lib/auth/session", () => ({ requireSession: async () => null }));
+
 import { GET, HEALTH_ROLES_ENV } from "./route";
 
 // Every snapshot fetch answers healthy for the role in its URL, so the

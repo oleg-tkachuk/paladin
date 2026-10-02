@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { requireSession } from "@/lib/auth/session";
+
 import { resolveHealthToken } from "./token";
 
 // Health aggregator — fans out to /system/health.json on each backend
@@ -152,6 +154,14 @@ function polledRoles(): typeof ROLES {
 }
 
 export async function GET(_req: NextRequest) {
+  // proxy.ts leaves /api/health public for the kubelet's /api/health/live,
+  // and this route attaches the server-held snapshot token itself — so it
+  // must check the session, or anyone reaching the console reads every role's
+  // snapshot.
+  const refused = await requireSession();
+  if (refused) {
+    return refused;
+  }
   const snapshots = await Promise.all(
     polledRoles().map((r) =>
       fetchSnapshot(r.name, process.env[r.envKey] || r.defaultUrl),
