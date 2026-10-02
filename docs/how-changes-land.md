@@ -73,6 +73,9 @@ Every check `ci.yaml` runs has a local task. The verify groups, `verify-e2e` and
 (actionlint, zizmor) are `task -t Taskfile.dev.yaml verify:workflows`, at the
 versions `ci.yaml` pins. Three things have no local form, by their nature:
 CodeQL ([`codeql.yaml`](../.github/workflows/codeql.yaml)), which is GitHub's
-own analysis and reports to the repository's code-scanning alerts; and the
+own analysis and reports to the repository's code-scanning alerts; the
 publishing workflow, [`release.yaml`](../.github/workflows/release.yaml), which
-pushes images, charts and the release tags and runs only from `main`.
+pushes images, charts and the release tags and runs only from `main`; and
+[`badges.yaml`](../.github/workflows/badges.yaml), which pushes the stack
+versions the README's badges read to the `badges` branch — the script that
+reads them is `verify:badge-versions`.
