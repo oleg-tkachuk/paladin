@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from importlib import metadata
-from typing import TypeVar
+from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
 from connectrpc.client import ResponseMetadata
@@ -148,6 +148,8 @@ class Client:
         capability: str | None = None,
         retry: Retry | None = None,
         headers: dict[str, str] | None = None,
+        token_source: Any = None,
+        audience: str | None = None,
     ) -> None:
         """Validate ``base_url`` and hold the credentials and retry policy.
 
@@ -157,7 +159,14 @@ class Client:
         strips ``Authorization``. ``capability`` is sent in
         ``X-Paladin-Capability``. ``headers`` are sent on every call and
         replace what the SDK would send there, the User-Agent included.
+
+        ``token_source`` — a ``StaticToken``, ``Session`` or ``AsyncSession``
+        — supplies the bearer token for ``audience``, this plane's; a call the
+        server refuses as unauthenticated is made once more with a fresh one.
+        ``connect`` sets ``audience`` for each plane.
         """
+        if token_source is not None and not audience:
+            raise ValueError("token_source needs the plane's audience; or use paladin.connect")
         if not base_url or not base_url.strip():
             raise ValueError("base URL is empty")
         parts = urlsplit(base_url)
@@ -174,6 +183,8 @@ class Client:
         sent.update(headers or {})
         self._headers = sent
         self._retry = retry
+        self._token_source = token_source
+        self._audience = audience or ""
 
     @property
     def base_url(self) -> str:
@@ -183,6 +194,8 @@ class Client:
     def interceptors(self) -> list[InterceptorSync]:
         """Interceptors for a generated ``…ClientSync``."""
         result: list[InterceptorSync] = [_HeadersSync(self._headers), _IdempotencySync()]
+        if self._token_source is not None:
+            result.append(_TokensSync(self._token_source, self._audience))
         if self._retry is not None:
             result.append(_RetrySync(self._retry))
         return result
@@ -190,6 +203,8 @@ class Client:
     def async_interceptors(self) -> list[Interceptor]:
         """Interceptors for a generated async ``…Client``."""
         result: list[Interceptor] = [_HeadersAsync(self._headers), _IdempotencyAsync()]
+        if self._token_source is not None:
+            result.append(_TokensAsync(self._token_source, self._audience))
         if self._retry is not None:
             result.append(_RetryAsync(self._retry))
         return result
@@ -288,6 +303,61 @@ class _IdempotencyAsync:
         ctx: RequestContext,
     ) -> RES:
         _stamp(request, ctx)
+        return await call_next(request, ctx)
+
+
+def _bearer(token: str) -> str:
+    return f"{_BEARER_SCHEME} {token}"
+
+
+class _TokensSync:
+    """Sends the source's token, and makes a call the server refused as
+    unauthenticated once more with a fresh one: the server authenticates
+    before it does anything else, so the first attempt changed nothing."""
+
+    def __init__(self, source: Any, audience: str) -> None:
+        self._source = source
+        self._audience = audience
+
+    def intercept_unary_sync(
+        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+    ) -> RES:
+        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
+        try:
+            return call_next(request, ctx)
+        except ConnectError as err:
+            invalidate = getattr(self._source, "invalidate", None)
+            if err.code != Code.UNAUTHENTICATED or invalidate is None:
+                raise
+            invalidate(self._audience)
+        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
+        return call_next(request, ctx)
+
+
+class _TokensAsync:
+    def __init__(self, source: Any, audience: str) -> None:
+        self._source = source
+        self._audience = audience
+
+    async def _token(self) -> str:
+        token = self._source.token(self._audience)
+        return await token if asyncio.iscoroutine(token) else token
+
+    async def intercept_unary(
+        self,
+        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        request: REQ,
+        ctx: RequestContext,
+    ) -> RES:
+        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(await self._token())
+        try:
+            return await call_next(request, ctx)
+        except ConnectError as err:
+            invalidate = getattr(self._source, "invalidate", None)
+            if err.code != Code.UNAUTHENTICATED or invalidate is None:
+                raise
+            invalidate(self._audience)
+        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(await self._token())
         return await call_next(request, ctx)
 
 

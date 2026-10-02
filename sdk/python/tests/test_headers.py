@@ -30,3 +30,20 @@ def test_header_names_match_the_go_sdk() -> None:
         match = re.search(rf'^\s*{go_name}\s*=\s*"([^"]+)"', source, re.MULTILINE)
         assert match, f"{go_name} not found in {GO_CLIENT}"
         assert getattr(paladin, py_name) == match.group(1), f"{py_name} differs from Go's {go_name}"
+
+
+GO_AUTH = Path(__file__).resolve().parents[2] / "go" / "paladin" / "auth.go"
+
+AUDIENCES = {
+    "AudienceData": "AUDIENCE_DATA",
+    "AudienceAdmin": "AUDIENCE_ADMIN",
+    "AudienceIAM": "AUDIENCE_IAM",
+}
+
+
+def test_audiences_match_the_go_sdk() -> None:
+    source = GO_AUTH.read_text()
+    for go_name, py_name in AUDIENCES.items():
+        match = re.search(rf'^\s*{go_name}\s*=\s*"([^"]+)"', source, re.MULTILINE)
+        assert match, f"{go_name} not found in {GO_AUTH}"
+        assert getattr(paladin, py_name) == match.group(1), f"{py_name} differs from Go's {go_name}"

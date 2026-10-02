@@ -69,7 +69,11 @@ type config struct {
 	httpClient connect.HTTPClient
 	headers    http.Header
 	retry      *retryPolicy
+	tokens     *tokenAuth
 	extra      []connect.ClientOption
+	// anyPlaneTokens and audience: WithTokens, and the plane Connect builds.
+	anyPlaneTokens TokenSource
+	audience       string
 }
 
 // WithHTTPClient replaces http.DefaultClient.
@@ -140,11 +144,20 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	if cfg.retry != nil && cfg.retry.attempts < 1 {
 		return nil, ErrInvalidRetries
 	}
+	if cfg.anyPlaneTokens != nil && cfg.tokens == nil {
+		if cfg.audience == "" {
+			return nil, ErrNoAudience
+		}
+		cfg.tokens = &tokenAuth{source: cfg.anyPlaneTokens, audience: cfg.audience}
+	}
 
 	if cfg.headers.Get(HeaderUserAgent) == "" {
 		cfg.headers.Set(HeaderUserAgent, userAgent())
 	}
 	interceptors := []connect.Interceptor{&headerInterceptor{headers: cfg.headers}}
+	if cfg.tokens != nil {
+		interceptors = append(interceptors, cfg.tokens)
+	}
 	if cfg.retry != nil {
 		interceptors = append(interceptors, cfg.retry)
 	}
