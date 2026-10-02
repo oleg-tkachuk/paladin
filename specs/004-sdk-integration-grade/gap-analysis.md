@@ -481,3 +481,28 @@ commit.
    intentional difference from Go.
 6. **Amending the `sdk/go/v0.12.0` release notes** (item 10) needs an explicit
    yes, since it edits a published release.
+
+## Outcome
+
+Built as planned, in these pull requests; the decisions are in
+[ADR-0020](../../docs/adr/0020-sdk-integration-grade.md).
+
+| Item | Pull request |
+| --- | --- |
+| 1. protobuf 6 and 7 | #179 |
+| 2. Presigned transfers | #180 (Go), #181 (Python) |
+| 3. TLS and workload identity | #182 |
+| 4. Credentials | already solved; the recipe is in the cookbook (#192) |
+| 5. Idempotency and retries | #183 |
+| 6. Errors | #185 |
+| 7. Names and URIs | #186; the bootstrap is the server's `EnsureTenantStorage` |
+| 8. Observability | #187 |
+| 9. Concurrency | #190 |
+| 10. Behaviour changes in release notes | #188, #193 |
+| 11. Shared scenarios against the stack | #191 |
+| 12. Fakes for consumers | #189 |
+| 13. Cookbook | #192 |
+
+Left in BACKLOG.md under *SDK*: the server's own name parsers on the shared
+table, the webhook signature and its verifiers, and RPC spans from
+connect-python's interceptor once it supports the version in use.

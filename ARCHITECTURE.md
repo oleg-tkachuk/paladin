@@ -179,9 +179,9 @@ sequenceDiagram
     A-->>C: object + presigned PUT URL
     C->>S3: PUT bytes (presigned)
     alt completion_mode EXPLICIT
-        C->>A: CompleteObject
+        C->>A: CompleteObject(etag, SHA-256 of the bytes)
         A->>S3: HeadObject
-        A->>DB: PENDING → AVAILABLE + outbox event, one transaction
+        A->>DB: PENDING → AVAILABLE + checksum + outbox event, one transaction
     else completion_mode IMPLICIT
         S3-)I: storage notification
         I->>DB: PENDING → AVAILABLE + outbox event, one transaction
@@ -216,6 +216,23 @@ notifications — over a webhook, NATS (core or JetStream), RabbitMQ or SQS —
 and marks objects whose bytes arrived out of band as active, writing to
 PostgreSQL directly.
 
+## Clients
+
+Applications use the [Go](sdk/go/README.md) and [Python](sdk/python/README.md)
+SDKs: the generated Connect clients, a client for every service of each plane,
+and the work that takes more than one call — sessions, idempotency keys and
+retries, uploads and downloads over presigned URLs. The RPCs and the presigned
+transfers are separate legs with separate transports and TLS: a presigned
+request goes to storage and carries none of the client's credentials. A whole
+download is verified against the checksum the upload recorded.
+
+The server's side of that contract: every mapped error carries a
+`google.rpc.ErrorInfo` reason from `paladin.common.v1.ErrorReason`, and every
+response names the release, so the SDKs raise typed errors and name both sides
+of a contract skew. Both SDKs ship an in-memory data plane for consumers'
+tests, and run the same scenarios against the server in CI. The layers are in
+[diagrams.md](backend/docs/diagrams.md#sdk-layers).
+
 ## The admin console
 
 Next.js, with a BFF between the browser and the planes. The browser never
@@ -230,8 +247,8 @@ should be one commit.
 
 [`backend/docs/diagrams.md`](backend/docs/diagrams.md) has the rest: context,
 code layout, the request path through the interceptors, upload, events,
-background work, the console session, the contract fan-out, the schema and the
-deployment. The path from a pull request to a signed release is in
+background work, the console session, the contract fan-out, the SDK layers,
+the schema and the deployment. The path from a pull request to a signed release is in
 [`docs/how-changes-land.md`](docs/how-changes-land.md).
 
 ## Repository layout
@@ -243,7 +260,7 @@ capability/   standalone Go module, no DB and no storage SDK
 docs/         ADRs, runbooks, configuration reference
 specs/        spec-driven-development artifacts per feature
 proto/        the API contract the backend, console and SDKs generate from
-sdk/          the Go and Python SDKs
+sdk/          the Go and Python SDKs; sdk/testdata holds what both are tested against
 BACKLOG.md    deferred work, with reasons
 ```
 

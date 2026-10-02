@@ -36,29 +36,35 @@ cut by hand. See [releasing.md](releasing.md).
 flowchart LR
     chg["<b>Changed paths</b><br/>ci-groups.sh"]
     v["<b>Verify</b><br/>one job per group"]
+    py["<b>Python SDK</b><br/>wheel × Python × protobuf"]
     img["<b>End-to-end images</b>"]
     e2e["<b>End-to-end</b><br/>shards 1/2 · 2/2"]
-    deep["<b>Deep</b><br/>integration · stack"]
+    deep["<b>Deep</b><br/>integration · stack<br/>(stack runs both SDKs' scenarios)"]
     wf["<b>Workflow</b><br/>syntax · audit"]
     ok{{"<b>All checks passed</b><br/>required by main"}}
     head{"head is the<br/>commit CI passed?"}
-    tag["semantic-release<br/>pushes the tag"]
+    tag["semantic-release<br/>three streams"]
     pub["<b>publish</b> backend · frontend<br/>image → sign → SBOM per platform<br/>chart → sign · verify all"]
-    ann["<b>GitHub release</b><br/>notes + SBOMs"]
+    ann["<b>GitHub release</b> vX.Y.Z<br/>notes + SBOMs · latest"]
+    mods["<b>sdk/go/v*</b> · <b>capability/v*</b><br/>GitHub release, not latest<br/>Go proxy told of the tag"]
+    badges["<b>Badges</b><br/>stack versions → badges branch"]
 
-    chg --> v & img & deep & wf
+    chg --> v & py & img & deep & wf
     img --> e2e
-    v & e2e & deep & wf --> ok
+    v & py & e2e & deep & wf --> ok
     ok -- "push to main" --> head
-    head -- yes --> tag --> pub --> ann
+    head -- yes --> tag
+    tag -- "product" --> pub --> ann
+    tag -- "a module's commits" --> mods
     head -- "no: the newer commit's CI releases it" --> skip(["nothing"])
+    pin(["push to main changing<br/>go.mod · package.json · compose"]) -. "badges.yaml" .-> badges
 
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class chg,v,img,e2e,deep,wf,tag,pub role
-    class skip optional
-    class ok,ann external
+    class chg,v,py,img,e2e,deep,wf,tag,pub role
+    class skip,badges,pin optional
+    class ok,ann,mods external
 ```
 
 `ci.yaml` pushes no image and deploys nothing. Images and charts are published
