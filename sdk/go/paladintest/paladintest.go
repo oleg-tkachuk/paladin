@@ -50,6 +50,8 @@ const (
 	storagePath = "/storage/"
 	etagQuote   = `"`
 	partQuery   = "part"
+	// maxParts is the most parts a multipart upload has, as in S3.
+	maxParts = 10000
 )
 
 // Server is the fake. Its methods are safe for concurrent use.
@@ -372,12 +374,12 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		defer s.mu.Unlock()
 		if part := r.URL.Query().Get(partQuery); part != "" {
 			up, ok := s.uploads[id]
-			n, err := strconv.Atoi(part)
-			if !ok || err != nil {
+			n, err := strconv.ParseInt(part, 10, 32)
+			if !ok || err != nil || n < 1 || n > maxParts {
 				http.NotFound(w, r)
 				return
 			}
-			up.parts[int32(n)] = body.Bytes() //nolint:gosec // a part number
+			up.parts[int32(n)] = body.Bytes()
 		} else {
 			o, ok := s.objectByID(id)
 			if !ok {
