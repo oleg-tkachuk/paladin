@@ -11,6 +11,7 @@ package paladin
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -78,6 +79,11 @@ type config struct {
 	extra      []connect.ClientOption
 	transfer   *Transfer
 	tls        *TLS
+	// hooks, logger and userAgentSuffix: WithHooks, WithLogger,
+	// WithUserAgentSuffix.
+	hooks           Hooks
+	logger          *slog.Logger
+	userAgentSuffix string
 	// httpClientSet is whether WithHTTPClient was given, which WithTLS
 	// cannot be combined with.
 	httpClientSet bool
@@ -186,7 +192,11 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	}
 
 	if cfg.headers.Get(HeaderUserAgent) == "" {
-		cfg.headers.Set(HeaderUserAgent, userAgent())
+		ua := userAgent()
+		if cfg.userAgentSuffix != "" {
+			ua += " " + cfg.userAgentSuffix
+		}
+		cfg.headers.Set(HeaderUserAgent, ua)
 	}
 	// Outermost: every failure reaches the caller as an *Error, while the
 	// interceptors inside see the Connect error they act on.
@@ -196,6 +206,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	}
 	if cfg.retry != nil {
 		cfg.retry.transient = cfg.retryable
+		cfg.retry.observe = observer{hooks: cfg.hooks, logger: cfg.logger}
 		interceptors = append(interceptors, cfg.retry)
 	}
 	options := append([]connect.ClientOption{connect.WithInterceptors(interceptors...)}, cfg.extra...)

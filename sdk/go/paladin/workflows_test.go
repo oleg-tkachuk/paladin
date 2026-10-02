@@ -176,6 +176,20 @@ type storage struct {
 	redirectTo  string
 	headersSeen map[string]string
 	hosts       []string
+	traced      int // requests that carried a traceparent
+	refuse      int // status every request is refused with; 0 none
+}
+
+func (s *storage) refuseWith(status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuse = status
+}
+
+func (s *storage) traceparents() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.traced
 }
 
 const (
@@ -187,6 +201,13 @@ func (s *storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.hosts = append(s.hosts, r.Host)
+	if r.Header.Get("Traceparent") != "" {
+		s.traced++
+	}
+	if s.refuse != 0 {
+		http.Error(w, "refused", s.refuse)
+		return
+	}
 	if s.redirectTo != "" {
 		http.Redirect(w, r, s.redirectTo, http.StatusTemporaryRedirect)
 		return
@@ -235,6 +256,7 @@ type dataPlane struct {
 	// described is what DownloadObject says of the object: size, checksum.
 	described *datav1.Object
 	noURL     bool
+	lookedUp  []string // parent|key of every LookupObject
 }
 
 func (d *dataPlane) signed(path string) *commonv1.PresignedUrl {
@@ -267,6 +289,13 @@ func (d *dataPlane) DownloadObject(_ context.Context, req *connect.Request[datav
 		resp.DownloadUrl = nil
 	}
 	return connect.NewResponse(resp), nil
+}
+
+func (d *dataPlane) LookupObject(_ context.Context, req *connect.Request[datav1.LookupObjectRequest]) (*connect.Response[datav1.Object], error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lookedUp = append(d.lookedUp, req.Msg.GetParent()+"|"+req.Msg.GetKey())
+	return connect.NewResponse(&datav1.Object{Name: req.Msg.GetParent() + "/objects/" + req.Msg.GetKey()}), nil
 }
 
 func (d *dataPlane) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {

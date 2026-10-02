@@ -69,7 +69,7 @@ func TestCreatedBounds(t *testing.T) {
 	}
 }
 
-// likeLiteral decides whether a caller's literal is safe to hand to SQL LIKE.
+// likeEscape decides whether a caller's literal is safe to hand to SQL LIKE.
 // The metacharacter check is the guard: a `_` pushed down unescaped matches
 // any single character, so the query returns rows the filter rejects — and
 // unlike a too-wide scan, the CEL pass cannot put back rows a wrong predicate
@@ -80,24 +80,27 @@ func TestLikeLiteral(t *testing.T) {
 		want string
 		ok   bool
 	}{
-		"plain":         {"report", "report", true},
-		"empty":         {"", "", false},
-		"underscore":    {"a_b", "", false},
-		"percent":       {"50%", "", false},
-		"backslash":     {`c:\x`, "", false},
-		"metachar only": {"_", "", false},
+		"plain": {"report", "report", true},
+		"empty": {"", "", false},
+		// Metacharacters are escaped with Postgres' default LIKE escape, not
+		// dropped: object keys are full of underscores.
+		"underscore":    {"a_b", `a\_b`, true},
+		"percent":       {"50%", `50\%`, true},
+		"backslash":     {`c:\x`, `c:\\x`, true},
+		"metachar only": {"_", `\_`, true},
+		"non-ascii":     {"звіт_1", `звіт\_1`, true},
 		// Nothing in the set is a metacharacter, so a literal built from
 		// neighbouring punctuation must still be pushed down.
 		"punctuation": {"a-b.c/d", "a-b.c/d", true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got, ok := likeLiteral(tc.in)
+			got, ok := likeEscape(tc.in)
 			if ok != tc.ok {
-				t.Fatalf("likeLiteral(%q): ok = %v, want %v", tc.in, ok, tc.ok)
+				t.Fatalf("likeEscape(%q): ok = %v, want %v", tc.in, ok, tc.ok)
 			}
 			if got != tc.want {
-				t.Errorf("likeLiteral(%q) = %q, want %q", tc.in, got, tc.want)
+				t.Errorf("likeEscape(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

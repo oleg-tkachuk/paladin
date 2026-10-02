@@ -32,7 +32,7 @@ export const file_paladin_data_v1_types: GenFile =
  */
 export type Object$ = Message<"paladin.data.v1.Object"> & {
   /**
-   * Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}/objects/{object_id}".
+   * Resource name: "tenants/{tenant_id}/collections/{collection}/objects/{object_id}".
    *
    * @generated from field: string name = 1;
    */

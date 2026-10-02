@@ -60,6 +60,8 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0015](adr/0015-per-tenant-bucket-layout.md) | Per-tenant bucket layout |
 | [0016](adr/0016-cedar-tenant-membership-isolation.md) | Cedar tenant-membership isolation |
 | [0017](adr/0017-single-identity-model-and-naming.md) | One identity model, one naming convention |
+| [0018](adr/0018-sdk-layers.md) | The SDKs as three layers over the generated clients |
+| [0019](adr/0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica |
 
 ## Runbooks
 

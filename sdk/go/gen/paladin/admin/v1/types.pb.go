@@ -1451,7 +1451,9 @@ func (x *Tenant) GetStorageLayout() string {
 // ─── Collection ──────────────────────────────────────────────────────────────
 type Collection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
+	// Resource name: "tenants/{tenant_id}/collections/{collection}". Under a
+	// tenant the name takes the tenant's id, not its slug; the collection may
+	// contain '/'.
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	TenantId    string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Collection  string `protobuf:"bytes,3,opt,name=collection,proto3" json:"collection,omitempty"`

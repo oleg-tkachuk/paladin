@@ -284,8 +284,13 @@ between two calls.
 - **Resource names**: no builders or parsers today. BACKLOG holds *Resource
   names are strings each side assembles by hand*, with the plan to annotate
   `google.api.resource` and generate helpers.
-- **The brief's "tenant segment is a UUID enforced client-side" contradicts
-  the contract**: the patterns are `tenants/{tenant_id_or_slug}/…`
+- **Corrected while building it: the brief was right.** The proto comments
+  say `tenant_id_or_slug`, but the server's parsers
+  (`connectshim/resolve/resolver.go`, `connectshim/data/conv.go`) require
+  the tenant's id, a UUID, in every name under a tenant; only
+  `tenants/{tenant}` takes a slug. The comments are fixed, and the
+  helpers enforce the UUID. What follows was the original, wrong, reading:
+  **"the tenant segment is a UUID" contradicts the contract**: the patterns are `tenants/{tenant_id_or_slug}/…`
   (`proto/paladin/data/v1/object_service.proto:135`, `types.proto:14`). A
   client-side UUID check would reject valid slug names. The builders should
   validate the *shape* (segment count, no empty or `/`-bearing segment), not
@@ -468,7 +473,9 @@ commit.
    `paladin://tenants/{t}/collections/{c}/objects/{key}`. It extends the MCP
    bridge's `paladin://tenants` rather than colliding with it, and it names
    the tenant.
-4. **The tenant segment** (item 7) accepts an id or a slug, as the contract
+4. **The tenant segment** (item 7) — superseded: the server requires the
+   id under a tenant (see item 7); only a tenant's own name takes a slug.
+   Originally: accepts an id or a slug, as the contract
    does.
 5. **Python peer verification** (item 3): CA pinning only, documented as an
    intentional difference from Go.
