@@ -67,8 +67,9 @@ both images once, and its two End-to-end jobs run `verify-e2e:run` —
 Playwright against a stack booted from those images — each on half the suite
 (`PALADIN_E2E_SHARD`), when the change reaches the console or the backend, and its two Deep jobs run the halves of
 `verify-deep` side by side — `verify-deep:integration`, the Postgres-backed
-suites, and `verify-deep:stack`, the stack gate — when the change reaches the
-backend. The `All checks passed` check that `main` requires waits for all of them;
+suites, and `verify-deep:stack`, the stack gate, which also drives both
+SDKs through the scenarios in `sdk/testdata/scenarios.json` — when the
+change reaches the backend or an SDK. The `All checks passed` check that `main` requires waits for all of them;
 [task.md](task.md#working-on-the-code) lists them for running locally.
 
 Every check `ci.yaml` runs has a local task. The verify groups, `verify-e2e` and
