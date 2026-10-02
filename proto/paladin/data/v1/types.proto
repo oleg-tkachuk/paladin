@@ -11,7 +11,7 @@ import "google/api/field_behavior.proto";
 // `bucket` and `backend_id` surface only when the caller has the
 // `view.physical_storage` role (set in JWT claims).
 message Object {
-  // Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}/objects/{object_id}".
+  // Resource name: "tenants/{tenant_id}/collections/{collection}/objects/{object_id}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string object_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
   string tenant_id = 3 [(google.api.field_behavior) = OUTPUT_ONLY];

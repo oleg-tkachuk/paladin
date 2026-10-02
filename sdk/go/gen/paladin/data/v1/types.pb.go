@@ -84,7 +84,7 @@ func (ObjectState) EnumDescriptor() ([]byte, []int) {
 // `view.physical_storage` role (set in JWT claims).
 type Object struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}/objects/{object_id}".
+	// Resource name: "tenants/{tenant_id}/collections/{collection}/objects/{object_id}".
 	Name       string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ObjectId   string `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	TenantId   string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`

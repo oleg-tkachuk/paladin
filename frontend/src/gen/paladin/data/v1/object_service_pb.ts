@@ -70,7 +70,7 @@ export const file_paladin_data_v1_object_service: GenFile =
  */
 export type ObjectVersion = Message<"paladin.data.v1.ObjectVersion"> & {
   /**
-   * Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
+   * Resource name: "tenants/{tenant_id}/collections/{ok}/objects/{id}/versions/{ver}".
    *
    * @generated from field: string name = 1;
    */
@@ -206,7 +206,7 @@ export const ListObjectVersionsResponseSchema: GenMessage<ListObjectVersionsResp
 export type GetObjectVersionRequest =
   Message<"paladin.data.v1.GetObjectVersionRequest"> & {
     /**
-     * Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
+     * Resource name: "tenants/{tenant_id}/collections/{ok}/objects/{id}/versions/{ver}".
      *
      * @generated from field: string name = 1;
      */
@@ -259,7 +259,7 @@ export const RestoreObjectVersionRequestSchema: GenMessage<RestoreObjectVersionR
 export type UploadObjectRequest =
   Message<"paladin.data.v1.UploadObjectRequest"> & {
     /**
-     * Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
+     * Parent Collection: "tenants/{tenant_id}/collections/{ok}".
      *
      * @generated from field: string parent = 1;
      */
@@ -619,7 +619,7 @@ export const DeleteObjectResponseSchema: GenMessage<DeleteObjectResponse> =
 export type SetObjectRetentionRequest =
   Message<"paladin.data.v1.SetObjectRetentionRequest"> & {
     /**
-     * Object resource name: "tenants/{tenant}/collections/{ok}/objects/{id}".
+     * Object resource name: "tenants/{tenant_id}/collections/{ok}/objects/{id}".
      *
      * @generated from field: string name = 1;
      */
@@ -821,7 +821,7 @@ export const TagsOverrideSchema: GenMessage<TagsOverride> =
 export type ListObjectsRequest =
   Message<"paladin.data.v1.ListObjectsRequest"> & {
     /**
-     * Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
+     * Parent Collection: "tenants/{tenant_id}/collections/{ok}".
      *
      * @generated from field: string parent = 1;
      */

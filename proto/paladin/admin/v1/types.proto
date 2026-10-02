@@ -250,7 +250,9 @@ message Tenant {
 
 // ─── Collection ──────────────────────────────────────────────────────────────
 message Collection {
-  // Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
+  // Resource name: "tenants/{tenant_id}/collections/{collection}". Under a
+  // tenant the name takes the tenant's id, not its slug; the collection may
+  // contain '/'.
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string tenant_id = 2 [(google.api.field_behavior) = IMMUTABLE];
   string collection = 3 [(google.api.field_behavior) = IMMUTABLE];

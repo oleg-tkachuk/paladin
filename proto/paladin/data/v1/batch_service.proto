@@ -53,7 +53,7 @@ message ObjectSelector {
 }
 
 message BatchDeleteObjectsRequest {
-  // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
+  // Parent Collection: "tenants/{tenant_id}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   ObjectSelector selector = 2 [(buf.validate.field).required = true];
   // Hard-delete the selected objects — storage bytes and row — instead of

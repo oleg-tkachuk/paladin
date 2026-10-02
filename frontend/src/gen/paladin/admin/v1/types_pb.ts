@@ -764,7 +764,9 @@ export const TenantSchema: GenMessage<Tenant> =
  */
 export type Collection = Message<"paladin.admin.v1.Collection"> & {
   /**
-   * Resource name: "tenants/{tenant_id_or_slug}/collections/{collection}".
+   * Resource name: "tenants/{tenant_id}/collections/{collection}". Under a
+   * tenant the name takes the tenant's id, not its slug; the collection may
+   * contain '/'.
    *
    * @generated from field: string name = 1;
    */

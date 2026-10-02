@@ -139,7 +139,7 @@ export const ObjectSelectorSchema: GenMessage<ObjectSelector> =
 export type BatchDeleteObjectsRequest =
   Message<"paladin.data.v1.BatchDeleteObjectsRequest"> & {
     /**
-     * Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
+     * Parent Collection: "tenants/{tenant_id}/collections/{ok}".
      *
      * @generated from field: string parent = 1;
      */
