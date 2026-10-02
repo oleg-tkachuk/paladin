@@ -341,16 +341,18 @@ func TestGoBlocksAreDeclaredInSchema(t *testing.T) {
 var unsetKnobAllowlist = map[string]string{
 	"security.log_sensitive": "retired; accepted so old configs load, read by nothing, warned about when true",
 	// Supplied at deploy time, never in a committed values file.
-	"auth.signing_key_secret":                    "secret ref; the env overlay or external-secrets fills it",
-	"api_token.hmac_key":                         "secret; per-deploy",
-	"api_token.hmac_key_secret":                  "secret ref; per-deploy",
-	"runtime.health_snapshot_token_secret":       "secret ref; per-deploy",
-	"bootstrap.admin.password":                   "secret; per-deploy",
-	"datastores.postgres.password":               "secret; per-deploy",
-	"datastores.postgres.migrate_password":       "secret; per-deploy",
-	"datastores.postgres.reaper_password":        "secret; per-deploy",
-	"datastores.postgres.reaper_password_secret": "secret ref; per-deploy",
-	"runtime.health_snapshot_token":              "secret; opt-in debug endpoint",
+	"auth.signing_key_secret":                     "secret ref; the env overlay or external-secrets fills it",
+	"api_token.hmac_key":                          "secret; per-deploy",
+	"api_token.hmac_key_secret":                   "secret ref; per-deploy",
+	"runtime.health_snapshot_token_secret":        "secret ref; per-deploy",
+	"bootstrap.admin.password":                    "secret; per-deploy",
+	"datastores.postgres.password":                "secret; per-deploy",
+	"datastores.postgres.migrate_password":        "secret; per-deploy",
+	"datastores.postgres.reaper_password":         "secret; per-deploy",
+	"datastores.postgres.reaper_password_secret":  "secret ref; per-deploy",
+	"datastores.postgres.replica.password":        "secret; per-deploy, defaults to the primary's",
+	"datastores.postgres.replica.password_secret": "secret ref; per-deploy, defaults to the primary's",
+	"runtime.health_snapshot_token":               "secret; opt-in debug endpoint",
 
 	// Built by the chart's ConfigMap template from the top-level `postgres`
 	// block, so they never appear under `config:` in values.yaml.

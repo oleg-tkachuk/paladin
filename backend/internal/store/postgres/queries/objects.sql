@@ -172,25 +172,38 @@ SELECT EXISTS(
 
 -- name: ListObjects :many
 -- The full CEL filter is still applied by the caller post-load; the
--- `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
--- extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
--- non-matching rows before they cross the wire instead of fetching the
--- whole namespace and filtering in Go. The post-load CEL pass stays
--- authoritative, so over-fetching (a hint that's absent) only costs
--- throughput, never correctness. `substr` is escaped for LIKE by the
--- adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
+-- nargs below are PUSHDOWN narrowing hints extracted from that CEL
+-- (cel.ExtractObjectPushdown) so the DB drops non-matching rows before
+-- they cross the wire instead of fetching the whole namespace and
+-- filtering in Go. The post-load CEL pass stays authoritative, so
+-- over-fetching (a hint that's absent) only costs throughput, never
+-- correctness. `prefix`, `substr` and `content_type_prefix` arrive
+-- LIKE-escaped by the adapter (backslash, Postgres' default escape).
+--
+-- Two steps in one statement. search_object_ids (029) picks the page's ids
+-- with the trigram and GIN indexes (026–028), which RLS would otherwise keep
+-- out of the plan; this query then reads those rows under the caller's RLS,
+-- which still decides what is returned. The page is the function's LIMIT;
+-- keyset on id (UUIDv7, monotonic-by-time).
 SELECT sqlc.embed(o), c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1
-  AND c.name = $2
-  AND (sqlc.narg('state')::object_state IS NULL OR o.state = sqlc.narg('state')::object_state)
-  AND (sqlc.narg('prefix')::text IS NULL OR o.path LIKE sqlc.narg('prefix')::text || '%')
-  AND (sqlc.narg('substr')::text IS NULL
-       OR o.path LIKE '%' || sqlc.narg('substr')::text || '%')
-  AND (sqlc.narg('after_id')::uuid IS NULL OR o.id > sqlc.narg('after_id')::uuid)
-ORDER BY o.id
-LIMIT sqlc.arg('page_size');
+WHERE o.id = ANY (ARRAY(
+        SELECT search_object_ids(
+            sqlc.arg('tenant_id')::uuid,
+            sqlc.arg('collection')::text,
+            sqlc.narg('state')::object_state,
+            sqlc.narg('prefix')::text,
+            sqlc.narg('substr')::text,
+            sqlc.narg('content_type')::text,
+            sqlc.narg('content_type_prefix')::text,
+            sqlc.narg('tags_contains')::jsonb,
+            sqlc.narg('metadata_contains')::jsonb,
+            sqlc.narg('after_id')::uuid,
+            sqlc.arg('page_size')::integer)))
+  AND o.tenant_id = sqlc.arg('tenant_id')::uuid
+  AND c.name = sqlc.arg('collection')::text
+ORDER BY o.id;
 
 -- name: CountObjects :one
 SELECT COUNT(*) AS n

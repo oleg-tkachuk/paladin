@@ -351,15 +351,22 @@ const listObjects = `-- name: ListObjects :many
 SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1
-  AND c.name = $2
-  AND ($3::object_state IS NULL OR o.state = $3::object_state)
-  AND ($4::text IS NULL OR o.path LIKE $4::text || '%')
-  AND ($5::text IS NULL
-       OR o.path LIKE '%' || $5::text || '%')
-  AND ($6::uuid IS NULL OR o.id > $6::uuid)
+WHERE o.id = ANY (ARRAY(
+        SELECT search_object_ids(
+            $1::uuid,
+            $2::text,
+            $3::object_state,
+            $4::text,
+            $5::text,
+            $6::text,
+            $7::text,
+            $8::jsonb,
+            $9::jsonb,
+            $10::uuid,
+            $11::integer)))
+  AND o.tenant_id = $1::uuid
+  AND c.name = $2::text
 ORDER BY o.id
-LIMIT $7
 `
 
 type ListObjectsRow struct {
@@ -368,20 +375,30 @@ type ListObjectsRow struct {
 }
 
 // The full CEL filter is still applied by the caller post-load; the
-// `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
-// extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
-// non-matching rows before they cross the wire instead of fetching the
-// whole namespace and filtering in Go. The post-load CEL pass stays
-// authoritative, so over-fetching (a hint that's absent) only costs
-// throughput, never correctness. `substr` is escaped for LIKE by the
-// adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+// nargs below are PUSHDOWN narrowing hints extracted from that CEL
+// (cel.ExtractObjectPushdown) so the DB drops non-matching rows before
+// they cross the wire instead of fetching the whole namespace and
+// filtering in Go. The post-load CEL pass stays authoritative, so
+// over-fetching (a hint that's absent) only costs throughput, never
+// correctness. `prefix`, `substr` and `content_type_prefix` arrive
+// LIKE-escaped by the adapter (backslash, Postgres' default escape).
+//
+// Two steps in one statement. search_object_ids (029) picks the page's ids
+// with the trigram and GIN indexes (026–028), which RLS would otherwise keep
+// out of the plan; this query then reads those rows under the caller's RLS,
+// which still decides what is returned. The page is the function's LIMIT;
+// keyset on id (UUIDv7, monotonic-by-time).
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		name,
+		collection,
 		state,
 		prefix,
 		substr,
+		contentType,
+		contentTypePrefix,
+		tagsContains,
+		metadataContains,
 		afterID,
 		pageSize,
 	)
