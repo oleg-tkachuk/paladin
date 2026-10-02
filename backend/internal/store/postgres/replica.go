@@ -3,10 +3,15 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -39,6 +44,53 @@ type ReadRouter struct {
 	// has not been checked yet is not trusted with a read.
 	inSync atomic.Bool
 	log    *zap.Logger
+
+	// last is the most recent probe's outcome, for the health snapshot.
+	mu   sync.Mutex
+	last ReplicaStatus
+}
+
+// ReplicaStatus is the outcome of the most recent lag probe.
+type ReplicaStatus struct {
+	InSync bool
+	// Lag is nil when it could not be measured (probe failed, or replay
+	// with no commit to date).
+	Lag *time.Duration
+	// Err is the probe's error, if it failed.
+	Err error
+	// CheckedAt is zero until the first probe has run.
+	CheckedAt time.Time
+}
+
+// Status returns the most recent probe's outcome. Zero when there is no
+// replica or it has not been probed yet.
+func (r *ReadRouter) Status() ReplicaStatus {
+	if !r.HasReplica() {
+		return ReplicaStatus{}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.last
+}
+
+// HealthErr describes why reads are not on the replica, nil when they are.
+// For the health snapshot, which shows it as a non-critical database
+// component: a replica that is down slows nothing — reads are on the
+// primary — so it must never fail readiness.
+func (r *ReadRouter) HealthErr() error {
+	st := r.Status()
+	switch {
+	case st.InSync:
+		return nil
+	case st.CheckedAt.IsZero():
+		return errors.New("not probed yet; reads on the primary")
+	case st.Err != nil:
+		return fmt.Errorf("unreachable, reads on the primary: %w", st.Err)
+	case st.Lag == nil:
+		return errors.New("lag unknown; reads on the primary")
+	default:
+		return fmt.Errorf("%s behind (max_lag %s); reads on the primary", st.Lag.Round(time.Millisecond), r.maxLag)
+	}
 }
 
 // NewPrimaryOnlyRouter returns a router with no replica: every read runs on
@@ -76,13 +128,18 @@ func (r *ReadRouter) InSync() bool { return r.HasReplica() && r.inSync.Load() }
 // consistent snapshot across statements does not belong here.
 func (r *ReadRouter) Read(ctx context.Context, fn func(db sqlc.DBTX) error) error {
 	if !r.InSync() {
+		if r.HasReplica() {
+			countRead(ctx, "primary", "out_of_sync")
+		}
 		return fn(r.primary)
 	}
 	err := fn(r.replica)
 	if err == nil || ctx.Err() != nil || errors.Is(err, pgx.ErrNoRows) {
+		countRead(ctx, "replica", "in_sync")
 		return err
 	}
 	r.log.Warn("read replica query failed; retrying on the primary", zap.Error(err))
+	countRead(ctx, "primary", "replica_error")
 	return fn(r.primary)
 }
 
@@ -116,6 +173,10 @@ func (r *ReadRouter) probe(ctx context.Context) {
 	}
 	ok := err == nil && lag != nil && (r.maxLag <= 0 || *lag <= r.maxLag)
 	was := r.inSync.Swap(ok)
+	r.mu.Lock()
+	r.last = ReplicaStatus{InSync: ok, Lag: lag, Err: err, CheckedAt: time.Now()}
+	r.mu.Unlock()
+	recordProbe(ctx, ok, lag)
 	switch {
 	case ok && !was:
 		r.log.Info("read replica in sync; routing reads to it", zap.Durationp("lag", lag))
@@ -167,4 +228,63 @@ func replicaLag(ctx context.Context, pool PgxPool) (*time.Duration, error) {
 		d = 0
 	}
 	return &d, nil
+}
+
+// Replica metrics. Same lazy-init shape as the outbox gauges
+// (internal/worker/metrics.go): no instrument exists before the OTel
+// MeterProvider is wired, and recording is a no-op until then.
+//
+// Exported to Prometheus as paladin_db_replica_in_sync (0/1),
+// paladin_db_replica_lag_seconds and paladin_db_replica_reads_total{served_by,
+// reason}. Bounded labels only; one series set per pod.
+var (
+	replicaMetricsOnce sync.Once
+
+	replicaInSync   metric.Int64Gauge
+	replicaLagGauge metric.Float64Gauge
+	replicaReads    metric.Int64Counter
+)
+
+func initReplicaMetrics() {
+	replicaMetricsOnce.Do(func() {
+		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/store/postgres")
+		replicaInSync, _ = meter.Int64Gauge(
+			"paladin.db.replica.in_sync",
+			metric.WithDescription("1 while lag-tolerant reads go to the read replica, 0 while they go to the primary."),
+		)
+		replicaLagGauge, _ = meter.Float64Gauge(
+			"paladin.db.replica.lag",
+			metric.WithDescription("Read replica replay lag at the last probe. Not recorded when it could not be measured."),
+			metric.WithUnit("s"),
+		)
+		replicaReads, _ = meter.Int64Counter(
+			"paladin.db.replica.reads",
+			metric.WithDescription("Lag-tolerant reads by where they ran (served_by) and why (reason: in_sync, out_of_sync, replica_error)."),
+		)
+	})
+}
+
+func recordProbe(ctx context.Context, inSync bool, lag *time.Duration) {
+	initReplicaMetrics()
+	if replicaInSync != nil {
+		v := int64(0)
+		if inSync {
+			v = 1
+		}
+		replicaInSync.Record(ctx, v)
+	}
+	if replicaLagGauge != nil && lag != nil {
+		replicaLagGauge.Record(ctx, lag.Seconds())
+	}
+}
+
+func countRead(ctx context.Context, servedBy, reason string) {
+	initReplicaMetrics()
+	if replicaReads == nil {
+		return
+	}
+	replicaReads.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("served_by", servedBy),
+		attribute.String("reason", reason),
+	))
 }

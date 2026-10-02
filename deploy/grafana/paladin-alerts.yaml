@@ -1,4 +1,5 @@
-# Paladin alerting rules for the outbox, rate limiting and capability charges.
+# Paladin alerting rules for the outbox, rate limiting, capability charges and
+# the read replica.
 #
 # Plain Prometheus rule group, same format as worker-alerts.yaml: drop it into
 # `rule_files:` or use it as the `spec.groups` body of a PrometheusRule CR.
@@ -79,3 +80,21 @@ groups:
             The per-tenant limiter has refused more than 1 request/s for 10m.
             Either a client is looping or middleware.rate_limit is too low for
             this tenant.
+
+      # The read replica is enabled, yet no pod has routed a read to it for
+      # 15m: it is down, unreachable, or more than max_lag behind. Nothing
+      # fails — reads fall back to the primary — which is exactly why it needs
+      # an alert: the replica can be lost for weeks while the primary quietly
+      # carries its load. The series exists only where the replica is enabled.
+      - alert: PaladinReadReplicaOutOfSync
+        expr: |
+          max(paladin_db_replica_in_sync) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Paladin read replica has served no reads for 15m"
+          description: >-
+            Every pod is sending listing reads to the primary. The health page's
+            postgres-replica row says why (unreachable, lag, not probed);
+            paladin_db_replica_lag_seconds shows how far behind it is.

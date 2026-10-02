@@ -109,13 +109,16 @@ func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid
 			}
 			err := cb(worker.LifecycleObjectRow{
 				ObjectID:    uuidFrom(row.ID),
+				Key:         row.Path,
 				State:       string(row.State),
 				ContentType: row.ContentType,
 				SizeBytes:   size,
 				Metadata:    decodeMap(row.Metadata),
 				Tags:        decodeMap(row.Tags),
 				CreatedAt:   timeFrom(row.CreatedAt),
+				UpdatedAt:   timeFrom(row.UpdatedAt),
 				CommittedAt: timePtr(row.CommittedAt),
+				ExternalRef: derefStr(row.ExternalRef),
 			})
 			if err != nil {
 				return err

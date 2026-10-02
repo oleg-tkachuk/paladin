@@ -308,6 +308,8 @@ type Querier interface {
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
+	// Every column cel.ObjectVars projects, so a rule's match sees what a
+	// ListObjects filter sees.
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
@@ -399,7 +401,7 @@ type Querier interface {
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
 	// The full CEL filter is still applied by the caller post-load; the
 	// nargs below are PUSHDOWN narrowing hints extracted from that CEL
-	// (cel.ExtractObjectPushdown) so the DB drops non-matching rows before
+	// (cel.ExtractObjectBranches; one call per branch) so the DB drops non-matching rows before
 	// they cross the wire instead of fetching the whole namespace and
 	// filtering in Go. The post-load CEL pass stays authoritative, so
 	// over-fetching (a hint that's absent) only costs throughput, never

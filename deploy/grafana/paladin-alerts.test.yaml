@@ -106,3 +106,36 @@ tests:
                 The per-tenant limiter has refused more than 1 request/s for 10m.
                 Either a client is looping or middleware.rate_limit is too low for
                 this tenant.
+
+  # Both pods out of sync for 20m → fires.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_db_replica_in_sync{pod="api-a"}'
+        values: "0x30"
+      - series: 'paladin_db_replica_in_sync{pod="api-b"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinReadReplicaOutOfSync
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Paladin read replica has served no reads for 15m"
+              description: >-
+                Every pod is sending listing reads to the primary. The health page's
+                postgres-replica row says why (unreachable, lag, not probed);
+                paladin_db_replica_lag_seconds shows how far behind it is.
+
+  # One pod still in sync → the replica works; a single pod's view is not
+  # an outage. And with the replica disabled there is no series at all.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_db_replica_in_sync{pod="api-a"}'
+        values: "0x30"
+      - series: 'paladin_db_replica_in_sync{pod="api-b"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinReadReplicaOutOfSync
+        exp_alerts: []
