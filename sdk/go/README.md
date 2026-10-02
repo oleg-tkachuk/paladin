@@ -88,7 +88,7 @@ tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseUR
 | `WithAPIToken(token)` | Sends an API token in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. |
 | `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`. Can be combined with a bearer token. |
 | `WithHeader(name, value)` | Sends a header on every call, replacing what the SDK would send there — `User-Agent` included, which is `paladin-sdk-go/<module version>` by default. |
-| `WithRetries(attempts, baseDelay)` | Retries a unary call on `Unavailable` or `ResourceExhausted`, up to `attempts` calls in total. The wait is drawn at random up to a ceiling that doubles from `baseDelay` (zero means `DefaultRetryBaseDelay`, 100ms) to `DefaultRetryMaxDelay` (5s), and is never shorter than the server's `Retry-After`. A retry that could not start before the context's deadline is not made, and the server's error is returned. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. |
+| `WithRetries(attempts, baseDelay)` | Retries a unary call on `Unavailable` or `ResourceExhausted`, up to `attempts` calls in total. The wait is drawn at random up to a ceiling that doubles from `baseDelay` (zero means `DefaultRetryBaseDelay`, 100ms) to `DefaultRetryMaxDelay` (5s), and is never shorter than the server's `Retry-After`, given in seconds or as an HTTP date. A retry that could not start before the context's deadline is not made, and the server's error is returned. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. |
 | `WithHTTPClient(c)` | Replaces `http.DefaultClient` — for timeouts, proxies, custom TLS. |
 | `WithClientOptions(opts...)` | Passes Connect options through, e.g. `connect.WithGRPC()` or `connect.WithSendGzip()`. |
 
@@ -104,6 +104,8 @@ and `Issue*` calls and answers a repeated key with the first response.
 | --- | --- |
 | `WithIdempotencyKey(ctx, key) context.Context` | Every call made with the returned context sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. A response that carries a credential (a minted API or capability token, a generated password) is not replayed: the repeat returns `AlreadyExists`, because the credential is delivered once and not stored. Reuse the key only for the same logical operation. |
 | `IdempotencyKey(ctx) (string, bool)` | The key attached to `ctx`; an empty key counts as none. |
+| `WithoutIdempotencyKey(ctx) context.Context` | Every call made with the returned context goes out with no key — not the default one, not the request's field — and so is never retried, unless the contract declares it side-effect free or idempotent. For an operation that must run again when repeated rather than be answered with the first response. The server refuses `Create*` and `Issue*` without a key. The last `WithIdempotencyKey` or `WithoutIdempotencyKey` on a context wins. |
+| `WithRetryable(func(error) bool) Option` | Replaces `DefaultRetryable` (`Unavailable`, `ResourceExhausted`) as the test of which failures `WithRetries` retries. It cannot make an unsafe call retried: the rule above still applies. |
 
 ### Tokens
 

@@ -93,9 +93,12 @@ written against 0.11 (ADR-0018):
 - **Every call with side effects carries an `Idempotency-Key`.** A unary call
   whose `idempotency_level` is unknown gets the context's key, else its
   request's `idempotency_key` field, else a fresh one, kept across retries.
-  Code that counted on a call going out without one — to make a repeat
-  create a second resource — now gets the first response back. Set a fresh
-  key per logical operation to keep that behaviour.
+  Each call without a key of its own gets a fresh one, so two calls are still
+  two operations; only a key held across several calls — one context from
+  `WithIdempotencyKey`, one `idempotency_key` block around a loop — answers
+  every call after the first with the first response. Set a fresh key per
+  logical operation. A call that must go out with no key at all takes
+  `WithoutIdempotencyKey` / `no_idempotency_key`.
 - **Such calls are now retried** on `Unavailable` and `ResourceExhausted`
   under `WithRetries`/`Retry`, since they carry a key; before, only calls
   made with an explicit key were.
