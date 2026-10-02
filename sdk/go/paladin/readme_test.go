@@ -2,12 +2,15 @@ package paladin_test
 
 import (
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
 	// Registered for their descriptors; the tests below walk the registry.
 	_ "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -79,5 +82,30 @@ func TestReadmeListsEveryMethod(t *testing.T) {
 	})
 	if services == 0 {
 		t.Fatal("no contract services registered — this test is asserting nothing")
+	}
+}
+
+// TestReadmeDocumentsTheTLSSurface keeps the TLS section in step with the
+// types: every exported field and method of TLS and RotatingTransport's own
+// methods are named in README.md.
+func TestReadmeDocumentsTheTLSSurface(t *testing.T) {
+	raw, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := string(raw)
+	var names []string
+	tlsType := reflect.TypeFor[paladin.TLS]()
+	for i := range tlsType.NumField() {
+		names = append(names, "`"+tlsType.Field(i).Name+"`")
+	}
+	for i := range tlsType.NumMethod() {
+		names = append(names, "`(TLS)."+tlsType.Method(i).Name+"()`")
+	}
+	names = append(names, "`RotatingTransport`", "`RoundTrip`", "`CloseIdleConnections`")
+	for _, name := range names {
+		if !strings.Contains(readme, name) {
+			t.Errorf("README.md does not document %s", name)
+		}
 	}
 }

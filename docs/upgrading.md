@@ -42,6 +42,15 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## v0.23.0 — TLS that a consumer can wrap, verify and close
+
+- **Go: `TLS.RoundTripper()` returns the rotating transport** `WithTLS` and
+  `WithTransferTLS` use, as a `*RotatingTransport`, for a client of your own
+  that wraps it — give it to `WithHTTPClient` or `WithTransferHTTPClient`.
+  After a rotation every new request, HTTP/2 included, goes on a connection
+  with the new files; before, a busy HTTP/2 connection kept taking requests
+  on the old certificate. `TLS.Transport()` is unchanged.
+
 ## Unreleased — the SDKs answer a consumer's review
 
 The contract does not change. What a caller may notice:
