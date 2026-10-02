@@ -225,3 +225,27 @@ func (r *ObjectReader) expect(object *datav1.Object) {
 	}
 	r.digest, r.want, r.algo = digest, want, sum.GetAlgorithm()
 }
+
+// LookupObject returns the object a paladin:// URI names, found by its key.
+func LookupObject(ctx context.Context, data *DataPlane, uri ObjectURI) (*datav1.Object, error) {
+	resp, err := data.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
+		Parent: uri.Parent(), Key: uri.Key,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// DownloadURI is Download for the object a paladin:// URI names.
+func DownloadURI(ctx context.Context, data *DataPlane, uri string, opts DownloadOptions) (*ObjectReader, error) {
+	parsed, err := ParseObjectURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	object, err := LookupObject(ctx, data, parsed)
+	if err != nil {
+		return nil, err
+	}
+	return Download(ctx, data, object.GetName(), opts)
+}
