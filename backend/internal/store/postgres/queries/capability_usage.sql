@@ -20,9 +20,10 @@ WHERE
 RETURNING request_count;
 
 -- name: ChargeCapability :one
--- Adds amount to spent_usd and rejects when over the supplied cap.
--- max_budget=0 means unlimited. unit_code is set on insert and
--- preserved on conflict (an existing row owns its currency).
+-- Adds amount to spent_usd and rejects when spend plus open holds
+-- (reserved_usd) would pass the supplied cap. max_budget=0 means
+-- unlimited. unit_code is set on insert and preserved on conflict (an
+-- existing row owns its currency).
 --
 -- The ceiling is checked on BOTH paths. The INSERT is a SELECT filtered by
 -- it, so a first charge above the cap inserts nothing, conflicts with
@@ -37,11 +38,12 @@ SET spent_usd  = capability_usage.spent_usd + sqlc.arg('amount_usd')::numeric,
     updated_at = now()
 WHERE
     sqlc.arg('max_budget_usd')::numeric = 0
-    OR capability_usage.spent_usd + sqlc.arg('amount_usd')::numeric <= sqlc.arg('max_budget_usd')::numeric
+    OR capability_usage.spent_usd + capability_usage.reserved_usd + sqlc.arg('amount_usd')::numeric
+       <= sqlc.arg('max_budget_usd')::numeric
 RETURNING spent_usd;
 
 -- name: GetCapabilityUsage :one
-SELECT capability_id, request_count, spent_usd, unit_code, updated_at
+SELECT capability_id, request_count, spent_usd, reserved_usd, unit_code, updated_at
 FROM capability_usage
 WHERE capability_id = $1;
 

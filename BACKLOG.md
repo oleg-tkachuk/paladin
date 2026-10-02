@@ -1635,18 +1635,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** a breaking proto change, which needs its own deprecation
   window.
 
-### No explicit budget reservations
-
-- **Status:** Deferred — charge-then-refund covers the need today.
-- **Reason:** a cost known only after the call (an LLM completion) is handled
-  by charging an estimate and refunding the difference against the charge ID
-  (`Meter.Refund`, `auth.RefundLastCharge`). What that does not give is a
-  hold that lapses on its own if the caller dies between the two steps — the
-  estimate then stays charged.
-- **Definition of Done:** `Reserve` / `Settle` / `Release` on `Meter`, with
-  holds that expire, counted against every ceiling the way charges are.
-- **Blockers:** none.
-
 ### Revocation reaches other replicas only by cache expiry
 
 - **Status:** Deferred.
