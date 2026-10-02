@@ -10,7 +10,7 @@ through `rule_files:` or as the `spec.groups` of a `PrometheusRule`.
 | `paladin-rpc-red.json` | RPC rate, errors and duration per service and method |
 | `paladin-operations.json` | outbox, workers, Postgres, rate limiting, presigns, capability charges |
 | `worker-alerts.yaml` | a worker that stopped ticking, or fails every tick |
-| `paladin-alerts.yaml` | outbox not draining, rate limiting failing open, refused capability charges, throttled tenants |
+| `paladin-alerts.yaml` | outbox not draining, rate limiting failing open, refused capability charges, throttled tenants, read replica out of sync |
 
 `task -t Taskfile.dev.yaml verify:grafana-rules` parses every rule file and
 dashboard query with `promtool`, and runs the alert unit tests in
@@ -102,7 +102,7 @@ The work that does not show up in RPC metrics.
 `tenant_id` appears on the rate-limit and capability-charge series only; the
 outbox gauge carries the deepest tenant's depth, not a per-tenant series.
 
-## `paladin-alerts.yaml` — outbox, rate limiting, charges
+## `paladin-alerts.yaml` — outbox, rate limiting, charges, read replica
 
 | Alert | Fires when | Severity |
 |-------|-----------|----------|
@@ -110,7 +110,9 @@ outbox gauge carries the deepest tenant's depth, not a per-tenant series.
 | `PaladinRateLimitFailingOpen` | either limiter admitted a request because its storage failed, in the last 10m | critical |
 | `PaladinCapabilityChargesRefused` | over 90% of a tenant's charges were refused for 15m | warning |
 | `PaladinTenantThrottled` | the per-tenant limiter refused over 1 req/s for 10m | warning |
+| `PaladinReadReplicaOutOfSync` | the read replica is enabled and no pod has routed a read to it for 15m | warning |
 
-The counters behind the last three exist only after their path has run once.
+The counters behind the charge and throttling rules exist only after their
+path has run once, and the replica gauge only where the replica is enabled.
 The fail-open rule treats an absent counter as zero; none of the rules alert
 on absence.

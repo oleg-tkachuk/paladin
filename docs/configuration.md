@@ -182,6 +182,14 @@ replay, a restart) is retried on the primary. Lists may trail writes by up
 to `max_lag`; set `0s` to drop the bound and keep only the reachability
 check.
 
+What it is doing is visible three ways: the health page's `postgres-replica`
+row (never critical — a replica that is down fails nothing, so it never fails
+readiness) says why reads are on the primary; the metrics
+`paladin_db_replica_in_sync`, `paladin_db_replica_lag_seconds` and
+`paladin_db_replica_reads_total{served_by,reason}` show it over time; and
+`PaladinReadReplicaOutOfSync` (`deploy/grafana/paladin-alerts.yaml`) fires when
+no pod has used the replica for 15 minutes.
+
 Outside CNPG set `dsn` explicitly. The replica must be a physical standby,
 or a managed reader endpoint over one; a logical replica does not carry the
 roles and policies and is not supported.
