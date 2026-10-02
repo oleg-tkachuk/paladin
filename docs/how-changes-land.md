@@ -28,6 +28,35 @@ are pushed to GHCR at that version, and the GitHub release with generated
 notes is created once all of them are. The SDK and API-contract tags follow their own
 stream; see [releasing.md](releasing.md).
 
+```mermaid
+flowchart LR
+    chg["<b>Changed paths</b><br/>ci-groups.sh"]
+    v["<b>Verify</b><br/>one job per group"]
+    img["<b>End-to-end images</b>"]
+    e2e["<b>End-to-end</b><br/>shards 1/2 · 2/2"]
+    deep["<b>Deep</b><br/>integration · stack"]
+    wf["<b>Workflow</b><br/>syntax · audit"]
+    ok{{"<b>All checks passed</b><br/>required by main"}}
+    head{"head is the<br/>commit CI passed?"}
+    tag["semantic-release<br/>pushes the tag"]
+    pub["<b>publish</b> backend · frontend<br/>image → sign → SBOM per platform<br/>chart → sign · verify all"]
+    ann["<b>GitHub release</b><br/>notes + SBOMs"]
+
+    chg --> v & img & deep & wf
+    img --> e2e
+    v & e2e & deep & wf --> ok
+    ok -- "push to main" --> head
+    head -- yes --> tag --> pub --> ann
+    head -- "no: the newer commit's CI releases it" --> skip(["nothing"])
+
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class chg,v,img,e2e,deep,wf,tag,pub role
+    class skip optional
+    class ok,ann external
+```
+
 `ci.yaml` pushes no image and deploys nothing. Images and charts are published
 only by `release.yaml`, for a release tag. Its End-to-end images job builds
 both images once, and its two End-to-end jobs run `verify-e2e:run` —

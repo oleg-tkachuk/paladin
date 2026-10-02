@@ -45,6 +45,88 @@ flowchart LR
     class sinks external
 ```
 
+## Code layout: handlers own their ports
+
+A handler package declares the interfaces it needs; the Postgres and S3
+adapters implement them. That is why `internal/store` and `internal/storage`
+import `internal/api`: the arrow points at the interface, not the caller.
+
+```mermaid
+flowchart LR
+    cmd["<b>cmd/server</b><br/>serve &lt;role&gt;"]
+    app["<b>internal/app</b><br/>fx wiring · listeners"]
+    shim["<b>connectshim</b><br/>proto ⇄ domain"]
+    h["<b>handlers</b><br/>internal/api/&lt;plane&gt;/v1/*h<br/>declare ports"]
+    pgad["<b>store/postgres/adapters</b><br/>over sqlc"]
+    s3ad["<b>storage/s3adapter</b><br/>routed per backend"]
+    pg[("<b>PostgreSQL</b>")]
+    s3[("<b>S3</b>")]
+
+    cmd --> app --> shim --> h
+    app -- "injects" --> pgad & s3ad
+    pgad -. "implements" .-> h
+    s3ad -. "implements" .-> h
+    pgad --> pg
+    s3ad --> s3
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class cmd,app,shim,h role
+    class pgad,s3ad optional
+    class pg,s3 store
+```
+
+## Request path
+
+One data-plane call, outermost interceptor first
+(`internal/app/build_listeners_api.go`). The iam plane lets `Login`,
+`RefreshToken` and `ExchangeAudience` through anonymously and adds a login rate
+limit and an audit of mutations; the admin plane accepts API tokens only when
+they carry roles, and audits its mutations too.
+
+```mermaid
+flowchart TB
+    req(["Connect RPC"])
+    subgraph ic ["interceptors"]
+        direction TB
+        obs["otel · outcome log"]
+        authn["<b>authenticate</b><br/>JWT · API token · capability → Principal"]
+        aud["audience must be this plane"]
+        lim["tenant rate limit · quota soft check"]
+        val["protovalidate · idempotency key"]
+    end
+    h["<b>handler</b>"]
+    cedar["<b>Cedar</b><br/>tenant · bucket · collection policies<br/>+ built-in scope forbid"]
+    cap["<b>capability</b><br/>allowed op · charge budget"]
+    adp["adapter"]
+    pool["RLS pool<br/>paladin.tenant_id set on acquire"]
+    pg[("<b>PostgreSQL</b><br/>row-level security")]
+
+    req --> obs --> authn --> aud --> lim --> val --> h
+    h --> cedar
+    h --> cap
+    h --> adp --> pool --> pg
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class req client
+    class obs,authn,aud,lim,val,h,cedar,cap,adp,pool role
+    class pg store
+    style ic fill:#F8FAFC,stroke:#16A34A
+```
+
+Policies are compiled once per tenant and cached; a `LISTEN policy_changed`
+connection evicts them, and flushes everything after a reconnect. A mutation
+writes its outbox row in the same transaction as the change.
+
 ## Main request: upload
 
 The api plane authorises the call, records the object as `PENDING` and returns
@@ -77,6 +159,138 @@ sequenceDiagram
         S3-)I: storage notification
         I->>DB: PENDING → AVAILABLE + outbox event, one transaction
     end
+```
+
+## Events
+
+Every producer writes the event row in the transaction that made the change;
+`dispatcher` delivers it at least once. `ingest` runs the other way, turning
+storage notifications into state changes. The audit log has its own table and
+a live stream.
+
+```mermaid
+flowchart LR
+    notif(["storage notification<br/>webhook · NATS · RabbitMQ · SQS"])
+    subgraph prod ["producers"]
+        direction TB
+        api["<b>api</b>"]
+        admin["<b>admin</b>"]
+        worker["<b>worker</b>"]
+        ingest["<b>ingest</b><br/>dedup · PENDING → AVAILABLE"]
+    end
+    outbox[("<b>event_deliveries</b><br/>pending · delivered · failed")]
+    disp["<b>dispatcher</b><br/>SKIP LOCKED batches · backoff"]
+    sinks{{"<b>sinks</b><br/>HTTP · NATS · Kafka<br/>RabbitMQ · SQS"}}
+    audit[("<b>audit_log</b>")]
+    sse["admin: audit stream<br/>LISTEN paladin_audit → SSE"]
+
+    notif --> ingest
+    api & admin & worker & ingest --> outbox --> disp --> sinks
+    api & admin --> audit --> sse
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class notif client
+    class api,admin,worker,disp,sse role
+    class ingest optional
+    class outbox,audit store
+    class sinks external
+    style prod fill:#F8FAFC,stroke:#16A34A
+```
+
+A row that exhausts its attempts stays `failed`; nothing redrives it. Consumers
+deduplicate on the event id ([event-delivery-dedup.md](../../docs/event-delivery-dedup.md)).
+
+## Background work
+
+`worker` runs each job in one replica at a time, under a lease in
+`worker_leases`. Jobs use the BYPASSRLS reaper pool, because they act across
+tenants. The job list is in [ops-housekeeping.md](ops-housekeeping.md).
+
+```mermaid
+flowchart LR
+    w["<b>worker</b> replicas"]
+    lease[("<b>worker_leases</b><br/>one per job · 30s TTL")]
+    jobs["<b>jobs</b><br/>reconcilers · purgers · drainers<br/>lifecycle · quotas · operations"]
+    pool["reaper pool<br/>BYPASSRLS"]
+    pg[("<b>PostgreSQL</b>")]
+    s3[("<b>S3</b>")]
+
+    w -- "claim · renew every 10s" --> lease
+    w --> jobs --> pool --> pg
+    jobs --> s3
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class w,jobs,pool role
+    class lease,pg,s3 store
+```
+
+## Console session
+
+The browser holds only short-lived access tokens; the refresh token stays in an
+httpOnly cookie the BFF reads. Every plane call goes through the BFF.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    box rgb(237,233,254) paladin-console
+        participant P as proxy.ts
+        participant F as BFF /api
+    end
+    participant I as iam
+    participant D as data · admin
+
+    B->>P: any page or /api call
+    Note over P: no paladin_rt_iam cookie → /login<br/>unsafe /api call from a foreign Origin → 403
+    B->>F: /api/auth/login
+    F->>I: Login
+    F-->>B: iam access token · Set-Cookie paladin_rt_iam
+    B->>F: /api/auth/exchange {audience}
+    F->>I: ExchangeAudience
+    F-->>B: access token for that plane
+    B->>F: /api/rpc/{plane}/… with Bearer
+    Note over F: token audience must match the plane
+    F->>D: Connect · Authorization · Idempotency-Key · X-Forwarded-For
+    D-->>B: response
+```
+
+## Contract fan-out
+
+`proto/` is the one contract. Three generators read it, each with a drift gate
+in `verify-all`; `verify:proto-breaking` refuses a wire-incompatible change against the last
+contract tag.
+
+```mermaid
+flowchart LR
+    proto["<b>proto/</b>"]
+    es["<b>frontend/src/gen</b><br/>protoc-gen-es"]
+    gosdk["<b>sdk/go/gen</b><br/>protoc-gen-go · connect-go"]
+    py["<b>sdk/python</b><br/>connect-python"]
+    console["<b>console</b>"]
+    backend["<b>backend</b><br/>go.mod replace → sdk/go"]
+
+    proto --> es --> console
+    proto --> gosdk --> backend
+    proto --> py
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class proto,gosdk,py,backend role
+    class es,console ui
 ```
 
 ## Schema
