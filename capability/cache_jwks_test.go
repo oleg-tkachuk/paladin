@@ -127,6 +127,23 @@ func TestRevocationCacheIsBoundedAndHonoursClock(t *testing.T) {
 	}
 }
 
+func TestRevocationCacheClearForgetsEveryAnswer(t *testing.T) {
+	store := newMemStore()
+	c := NewCachedRevocationChecker(store, time.Hour)
+	ctx := context.Background()
+	ids := []uuid.UUID{uuid.New(), uuid.New()}
+	for _, id := range ids {
+		_, _ = c.IsRevoked(ctx, id)
+		store.revoked[id] = true
+	}
+	c.Clear()
+	for _, id := range ids {
+		if r, _ := c.IsRevoked(ctx, id); !r {
+			t.Errorf("%s: cached answer survived Clear", id)
+		}
+	}
+}
+
 // ─── JWKS ──────────────────────────────────────────────────────────────────
 
 func TestMarshalJWKSIsDeterministic(t *testing.T) {

@@ -1,8 +1,8 @@
 # ADR-0018: The SDKs as three layers over the generated clients
 
-- **Status:** Accepted 2026-10-02 for the client-side layers, which land with
-  this ADR in both SDKs. The parts that need the contract or the server to
-  change are **Proposed** and tracked in BACKLOG.md under *SDK*.
+- **Status:** Accepted 2026-10-02. The contract and server parts it left
+  proposed are settled by [ADR-0020](0020-sdk-integration-grade.md), but for
+  the webhook signature, still in BACKLOG.md under *SDK*.
 
 - **Context.** Both SDKs were a thin shim over the generated Connect clients:
   a base URL, a static token, a context-scoped idempotency key, and retries.
@@ -40,15 +40,18 @@
   is defined once in the Go SDK, imported by the server, and compared by a
   Python test.
 
-- **Proposed, needing contract or server changes:**
-  - `google.api.resource` annotations, and resource-name builders and
-    parsers generated from them for both SDKs and the server;
-  - `google.rpc.ErrorInfo` reasons on errors, so clients branch on a reason
-    rather than a message;
+- **Proposed, needing contract or server changes** — since decided or done,
+  in [ADR-0020](0020-sdk-integration-grade.md):
+  - resource names: done in both SDKs, built and parsed by the server's rules
+    against one shared table; generating them from `google.api.resource`
+    annotations was dropped, because a collection may contain `/`, which an
+    annotation pattern cannot state;
+  - `google.rpc.ErrorInfo` reasons on errors: done, with the reasons an enum
+    in the contract;
+  - an in-memory fake for SDK users' tests, and one set of scenarios both
+    SDKs run against the stack: done;
   - a webhook signature over a timestamp and the body, with a verifier in
-    both SDKs; today's signs the body alone, so a captured delivery replays;
-  - an in-memory fake server for SDK users' tests, and one set of scenarios
-    both SDKs run against the stack.
+    both SDKs: still proposed, in BACKLOG.md.
 
 - **Consequences.** The SDK release is breaking: calls now carry keys they
   did not, a retry that cannot fit the deadline returns the server's error
