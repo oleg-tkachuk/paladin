@@ -284,6 +284,14 @@ tasks:
       - task: py-sdk:lint
       - task: py-sdk:test
       - ./scripts/py-sdk-gen.test.sh
+      - ./scripts/py-sdk-compat.test.sh
+
+  verify-py-sdk-compat:
+    desc: "Install the Python SDK's wheel beside each protobuf and Python it supports, and run its tests (CI's compatibility matrix)"
+    # Not in verify-all: it builds a dozen environments, ~5 min. CI runs the
+    # same cells (sdk/python/compat.json) as parallel jobs.
+    cmds:
+      - ./scripts/py-sdk-compat.sh --matrix
 
   verify-capability:
     desc: "gofmt + lint + test the capability module (the third Go tree)"

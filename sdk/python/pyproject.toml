@@ -8,19 +8,25 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
-    # Pinned exactly: pre-1.0, and the generated clients are written against
-    # this version's API.
-    "connect-python==0.9.0",
-    # Generated with the protoc bundled in grpcio-tools below; the runtime must
-    # be at least that protoc's Python version.
-    "protobuf>=7.35.1",
+    # Pre-1.0: a minor may change the API the generated clients call, so the
+    # range stops at the next one. CI tests the floor.
+    "connect-python>=0.9.0,<0.10",
+    # Both majors: workers that share an image with protobuf-6 libraries
+    # (grpcio-tools, hatchet-sdk) can install the SDK. The floor is the gencode
+    # version of the protoc in grpcio-tools below, and the one
+    # googleapis-common-protos needs; CI runs the tests on 6.x and 7.x.
+    "protobuf>=6.33.5,<8",
     # google.api and google.rpc, which the contract imports.
-    "googleapis-common-protos>=1.75.5",
+    "googleapis-common-protos>=1.75.5,<2",
 ]
 
 [dependency-groups]
 dev = [
-    "grpcio-tools==1.84.0",
+    # Deliberately not the latest: its protoc's version is the oldest protobuf
+    # runtime the stubs accept (ValidateProtobufRuntimeVersion), so it is the
+    # newest release still generating for protobuf 6. A newer one would lock
+    # out every protobuf-6 environment.
+    "grpcio-tools==1.81.1",
     "protoc-gen-connect-python==0.9.0",
     "pytest==9.1.1",
     "ruff==0.16.9",

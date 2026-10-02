@@ -8,7 +8,10 @@ follow the format releases nothing.
 [`ci.yaml`](../.github/workflows/ci.yaml) runs the groups of `verify-all` a
 change can reach — `verify-backend`, `verify-capability`, `verify-sdk`,
 `verify-frontend` and `verify-repo`, one job each — and audits the workflows
-with actionlint and zizmor. [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
+with actionlint and zizmor. A change the `sdk` group reaches also installs the
+Python SDK's wheel beside each protobuf major and Python it supports, one job
+per cell of [`sdk/python/compat.json`](../sdk/python/compat.json)
+(`verify-py-sdk-compat` locally). [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
 decides which groups a set of paths reaches; a console-only change does not
 run the backend's tests. Run by hand, it runs every group. A final `All checks
 passed` job is the one check branch protection requires, so a group that was
