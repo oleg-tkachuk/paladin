@@ -31,6 +31,7 @@ from paladin.client import (
     user_agent,
 )
 from paladin.connect import AsyncPaladin, Endpoints, Paladin, connect, connect_async
+from paladin.tls import DEFAULT_TLS_RELOAD_INTERVAL, TLS
 from paladin.transfer import (
     CHECKSUM_CRC32C,
     CHECKSUM_MD5,
@@ -73,6 +74,7 @@ __all__ = [
     "DEFAULT_POLL_INTERVAL",
     "DEFAULT_RETRY_BASE_DELAY",
     "DEFAULT_RETRY_MAX_DELAY",
+    "DEFAULT_TLS_RELOAD_INTERVAL",
     "DEFAULT_TRANSFER_CONNECT_TIMEOUT",
     "DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST",
     "DEFAULT_TRANSFER_READ_TIMEOUT",
@@ -82,6 +84,7 @@ __all__ = [
     "HEADER_IDEMPOTENCY_KEY",
     "HEADER_RETRY_AFTER",
     "HEADER_USER_AGENT",
+    "TLS",
     "TOKEN_REFRESH_MARGIN",
     "AsyncPaladin",
     "AsyncSession",

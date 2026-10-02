@@ -42,11 +42,15 @@ trap 'rm -rf "$work"' EXIT
 uv build --quiet --wheel --out-dir "$work/dist" "$SDK"
 wheel=$(find "$work/dist" -name '*.whl' | head -1)
 
-# The test runner at the version the SDK's lock holds.
-pytest=$(cd "$SDK" && uv export --quiet --frozen --only-group dev --no-hashes --no-annotate | grep '^pytest==')
+# What the tests themselves import, at the versions the SDK's lock holds.
+# Not the whole dev group: its generator pins protobuf, and its optional
+# google-crc32c would hide the path where that extra is absent.
+readonly TEST_DEPS='^(pytest|cryptography)=='
+mapfile -t test_deps < <(cd "$SDK" && uv export --quiet --frozen --only-group dev --no-hashes --no-annotate --no-emit-project |
+    grep -E "$TEST_DEPS")
 
 uv venv --quiet --python "$python" "$work/venv"
-uv pip install --quiet --python "$work/venv" "$wheel" "$pytest" "$@"
+uv pip install --quiet --python "$work/venv" "$wheel" "${test_deps[@]}" "$@"
 
 # From outside the source tree: the tests import the installed wheel.
 cd "$SDK/tests"

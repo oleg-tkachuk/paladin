@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pyqwest
+
 from paladin.auth import AUDIENCE_ADMIN, AUDIENCE_DATA, AUDIENCE_IAM
 from paladin.client import Client
 from paladin.facade import (
@@ -15,6 +17,7 @@ from paladin.facade import (
     DataPlane,
     IAMPlane,
 )
+from paladin.tls import TLS
 from paladin.transfer import Transfer
 
 
@@ -47,6 +50,19 @@ class AsyncPaladin:
     iam: AsyncIAMPlane | None
 
 
+_HTTP_CLIENT = "http_client"
+
+
+def _with_tls(transport: dict[str, Any] | None, tls: TLS | None, client: Any) -> dict[str, Any]:
+    extra = dict(transport or {})
+    if tls is None:
+        return extra
+    if _HTTP_CLIENT in extra:
+        raise ValueError("tls builds the http_client; give one or the other")
+    extra[_HTTP_CLIENT] = client(tls)
+    return extra
+
+
 def _client(url: str, audience: str, client_options: dict[str, Any]) -> Client:
     token_source = client_options.get("token_source")
     return Client(url, **client_options, audience=audience if token_source is not None else None)
@@ -57,6 +73,7 @@ def connect(
     *,
     transport: dict[str, Any] | None = None,
     transfer: Transfer | None = None,
+    tls: TLS | None = None,
     **client_options: Any,
 ) -> Paladin:
     """Synchronous clients for the planes in ``endpoints``.
@@ -66,9 +83,11 @@ def connect(
     ``transport`` is passed to every generated client: ``timeout_ms``,
     ``http_client``, ``proto_json`` and the like. ``transfer`` sends the
     presigned requests of ``upload`` and ``download``; a shared default when
-    left out.
+    left out. ``tls`` makes the connections to Paladin with a CA bundle and a
+    client certificate that may rotate on disk; it builds the ``http_client``,
+    so the two cannot both be given. For storage, give the ``Transfer`` its own.
     """
-    extra = transport or {}
+    extra = _with_tls(transport, tls, lambda t: pyqwest.SyncClient(t.sync_transport()))
 
     def plane(url: str | None, audience: str, kind: Any, **more: Any) -> Any:
         if not url:
@@ -88,11 +107,12 @@ def connect_async(
     *,
     transport: dict[str, Any] | None = None,
     transfer: Transfer | None = None,
+    tls: TLS | None = None,
     **client_options: Any,
 ) -> AsyncPaladin:
     """``connect`` for asyncio: the generated async clients, and an
     ``AsyncSession`` as the token source."""
-    extra = transport or {}
+    extra = _with_tls(transport, tls, lambda t: pyqwest.Client(t.async_transport()))
 
     def plane(url: str | None, audience: str, kind: Any, **more: Any) -> Any:
         if not url:
