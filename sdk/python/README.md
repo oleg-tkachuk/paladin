@@ -59,7 +59,7 @@ async with TenantServiceClient(client.base_url, interceptors=client.async_interc
 
 | Member | Does |
 | --- | --- |
-| `Client(base_url, *, bearer_token=None, capability=None, retry=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `capability` is sent in `X-Paladin-Capability`. |
+| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
 | `base_url` | First argument of every generated client. |
 | `interceptors()` | Interceptors for a generated `…ClientSync`. |
 | `async_interceptors()` | Interceptors for a generated async `…Client`. |
@@ -68,10 +68,17 @@ async with TenantServiceClient(client.base_url, interceptors=client.async_interc
 
 | Member | Does |
 | --- | --- |
-| `Retry(attempts, base_delay=0.1, max_delay=5.0)` | Retries a unary call on `UNAVAILABLE` or `RESOURCE_EXHAUSTED`, up to `attempts` calls in total, doubling the delay (seconds) from `base_delay` up to `max_delay`. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and any call made inside `idempotency_key`. Streams are never retried. Raises `ValueError` for `attempts < 1` or delays outside `0 < base_delay <= max_delay`. |
-| `delays()` | The pause before each retry. |
+| `Retry(attempts, base_delay=0.1, max_delay=5.0)` | Retries a unary call on `UNAVAILABLE` or `RESOURCE_EXHAUSTED`, up to `attempts` calls in total. The wait (seconds) is drawn at random up to a ceiling that doubles from `base_delay` to `max_delay`, and is never shorter than the server's `Retry-After`. A retry that could not start before the call's `timeout_ms` is not made, and the server's error is raised. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. Each attempt reads its headers through its own `connectrpc.client.ResponseMetadata`, so one wrapped around a retried call sees nothing. Raises `ValueError` for `attempts < 1` or delays outside `0 < base_delay <= max_delay`. |
+| `delays()` | The ceiling of the pause before each retry. |
+| `wait(ceiling, retry_after)` | The pause before one retry: a random share of `ceiling`, at least `retry_after`. |
 
 ### Idempotency
+
+A unary call the contract does not declare side-effect free or idempotent
+sends an `Idempotency-Key` of its own: the one set by `idempotency_key` when
+there is one, else the request's `idempotency_key` field when set, else a
+fresh random key. Every retry of that call sends the same key. The server
+requires one on `Create*` and `Issue*` calls.
 
 | Function | Does |
 | --- | --- |
@@ -81,9 +88,10 @@ async with TenantServiceClient(client.base_url, interceptors=client.async_interc
 ### Constants
 
 `HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY` and
-`HEADER_IDEMPOTENCY_KEY` are the header names the server reads;
-`tests/test_headers.py` keeps them equal to the Go SDK's, which the server
-imports. `DEFAULT_RETRY_BASE_DELAY` and `DEFAULT_RETRY_MAX_DELAY` are
+`HEADER_IDEMPOTENCY_KEY` are the header names the server reads, and
+`HEADER_USER_AGENT` and `HEADER_RETRY_AFTER` the two the SDK sends and reads
+besides; `tests/test_headers.py` keeps them equal to the Go SDK's, which the
+server imports. `user_agent()` is the `User-Agent` the client sends. `DEFAULT_RETRY_BASE_DELAY` and `DEFAULT_RETRY_MAX_DELAY` are
 `Retry`'s defaults.
 
 ## Services and methods

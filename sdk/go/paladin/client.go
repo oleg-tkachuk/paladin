@@ -33,6 +33,12 @@ const (
 	// replays the first response for a key it has already seen.
 	HeaderIdempotencyKey = "Idempotency-Key"
 
+	// HeaderUserAgent names the SDK and its version; set it with
+	// WithHeader to override.
+	HeaderUserAgent = "User-Agent"
+	// HeaderRetryAfter is how the server asks a client to wait, in seconds.
+	HeaderRetryAfter = "Retry-After"
+
 	bearerScheme = "Bearer"
 )
 
@@ -77,6 +83,18 @@ func WithBearerToken(token string) Option {
 	return func(cfg *config) { cfg.headers.Set(HeaderAuthorization, bearerScheme+" "+token) }
 }
 
+// WithHeader sends name: value on every call, replacing what the SDK would
+// send there, the User-Agent included.
+func WithHeader(name, value string) Option {
+	return func(cfg *config) { cfg.headers.Set(name, value) }
+}
+
+// WithAPIToken sends an API token in HeaderAPIToken. WithBearerToken works
+// for an API token too; this is for a proxy that strips Authorization.
+func WithAPIToken(token string) Option {
+	return func(cfg *config) { cfg.headers.Set(HeaderAPIToken, token) }
+}
+
 // WithCapability sends a capability token in HeaderCapability.
 func WithCapability(token string) Option {
 	return func(cfg *config) { cfg.headers.Set(HeaderCapability, token) }
@@ -85,8 +103,12 @@ func WithCapability(token string) Option {
 // WithRetries retries a unary call up to attempts times in total when the
 // server answers Unavailable or ResourceExhausted, and only when the call is
 // safe to repeat: the RPC is declared free of side effects or idempotent, or
-// the context carries an idempotency key. The delay doubles from baseDelay up
-// to DefaultRetryMaxDelay; a zero baseDelay means DefaultRetryBaseDelay.
+// the request carries an idempotency key — which every call with side
+// effects does, see WithIdempotencyKey. The wait before each retry is drawn
+// at random up to a ceiling that doubles from baseDelay to
+// DefaultRetryMaxDelay, and is never shorter than a Retry-After the server
+// sent; a retry that could not start before the context's deadline is not
+// attempted. A zero baseDelay means DefaultRetryBaseDelay.
 func WithRetries(attempts int, baseDelay time.Duration) Option {
 	return func(cfg *config) {
 		if baseDelay <= 0 {
@@ -119,6 +141,9 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		return nil, ErrInvalidRetries
 	}
 
+	if cfg.headers.Get(HeaderUserAgent) == "" {
+		cfg.headers.Set(HeaderUserAgent, userAgent())
+	}
 	interceptors := []connect.Interceptor{&headerInterceptor{headers: cfg.headers}}
 	if cfg.retry != nil {
 		interceptors = append(interceptors, cfg.retry)

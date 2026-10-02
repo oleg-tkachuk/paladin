@@ -47,6 +47,8 @@ if err != nil {
 }
 tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
 
+// An idempotency key is sent automatically; set one to make a repeat of
+// the same logical operation, across processes, return the first answer.
 ctx = paladin.WithIdempotencyKey(ctx, requestID)
 resp, err := tenants.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantRequest{ /* … */ }))
 ```
@@ -67,12 +69,20 @@ resp, err := tenants.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantR
 | Option | Does |
 | --- | --- |
 | `WithBearerToken(token)` | Sends `Authorization: Bearer <token>`. An API token (`paladin_pat_…`) and an OIDC JWT are both accepted there. |
+| `WithAPIToken(token)` | Sends an API token in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. |
 | `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`. Can be combined with a bearer token. |
-| `WithRetries(attempts, baseDelay)` | Retries a unary call on `Unavailable` or `ResourceExhausted`, up to `attempts` calls in total, doubling the delay from `baseDelay` (zero means `DefaultRetryBaseDelay`, 100ms) up to `DefaultRetryMaxDelay` (5s). Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and any call whose context carries an idempotency key. Streams are never retried. |
+| `WithHeader(name, value)` | Sends a header on every call, replacing what the SDK would send there — `User-Agent` included, which is `paladin-sdk-go/<module version>` by default. |
+| `WithRetries(attempts, baseDelay)` | Retries a unary call on `Unavailable` or `ResourceExhausted`, up to `attempts` calls in total. The wait is drawn at random up to a ceiling that doubles from `baseDelay` (zero means `DefaultRetryBaseDelay`, 100ms) to `DefaultRetryMaxDelay` (5s), and is never shorter than the server's `Retry-After`. A retry that could not start before the context's deadline is not made, and the server's error is returned. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. |
 | `WithHTTPClient(c)` | Replaces `http.DefaultClient` — for timeouts, proxies, custom TLS. |
 | `WithClientOptions(opts...)` | Passes Connect options through, e.g. `connect.WithGRPC()` or `connect.WithSendGzip()`. |
 
 ### Idempotency
+
+A unary call the contract does not declare side-effect free or idempotent
+sends an `Idempotency-Key` of its own: the context's when it has one, else the
+request's `idempotency_key` field when set, else a fresh random key. Every
+retry of that call sends the same key. The server requires one on `Create*`
+and `Issue*` calls and answers a repeated key with the first response.
 
 | Function | Does |
 | --- | --- |
@@ -82,7 +92,8 @@ resp, err := tenants.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantR
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and
-`HeaderIdempotencyKey` are the names the server reads. The server imports
+`HeaderIdempotencyKey` are the names the server reads; `HeaderUserAgent` and
+`HeaderRetryAfter` are the two the SDK sends and reads besides. The server imports
 them from here, so the two cannot drift.
 
 ## Services and methods

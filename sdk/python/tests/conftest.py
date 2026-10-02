@@ -29,6 +29,8 @@ class Recorder:
     headers: list[dict[str, str]] = field(default_factory=list)
     failures: int = 0
     fail_code: Code = Code.UNAVAILABLE
+    # Sent as Retry-After with each injected failure, when set.
+    retry_after: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def record(self, ctx: RequestContext) -> None:
@@ -36,6 +38,8 @@ class Recorder:
             self.headers.append({k.lower(): v for k, v in ctx.request_headers().items()})
             if self.failures > 0:
                 self.failures -= 1
+                if self.retry_after is not None:
+                    ctx.response_headers()["Retry-After"] = self.retry_after
                 raise ConnectError(self.fail_code, "injected")
 
     @property

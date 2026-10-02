@@ -7,13 +7,16 @@ from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
 from paladin import (
+    HEADER_API_TOKEN,
     HEADER_AUTHORIZATION,
     HEADER_CAPABILITY,
     HEADER_IDEMPOTENCY_KEY,
+    HEADER_USER_AGENT,
     Client,
     Retry,
     current_idempotency_key,
     idempotency_key,
+    user_agent,
 )
 from paladin.iam.v1 import auth_service_pb2, health_service_pb2
 from paladin.iam.v1.auth_service_connect import AuthServiceClientSync
@@ -21,6 +24,9 @@ from paladin.iam.v1.health_service_connect import HealthServiceClient, HealthSer
 
 # Keeps retry tests fast; a zero delay is refused by Retry.
 FAST = Retry(attempts=3, base_delay=0.001, max_delay=0.001)
+# A call budget that an hour's wait cannot fit in, and a retry of a few
+# milliseconds can.
+CALL_TIMEOUT_MS = 2000
 
 
 def _health(client: Client) -> HealthServiceClientSync:
@@ -77,7 +83,9 @@ def test_idempotency_key_is_scoped_to_the_block(server) -> None:  # type: ignore
 
     assert current_idempotency_key() is None
     auth.login(auth_service_pb2.LoginRequest())
-    assert HEADER_IDEMPOTENCY_KEY.lower() not in server.recorder.last
+    # Outside the block the call still has side effects, so it gets its own.
+    minted = server.recorder.last[HEADER_IDEMPOTENCY_KEY.lower()]
+    assert minted and minted != "key-1"
 
 
 def test_empty_idempotency_key_is_none() -> None:
@@ -92,7 +100,7 @@ def test_empty_idempotency_key_is_none() -> None:
         ("get_version", False, 5, Code.UNAVAILABLE, 3, True),
         ("get_version", False, 1, Code.RESOURCE_EXHAUSTED, 2, False),
         ("get_version", False, 1, Code.INVALID_ARGUMENT, 1, True),
-        ("login", False, 1, Code.UNAVAILABLE, 1, True),
+        ("login", False, 1, Code.UNAVAILABLE, 2, False),
         ("login", True, 1, Code.UNAVAILABLE, 2, False),
     ],
     ids=[
@@ -100,7 +108,7 @@ def test_empty_idempotency_key_is_none() -> None:
         "side-effect free, gives up after attempts",
         "rate limited is transient",
         "permanent error is not retried",
-        "mutating call without a key is not retried",
+        "mutating call carries its own key and is retried",
         "mutating call with a key is retried",
     ],
 )
@@ -150,3 +158,64 @@ def test_async_client_sends_credentials_and_retries(server) -> None:  # type: ig
     asyncio.run(call())
     assert server.recorder.calls == 2
     assert server.recorder.last[HEADER_AUTHORIZATION.lower()] == "Bearer paladin_pat_abc"
+
+
+def test_mutating_call_keeps_one_key_across_retries(server) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 2
+    _auth(Client(server.url, retry=FAST)).login(auth_service_pb2.LoginRequest())
+    keys = {h[HEADER_IDEMPOTENCY_KEY.lower()] for h in server.recorder.headers}
+    assert len(server.recorder.headers) == 3
+    assert len(keys) == 1, f"retries of one call sent different keys: {keys}"
+
+
+def test_each_mutating_call_gets_its_own_key(server) -> None:  # type: ignore[no-untyped-def]
+    auth = _auth(Client(server.url))
+    auth.login(auth_service_pb2.LoginRequest())
+    auth.login(auth_service_pb2.LoginRequest())
+    first, second = (h[HEADER_IDEMPOTENCY_KEY.lower()] for h in server.recorder.headers)
+    assert first != second
+
+
+def test_retry_honours_retry_after(server) -> None:  # type: ignore[no-untyped-def]
+    an_hour = "3600"
+    server.recorder.failures = 1
+    server.recorder.fail_code = Code.RESOURCE_EXHAUSTED
+    server.recorder.retry_after = an_hour
+    health = HealthServiceClientSync(
+        server.url,
+        interceptors=Client(server.url, retry=FAST).interceptors(),
+        timeout_ms=CALL_TIMEOUT_MS,
+    )
+    with pytest.raises(ConnectError) as err:
+        health.get_version(health_service_pb2.GetVersionRequest())
+    assert err.value.code == Code.RESOURCE_EXHAUSTED
+    assert server.recorder.calls == 1, "Retry-After was ignored"
+
+
+def test_retry_not_attempted_past_the_timeout(server) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 10
+    slow = Retry(attempts=10, base_delay=3600.0, max_delay=3600.0)
+    health = HealthServiceClientSync(
+        server.url,
+        interceptors=Client(server.url, retry=slow).interceptors(),
+        timeout_ms=CALL_TIMEOUT_MS,
+    )
+    with pytest.raises(ConnectError) as err:
+        health.get_version(health_service_pb2.GetVersionRequest())
+    assert err.value.code == Code.UNAVAILABLE
+    assert server.recorder.calls == 1
+
+
+def test_options_reach_the_server(server) -> None:  # type: ignore[no-untyped-def]
+    client = Client(server.url, api_token="paladin_pat_xyz", headers={"X-Custom": "v"})
+    _health(client).get_version(health_service_pb2.GetVersionRequest())
+    sent = server.recorder.last
+    assert sent[HEADER_API_TOKEN.lower()] == "paladin_pat_xyz"
+    assert sent["x-custom"] == "v"
+    assert sent[HEADER_USER_AGENT.lower()].startswith("paladin-sdk-python/")
+
+
+def test_user_agent_names_the_installed_version() -> None:
+    from importlib import metadata
+
+    assert user_agent() == f"paladin-sdk-python/{metadata.version('paladin-sdk')}"
