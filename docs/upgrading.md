@@ -58,6 +58,11 @@ tree with itself and passes without checking anything.
   old ones close once idle. A pyqwest-only setting passed to
   `TLS.sync_transport()` still works, with a `DeprecationWarning`, for one
   release.
+- **Python: the exit abort reported against 0.17 did not reproduce.** 200
+  runs each on macOS — 0.17.0, 0.17.0 with grpcio, and this release over
+  mutual TLS — exited cleanly, so nothing changed for it. A stress test now
+  makes and drops clients and transfers in fresh interpreters, 200 times per
+  CI run, and fails on any abort.
 
 ## Unreleased — the SDKs answer a consumer's review
 
