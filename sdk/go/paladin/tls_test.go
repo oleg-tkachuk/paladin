@@ -427,11 +427,33 @@ func TestTLSMinVersion(t *testing.T) {
 // A connection kept alive across a rotation is closed once idle, so the next
 // call presents the new certificate rather than reusing the old handshake.
 func TestTLSRetiresAKeptAliveConnectionAfterARotation(t *testing.T) {
+	for _, h2 := range []bool{false, true} {
+		t.Run(map[bool]string{false: "HTTP/1.1", true: "HTTP/2"}[h2], func(t *testing.T) {
+			testRetiresAfterARotation(t, h2)
+		})
+	}
+}
+
+func testRetiresAfterARotation(t *testing.T, h2 bool) {
 	ca := newAuthority(t)
 	first, second := ca.issue(t, true, nil, nil), ca.issue(t, true, nil, nil)
 	dir := t.TempDir()
 	f := writeFiles(t, dir, ca.pem, first)
-	keepAlive := func(srv *httptest.Server) { srv.Config.SetKeepAlivesEnabled(true) }
+	var (
+		mu     sync.Mutex
+		protos []string
+	)
+	keepAlive := func(srv *httptest.Server) {
+		srv.Config.SetKeepAlivesEnabled(true)
+		srv.EnableHTTP2 = h2
+		srv.Config.ConnState = func(c net.Conn, state http.ConnState) {
+			if tc, ok := c.(*tls.Conn); ok && state == http.StateActive {
+				mu.Lock()
+				protos = append(protos, tc.ConnectionState().NegotiatedProtocol)
+				mu.Unlock()
+			}
+		}
+	}
 	h, url := serveMTLSWith(t, ca, ca.issue(t, false, loopback, nil), keepAlive)
 	p, err := paladin.Connect(paladin.Endpoints{IAM: url},
 		paladin.WithTLS(paladin.TLS{CAFile: f.ca, CertFile: f.cert, KeyFile: f.key, ReloadInterval: reloadNow}))
@@ -457,5 +479,10 @@ func TestTLSRetiresAKeptAliveConnectionAfterARotation(t *testing.T) {
 	want := []string{first.serial.String(), first.serial.String(), second.serial.String()}
 	if !slices.Equal(h.serials, want) {
 		t.Errorf("server saw %v, want %v: the connection from before the rotation was reused", h.serials, want)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if h2 && (len(protos) == 0 || protos[0] != "h2") {
+		t.Errorf("negotiated %v, want h2: the test did not exercise HTTP/2", protos)
 	}
 }
