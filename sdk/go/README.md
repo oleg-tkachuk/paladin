@@ -8,25 +8,15 @@ Two parts:
 
 - `gen/` — protobuf types and Connect clients generated from
   [`proto/`](../../proto). The service clients are these, unwrapped.
-- `paladin/` — a thin client that holds what every call needs: one plane's
-  base URL, credentials, the idempotency key, and retries for calls that are
-  safe to repeat.
+- `paladin/` — three layers over them. What every call needs: credentials and
+  sessions, idempotency keys, retries. `Connect`, a client for every service
+  of each plane. And what takes more than one call: paging, waiting on an
+  operation, update masks, uploads and downloads.
 
 Only this module's own dependencies come with it — protobuf, Connect and the
 annotation packages the stubs import. Nothing of the server.
 
-## Planes
-
-Paladin serves three planes on separate listeners. Create one `paladin.Client`
-per plane you talk to, and build that plane's service clients from it.
-
-| Plane | Package | Services |
-| --- | --- | --- |
-| Admin | `gen/paladin/admin/v1/paladinadminv1connect` | tenants, buckets, backends, policies, quotas, tokens, audit |
-| Data | `gen/paladin/data/v1/paladindatav1connect` | objects, multipart uploads, tags, batches, presigning |
-| IAM | `gen/paladin/iam/v1/paladiniamv1connect` | login, tokens, users, health |
-
-## Example
+## Quick start
 
 ```go
 import (
@@ -35,22 +25,48 @@ import (
 	"connectrpc.com/connect"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
-	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-c, err := paladin.New("https://admin.paladin.example",
-	paladin.WithBearerToken(apiToken),
-	paladin.WithRetries(3, 0))
+session, err := paladin.NewSession(ctx, iamURL, subject, password)
 if err != nil {
 	return err
 }
-tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+p, err := paladin.Connect(paladin.Endpoints{Data: dataURL, Admin: adminURL, IAM: iamURL},
+	paladin.WithTokens(session), paladin.WithRetries(3, 0))
+if err != nil {
+	return err
+}
+// Every service of every plane; each call carries the token for its plane
+// and, when it has side effects, an idempotency key.
+tenant, err := p.Admin.Tenant.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantRequest{ /* … */ }))
+```
 
-// An idempotency key is sent automatically; set one to make a repeat of
-// the same logical operation, across processes, return the first answer.
-ctx = paladin.WithIdempotencyKey(ctx, requestID)
-resp, err := tenants.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantRequest{ /* … */ }))
+With an API token instead of a session, pass
+`paladin.WithTokens(paladin.StaticToken(apiToken))`.
+
+## Planes
+
+Paladin serves three planes on separate listeners, and a token is issued for
+one of them. `Connect` builds a client for every service of each plane you
+give a URL — `p.Data`, `p.Admin`, `p.IAM`, nil for a plane left out — and
+sends each the token for its own audience. The fields are the services'
+names without `Service`: `p.Data.Object`, `p.Admin.EventSubscription`,
+`p.IAM.Auth`. They are generated from the contract (`go generate
+./paladin`), and a test fails when they fall behind it.
+
+| Plane | Package | Services |
+| --- | --- | --- |
+| Admin | `gen/paladin/admin/v1/paladinadminv1connect` | tenants, buckets, backends, policies, quotas, tokens, audit |
+| Data | `gen/paladin/data/v1/paladindatav1connect` | objects, multipart uploads, tags, batches, presigning |
+| IAM | `gen/paladin/iam/v1/paladiniamv1connect` | login, tokens, users, health |
+
+For one plane alone, `New` gives the pieces the generated `New…ServiceClient`
+constructors take:
+
+```go
+c, err := paladin.New(adminURL, paladin.WithTokenSource(session, paladin.AudienceAdmin))
+tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
 ```
 
 ## `paladin` package
@@ -88,6 +104,28 @@ and `Issue*` calls and answers a repeated key with the first response.
 | --- | --- |
 | `WithIdempotencyKey(ctx, key) context.Context` | Every call made with the returned context sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. A response that carries a credential (a minted API or capability token, a generated password) is not replayed: the repeat returns `AlreadyExists`, because the credential is delivered once and not stored. Reuse the key only for the same logical operation. |
 | `IdempotencyKey(ctx) (string, bool)` | The key attached to `ctx`; an empty key counts as none. |
+
+### Tokens
+
+| Name | Does |
+| --- | --- |
+| `NewSession(ctx, iamURL, subject, password, opts...) (*Session, error)` | Signs in at the IAM plane and keeps the refresh token. `Token(ctx, audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TokenRefreshMargin` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Safe for concurrent use; concurrent callers wait for one mint. |
+| `SessionFromRefreshToken(iamURL, refreshToken, opts...)` | Resumes from a stored refresh token; cannot sign in again when it expires. `(*Session).RefreshToken()` is the current one to store — refreshing rotates it. |
+| `WithSessionClock(now)` | Replaces `time.Now`, for tests. |
+| `StaticToken(token)` | The same token for every plane: an API token, or a JWT from elsewhere. |
+| `WithTokens(ts)` | With `Connect`: each plane gets `ts`'s token for its own audience. `New` refuses it with `ErrNoAudience`. |
+| `WithTokenSource(ts, audience)` | One plane's client: the token for `audience`. A call refused as `Unauthenticated` is made once more with a fresh token — the server authenticates before anything else, so the first attempt changed nothing. |
+| `AudienceData`, `AudienceAdmin`, `AudienceIAM` | The audience names; the server imports them from here. |
+
+### Workflows
+
+| Name | Does |
+| --- | --- |
+| `Pages(ctx, call, req, items) iter.Seq2[Item, error]` | Calls a List RPC page by page, following `next_page_token`, and yields every item; `items` picks them out of a response, e.g. `(*datav1.ListObjectsResponse).GetObjects`. The first error is yielded and ends it; leaving the loop makes no further calls. `ErrNotPaged` for an RPC without `page`. |
+| `Wait(ctx, get) (Op, error)` | Polls `get` until the operation is done, from `DefaultPollInterval` (500ms) doubling to `DefaultMaxPollInterval` (10s). An operation that failed comes back with an `*OperationError` carrying its status; `Code()` is the Connect code. `ctx` bounds the wait. Works for both planes' `Operation`. |
+| `Mask[M](paths...) (*fieldmaskpb.FieldMask, error)` | An update mask for `M` from proto field names, nested ones with `.`, each checked against `M`'s descriptor: `ErrUnknownMaskPath` for one it lacks. |
+| `Upload(ctx, p.Data, UploadInput, UploadOptions) (*datav1.Object, error)` | Uploads `Body` (an `io.ReaderAt`: `*os.File`, `*bytes.Reader`) of `Size` bytes and completes it. Up to `MultipartThreshold` (default `DefaultMultipartThreshold`, 8 MiB) one presigned PUT; above it multipart, `PartConcurrency` parts at a time (default 3), aborted if any part fails. A refused transfer is a `*TransferError`. The presigned requests go to storage, not Paladin, through `UploadOptions.HTTPClient`. |
+| `Download(ctx, p.Data, name, httpClient) (io.ReadCloser, *datav1.Object, error)` | Opens the object's content through a presigned URL; close the reader. |
 
 ### Header names
 
@@ -151,5 +189,6 @@ from the tables above.
 ## Versioning
 
 The SDK is versioned with the API contract: `sdk/go/vX.Y.Z` is tagged beside
-`api/vX.Y.Z`. Pre-1.0, a minor version may break the contract; see
+`api/vX.Y.Z`. Pre-1.0, a minor version may break the contract or this
+package's own API; see
 [`docs/upgrading.md`](../../docs/upgrading.md).

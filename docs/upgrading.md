@@ -42,6 +42,32 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## v0.12.0 — the SDKs sign in, connect every plane, and stamp idempotency keys
+
+The contract gains one RPC, `EventSubscriptionService.RedriveFailedDeliveries`;
+nothing in it changes. The SDKs change, and three of the changes break code
+written against 0.11 (ADR-0018):
+
+- **Every call with side effects carries an `Idempotency-Key`.** A unary call
+  whose `idempotency_level` is unknown gets the context's key, else its
+  request's `idempotency_key` field, else a fresh one, kept across retries.
+  Code that counted on a call going out without one — to make a repeat
+  create a second resource — now gets the first response back. Set a fresh
+  key per logical operation to keep that behaviour.
+- **Such calls are now retried** on `Unavailable` and `ResourceExhausted`
+  under `WithRetries`/`Retry`, since they carry a key; before, only calls
+  made with an explicit key were.
+- **A retry that cannot start before the deadline is not made**, and the
+  server's error is returned rather than the context's. Code that matched
+  `context.DeadlineExceeded` after a retried call now sees the server's code.
+
+Added: `Session`/`AsyncSession` and `StaticToken`, `Connect`/`connect` with a
+client for every service of each plane, `Pages`, `Wait`, `Mask`, `Upload`,
+`Download`; `WithAPIToken`/`api_token`, `WithHeader`/`headers`, and a
+`User-Agent` naming the SDK. The Python `Client` takes `token_source` and
+`audience`. Retries wait a random share of the doubling ceiling and never less
+than the server's `Retry-After`.
+
 ## Unreleased — clients read the contract; the three prefix lists are gone
 
 No proto change and no wire change. `backend/internal/rpcmeta` answers "is this
