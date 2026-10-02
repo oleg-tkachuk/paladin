@@ -5,25 +5,32 @@
 // accumulation, and the data fetch itself stay in the page — they depend on the
 // loaded objects, which this hook never sees.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { celString } from "@/lib/cel";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { buildObjectFilter } from "@/lib/objectFilter";
 import { getNextSort, type SortState } from "./_view";
 
 export interface ObjectListState {
   status: string | undefined;
   setStatus: (value: string | undefined) => void;
   tagFilter: string | undefined;
+  /** Content-type category (CONTENT_TYPE_OPTIONS value), URL param `type`. */
+  typeFilter: string | undefined;
+  /** Metadata facet "key=value", URL param `meta`. */
+  metaFilter: string | undefined;
   search: string;
   setSearch: (value: string) => void;
   recursive: boolean;
   setRecursive: (value: boolean) => void;
   sort: SortState;
-  /** Derived CEL predicate over the object list (status + search + tag). */
+  /** Derived CEL predicate over the object list (status, search, tag, type,
+   *  metadata). */
   filter: string;
   handleSort: (column: string) => void;
   handleStatusChange: (value: string | undefined) => void;
   handleTagChange: (value: string | undefined) => void;
+  handleTypeChange: (value: string | undefined) => void;
+  handleMetaChange: (value: string | undefined) => void;
   handleSearchChange: (value: string) => void;
   handleRecursiveChange: (value: boolean) => void;
 }
@@ -43,6 +50,12 @@ export function useObjectListState(): ObjectListState {
   // BACKLOG.
   const [tagFilter, setTagFilter] = useState<string | undefined>(
     searchParams.get("tag") || undefined,
+  );
+  const [typeFilter, setTypeFilter] = useState<string | undefined>(
+    searchParams.get("type") || undefined,
+  );
+  const [metaFilter, setMetaFilter] = useState<string | undefined>(
+    searchParams.get("meta") || undefined,
   );
   const [search, setSearch] = useState(searchParams.get("search") || "");
   // Trails `search` by 300ms (see the debounce effect below); feeds
@@ -90,6 +103,16 @@ export function useObjectListState(): ObjectListState {
     syncToUrl({ tag: value });
   };
 
+  const handleTypeChange = (value: string | undefined) => {
+    setTypeFilter(value);
+    syncToUrl({ type: value });
+  };
+
+  const handleMetaChange = (value: string | undefined) => {
+    setMetaFilter(value);
+    syncToUrl({ meta: value });
+  };
+
   const handleSearchChange = (value: string) => {
     setSearch(value);
   };
@@ -125,38 +148,31 @@ export function useObjectListState(): ObjectListState {
     syncToUrl({ recursive: value ? "true" : undefined });
   };
 
-  // Every literal goes through celString. These three values all come out of
-  // the QUERY STRING — status, tag and search are read from searchParams above
-  // — so they are attacker-supplied text being spliced into an expression the
-  // server compiles.
+  // Every value here comes out of the QUERY STRING, so it is attacker-supplied
+  // text headed for an expression the server compiles. buildObjectFilter
+  // passes every literal through celString and maps the content type through
+  // a fixed list; its tests, and this hook's, hold the escaping.
   //
-  // What was here: `state == '${status}'` with no escaping at all, and a
-  // `replace(/'/g, …)` for the other two that handled the quote and not the
-  // backslash. A URL ending its status in a backslash escaped the closing
-  // quote; one carrying `x' || true || '` wrote its own conjunct. The blast
-  // radius is small — the filter runs inside the caller's own tenant and
-  // collection, so it can only widen what that caller may already list — but
-  // "small" is not the same as "intended", and a filter nobody can predict is
-  // not a filter.
-  const filterParts: string[] = [];
-  if (status) filterParts.push(`state == ${celString(status)}`);
-  if (debouncedSearch.length > 2)
-    filterParts.push(`key.contains(${celString(debouncedSearch)})`);
-  if (tagFilter) {
-    // Split on the FIRST '=' only — tag values may themselves contain '='.
-    const eq = tagFilter.indexOf("=");
-    if (eq > 0) {
-      filterParts.push(
-        `tags[${celString(tagFilter.slice(0, eq))}] == ${celString(tagFilter.slice(eq + 1))}`,
-      );
-    }
-  }
-  const filter = filterParts.join(" && ");
+  // What was here once: `state == '${status}'` with no escaping at all, and a
+  // `replace(/'/g, …)` that handled the quote and not the backslash. A URL
+  // ending its status in a backslash escaped the closing quote; one carrying
+  // `x' || true || '` wrote its own conjunct. The blast radius is small — the
+  // filter runs inside the caller's own tenant and collection — but a filter
+  // nobody can predict is not a filter.
+  const filter = buildObjectFilter({
+    status,
+    search: debouncedSearch,
+    tag: tagFilter,
+    type: typeFilter,
+    meta: metaFilter,
+  });
 
   return {
     status,
     setStatus,
     tagFilter,
+    typeFilter,
+    metaFilter,
     search,
     setSearch,
     recursive,
@@ -166,6 +182,8 @@ export function useObjectListState(): ObjectListState {
     handleSort,
     handleStatusChange,
     handleTagChange,
+    handleTypeChange,
+    handleMetaChange,
     handleSearchChange,
     handleRecursiveChange,
   };

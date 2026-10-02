@@ -11,32 +11,39 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
+import { useState } from "react";
 import { Select } from "@/components/ui/Select";
 import { Dropdown } from "@/components/ui/Dropdown";
+import { CONTENT_TYPE_OPTIONS } from "@/lib/objectFilter";
 
 interface SavedView {
   name: string;
   filters: {
     search?: string;
     status?: string;
+    tag?: string;
+    type?: string;
+    meta?: string;
     recursive?: boolean;
   };
 }
 
 /**
- * The object-list filter values, collapsed into one object. `tag` is the
- * selected "key=value" facet (undefined = none); `status` is undefined when
- * unfiltered.
+ * The object-list filter values, collapsed into one object. `tag` and `meta`
+ * are "key=value" facets and `type` a content-type category; each is
+ * undefined when unfiltered, as is `status`.
  */
 export interface FilterState {
   search: string;
   status: string | undefined;
   tag: string | undefined;
+  type: string | undefined;
+  meta: string | undefined;
   recursive: boolean;
 }
 
 interface ObjectsFilterBarProps {
-  /** The four filter values, bundled. */
+  /** The filter values, bundled. */
   filter: FilterState;
   /** Apply a single-field patch — the bar always changes one field at a time. */
   onFilterChange: (patch: Partial<FilterState>) => void;
@@ -85,7 +92,7 @@ export function ObjectsFilterBar({
 }: ObjectsFilterBarProps) {
   // Re-derive the per-field values + setters from the bundled filter so the
   // markup below stays unchanged. Each setter emits a single-field patch.
-  const { search, status, tag, recursive } = filter;
+  const { search, status, tag, type, meta, recursive } = filter;
   const onSearchChange = (value: string) => onFilterChange({ search: value });
   const onStatusChange = (value: string | undefined) =>
     onFilterChange({ status: value });
@@ -93,6 +100,8 @@ export function ObjectsFilterBar({
     onFilterChange({ tag: value });
   const onRecursiveChange = (value: boolean) =>
     onFilterChange({ recursive: value });
+  const onTypeChange = (value: string | undefined) =>
+    onFilterChange({ type: value });
   return (
     <div className="flex flex-wrap items-center gap-4 bg-card/30 border border-border rounded-2xl p-4">
       <div className="flex-1 min-w-60 relative group">
@@ -146,6 +155,24 @@ export function ObjectsFilterBar({
             onChange={(val) => onTagChange(val === "all" ? undefined : val)}
           />
         )}
+
+        <Select
+          aria-label="Filter by content type"
+          options={[
+            { value: "all", label: "All Types" },
+            ...CONTENT_TYPE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: o.label,
+            })),
+          ]}
+          value={type || "all"}
+          onChange={(val) => onTypeChange(val === "all" ? undefined : val)}
+        />
+
+        <MetadataFilterInput
+          value={meta}
+          onCommit={(value) => onFilterChange({ meta: value })}
+        />
 
         <Dropdown align="right" width="w-72">
           <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all">
@@ -238,5 +265,53 @@ export function ObjectsFilterBar({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * A "key=value" metadata facet. Applied on Enter or when the field loses
+ * focus, not per keystroke: every applied value is a list request, and a
+ * half-typed key matches nothing. Whitespace around the key is dropped (keys
+ * are identifiers someone typed); the value is kept as typed. Clearing the
+ * field clears the filter; text without "=" is left in the field, unapplied.
+ */
+export function MetadataFilterInput({
+  value,
+  onCommit,
+}: {
+  value: string | undefined;
+  onCommit: (value: string | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const [synced, setSynced] = useState(value);
+  // A saved view or the URL can change the applied value under the field.
+  if (value !== synced) {
+    setSynced(value);
+    setDraft(value ?? "");
+  }
+  const commit = () => {
+    if (draft.trim() === "") {
+      if (value !== undefined) onCommit(undefined);
+      return;
+    }
+    const eq = draft.indexOf("=");
+    const key = eq > 0 ? draft.slice(0, eq).trim() : "";
+    if (!key) return;
+    const next = `${key}=${draft.slice(eq + 1)}`;
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <input
+      type="text"
+      aria-label="Filter by metadata"
+      placeholder="metadata key=value"
+      className="w-44 bg-foreground/5 border border-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/50 transition-all"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+      }}
+    />
   );
 }

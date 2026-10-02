@@ -60,4 +60,16 @@ describe("useObjectListState filter escaping", () => {
     expect(unescapedQuotes(filter)).toBe(4); // two literals, key and value
     expect(filter).toBe('tags["k\\""] == "v\\" || true || \\""');
   });
+
+  it("reads content type and metadata from the URL, escaped or ignored", () => {
+    expect(filterFor("type=image")).toBe('content_type.startsWith("image/")');
+    expect(filterFor("type=" + encodeURIComponent('image" || true || "'))).toBe(
+      "",
+    );
+    const filter = filterFor(
+      "meta=" + encodeURIComponent('k"=v" || true || "'),
+    );
+    expect(unescapedQuotes(filter)).toBe(4);
+    expect(filter).toBe('metadata["k\\""] == "v\\" || true || \\""');
+  });
 });
