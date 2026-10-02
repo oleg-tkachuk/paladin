@@ -1,0 +1,86 @@
+name: Badges
+
+# Publishes the stack versions the README's badges show — Go, PostgreSQL,
+# Connect RPC, Cedar, MCP, Next.js — to the `badges` branch, read from the
+# files that pin them (scripts/badge-versions.sh). shields.io reads JSON, YAML
+# and TOML, but not go.mod, so the versions are published as one JSON file
+# there. The branch holds only that file; main is never written.
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/go.mod
+      - frontend/package.json
+      - backend/deploy/docker-compose.yaml
+      - scripts/badge-versions.sh
+      - .github/workflows/badges.yaml
+  # A first publish, or a re-publish, without a change to those files.
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: badges
+  cancel-in-progress: true
+
+env:
+  # renovate: datasource=github-releases depName=mikefarah/yq
+  YQ_VERSION: "v4.53.6"
+  BADGES_BRANCH: badges
+  VERSIONS_FILE: versions.json
+
+jobs:
+  publish:
+    name: Publish the badge versions
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # push the badges branch
+    steps:
+      # Credentials kept: the last step pushes the badges branch, and nothing
+      # else this job runs is third-party code.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true # zizmor: ignore[artipacked]
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      # The runner image ships a yq, but not a version this repository chose.
+      - name: Set up yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Read the versions
+        run: ./scripts/badge-versions.sh >"$RUNNER_TEMP/$VERSIONS_FILE"
+
+      # An orphan branch with one file; a commit only when a version moved.
+      - name: Publish them to the badges branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          dir="$RUNNER_TEMP/badges"
+          if git fetch --quiet origin "$BADGES_BRANCH"; then
+            git worktree add --quiet "$dir" FETCH_HEAD
+            git -C "$dir" switch --quiet -C "$BADGES_BRANCH"
+          else
+            git worktree add --quiet --detach "$dir"
+            git -C "$dir" switch --quiet --orphan "$BADGES_BRANCH"
+          fi
+          cp "$RUNNER_TEMP/$VERSIONS_FILE" "$dir/$VERSIONS_FILE"
+          git -C "$dir" add "$VERSIONS_FILE"
+          if git -C "$dir" diff --cached --quiet; then
+            echo "badge versions unchanged"
+            exit 0
+          fi
+          git -C "$dir" commit --quiet -m "chore(badges): publish the stack versions"
+          git -C "$dir" push --quiet origin "$BADGES_BRANCH"
+          cat "$dir/$VERSIONS_FILE"

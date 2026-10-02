@@ -251,6 +251,7 @@ tasks:
       - task: verify:publish-target
       - task: verify:new-release-tag
       - task: verify:stream-release-notes
+      - task: verify:badge-versions
       - task: verify:release-head
       - task: verify:release-rules
       - task: verify:go-module-paths
@@ -521,6 +522,11 @@ tasks:
     # already existed, and fail.
     cmds:
       - ./scripts/new-release-tag.test.sh
+
+  verify:badge-versions:
+    desc: "Fail when the README's stack badges would read a version from the wrong place"
+    cmds:
+      - ./scripts/badge-versions.test.sh
 
   verify:stream-release-notes:
     desc: "Fail when an SDK or capability release lists commits that are not its own"
