@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import threading
+import base64
+import hashlib
+import io
 import time
-import urllib.error
-import urllib.request
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
+from concurrent.futures import wait as wait_futures
 from typing import IO, Any, TypeVar
 
 from connectrpc.code import Code
@@ -19,6 +20,14 @@ from google.rpc import code_pb2
 from paladin.common.v1 import resource_pb2
 from paladin.data.v1 import multipart_service_pb2, object_service_pb2, types_pb2
 from paladin.facade import DataPlane
+from paladin.transfer import (
+    ObjectReader,
+    Transfer,
+    TransferError,
+    default_transfer,
+    range_header,
+    require_partial,
+)
 
 T = TypeVar("T")
 M = TypeVar("M", bound=Message)
@@ -40,10 +49,12 @@ DEFAULT_PART_CONCURRENCY = 3
 _PUT = "PUT"
 _GET = "GET"
 _HEADER_CONTENT_TYPE = "Content-Type"
-_HEADER_ETAG = "ETag"
+_HEADER_CONTENT_LENGTH = "Content-Length"
+_HEADER_ETAG = "etag"
+_HEADER_RANGE = "Range"
 _ETAG_QUOTE = '"'
-# How much of a refused transfer's body an error quotes.
-_ERROR_BODY_LIMIT = 512
+# How much of a stream one read takes while it is sent.
+_STREAM_CHUNK = 64 << 10
 
 
 def pages(call: Callable[[Any], Any], request: Message, items: str) -> Iterator[Any]:
@@ -182,48 +193,29 @@ def mask(message: type[Message], *paths: str) -> field_mask_pb2.FieldMask:
     return field_mask_pb2.FieldMask(paths=list(paths))
 
 
-class TransferError(Exception):
-    """A presigned request that storage refused."""
-
-    def __init__(self, method: str, status: int, body: str) -> None:
-        self.method, self.status, self.body = method, status, body
-        super().__init__(f"storage refused {method}: {status} {body}")
-
-
-def _send(url: Any, method: str, body: bytes | None, content_type: str = "") -> tuple[bytes, Any]:
-    """Send one presigned request; return the body and the headers."""
-    req = urllib.request.Request(url.url, data=body, method=url.method or method)
-    if content_type:
-        req.add_header(_HEADER_CONTENT_TYPE, content_type)
-    # Covered by the signature: storage refuses the request without them.
-    for name, value in url.required_headers.items():
-        req.add_header(name, value)
-    try:
-        with urllib.request.urlopen(req) as resp:  # a URL the server presigned
-            return resp.read(), resp.headers
-    except urllib.error.HTTPError as err:
-        raise TransferError(
-            req.get_method(), err.code, err.read(_ERROR_BODY_LIMIT).decode(errors="replace")
-        ) from err
+def _transfer(data: DataPlane) -> Transfer:
+    """The data plane's Transfer (``connect(transfer=…)``), else the default."""
+    return getattr(data, "transfer", None) or default_transfer()
 
 
 def _etag(headers: Any) -> str:
-    return str(headers.get(_HEADER_ETAG, "")).strip(_ETAG_QUOTE)
+    return str(headers.get(_HEADER_ETAG) or "").strip(_ETAG_QUOTE)
 
 
-class _Body:
-    """Reads ``length`` bytes at ``offset`` from bytes or a seekable file."""
+def _reader(body: bytes | IO[bytes]) -> IO[bytes]:
+    if isinstance(body, bytes | bytearray | memoryview):
+        return io.BytesIO(body)
+    return body
 
-    def __init__(self, body: bytes | IO[bytes]) -> None:
-        self._body = body
-        self._lock = threading.Lock()
 
-    def read(self, offset: int, length: int) -> bytes:
-        if isinstance(self._body, bytes | bytearray | memoryview):
-            return bytes(self._body[offset : offset + length])
-        with self._lock:
-            self._body.seek(offset)
-            return self._body.read(length)
+def _read_exactly(reader: IO[bytes], length: int) -> bytes:
+    got = bytearray()
+    while len(got) < length:
+        chunk = reader.read(length - len(got))
+        if not chunk:
+            raise ValueError(f"the upload body ended {length - len(got)} bytes short of its size")
+        got += chunk
+    return bytes(got)
 
 
 def upload(
@@ -239,15 +231,20 @@ def upload(
     multipart_threshold: int = DEFAULT_MULTIPART_THRESHOLD,
     part_concurrency: int = DEFAULT_PART_CONCURRENCY,
 ) -> types_pb2.Object:
-    """Store ``body`` (bytes, or a seekable binary file) as a new object and
-    return it once complete: one presigned PUT up to ``multipart_threshold``
-    bytes, multipart above it, whose failure aborts the session."""
+    """Store ``size`` bytes of ``body`` as a new object and return it once
+    complete. ``body`` is bytes or a binary file — seekable or not: a pipe, a
+    response body. It is read once, front to back, and never whole.
+
+    Up to ``multipart_threshold`` bytes one presigned PUT, which records the
+    content's SHA-256 on the object for ``download`` to verify; above it
+    multipart, ``part_concurrency`` parts in flight, whose failure aborts the
+    session. The requests go through the data plane's ``Transfer``."""
     if size <= 0:
         raise ValueError("upload size must be positive")
-    source = _Body(body)
+    reader = _reader(body)
     if size > multipart_threshold:
         return _upload_multipart(
-            data, parent, key, content_type, size, source, metadata, tags, part_concurrency
+            data, parent, key, content_type, size, reader, metadata, tags, part_concurrency
         )
     allocated = data.object.upload_object(
         object_service_pb2.UploadObjectRequest(
@@ -262,10 +259,26 @@ def upload(
         )
     )
     if not allocated.upload_url.url:
-        raise TransferError(_PUT, 0, "the server returned no upload URL")
-    _, headers = _send(allocated.upload_url, _PUT, source.read(0, size), content_type)
+        raise TransferError(_PUT, "", 0, "the server returned no upload URL")
+    digest = hashlib.sha256()
+
+    def content() -> Iterator[bytes]:
+        remaining = size
+        while remaining:
+            chunk = _read_exactly(reader, min(_STREAM_CHUNK, remaining))
+            digest.update(chunk)
+            remaining -= len(chunk)
+            yield chunk
+
+    headers = {_HEADER_CONTENT_TYPE: content_type, _HEADER_CONTENT_LENGTH: str(size)}
+    with _transfer(data).stream(_PUT, allocated.upload_url, headers, content()) as resp:
+        etag = _etag(resp.headers)
     return data.object.complete_object(
-        object_service_pb2.CompleteObjectRequest(name=allocated.object.name, etag=_etag(headers))
+        object_service_pb2.CompleteObjectRequest(
+            name=allocated.object.name,
+            etag=etag,
+            checksum_value=base64.b64encode(digest.digest()).decode(),
+        )
     )
 
 
@@ -275,7 +288,7 @@ def _upload_multipart(
     key: str,
     content_type: str,
     size: int,
-    source: _Body,
+    reader: IO[bytes],
     metadata: dict[str, str] | None,
     tags: dict[str, str] | None,
     concurrency: int,
@@ -294,27 +307,40 @@ def _upload_multipart(
     name, upload_id = init.object.name, init.upload_id
     part_size = init.recommended_part_size or DEFAULT_MULTIPART_THRESHOLD
     count = -(-size // part_size)
+    transfer = _transfer(data)
 
-    def send(index: int) -> types_pb2.CompletedPart:
+    def send(index: int, chunk: bytes) -> types_pb2.CompletedPart:
         signed = data.multipart_upload.presign_part(
             multipart_service_pb2.PresignPartRequest(
                 object_name=name, upload_id=upload_id, part_number=index + 1
             )
         )
-        offset = index * part_size
-        _, headers = _send(
-            signed.upload_url, _PUT, source.read(offset, min(part_size, size - offset))
-        )
-        etag = _etag(headers)
+        headers = {_HEADER_CONTENT_LENGTH: str(len(chunk))}
+        with transfer.stream(_PUT, signed.upload_url, headers, chunk) as resp:
+            etag = _etag(resp.headers)
         if not etag:
             raise TransferError(
-                _PUT, 0, f"part {index + 1} returned no ETag; storage must expose it"
+                _PUT, "", 0, f"part {index + 1} returned no ETag; storage must expose it"
             )
         return types_pb2.CompletedPart(part_number=index + 1, etag=etag)
 
+    workers = max(1, min(concurrency, count))
     try:
-        with ThreadPoolExecutor(max_workers=max(1, min(concurrency, count))) as pool:
-            parts = list(pool.map(send, range(count)))
+        # Parts are read here, in order, and handed to the pool: at most
+        # ``workers`` in flight and one more being read.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures: list[Future[types_pb2.CompletedPart]] = []
+            pending: set[Future[types_pb2.CompletedPart]] = set()
+            for index in range(count):
+                if len(pending) >= workers:
+                    done, pending = wait_futures(pending, return_when=FIRST_COMPLETED)
+                    for finished in done:
+                        finished.result()
+                chunk = _read_exactly(reader, min(part_size, size - index * part_size))
+                future = pool.submit(send, index, chunk)
+                futures.append(future)
+                pending.add(future)
+            parts = [f.result() for f in futures]
         return data.multipart_upload.complete_multipart_upload(
             multipart_service_pb2.CompleteMultipartUploadRequest(
                 object_name=name, upload_id=upload_id, parts=parts
@@ -334,10 +360,35 @@ def _upload_multipart(
         raise
 
 
-def download(data: DataPlane, name: str) -> bytes:
-    """The object's content, fetched through a presigned URL."""
+def download_stream(
+    data: DataPlane, name: str, *, offset: int = 0, length: int = 0
+) -> ObjectReader:
+    """The object's content as a file-like ``ObjectReader``, streamed: the
+    object is never held in memory whole. Close it, or use it in ``with``.
+
+    ``offset`` and ``length`` read a byte range — ``length`` 0 to the end;
+    ``RangeIgnoredError`` when storage answers with the whole object. A whole
+    read is verified against the object's size and recorded checksum
+    (``IntegrityError``)."""
+    if offset < 0 or length < 0:
+        raise ValueError("a range needs offset >= 0 and length >= 0")
     resp = data.object.download_object(object_service_pb2.DownloadObjectRequest(name=name))
     if not resp.download_url.url:
-        raise TransferError(_GET, 0, "the server returned no download URL")
-    content, _ = _send(resp.download_url, _GET, None)
-    return content
+        raise TransferError(_GET, "", 0, "the server returned no download URL")
+    ranged = offset != 0 or length != 0
+    headers = {_HEADER_RANGE: range_header(offset, length)} if ranged else {}
+    exchange = _transfer(data).stream(_GET, resp.download_url, headers)
+    got = exchange.__enter__()
+    try:
+        if ranged:
+            require_partial(got)
+    except BaseException:
+        exchange.__exit__(None, None, None)
+        raise
+    return ObjectReader(exchange, got, resp.object, verify=not ranged)
+
+
+def download(data: DataPlane, name: str, *, offset: int = 0, length: int = 0) -> bytes:
+    """``download_stream`` read whole: the content, or the range, as bytes."""
+    with download_stream(data, name, offset=offset, length=length) as reader:
+        return reader.read()

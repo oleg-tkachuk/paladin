@@ -42,6 +42,24 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## v0.14.0 — the Python SDK's transfers are declared once, stream and verify
+
+The contract does not change. The Python SDK's `upload` and `download` now
+match the Go SDK's, and break code written against 0.13:
+
+- **Presigned requests go through a `Transfer`.** Pass one to
+  `connect(…, transfer=paladin.Transfer(…))`; without it a shared default is
+  used. They no longer go through `urllib`, so a proxy or TLS setting made for
+  `urllib` no longer reaches them: give the `Transfer` a `transport`.
+- **Redirects are refused.** A redirect from storage is now a
+  `TransferError` with its 3xx status.
+- **`TransferError(method, host, status, body)`** gains `host`, the host the
+  request went to.
+- **A whole download is verified**: `IntegrityError` when the size or the
+  recorded checksum does not match. `download_stream` streams the content
+  instead of returning it whole; `download` still returns bytes.
+- **A single-PUT upload records its SHA-256** on the object.
+
 ## v0.13.0 — the Go SDK's transfers are declared once, stream and verify
 
 The contract does not change. The Go SDK's `Upload` and `Download` do, and

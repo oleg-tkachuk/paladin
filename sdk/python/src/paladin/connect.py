@@ -15,6 +15,7 @@ from paladin.facade import (
     DataPlane,
     IAMPlane,
 )
+from paladin.transfer import Transfer
 
 
 @dataclass(frozen=True)
@@ -52,45 +53,55 @@ def _client(url: str, audience: str, client_options: dict[str, Any]) -> Client:
 
 
 def connect(
-    endpoints: Endpoints, *, transport: dict[str, Any] | None = None, **client_options: Any
+    endpoints: Endpoints,
+    *,
+    transport: dict[str, Any] | None = None,
+    transfer: Transfer | None = None,
+    **client_options: Any,
 ) -> Paladin:
     """Synchronous clients for the planes in ``endpoints``.
 
     ``client_options`` are ``Client``'s — credentials, ``retry``, ``headers``;
     a ``token_source`` sends each plane the token for its own audience.
     ``transport`` is passed to every generated client: ``timeout_ms``,
-    ``http_client``, ``proto_json`` and the like.
+    ``http_client``, ``proto_json`` and the like. ``transfer`` sends the
+    presigned requests of ``upload`` and ``download``; a shared default when
+    left out.
     """
     extra = transport or {}
 
-    def plane(url: str | None, audience: str, kind: Any) -> Any:
+    def plane(url: str | None, audience: str, kind: Any, **more: Any) -> Any:
         if not url:
             return None
         client = _client(url, audience, client_options)
-        return kind(client.base_url, client.interceptors(), **extra)
+        return kind(client.base_url, client.interceptors(), **more, **extra)
 
     return Paladin(
-        data=plane(endpoints.data, AUDIENCE_DATA, DataPlane),
+        data=plane(endpoints.data, AUDIENCE_DATA, DataPlane, transfer=transfer),
         admin=plane(endpoints.admin, AUDIENCE_ADMIN, AdminPlane),
         iam=plane(endpoints.iam, AUDIENCE_IAM, IAMPlane),
     )
 
 
 def connect_async(
-    endpoints: Endpoints, *, transport: dict[str, Any] | None = None, **client_options: Any
+    endpoints: Endpoints,
+    *,
+    transport: dict[str, Any] | None = None,
+    transfer: Transfer | None = None,
+    **client_options: Any,
 ) -> AsyncPaladin:
     """``connect`` for asyncio: the generated async clients, and an
     ``AsyncSession`` as the token source."""
     extra = transport or {}
 
-    def plane(url: str | None, audience: str, kind: Any) -> Any:
+    def plane(url: str | None, audience: str, kind: Any, **more: Any) -> Any:
         if not url:
             return None
         client = _client(url, audience, client_options)
-        return kind(client.base_url, client.async_interceptors(), **extra)
+        return kind(client.base_url, client.async_interceptors(), **more, **extra)
 
     return AsyncPaladin(
-        data=plane(endpoints.data, AUDIENCE_DATA, AsyncDataPlane),
+        data=plane(endpoints.data, AUDIENCE_DATA, AsyncDataPlane, transfer=transfer),
         admin=plane(endpoints.admin, AUDIENCE_ADMIN, AsyncAdminPlane),
         iam=plane(endpoints.iam, AUDIENCE_IAM, AsyncIAMPlane),
     )

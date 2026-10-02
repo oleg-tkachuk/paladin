@@ -37,7 +37,11 @@ from paladin.iam.v1.user_settings_service_connect import UserSettingsServiceClie
 class DataPlane:
     """Every service of the data plane."""
 
-    def __init__(self, address: str, interceptors: Any, **options: Any) -> None:
+    def __init__(
+        self, address: str, interceptors: Any, *, transfer: Any = None, **options: Any
+    ) -> None:
+        self.transfer = transfer
+        """The ``Transfer`` upload and download use; None for the default."""
         self.batch = BatchServiceClientSync(address, interceptors=interceptors, **options)
         self.multipart_upload = MultipartUploadServiceClientSync(address, interceptors=interceptors, **options)
         self.object = ObjectServiceClientSync(address, interceptors=interceptors, **options)
@@ -50,7 +54,11 @@ class DataPlane:
 class AsyncDataPlane:
     """Every service of the data plane."""
 
-    def __init__(self, address: str, interceptors: Any, **options: Any) -> None:
+    def __init__(
+        self, address: str, interceptors: Any, *, transfer: Any = None, **options: Any
+    ) -> None:
+        self.transfer = transfer
+        """The ``Transfer`` upload and download use; None for the default."""
         self.batch = BatchServiceClient(address, interceptors=interceptors, **options)
         self.multipart_upload = MultipartUploadServiceClient(address, interceptors=interceptors, **options)
         self.object = ObjectServiceClient(address, interceptors=interceptors, **options)
